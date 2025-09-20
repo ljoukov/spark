@@ -9,6 +9,7 @@
 	let theme: Theme = 'light';
 	let isMuted = true;
 	let shouldAutoPlay = true;
+	let videoReady = false;
 	let videoEl: HTMLVideoElement | null = null;
 
 	function applyTheme(next: Theme) {
@@ -76,6 +77,13 @@
 			});
 		}
 	}
+
+	function handleCanPlay() {
+		videoReady = true;
+		if (videoEl) {
+			videoEl.poster = '';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -123,6 +131,11 @@
 
 	<main class="hero">
 		<section class="hero__copy" aria-label="GCSE Spark introduction">
+			<span class="pill">Now on the App Store</span>
+			<h1 class="slogan">
+				<span class="slogan__primary">GCSE Spark</span>
+				<span class="slogan__secondary">Scan. Learn. Spark.</span>
+			</h1>
 			<div class="cta">
 				<a class="cta__link" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">
 					<img
@@ -133,16 +146,12 @@
 					/>
 				</a>
 			</div>
-			<h1 class="slogan">
-				<span class="slogan__primary">GCSE Spark</span>
-				<span class="slogan__secondary">Scan. Learn. Spark.</span>
-			</h1>
-			<span class="pill">Now on the App Store</span>
 		</section>
 
 		<section class="hero__media" aria-label="App preview">
-			<div class="video-shell">
-				<div class="video-shell__glow" aria-hidden="true"></div>
+			<div class="video-shell" class:video-shell--ready={videoReady}>
+				<div class="video-shell__halo" aria-hidden="true"></div>
+				<div class="video-shell__inner" aria-hidden="true"></div>
 				<video
 					bind:this={videoEl}
 					autoplay={shouldAutoPlay}
@@ -151,10 +160,10 @@
 					muted={isMuted}
 					preload="auto"
 					poster="/intro.jpg"
+					on:canplay={handleCanPlay}
 				>
 					<source src="/intro.webm" type="video/webm" />
 					<source src="/intro.mp4" type="video/mp4" />
-					<img src="/intro.jpg" alt="GCSE Spark video preview" loading="lazy" />
 				</video>
 
 				<button
@@ -179,6 +188,41 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2.25rem, 5vw, 3.75rem);
+		position: relative;
+		isolation: isolate;
+	}
+
+	.page::before,
+	.page::after {
+		content: '';
+		position: absolute;
+		z-index: -1;
+		border-radius: 50%;
+		filter: blur(64px);
+		opacity: 0.6;
+		pointer-events: none;
+	}
+
+	.page::before {
+		inset: clamp(-8rem, -14vw, -4rem) clamp(-5rem, -8vw, -3rem) auto auto;
+		height: clamp(14rem, 38vw, 20rem);
+		width: clamp(18rem, 42vw, 26rem);
+		background: radial-gradient(circle at 30% 40%, rgba(162, 132, 255, 0.55), transparent 70%);
+	}
+
+	.page::after {
+		inset: auto auto clamp(-10rem, -18vw, -4rem) clamp(-8rem, -14vw, -5rem);
+		height: clamp(16rem, 46vw, 28rem);
+		width: clamp(20rem, 52vw, 32rem);
+		background: radial-gradient(circle at 60% 60%, rgba(16, 185, 129, 0.22), transparent 75%);
+	}
+
+	:global([data-theme='dark'] .page::before) {
+		background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
+	}
+
+	:global([data-theme='dark'] .page::after) {
+		background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
 	}
 
 	.top-bar {
@@ -296,7 +340,7 @@
 	.cta {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 1rem;
+		gap: 0.85rem;
 		align-items: center;
 		justify-content: flex-start;
 		width: 100%;
@@ -334,39 +378,73 @@
 		position: relative;
 		width: min(440px, 100%);
 		aspect-ratio: 1 / 1;
-		border-radius: 1.6rem;
-		padding: clamp(0.7rem, 1.8vw, 1rem);
-		background: radial-gradient(
-			circle at 30% 20%,
-			rgba(126, 58, 236, 0.65),
-			rgba(22, 10, 45, 0.95)
-		);
-		border: 0.55px solid var(--surface-border);
-		box-shadow: 0 30px 72px var(--shadow-color);
+		border-radius: 1.45rem;
+		padding: clamp(0.35rem, 1.2vw, 0.6rem);
+		background: linear-gradient(155deg, rgba(190, 169, 255, 0.58), rgba(22, 25, 60, 0.92));
+		border: 1px solid rgba(148, 163, 184, 0.22);
+		box-shadow: 0 28px 68px var(--shadow-color);
 		overflow: hidden;
+		transition: background 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
 	}
 
-	.video-shell__glow {
+	:global([data-theme='dark'] .video-shell) {
+		background: linear-gradient(150deg, rgba(88, 28, 135, 0.5), rgba(2, 6, 23, 0.95));
+		border-color: rgba(148, 163, 184, 0.26);
+		box-shadow: 0 32px 84px rgba(8, 11, 21, 0.88);
+	}
+
+	.video-shell__halo {
 		position: absolute;
-		inset: 10%;
-		border-radius: 1.2rem;
-		background: radial-gradient(circle, rgba(91, 33, 182, 0.32), transparent 70%);
-		filter: blur(55px);
+		inset: -35%;
+		border-radius: inherit;
+		background: radial-gradient(circle at 50% 50%, rgba(209, 196, 255, 0.65), transparent 68%);
+		filter: blur(62px);
+		opacity: 0.7;
 		mix-blend-mode: screen;
 		pointer-events: none;
+		z-index: 0;
 	}
 
-	:global([data-theme='dark'] .video-shell__glow) {
-		background: radial-gradient(circle, rgba(249, 115, 22, 0.38), transparent 70%);
+	:global([data-theme='dark'] .video-shell__halo) {
+		background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
+		opacity: 0.6;
+	}
+
+	.video-shell__inner {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background: linear-gradient(150deg, rgba(255, 255, 255, 0.36), rgba(103, 87, 232, 0.18));
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		opacity: 0.58;
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	:global([data-theme='dark'] .video-shell__inner) {
+		background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.88));
+		border-color: rgba(148, 163, 184, 0.18);
+		opacity: 0.52;
 	}
 
 	.video-shell video {
 		position: relative;
+		z-index: 2;
 		width: 100%;
 		height: 100%;
-		border-radius: 1rem;
-		background: #000;
-		z-index: 1;
+		border-radius: 1.1rem;
+		background: rgba(5, 9, 21, 0.96);
+		object-fit: cover;
+		box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+	}
+
+	.video-shell--ready .video-shell__inner {
+		opacity: 0.44;
+		filter: saturate(1.05);
+	}
+
+	.video-shell--ready video {
+		box-shadow: 0 34px 72px rgba(15, 23, 42, 0.38);
 	}
 
 	.sound-toggle {
