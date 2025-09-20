@@ -2,8 +2,6 @@
 	import { onMount } from 'svelte';
 
 	type Theme = 'light' | 'dark';
-
-	const STORAGE_KEY = 'gcsespark.theme';
 	const APP_STORE_URL = 'https://apps.apple.com';
 
 	let theme: Theme = 'light';
@@ -19,23 +17,26 @@
 		document.documentElement.dataset.theme = next;
 	}
 
+	function setTheme(next: Theme) {
+		theme = next;
+		applyTheme(next);
+	}
+
+	if (typeof window !== 'undefined') {
+		const initialPreference = window.matchMedia('(prefers-color-scheme: dark)');
+		setTheme(initialPreference.matches ? 'dark' : 'light');
+	}
+
 	onMount(() => {
-		const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
 		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 		const prefersReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 		shouldAutoPlay = !prefersReduceMotion.matches;
 
-		const initialTheme = stored ?? (prefersDark.matches ? 'dark' : 'light');
-		theme = initialTheme;
-		applyTheme(initialTheme);
+		setTheme(prefersDark.matches ? 'dark' : 'light');
 
 		const handleThemeChange = (event: MediaQueryListEvent) => {
-			if (window.localStorage.getItem(STORAGE_KEY)) {
-				return;
-			}
-			theme = event.matches ? 'dark' : 'light';
-			applyTheme(theme);
+			setTheme(event.matches ? 'dark' : 'light');
 		};
 
 		const handleMotionChange = (event: MediaQueryListEvent) => {
@@ -53,15 +54,6 @@
 			prefersReduceMotion.removeEventListener('change', handleMotionChange);
 		};
 	});
-
-	function toggleTheme() {
-		const next = theme === 'dark' ? 'light' : 'dark';
-		theme = next;
-		applyTheme(next);
-		if (typeof window !== 'undefined') {
-			window.localStorage.setItem(STORAGE_KEY, next);
-		}
-	}
 
 	function toggleAudio() {
 		const element = videoEl;
@@ -107,26 +99,6 @@
 			<img class="brand__icon" src="/favicon.png" alt="GCSE Spark icon" loading="lazy" />
 			<span class="brand__name">GCSE Spark</span>
 		</div>
-		<button
-			type="button"
-			class="theme-toggle"
-			on:click={toggleTheme}
-			aria-label={`Activate ${theme === 'dark' ? 'light' : 'dark'} mode`}
-		>
-			{#if theme === 'dark'}
-				<svg viewBox="0 0 24 24" role="img" aria-hidden="true">
-					<path
-						d="M12 4.25a.75.75 0 0 1 .75.75v1a.75.75 0 0 1-1.5 0v-1A.75.75 0 0 1 12 4.25Zm6.364 1.386a.75.75 0 0 1 1.06 1.061l-.707.707a.75.75 0 1 1-1.06-1.06Zm-12.728 0a.75.75 0 0 1 1.06 1.061l-.707.707a.75.75 0 0 1-1.06-1.06ZM12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 3.25a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1 0-1.5Zm-15 0a.75.75 0 0 1 0 1.5h-1a.75.75 0 1 1 0-1.5Zm12.728 6.114.707.707a.75.75 0 0 1-1.06 1.06l-.707-.706a.75.75 0 1 1 1.06-1.061Zm-10.607 0a.75.75 0 0 1 1.06 1.06l-.707.707a.75.75 0 1 1-1.06-1.06ZM12 17.25a.75.75 0 0 1 .75.75v1a.75.75 0 0 1-1.5 0v-1a.75.75 0 0 1 .75-.75Z"
-					/>
-				</svg>
-			{:else}
-				<svg viewBox="0 0 24 24" role="img" aria-hidden="true">
-					<path
-						d="M19.017 15.796a7.5 7.5 0 0 1-10.813-9.94.75.75 0 0 0-.93-.989A8.999 8.999 0 1 0 20.02 16.726a.75.75 0 0 0-1.003-.93Z"
-					/>
-				</svg>
-			{/if}
-		</button>
 	</header>
 
 	<main class="hero">
@@ -227,7 +199,7 @@
 
 	.top-bar {
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
 		align-items: center;
 		gap: 1rem;
 	}
@@ -250,32 +222,6 @@
 	.brand__name {
 		font-size: clamp(1.05rem, 2.5vw, 1.4rem);
 		font-weight: 600;
-	}
-
-	.theme-toggle {
-		width: 2.75rem;
-		height: 2.75rem;
-		border-radius: 999px;
-		border: 1px solid var(--surface-border);
-		background: var(--surface-color);
-		display: grid;
-		place-items: center;
-		box-shadow: 0 12px 32px var(--shadow-color);
-		cursor: pointer;
-		transition:
-			transform 150ms ease,
-			box-shadow 150ms ease;
-	}
-
-	.theme-toggle:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 18px 50px var(--shadow-color);
-	}
-
-	.theme-toggle svg {
-		width: 1.35rem;
-		height: 1.35rem;
-		fill: var(--text-primary);
 	}
 
 	.hero {
@@ -384,7 +330,10 @@
 		border: 1px solid rgba(148, 163, 184, 0.22);
 		box-shadow: 0 28px 68px var(--shadow-color);
 		overflow: hidden;
-		transition: background 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+		transition:
+			background 220ms ease,
+			box-shadow 220ms ease,
+			border-color 220ms ease;
 	}
 
 	:global([data-theme='dark'] .video-shell) {
@@ -526,11 +475,6 @@
 		.brand__icon {
 			width: 2.25rem;
 			height: 2.25rem;
-		}
-
-		.theme-toggle {
-			width: 2.4rem;
-			height: 2.4rem;
 		}
 
 		.sound-toggle {
