@@ -1,0 +1,370 @@
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+message SparkApiRequestProto {
+  SparkRequestAuthProto request_auth = 1;
+  SparkClientContextProto client_context = 2;
+
+  reserved 3, 4, 12, 13;
+
+  oneof request {
+    SparkCreateRequestProto create = 10;
+    SparkCheckAnswerRequestProto check_answer = 11;
+  }
+}
+
+message SparkApiResponseProto {
+  SparkApiErrorProto error = 1;
+
+  oneof response {
+    SparkCreateResponseProto create = 10;
+    SparkCheckAnswerResponseProto check_answer = 11;
+  }
+
+  map<string, google.protobuf.Duration> latencies = 100;
+}
+
+message SparkCreateRequestProto {
+  SparkUploadReferenceProto upload = 1;
+}
+
+message SparkCreateResponseProto {
+  SparkJobStatusProto job = 1;
+  SparkQuizProto quiz = 2;
+}
+
+enum SparkUploadTypeProto {
+  SPARK_UPLOAD_TYPE_PROTO_UNDEFINED = 0;
+  SPARK_UPLOAD_TYPE_PROTO_PHOTO = 1;
+  SPARK_UPLOAD_TYPE_PROTO_PDF_FULL = 2;
+  SPARK_UPLOAD_TYPE_PROTO_PDF_PAGE_RANGE = 3;
+}
+
+message SparkUploadReferenceProto {
+  string storage_path = 1;
+  SparkUploadTypeProto upload_type = 2;
+  string mime_type = 3;
+  int64 size_bytes = 4;
+  SparkPageRangeProto page_range = 5;
+  google.protobuf.Timestamp uploaded_at = 6;
+}
+
+message SparkPageRangeProto {
+  int32 start_page = 1;
+  int32 end_page = 2;
+}
+
+message SparkCheckAnswerRequestProto {
+  string quiz_id = 1;
+  string question_id = 2;
+  SparkSubmittedAnswerProto answer = 3;
+  string attempt_id = 4;
+  google.protobuf.Timestamp answered_at = 5;
+}
+
+message SparkCheckAnswerResponseProto {
+  SparkAnswerEvaluationProto evaluation = 1;
+  SparkQuestionProto question = 2;
+  google.protobuf.Timestamp evaluated_at = 3;
+}
+
+message SparkSubmittedAnswerProto {
+  oneof value {
+    string text = 1;
+    string option_id = 2;
+    bool true_false = 3;
+    SparkNumericSubmissionProto numeric = 4;
+  }
+}
+
+message SparkNumericSubmissionProto {
+  double value = 1;
+  string unit = 2;
+  int32 significant_figures = 3;
+}
+
+message SparkAnswerEvaluationProto {
+  SparkAnswerGradeProto grade = 1;
+  string feedback = 2;
+  double score = 3;
+  google.protobuf.Timestamp retry_available_at = 4;
+}
+
+message SparkQuestionProto {
+  string question_id = 1;
+  SparkQuestionKindProto kind = 2;
+  string prompt = 3;
+  SparkQuestionSourceProto source = 4;
+  SparkQuestionAnswerKeyProto answer_key = 5;
+  repeated string hints = 6;
+  google.protobuf.Timestamp created_at = 7;
+  oneof body {
+    SparkMultipleChoiceQuestionProto multiple_choice = 10;
+    SparkTrueFalseQuestionProto true_false = 11;
+    SparkFreeTextQuestionProto short_text = 12;
+    SparkNumericQuestionProto numeric = 13;
+  }
+}
+
+enum SparkAnswerGradeProto {
+  SPARK_ANSWER_GRADE_PROTO_UNDEFINED = 0;
+  SPARK_ANSWER_GRADE_PROTO_CORRECT = 1;
+  SPARK_ANSWER_GRADE_PROTO_INCORRECT = 2;
+  SPARK_ANSWER_GRADE_PROTO_PARTIAL = 3;
+  SPARK_ANSWER_GRADE_PROTO_RETRY = 4;
+}
+
+enum SparkQuestionKindProto {
+  SPARK_QUESTION_KIND_PROTO_UNDEFINED = 0;
+  SPARK_QUESTION_KIND_PROTO_MULTIPLE_CHOICE = 1;
+  SPARK_QUESTION_KIND_PROTO_TRUE_FALSE = 2;
+  SPARK_QUESTION_KIND_PROTO_SHORT_TEXT = 3;
+  SPARK_QUESTION_KIND_PROTO_NUMERIC = 4;
+}
+
+message SparkQuestionSourceProto {
+  string upload_path = 1;
+  SparkPageRangeProto page_range = 2;
+  string snippet = 3;
+}
+
+message SparkQuestionAnswerKeyProto {
+  oneof key {
+    SparkMultipleChoiceAnswerKeyProto multiple_choice = 1;
+    SparkTrueFalseAnswerKeyProto true_false = 2;
+    SparkFreeTextAnswerKeyProto short_text = 3;
+    SparkNumericAnswerKeyProto numeric = 4;
+  }
+}
+
+message SparkMultipleChoiceQuestionProto {
+  repeated SparkMultipleChoiceOptionProto options = 1;
+  bool shuffle_options = 2;
+}
+
+message SparkMultipleChoiceOptionProto {
+  string option_id = 1;
+  string text = 2;
+}
+
+message SparkTrueFalseQuestionProto {
+  string statement = 1;
+}
+
+message SparkFreeTextQuestionProto {
+  SparkFreeTextRubricProto rubric = 1;
+  repeated string key_points = 2;
+}
+
+message SparkFreeTextRubricProto {
+  string overview = 1;
+  repeated string bullet_points = 2;
+}
+
+message SparkNumericQuestionProto {
+  string prompt_suffix = 1;
+  SparkNumericAnswerRuleProto rule = 2;
+}
+
+enum SparkNumericToleranceTypeProto {
+  SPARK_NUMERIC_TOLERANCE_TYPE_PROTO_UNDEFINED = 0;
+  SPARK_NUMERIC_TOLERANCE_TYPE_PROTO_ABSOLUTE = 1;
+  SPARK_NUMERIC_TOLERANCE_TYPE_PROTO_RELATIVE = 2;
+}
+
+message SparkNumericAnswerRuleProto {
+  double value = 1;
+  string unit = 2;
+  SparkNumericToleranceTypeProto tolerance_type = 3;
+  double tolerance = 4;
+  int32 significant_figures = 5;
+}
+
+message SparkMultipleChoiceAnswerKeyProto {
+  string correct_option_id = 1;
+}
+
+message SparkTrueFalseAnswerKeyProto {
+  bool correct_value = 1;
+}
+
+message SparkFreeTextAnswerKeyProto {
+  repeated string exemplar_answers = 1;
+}
+
+message SparkNumericAnswerKeyProto {
+  SparkNumericAnswerRuleProto expected = 1;
+}
+
+message SparkQuizProto {
+  string quiz_id = 1;
+  SparkQuizMetadataProto metadata = 2;
+  repeated SparkQuestionProto questions = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message SparkQuizMetadataProto {
+  SparkProgrammeProto programme = 1;
+  SparkSubjectProto subject = 2;
+  SparkExamBoardProto exam_board = 3;
+  SparkGenerationModeProto generation_mode = 4;
+  int32 total_questions = 5;
+  string topic = 6;
+  string subtopic = 7;
+}
+
+enum SparkProgrammeProto {
+  SPARK_PROGRAMME_PROTO_UNDEFINED = 0;
+  SPARK_PROGRAMME_PROTO_GCSE_TRIPLE_SCIENCE = 1;
+}
+
+enum SparkSubjectProto {
+  SPARK_SUBJECT_PROTO_UNDEFINED = 0;
+  SPARK_SUBJECT_PROTO_BIOLOGY = 1;
+  SPARK_SUBJECT_PROTO_CHEMISTRY = 2;
+  SPARK_SUBJECT_PROTO_PHYSICS = 3;
+}
+
+enum SparkExamBoardProto {
+  SPARK_EXAM_BOARD_PROTO_UNDEFINED = 0;
+  SPARK_EXAM_BOARD_PROTO_AQA = 1;
+  SPARK_EXAM_BOARD_PROTO_EDEXCEL = 2;
+  SPARK_EXAM_BOARD_PROTO_OCR = 3;
+}
+
+enum SparkGenerationModeProto {
+  SPARK_GENERATION_MODE_PROTO_UNDEFINED = 0;
+  SPARK_GENERATION_MODE_PROTO_EXTRACTION = 1;
+  SPARK_GENERATION_MODE_PROTO_SYNTHESIS = 2;
+}
+
+message SparkJobStatusProto {
+  string job_id = 1;
+  SparkJobStateProto state = 2;
+  double progress_percent = 3;
+  string status_message = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  SparkJobErrorProto error = 6;
+}
+
+enum SparkJobStateProto {
+  SPARK_JOB_STATE_PROTO_UNDEFINED = 0;
+  SPARK_JOB_STATE_PROTO_RECEIVED = 1;
+  SPARK_JOB_STATE_PROTO_PROCESSING = 2;
+  SPARK_JOB_STATE_PROTO_COMPLETED = 3;
+  SPARK_JOB_STATE_PROTO_FAILED = 4;
+  SPARK_JOB_STATE_PROTO_CANCELLED = 5;
+}
+
+message SparkJobErrorProto {
+  string code = 1;
+  string message = 2;
+  map<string, string> context = 3;
+}
+
+message SparkFirestoreDocProto {
+  string doc_id = 1;
+  SparkUploadReferenceProto upload = 2;
+  SparkJobStatusProto job = 3;
+  SparkQuizProto quiz = 4;
+  SparkQuizSummaryProto summary = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+}
+
+message SparkFirestoreStateProto {
+  map<string, SparkQuizStateProto> quiz_states = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+message SparkQuizStateProto {
+  string quiz_id = 1;
+  int32 questions_answered = 2;
+  int32 questions_correct = 3;
+  bool completed = 4;
+  google.protobuf.Timestamp last_answered_at = 5;
+  double score = 6;
+  SparkQuizStateStatusProto status = 7;
+  SparkQuizReviewStatusProto review_status = 8;
+  string current_question_id = 9;
+  repeated string incorrect_question_ids = 10;
+  google.protobuf.Timestamp started_at = 11;
+}
+
+enum SparkQuizStateStatusProto {
+  SPARK_QUIZ_STATE_STATUS_PROTO_UNDEFINED = 0;
+  SPARK_QUIZ_STATE_STATUS_PROTO_NOT_STARTED = 1;
+  SPARK_QUIZ_STATE_STATUS_PROTO_IN_PROGRESS = 2;
+  SPARK_QUIZ_STATE_STATUS_PROTO_COMPLETED = 3;
+  SPARK_QUIZ_STATE_STATUS_PROTO_ARCHIVED = 4;
+}
+
+enum SparkQuizReviewStatusProto {
+  SPARK_QUIZ_REVIEW_STATUS_PROTO_UNDEFINED = 0;
+  SPARK_QUIZ_REVIEW_STATUS_PROTO_NOT_REQUIRED = 1;
+  SPARK_QUIZ_REVIEW_STATUS_PROTO_PENDING = 2;
+  SPARK_QUIZ_REVIEW_STATUS_PROTO_IN_REVIEW = 3;
+  SPARK_QUIZ_REVIEW_STATUS_PROTO_DONE = 4;
+}
+
+message SparkSummarizeResponseProto {
+  SparkQuizSummaryProto summary = 1;
+  google.protobuf.Timestamp summarized_at = 2;
+}
+
+message SparkQuizSummaryProto {
+  string quiz_id = 1;
+  string headline = 2;
+  repeated SparkSubjectSummaryProto subject_breakdown = 3;
+  repeated SparkStudyRecommendationProto recommendations = 4;
+}
+
+message SparkSubjectSummaryProto {
+  SparkSubjectProto subject = 1;
+  double mastery_percent = 2;
+  string narrative = 3;
+}
+
+message SparkStudyRecommendationProto {
+  string recommendation_id = 1;
+  string title = 2;
+  string description = 3;
+}
+
+message SparkApiErrorProto {
+  string code = 1;
+  string message = 2;
+  repeated string details = 3;
+}
+
+message SparkRequestAuthProto {
+  string firebase_id_token = 1;
+  string appcheck_token = 2;
+  string user_id = 3;
+}
+
+message SparkClientContextProto {
+  string api_version = 1;
+  string client_version = 2;
+  SparkClientDeviceProto device = 3;
+  bool beta_user = 4;
+  SparkRequestLocaleProto locale = 5;
+}
+
+message SparkClientDeviceProto {
+  string platform = 1;
+  string os_version = 2;
+  string device_model = 3;
+  bool is_simulator = 4;
+  string app_build = 5;
+}
+
+message SparkRequestLocaleProto {
+  string language = 1;
+  string region = 2;
+  string time_zone = 3;
+}
