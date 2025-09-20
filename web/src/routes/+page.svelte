@@ -9,7 +9,6 @@
 	let theme: Theme = 'light';
 	let isMuted = true;
 	let shouldAutoPlay = true;
-	let videoReady = false;
 	let videoEl: HTMLVideoElement | null = null;
 
 	function applyTheme(next: Theme) {
@@ -77,10 +76,6 @@
 			});
 		}
 	}
-
-	function handleCanPlay() {
-		videoReady = true;
-	}
 </script>
 
 <svelte:head>
@@ -90,7 +85,10 @@
 		content="GCSE Spark turns your science notes into Grade 9 mastery — download now on the App Store."
 	/>
 	<meta property="og:title" content="GCSE Spark" />
-	<meta property="og:description" content="Ignite GCSE science brilliance with the iOS app designed for fast mastery." />
+	<meta
+		property="og:description"
+		content="Ignite GCSE science brilliance with the iOS app designed for fast mastery."
+	/>
 	<meta property="og:image" content="/intro.jpg" />
 	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
@@ -124,30 +122,27 @@
 	</header>
 
 	<main class="hero">
-	<section class="hero__copy" aria-label="GCSE Spark introduction">
-		<div class="cta">
-			<a class="cta__link" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">
-				<img
-					src={theme === 'dark' ? '/appstore-dark.svg' : '/appstore-light.svg'}
-					alt="Download GCSE Spark on the App Store"
-					width="200"
-					height="64"
+		<section class="hero__copy" aria-label="GCSE Spark introduction">
+			<div class="cta">
+				<a class="cta__link" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+					<img
+						src={theme === 'dark' ? '/appstore-dark.svg' : '/appstore-light.svg'}
+						alt="Download GCSE Spark on the App Store"
+						width="200"
+						height="64"
 					/>
-			</a>
-		</div>
-		<h1 class="slogan">
-			<span class="slogan__primary">GCSE Spark</span>
-			<span class="slogan__secondary">Scan. Learn. Spark.</span>
-		</h1>
-		<span class="pill">Now on the App Store</span>
-	</section>
+				</a>
+			</div>
+			<h1 class="slogan">
+				<span class="slogan__primary">GCSE Spark</span>
+				<span class="slogan__secondary">Scan. Learn. Spark.</span>
+			</h1>
+			<span class="pill">Now on the App Store</span>
+		</section>
 
 		<section class="hero__media" aria-label="App preview">
 			<div class="video-shell">
 				<div class="video-shell__glow" aria-hidden="true"></div>
-				{#if !videoReady}
-					<img class="video-shell__fallback" src="/intro.jpg" alt="GCSE Spark preview" />
-				{/if}
 				<video
 					bind:this={videoEl}
 					autoplay={shouldAutoPlay}
@@ -156,23 +151,22 @@
 					muted={isMuted}
 					preload="auto"
 					poster="/intro.jpg"
-					on:canplay={handleCanPlay}
 				>
 					<source src="/intro.webm" type="video/webm" />
 					<source src="/intro.mp4" type="video/mp4" />
 					<img src="/intro.jpg" alt="GCSE Spark video preview" loading="lazy" />
 				</video>
 
-					<button
-						type="button"
-						class="sound-toggle"
-						on:click={toggleAudio}
-						aria-pressed={!isMuted}
-						aria-label={isMuted ? 'Enable soundtrack' : 'Mute soundtrack'}
-					>
-						<span>{isMuted ? 'Sound off' : 'Sound on'}</span>
-					</button>
-				</div>
+				<button
+					type="button"
+					class="sound-toggle"
+					on:click={toggleAudio}
+					aria-pressed={!isMuted}
+					aria-label={isMuted ? 'Enable soundtrack' : 'Mute soundtrack'}
+				>
+					<span>{isMuted ? 'Sound off' : 'Sound on'}</span>
+				</button>
+			</div>
 		</section>
 	</main>
 </div>
@@ -224,7 +218,9 @@
 		place-items: center;
 		box-shadow: 0 12px 32px var(--shadow-color);
 		cursor: pointer;
-		transition: transform 150ms ease, box-shadow 150ms ease;
+		transition:
+			transform 150ms ease,
+			box-shadow 150ms ease;
 	}
 
 	.theme-toggle:hover {
@@ -311,7 +307,9 @@
 		justify-content: center;
 		align-items: center;
 		filter: drop-shadow(0 22px 44px var(--shadow-color));
-		transition: transform 180ms ease, filter 180ms ease;
+		transition:
+			transform 180ms ease,
+			filter 180ms ease;
 		padding: 0;
 		width: min(100%, clamp(190px, 28vw, 250px));
 	}
@@ -338,7 +336,11 @@
 		aspect-ratio: 1 / 1;
 		border-radius: 1.6rem;
 		padding: clamp(0.7rem, 1.8vw, 1rem);
-		background: radial-gradient(circle at 30% 20%, rgba(126, 58, 236, 0.65), rgba(22, 10, 45, 0.95));
+		background: radial-gradient(
+			circle at 30% 20%,
+			rgba(126, 58, 236, 0.65),
+			rgba(22, 10, 45, 0.95)
+		);
 		border: 0.55px solid var(--surface-border);
 		box-shadow: 0 30px 72px var(--shadow-color);
 		overflow: hidden;
@@ -367,14 +369,6 @@
 		z-index: 1;
 	}
 
-	.video-shell__fallback {
-		position: absolute;
-		inset: clamp(0.7rem, 1.8vw, 1rem);
-		object-fit: cover;
-		border-radius: 1rem;
-		z-index: 1;
-	}
-
 	.sound-toggle {
 		position: absolute;
 		bottom: 1.1rem;
@@ -391,7 +385,10 @@
 		padding: 0.55rem 1.1rem;
 		z-index: 2;
 		cursor: pointer;
-		transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+		transition:
+			transform 150ms ease,
+			box-shadow 150ms ease,
+			background 150ms ease;
 	}
 
 	:global([data-theme='dark'] .sound-toggle) {
@@ -434,9 +431,9 @@
 			margin-inline: auto;
 		}
 
-			.hero__media {
-				order: 2;
-			}
+		.hero__media {
+			order: 2;
+		}
 
 		.brand__name {
 			font-size: 1.1rem;
@@ -458,9 +455,9 @@
 			height: 2.4rem;
 		}
 
-			.sound-toggle {
-				font-size: 0.72rem;
-				padding: 0.5rem 0.9rem;
-			}
+		.sound-toggle {
+			font-size: 0.72rem;
+			padding: 0.5rem 0.9rem;
+		}
 	}
 </style>
