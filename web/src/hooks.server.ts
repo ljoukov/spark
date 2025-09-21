@@ -1,6 +1,7 @@
 import { isUserAdmin } from '$lib/server/utils/admin';
 import { getUserAuthFromCookiesResult, hasUserAuthCookie } from '$lib/server/auth/cookie';
 import { type Handle } from '@sveltejs/kit';
+import { proxyFirebaseAuth } from '$lib/server/auth/firebaseProxy';
 
 if (typeof global !== 'undefined') {
 	global.process.on('unhandledRejection', (reason, promise) => {
@@ -9,11 +10,16 @@ if (typeof global !== 'undefined') {
 }
 
 export const handle = (async ({ event, resolve }) => {
-	const isAdminPath = event.url.pathname.startsWith('/admin');
-	if (isAdminPath || event.url.pathname.startsWith('/app')) {
-		const redirectParams = new URLSearchParams({ r: event.url.pathname });
-		const cookies = event.cookies;
-		if (!hasUserAuthCookie(cookies)) {
+    // 1) Proxy Firebase Auth helper endpoints transparently.
+    if (event.url.pathname.startsWith('/__/auth/')) {
+        return await proxyFirebaseAuth(event);
+    }
+
+    const isAdminPath = event.url.pathname.startsWith('/admin');
+    if (isAdminPath || event.url.pathname.startsWith('/app')) {
+        const redirectParams = new URLSearchParams({ r: event.url.pathname });
+        const cookies = event.cookies;
+        if (!hasUserAuthCookie(cookies)) {
 			console.log(
 				`Admin or app request without auth cookie, redirecting to /auth/start then to ${event.url.pathname}`
 			);
