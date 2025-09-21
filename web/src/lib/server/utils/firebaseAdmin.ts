@@ -32,8 +32,12 @@ const serviceAccountConfig = Object.freeze(
 	serviceAccountJsonSchema.parse(JSON.parse(rawServiceAccountJson))
 );
 
-function resolveServiceAccount(): Readonly<ServiceAccount> {
-	return serviceAccountConfig;
+function resolveServiceAccount(): ServiceAccount {
+	return {
+		projectId: serviceAccountConfig.projectId,
+		clientEmail: serviceAccountConfig.clientEmail,
+		privateKey: serviceAccountConfig.privateKey
+	};
 }
 
 let cachedApp: App | null = null;
