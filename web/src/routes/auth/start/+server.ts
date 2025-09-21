@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { GOOGLE_API_KEY } from '$env/static/private';
 import { clientSideRedirect } from '$lib/server/utils/response';
-import { AUTH_SESSION_ID_COOKIE_NAME } from '$lib/server/auth/cookie';
+import { setAuthSessionCookie } from '$lib/server/auth/cookie';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
 import { responseErrorAsString } from '$lib/utils/error';
@@ -12,7 +12,24 @@ const createAuthUriResponseSchema = z.object({
 	sessionId: z.string()
 });
 
+const startQueryParamsSchema = z.object({
+	r: z
+		.string()
+		.trim()
+		.refine((value) => value.startsWith('/') && !value.startsWith('//'), {
+			message: 'r must be a URL path starting with "/"'
+		})
+		.optional()
+});
+
 export const GET: RequestHandler = async ({ url, cookies }) => {
+	const { r: redirectPath } = startQueryParamsSchema.parse({
+		r: url.searchParams.get('r') ?? undefined
+	});
+	if (redirectPath === undefined) {
+		throw error(400, 'Missing required redirect path parameter "r"');
+	}
+
 	const continueUri = new URL('/auth/continue', getHostUrl(url));
 	const authUriRespObj = await fetch(
 		'https://www.googleapis.com/identitytoolkit/v3/relyingparty/createAuthUri',
@@ -33,12 +50,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 	if (!authUriRespObj.ok) {
 		throw error(500, `createAuthUri: ${await responseErrorAsString(authUriRespObj)}`);
 	}
-	const expiration_seconds = 20 * 60; // 20 minutes
-	const authUriResp = createAuthUriResponseSchema.parse(await authUriRespObj.json());
-	cookies.set(AUTH_SESSION_ID_COOKIE_NAME, authUriResp.sessionId, {
-		path: '/auth/',
-		expires: new Date(Date.now() + expiration_seconds * 1000),
-		maxAge: expiration_seconds
-	});
-	return clientSideRedirect(new URL(authUriResp.authUri));
+	const { sessionId, authUri } = createAuthUriResponseSchema.parse(await authUriRespObj.json());
+	setAuthSessionCookie(cookies, { sessionId, redirectPath });
+	return clientSideRedirect(new URL(authUri));
 };

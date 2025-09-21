@@ -3,33 +3,33 @@
 // @generated from protobuf file "third_party/FirestoreProto.proto" (package "google.firestore.v1", syntax proto3)
 // tslint:disable
 // @ts-nocheck
-import type { BinaryWriteOptions } from '@protobuf-ts/runtime';
-import type { IBinaryWriter } from '@protobuf-ts/runtime';
-import { WireType } from '@protobuf-ts/runtime';
-import type { BinaryReadOptions } from '@protobuf-ts/runtime';
-import type { IBinaryReader } from '@protobuf-ts/runtime';
-import { UnknownFieldHandler } from '@protobuf-ts/runtime';
-import type { PartialMessage } from '@protobuf-ts/runtime';
-import { reflectionMergePartial } from '@protobuf-ts/runtime';
-import { MessageType } from '@protobuf-ts/runtime';
-import { NullValue } from '../google/protobuf/struct';
-import { Timestamp } from '../google/protobuf/timestamp';
+import type { BinaryWriteOptions } from "@protobuf-ts/runtime";
+import type { IBinaryWriter } from "@protobuf-ts/runtime";
+import { WireType } from "@protobuf-ts/runtime";
+import type { BinaryReadOptions } from "@protobuf-ts/runtime";
+import type { IBinaryReader } from "@protobuf-ts/runtime";
+import { UnknownFieldHandler } from "@protobuf-ts/runtime";
+import type { PartialMessage } from "@protobuf-ts/runtime";
+import { reflectionMergePartial } from "@protobuf-ts/runtime";
+import { MessageType } from "@protobuf-ts/runtime";
+import { NullValue } from "../google/protobuf/struct";
+import { Timestamp } from "../google/protobuf/timestamp";
 /**
  * @generated from protobuf message google.firestore.v1.RpcError
  */
 export interface RpcError {
-	/**
-	 * @generated from protobuf field: int32 code = 1;
-	 */
-	code: number;
-	/**
-	 * @generated from protobuf field: string message = 2;
-	 */
-	message: string;
-	/**
-	 * @generated from protobuf field: google.firestore.v1.StatusCode status = 3;
-	 */
-	status: StatusCode;
+    /**
+     * @generated from protobuf field: int32 code = 1;
+     */
+    code: number;
+    /**
+     * @generated from protobuf field: string message = 2;
+     */
+    message: string;
+    /**
+     * @generated from protobuf field: google.firestore.v1.StatusCode status = 3;
+     */
+    status: StatusCode;
 }
 /**
  * A Firestore document.
@@ -39,64 +39,64 @@ export interface RpcError {
  * @generated from protobuf message google.firestore.v1.Document
  */
 export interface Document {
-	/**
-	 * The resource name of the document, for example
-	 * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
-	 *
-	 * @generated from protobuf field: string name = 1;
-	 */
-	name: string;
-	/**
-	 * The document's fields.
-	 *
-	 * The map keys represent field names.
-	 *
-	 * A simple field name contains only characters `a` to `z`, `A` to `Z`,
-	 * `0` to `9`, or `_`, and must not start with `0` to `9`. For example,
-	 * `foo_bar_17`.
-	 *
-	 * Field names matching the regular expression `__.*__` are reserved. Reserved
-	 * field names are forbidden except in certain documented contexts. The map
-	 * keys, represented as UTF-8, must not exceed 1,500 bytes and cannot be
-	 * empty.
-	 *
-	 * Field paths may be used in other contexts to refer to structured fields
-	 * defined here. For `map_value`, the field path is represented by the simple
-	 * or quoted field names of the containing fields, delimited by `.`. For
-	 * example, the structured field
-	 * `"foo" : { map_value: { "x&y" : { string_value: "hello" }}}` would be
-	 * represented by the field path `foo.x&y`.
-	 *
-	 * Within a field path, a quoted field name starts and ends with `` ` `` and
-	 * may contain any character. Some characters, including `` ` ``, must be
-	 * escaped using a `\`. For example, `` `x&y` `` represents `x&y` and
-	 * `` `bak\`tik` `` represents `` bak`tik ``.
-	 *
-	 * @generated from protobuf field: map<string, google.firestore.v1.Value> fields = 2;
-	 */
-	fields: {
-		[key: string]: Value;
-	};
-	/**
-	 * Output only. The time at which the document was created.
-	 *
-	 * This value increases monotonically when a document is deleted then
-	 * recreated. It can also be compared to values from other documents and
-	 * the `read_time` of a query.
-	 *
-	 * @generated from protobuf field: google.protobuf.Timestamp create_time = 3;
-	 */
-	createTime?: Timestamp;
-	/**
-	 * Output only. The time at which the document was last changed.
-	 *
-	 * This value is initially set to the `create_time` then increases
-	 * monotonically with each change to the document. It can also be
-	 * compared to values from other documents and the `read_time` of a query.
-	 *
-	 * @generated from protobuf field: google.protobuf.Timestamp update_time = 4;
-	 */
-	updateTime?: Timestamp;
+    /**
+     * The resource name of the document, for example
+     * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
+     *
+     * @generated from protobuf field: string name = 1;
+     */
+    name: string;
+    /**
+     * The document's fields.
+     *
+     * The map keys represent field names.
+     *
+     * A simple field name contains only characters `a` to `z`, `A` to `Z`,
+     * `0` to `9`, or `_`, and must not start with `0` to `9`. For example,
+     * `foo_bar_17`.
+     *
+     * Field names matching the regular expression `__.*__` are reserved. Reserved
+     * field names are forbidden except in certain documented contexts. The map
+     * keys, represented as UTF-8, must not exceed 1,500 bytes and cannot be
+     * empty.
+     *
+     * Field paths may be used in other contexts to refer to structured fields
+     * defined here. For `map_value`, the field path is represented by the simple
+     * or quoted field names of the containing fields, delimited by `.`. For
+     * example, the structured field
+     * `"foo" : { map_value: { "x&y" : { string_value: "hello" }}}` would be
+     * represented by the field path `foo.x&y`.
+     *
+     * Within a field path, a quoted field name starts and ends with `` ` `` and
+     * may contain any character. Some characters, including `` ` ``, must be
+     * escaped using a `\`. For example, `` `x&y` `` represents `x&y` and
+     * `` `bak\`tik` `` represents `` bak`tik ``.
+     *
+     * @generated from protobuf field: map<string, google.firestore.v1.Value> fields = 2;
+     */
+    fields: {
+        [key: string]: Value;
+    };
+    /**
+     * Output only. The time at which the document was created.
+     *
+     * This value increases monotonically when a document is deleted then
+     * recreated. It can also be compared to values from other documents and
+     * the `read_time` of a query.
+     *
+     * @generated from protobuf field: google.protobuf.Timestamp create_time = 3;
+     */
+    createTime?: Timestamp;
+    /**
+     * Output only. The time at which the document was last changed.
+     *
+     * This value is initially set to the `create_time` then increases
+     * monotonically with each change to the document. It can also be
+     * compared to values from other documents and the `read_time` of a query.
+     *
+     * @generated from protobuf field: google.protobuf.Timestamp update_time = 4;
+     */
+    updateTime?: Timestamp;
 }
 /**
  * A message that can hold any of the supported value types.
@@ -104,126 +104,114 @@ export interface Document {
  * @generated from protobuf message google.firestore.v1.Value
  */
 export interface Value {
-	/**
-	 * @generated from protobuf oneof: value_type
-	 */
-	valueType:
-		| {
-				oneofKind: 'nullValue';
-				/**
-				 * A null value.
-				 *
-				 * @generated from protobuf field: google.protobuf.NullValue null_value = 11;
-				 */
-				nullValue: NullValue;
-		  }
-		| {
-				oneofKind: 'booleanValue';
-				/**
-				 * A boolean value.
-				 *
-				 * @generated from protobuf field: bool boolean_value = 1;
-				 */
-				booleanValue: boolean;
-		  }
-		| {
-				oneofKind: 'integerValue';
-				/**
-				 * An integer value.
-				 *
-				 * @generated from protobuf field: int64 integer_value = 2;
-				 */
-				integerValue: string;
-		  }
-		| {
-				oneofKind: 'doubleValue';
-				/**
-				 * A double value.
-				 *
-				 * @generated from protobuf field: double double_value = 3;
-				 */
-				doubleValue: number;
-		  }
-		| {
-				oneofKind: 'timestampValue';
-				/**
-				 * A timestamp value.
-				 *
-				 * Precise only to microseconds. When stored, any additional precision is
-				 * rounded down.
-				 *
-				 * @generated from protobuf field: google.protobuf.Timestamp timestamp_value = 10;
-				 */
-				timestampValue: Timestamp;
-		  }
-		| {
-				oneofKind: 'stringValue';
-				/**
-				 * A string value.
-				 *
-				 * The string, represented as UTF-8, must not exceed 1 MiB - 89 bytes.
-				 * Only the first 1,500 bytes of the UTF-8 representation are considered by
-				 * queries.
-				 *
-				 * @generated from protobuf field: string string_value = 17;
-				 */
-				stringValue: string;
-		  }
-		| {
-				oneofKind: 'bytesValue';
-				/**
-				 * A bytes value.
-				 *
-				 * Must not exceed 1 MiB - 89 bytes.
-				 * Only the first 1,500 bytes are considered by queries.
-				 *
-				 * @generated from protobuf field: bytes bytes_value = 18;
-				 */
-				bytesValue: Uint8Array;
-		  }
-		| {
-				oneofKind: 'referenceValue';
-				/**
-				 * A reference to a document. For example:
-				 * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
-				 *
-				 * @generated from protobuf field: string reference_value = 5;
-				 */
-				referenceValue: string;
-		  }
-		| {
-				oneofKind: 'geoPointValue';
-				/**
-				 * A geo point value representing a point on the surface of Earth.
-				 *
-				 * @generated from protobuf field: google.firestore.v1.LatLng geo_point_value = 8;
-				 */
-				geoPointValue: LatLng;
-		  }
-		| {
-				oneofKind: 'arrayValue';
-				/**
-				 * An array value.
-				 *
-				 * Cannot directly contain another array value, though can contain an
-				 * map which contains another array.
-				 *
-				 * @generated from protobuf field: google.firestore.v1.ArrayValue array_value = 9;
-				 */
-				arrayValue: ArrayValue;
-		  }
-		| {
-				oneofKind: 'mapValue';
-				/**
-				 * A map value.
-				 *
-				 * @generated from protobuf field: google.firestore.v1.MapValue map_value = 6;
-				 */
-				mapValue: MapValue;
-		  }
-		| {
-				oneofKind: undefined;
-		  };
+    /**
+     * @generated from protobuf oneof: value_type
+     */
+    valueType: {
+        oneofKind: "nullValue";
+        /**
+         * A null value.
+         *
+         * @generated from protobuf field: google.protobuf.NullValue null_value = 11;
+         */
+        nullValue: NullValue;
+    } | {
+        oneofKind: "booleanValue";
+        /**
+         * A boolean value.
+         *
+         * @generated from protobuf field: bool boolean_value = 1;
+         */
+        booleanValue: boolean;
+    } | {
+        oneofKind: "integerValue";
+        /**
+         * An integer value.
+         *
+         * @generated from protobuf field: int64 integer_value = 2;
+         */
+        integerValue: string;
+    } | {
+        oneofKind: "doubleValue";
+        /**
+         * A double value.
+         *
+         * @generated from protobuf field: double double_value = 3;
+         */
+        doubleValue: number;
+    } | {
+        oneofKind: "timestampValue";
+        /**
+         * A timestamp value.
+         *
+         * Precise only to microseconds. When stored, any additional precision is
+         * rounded down.
+         *
+         * @generated from protobuf field: google.protobuf.Timestamp timestamp_value = 10;
+         */
+        timestampValue: Timestamp;
+    } | {
+        oneofKind: "stringValue";
+        /**
+         * A string value.
+         *
+         * The string, represented as UTF-8, must not exceed 1 MiB - 89 bytes.
+         * Only the first 1,500 bytes of the UTF-8 representation are considered by
+         * queries.
+         *
+         * @generated from protobuf field: string string_value = 17;
+         */
+        stringValue: string;
+    } | {
+        oneofKind: "bytesValue";
+        /**
+         * A bytes value.
+         *
+         * Must not exceed 1 MiB - 89 bytes.
+         * Only the first 1,500 bytes are considered by queries.
+         *
+         * @generated from protobuf field: bytes bytes_value = 18;
+         */
+        bytesValue: Uint8Array;
+    } | {
+        oneofKind: "referenceValue";
+        /**
+         * A reference to a document. For example:
+         * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
+         *
+         * @generated from protobuf field: string reference_value = 5;
+         */
+        referenceValue: string;
+    } | {
+        oneofKind: "geoPointValue";
+        /**
+         * A geo point value representing a point on the surface of Earth.
+         *
+         * @generated from protobuf field: google.firestore.v1.LatLng geo_point_value = 8;
+         */
+        geoPointValue: LatLng;
+    } | {
+        oneofKind: "arrayValue";
+        /**
+         * An array value.
+         *
+         * Cannot directly contain another array value, though can contain an
+         * map which contains another array.
+         *
+         * @generated from protobuf field: google.firestore.v1.ArrayValue array_value = 9;
+         */
+        arrayValue: ArrayValue;
+    } | {
+        oneofKind: "mapValue";
+        /**
+         * A map value.
+         *
+         * @generated from protobuf field: google.firestore.v1.MapValue map_value = 6;
+         */
+        mapValue: MapValue;
+    } | {
+        oneofKind: undefined;
+    };
 }
 /**
  * An array value.
@@ -231,12 +219,12 @@ export interface Value {
  * @generated from protobuf message google.firestore.v1.ArrayValue
  */
 export interface ArrayValue {
-	/**
-	 * Values in the array.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.Value values = 1;
-	 */
-	values: Value[];
+    /**
+     * Values in the array.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.Value values = 1;
+     */
+    values: Value[];
 }
 /**
  * A map value.
@@ -244,19 +232,19 @@ export interface ArrayValue {
  * @generated from protobuf message google.firestore.v1.MapValue
  */
 export interface MapValue {
-	/**
-	 * The map's fields.
-	 *
-	 * The map keys represent field names. Field names matching the regular
-	 * expression `__.*__` are reserved. Reserved field names are forbidden except
-	 * in certain documented contexts. The map keys, represented as UTF-8, must
-	 * not exceed 1,500 bytes and cannot be empty.
-	 *
-	 * @generated from protobuf field: map<string, google.firestore.v1.Value> fields = 1;
-	 */
-	fields: {
-		[key: string]: Value;
-	};
+    /**
+     * The map's fields.
+     *
+     * The map keys represent field names. Field names matching the regular
+     * expression `__.*__` are reserved. Reserved field names are forbidden except
+     * in certain documented contexts. The map keys, represented as UTF-8, must
+     * not exceed 1,500 bytes and cannot be empty.
+     *
+     * @generated from protobuf field: map<string, google.firestore.v1.Value> fields = 1;
+     */
+    fields: {
+        [key: string]: Value;
+    };
 }
 /**
  * An object that represents a latitude/longitude pair. This is expressed as a
@@ -268,35 +256,35 @@ export interface MapValue {
  * @generated from protobuf message google.firestore.v1.LatLng
  */
 export interface LatLng {
-	/**
-	 * The latitude in degrees. It must be in the range [-90.0, +90.0].
-	 *
-	 * @generated from protobuf field: double latitude = 1;
-	 */
-	latitude: number;
-	/**
-	 * The longitude in degrees. It must be in the range [-180.0, +180.0].
-	 *
-	 * @generated from protobuf field: double longitude = 2;
-	 */
-	longitude: number;
+    /**
+     * The latitude in degrees. It must be in the range [-90.0, +90.0].
+     *
+     * @generated from protobuf field: double latitude = 1;
+     */
+    latitude: number;
+    /**
+     * The longitude in degrees. It must be in the range [-180.0, +180.0].
+     *
+     * @generated from protobuf field: double longitude = 2;
+     */
+    longitude: number;
 }
 /**
  * @generated from protobuf message google.firestore.v1.ListDocumentsResponse
  */
 export interface ListDocumentsResponse {
-	/**
-	 * The Documents found.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.Document documents = 1;
-	 */
-	documents: Document[];
-	/**
-	 * The next page token.
-	 *
-	 * @generated from protobuf field: string next_page_token = 2;
-	 */
-	nextPageToken: string;
+    /**
+     * The Documents found.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.Document documents = 1;
+     */
+    documents: Document[];
+    /**
+     * The next page token.
+     *
+     * @generated from protobuf field: string next_page_token = 2;
+     */
+    nextPageToken: string;
 }
 /**
  * The request for [Firestore.Write][google.firestore.v1.Firestore.Write].
@@ -319,52 +307,52 @@ export interface ListDocumentsResponse {
  * @generated from protobuf message google.firestore.v1.WriteRequest
  */
 export interface WriteRequest {
-	/**
-	 * The ID of the write stream to resume.
-	 * This may only be set in the first message. When left empty, a new write
-	 * stream will be created.
-	 *
-	 * @generated from protobuf field: optional string stream_id = 2;
-	 */
-	streamId?: string;
-	/**
-	 * The writes to apply.
-	 *
-	 * Always executed atomically and in order.
-	 * This must be empty on the first request.
-	 * This may be empty on the last request.
-	 * This must not be empty on all other requests.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.Write writes = 3;
-	 */
-	writes: Write[];
-	/**
-	 * A stream token that was previously sent by the server.
-	 *
-	 * The client should set this field to the token from the most recent
-	 * [WriteResponse][google.firestore.v1.WriteResponse] it has received. This
-	 * acknowledges that the client has received responses up to this token. After
-	 * sending this token, earlier tokens may not be used anymore.
-	 *
-	 * The server may close the stream if there are too many unacknowledged
-	 * responses.
-	 *
-	 * Leave this field unset when creating a new stream. To resume a stream at
-	 * a specific point, set this field and the `stream_id` field.
-	 *
-	 * Leave this field unset when creating a new stream.
-	 *
-	 * @generated from protobuf field: optional bytes stream_token = 4;
-	 */
-	streamToken?: Uint8Array;
-	/**
-	 * Labels associated with this write request.
-	 *
-	 * @generated from protobuf field: map<string, string> labels = 5;
-	 */
-	labels: {
-		[key: string]: string;
-	};
+    /**
+     * The ID of the write stream to resume.
+     * This may only be set in the first message. When left empty, a new write
+     * stream will be created.
+     *
+     * @generated from protobuf field: optional string stream_id = 2;
+     */
+    streamId?: string;
+    /**
+     * The writes to apply.
+     *
+     * Always executed atomically and in order.
+     * This must be empty on the first request.
+     * This may be empty on the last request.
+     * This must not be empty on all other requests.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.Write writes = 3;
+     */
+    writes: Write[];
+    /**
+     * A stream token that was previously sent by the server.
+     *
+     * The client should set this field to the token from the most recent
+     * [WriteResponse][google.firestore.v1.WriteResponse] it has received. This
+     * acknowledges that the client has received responses up to this token. After
+     * sending this token, earlier tokens may not be used anymore.
+     *
+     * The server may close the stream if there are too many unacknowledged
+     * responses.
+     *
+     * Leave this field unset when creating a new stream. To resume a stream at
+     * a specific point, set this field and the `stream_id` field.
+     *
+     * Leave this field unset when creating a new stream.
+     *
+     * @generated from protobuf field: optional bytes stream_token = 4;
+     */
+    streamToken?: Uint8Array;
+    /**
+     * Labels associated with this write request.
+     *
+     * @generated from protobuf field: map<string, string> labels = 5;
+     */
+    labels: {
+        [key: string]: string;
+    };
 }
 /**
  * The response for [Firestore.Write][google.firestore.v1.Firestore.Write].
@@ -372,38 +360,38 @@ export interface WriteRequest {
  * @generated from protobuf message google.firestore.v1.WriteResponse
  */
 export interface WriteResponse {
-	/**
-	 * The ID of the stream.
-	 * Only set on the first message, when a new stream was created.
-	 *
-	 * @generated from protobuf field: string stream_id = 1;
-	 */
-	streamId: string;
-	/**
-	 * A token that represents the position of this response in the stream.
-	 * This can be used by a client to resume the stream at this point.
-	 *
-	 * This field is always set.
-	 *
-	 * @generated from protobuf field: bytes stream_token = 2;
-	 */
-	streamToken: Uint8Array;
-	/**
-	 * The result of applying the writes.
-	 *
-	 * This i-th write result corresponds to the i-th write in the
-	 * request.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.WriteResult write_results = 3;
-	 */
-	writeResults: WriteResult[];
-	/**
-	 * The time at which the commit occurred. Any read with an equal or greater
-	 * `read_time` is guaranteed to see the effects of the write.
-	 *
-	 * @generated from protobuf field: google.protobuf.Timestamp commit_time = 4;
-	 */
-	commitTime?: Timestamp;
+    /**
+     * The ID of the stream.
+     * Only set on the first message, when a new stream was created.
+     *
+     * @generated from protobuf field: string stream_id = 1;
+     */
+    streamId: string;
+    /**
+     * A token that represents the position of this response in the stream.
+     * This can be used by a client to resume the stream at this point.
+     *
+     * This field is always set.
+     *
+     * @generated from protobuf field: bytes stream_token = 2;
+     */
+    streamToken: Uint8Array;
+    /**
+     * The result of applying the writes.
+     *
+     * This i-th write result corresponds to the i-th write in the
+     * request.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.WriteResult write_results = 3;
+     */
+    writeResults: WriteResult[];
+    /**
+     * The time at which the commit occurred. Any read with an equal or greater
+     * `read_time` is guaranteed to see the effects of the write.
+     *
+     * @generated from protobuf field: google.protobuf.Timestamp commit_time = 4;
+     */
+    commitTime?: Timestamp;
 }
 /**
  * The result of applying a write.
@@ -411,24 +399,24 @@ export interface WriteResponse {
  * @generated from protobuf message google.firestore.v1.WriteResult
  */
 export interface WriteResult {
-	/**
-	 * The last update time of the document after applying the write. Not set
-	 * after a `delete`.
-	 *
-	 * If the write did not actually change the document, this will be the
-	 * previous update_time.
-	 *
-	 * @generated from protobuf field: google.protobuf.Timestamp update_time = 1;
-	 */
-	updateTime?: Timestamp;
-	/**
-	 * The results of applying each
-	 * [DocumentTransform.FieldTransform][google.firestore.v1.DocumentTransform.FieldTransform],
-	 * in the same order.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.Value transform_results = 2;
-	 */
-	transformResults: Value[];
+    /**
+     * The last update time of the document after applying the write. Not set
+     * after a `delete`.
+     *
+     * If the write did not actually change the document, this will be the
+     * previous update_time.
+     *
+     * @generated from protobuf field: google.protobuf.Timestamp update_time = 1;
+     */
+    updateTime?: Timestamp;
+    /**
+     * The results of applying each
+     * [DocumentTransform.FieldTransform][google.firestore.v1.DocumentTransform.FieldTransform],
+     * in the same order.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.Value transform_results = 2;
+     */
+    transformResults: Value[];
 }
 /**
  * Required. The database name. In the format:
@@ -439,20 +427,20 @@ export interface WriteResult {
  * @generated from protobuf message google.firestore.v1.CommitRequest
  */
 export interface CommitRequest {
-	/**
-	 * The writes to apply.
-	 *
-	 * Always executed atomically and in order.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.Write writes = 2;
-	 */
-	writes: Write[];
-	/**
-	 * If set, applies all writes in this transaction, and commits it.
-	 *
-	 * @generated from protobuf field: bytes transaction = 3;
-	 */
-	transaction: Uint8Array;
+    /**
+     * The writes to apply.
+     *
+     * Always executed atomically and in order.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.Write writes = 2;
+     */
+    writes: Write[];
+    /**
+     * If set, applies all writes in this transaction, and commits it.
+     *
+     * @generated from protobuf field: bytes transaction = 3;
+     */
+    transaction: Uint8Array;
 }
 /**
  * The response for [Firestore.Commit][google.firestore.v1.Firestore.Commit].
@@ -460,22 +448,22 @@ export interface CommitRequest {
  * @generated from protobuf message google.firestore.v1.CommitResponse
  */
 export interface CommitResponse {
-	/**
-	 * The result of applying the writes.
-	 *
-	 * This i-th write result corresponds to the i-th write in the
-	 * request.
-	 *
-	 * @generated from protobuf field: repeated google.firestore.v1.WriteResult write_results = 1;
-	 */
-	writeResults: WriteResult[];
-	/**
-	 * The time at which the commit occurred. Any read with an equal or greater
-	 * `read_time` is guaranteed to see the effects of the commit.
-	 *
-	 * @generated from protobuf field: google.protobuf.Timestamp commit_time = 2;
-	 */
-	commitTime?: Timestamp;
+    /**
+     * The result of applying the writes.
+     *
+     * This i-th write result corresponds to the i-th write in the
+     * request.
+     *
+     * @generated from protobuf field: repeated google.firestore.v1.WriteResult write_results = 1;
+     */
+    writeResults: WriteResult[];
+    /**
+     * The time at which the commit occurred. Any read with an equal or greater
+     * `read_time` is guaranteed to see the effects of the commit.
+     *
+     * @generated from protobuf field: google.protobuf.Timestamp commit_time = 2;
+     */
+    commitTime?: Timestamp;
 }
 /**
  * A write on a document.
@@ -483,258 +471,234 @@ export interface CommitResponse {
  * @generated from protobuf message google.firestore.v1.Write
  */
 export interface Write {
-	/**
-	 * @generated from protobuf oneof: operation
-	 */
-	operation:
-		| {
-				oneofKind: 'update';
-				/**
-				 * A document to write.
-				 *
-				 * @generated from protobuf field: google.firestore.v1.Document update = 1;
-				 */
-				update: Document;
-		  }
-		| {
-				oneofKind: 'delete';
-				/**
-				 * A document name to delete. In the format:
-				 * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
-				 *
-				 * @generated from protobuf field: string delete = 2;
-				 */
-				delete: string;
-		  }
-		| {
-				oneofKind: undefined;
-		  };
-	// The fields to update in this write.
-	//
-	// This field can be set only when the operation is `update`.
-	// If the mask is not set for an `update` and the document exists, any
-	// existing data will be overwritten.
-	// If the mask is set and the document on the server has fields not covered by
-	// the mask, they are left unchanged.
-	// Fields referenced in the mask, but not present in the input document, are
-	// deleted from the document on the server.
-	// The field paths in this mask must not contain a reserved field name.
+    /**
+     * @generated from protobuf oneof: operation
+     */
+    operation: {
+        oneofKind: "update";
+        /**
+         * A document to write.
+         *
+         * @generated from protobuf field: google.firestore.v1.Document update = 1;
+         */
+        update: Document;
+    } | {
+        oneofKind: "delete";
+        /**
+         * A document name to delete. In the format:
+         * `projects/{project_id}/databases/{database_id}/documents/{document_path}`.
+         *
+         * @generated from protobuf field: string delete = 2;
+         */
+        delete: string;
+    } | {
+        oneofKind: undefined;
+    };
+    // The fields to update in this write.
+    // 
+    // This field can be set only when the operation is `update`.
+    // If the mask is not set for an `update` and the document exists, any
+    // existing data will be overwritten.
+    // If the mask is set and the document on the server has fields not covered by
+    // the mask, they are left unchanged.
+    // Fields referenced in the mask, but not present in the input document, are
+    // deleted from the document on the server.
+    // The field paths in this mask must not contain a reserved field name.
 
-	/**
-	 * @generated from protobuf field: google.firestore.v1.DocumentMask update_mask = 3;
-	 */
-	updateMask?: DocumentMask;
-	// The transforms to perform after update.
-	//
-	// This field can be set only when the operation is `update`. If present, this
-	// write is equivalent to performing `update` and `transform` to the same
-	// document atomically and in order.
-	// [NOT IMPLEMENTED] repeated DocumentTransform.FieldTransform
-	// update_transforms = 7;
+    /**
+     * @generated from protobuf field: google.firestore.v1.DocumentMask update_mask = 3;
+     */
+    updateMask?: DocumentMask;
+    // The transforms to perform after update.
+    // 
+    // This field can be set only when the operation is `update`. If present, this
+    // write is equivalent to performing `update` and `transform` to the same
+    // document atomically and in order.
+    // [NOT IMPLEMENTED] repeated DocumentTransform.FieldTransform
+    // update_transforms = 7;
 
-	/**
-	 * An optional precondition on the document.
-	 *
-	 * The write will fail if this is set and not met by the target document.
-	 *
-	 * @generated from protobuf field: google.firestore.v1.Precondition current_document = 4;
-	 */
-	currentDocument?: Precondition;
+    /**
+     * An optional precondition on the document.
+     *
+     * The write will fail if this is set and not met by the target document.
+     *
+     * @generated from protobuf field: google.firestore.v1.Precondition current_document = 4;
+     */
+    currentDocument?: Precondition;
 }
 /**
  * @generated from protobuf message google.firestore.v1.DocumentMask
  */
 export interface DocumentMask {
-	/**
-	 * The list of field paths in the mask. See
-	 * [Document.fields][google.firestore.v1.Document.fields] for a field path
-	 * syntax reference.
-	 *
-	 * @generated from protobuf field: repeated string field_paths = 1;
-	 */
-	fieldPaths: string[];
+    /**
+     * The list of field paths in the mask. See
+     * [Document.fields][google.firestore.v1.Document.fields] for a field path
+     * syntax reference.
+     *
+     * @generated from protobuf field: repeated string field_paths = 1;
+     */
+    fieldPaths: string[];
 }
 /**
  * @generated from protobuf message google.firestore.v1.Precondition
  */
 export interface Precondition {
-	/**
-	 * @generated from protobuf oneof: condition_type
-	 */
-	conditionType:
-		| {
-				oneofKind: 'exists';
-				/**
-				 * When set to `true`, the target document must exist.
-				 * When set to `false`, the target document must not exist.
-				 *
-				 * @generated from protobuf field: bool exists = 1;
-				 */
-				exists: boolean;
-		  }
-		| {
-				oneofKind: 'updateTime';
-				/**
-				 * When set, the target document must exist and have been last updated at
-				 * that time. Timestamp must be microsecond aligned.
-				 *
-				 * @generated from protobuf field: google.protobuf.Timestamp update_time = 2;
-				 */
-				updateTime: Timestamp;
-		  }
-		| {
-				oneofKind: undefined;
-		  };
+    /**
+     * @generated from protobuf oneof: condition_type
+     */
+    conditionType: {
+        oneofKind: "exists";
+        /**
+         * When set to `true`, the target document must exist.
+         * When set to `false`, the target document must not exist.
+         *
+         * @generated from protobuf field: bool exists = 1;
+         */
+        exists: boolean;
+    } | {
+        oneofKind: "updateTime";
+        /**
+         * When set, the target document must exist and have been last updated at
+         * that time. Timestamp must be microsecond aligned.
+         *
+         * @generated from protobuf field: google.protobuf.Timestamp update_time = 2;
+         */
+        updateTime: Timestamp;
+    } | {
+        oneofKind: undefined;
+    };
 }
 /**
  * @generated from protobuf enum google.firestore.v1.StatusCode
  */
 export enum StatusCode {
-	/**
-	 * @generated from protobuf enum value: OK = 0;
-	 */
-	OK = 0,
-	/**
-	 * @generated from protobuf enum value: CANCELLED = 1;
-	 */
-	CANCELLED = 1,
-	/**
-	 * @generated from protobuf enum value: UNKNOWN = 2;
-	 */
-	UNKNOWN = 2,
-	/**
-	 * @generated from protobuf enum value: INVALID_ARGUMENT = 3;
-	 */
-	INVALID_ARGUMENT = 3,
-	/**
-	 * @generated from protobuf enum value: DEADLINE_EXCEEDED = 4;
-	 */
-	DEADLINE_EXCEEDED = 4,
-	/**
-	 * @generated from protobuf enum value: NOT_FOUND = 5;
-	 */
-	NOT_FOUND = 5,
-	/**
-	 * @generated from protobuf enum value: ALREADY_EXISTS = 6;
-	 */
-	ALREADY_EXISTS = 6,
-	/**
-	 * @generated from protobuf enum value: PERMISSION_DENIED = 7;
-	 */
-	PERMISSION_DENIED = 7,
-	/**
-	 * @generated from protobuf enum value: UNAUTHENTICATED = 16;
-	 */
-	UNAUTHENTICATED = 16,
-	/**
-	 * @generated from protobuf enum value: RESOURCE_EXHAUSTED = 8;
-	 */
-	RESOURCE_EXHAUSTED = 8,
-	/**
-	 * @generated from protobuf enum value: FAILED_PRECONDITION = 9;
-	 */
-	FAILED_PRECONDITION = 9,
-	/**
-	 * @generated from protobuf enum value: ABORTED = 10;
-	 */
-	ABORTED = 10,
-	/**
-	 * @generated from protobuf enum value: OUT_OF_RANGE = 11;
-	 */
-	OUT_OF_RANGE = 11,
-	/**
-	 * @generated from protobuf enum value: UNIMPLEMENTED = 12;
-	 */
-	UNIMPLEMENTED = 12,
-	/**
-	 * @generated from protobuf enum value: INTERNAL = 13;
-	 */
-	INTERNAL = 13,
-	/**
-	 * @generated from protobuf enum value: UNAVAILABLE = 14;
-	 */
-	UNAVAILABLE = 14,
-	/**
-	 * @generated from protobuf enum value: DATA_LOSS = 15;
-	 */
-	DATA_LOSS = 15
+    /**
+     * @generated from protobuf enum value: OK = 0;
+     */
+    OK = 0,
+    /**
+     * @generated from protobuf enum value: CANCELLED = 1;
+     */
+    CANCELLED = 1,
+    /**
+     * @generated from protobuf enum value: UNKNOWN = 2;
+     */
+    UNKNOWN = 2,
+    /**
+     * @generated from protobuf enum value: INVALID_ARGUMENT = 3;
+     */
+    INVALID_ARGUMENT = 3,
+    /**
+     * @generated from protobuf enum value: DEADLINE_EXCEEDED = 4;
+     */
+    DEADLINE_EXCEEDED = 4,
+    /**
+     * @generated from protobuf enum value: NOT_FOUND = 5;
+     */
+    NOT_FOUND = 5,
+    /**
+     * @generated from protobuf enum value: ALREADY_EXISTS = 6;
+     */
+    ALREADY_EXISTS = 6,
+    /**
+     * @generated from protobuf enum value: PERMISSION_DENIED = 7;
+     */
+    PERMISSION_DENIED = 7,
+    /**
+     * @generated from protobuf enum value: UNAUTHENTICATED = 16;
+     */
+    UNAUTHENTICATED = 16,
+    /**
+     * @generated from protobuf enum value: RESOURCE_EXHAUSTED = 8;
+     */
+    RESOURCE_EXHAUSTED = 8,
+    /**
+     * @generated from protobuf enum value: FAILED_PRECONDITION = 9;
+     */
+    FAILED_PRECONDITION = 9,
+    /**
+     * @generated from protobuf enum value: ABORTED = 10;
+     */
+    ABORTED = 10,
+    /**
+     * @generated from protobuf enum value: OUT_OF_RANGE = 11;
+     */
+    OUT_OF_RANGE = 11,
+    /**
+     * @generated from protobuf enum value: UNIMPLEMENTED = 12;
+     */
+    UNIMPLEMENTED = 12,
+    /**
+     * @generated from protobuf enum value: INTERNAL = 13;
+     */
+    INTERNAL = 13,
+    /**
+     * @generated from protobuf enum value: UNAVAILABLE = 14;
+     */
+    UNAVAILABLE = 14,
+    /**
+     * @generated from protobuf enum value: DATA_LOSS = 15;
+     */
+    DATA_LOSS = 15
 }
 // @generated message type with reflection information, may provide speed optimized methods
 class RpcError$Type extends MessageType<RpcError> {
-	constructor() {
-		super('google.firestore.v1.RpcError', [
-			{ no: 1, name: 'code', kind: 'scalar', T: 5 /*ScalarType.INT32*/ },
-			{ no: 2, name: 'message', kind: 'scalar', T: 9 /*ScalarType.STRING*/ },
-			{
-				no: 3,
-				name: 'status',
-				kind: 'enum',
-				T: () => ['google.firestore.v1.StatusCode', StatusCode]
-			}
-		]);
-	}
-	create(value?: PartialMessage<RpcError>): RpcError {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.code = 0;
-		message.message = '';
-		message.status = 0;
-		if (value !== undefined) reflectionMergePartial<RpcError>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: RpcError
-	): RpcError {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* int32 code */ 1:
-					message.code = reader.int32();
-					break;
-				case /* string message */ 2:
-					message.message = reader.string();
-					break;
-				case /* google.firestore.v1.StatusCode status */ 3:
-					message.status = reader.int32();
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: RpcError,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* int32 code = 1; */
-		if (message.code !== 0) writer.tag(1, WireType.Varint).int32(message.code);
-		/* string message = 2; */
-		if (message.message !== '') writer.tag(2, WireType.LengthDelimited).string(message.message);
-		/* google.firestore.v1.StatusCode status = 3; */
-		if (message.status !== 0) writer.tag(3, WireType.Varint).int32(message.status);
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.RpcError", [
+            { no: 1, name: "code", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
+            { no: 2, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "status", kind: "enum", T: () => ["google.firestore.v1.StatusCode", StatusCode] }
+        ]);
+    }
+    create(value?: PartialMessage<RpcError>): RpcError {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.code = 0;
+        message.message = "";
+        message.status = 0;
+        if (value !== undefined)
+            reflectionMergePartial<RpcError>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RpcError): RpcError {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* int32 code */ 1:
+                    message.code = reader.int32();
+                    break;
+                case /* string message */ 2:
+                    message.message = reader.string();
+                    break;
+                case /* google.firestore.v1.StatusCode status */ 3:
+                    message.status = reader.int32();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: RpcError, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* int32 code = 1; */
+        if (message.code !== 0)
+            writer.tag(1, WireType.Varint).int32(message.code);
+        /* string message = 2; */
+        if (message.message !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.message);
+        /* google.firestore.v1.StatusCode status = 3; */
+        if (message.status !== 0)
+            writer.tag(3, WireType.Varint).int32(message.status);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.RpcError
@@ -742,137 +706,88 @@ class RpcError$Type extends MessageType<RpcError> {
 export const RpcError = new RpcError$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class Document$Type extends MessageType<Document> {
-	constructor() {
-		super('google.firestore.v1.Document', [
-			{ no: 1, name: 'name', kind: 'scalar', T: 9 /*ScalarType.STRING*/ },
-			{
-				no: 2,
-				name: 'fields',
-				kind: 'map',
-				K: 9 /*ScalarType.STRING*/,
-				V: { kind: 'message', T: () => Value }
-			},
-			{ no: 3, name: 'create_time', kind: 'message', T: () => Timestamp },
-			{ no: 4, name: 'update_time', kind: 'message', T: () => Timestamp }
-		]);
-	}
-	create(value?: PartialMessage<Document>): Document {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.name = '';
-		message.fields = {};
-		if (value !== undefined) reflectionMergePartial<Document>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: Document
-	): Document {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* string name */ 1:
-					message.name = reader.string();
-					break;
-				case /* map<string, google.firestore.v1.Value> fields */ 2:
-					this.binaryReadMap2(message.fields, reader, options);
-					break;
-				case /* google.protobuf.Timestamp create_time */ 3:
-					message.createTime = Timestamp.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.createTime
-					);
-					break;
-				case /* google.protobuf.Timestamp update_time */ 4:
-					message.updateTime = Timestamp.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.updateTime
-					);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	private binaryReadMap2(
-		map: Document['fields'],
-		reader: IBinaryReader,
-		options: BinaryReadOptions
-	): void {
-		let len = reader.uint32(),
-			end = reader.pos + len,
-			key: keyof Document['fields'] | undefined,
-			val: Document['fields'][any] | undefined;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case 1:
-					key = reader.string();
-					break;
-				case 2:
-					val = Value.internalBinaryRead(reader, reader.uint32(), options);
-					break;
-				default:
-					throw new globalThis.Error(
-						'unknown map entry field for field google.firestore.v1.Document.fields'
-					);
-			}
-		}
-		map[key ?? ''] = val ?? Value.create();
-	}
-	internalBinaryWrite(
-		message: Document,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* string name = 1; */
-		if (message.name !== '') writer.tag(1, WireType.LengthDelimited).string(message.name);
-		/* map<string, google.firestore.v1.Value> fields = 2; */
-		for (let k of globalThis.Object.keys(message.fields)) {
-			writer.tag(2, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k);
-			writer.tag(2, WireType.LengthDelimited).fork();
-			Value.internalBinaryWrite(message.fields[k], writer, options);
-			writer.join().join();
-		}
-		/* google.protobuf.Timestamp create_time = 3; */
-		if (message.createTime)
-			Timestamp.internalBinaryWrite(
-				message.createTime,
-				writer.tag(3, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.protobuf.Timestamp update_time = 4; */
-		if (message.updateTime)
-			Timestamp.internalBinaryWrite(
-				message.updateTime,
-				writer.tag(4, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.Document", [
+            { no: 1, name: "name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "fields", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "message", T: () => Value } },
+            { no: 3, name: "create_time", kind: "message", T: () => Timestamp },
+            { no: 4, name: "update_time", kind: "message", T: () => Timestamp }
+        ]);
+    }
+    create(value?: PartialMessage<Document>): Document {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.name = "";
+        message.fields = {};
+        if (value !== undefined)
+            reflectionMergePartial<Document>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: Document): Document {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string name */ 1:
+                    message.name = reader.string();
+                    break;
+                case /* map<string, google.firestore.v1.Value> fields */ 2:
+                    this.binaryReadMap2(message.fields, reader, options);
+                    break;
+                case /* google.protobuf.Timestamp create_time */ 3:
+                    message.createTime = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.createTime);
+                    break;
+                case /* google.protobuf.Timestamp update_time */ 4:
+                    message.updateTime = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.updateTime);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    private binaryReadMap2(map: Document["fields"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof Document["fields"] | undefined, val: Document["fields"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = Value.internalBinaryRead(reader, reader.uint32(), options);
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for field google.firestore.v1.Document.fields");
+            }
+        }
+        map[key ?? ""] = val ?? Value.create();
+    }
+    internalBinaryWrite(message: Document, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string name = 1; */
+        if (message.name !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.name);
+        /* map<string, google.firestore.v1.Value> fields = 2; */
+        for (let k of globalThis.Object.keys(message.fields)) {
+            writer.tag(2, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k);
+            writer.tag(2, WireType.LengthDelimited).fork();
+            Value.internalBinaryWrite(message.fields[k], writer, options);
+            writer.join().join();
+        }
+        /* google.protobuf.Timestamp create_time = 3; */
+        if (message.createTime)
+            Timestamp.internalBinaryWrite(message.createTime, writer.tag(3, WireType.LengthDelimited).fork(), options).join();
+        /* google.protobuf.Timestamp update_time = 4; */
+        if (message.updateTime)
+            Timestamp.internalBinaryWrite(message.updateTime, writer.tag(4, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.Document
@@ -880,243 +795,149 @@ class Document$Type extends MessageType<Document> {
 export const Document = new Document$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class Value$Type extends MessageType<Value> {
-	constructor() {
-		super('google.firestore.v1.Value', [
-			{
-				no: 11,
-				name: 'null_value',
-				kind: 'enum',
-				oneof: 'valueType',
-				T: () => ['google.protobuf.NullValue', NullValue]
-			},
-			{
-				no: 1,
-				name: 'boolean_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 8 /*ScalarType.BOOL*/
-			},
-			{
-				no: 2,
-				name: 'integer_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 3 /*ScalarType.INT64*/
-			},
-			{
-				no: 3,
-				name: 'double_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 1 /*ScalarType.DOUBLE*/
-			},
-			{ no: 10, name: 'timestamp_value', kind: 'message', oneof: 'valueType', T: () => Timestamp },
-			{
-				no: 17,
-				name: 'string_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 9 /*ScalarType.STRING*/
-			},
-			{
-				no: 18,
-				name: 'bytes_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 12 /*ScalarType.BYTES*/
-			},
-			{
-				no: 5,
-				name: 'reference_value',
-				kind: 'scalar',
-				oneof: 'valueType',
-				T: 9 /*ScalarType.STRING*/
-			},
-			{ no: 8, name: 'geo_point_value', kind: 'message', oneof: 'valueType', T: () => LatLng },
-			{ no: 9, name: 'array_value', kind: 'message', oneof: 'valueType', T: () => ArrayValue },
-			{ no: 6, name: 'map_value', kind: 'message', oneof: 'valueType', T: () => MapValue }
-		]);
-	}
-	create(value?: PartialMessage<Value>): Value {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.valueType = { oneofKind: undefined };
-		if (value !== undefined) reflectionMergePartial<Value>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: Value
-	): Value {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* google.protobuf.NullValue null_value */ 11:
-					message.valueType = {
-						oneofKind: 'nullValue',
-						nullValue: reader.int32()
-					};
-					break;
-				case /* bool boolean_value */ 1:
-					message.valueType = {
-						oneofKind: 'booleanValue',
-						booleanValue: reader.bool()
-					};
-					break;
-				case /* int64 integer_value */ 2:
-					message.valueType = {
-						oneofKind: 'integerValue',
-						integerValue: reader.int64().toString()
-					};
-					break;
-				case /* double double_value */ 3:
-					message.valueType = {
-						oneofKind: 'doubleValue',
-						doubleValue: reader.double()
-					};
-					break;
-				case /* google.protobuf.Timestamp timestamp_value */ 10:
-					message.valueType = {
-						oneofKind: 'timestampValue',
-						timestampValue: Timestamp.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.valueType as any).timestampValue
-						)
-					};
-					break;
-				case /* string string_value */ 17:
-					message.valueType = {
-						oneofKind: 'stringValue',
-						stringValue: reader.string()
-					};
-					break;
-				case /* bytes bytes_value */ 18:
-					message.valueType = {
-						oneofKind: 'bytesValue',
-						bytesValue: reader.bytes()
-					};
-					break;
-				case /* string reference_value */ 5:
-					message.valueType = {
-						oneofKind: 'referenceValue',
-						referenceValue: reader.string()
-					};
-					break;
-				case /* google.firestore.v1.LatLng geo_point_value */ 8:
-					message.valueType = {
-						oneofKind: 'geoPointValue',
-						geoPointValue: LatLng.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.valueType as any).geoPointValue
-						)
-					};
-					break;
-				case /* google.firestore.v1.ArrayValue array_value */ 9:
-					message.valueType = {
-						oneofKind: 'arrayValue',
-						arrayValue: ArrayValue.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.valueType as any).arrayValue
-						)
-					};
-					break;
-				case /* google.firestore.v1.MapValue map_value */ 6:
-					message.valueType = {
-						oneofKind: 'mapValue',
-						mapValue: MapValue.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.valueType as any).mapValue
-						)
-					};
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: Value,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* google.protobuf.NullValue null_value = 11; */
-		if (message.valueType.oneofKind === 'nullValue')
-			writer.tag(11, WireType.Varint).int32(message.valueType.nullValue);
-		/* bool boolean_value = 1; */
-		if (message.valueType.oneofKind === 'booleanValue')
-			writer.tag(1, WireType.Varint).bool(message.valueType.booleanValue);
-		/* int64 integer_value = 2; */
-		if (message.valueType.oneofKind === 'integerValue')
-			writer.tag(2, WireType.Varint).int64(message.valueType.integerValue);
-		/* double double_value = 3; */
-		if (message.valueType.oneofKind === 'doubleValue')
-			writer.tag(3, WireType.Bit64).double(message.valueType.doubleValue);
-		/* google.protobuf.Timestamp timestamp_value = 10; */
-		if (message.valueType.oneofKind === 'timestampValue')
-			Timestamp.internalBinaryWrite(
-				message.valueType.timestampValue,
-				writer.tag(10, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* string string_value = 17; */
-		if (message.valueType.oneofKind === 'stringValue')
-			writer.tag(17, WireType.LengthDelimited).string(message.valueType.stringValue);
-		/* bytes bytes_value = 18; */
-		if (message.valueType.oneofKind === 'bytesValue')
-			writer.tag(18, WireType.LengthDelimited).bytes(message.valueType.bytesValue);
-		/* string reference_value = 5; */
-		if (message.valueType.oneofKind === 'referenceValue')
-			writer.tag(5, WireType.LengthDelimited).string(message.valueType.referenceValue);
-		/* google.firestore.v1.LatLng geo_point_value = 8; */
-		if (message.valueType.oneofKind === 'geoPointValue')
-			LatLng.internalBinaryWrite(
-				message.valueType.geoPointValue,
-				writer.tag(8, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.firestore.v1.ArrayValue array_value = 9; */
-		if (message.valueType.oneofKind === 'arrayValue')
-			ArrayValue.internalBinaryWrite(
-				message.valueType.arrayValue,
-				writer.tag(9, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.firestore.v1.MapValue map_value = 6; */
-		if (message.valueType.oneofKind === 'mapValue')
-			MapValue.internalBinaryWrite(
-				message.valueType.mapValue,
-				writer.tag(6, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.Value", [
+            { no: 11, name: "null_value", kind: "enum", oneof: "valueType", T: () => ["google.protobuf.NullValue", NullValue] },
+            { no: 1, name: "boolean_value", kind: "scalar", oneof: "valueType", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "integer_value", kind: "scalar", oneof: "valueType", T: 3 /*ScalarType.INT64*/ },
+            { no: 3, name: "double_value", kind: "scalar", oneof: "valueType", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 10, name: "timestamp_value", kind: "message", oneof: "valueType", T: () => Timestamp },
+            { no: 17, name: "string_value", kind: "scalar", oneof: "valueType", T: 9 /*ScalarType.STRING*/ },
+            { no: 18, name: "bytes_value", kind: "scalar", oneof: "valueType", T: 12 /*ScalarType.BYTES*/ },
+            { no: 5, name: "reference_value", kind: "scalar", oneof: "valueType", T: 9 /*ScalarType.STRING*/ },
+            { no: 8, name: "geo_point_value", kind: "message", oneof: "valueType", T: () => LatLng },
+            { no: 9, name: "array_value", kind: "message", oneof: "valueType", T: () => ArrayValue },
+            { no: 6, name: "map_value", kind: "message", oneof: "valueType", T: () => MapValue }
+        ]);
+    }
+    create(value?: PartialMessage<Value>): Value {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.valueType = { oneofKind: undefined };
+        if (value !== undefined)
+            reflectionMergePartial<Value>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: Value): Value {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* google.protobuf.NullValue null_value */ 11:
+                    message.valueType = {
+                        oneofKind: "nullValue",
+                        nullValue: reader.int32()
+                    };
+                    break;
+                case /* bool boolean_value */ 1:
+                    message.valueType = {
+                        oneofKind: "booleanValue",
+                        booleanValue: reader.bool()
+                    };
+                    break;
+                case /* int64 integer_value */ 2:
+                    message.valueType = {
+                        oneofKind: "integerValue",
+                        integerValue: reader.int64().toString()
+                    };
+                    break;
+                case /* double double_value */ 3:
+                    message.valueType = {
+                        oneofKind: "doubleValue",
+                        doubleValue: reader.double()
+                    };
+                    break;
+                case /* google.protobuf.Timestamp timestamp_value */ 10:
+                    message.valueType = {
+                        oneofKind: "timestampValue",
+                        timestampValue: Timestamp.internalBinaryRead(reader, reader.uint32(), options, (message.valueType as any).timestampValue)
+                    };
+                    break;
+                case /* string string_value */ 17:
+                    message.valueType = {
+                        oneofKind: "stringValue",
+                        stringValue: reader.string()
+                    };
+                    break;
+                case /* bytes bytes_value */ 18:
+                    message.valueType = {
+                        oneofKind: "bytesValue",
+                        bytesValue: reader.bytes()
+                    };
+                    break;
+                case /* string reference_value */ 5:
+                    message.valueType = {
+                        oneofKind: "referenceValue",
+                        referenceValue: reader.string()
+                    };
+                    break;
+                case /* google.firestore.v1.LatLng geo_point_value */ 8:
+                    message.valueType = {
+                        oneofKind: "geoPointValue",
+                        geoPointValue: LatLng.internalBinaryRead(reader, reader.uint32(), options, (message.valueType as any).geoPointValue)
+                    };
+                    break;
+                case /* google.firestore.v1.ArrayValue array_value */ 9:
+                    message.valueType = {
+                        oneofKind: "arrayValue",
+                        arrayValue: ArrayValue.internalBinaryRead(reader, reader.uint32(), options, (message.valueType as any).arrayValue)
+                    };
+                    break;
+                case /* google.firestore.v1.MapValue map_value */ 6:
+                    message.valueType = {
+                        oneofKind: "mapValue",
+                        mapValue: MapValue.internalBinaryRead(reader, reader.uint32(), options, (message.valueType as any).mapValue)
+                    };
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: Value, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* google.protobuf.NullValue null_value = 11; */
+        if (message.valueType.oneofKind === "nullValue")
+            writer.tag(11, WireType.Varint).int32(message.valueType.nullValue);
+        /* bool boolean_value = 1; */
+        if (message.valueType.oneofKind === "booleanValue")
+            writer.tag(1, WireType.Varint).bool(message.valueType.booleanValue);
+        /* int64 integer_value = 2; */
+        if (message.valueType.oneofKind === "integerValue")
+            writer.tag(2, WireType.Varint).int64(message.valueType.integerValue);
+        /* double double_value = 3; */
+        if (message.valueType.oneofKind === "doubleValue")
+            writer.tag(3, WireType.Bit64).double(message.valueType.doubleValue);
+        /* google.protobuf.Timestamp timestamp_value = 10; */
+        if (message.valueType.oneofKind === "timestampValue")
+            Timestamp.internalBinaryWrite(message.valueType.timestampValue, writer.tag(10, WireType.LengthDelimited).fork(), options).join();
+        /* string string_value = 17; */
+        if (message.valueType.oneofKind === "stringValue")
+            writer.tag(17, WireType.LengthDelimited).string(message.valueType.stringValue);
+        /* bytes bytes_value = 18; */
+        if (message.valueType.oneofKind === "bytesValue")
+            writer.tag(18, WireType.LengthDelimited).bytes(message.valueType.bytesValue);
+        /* string reference_value = 5; */
+        if (message.valueType.oneofKind === "referenceValue")
+            writer.tag(5, WireType.LengthDelimited).string(message.valueType.referenceValue);
+        /* google.firestore.v1.LatLng geo_point_value = 8; */
+        if (message.valueType.oneofKind === "geoPointValue")
+            LatLng.internalBinaryWrite(message.valueType.geoPointValue, writer.tag(8, WireType.LengthDelimited).fork(), options).join();
+        /* google.firestore.v1.ArrayValue array_value = 9; */
+        if (message.valueType.oneofKind === "arrayValue")
+            ArrayValue.internalBinaryWrite(message.valueType.arrayValue, writer.tag(9, WireType.LengthDelimited).fork(), options).join();
+        /* google.firestore.v1.MapValue map_value = 6; */
+        if (message.valueType.oneofKind === "mapValue")
+            MapValue.internalBinaryWrite(message.valueType.mapValue, writer.tag(6, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.Value
@@ -1124,66 +945,46 @@ class Value$Type extends MessageType<Value> {
 export const Value = new Value$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class ArrayValue$Type extends MessageType<ArrayValue> {
-	constructor() {
-		super('google.firestore.v1.ArrayValue', [
-			{ no: 1, name: 'values', kind: 'message', repeat: 1 /*RepeatType.PACKED*/, T: () => Value }
-		]);
-	}
-	create(value?: PartialMessage<ArrayValue>): ArrayValue {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.values = [];
-		if (value !== undefined) reflectionMergePartial<ArrayValue>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: ArrayValue
-	): ArrayValue {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* repeated google.firestore.v1.Value values */ 1:
-					message.values.push(Value.internalBinaryRead(reader, reader.uint32(), options));
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: ArrayValue,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* repeated google.firestore.v1.Value values = 1; */
-		for (let i = 0; i < message.values.length; i++)
-			Value.internalBinaryWrite(
-				message.values[i],
-				writer.tag(1, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.ArrayValue", [
+            { no: 1, name: "values", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => Value }
+        ]);
+    }
+    create(value?: PartialMessage<ArrayValue>): ArrayValue {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.values = [];
+        if (value !== undefined)
+            reflectionMergePartial<ArrayValue>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ArrayValue): ArrayValue {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated google.firestore.v1.Value values */ 1:
+                    message.values.push(Value.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ArrayValue, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated google.firestore.v1.Value values = 1; */
+        for (let i = 0; i < message.values.length; i++)
+            Value.internalBinaryWrite(message.values[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.ArrayValue
@@ -1191,98 +992,66 @@ class ArrayValue$Type extends MessageType<ArrayValue> {
 export const ArrayValue = new ArrayValue$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class MapValue$Type extends MessageType<MapValue> {
-	constructor() {
-		super('google.firestore.v1.MapValue', [
-			{
-				no: 1,
-				name: 'fields',
-				kind: 'map',
-				K: 9 /*ScalarType.STRING*/,
-				V: { kind: 'message', T: () => Value }
-			}
-		]);
-	}
-	create(value?: PartialMessage<MapValue>): MapValue {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.fields = {};
-		if (value !== undefined) reflectionMergePartial<MapValue>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: MapValue
-	): MapValue {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* map<string, google.firestore.v1.Value> fields */ 1:
-					this.binaryReadMap1(message.fields, reader, options);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	private binaryReadMap1(
-		map: MapValue['fields'],
-		reader: IBinaryReader,
-		options: BinaryReadOptions
-	): void {
-		let len = reader.uint32(),
-			end = reader.pos + len,
-			key: keyof MapValue['fields'] | undefined,
-			val: MapValue['fields'][any] | undefined;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case 1:
-					key = reader.string();
-					break;
-				case 2:
-					val = Value.internalBinaryRead(reader, reader.uint32(), options);
-					break;
-				default:
-					throw new globalThis.Error(
-						'unknown map entry field for field google.firestore.v1.MapValue.fields'
-					);
-			}
-		}
-		map[key ?? ''] = val ?? Value.create();
-	}
-	internalBinaryWrite(
-		message: MapValue,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* map<string, google.firestore.v1.Value> fields = 1; */
-		for (let k of globalThis.Object.keys(message.fields)) {
-			writer.tag(1, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k);
-			writer.tag(2, WireType.LengthDelimited).fork();
-			Value.internalBinaryWrite(message.fields[k], writer, options);
-			writer.join().join();
-		}
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.MapValue", [
+            { no: 1, name: "fields", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "message", T: () => Value } }
+        ]);
+    }
+    create(value?: PartialMessage<MapValue>): MapValue {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.fields = {};
+        if (value !== undefined)
+            reflectionMergePartial<MapValue>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: MapValue): MapValue {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* map<string, google.firestore.v1.Value> fields */ 1:
+                    this.binaryReadMap1(message.fields, reader, options);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    private binaryReadMap1(map: MapValue["fields"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof MapValue["fields"] | undefined, val: MapValue["fields"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = Value.internalBinaryRead(reader, reader.uint32(), options);
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for field google.firestore.v1.MapValue.fields");
+            }
+        }
+        map[key ?? ""] = val ?? Value.create();
+    }
+    internalBinaryWrite(message: MapValue, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* map<string, google.firestore.v1.Value> fields = 1; */
+        for (let k of globalThis.Object.keys(message.fields)) {
+            writer.tag(1, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k);
+            writer.tag(2, WireType.LengthDelimited).fork();
+            Value.internalBinaryWrite(message.fields[k], writer, options);
+            writer.join().join();
+        }
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.MapValue
@@ -1290,68 +1059,54 @@ class MapValue$Type extends MessageType<MapValue> {
 export const MapValue = new MapValue$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class LatLng$Type extends MessageType<LatLng> {
-	constructor() {
-		super('google.firestore.v1.LatLng', [
-			{ no: 1, name: 'latitude', kind: 'scalar', T: 1 /*ScalarType.DOUBLE*/ },
-			{ no: 2, name: 'longitude', kind: 'scalar', T: 1 /*ScalarType.DOUBLE*/ }
-		]);
-	}
-	create(value?: PartialMessage<LatLng>): LatLng {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.latitude = 0;
-		message.longitude = 0;
-		if (value !== undefined) reflectionMergePartial<LatLng>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: LatLng
-	): LatLng {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* double latitude */ 1:
-					message.latitude = reader.double();
-					break;
-				case /* double longitude */ 2:
-					message.longitude = reader.double();
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: LatLng,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* double latitude = 1; */
-		if (message.latitude !== 0) writer.tag(1, WireType.Bit64).double(message.latitude);
-		/* double longitude = 2; */
-		if (message.longitude !== 0) writer.tag(2, WireType.Bit64).double(message.longitude);
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.LatLng", [
+            { no: 1, name: "latitude", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ },
+            { no: 2, name: "longitude", kind: "scalar", T: 1 /*ScalarType.DOUBLE*/ }
+        ]);
+    }
+    create(value?: PartialMessage<LatLng>): LatLng {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.latitude = 0;
+        message.longitude = 0;
+        if (value !== undefined)
+            reflectionMergePartial<LatLng>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: LatLng): LatLng {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* double latitude */ 1:
+                    message.latitude = reader.double();
+                    break;
+                case /* double longitude */ 2:
+                    message.longitude = reader.double();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: LatLng, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* double latitude = 1; */
+        if (message.latitude !== 0)
+            writer.tag(1, WireType.Bit64).double(message.latitude);
+        /* double longitude = 2; */
+        if (message.longitude !== 0)
+            writer.tag(2, WireType.Bit64).double(message.longitude);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.LatLng
@@ -1359,80 +1114,54 @@ class LatLng$Type extends MessageType<LatLng> {
 export const LatLng = new LatLng$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class ListDocumentsResponse$Type extends MessageType<ListDocumentsResponse> {
-	constructor() {
-		super('google.firestore.v1.ListDocumentsResponse', [
-			{
-				no: 1,
-				name: 'documents',
-				kind: 'message',
-				repeat: 1 /*RepeatType.PACKED*/,
-				T: () => Document
-			},
-			{ no: 2, name: 'next_page_token', kind: 'scalar', T: 9 /*ScalarType.STRING*/ }
-		]);
-	}
-	create(value?: PartialMessage<ListDocumentsResponse>): ListDocumentsResponse {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.documents = [];
-		message.nextPageToken = '';
-		if (value !== undefined) reflectionMergePartial<ListDocumentsResponse>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: ListDocumentsResponse
-	): ListDocumentsResponse {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* repeated google.firestore.v1.Document documents */ 1:
-					message.documents.push(Document.internalBinaryRead(reader, reader.uint32(), options));
-					break;
-				case /* string next_page_token */ 2:
-					message.nextPageToken = reader.string();
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: ListDocumentsResponse,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* repeated google.firestore.v1.Document documents = 1; */
-		for (let i = 0; i < message.documents.length; i++)
-			Document.internalBinaryWrite(
-				message.documents[i],
-				writer.tag(1, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* string next_page_token = 2; */
-		if (message.nextPageToken !== '')
-			writer.tag(2, WireType.LengthDelimited).string(message.nextPageToken);
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.ListDocumentsResponse", [
+            { no: 1, name: "documents", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => Document },
+            { no: 2, name: "next_page_token", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ListDocumentsResponse>): ListDocumentsResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.documents = [];
+        message.nextPageToken = "";
+        if (value !== undefined)
+            reflectionMergePartial<ListDocumentsResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ListDocumentsResponse): ListDocumentsResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated google.firestore.v1.Document documents */ 1:
+                    message.documents.push(Document.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* string next_page_token */ 2:
+                    message.nextPageToken = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ListDocumentsResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated google.firestore.v1.Document documents = 1; */
+        for (let i = 0; i < message.documents.length; i++)
+            Document.internalBinaryWrite(message.documents[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* string next_page_token = 2; */
+        if (message.nextPageToken !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.nextPageToken);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.ListDocumentsResponse
@@ -1440,127 +1169,84 @@ class ListDocumentsResponse$Type extends MessageType<ListDocumentsResponse> {
 export const ListDocumentsResponse = new ListDocumentsResponse$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class WriteRequest$Type extends MessageType<WriteRequest> {
-	constructor() {
-		super('google.firestore.v1.WriteRequest', [
-			{ no: 2, name: 'stream_id', kind: 'scalar', opt: true, T: 9 /*ScalarType.STRING*/ },
-			{ no: 3, name: 'writes', kind: 'message', repeat: 1 /*RepeatType.PACKED*/, T: () => Write },
-			{ no: 4, name: 'stream_token', kind: 'scalar', opt: true, T: 12 /*ScalarType.BYTES*/ },
-			{
-				no: 5,
-				name: 'labels',
-				kind: 'map',
-				K: 9 /*ScalarType.STRING*/,
-				V: { kind: 'scalar', T: 9 /*ScalarType.STRING*/ }
-			}
-		]);
-	}
-	create(value?: PartialMessage<WriteRequest>): WriteRequest {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.writes = [];
-		message.labels = {};
-		if (value !== undefined) reflectionMergePartial<WriteRequest>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: WriteRequest
-	): WriteRequest {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* optional string stream_id */ 2:
-					message.streamId = reader.string();
-					break;
-				case /* repeated google.firestore.v1.Write writes */ 3:
-					message.writes.push(Write.internalBinaryRead(reader, reader.uint32(), options));
-					break;
-				case /* optional bytes stream_token */ 4:
-					message.streamToken = reader.bytes();
-					break;
-				case /* map<string, string> labels */ 5:
-					this.binaryReadMap5(message.labels, reader, options);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	private binaryReadMap5(
-		map: WriteRequest['labels'],
-		reader: IBinaryReader,
-		options: BinaryReadOptions
-	): void {
-		let len = reader.uint32(),
-			end = reader.pos + len,
-			key: keyof WriteRequest['labels'] | undefined,
-			val: WriteRequest['labels'][any] | undefined;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case 1:
-					key = reader.string();
-					break;
-				case 2:
-					val = reader.string();
-					break;
-				default:
-					throw new globalThis.Error(
-						'unknown map entry field for field google.firestore.v1.WriteRequest.labels'
-					);
-			}
-		}
-		map[key ?? ''] = val ?? '';
-	}
-	internalBinaryWrite(
-		message: WriteRequest,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* optional string stream_id = 2; */
-		if (message.streamId !== undefined)
-			writer.tag(2, WireType.LengthDelimited).string(message.streamId);
-		/* repeated google.firestore.v1.Write writes = 3; */
-		for (let i = 0; i < message.writes.length; i++)
-			Write.internalBinaryWrite(
-				message.writes[i],
-				writer.tag(3, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* optional bytes stream_token = 4; */
-		if (message.streamToken !== undefined)
-			writer.tag(4, WireType.LengthDelimited).bytes(message.streamToken);
-		/* map<string, string> labels = 5; */
-		for (let k of globalThis.Object.keys(message.labels))
-			writer
-				.tag(5, WireType.LengthDelimited)
-				.fork()
-				.tag(1, WireType.LengthDelimited)
-				.string(k)
-				.tag(2, WireType.LengthDelimited)
-				.string(message.labels[k])
-				.join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.WriteRequest", [
+            { no: 2, name: "stream_id", kind: "scalar", opt: true, T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "writes", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => Write },
+            { no: 4, name: "stream_token", kind: "scalar", opt: true, T: 12 /*ScalarType.BYTES*/ },
+            { no: 5, name: "labels", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } }
+        ]);
+    }
+    create(value?: PartialMessage<WriteRequest>): WriteRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.writes = [];
+        message.labels = {};
+        if (value !== undefined)
+            reflectionMergePartial<WriteRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: WriteRequest): WriteRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* optional string stream_id */ 2:
+                    message.streamId = reader.string();
+                    break;
+                case /* repeated google.firestore.v1.Write writes */ 3:
+                    message.writes.push(Write.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* optional bytes stream_token */ 4:
+                    message.streamToken = reader.bytes();
+                    break;
+                case /* map<string, string> labels */ 5:
+                    this.binaryReadMap5(message.labels, reader, options);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    private binaryReadMap5(map: WriteRequest["labels"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof WriteRequest["labels"] | undefined, val: WriteRequest["labels"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = reader.string();
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for field google.firestore.v1.WriteRequest.labels");
+            }
+        }
+        map[key ?? ""] = val ?? "";
+    }
+    internalBinaryWrite(message: WriteRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* optional string stream_id = 2; */
+        if (message.streamId !== undefined)
+            writer.tag(2, WireType.LengthDelimited).string(message.streamId);
+        /* repeated google.firestore.v1.Write writes = 3; */
+        for (let i = 0; i < message.writes.length; i++)
+            Write.internalBinaryWrite(message.writes[i], writer.tag(3, WireType.LengthDelimited).fork(), options).join();
+        /* optional bytes stream_token = 4; */
+        if (message.streamToken !== undefined)
+            writer.tag(4, WireType.LengthDelimited).bytes(message.streamToken);
+        /* map<string, string> labels = 5; */
+        for (let k of globalThis.Object.keys(message.labels))
+            writer.tag(5, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k).tag(2, WireType.LengthDelimited).string(message.labels[k]).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.WriteRequest
@@ -1568,105 +1254,69 @@ class WriteRequest$Type extends MessageType<WriteRequest> {
 export const WriteRequest = new WriteRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class WriteResponse$Type extends MessageType<WriteResponse> {
-	constructor() {
-		super('google.firestore.v1.WriteResponse', [
-			{ no: 1, name: 'stream_id', kind: 'scalar', T: 9 /*ScalarType.STRING*/ },
-			{ no: 2, name: 'stream_token', kind: 'scalar', T: 12 /*ScalarType.BYTES*/ },
-			{
-				no: 3,
-				name: 'write_results',
-				kind: 'message',
-				repeat: 1 /*RepeatType.PACKED*/,
-				T: () => WriteResult
-			},
-			{ no: 4, name: 'commit_time', kind: 'message', T: () => Timestamp }
-		]);
-	}
-	create(value?: PartialMessage<WriteResponse>): WriteResponse {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.streamId = '';
-		message.streamToken = new Uint8Array(0);
-		message.writeResults = [];
-		if (value !== undefined) reflectionMergePartial<WriteResponse>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: WriteResponse
-	): WriteResponse {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* string stream_id */ 1:
-					message.streamId = reader.string();
-					break;
-				case /* bytes stream_token */ 2:
-					message.streamToken = reader.bytes();
-					break;
-				case /* repeated google.firestore.v1.WriteResult write_results */ 3:
-					message.writeResults.push(
-						WriteResult.internalBinaryRead(reader, reader.uint32(), options)
-					);
-					break;
-				case /* google.protobuf.Timestamp commit_time */ 4:
-					message.commitTime = Timestamp.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.commitTime
-					);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: WriteResponse,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* string stream_id = 1; */
-		if (message.streamId !== '') writer.tag(1, WireType.LengthDelimited).string(message.streamId);
-		/* bytes stream_token = 2; */
-		if (message.streamToken.length)
-			writer.tag(2, WireType.LengthDelimited).bytes(message.streamToken);
-		/* repeated google.firestore.v1.WriteResult write_results = 3; */
-		for (let i = 0; i < message.writeResults.length; i++)
-			WriteResult.internalBinaryWrite(
-				message.writeResults[i],
-				writer.tag(3, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.protobuf.Timestamp commit_time = 4; */
-		if (message.commitTime)
-			Timestamp.internalBinaryWrite(
-				message.commitTime,
-				writer.tag(4, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.WriteResponse", [
+            { no: 1, name: "stream_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "stream_token", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 3, name: "write_results", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => WriteResult },
+            { no: 4, name: "commit_time", kind: "message", T: () => Timestamp }
+        ]);
+    }
+    create(value?: PartialMessage<WriteResponse>): WriteResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.streamId = "";
+        message.streamToken = new Uint8Array(0);
+        message.writeResults = [];
+        if (value !== undefined)
+            reflectionMergePartial<WriteResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: WriteResponse): WriteResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string stream_id */ 1:
+                    message.streamId = reader.string();
+                    break;
+                case /* bytes stream_token */ 2:
+                    message.streamToken = reader.bytes();
+                    break;
+                case /* repeated google.firestore.v1.WriteResult write_results */ 3:
+                    message.writeResults.push(WriteResult.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* google.protobuf.Timestamp commit_time */ 4:
+                    message.commitTime = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.commitTime);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: WriteResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string stream_id = 1; */
+        if (message.streamId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.streamId);
+        /* bytes stream_token = 2; */
+        if (message.streamToken.length)
+            writer.tag(2, WireType.LengthDelimited).bytes(message.streamToken);
+        /* repeated google.firestore.v1.WriteResult write_results = 3; */
+        for (let i = 0; i < message.writeResults.length; i++)
+            WriteResult.internalBinaryWrite(message.writeResults[i], writer.tag(3, WireType.LengthDelimited).fork(), options).join();
+        /* google.protobuf.Timestamp commit_time = 4; */
+        if (message.commitTime)
+            Timestamp.internalBinaryWrite(message.commitTime, writer.tag(4, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.WriteResponse
@@ -1674,88 +1324,53 @@ class WriteResponse$Type extends MessageType<WriteResponse> {
 export const WriteResponse = new WriteResponse$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class WriteResult$Type extends MessageType<WriteResult> {
-	constructor() {
-		super('google.firestore.v1.WriteResult', [
-			{ no: 1, name: 'update_time', kind: 'message', T: () => Timestamp },
-			{
-				no: 2,
-				name: 'transform_results',
-				kind: 'message',
-				repeat: 1 /*RepeatType.PACKED*/,
-				T: () => Value
-			}
-		]);
-	}
-	create(value?: PartialMessage<WriteResult>): WriteResult {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.transformResults = [];
-		if (value !== undefined) reflectionMergePartial<WriteResult>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: WriteResult
-	): WriteResult {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* google.protobuf.Timestamp update_time */ 1:
-					message.updateTime = Timestamp.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.updateTime
-					);
-					break;
-				case /* repeated google.firestore.v1.Value transform_results */ 2:
-					message.transformResults.push(Value.internalBinaryRead(reader, reader.uint32(), options));
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: WriteResult,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* google.protobuf.Timestamp update_time = 1; */
-		if (message.updateTime)
-			Timestamp.internalBinaryWrite(
-				message.updateTime,
-				writer.tag(1, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* repeated google.firestore.v1.Value transform_results = 2; */
-		for (let i = 0; i < message.transformResults.length; i++)
-			Value.internalBinaryWrite(
-				message.transformResults[i],
-				writer.tag(2, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.WriteResult", [
+            { no: 1, name: "update_time", kind: "message", T: () => Timestamp },
+            { no: 2, name: "transform_results", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => Value }
+        ]);
+    }
+    create(value?: PartialMessage<WriteResult>): WriteResult {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.transformResults = [];
+        if (value !== undefined)
+            reflectionMergePartial<WriteResult>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: WriteResult): WriteResult {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* google.protobuf.Timestamp update_time */ 1:
+                    message.updateTime = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.updateTime);
+                    break;
+                case /* repeated google.firestore.v1.Value transform_results */ 2:
+                    message.transformResults.push(Value.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: WriteResult, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* google.protobuf.Timestamp update_time = 1; */
+        if (message.updateTime)
+            Timestamp.internalBinaryWrite(message.updateTime, writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* repeated google.firestore.v1.Value transform_results = 2; */
+        for (let i = 0; i < message.transformResults.length; i++)
+            Value.internalBinaryWrite(message.transformResults[i], writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.WriteResult
@@ -1763,74 +1378,54 @@ class WriteResult$Type extends MessageType<WriteResult> {
 export const WriteResult = new WriteResult$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class CommitRequest$Type extends MessageType<CommitRequest> {
-	constructor() {
-		super('google.firestore.v1.CommitRequest', [
-			{ no: 2, name: 'writes', kind: 'message', repeat: 1 /*RepeatType.PACKED*/, T: () => Write },
-			{ no: 3, name: 'transaction', kind: 'scalar', T: 12 /*ScalarType.BYTES*/ }
-		]);
-	}
-	create(value?: PartialMessage<CommitRequest>): CommitRequest {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.writes = [];
-		message.transaction = new Uint8Array(0);
-		if (value !== undefined) reflectionMergePartial<CommitRequest>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: CommitRequest
-	): CommitRequest {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* repeated google.firestore.v1.Write writes */ 2:
-					message.writes.push(Write.internalBinaryRead(reader, reader.uint32(), options));
-					break;
-				case /* bytes transaction */ 3:
-					message.transaction = reader.bytes();
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: CommitRequest,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* repeated google.firestore.v1.Write writes = 2; */
-		for (let i = 0; i < message.writes.length; i++)
-			Write.internalBinaryWrite(
-				message.writes[i],
-				writer.tag(2, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* bytes transaction = 3; */
-		if (message.transaction.length)
-			writer.tag(3, WireType.LengthDelimited).bytes(message.transaction);
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.CommitRequest", [
+            { no: 2, name: "writes", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => Write },
+            { no: 3, name: "transaction", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<CommitRequest>): CommitRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.writes = [];
+        message.transaction = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<CommitRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CommitRequest): CommitRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated google.firestore.v1.Write writes */ 2:
+                    message.writes.push(Write.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* bytes transaction */ 3:
+                    message.transaction = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: CommitRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated google.firestore.v1.Write writes = 2; */
+        for (let i = 0; i < message.writes.length; i++)
+            Write.internalBinaryWrite(message.writes[i], writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        /* bytes transaction = 3; */
+        if (message.transaction.length)
+            writer.tag(3, WireType.LengthDelimited).bytes(message.transaction);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.CommitRequest
@@ -1838,90 +1433,53 @@ class CommitRequest$Type extends MessageType<CommitRequest> {
 export const CommitRequest = new CommitRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class CommitResponse$Type extends MessageType<CommitResponse> {
-	constructor() {
-		super('google.firestore.v1.CommitResponse', [
-			{
-				no: 1,
-				name: 'write_results',
-				kind: 'message',
-				repeat: 1 /*RepeatType.PACKED*/,
-				T: () => WriteResult
-			},
-			{ no: 2, name: 'commit_time', kind: 'message', T: () => Timestamp }
-		]);
-	}
-	create(value?: PartialMessage<CommitResponse>): CommitResponse {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.writeResults = [];
-		if (value !== undefined) reflectionMergePartial<CommitResponse>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: CommitResponse
-	): CommitResponse {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* repeated google.firestore.v1.WriteResult write_results */ 1:
-					message.writeResults.push(
-						WriteResult.internalBinaryRead(reader, reader.uint32(), options)
-					);
-					break;
-				case /* google.protobuf.Timestamp commit_time */ 2:
-					message.commitTime = Timestamp.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.commitTime
-					);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: CommitResponse,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* repeated google.firestore.v1.WriteResult write_results = 1; */
-		for (let i = 0; i < message.writeResults.length; i++)
-			WriteResult.internalBinaryWrite(
-				message.writeResults[i],
-				writer.tag(1, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.protobuf.Timestamp commit_time = 2; */
-		if (message.commitTime)
-			Timestamp.internalBinaryWrite(
-				message.commitTime,
-				writer.tag(2, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.CommitResponse", [
+            { no: 1, name: "write_results", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => WriteResult },
+            { no: 2, name: "commit_time", kind: "message", T: () => Timestamp }
+        ]);
+    }
+    create(value?: PartialMessage<CommitResponse>): CommitResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.writeResults = [];
+        if (value !== undefined)
+            reflectionMergePartial<CommitResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CommitResponse): CommitResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated google.firestore.v1.WriteResult write_results */ 1:
+                    message.writeResults.push(WriteResult.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* google.protobuf.Timestamp commit_time */ 2:
+                    message.commitTime = Timestamp.internalBinaryRead(reader, reader.uint32(), options, message.commitTime);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: CommitResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated google.firestore.v1.WriteResult write_results = 1; */
+        for (let i = 0; i < message.writeResults.length; i++)
+            WriteResult.internalBinaryWrite(message.writeResults[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* google.protobuf.Timestamp commit_time = 2; */
+        if (message.commitTime)
+            Timestamp.internalBinaryWrite(message.commitTime, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.CommitResponse
@@ -1929,116 +1487,73 @@ class CommitResponse$Type extends MessageType<CommitResponse> {
 export const CommitResponse = new CommitResponse$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class Write$Type extends MessageType<Write> {
-	constructor() {
-		super('google.firestore.v1.Write', [
-			{ no: 1, name: 'update', kind: 'message', oneof: 'operation', T: () => Document },
-			{ no: 2, name: 'delete', kind: 'scalar', oneof: 'operation', T: 9 /*ScalarType.STRING*/ },
-			{ no: 3, name: 'update_mask', kind: 'message', T: () => DocumentMask },
-			{ no: 4, name: 'current_document', kind: 'message', T: () => Precondition }
-		]);
-	}
-	create(value?: PartialMessage<Write>): Write {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.operation = { oneofKind: undefined };
-		if (value !== undefined) reflectionMergePartial<Write>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: Write
-	): Write {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* google.firestore.v1.Document update */ 1:
-					message.operation = {
-						oneofKind: 'update',
-						update: Document.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.operation as any).update
-						)
-					};
-					break;
-				case /* string delete */ 2:
-					message.operation = {
-						oneofKind: 'delete',
-						delete: reader.string()
-					};
-					break;
-				case /* google.firestore.v1.DocumentMask update_mask */ 3:
-					message.updateMask = DocumentMask.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.updateMask
-					);
-					break;
-				case /* google.firestore.v1.Precondition current_document */ 4:
-					message.currentDocument = Precondition.internalBinaryRead(
-						reader,
-						reader.uint32(),
-						options,
-						message.currentDocument
-					);
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: Write,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* google.firestore.v1.Document update = 1; */
-		if (message.operation.oneofKind === 'update')
-			Document.internalBinaryWrite(
-				message.operation.update,
-				writer.tag(1, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* string delete = 2; */
-		if (message.operation.oneofKind === 'delete')
-			writer.tag(2, WireType.LengthDelimited).string(message.operation.delete);
-		/* google.firestore.v1.DocumentMask update_mask = 3; */
-		if (message.updateMask)
-			DocumentMask.internalBinaryWrite(
-				message.updateMask,
-				writer.tag(3, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		/* google.firestore.v1.Precondition current_document = 4; */
-		if (message.currentDocument)
-			Precondition.internalBinaryWrite(
-				message.currentDocument,
-				writer.tag(4, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.Write", [
+            { no: 1, name: "update", kind: "message", oneof: "operation", T: () => Document },
+            { no: 2, name: "delete", kind: "scalar", oneof: "operation", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "update_mask", kind: "message", T: () => DocumentMask },
+            { no: 4, name: "current_document", kind: "message", T: () => Precondition }
+        ]);
+    }
+    create(value?: PartialMessage<Write>): Write {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.operation = { oneofKind: undefined };
+        if (value !== undefined)
+            reflectionMergePartial<Write>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: Write): Write {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* google.firestore.v1.Document update */ 1:
+                    message.operation = {
+                        oneofKind: "update",
+                        update: Document.internalBinaryRead(reader, reader.uint32(), options, (message.operation as any).update)
+                    };
+                    break;
+                case /* string delete */ 2:
+                    message.operation = {
+                        oneofKind: "delete",
+                        delete: reader.string()
+                    };
+                    break;
+                case /* google.firestore.v1.DocumentMask update_mask */ 3:
+                    message.updateMask = DocumentMask.internalBinaryRead(reader, reader.uint32(), options, message.updateMask);
+                    break;
+                case /* google.firestore.v1.Precondition current_document */ 4:
+                    message.currentDocument = Precondition.internalBinaryRead(reader, reader.uint32(), options, message.currentDocument);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: Write, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* google.firestore.v1.Document update = 1; */
+        if (message.operation.oneofKind === "update")
+            Document.internalBinaryWrite(message.operation.update, writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* string delete = 2; */
+        if (message.operation.oneofKind === "delete")
+            writer.tag(2, WireType.LengthDelimited).string(message.operation.delete);
+        /* google.firestore.v1.DocumentMask update_mask = 3; */
+        if (message.updateMask)
+            DocumentMask.internalBinaryWrite(message.updateMask, writer.tag(3, WireType.LengthDelimited).fork(), options).join();
+        /* google.firestore.v1.Precondition current_document = 4; */
+        if (message.currentDocument)
+            Precondition.internalBinaryWrite(message.currentDocument, writer.tag(4, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.Write
@@ -2046,68 +1561,46 @@ class Write$Type extends MessageType<Write> {
 export const Write = new Write$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class DocumentMask$Type extends MessageType<DocumentMask> {
-	constructor() {
-		super('google.firestore.v1.DocumentMask', [
-			{
-				no: 1,
-				name: 'field_paths',
-				kind: 'scalar',
-				repeat: 2 /*RepeatType.UNPACKED*/,
-				T: 9 /*ScalarType.STRING*/
-			}
-		]);
-	}
-	create(value?: PartialMessage<DocumentMask>): DocumentMask {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.fieldPaths = [];
-		if (value !== undefined) reflectionMergePartial<DocumentMask>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: DocumentMask
-	): DocumentMask {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* repeated string field_paths */ 1:
-					message.fieldPaths.push(reader.string());
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: DocumentMask,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* repeated string field_paths = 1; */
-		for (let i = 0; i < message.fieldPaths.length; i++)
-			writer.tag(1, WireType.LengthDelimited).string(message.fieldPaths[i]);
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.DocumentMask", [
+            { no: 1, name: "field_paths", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<DocumentMask>): DocumentMask {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.fieldPaths = [];
+        if (value !== undefined)
+            reflectionMergePartial<DocumentMask>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: DocumentMask): DocumentMask {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated string field_paths */ 1:
+                    message.fieldPaths.push(reader.string());
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: DocumentMask, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated string field_paths = 1; */
+        for (let i = 0; i < message.fieldPaths.length; i++)
+            writer.tag(1, WireType.LengthDelimited).string(message.fieldPaths[i]);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.DocumentMask
@@ -2115,84 +1608,59 @@ class DocumentMask$Type extends MessageType<DocumentMask> {
 export const DocumentMask = new DocumentMask$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class Precondition$Type extends MessageType<Precondition> {
-	constructor() {
-		super('google.firestore.v1.Precondition', [
-			{ no: 1, name: 'exists', kind: 'scalar', oneof: 'conditionType', T: 8 /*ScalarType.BOOL*/ },
-			{ no: 2, name: 'update_time', kind: 'message', oneof: 'conditionType', T: () => Timestamp }
-		]);
-	}
-	create(value?: PartialMessage<Precondition>): Precondition {
-		const message = globalThis.Object.create(this.messagePrototype!);
-		message.conditionType = { oneofKind: undefined };
-		if (value !== undefined) reflectionMergePartial<Precondition>(this, message, value);
-		return message;
-	}
-	internalBinaryRead(
-		reader: IBinaryReader,
-		length: number,
-		options: BinaryReadOptions,
-		target?: Precondition
-	): Precondition {
-		let message = target ?? this.create(),
-			end = reader.pos + length;
-		while (reader.pos < end) {
-			let [fieldNo, wireType] = reader.tag();
-			switch (fieldNo) {
-				case /* bool exists */ 1:
-					message.conditionType = {
-						oneofKind: 'exists',
-						exists: reader.bool()
-					};
-					break;
-				case /* google.protobuf.Timestamp update_time */ 2:
-					message.conditionType = {
-						oneofKind: 'updateTime',
-						updateTime: Timestamp.internalBinaryRead(
-							reader,
-							reader.uint32(),
-							options,
-							(message.conditionType as any).updateTime
-						)
-					};
-					break;
-				default:
-					let u = options.readUnknownField;
-					if (u === 'throw')
-						throw new globalThis.Error(
-							`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`
-						);
-					let d = reader.skip(wireType);
-					if (u !== false)
-						(u === true ? UnknownFieldHandler.onRead : u)(
-							this.typeName,
-							message,
-							fieldNo,
-							wireType,
-							d
-						);
-			}
-		}
-		return message;
-	}
-	internalBinaryWrite(
-		message: Precondition,
-		writer: IBinaryWriter,
-		options: BinaryWriteOptions
-	): IBinaryWriter {
-		/* bool exists = 1; */
-		if (message.conditionType.oneofKind === 'exists')
-			writer.tag(1, WireType.Varint).bool(message.conditionType.exists);
-		/* google.protobuf.Timestamp update_time = 2; */
-		if (message.conditionType.oneofKind === 'updateTime')
-			Timestamp.internalBinaryWrite(
-				message.conditionType.updateTime,
-				writer.tag(2, WireType.LengthDelimited).fork(),
-				options
-			).join();
-		let u = options.writeUnknownFields;
-		if (u !== false) (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
-		return writer;
-	}
+    constructor() {
+        super("google.firestore.v1.Precondition", [
+            { no: 1, name: "exists", kind: "scalar", oneof: "conditionType", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "update_time", kind: "message", oneof: "conditionType", T: () => Timestamp }
+        ]);
+    }
+    create(value?: PartialMessage<Precondition>): Precondition {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.conditionType = { oneofKind: undefined };
+        if (value !== undefined)
+            reflectionMergePartial<Precondition>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: Precondition): Precondition {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool exists */ 1:
+                    message.conditionType = {
+                        oneofKind: "exists",
+                        exists: reader.bool()
+                    };
+                    break;
+                case /* google.protobuf.Timestamp update_time */ 2:
+                    message.conditionType = {
+                        oneofKind: "updateTime",
+                        updateTime: Timestamp.internalBinaryRead(reader, reader.uint32(), options, (message.conditionType as any).updateTime)
+                    };
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: Precondition, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool exists = 1; */
+        if (message.conditionType.oneofKind === "exists")
+            writer.tag(1, WireType.Varint).bool(message.conditionType.exists);
+        /* google.protobuf.Timestamp update_time = 2; */
+        if (message.conditionType.oneofKind === "updateTime")
+            Timestamp.internalBinaryWrite(message.conditionType.updateTime, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
 }
 /**
  * @generated MessageType for protobuf message google.firestore.v1.Precondition
