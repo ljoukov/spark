@@ -1,10 +1,11 @@
 import { ADMIN_USER_IDS } from '$env/static/private';
 import { z } from 'zod';
+import type { UserAuth } from '../auth/auth';
 
 const adminUserIDsSchema = z.string().array().readonly();
 
-const adminUserIDs = adminUserIDsSchema.parse(JSON.parse(ADMIN_USER_IDS));
+const adminUserIDs = new Set(adminUserIDsSchema.parse(JSON.parse(ADMIN_USER_IDS)));
 
-export function getAdminUserIDs(): readonly string[] {
-	return adminUserIDs;
+export function isUserAdmin(userAuth: UserAuth): boolean {
+	return adminUserIDs.has(userAuth.userId);
 }

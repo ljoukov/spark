@@ -10,7 +10,7 @@ async function getPrivateKey(): Promise<CryptoKey> {
 	if (!pkCache) {
 		const rawKey = base64decode(COOKIE_SECRET_KEY);
 		if (rawKey.length !== 32) {
-			throw Error('invalid cookie_key length');
+			throw Error(`getPrivateKey: invalid COOKIE_SECRET_KEY length: ${rawKey.length}`);
 		}
 		pkCache = await crypto.subtle.importKey('raw', rawKey, algorithm, true, ['encrypt', 'decrypt']);
 	}

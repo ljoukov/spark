@@ -9,3 +9,8 @@ message UserAuthProto {
   google.protobuf.Timestamp expires_at = 3;
   string refresh_token = 4;
 }
+
+message AuthSessionProto {
+  string session_id = 1;
+  string redirect_path = 2;
+}
