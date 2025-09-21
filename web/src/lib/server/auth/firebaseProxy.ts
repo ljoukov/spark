@@ -4,10 +4,14 @@ export const FIREBASE_AUTH_HOST = 'pic2toon.firebaseapp.com';
 export const FIREBASE_AUTH_ORIGIN = `https://${FIREBASE_AUTH_HOST}` as const;
 
 /**
- * Reverse proxy for Firebase Auth helper endpoints ("/__/auth/*").
+ * Reverse proxy for Firebase helper endpoints used by the Web SDK:
+ *  - "/__/auth/*" (OAuth helper)
+ *  - "/__/firebase/*" (e.g. init.json / init.js)
+ *
  * Forwards requests to the project's firebaseapp.com origin while keeping
- * the browser on our domain. Location headers pointing back to the helper
- * paths are rewritten to our domain to avoid any 302 cross-site hops.
+ * the browser on our domain. Location headers that point back to
+ * firebaseapp.com/__/auth/* are rewritten so the browser stays on
+ * our domain during the OAuth flow.
  */
 export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> {
   const upstreamUrl = new URL(event.url.pathname + event.url.search, FIREBASE_AUTH_ORIGIN);
@@ -65,4 +69,3 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
     headers: outHeaders
   });
 }
-
