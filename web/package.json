@@ -3,11 +3,11 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-  "scripts": {
-    "dev": "vite dev --port 8080",
-    "dev:https": "vite dev --port 8080",
+	"scripts": {
+		"dev": "vite dev --port 8080",
+		"dev:https": "vite dev --port 8080",
 		"build": "vite build",
-    "prebuild": "echo skip signin-helpers sync (manual)",
+		"prebuild": "node -e \"console.log('skip signin-helpers sync (manual)')\"",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -17,8 +17,8 @@
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
-    "sync:signin-helpers": "FIREBASE_AUTH_HOST=pic2toon.firebaseapp.com node scripts/sync-signin-helpers.mjs"
-  },
+		"sync:signin-helpers": "FIREBASE_AUTH_HOST=pic2toon.firebaseapp.com node scripts/sync-signin-helpers.mjs"
+	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^9.22.0",
@@ -28,6 +28,7 @@
 		"@lucide/svelte": "^0.515.0",
 		"@protobuf-ts/plugin": "^2.11.1",
 		"@sveltejs/adapter-auto": "^6.0.0",
+		"@sveltejs/adapter-cloudflare": "^7.2.3",
 		"@sveltejs/kit": "^2.22.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
 		"@tailwindcss/vite": "^4.0.0",
