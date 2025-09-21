@@ -10,8 +10,13 @@ if (typeof global !== 'undefined') {
 }
 
 export const handle = (async ({ event, resolve }) => {
-    // 1) Proxy Firebase Auth helper endpoints transparently.
-    if (event.url.pathname.startsWith('/__/auth/')) {
+    // 1) Proxy Firebase helper endpoints transparently.
+    //    - /__/auth/*   (OAuth helper)
+    //    - /__/firebase/* (init.json / init.js)
+    if (
+        event.url.pathname.startsWith('/__/auth/') ||
+        event.url.pathname.startsWith('/__/firebase/')
+    ) {
         return await proxyFirebaseAuth(event);
     }
 
