@@ -9,16 +9,20 @@ if (typeof global !== 'undefined') {
 }
 
 export const handle = (async ({ event, resolve }) => {
-	if (event.url.pathname.startsWith('/admin')) {
+	const isAdminPath = event.url.pathname.startsWith('/admin');
+	if (isAdminPath || event.url.pathname.startsWith('/app')) {
+		const redirectParams = new URLSearchParams({ r: event.url.pathname });
 		const cookies = event.cookies;
 		if (!hasUserAuthCookie(cookies)) {
-			console.log('/admin request without auth cookie, redirecting');
-			return Response.redirect(event.url.origin + '/auth/start?r=/admin', 307);
+			console.log(
+				`Admin or app request without auth cookie, redirecting to /auth/start then to ${event.url.pathname}`
+			);
+			return Response.redirect(event.url.origin + '/auth/start?' + redirectParams.toString(), 307);
 		}
 		const authResult = await getUserAuthFromCookiesResult(cookies);
 		switch (authResult.status) {
 			case 'ok':
-				if (!isUserAdmin(authResult.userAuth)) {
+				if (isAdminPath && !isUserAdmin(authResult.userAuth)) {
 					console.log(
 						`/admin request from logged in not administrator: userId=${authResult.userAuth.userId}`
 					);
@@ -26,9 +30,11 @@ export const handle = (async ({ event, resolve }) => {
 				}
 				break;
 			case 'error':
-				console.log('/admin request with expired cookie');
+				console.log(
+					`Admin or app request with expired cookie, forwarding to /auth/redirect then to ${event.url.pathname}`
+				);
 				// To avoid redirect loops we forward the user to the screen with explicit login button
-				return Response.redirect(event.url.origin + '/auth/relogin', 307);
+				return Response.redirect(event.url.origin + '/auth/relogin?' + redirectParams, 307);
 		}
 	}
 	return await resolve(event);
