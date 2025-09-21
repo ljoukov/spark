@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --port 8080",
 		"build": "vite build",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
 		"preview": "vite preview",
@@ -23,6 +23,7 @@
 		"@google/genai": "^1.20.0",
 		"@internationalized/date": "^3.9.0",
 		"@lucide/svelte": "^0.515.0",
+		"@protobuf-ts/plugin": "^2.11.1",
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/kit": "^2.22.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",

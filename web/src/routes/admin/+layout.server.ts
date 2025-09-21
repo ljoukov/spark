@@ -12,12 +12,14 @@ const decodedTokenSchema = z
 	.object({
 		uid: z.string().min(1, 'Firebase UID missing on session'),
 		email: z.string().email().optional(),
-		name: z.string().optional()
+		name: z.string().optional(),
+		picture: z.string().url().optional()
 	})
-	.transform(({ uid, email, name }) => ({
+	.transform(({ uid, email, name, picture }) => ({
 		uid,
 		email: email ?? null,
-		name: name ?? null
+		name: name ?? null,
+		photoUrl: picture ?? null
 	}));
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
