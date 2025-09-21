@@ -20,6 +20,7 @@
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^9.22.0",
 		"@google-cloud/storage": "^7.17.1",
+		"@google/genai": "^1.20.0",
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/kit": "^2.22.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
