@@ -153,7 +153,23 @@
 </div>
 
 <style>
+	:global(:root) {
+		--scrollbar-compensation: max(0px, calc(100vw - 100%));
+		--viewport-inline: calc(100vw - var(--scrollbar-compensation));
+	}
+
+	@supports (width: 100dvw) {
+		:global(:root) {
+			--scrollbar-compensation: 0px;
+			--viewport-inline: 100dvw;
+		}
+	}
+
 	.page {
+		--page-width: min(1160px, var(--viewport-inline));
+		--page-inline-gutter: max(0px, calc((var(--viewport-inline) - var(--page-width)) / 2));
+		--halo-before-width: min(clamp(18rem, 42vw, 26rem), 100%);
+		--halo-after-width: min(clamp(20rem, 52vw, 32rem), 100%);
 		width: min(1160px, 100%);
 		margin: 0 auto;
 		padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 6vw, 3.75rem) clamp(2.5rem, 8vw, 4rem);
@@ -162,6 +178,7 @@
 		gap: clamp(2.25rem, 5vw, 3.75rem);
 		position: relative;
 		isolation: isolate;
+		box-sizing: border-box;
 	}
 
 	.page::before,
@@ -176,17 +193,19 @@
 	}
 
 	.page::before {
-		inset: clamp(-8rem, -14vw, -4rem) clamp(-5rem, -8vw, -3rem) auto auto;
+		inset: clamp(-8rem, -14vw, -4rem) 0 auto auto;
 		height: clamp(14rem, 38vw, 20rem);
-		width: clamp(18rem, 42vw, 26rem);
+		width: var(--halo-before-width);
 		background: radial-gradient(circle at 30% 40%, rgba(162, 132, 255, 0.55), transparent 70%);
+		transform: translateX(min(var(--page-inline-gutter), calc(var(--halo-before-width) * 0.22)));
 	}
 
 	.page::after {
-		inset: auto auto clamp(-10rem, -18vw, -4rem) clamp(-8rem, -14vw, -5rem);
+		inset: auto auto clamp(-10rem, -18vw, -4rem) 0;
 		height: clamp(16rem, 46vw, 28rem);
-		width: clamp(20rem, 52vw, 32rem);
+		width: var(--halo-after-width);
 		background: radial-gradient(circle at 60% 60%, rgba(16, 185, 129, 0.22), transparent 75%);
+		transform: translateX(-min(var(--page-inline-gutter), calc(var(--halo-after-width) * 0.26)));
 	}
 
 	:global([data-theme='dark'] .page::before) {
@@ -344,7 +363,7 @@
 
 	.video-shell__halo {
 		position: absolute;
-		inset: -35%;
+		inset: 0;
 		border-radius: inherit;
 		background: radial-gradient(circle at 50% 50%, rgba(209, 196, 255, 0.65), transparent 68%);
 		filter: blur(62px);
@@ -352,11 +371,25 @@
 		mix-blend-mode: screen;
 		pointer-events: none;
 		z-index: 0;
+		transform: scale(1.1);
+		transform-origin: center;
 	}
 
 	:global([data-theme='dark'] .video-shell__halo) {
 		background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
 		opacity: 0.6;
+	}
+
+	@media (min-width: 640px) {
+		.video-shell__halo {
+			transform: scale(1.4);
+		}
+	}
+
+	@media (min-width: 960px) {
+		.video-shell__halo {
+			transform: scale(1.65);
+		}
 	}
 
 	.video-shell__inner {
