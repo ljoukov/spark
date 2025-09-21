@@ -21,3 +21,10 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local HTTPS certificates
+certs/
+
+# Self-hosted Firebase helper artifacts (vendored)
+# We commit vendored helper files under src/vendor/firebase-auth-helpers
+# so do NOT ignore them.
