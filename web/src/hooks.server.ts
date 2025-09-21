@@ -1,116 +1,35 @@
-import type { Handle, RequestEvent } from '@sveltejs/kit';
-import { firebaseAuthHelperOrigin } from '$lib/config/firebase';
+import { isUserAdmin } from '$lib/server/utils/admin';
+import { getUserAuthFromCookiesResult, hasUserAuthCookie } from '$lib/server/auth/cookie';
+import { type Handle } from '@sveltejs/kit';
 
-const FIREBASE_AUTH_PATH_PREFIX = '/__/auth';
-const FIREBASE_INIT_PATHS = new Set([
-	'/__/firebase/init.json',
-	'/__/firebase/init.js',
-	'/__/firebase/init.js.map'
-]);
-
-export const handle: Handle = async ({ event, resolve }) => {
-	if (shouldProxyFirebaseHelper(event.url.pathname)) {
-		return proxyFirebaseHelper(event);
-	}
-
-	return resolve(event);
-};
-
-function shouldProxyFirebaseHelper(pathname: string): boolean {
-	if (pathname === FIREBASE_AUTH_PATH_PREFIX) {
-		return true;
-	}
-	if (pathname.startsWith(`${FIREBASE_AUTH_PATH_PREFIX}/`)) {
-		return true;
-	}
-	if (FIREBASE_INIT_PATHS.has(pathname)) {
-		return true;
-	}
-	return false;
-}
-
-async function proxyFirebaseHelper(event: RequestEvent): Promise<Response> {
-	const targetUrl = new URL(`${event.url.pathname}${event.url.search}`, firebaseAuthHelperOrigin);
-	const forwardedHeaders = buildForwardHeaders(event);
-	const method = event.request.method.toUpperCase();
-	const hasBody = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
-	let body: ArrayBuffer | undefined;
-
-	if (hasBody) {
-		const cloned = event.request.clone();
-		body = await cloned.arrayBuffer();
-	}
-
-	try {
-		const upstreamResponse = await event.fetch(targetUrl, {
-			method: event.request.method,
-			headers: forwardedHeaders,
-			body,
-			redirect: 'manual'
-		});
-
-		return rewriteFirebaseResponse(upstreamResponse, event.url);
-	} catch (error) {
-		console.error('Failed to proxy Firebase auth helper request', error);
-		return new Response('Firebase auth helper unavailable', { status: 502 });
-	}
-}
-
-function buildForwardHeaders(event: RequestEvent): Headers {
-	const headers = new Headers();
-
-	event.request.headers.forEach((value, key) => {
-		const lowerKey = key.toLowerCase();
-		if (lowerKey === 'host' || lowerKey === 'content-length') {
-			return;
-		}
-		if (lowerKey === 'origin' || lowerKey === 'referer') {
-			return;
-		}
-		headers.set(key, value);
-	});
-
-	const originalHost = event.request.headers.get('host');
-	if (originalHost) {
-		headers.set('x-forwarded-host', originalHost);
-	}
-	const protocol = event.url.protocol.replace(':', '');
-	headers.set('x-forwarded-proto', protocol);
-	return headers;
-}
-
-function rewriteFirebaseResponse(response: Response, requestUrl: URL): Response {
-	const headers = new Headers(response.headers);
-	const location = headers.get('location');
-
-	if (location) {
-		headers.set('location', rewriteLocationHeader(location, requestUrl));
-	}
-
-	return new Response(response.body, {
-		status: response.status,
-		statusText: response.statusText,
-		headers
+if (typeof global !== 'undefined') {
+	global.process.on('unhandledRejection', (reason, promise) => {
+		console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 	});
 }
 
-function rewriteLocationHeader(location: string, requestUrl: URL): string {
-	try {
-		const proxied = new URL(location, firebaseAuthHelperOrigin);
-		if (proxied.origin === firebaseAuthHelperOrigin) {
-			const rewritten = new URL(
-				`${proxied.pathname}${proxied.search}${proxied.hash}`,
-				requestUrl.origin
-			);
-			return rewritten.toString();
+export const handle = (async ({ event, resolve }) => {
+	if (event.url.pathname.startsWith('/admin')) {
+		const cookies = event.cookies;
+		if (!hasUserAuthCookie(cookies)) {
+			console.log('/admin request without auth cookie, redirecting');
+			return Response.redirect(event.url.origin + '/auth/start?r=/admin', 307);
 		}
-		return location;
-	} catch (error) {
-		if (location.startsWith('/')) {
-			const rewritten = new URL(location, requestUrl.origin);
-			return rewritten.toString();
+		const authResult = await getUserAuthFromCookiesResult(cookies);
+		switch (authResult.status) {
+			case 'ok':
+				if (!isUserAdmin(authResult.userAuth)) {
+					console.log(
+						`/admin request from logged in not administrator: userId=${authResult.userAuth.userId}`
+					);
+					return new Response('Not an administrator', { status: 401 });
+				}
+				break;
+			case 'error':
+				console.log('/admin request with expired cookie');
+				// To avoid redirect loops we forward the user to the screen with explicit login button
+				return Response.redirect(event.url.origin + '/auth/relogin', 307);
 		}
-		console.error('Failed to rewrite Firebase Location header', error);
-		return location;
 	}
-}
+	return await resolve(event);
+}) satisfies Handle;
