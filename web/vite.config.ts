@@ -1,13 +1,28 @@
 import devtoolsJson from 'vite-plugin-devtools-json';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
+import fs from 'node:fs';
+
+const hasCustomCert = !!(process.env.DEV_HTTPS_KEY && process.env.DEV_HTTPS_CERT);
+const httpsOption = hasCustomCert
+  ? {
+      key: fs.readFileSync(process.env.DEV_HTTPS_KEY!, 'utf8'),
+      cert: fs.readFileSync(process.env.DEV_HTTPS_CERT!, 'utf8')
+    }
+  : true; // use basic self-signed cert via plugin
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), devtoolsJson()],
-	test: {
-		expect: { requireAssertions: true },
-		projects: [
+    plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],
+    server: {
+        host: 'localhost',
+        port: 8080,
+        https: httpsOption
+    },
+    test: {
+        expect: { requireAssertions: true },
+        projects: [
 			{
 				extends: './vite.config.ts',
 				test: {
