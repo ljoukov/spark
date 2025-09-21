@@ -2,6 +2,7 @@ export type AdminUser = {
 	uid: string;
 	email: string | null;
 	name: string | null;
+	photoUrl: string | null;
 };
 
 export type AdminSessionState =

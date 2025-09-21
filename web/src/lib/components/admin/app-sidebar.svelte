@@ -5,6 +5,7 @@
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { resolve } from '$app/paths';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
 
@@ -53,7 +54,8 @@
 		return target.email ?? 'No email on file';
 	}
 
-	const avatarSrc = '/images/admin-avatar.svg';
+	const defaultAvatarSrc = '/images/admin-avatar.svg';
+	const avatarSrc = $derived(user.photoUrl ?? defaultAvatarSrc);
 	const signingOut = $state({ active: false, error: '' });
 
 	async function handleSignOut() {
@@ -98,7 +100,7 @@
 								{#snippet child({ props })}
 									<a
 										{...props}
-										href={item.href}
+										href={resolve(item.href)}
 										class={cn(
 											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined
@@ -119,7 +121,9 @@
 	<Sidebar.Footer class="border-t border-sidebar-border px-3 py-4">
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger class="w-full">
-				<div class="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/40 px-3 py-2 text-left transition hover:bg-sidebar-accent">
+				<div
+					class="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/40 px-3 py-2 text-left transition hover:bg-sidebar-accent"
+				>
 					<Avatar.Root class="h-9 w-9">
 						<Avatar.Image src={avatarSrc} alt={getDisplayName(user)} />
 						<Avatar.Fallback>{getInitials(user)}</Avatar.Fallback>

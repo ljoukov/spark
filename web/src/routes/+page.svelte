@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 
 	type Theme = 'light' | 'dark';
-	const APP_STORE_URL = 'https://apps.apple.com';
 
 	let theme: Theme = 'light';
 	let isMuted = true;
@@ -111,7 +110,12 @@
 				<span class="slogan__secondary">Scan. Learn. Spark.</span>
 			</h1>
 			<div class="cta">
-				<a class="cta__link" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+				<a
+					class="cta__link"
+					href="https://apps.apple.com"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
 					<img
 						src={theme === 'dark' ? '/appstore-dark.svg' : '/appstore-light.svg'}
 						alt="Download GCSE Spark on the App Store"
