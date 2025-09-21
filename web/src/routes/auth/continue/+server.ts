@@ -46,6 +46,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 		throw error(500, `signInWithIdp error=${signInRespObj.status}: ${signInRespObj.statusText}`);
 	}
 	const signInResp = signInWithIdpResponseSchema.parse(await signInRespObj.json());
+
 	const userAuth: UserAuth = {
 		userId: signInResp.localId,
 		accessToken: signInResp.idToken,
