@@ -14,3 +14,10 @@ message AuthSessionProto {
   string session_id = 1;
   string redirect_path = 2;
 }
+
+message AuthUserInfoProto {
+  string user_id = 1;
+  string display_name = 2;
+  string photo_url = 3;
+  string email = 4;
+}

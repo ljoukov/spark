@@ -61,6 +61,24 @@ struct AuthSessionProto: Sendable {
   init() {}
 }
 
+struct AuthUserInfoProto: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var userID: String = String()
+
+  var displayName: String = String()
+
+  var photoURL: String = String()
+
+  var email: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 extension UserAuthProto: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -142,6 +160,51 @@ extension AuthSessionProto: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   static func ==(lhs: AuthSessionProto, rhs: AuthSessionProto) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.redirectPath != rhs.redirectPath {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension AuthUserInfoProto: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "AuthUserInfoProto"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{3}display_name\0\u{3}photo_url\0\u{1}email\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.userID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.photoURL) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.email) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.userID.isEmpty {
+      try visitor.visitSingularStringField(value: self.userID, fieldNumber: 1)
+    }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 2)
+    }
+    if !self.photoURL.isEmpty {
+      try visitor.visitSingularStringField(value: self.photoURL, fieldNumber: 3)
+    }
+    if !self.email.isEmpty {
+      try visitor.visitSingularStringField(value: self.email, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: AuthUserInfoProto, rhs: AuthUserInfoProto) -> Bool {
+    if lhs.userID != rhs.userID {return false}
+    if lhs.displayName != rhs.displayName {return false}
+    if lhs.photoURL != rhs.photoURL {return false}
+    if lhs.email != rhs.email {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

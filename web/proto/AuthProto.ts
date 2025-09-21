@@ -47,6 +47,27 @@ export interface AuthSessionProto {
      */
     redirectPath: string;
 }
+/**
+ * @generated from protobuf message AuthUserInfoProto
+ */
+export interface AuthUserInfoProto {
+    /**
+     * @generated from protobuf field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from protobuf field: string display_name = 2;
+     */
+    displayName: string;
+    /**
+     * @generated from protobuf field: string photo_url = 3;
+     */
+    photoUrl: string;
+    /**
+     * @generated from protobuf field: string email = 4;
+     */
+    email: string;
+}
 // @generated message type with reflection information, may provide speed optimized methods
 class UserAuthProto$Type extends MessageType<UserAuthProto> {
     constructor() {
@@ -172,3 +193,74 @@ class AuthSessionProto$Type extends MessageType<AuthSessionProto> {
  * @generated MessageType for protobuf message AuthSessionProto
  */
 export const AuthSessionProto = new AuthSessionProto$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class AuthUserInfoProto$Type extends MessageType<AuthUserInfoProto> {
+    constructor() {
+        super("AuthUserInfoProto", [
+            { no: 1, name: "user_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "display_name", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "photo_url", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "email", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<AuthUserInfoProto>): AuthUserInfoProto {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.userId = "";
+        message.displayName = "";
+        message.photoUrl = "";
+        message.email = "";
+        if (value !== undefined)
+            reflectionMergePartial<AuthUserInfoProto>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthUserInfoProto): AuthUserInfoProto {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string user_id */ 1:
+                    message.userId = reader.string();
+                    break;
+                case /* string display_name */ 2:
+                    message.displayName = reader.string();
+                    break;
+                case /* string photo_url */ 3:
+                    message.photoUrl = reader.string();
+                    break;
+                case /* string email */ 4:
+                    message.email = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: AuthUserInfoProto, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string user_id = 1; */
+        if (message.userId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.userId);
+        /* string display_name = 2; */
+        if (message.displayName !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.displayName);
+        /* string photo_url = 3; */
+        if (message.photoUrl !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.photoUrl);
+        /* string email = 4; */
+        if (message.email !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.email);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message AuthUserInfoProto
+ */
+export const AuthUserInfoProto = new AuthUserInfoProto$Type();
