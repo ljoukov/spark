@@ -1,0 +1,157 @@
+<script lang="ts">
+	import HomeIcon from '@lucide/svelte/icons/home';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { cn } from '$lib/utils.js';
+	import type { AdminUser } from '$lib/types/admin';
+
+	type NavItem = {
+		title: string;
+		href: string;
+		icon: typeof HomeIcon;
+		highlight: (path: string) => boolean;
+	};
+
+	const primaryNav: NavItem[] = [
+		{
+			title: 'Home',
+			href: '/admin',
+			icon: HomeIcon,
+			highlight: (path) => path === '/admin' || path === '/admin/'
+		},
+		{
+			title: 'Gemini',
+			href: '/admin/gemini',
+			icon: BotIcon,
+			highlight: (path) => path.startsWith('/admin/gemini')
+		}
+	];
+
+	let {
+		currentPath,
+		user,
+		onSignOut
+	}: {
+		currentPath: string;
+		user: AdminUser;
+		onSignOut: () => Promise<void>;
+	} = $props();
+
+	function getDisplayName(target: AdminUser): string {
+		return target.name?.trim() || target.email?.trim() || target.uid;
+	}
+
+	function getInitials(target: AdminUser): string {
+		const from = getDisplayName(target) || target.uid;
+		return from.trim().charAt(0).toUpperCase() || 'A';
+	}
+
+	function getEmailLabel(target: AdminUser): string {
+		return target.email ?? 'No email on file';
+	}
+
+	const avatarSrc = '/images/admin-avatar.svg';
+	const signingOut = $state({ active: false, error: '' });
+
+	async function handleSignOut() {
+		if (signingOut.active) {
+			return;
+		}
+		signingOut.active = true;
+		signingOut.error = '';
+		try {
+			await onSignOut();
+		} catch (error) {
+			signingOut.error = error instanceof Error ? error.message : 'Failed to sign out.';
+		} finally {
+			signingOut.active = false;
+		}
+	}
+
+	async function handleUserMenuSignOut(event: Event) {
+		event.preventDefault();
+		await handleSignOut();
+	}
+</script>
+
+<Sidebar.Root>
+	<Sidebar.Header class="border-b border-sidebar-border px-4 py-3">
+		<div class="flex items-center justify-between gap-2">
+			<div>
+				<p class="font-semibold">GCSE Spark</p>
+				<p class="text-xs text-sidebar-foreground/70">Admin tools</p>
+			</div>
+		</div>
+	</Sidebar.Header>
+
+	<Sidebar.Content class="flex-1 overflow-y-auto px-2 py-4">
+		<Sidebar.Group>
+			<Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
+			<Sidebar.GroupContent>
+				<Sidebar.Menu>
+					{#each primaryNav as item (item.title)}
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton isActive={item.highlight(currentPath)}>
+								{#snippet child({ props })}
+									<a
+										{...props}
+										href={item.href}
+										class={cn(
+											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
+											props?.class as string | undefined
+										)}
+									>
+										<item.icon class="h-4 w-4" aria-hidden="true" />
+										<span>{item.title}</span>
+									</a>
+								{/snippet}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					{/each}
+				</Sidebar.Menu>
+			</Sidebar.GroupContent>
+		</Sidebar.Group>
+	</Sidebar.Content>
+
+	<Sidebar.Footer class="border-t border-sidebar-border px-3 py-4">
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger class="w-full">
+				<div class="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/40 px-3 py-2 text-left transition hover:bg-sidebar-accent">
+					<Avatar.Root class="h-9 w-9">
+						<Avatar.Image src={avatarSrc} alt={getDisplayName(user)} />
+						<Avatar.Fallback>{getInitials(user)}</Avatar.Fallback>
+					</Avatar.Root>
+					<div class="min-w-0">
+						<p class="truncate text-sm font-medium">{getDisplayName(user)}</p>
+						<p class="truncate text-xs text-sidebar-foreground/70">{getEmailLabel(user)}</p>
+					</div>
+				</div>
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content align="end" class="w-56">
+				<DropdownMenu.Label class="text-xs text-muted-foreground">Signed in</DropdownMenu.Label>
+				<DropdownMenu.Item class="flex flex-col items-start gap-0">
+					<span class="text-sm font-medium">{getDisplayName(user)}</span>
+					<span class="text-xs text-muted-foreground">{getEmailLabel(user)}</span>
+				</DropdownMenu.Item>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item
+					onSelect={handleUserMenuSignOut}
+					variant="destructive"
+					disabled={signingOut.active}
+				>
+					<LogOutIcon class="mr-2 h-4 w-4" />
+					{signingOut.active ? 'Signing out…' : 'Log out'}
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
+
+		{#if signingOut.error}
+			<p class="mt-3 text-xs text-red-500">{signingOut.error}</p>
+		{/if}
+	</Sidebar.Footer>
+
+	<Sidebar.Rail />
+</Sidebar.Root>

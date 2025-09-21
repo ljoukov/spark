@@ -37,6 +37,14 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+  --surface-color: var(--card);
+  --surface-border: var(--border);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --accent-contrast: var(--popover-foreground);
+  --shadow-color: rgba(15, 23, 42, 0.18);
+  --sound-toggle-bg: rgba(248, 250, 255, 0.68);
+  --sound-toggle-foreground: rgba(15, 23, 42, 0.82);
 }
 
 .dark {
@@ -71,6 +79,14 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --surface-color: var(--card);
+  --surface-border: var(--border);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --accent-contrast: var(--popover-foreground);
+  --shadow-color: rgba(2, 6, 23, 0.55);
+  --sound-toggle-bg: rgba(7, 18, 38, 0.6);
+  --sound-toggle-foreground: rgba(248, 250, 252, 0.88);
 }
 
 @theme inline {

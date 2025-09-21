@@ -14,7 +14,9 @@
 		if (typeof document === 'undefined') {
 			return;
 		}
-		document.documentElement.dataset.theme = next;
+		const root = document.documentElement;
+		root.dataset.theme = next;
+		root.classList.toggle('dark', next === 'dark');
 	}
 
 	function setTheme(next: Theme) {
@@ -434,10 +436,10 @@
 		bottom: 1.1rem;
 		right: 1.1rem;
 		border-radius: 999px;
-		border: 1px solid var(--surface-border);
-		background: rgba(7, 18, 38, 0.45);
+		border: 1px solid rgba(15, 23, 42, 0.12);
+		background: var(--sound-toggle-bg);
 		backdrop-filter: blur(12px);
-		color: var(--accent-contrast);
+		color: var(--sound-toggle-foreground);
 		font-size: 0.8rem;
 		font-weight: 600;
 		letter-spacing: 0.05em;
@@ -452,7 +454,9 @@
 	}
 
 	:global([data-theme='dark'] .sound-toggle) {
-		background: rgba(2, 6, 23, 0.55);
+		border-color: rgba(148, 163, 184, 0.24);
+		background: var(--sound-toggle-bg);
+		color: var(--sound-toggle-foreground);
 	}
 
 	.sound-toggle:hover {
