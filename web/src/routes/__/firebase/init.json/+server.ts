@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import initJsonRaw from '../../../../vendor/firebase-auth-helpers/__/firebase/init.json?raw';
+import initJsonRaw from './original.json?raw';
 
 export const GET: RequestHandler = async ({ url }) => {
   // Parse the vendored init.json and rewrite authDomain dynamically to current host

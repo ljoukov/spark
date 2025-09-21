@@ -20,18 +20,15 @@ import path from 'node:path';
 const AUTH_HOST = process.env.FIREBASE_AUTH_HOST || 'pic2toon.firebaseapp.com';
 const ORIGIN = `https://${AUTH_HOST}`;
 
-// Vendor root inside repo; these files are imported by routes and bundled
-const VENDOR_ROOT = 'src/vendor/firebase-auth-helpers';
+// For Option 4: put all helper files under static/__ (served as static assets),
+// except init.json which goes into the route folder for dynamic rewriting.
 const targets = [
-  // HTML helpers
-  { url: `${ORIGIN}/__/auth/handler`, out: `${VENDOR_ROOT}/__/auth/handler.html`, kind: 'html' },
-  { url: `${ORIGIN}/__/auth/iframe`, out: `${VENDOR_ROOT}/__/auth/iframe.html`, kind: 'html' },
-  // JS helpers
-  { url: `${ORIGIN}/__/auth/handler.js`, out: `${VENDOR_ROOT}/__/auth/handler.js`, kind: 'binary' },
-  { url: `${ORIGIN}/__/auth/experiments.js`, out: `${VENDOR_ROOT}/__/auth/experiments.js`, kind: 'binary' },
-  { url: `${ORIGIN}/__/auth/iframe.js`, out: `${VENDOR_ROOT}/__/auth/iframe.js`, kind: 'binary' },
-  // init.json (we will rewrite per-request at runtime; store original here)
-  { url: `${ORIGIN}/__/firebase/init.json`, out: `${VENDOR_ROOT}/__/firebase/init.json`, kind: 'initjson' }
+  { url: `${ORIGIN}/__/auth/handler`, out: 'static/__/auth/handler', kind: 'binary' },
+  { url: `${ORIGIN}/__/auth/iframe`, out: 'static/__/auth/iframe', kind: 'binary' },
+  { url: `${ORIGIN}/__/auth/handler.js`, out: 'static/__/auth/handler.js', kind: 'binary' },
+  { url: `${ORIGIN}/__/auth/experiments.js`, out: 'static/__/auth/experiments.js', kind: 'binary' },
+  { url: `${ORIGIN}/__/auth/iframe.js`, out: 'static/__/auth/iframe.js', kind: 'binary' },
+  { url: `${ORIGIN}/__/firebase/init.json`, out: 'src/routes/__/firebase/init.json/original.json', kind: 'initjson' }
 ];
 
 async function ensureDir(dir) {
@@ -56,7 +53,6 @@ async function main() {
     console.log(`[sync] GET ${t.url}`);
     const data = await download(t.url);
     // Store original upstream content; init.json will be rewritten dynamically at runtime
-    // Write to static as-is
     await ensureDir(dir);
     await fs.writeFile(t.out, data);
     console.log(`[sync] WROTE ${t.out} (${data.length} bytes)`);
