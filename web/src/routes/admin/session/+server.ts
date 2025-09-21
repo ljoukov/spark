@@ -27,7 +27,8 @@ const firebaseTokenSchema = z
 		name: name ?? null
 	}));
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+export const POST: RequestHandler = async (event) => {
+	const { request, cookies, url } = event;
 	const rawBody = await request.json().catch(() => null);
 	const parsedBody = requestSchema.safeParse(rawBody);
 
@@ -63,11 +64,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			expiresIn: ADMIN_SESSION_MAX_AGE_MS
 		});
 
+		const useSecureCookie = url.protocol === 'https:';
+
 		cookies.set(ADMIN_SESSION_COOKIE_NAME, sessionCookie, {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'strict',
-			secure: true,
+			secure: useSecureCookie,
 			maxAge: ADMIN_SESSION_MAX_AGE_SECONDS
 		});
 
