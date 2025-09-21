@@ -19,12 +19,14 @@ const firebaseTokenSchema = z
 		sub: z.string().min(1, 'Missing subject'),
 		user_id: z.string().min(1).optional(),
 		email: z.string().email().optional(),
-		name: z.string().optional()
+		name: z.string().optional(),
+		picture: z.string().url().optional()
 	})
-	.transform(({ sub, user_id, email, name }) => ({
+	.transform(({ sub, user_id, email, name, picture }) => ({
 		uid: user_id ?? sub,
 		email: email ?? null,
-		name: name ?? null
+		name: name ?? null,
+		photoUrl: picture ?? null
 	}));
 
 export const POST: RequestHandler = async (event) => {

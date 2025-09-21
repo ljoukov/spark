@@ -28,7 +28,9 @@
 	}
 
 	function buildBreadcrumbs(path: string): BreadcrumbItem[] {
-		const items: BreadcrumbItem[] = [{ label: 'Home', href: '/admin', isCurrent: path === '/admin' }];
+		const items: BreadcrumbItem[] = [
+			{ label: 'Home', href: '/admin', isCurrent: path === '/admin' }
+		];
 		if (path.startsWith('/admin/gemini') && path !== '/admin') {
 			items[0].isCurrent = false;
 			items.push({ label: 'Gemini', href: '/admin/gemini', isCurrent: true });
@@ -66,11 +68,13 @@
 	<SessionGate {session} />
 {:else}
 	<Sidebar.Provider>
-		<AppSidebar currentPath={currentPath} user={session.user} onSignOut={handleSignOut} />
+		<AppSidebar {currentPath} user={session.user} onSignOut={handleSignOut} />
 		<Sidebar.Inset>
-			<header class="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+			<header
+				class="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+			>
 				<Sidebar.Trigger
-					class="-ml-1 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground transition-colors data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-muted/60"
+					class="-ml-1 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/60 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 					aria-label="Toggle navigation"
 				/>
 				<Separator orientation="vertical" class="h-6" />
@@ -80,9 +84,13 @@
 							{#each breadcrumbItems as item, index (item.href)}
 								<Breadcrumb.Item class="truncate">
 									{#if item.isCurrent}
-										<Breadcrumb.Page class="font-semibold text-foreground">{item.label}</Breadcrumb.Page>
+										<Breadcrumb.Page class="font-semibold text-foreground"
+											>{item.label}</Breadcrumb.Page
+										>
 									{:else}
-										<Breadcrumb.Link href={item.href} class="hover:text-foreground">{item.label}</Breadcrumb.Link>
+										<Breadcrumb.Link href={item.href} class="hover:text-foreground"
+											>{item.label}</Breadcrumb.Link
+										>
 									{/if}
 								</Breadcrumb.Item>
 								{#if index < breadcrumbItems.length - 1}

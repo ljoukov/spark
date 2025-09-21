@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { resolve } from '$app/paths';
 
 	const quickLinks = [
 		{
@@ -20,10 +21,7 @@
 				<Card.CardDescription>{link.description}</Card.CardDescription>
 			</Card.CardHeader>
 			<Card.CardFooter class="flex justify-end">
-				<a
-					href={link.href}
-					class="inline-flex"
-				>
+				<a href={resolve(link.href)} class="inline-flex">
 					<Button>{link.cta}</Button>
 				</a>
 			</Card.CardFooter>
@@ -31,10 +29,12 @@
 	{/each}
 </section>
 
-<section class="rounded-xl border border-dashed border-border/60 bg-muted/20 p-6 text-sm text-muted-foreground">
+<section
+	class="rounded-xl border border-dashed border-border/60 bg-muted/20 p-6 text-sm text-muted-foreground"
+>
 	<h2 class="text-base font-semibold text-foreground">What’s next?</h2>
 	<p class="mt-2">
-		More admin tools will appear here soon. Let us know if a workflow needs priority and
-		we'll slot it into the roadmap.
+		More admin tools will appear here soon. Let us know if a workflow needs priority and we'll slot
+		it into the roadmap.
 	</p>
 </section>

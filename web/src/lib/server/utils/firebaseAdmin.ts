@@ -7,7 +7,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { z } from 'zod';
-import { clientFirebaseConfig } from '../../utils/firebaseClient';
+import { clientFirebaseConfig } from '../../config/firebase';
 
 const rawServiceAccountSchema = z
 	.string({ message: 'GOOGLE_SERVICE_ACCOUNT_JSON must be set' })
