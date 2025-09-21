@@ -3,7 +3,8 @@ import { getAdminUserIDs } from '$lib/server/utils/admin';
 import { logServerEvent } from '$lib/server/utils/logger';
 import { verifyFirebaseSessionCookie } from '$lib/server/utils/firebaseServer';
 import { z } from 'zod';
-import type { PageServerLoad } from './$types';
+import type { LayoutServerLoad } from './$types';
+import type { AdminSessionState } from '$lib/types/admin';
 
 const sessionCookieSchema = z.string().min(1, 'Session cookie cannot be empty');
 
@@ -19,15 +20,10 @@ const decodedTokenSchema = z
 		name: name ?? null
 	}));
 
-export type AdminPageData =
-	| { status: 'signed_out' }
-	| { status: 'not_admin'; user: { uid: string; email: string | null; name: string | null } }
-	| { status: 'admin'; user: { uid: string; email: string | null; name: string | null } };
-
-export const load: PageServerLoad = async ({ cookies }) => {
+export const load: LayoutServerLoad = async ({ cookies }) => {
 	const rawCookie = cookies.get(ADMIN_SESSION_COOKIE_NAME);
 	if (!rawCookie) {
-		return { status: 'signed_out' } satisfies AdminPageData;
+		return { session: { status: 'signed_out' } satisfies AdminSessionState };
 	}
 
 	try {
@@ -38,15 +34,19 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
 		if (!isAdmin) {
 			return {
-				status: 'not_admin',
-				user: decoded
-			} satisfies AdminPageData;
+				session: {
+					status: 'not_admin',
+					user: decoded
+				} satisfies AdminSessionState
+			};
 		}
 
 		return {
-			status: 'admin',
-			user: decoded
-		} satisfies AdminPageData;
+			session: {
+				status: 'admin',
+				user: decoded
+			} satisfies AdminSessionState
+		};
 	} catch (error) {
 		cookies.delete(ADMIN_SESSION_COOKIE_NAME, { path: '/' });
 		logServerEvent({
@@ -54,6 +54,6 @@ export const load: PageServerLoad = async ({ cookies }) => {
 			message: 'Failed to validate admin session cookie',
 			context: { error }
 		});
-		return { status: 'signed_out' } satisfies AdminPageData;
+		return { session: { status: 'signed_out' } satisfies AdminSessionState };
 	}
 };
