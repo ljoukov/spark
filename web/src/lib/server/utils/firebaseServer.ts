@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getFirebaseAdminAuth } from './firebaseAdmin';
-import { clientFirebaseConfig } from '../../util/firebaseClient';
+import { clientFirebaseConfig } from '../../utils/firebaseClient';
 
 const PROJECT_ID = clientFirebaseConfig.projectId; // From firebase config
 const ISSUER = `https://securetoken.google.com/${PROJECT_ID}`;
