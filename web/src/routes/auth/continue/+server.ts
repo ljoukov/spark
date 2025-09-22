@@ -7,6 +7,7 @@ import type { UserAuth } from '$lib/server/auth/auth';
 import { getAuthSessionCookie, setUserAuthCookie } from '$lib/server/auth/cookie';
 import { clientSideRedirect } from '$lib/server/utils/response';
 import { getHostUrl } from '$lib/server/utils/urlParams';
+import type { AuthUserInfoProto } from '$proto/AuthProto';
 
 const signInWithIdpResponseSchema = z.object({
 	localId: z.string(),
@@ -46,9 +47,17 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 		throw error(500, `signInWithIdp error=${signInRespObj.status}: ${signInRespObj.statusText}`);
 	}
 	const signInResp = signInWithIdpResponseSchema.parse(await signInRespObj.json());
+	const userId = signInResp.localId;
+	const userInfo: AuthUserInfoProto = {
+		userId,
+		displayName: signInResp.displayName || '',
+		photoUrl: signInResp.photoUrl || '',
+		email: signInResp.email || ''
+	};
+	// TODO: userInfo into firestore under /spark/<user-id>/userInfo using admin sdk, use import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
 
 	const userAuth: UserAuth = {
-		userId: signInResp.localId,
+		userId,
 		accessToken: signInResp.idToken,
 		expiresAt: Timestamp.fromDate(new Date(Date.now() + (signInResp.expiresIn - 10) * 1000)),
 		refreshToken: signInResp.refreshToken
