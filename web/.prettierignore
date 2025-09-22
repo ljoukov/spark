@@ -8,3 +8,5 @@ bun.lockb
 # Miscellaneous
 /static/
 /proto/
+
+*.md
