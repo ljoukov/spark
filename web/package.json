@@ -7,7 +7,6 @@
 		"dev": "vite dev --port 8080",
 		"dev:https": "vite dev --port 8080",
 		"build": "vite build",
-		"prebuild": "node -e \"console.log('skip signin-helpers sync (manual)')\"",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
 		"build:vercel": "VERCEL=dummy npm run build",
 		"preview": "vite preview",
