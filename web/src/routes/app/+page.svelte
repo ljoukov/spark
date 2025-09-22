@@ -9,11 +9,13 @@
 		signInWithPopup,
 		getRedirectResult,
 		onAuthStateChanged,
+		onIdTokenChanged,
 		setPersistence,
 		browserLocalPersistence,
 		browserSessionPersistence,
 		type User
 	} from 'firebase/auth';
+    import { startIdTokenCookieSync, clearIdTokenCookie } from '$lib/auth/tokenCookie';
 
 	let user: User | null = null;
 	let statusText = 'Loading…';
@@ -108,6 +110,7 @@
 
 	onMount(() => {
 		const auth = getAuth(getFirebaseApp());
+        const stopCookieSync = startIdTokenCookieSync(auth);
 
 		onAuthStateChanged(auth, (u) => {
 			user = u;
@@ -133,6 +136,11 @@
 				setStatus('Redirect error');
 			}
 		})();
+
+        return () => {
+          stopCookieSync();
+          clearIdTokenCookie();
+        };
 	});
 </script>
 
