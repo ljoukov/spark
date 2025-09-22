@@ -7,22 +7,22 @@ import fs from 'node:fs';
 
 const hasCustomCert = !!(process.env.DEV_HTTPS_KEY && process.env.DEV_HTTPS_CERT);
 const httpsOption = hasCustomCert
-  ? {
-      key: fs.readFileSync(process.env.DEV_HTTPS_KEY!, 'utf8'),
-      cert: fs.readFileSync(process.env.DEV_HTTPS_CERT!, 'utf8')
-    }
-  : true; // use basic self-signed cert via plugin
+	? {
+			key: fs.readFileSync(process.env.DEV_HTTPS_KEY!, 'utf8'),
+			cert: fs.readFileSync(process.env.DEV_HTTPS_CERT!, 'utf8')
+		}
+	: true; // use basic self-signed cert via plugin
 
 export default defineConfig({
-    plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],
-    server: {
-        host: 'localhost',
-        port: 8080,
-        https: httpsOption
-    },
-    test: {
-        expect: { requireAssertions: true },
-        projects: [
+	plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],
+	server: {
+		host: 'localhost',
+		port: 8080,
+		https: httpsOption
+	},
+	test: {
+		expect: { requireAssertions: true },
+		projects: [
 			{
 				extends: './vite.config.ts',
 				test: {
