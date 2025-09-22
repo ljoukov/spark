@@ -2,13 +2,16 @@
 
 ## 0) Monorepo Layout & Tooling Assumptions
 
-- `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, uses Swift Concurrency and integrates with Firebase SDKs plus generated Swift Protobuf types.
-- `protos/` — Source of truth for Protocol Buffer definitions shared by client and server. Uses `buf` (or plain `protoc`) to emit:
-  - Swift types via `swift-protobuf` into `Spark/Shared/Generated`.
-  - TypeScript bindings via `ts-proto` into `web/src/lib/proto`.
-- `web/` — SvelteKit (latest) project deployed to Cloudflare Workers using `@sveltejs/adapter-cloudflare`. Hosts the public marketing pages *and* API endpoints consumed by the iOS app. API logic lives under `web/src/routes/api/*` and runs inside the Worker runtime.
+- `proto/` — Source of truth for Protocol Buffer definitions shared by client and server.
+  - inside `proto/` run "npm run generate" ro ptoduce TypeScript and Swift protos.
+  - TypeScript: alias `$proto` is configured to simplify importing.
+  - Swift types via `swift-protobuf` into `Spark/proto`.
+- `web/` — SvelteKit (latest) project deployed to Vercel. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
+- API logic lives under `web/src/routes/api/*`.
+- Web app lives under `web/src/routes/app`
+- Admin dashboard lives under `web/src/routes/admin`
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Cloudflare environment variables and Xcode build settings.
-- CI: GitHub Actions pipeline with three jobs (lint/test Swift, lint/test TypeScript, proto lint + breaking-change check). Deployments triggered on `main` merges.
+- `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
 
 ## 1) Product Goal
 
@@ -16,6 +19,7 @@
 - Focus: GCSE Triple Science (Biology, Chemistry, Physics) across AQA, Edexcel, OCR. Provide fast feedback loops: immediate acknowledgement that generation started and continuous progress updates via Firestore.
 
 **Non-Goals**
+
 - Teacher dashboards, offline generation, Combined/Double Award in v1, or general note management tooling.
 
 ## 2) Key Functional Requirements
@@ -34,27 +38,37 @@
 
 ## 3) Platform Architecture Overview
 
+### API endpoint
+
+`/api/spark` accepts SparkApiRequestProto and responds with SparkApiResponseProto, to simplify logging
+additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
+name of the oneof in `SparkApiRequestProto.request`.
+
 ### 3.1 Data Flow
+
 1. User captures/upload content in the SwiftUI app.
 2. App serializes a Protocol Buffer `GenerateFromUploadRequest` and uploads file(s) to Firebase Storage (`/spark/<userId>/<timestamp>.jpg|pdf`).
-3. App calls Cloudflare Worker endpoint (`POST /api/generate`) with binary proto payload referencing the upload.
-4. Worker validates input, writes initial job document to Firestore, and kicks off LLM processing using `context.waitUntil()` so work continues even if the HTTP client disconnects.
+3. App calls API endpoint (`POST /api/spark`) with binary proto payload referencing the upload.
+4. API endpoint validates input, writes initial job document to Firestore, and kicks off LLM processing using `context.waitUntil()` so work continues even if the HTTP client disconnects.
 5. Background generation reads source material, produces quiz content, and streams status into Firestore (`requests`, `client.events`, and quiz documents).
 6. SwiftUI app listens to Firestore collection changes to display progress, new questions, summaries, and errors in real time.
 
 ### 3.2 Protocol Buffer Contract
+
 - Core message families: `SparkApiRequest`, `SparkApiResponse`, `GenerateFromUploadRequest`, `CheckAnswerRequest`, `SummarizeRequest`, `JobStatusUpdate`, `Quiz`, `Question`, `FirestoreSyncEnvelope`.
 - Versioning: embed `api_version` and `client_version` so server can reject incompatible clients gracefully.
 - Binary transport (`Content-Type: application/octet-stream`) for performance; fallback REST+JSON only for marketing/diagnostics endpoints.
 
 ### 3.3 Cloud Services
+
 - **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by Cloudflare Worker using Admin SDK (running via `firebase-admin` configured for edge-compatible builds).
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership.
 
-## 4) Backend (SvelteKit on Cloudflare Workers)
+## 4) Backend (SvelteKit)
 
-- Uses SvelteKit with `adapter-cloudflare` to deploy as a Worker. API routes implemented as server modules in `web/src/routes/api/*/+server.ts`.
+- Uses SvelteKit
+- API routes implemented as server modules in `web/src/routes/api/*/+server.ts`.
 - Request handling pipeline:
   1. Parse binary proto payload using generated TypeScript classes.
   2. Validate auth (Firebase ID token in headers) using Admin SDK instance warmed at module scope.
@@ -91,6 +105,11 @@
 
 ## 6) Web Frontend (SvelteKit)
 
+- IMPORTANT: read the docs in web/docs/sveltekit-docs.md for SvelteKit, it significantly changed recently, eg runes
+- IMPORTANT: read the docs in web/docs/shadcn-svelte.md to understand shadcn (UI Com ponents library)
+
+- Landing page is minimal and not shadcn
+- /app and /admin pages are build with shadcn and SvelteKit
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for Worker) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
@@ -130,19 +149,9 @@
 
 ## 10) Non-Functional Requirements
 
-- Performance: initial acknowledgement <1s; status update within 3s of job start; total generation target <15s for 10-question quiz.
 - Reliability: graceful degradation if LLM provider down — mark job failed with retry guidance. Retain idempotency via `client_request_id` embedded in proto messages.
-- Security: Firebase security rules enforce user isolation; Cloudflare Worker checks token on every request. Encrypted-at-rest storage (Firebase default). No secret logging.
-- Observability: integrate Workers Metrics (Durable Logs) and Sentry (Edge SDK) for error tracking. Firestore debug dashboards for job throughput.
-- Testing:
-  - Proto snapshot tests to catch schema drift.
-  - Swift UI tests for capture + quiz flows using mocked Firestore (Firebase Emulator Suite).
-  - SvelteKit endpoint tests (Vitest) running in Miniflare with fake Firestore.
 
 ## 11) Open Questions & Future Enhancements
 
-- Should we introduce a dedicated job queue (e.g., Cloudflare Queues) if WaitUntil proves insufficient for concurrency spikes?
-- Are we supporting Android/web clients later? If so, need Kotlin codegen targets for protos and expanded auth flows.
-- How aggressively should we prune Firebase Storage assets? (Current plan: 7-day TTL; verify this aligns with moderation/audit requirements.)
 - Do we need offline capture queue on iOS (store uploads locally until connectivity resumes)?
-- Should we expose partial quiz previews on the marketing site using the same proto contract (requires auth gating)?
+- Should we expose partial quiz previews while they are being generated? (Answer: definitely)
