@@ -16,7 +16,8 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"test": "npm run test:unit -- --run",
+		"generate:sample-previews": "tsx --tsconfig scripts/tsconfig.scripts.json scripts/generate-sample-previews.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -55,6 +56,7 @@
 		"tailwindcss": "^4.0.0",
 		"tw-animate-css": "^1.3.8",
 		"typescript": "^5.0.0",
+		"tsx": "^4.19.2",
 		"typescript-eslint": "^8.20.0",
 		"vite": "^7.0.4",
 		"vite-plugin-devtools-json": "^1.0.0",

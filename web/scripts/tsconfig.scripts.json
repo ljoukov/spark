@@ -1,0 +1,9 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": "..",
+		"paths": {
+			"$env/static/private": ["scripts/stubs/$env/static/private.ts"]
+		}
+	}
+}

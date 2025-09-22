@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2025-09-22T08:24:35.756Z",
+  "itemCount": 5,
+  "items": [
+    {
+      "id": "001-no-questions-y8lesson-health-blooddonations-pdf",
+      "sequence": 1,
+      "mode": "synthesis",
+      "sourceFile": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+      "sourceDisplayName": "Y8Lesson-Health-BloodDonations.pdf",
+      "resultPath": "quizzes/001-no-questions-y8lesson-health-blooddonations-pdf.json",
+      "status": "error",
+      "subject": "biology",
+      "errorMessage": "exception TypeError: fetch failed sending request"
+    },
+    {
+      "id": "002-with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-jpeg",
+      "sequence": 2,
+      "mode": "extraction",
+      "sourceFile": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+      "sourceDisplayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+      "resultPath": "quizzes/002-with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-jpeg.json",
+      "status": "error",
+      "errorMessage": "exception TypeError: fetch failed sending request"
+    },
+    {
+      "id": "003-with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-jpeg",
+      "sequence": 3,
+      "mode": "extraction",
+      "sourceFile": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+      "sourceDisplayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+      "resultPath": "quizzes/003-with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-jpeg.json",
+      "status": "error",
+      "errorMessage": "exception TypeError: fetch failed sending request"
+    },
+    {
+      "id": "004-with-questions-c2-1examqs-pdf",
+      "sequence": 4,
+      "mode": "extraction",
+      "sourceFile": "data/samples/with-questions/C2.1ExamQs.pdf",
+      "sourceDisplayName": "C2.1ExamQs.pdf",
+      "resultPath": "quizzes/004-with-questions-c2-1examqs-pdf.json",
+      "status": "error",
+      "errorMessage": "exception TypeError: fetch failed sending request"
+    },
+    {
+      "id": "005-with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-jpeg",
+      "sequence": 5,
+      "mode": "extraction",
+      "sourceFile": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+      "sourceDisplayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+      "resultPath": "quizzes/005-with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-jpeg.json",
+      "status": "error",
+      "errorMessage": "exception TypeError: fetch failed sending request"
+    }
+  ]
+}

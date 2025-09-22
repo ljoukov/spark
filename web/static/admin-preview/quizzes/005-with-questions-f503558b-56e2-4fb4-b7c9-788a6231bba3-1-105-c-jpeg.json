@@ -1,0 +1,12 @@
+{
+  "status": "error",
+  "sequence": 5,
+  "mode": "extraction",
+  "sourceFile": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+  "sourceDisplayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+  "generatedAt": "2025-09-22T08:24:35.756Z",
+  "error": {
+    "message": "exception TypeError: fetch failed sending request",
+    "stack": "Error: exception TypeError: fetch failed sending request\n    at <anonymous> (/workspace/spark/web/node_modules/@google/genai/src/_api_client.ts:600:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async Models.Models.generateContent (/workspace/spark/web/node_modules/@google/genai/src/models.ts:76:14)\n    at async attemptWithRetries (/workspace/spark/web/src/lib/server/utils/gemini.ts:165:10)\n    at async runTask (/workspace/spark/web/src/lib/server/utils/gemini.ts:198:18)"
+  }
+}

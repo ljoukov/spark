@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "sequence": 1,
+  "mode": "synthesis",
+  "sourceFile": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+  "sourceDisplayName": "Y8Lesson-Health-BloodDonations.pdf",
+  "generatedAt": "2025-09-22T08:24:35.756Z",
+  "subjectGuess": "biology",
+  "error": {
+    "message": "exception TypeError: fetch failed sending request",
+    "stack": "Error: exception TypeError: fetch failed sending request\n    at <anonymous> (/workspace/spark/web/node_modules/@google/genai/src/_api_client.ts:600:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async Models.Models.generateContent (/workspace/spark/web/node_modules/@google/genai/src/models.ts:76:14)\n    at async attemptWithRetries (/workspace/spark/web/src/lib/server/utils/gemini.ts:165:10)\n    at async runTask (/workspace/spark/web/src/lib/server/utils/gemini.ts:198:18)"
+  }
+}
