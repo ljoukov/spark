@@ -15,6 +15,7 @@
 	import {
 		getFirebaseApp,
 		startGoogleSignInRedirect,
+		startGoogleSignInPopup,
 		firebaseSignOut
 	} from '$lib/utils/firebaseClient';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
@@ -60,13 +61,23 @@
 
 	// Sign-in overlay logic from previous layout
 	const showLogin = $derived(!data.user);
-	const ui = $state({ signingIn: false });
-	async function handleGoogleSignIn(): Promise<void> {
-		ui.signingIn = true;
+	const ui = $state({ signingInRedirect: false, signingInPopup: false });
+	const signingIn = $derived(ui.signingInRedirect || ui.signingInPopup);
+	async function handleGoogleSignInRedirect(): Promise<void> {
+		ui.signingInRedirect = true;
 		try {
 			await startGoogleSignInRedirect();
 		} finally {
-			ui.signingIn = false;
+			ui.signingInRedirect = false;
+		}
+	}
+
+	async function handleGoogleSignInPopup(): Promise<void> {
+		ui.signingInPopup = true;
+		try {
+			await startGoogleSignInPopup();
+		} finally {
+			ui.signingInPopup = false;
 		}
 	}
 
@@ -157,14 +168,15 @@
 				<Card.Title>Admin Sign In</Card.Title>
 				<Card.Description>Sign in with Google to access the admin area.</Card.Description>
 			</Card.Header>
-			<Card.Content>
+			<Card.Content class="space-y-2">
 				<button
 					type="button"
 					class={cn(buttonVariants({ variant: 'default', size: 'default' }), 'w-full')}
-					onclick={handleGoogleSignIn}
-					disabled={ui.signingIn}
+					onclick={handleGoogleSignInRedirect}
+					disabled={signingIn}
+					aria-busy={ui.signingInRedirect}
 				>
-					{#if ui.signingIn}
+					{#if ui.signingInRedirect}
 						Signing in…
 					{:else}
 						<svg
@@ -190,7 +202,43 @@
 								d="M272 107.7c40.8 0 77.3 14 106.1 41.4l79.6-79.6C409.4 24.8 346.7 0 272 0 162.5 0 69.4 62.1 24.2 166.6l91.9 72.3C138 156.7 199.4 107.7 272 107.7z"
 							/>
 						</svg>
-						Sign in with Google
+						Sign in with Google (Redirect)
+					{/if}
+				</button>
+				<button
+					type="button"
+					class={cn(buttonVariants({ variant: 'outline', size: 'default' }), 'w-full')}
+					onclick={handleGoogleSignInPopup}
+					disabled={signingIn}
+					aria-busy={ui.signingInPopup}
+				>
+					{#if ui.signingInPopup}
+						Signing in…
+					{:else}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 533.5 544.3"
+							class="mr-2 h-4 w-4"
+							aria-hidden="true"
+						>
+							<path
+								fill="#4285f4"
+								d="M533.5 278.4c0-17.4-1.5-34.1-4.4-50.2H272v95h147.2c-6.4 34.6-25.9 63.9-55.1 83.5v69h88.9c52.1-47.9 80.5-118.4 80.5-197.3z"
+							/>
+							<path
+								fill="#34a853"
+								d="M272 544.3c74.7 0 137.4-24.7 183.2-67.6l-88.9-69c-24.7 16.6-56.3 26.4-94.3 26.4-72.6 0-134-49-155.9-114.9H24.2v72.3C69.4 482.2 162.5 544.3 272 544.3z"
+							/>
+							<path
+								fill="#fbbc04"
+								d="M116.1 318.9c-4.2-12.6-6.6-26.1-6.6-40s2.4-27.4 6.6-40V166.6H24.2C9 196.3 0 231.4 0 268.9s9 72.6 24.2 102.3l91.9-72.3z"
+							/>
+							<path
+								fill="#ea4335"
+								d="M272 107.7c40.8 0 77.3 14 106.1 41.4l79.6-79.6C409.4 24.8 346.7 0 272 0 162.5 0 69.4 62.1 24.2 166.6l91.9 72.3C138 156.7 199.4 107.7 272 107.7z"
+							/>
+						</svg>
+						Sign in with Google (Popup)
 					{/if}
 				</button>
 			</Card.Content>

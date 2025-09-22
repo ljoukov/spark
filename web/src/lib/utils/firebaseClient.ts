@@ -42,6 +42,23 @@ export async function startGoogleSignInRedirect(): Promise<void> {
 }
 
 /**
+ * Starts Google sign-in using Firebase Web SDK popup flow.
+ * Falls back to session persistence if local persistence is unavailable (e.g., Safari ITP).
+ */
+export async function startGoogleSignInPopup(): Promise<void> {
+	const auth = getAuth(getFirebaseApp());
+	try {
+		await setPersistence(auth, browserLocalPersistence);
+	} catch {
+		await setPersistence(auth, browserSessionPersistence);
+	}
+	const provider = new GoogleAuthProvider();
+	provider.setCustomParameters({ prompt: 'select_account' });
+	const { signInWithPopup } = await import('firebase/auth');
+	await signInWithPopup(auth, provider);
+}
+
+/**
  * After a redirect-based sign-in, returns the Google ID token from the OAuth
  * credential (NOT the Firebase ID token). This token can be exchanged on the
  * server with Identity Toolkit to mint Firebase ID/refresh tokens for the
