@@ -3,7 +3,6 @@
 
 	type Theme = 'light' | 'dark';
 
-	let theme: Theme = 'light';
 	let isMuted = true;
 	let shouldAutoPlay = true;
 	let videoReady = false;
@@ -20,7 +19,6 @@
 	}
 
 	function setTheme(next: Theme) {
-		theme = next;
 		applyTheme(next);
 	}
 
@@ -127,12 +125,16 @@
 					target="_blank"
 					rel="noopener noreferrer"
 				>
-					<img
-						src={theme === 'dark' ? '/appstore-dark.svg' : '/appstore-light.svg'}
-						alt="Download GCSE Spark on the App Store"
-						width="200"
-						height="64"
-					/>
+					<picture>
+						<source media="(prefers-color-scheme: dark)" srcset="/appstore-dark.svg" />
+						<source media="(prefers-color-scheme: light)" srcset="/appstore-light.svg" />
+						<img
+							src="/appstore-light.svg"
+							alt="Download GCSE Spark on the App Store"
+							width="200"
+							height="64"
+						/>
+					</picture>
 				</a>
 			</div>
 		</section>
