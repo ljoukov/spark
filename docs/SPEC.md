@@ -1,5 +1,7 @@
 # Spark — Product & Architecture Specification (SwiftUI + SvelteKit)
 
+IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
+
 ## 0) Monorepo Layout & Tooling Assumptions
 
 - `proto/` — Source of truth for Protocol Buffer definitions shared by client and server.
