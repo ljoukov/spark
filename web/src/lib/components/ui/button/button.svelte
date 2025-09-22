@@ -60,10 +60,6 @@
 	function isAbsoluteOrFragment(target: string): boolean {
 		return ABSOLUTE_URL_PATTERN.test(target) || target.startsWith('#');
 	}
-
-	function resolveInternalHref(target: string): string {
-		return resolve(target as Pathname);
-	}
 </script>
 
 {#if href}
@@ -93,7 +89,7 @@
 			bind:this={ref}
 			data-slot="button"
 			class={cn(buttonVariants({ variant, size }), className)}
-			href={resolveInternalHref(href)}
+			href={resolve(href as Pathname)}
 			{...restProps}
 		>
 			{@render children?.()}
