@@ -20,6 +20,8 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 	headers.delete('host');
 	headers.delete('connection');
 	headers.delete('content-length');
+	// Avoid upstream gzip/brotli so we can safely manage content-encoding ourselves
+	headers.set('accept-encoding', 'identity');
 	if (headers.has('origin')) {
 		headers.set('origin', FIREBASE_AUTH_ORIGIN);
 	}
@@ -35,6 +37,9 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 		}
 	}
 
+	const started = Date.now();
+	console.log(`[auth-proxy] → ${method} ${event.url.pathname}${event.url.search}`);
+
 	const upstreamRes = await event.fetch(upstreamUrl, {
 		method,
 		headers,
@@ -42,8 +47,19 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 		redirect: 'manual'
 	});
 
+	const elapsed = Date.now() - started;
 	const outHeaders = new Headers();
 	upstreamRes.headers.forEach((value, key) => {
+		const lower = key.toLowerCase();
+		// Strip hop-by-hop and encoding-specific headers to prevent decoding mismatches
+		if (
+			lower === 'content-encoding' ||
+			lower === 'transfer-encoding' ||
+			lower === 'content-length' ||
+			lower === 'connection'
+		) {
+			return;
+		}
 		outHeaders.append(key, value);
 	});
 
@@ -62,6 +78,21 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 			// ignore malformed locations; pass through as-is
 		}
 	}
+
+
+	// Ensure correct content type for extensionless helper HTML pages.
+	const path = event.url.pathname;
+	const filename = path.substring(path.lastIndexOf('/') + 1);
+	if (filename === 'iframe' || filename === 'handler' || filename === 'callback') {
+		outHeaders.set('content-type', 'text/html; charset=utf-8');
+		outHeaders.set('x-content-type-options', 'nosniff');
+		// Remove any content-disposition that might trigger downloads
+		outHeaders.delete('content-disposition');
+	}
+
+	console.log(
+		`[auth-proxy] ← ${upstreamRes.status} ${filename || ''} (${elapsed}ms)`
+	);
 
 	return new Response(upstreamRes.body, {
 		status: upstreamRes.status,
