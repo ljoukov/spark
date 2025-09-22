@@ -97,11 +97,11 @@
 					src="/favicon.png"
 					alt="Spark"
 					title="Spark"
-					class="border-sidebar-border size-10 rounded-lg border object-cover"
+					class="size-10 rounded-lg border border-sidebar-border object-cover"
 				/>
 				<div>
 					<p class="font-semibold">GCSE Spark</p>
-					<p class="text-sidebar-foreground/70 text-xs">Admin tools</p>
+					<p class="text-xs text-sidebar-foreground/70">Admin tools</p>
 				</div>
 			</div>
 		</div>
@@ -120,7 +120,7 @@
 										{...props}
 										href={resolve(item.href)}
 										class={cn(
-											'text-sidebar-foreground/80 hover:text-sidebar-foreground flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium no-underline transition-colors',
+											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined
 										)}
 										onclick={() => {
@@ -141,11 +141,11 @@
 		</Sidebar.Group>
 	</Sidebar.Content>
 
-	<Sidebar.Footer class="border-sidebar-border border-t px-3 py-4">
+	<Sidebar.Footer class="border-t border-sidebar-border px-3 py-4">
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger class="w-full">
 				<div
-					class="bg-sidebar-accent/40 hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition"
+					class="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/40 px-3 py-2 text-left transition hover:bg-sidebar-accent"
 				>
 					<Avatar.Root class="h-9 w-9">
 						<Avatar.Image src={avatarSrc} alt={getDisplayName(user)} />
@@ -153,7 +153,7 @@
 					</Avatar.Root>
 					<div class="min-w-0 flex-1">
 						<p class="truncate text-sm font-medium">{getDisplayName(user)}</p>
-						<p class="text-sidebar-foreground/70 truncate text-xs">{getEmailLabel(user)}</p>
+						<p class="truncate text-xs text-sidebar-foreground/70">{getEmailLabel(user)}</p>
 					</div>
 					<MoreVerticalIcon class="ml-auto h-4 w-4 opacity-70" />
 				</div>
@@ -164,10 +164,10 @@
 				side={sidebar.isMobile ? 'bottom' : 'right'}
 				sideOffset={4}
 			>
-				<DropdownMenu.Label class="text-muted-foreground text-xs">Signed in</DropdownMenu.Label>
+				<DropdownMenu.Label class="text-xs text-muted-foreground">Signed in</DropdownMenu.Label>
 				<DropdownMenu.Item class="flex flex-col items-start gap-0">
-					<span class="break-words text-sm font-medium">{getDisplayName(user)}</span>
-					<span class="text-muted-foreground break-words text-xs">{getEmailLabel(user)}</span>
+					<span class="text-sm font-medium break-words">{getDisplayName(user)}</span>
+					<span class="text-xs break-words text-muted-foreground">{getEmailLabel(user)}</span>
 				</DropdownMenu.Item>
 				<DropdownMenu.Separator />
 				<DropdownMenu.Item
