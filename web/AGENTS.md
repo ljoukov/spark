@@ -22,7 +22,7 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
   - All app → server API calls must include a Firebase ID token (e.g., `Authorization: Bearer <idToken>`). The server validates tokens using the Firebase Admin SDK. See helpers in `web/src/lib/server/utils/firebaseAdmin.ts:68` and token verification utilities in `web/src/lib/server/utils/firebaseServer.ts:23`.
 
   - We keep Firebase Hosting deployed only to make the Firebase Auth helper endpoints available at `__/auth/*` and to test client sign-in. See the lightweight demo page at `web/public/index.html`.
-  - The SvelteKit app itself is deployed as a Cloudflare Worker or Vercel; Hosting is not used for app routing.
+  - The SvelteKit app itself is deployed to Vercel; Hosting is not used for app routing.
 
 - Notes
   - Follow `docs/SPEC.md` for auth and validation requirements. All external inputs must be validated with `zod` and normalized before use.
