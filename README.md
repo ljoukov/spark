@@ -1,13 +1,13 @@
 # Spark
 
-Spark turns GCSE Triple Science study materials into calm, exam-board aware practice. Students snap a photo or upload a PDF, Spark understands the content, and delivers a short run of tailored questions with confident guidance on what to do next. Both the SwiftUI app and the SvelteKit web surface share the same real-time backend so progress, summaries, and feedback stay in sync across devices.
+Spark turns GCSE Triple Science study materials into calm, deliberate practice. Students snap a photo or upload a PDF, Spark understands the content, and delivers a short run of tailored questions with confident guidance on what to do next. The goal is to avoid a "slot machine" feel while still making it efficient and effective to work through the material. Both the SwiftUI app and the SvelteKit web surface share the same real-time backend so progress, summaries, and feedback stay in sync across devices.
 
 ## User experience at a glance
 - **One-button start:** The home screen revolves around a single “Scan or Upload” button so students can jump directly into practice.
 - **Smart capture pipeline:** Photos and PDFs are cropped, classified, and tagged with subject/board metadata automatically, with quick edits available when needed.
 - **Tailored practice:** Spark generates ~10 minute quiz sets that respect the source material—MCQ, free-text, numeric, and diagram labelling all inherit GCSE mark-scheme cues.
 - **Consistent practice player:** A focused player keeps interactions predictable with accessible input controls, hints on demand, and structured feedback (correct/partial/try again plus rationale).
-- **Calm summaries:** After each set students receive accuracy, grade-band trend, and one suggested next action, with optional deep-dive into explanations.
+- **Guided summaries:** After each set students receive accuracy, grade-band trend, and one suggested next action, with optional deep-dive into explanations.
 - **Lightweight progress lens:** A single progress view lets students flip between subjects, timeline, and metrics without leaving the page.
 - **Accessibility baked in:** High-contrast visuals, generous tap targets, inclusive language, and optional dark/reduced-motion modes keep the experience welcoming.
 
@@ -15,9 +15,9 @@ For full UX details, see the [Flow reference](docs/FLOW.md).
 
 ## Technical stack highlights
 - **SwiftUI iOS app** targeting iOS 17+, using Firebase Auth/Firestore/Storage and generated Swift Protobuf models for realtime job tracking and quiz playback.
-- **SvelteKit web app** deployed to Vercel, using server routes under `web/src/routes/api` to process Protocol Buffer requests inside Cloudflare Workers.
+- **SvelteKit web app** deployed to Vercel, using server routes under `web/src/routes/api` to process Protocol Buffer requests in the Vercel Edge Runtime.
 - **Shared Protocol Buffers** in [`proto/`](proto) drive typed contracts between client and server (transported as `application/octet-stream`).
-- **Cloudflare Workers backend** orchestrates long-running generation via `context.waitUntil`, streaming updates into Firestore.
+- **Vercel Edge runtime** orchestrates long-running generation via `event.waitUntil`, streaming updates into Firestore.
 - **Firebase data model** centralises uploads, requests, quizzes, attempts, and summaries with board/topic tagging and rate-aware writes.
 - **Design system** built with shadcn-svelte components and Tailwind/UnoCSS for consistent marketing, app, and admin surfaces.
 

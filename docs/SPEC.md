@@ -12,7 +12,7 @@ IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
 - API logic lives under `web/src/routes/api/*`.
 - Web app lives under `web/src/routes/app`
 - Admin dashboard lives under `web/src/routes/admin`
-- Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Cloudflare environment variables and Xcode build settings.
+- Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
 
 ## 1) Product Goal
@@ -51,7 +51,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 1. User captures/upload content in the SwiftUI app.
 2. App serializes a Protocol Buffer `GenerateFromUploadRequest` and uploads file(s) to Firebase Storage (`/spark/<userId>/<timestamp>.jpg|pdf`).
 3. App calls API endpoint (`POST /api/spark`) with binary proto payload referencing the upload.
-4. API endpoint validates input, writes initial job document to Firestore, and kicks off LLM processing using `context.waitUntil()` so work continues even if the HTTP client disconnects.
+4. API endpoint validates input, writes initial job document to Firestore, and kicks off LLM processing using the Vercel Edge Runtime `event.waitUntil()` hook so work continues even if the HTTP client disconnects.
 5. Background generation reads source material, produces quiz content, and streams status into Firestore (`requests`, `client.events`, and quiz documents).
 6. SwiftUI app listens to Firestore collection changes to display progress, new questions, summaries, and errors in real time.
 
@@ -63,7 +63,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 
 ### 3.3 Cloud Services
 
-- **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by Cloudflare Worker using Admin SDK (running via `firebase-admin` configured for edge-compatible builds).
+- **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by the Vercel Edge Runtime using the Admin SDK (running via `firebase-admin` configured for edge-compatible builds).
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership.
 
@@ -74,17 +74,17 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Request handling pipeline:
   1. Parse binary proto payload using generated TypeScript classes.
   2. Validate auth (Firebase ID token in headers) using Admin SDK instance warmed at module scope.
-  3. Persist initial Firestore documents and enqueue background workflow by scheduling async functions in `platform.context.waitUntil()`.
+  3. Persist initial Firestore documents and enqueue background workflow by scheduling async functions with `event.waitUntil()` when running in the Edge Runtime.
   4. Return minimal proto response (`AckResponse` with `job_id`, `received_at`, optimistic status).
-- Long-running operations (LLM generations, PDF parsing, summarization) run entirely inside `waitUntil`. Worker writes updates back to Firestore as discrete steps (`started`, `ingesting`, `generating`, `ready`...). If rate limits require, delegate to Cloud Tasks / Durable Objects (v2) in later iterations.
-- Firestore access uses REST RPC with service account JWT stored in Cloudflare environment secrets; ensure connection pooling via `fetch`. All writes batched to stay within limit.
+- Long-running operations (LLM generations, PDF parsing, summarization) run entirely inside the Edge Runtime `event.waitUntil` hook. The handler writes updates back to Firestore as discrete steps (`started`, `ingesting`, `generating`, `ready`...). If rate limits require, delegate to Cloud Tasks or other queueing primitives in later iterations.
+- Firestore access uses REST RPC with service account JWT stored in Vercel environment secrets; ensure connection pooling via `fetch`. All writes batched to stay within limit.
 - API surface (proto-based):
   - `SparkApiRequest.request = GenerateFromUploadRequest`
   - `SparkApiRequest.request = CheckAnswerRequest`
   - `SparkApiRequest.request = SummarizeRequest`
   - `SparkApiRequest.request = SyncRequest` (optional to bootstrap client caches)
 - Non-proto HTTP endpoints (JSON) for marketing forms or health checks kept separate (`/api/health`, `/api/newsletter`).
-- Logging & tracing: console logs streamed to Workers Analytics Engine; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
+- Logging & tracing: console logs captured via Vercel logging/observability; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
 
 ## 5) iOS App (SwiftUI)
 
@@ -113,9 +113,9 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Landing page is minimal and not shadcn
 - /app and /admin pages are build with shadcn and SvelteKit
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
-- Shared design system built with TailwindCSS (compiled for Worker) or UnoCSS.
+- Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
-- Implements newsletter sign-up (Mailcoach/ConvertKit) via Cloudflare Worker KV or third-party API.
+- Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
 - CSR avoided for marketing pages; islands used sparingly for forms.
 
 ## 7) Firestore Data Model
@@ -131,7 +131,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 
 ## 8) Background Processing & WaitUntil Strategy
 
-- Every API handler returns within <1s by pushing heavy work into `context.waitUntil(async () => { ... })`.
+- Every API handler returns within <1s by pushing heavy work into `event.waitUntil(async () => { ... })`.
 - Workflows encapsulated in pure async functions that:
   1. Fetch source materials from Firebase Storage (signed URL via Admin SDK).
   2. Run OCR/PDF parsing (Tesseract or Google Cloud Vision) and send prompts to LLM provider.
