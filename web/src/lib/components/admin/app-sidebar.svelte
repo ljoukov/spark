@@ -7,7 +7,7 @@
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
 
@@ -118,7 +118,7 @@
 								{#snippet child({ props })}
 									<a
 										{...props}
-										href={`${base}${item.href}`}
+										href={resolve(item.href)}
 										class={cn(
 											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined
