@@ -112,7 +112,7 @@ function buildSourceParts(files: InlineSourceFile[]): Part[] {
 	}));
 }
 
-function buildGenerationPrompt(options: GenerateQuizOptions): string {
+export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 	const base = [BASE_PROMPT_HEADER];
 	if (options.mode === 'extraction') {
 		base.push(
@@ -180,7 +180,7 @@ export async function generateQuizFromSource(
 	return QuizGenerationSchema.parse(normalised);
 }
 
-function buildExtensionPrompt(options: ExtendQuizOptions): string {
+export function buildExtensionPrompt(options: ExtendQuizOptions): string {
 	return [
 		BASE_PROMPT_HEADER,
 		'The learner already received an initial quiz, provided below as JSON. They now want additional questions.',

@@ -55,7 +55,7 @@ export interface AuditOptions {
 	readonly judgeVerdict: JudgeVerdict;
 }
 
-function buildJudgePrompt(options: JudgeOptions): string {
+export function buildJudgePrompt(options: JudgeOptions): string {
 	return [
 		`You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.`,
 		'Rubric:',
@@ -75,7 +75,7 @@ function buildJudgePrompt(options: JudgeOptions): string {
 		.join('\n');
 }
 
-function buildAuditPrompt(): string {
+export function buildAuditPrompt(): string {
 	return [
 		`You are Spark's senior reviewer using gemini-2.5-pro to audit another model's judgement.`,
 		'Assess whether the judge verdict is reasonable given the quiz and rubric. Focus on factual accuracy and rubric fit.',
