@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import { getApp } from 'firebase/app';
+	import { getApp, type FirebaseOptions } from 'firebase/app';
 	import {
 		getAuth,
 		GoogleAuthProvider,
@@ -9,7 +9,6 @@
 		signInWithPopup,
 		getRedirectResult,
 		onAuthStateChanged,
-		onIdTokenChanged,
 		setPersistence,
 		browserLocalPersistence,
 		browserSessionPersistence,
@@ -32,7 +31,7 @@
 			const ok = api.getItem(key) === '1';
 			api.removeItem(key);
 			return ok;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
@@ -45,7 +44,7 @@
 			prefix,
 			location: window.location.href,
 			appOptions: getApp().options,
-			usingAuthDomain: (getApp().options as any).authDomain,
+			usingAuthDomain: (getApp().options as FirebaseOptions).authDomain,
 			hasLocalStorage: supportsStorage(window.localStorage),
 			hasSessionStorage: supportsStorage(window.sessionStorage),
 			localFirebaseKeys: Object.keys(window.localStorage || {}).filter((k) =>
@@ -62,7 +61,7 @@
 	async function withPersistence(auth: ReturnType<typeof getAuth>) {
 		try {
 			await setPersistence(auth, browserLocalPersistence);
-		} catch (e) {
+		} catch {
 			await setPersistence(auth, browserSessionPersistence);
 		}
 	}

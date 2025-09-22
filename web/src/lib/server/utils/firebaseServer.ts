@@ -18,6 +18,9 @@ export type FirebaseIdToken = JWTPayload & {
 	user_id?: string; // same as sub
 	email?: string;
 	email_verified?: boolean;
+	// Optional OpenID profile claims Firebase may include
+	name?: string;
+	picture?: string;
 };
 
 export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseIdToken> {
