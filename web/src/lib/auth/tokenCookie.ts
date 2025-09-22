@@ -4,10 +4,10 @@ import { getAuth, onIdTokenChanged, type Auth, type Unsubscribe } from 'firebase
 
 function cookieAttrs(): string {
   if (typeof window === 'undefined') {
-    return 'Path=/app; SameSite=Lax';
+    return 'Path=/; SameSite=Lax';
   }
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  return `Path=/app; SameSite=Lax${secure}`;
+  return `Path=/; SameSite=Lax${secure}`;
 }
 
 export function setIdTokenCookie(token: string): void {
@@ -35,4 +35,3 @@ export function startIdTokenCookieSync(auth?: Auth): Unsubscribe {
     }
   });
 }
-
