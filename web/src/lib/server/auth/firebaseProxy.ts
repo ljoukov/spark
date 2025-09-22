@@ -79,7 +79,6 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 		}
 	}
 
-
 	// Ensure correct content type for extensionless helper HTML pages.
 	const path = event.url.pathname;
 	const filename = path.substring(path.lastIndexOf('/') + 1);
@@ -90,9 +89,7 @@ export async function proxyFirebaseAuth(event: RequestEvent): Promise<Response> 
 		outHeaders.delete('content-disposition');
 	}
 
-	console.log(
-		`[auth-proxy] ← ${upstreamRes.status} ${filename || ''} (${elapsed}ms)`
-	);
+	console.log(`[auth-proxy] ← ${upstreamRes.status} ${filename || ''} (${elapsed}ms)`);
 
 	return new Response(upstreamRes.body, {
 		status: upstreamRes.status,

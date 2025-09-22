@@ -15,7 +15,7 @@
 		browserSessionPersistence,
 		type User
 	} from 'firebase/auth';
-    import { startIdTokenCookieSync, clearIdTokenCookie } from '$lib/auth/tokenCookie';
+	import { startIdTokenCookieSync, clearIdTokenCookie } from '$lib/auth/tokenCookie';
 
 	let user: User | null = null;
 	let statusText = 'Loading…';
@@ -110,7 +110,7 @@
 
 	onMount(() => {
 		const auth = getAuth(getFirebaseApp());
-        const stopCookieSync = startIdTokenCookieSync(auth);
+		const stopCookieSync = startIdTokenCookieSync(auth);
 
 		onAuthStateChanged(auth, (u) => {
 			user = u;
@@ -137,10 +137,10 @@
 			}
 		})();
 
-        return () => {
-          stopCookieSync();
-          clearIdTokenCookie();
-        };
+		return () => {
+			stopCookieSync();
+			clearIdTokenCookie();
+		};
 	});
 </script>
 
