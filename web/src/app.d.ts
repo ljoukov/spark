@@ -14,6 +14,9 @@ declare global {
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}
+		interface PrivateEnv {
+			COOKIE_SECRET_KEY: string;
+		}
 	}
 }
 

@@ -1,0 +1,50 @@
+{
+  "quizTitle": "Chemical Bonding Short Tasks Quiz",
+  "summary": "Three short-answer checks on covalent diagrams, metallic bonding properties and comparing ionic versus covalent substances extracted from the photo.",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "syllabusAlignment": "AQA GCSE Chemistry: covalent, ionic and metallic bonding comparisons.",
+  "questionCount": 3,
+  "questions": [
+    {
+      "id": "img-c-q1",
+      "prompt": "The worksheet asks for a dot-and-cross diagram of methane. What key features should the answer contain?",
+      "answer": "A central carbon atom with four shared electron pairs to four hydrogen atoms, each pair containing one electron from carbon and one from hydrogen.",
+      "explanation": "Mark scheme notes emphasise showing shared pairs between C and H and no lone pairs, evidencing a simple covalent molecule.",
+      "type": "short_answer",
+      "topic": "Covalent bonding",
+      "difficulty": "foundation",
+      "skillFocus": "Represent simple molecules using dot-and-cross diagrams.",
+      "sourceReference": "Worksheet task 1"
+    },
+    {
+      "id": "img-c-q2",
+      "prompt": "One comparison asks why sodium chloride conducts electricity when molten but not when solid. Summarise the explanation expected.",
+      "answer": "In the solid ionic lattice the ions are locked in place, but when molten the ions are free to move and carry charge.",
+      "explanation": "Teacher comments point out that conductivity requires mobile charged particles, provided only when the ionic lattice melts.",
+      "type": "short_answer",
+      "topic": "Properties of ionic compounds",
+      "difficulty": "foundation",
+      "skillFocus": "Explain conductivity changes with state.",
+      "sourceReference": "Worksheet task 2"
+    },
+    {
+      "id": "img-c-q3",
+      "prompt": "The final prompt compares metallic and covalent bonding. Which property difference is highlighted on the answer sheet?",
+      "answer": "Metals conduct electricity because delocalised electrons move freely, unlike simple covalent molecules.",
+      "explanation": "The annotation stresses that the sea of delocalised electrons in metals enables conduction whereas discrete covalent molecules lack mobile charge carriers.",
+      "type": "multiple_choice",
+      "options": [
+        "Metals conduct electricity because delocalised electrons move freely, unlike simple covalent molecules.",
+        "Metals contain shared pairs only between two specific atoms just like covalent molecules.",
+        "Covalent substances conduct better because their electrons are localised on ions.",
+        "Both bonding types require ions arranged in a giant lattice to conduct."
+      ],
+      "topic": "Metallic bonding",
+      "difficulty": "intermediate",
+      "skillFocus": "Compare bonding models and resulting properties.",
+      "sourceReference": "Worksheet task 3"
+    }
+  ]
+}

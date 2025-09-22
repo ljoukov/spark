@@ -1,0 +1,50 @@
+{
+  "quizTitle": "Blood Donation Awareness Quiz",
+  "summary": "Synthesised three GCSE biology comprehension questions covering donor eligibility, blood group matching and transfusion safety from the leaflet.",
+  "mode": "synthesis",
+  "subject": "biology",
+  "board": "OCR",
+  "syllabusAlignment": "OCR GCSE Biology: circulatory system, blood components and health promotion.",
+  "questionCount": 3,
+  "questions": [
+    {
+      "id": "blood-q1",
+      "prompt": "According to the leaflet, list two eligibility checks that must be passed before someone can donate blood.",
+      "answer": "Potential donors must meet the minimum age and weight requirements and pass the health screening questions about recent illnesses or travel.",
+      "explanation": "The information sheet emphasises pre-donation checks on age, body weight and health questionnaire responses to ensure donor and recipient safety.",
+      "type": "short_answer",
+      "topic": "Health screening",
+      "difficulty": "foundation",
+      "skillFocus": "Recall key eligibility criteria for medical procedures.",
+      "sourceReference": "Leaflet section: Who can give blood?"
+    },
+    {
+      "id": "blood-q2",
+      "prompt": "The notes explain why matching blood groups matters. What risk arises if incompatible blood is transfused?",
+      "answer": "Antibodies in the recipient attack the donated red cells causing them to clump and block vessels.",
+      "explanation": "The leaflet highlights that mismatched groups trigger an immune reaction where antibodies agglutinate donor cells, which can be life-threatening.",
+      "type": "multiple_choice",
+      "options": [
+        "Antibodies in the recipient attack the donated red cells causing them to clump and block vessels.",
+        "The donated blood evaporates quickly so the transfusion fails.",
+        "The recipient instantly forms more red blood cells to dilute the transfusion.",
+        "The donation permanently changes the recipient’s own blood group."
+      ],
+      "topic": "Immune response",
+      "difficulty": "intermediate",
+      "skillFocus": "Explain immunological compatibility.",
+      "sourceReference": "Leaflet section: Matching matters"
+    },
+    {
+      "id": "blood-q3",
+      "prompt": "Summarise one benefit to hospitals of maintaining a steady supply of donated blood as highlighted in the leaflet.",
+      "answer": "Hospitals can respond quickly to emergencies and planned operations because compatible blood components are ready in storage.",
+      "explanation": "The promotional text stresses that regular donations keep stocks high so trauma care, surgeries and treatments for conditions like anaemia can proceed without delay.",
+      "type": "short_answer",
+      "topic": "Public health logistics",
+      "difficulty": "foundation",
+      "skillFocus": "Connect community health initiatives to patient outcomes.",
+      "sourceReference": "Leaflet closing section"
+    }
+  ]
+}

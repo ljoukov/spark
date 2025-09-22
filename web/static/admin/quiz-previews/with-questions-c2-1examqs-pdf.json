@@ -1,0 +1,50 @@
+{
+  "quizTitle": "C2.1 Ionic Bonding Extracted Quiz",
+  "summary": "Extracted three AQA-style practice questions covering ionic bonding, empirical formulae and lattice energy trends from the supplied worksheet.",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "syllabusAlignment": "AQA GCSE Chemistry C2.1: ionic bonding, empirical formulae, lattice energy, and structure/property links.",
+  "questionCount": 3,
+  "questions": [
+    {
+      "id": "c21-q1",
+      "prompt": "According to the worksheet, which ionic compound forms when magnesium reacts fully with oxygen?",
+      "answer": "Magnesium oxide (MgO)",
+      "explanation": "The worksheet summarises that Group 2 metals such as magnesium react with oxygen to make ionic oxides containing Mg2+ and O2− ions, giving the empirical formula MgO.",
+      "type": "multiple_choice",
+      "options": [
+        "Magnesium oxide (MgO)",
+        "Magnesium hydroxide (Mg(OH)2)",
+        "Magnesium sulfate (MgSO4)",
+        "Magnesium carbonate (MgCO3)"
+      ],
+      "topic": "Ionic bonding",
+      "difficulty": "foundation",
+      "skillFocus": "Recall of metal and oxygen reactions.",
+      "sourceReference": "Worksheet page 1, question 1"
+    },
+    {
+      "id": "c21-q2",
+      "prompt": "The sheet states that sodium chloride contains a giant ionic lattice. What particle-level explanation links this structure to its high melting point?",
+      "answer": "Oppositely charged sodium and chloride ions are held by strong electrostatic attractions in all directions, so a lot of energy is needed to break the lattice.",
+      "explanation": "Learners are reminded that the regular lattice of Na+ and Cl− ions produces strong, non-directional electrostatic forces that require significant energy to overcome, explaining the high melting point.",
+      "type": "short_answer",
+      "topic": "Structure and bonding",
+      "difficulty": "intermediate",
+      "skillFocus": "Explain structure-property relationships.",
+      "sourceReference": "Worksheet page 2, explain section"
+    },
+    {
+      "id": "c21-q3",
+      "prompt": "One task asks for the empirical formula of aluminium oxide. State the formula implied by the worksheet.",
+      "answer": "Al2O3",
+      "explanation": "The worked example highlights that Al3+ and O2− ions combine in the simplest whole-number ratio of two aluminium ions to three oxide ions, giving Al2O3.",
+      "type": "short_answer",
+      "topic": "Chemical calculations",
+      "difficulty": "foundation",
+      "skillFocus": "Determine empirical formulae from ionic charges.",
+      "sourceReference": "Worksheet page 2, worked example"
+    }
+  ]
+}

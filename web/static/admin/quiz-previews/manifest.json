@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2025-09-22T08:19:43.793Z",
+  "generator": {
+    "script": "scripts/generate-admin-previews.ts",
+    "questionCountDefault": 3,
+    "usedFixtures": true
+  },
+  "entries": [
+    {
+      "id": "no-questions-y8lesson-health-blooddonations-pdf",
+      "label": "no-questions/Y8Lesson-Health-BloodDonations.pdf",
+      "mode": "synthesis",
+      "questionCount": 3,
+      "subject": "biology",
+      "board": "OCR",
+      "generatedAt": "2025-09-22T08:19:43.793Z",
+      "generationSource": "fixture",
+      "status": "ok",
+      "quizPath": "no-questions-y8lesson-health-blooddonations-pdf.json",
+      "sourceFiles": [
+        {
+          "relativePath": "no-questions/Y8Lesson-Health-BloodDonations.pdf",
+          "displayName": "Y8Lesson-Health-BloodDonations.pdf",
+          "mimeType": "application/pdf",
+          "bytes": 743060
+        }
+      ]
+    },
+    {
+      "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-jpeg",
+      "label": "with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+      "mode": "extraction",
+      "questionCount": 3,
+      "subject": "chemistry",
+      "board": "AQA",
+      "generatedAt": "2025-09-22T08:19:43.793Z",
+      "generationSource": "fixture",
+      "status": "ok",
+      "quizPath": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-jpeg.json",
+      "sourceFiles": [
+        {
+          "relativePath": "with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+          "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+          "mimeType": "image/jpeg",
+          "bytes": 248200
+        }
+      ]
+    },
+    {
+      "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-jpeg",
+      "label": "with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+      "mode": "extraction",
+      "questionCount": 3,
+      "subject": "chemistry",
+      "board": "AQA",
+      "generatedAt": "2025-09-22T08:19:43.793Z",
+      "generationSource": "fixture",
+      "status": "ok",
+      "quizPath": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-jpeg.json",
+      "sourceFiles": [
+        {
+          "relativePath": "with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+          "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+          "mimeType": "image/jpeg",
+          "bytes": 263067
+        }
+      ]
+    },
+    {
+      "id": "with-questions-c2-1examqs-pdf",
+      "label": "with-questions/C2.1ExamQs.pdf",
+      "mode": "extraction",
+      "questionCount": 3,
+      "subject": "chemistry",
+      "board": "AQA",
+      "generatedAt": "2025-09-22T08:19:43.793Z",
+      "generationSource": "fixture",
+      "status": "ok",
+      "quizPath": "with-questions-c2-1examqs-pdf.json",
+      "sourceFiles": [
+        {
+          "relativePath": "with-questions/C2.1ExamQs.pdf",
+          "displayName": "C2.1ExamQs.pdf",
+          "mimeType": "application/pdf",
+          "bytes": 196478
+        }
+      ]
+    },
+    {
+      "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-jpeg",
+      "label": "with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+      "mode": "extraction",
+      "questionCount": 3,
+      "subject": "chemistry",
+      "board": "AQA",
+      "generatedAt": "2025-09-22T08:19:43.793Z",
+      "generationSource": "fixture",
+      "status": "ok",
+      "quizPath": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-jpeg.json",
+      "sourceFiles": [
+        {
+          "relativePath": "with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+          "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+          "mimeType": "image/jpeg",
+          "bytes": 251053
+        }
+      ]
+    }
+  ]
+}

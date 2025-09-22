@@ -1,0 +1,50 @@
+{
+  "quizTitle": "Energy Changes Marked Work Quiz",
+  "summary": "Extraction quiz sampling questions on exothermic profiles, bond energy calculations and evaluation of practical observations from the photo worksheet.",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "syllabusAlignment": "AQA GCSE Chemistry: exothermic/endothermic reactions and energy profile diagrams.",
+  "questionCount": 3,
+  "questions": [
+    {
+      "id": "img-b-q1",
+      "prompt": "The worksheet sketch shows an energy profile for an exothermic reaction. Which statement best summarises the energy change?",
+      "answer": "The products sit at a lower energy than the reactants because energy is released to the surroundings.",
+      "explanation": "Teacher annotations underline that exothermic profiles drop from reactants to products as heat is transferred out, giving a negative enthalpy change.",
+      "type": "multiple_choice",
+      "options": [
+        "The products sit at a lower energy than the reactants because energy is released to the surroundings.",
+        "Activation energy is negative because particles collide more slowly.",
+        "Reactants have lower energy than products because they absorb heat.",
+        "The profile is flat because the reaction reaches equilibrium."
+      ],
+      "topic": "Energy profiles",
+      "difficulty": "foundation",
+      "skillFocus": "Interpret reaction profile diagrams.",
+      "sourceReference": "Worksheet section A, diagram analysis"
+    },
+    {
+      "id": "img-b-q2",
+      "prompt": "One item requires calculating the energy change using bond energies. What method does the worksheet highlight?",
+      "answer": "Add the energy needed to break bonds in reactants, subtract the energy released when new bonds form in products, and interpret the sign of the result.",
+      "explanation": "The model answer guides students to sum bond-breaking energies, subtract bond-making energies and relate the overall sign to whether the reaction is exothermic or endothermic.",
+      "type": "short_answer",
+      "topic": "Bond energy calculations",
+      "difficulty": "intermediate",
+      "skillFocus": "Apply bond energy data to calculate ΔH.",
+      "sourceReference": "Worksheet section B, calculation steps"
+    },
+    {
+      "id": "img-b-q3",
+      "prompt": "Students comment on a temperature-time graph from a practical. What conclusion is expected about the observed drop in temperature?",
+      "answer": "It indicates an endothermic process where the reaction absorbs heat from the solution, so the temperature falls.",
+      "explanation": "Marking guidance next to the graph directs learners to link a falling temperature curve to heat absorption characteristic of an endothermic reaction.",
+      "type": "short_answer",
+      "topic": "Practical analysis",
+      "difficulty": "foundation",
+      "skillFocus": "Relate experimental data to energy changes.",
+      "sourceReference": "Worksheet section C, evaluation prompt"
+    }
+  ]
+}

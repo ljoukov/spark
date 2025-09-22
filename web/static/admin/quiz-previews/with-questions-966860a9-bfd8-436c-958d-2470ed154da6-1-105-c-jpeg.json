@@ -1,0 +1,50 @@
+{
+  "quizTitle": "Ionic Equations Photo Set Quiz",
+  "summary": "Three extracted questions focus on interpreting half equations, ionic balances and state symbols from the photographed worksheet.",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "syllabusAlignment": "AQA GCSE Chemistry: ionic equations for precipitation and displacement reactions.",
+  "questionCount": 3,
+  "questions": [
+    {
+      "id": "img-a-q1",
+      "prompt": "The photo shows a question asking for the ionic equation when silver nitrate is added to sodium chloride. What balanced ionic equation is expected?",
+      "answer": "Ag⁺(aq) + Cl⁻(aq) → AgCl(s)",
+      "explanation": "Learners are prompted to remove spectator ions and combine aqueous Ag⁺ and Cl⁻ ions to form the silver chloride precipitate, matching the exemplar in the worksheet.",
+      "type": "short_answer",
+      "topic": "Ionic equations",
+      "difficulty": "foundation",
+      "skillFocus": "Construct net ionic equations for precipitation reactions.",
+      "sourceReference": "Worksheet photo prompt 1"
+    },
+    {
+      "id": "img-a-q2",
+      "prompt": "One part checks balancing of the iron and copper displacement reaction. What ionic equation should students provide?",
+      "answer": "Fe(s) + Cu²⁺(aq) → Fe²⁺(aq) + Cu(s)",
+      "explanation": "The captured answer line expects the oxidation of iron to Fe²⁺ while Cu²⁺ gains electrons to form copper metal, illustrating redox in displacement reactions.",
+      "type": "short_answer",
+      "topic": "Redox reactions",
+      "difficulty": "intermediate",
+      "skillFocus": "Represent changes in oxidation state using ionic equations.",
+      "sourceReference": "Worksheet photo prompt 2"
+    },
+    {
+      "id": "img-a-q3",
+      "prompt": "According to the marking guidance on the sheet, why must state symbols be included in ionic equations?",
+      "answer": "They show the physical state of each species and confirm which product is a precipitate.",
+      "explanation": "The teacher notes alongside the image stress that correct state symbols demonstrate understanding of which ions remain aqueous and which form the solid precipitate.",
+      "type": "multiple_choice",
+      "options": [
+        "They show the physical state of each species and confirm which product is a precipitate.",
+        "They replace the need to balance charge conservation.",
+        "They remove spectator ions from the equation entirely.",
+        "They convert the equation into a molecular representation."
+      ],
+      "topic": "Chemical communication",
+      "difficulty": "foundation",
+      "skillFocus": "Use correct notation in ionic equations.",
+      "sourceReference": "Worksheet annotation note"
+    }
+  ]
+}
