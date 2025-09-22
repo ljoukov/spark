@@ -7,8 +7,6 @@ message SparkApiRequestProto {
   SparkRequestAuthProto request_auth = 1;
   SparkClientContextProto client_context = 2;
 
-  reserved 3, 4, 12, 13;
-
   oneof request {
     SparkCreateRequestProto create = 10;
     SparkCheckAnswerRequestProto check_answer = 11;

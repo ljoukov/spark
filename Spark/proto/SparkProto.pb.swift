@@ -1739,7 +1739,7 @@ extension SparkQuizReviewStatusProto: SwiftProtobuf._ProtoNameProviding {
 
 extension SparkApiRequestProto: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "SparkApiRequestProto"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_auth\0\u{3}client_context\0\u{2}\u{8}create\0\u{3}check_answer\0\u{c}\u{3}\u{1}\u{c}\u{4}\u{1}\u{c}\u{c}\u{1}\u{c}\u{d}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_auth\0\u{3}client_context\0\u{2}\u{8}create\0\u{3}check_answer\0")
 
   fileprivate class _StorageClass {
     var _requestAuth: SparkRequestAuthProto? = nil
