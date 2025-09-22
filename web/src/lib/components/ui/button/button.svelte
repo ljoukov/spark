@@ -40,7 +40,7 @@
 </script>
 
 <script lang="ts">
-    import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 
 	const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z+.-]*:/;
 
@@ -62,17 +62,17 @@
 </script>
 
 {#if href}
-    {#if disabled}
-        <span
-            bind:this={ref}
-            data-slot="button"
-            class={cn(buttonVariants({ variant, size }), className)}
-            role="link"
-            aria-disabled="true"
-            tabindex={-1}
-        >
-            {@render children?.()}
-        </span>
+	{#if disabled}
+		<span
+			bind:this={ref}
+			data-slot="button"
+			class={cn(buttonVariants({ variant, size }), className)}
+			role="link"
+			aria-disabled="true"
+			tabindex={-1}
+		>
+			{@render children?.()}
+		</span>
 	{:else if isAbsoluteOrFragment(href)}
 		<a
 			bind:this={ref}
@@ -84,15 +84,15 @@
 			{@render children?.()}
 		</a>
 	{:else}
-        <a
-            bind:this={ref}
-            data-slot="button"
-            class={cn(buttonVariants({ variant, size }), className)}
-            href={`${base}${href}`}
-            {...restProps}
-        >
-            {@render children?.()}
-        </a>
+		<a
+			bind:this={ref}
+			data-slot="button"
+			class={cn(buttonVariants({ variant, size }), className)}
+			href={resolve(href)}
+			{...restProps}
+		>
+			{@render children?.()}
+		</a>
 	{/if}
 {:else}
 	<button
