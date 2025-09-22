@@ -10,7 +10,7 @@ import {
 	type JudgeAudit,
 	type JudgeVerdict,
 	type QuizGeneration
-} from './schemas';
+} from '$lib/llm/schemas';
 import { extendQuizWithMoreQuestions, generateQuizFromSource } from './quizGenerator';
 import { runGeminiCall } from '../utils/gemini';
 
