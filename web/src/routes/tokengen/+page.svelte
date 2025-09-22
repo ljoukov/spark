@@ -17,7 +17,7 @@
 	<div class="mb-4 font-semibold uppercase">Token Generator</div>
 	<button
 		on:click={generateToken}
-		class="rounded-xl bg-blue-700 px-4 py-2 text-white shadow-md hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2 disabled:bg-blue-300"
+		class="rounded-xl bg-blue-700 px-4 py-2 text-white shadow-md hover:bg-blue-500 focus:ring-2 focus:ring-blue-700 focus:ring-offset-2 focus:outline-none disabled:bg-blue-300"
 		>Generate</button
 	>
 	<div class="mt-4 p-2">
