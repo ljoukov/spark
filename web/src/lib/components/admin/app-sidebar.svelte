@@ -44,6 +44,12 @@
 			href: '/admin/prompts',
 			icon: FileTextIcon,
 			highlight: (path) => path.startsWith('/admin/prompts')
+		},
+		{
+			title: 'Sample quizzes',
+			href: '/admin/sample-quizzes',
+			icon: FileTextIcon,
+			highlight: (path) => path.startsWith('/admin/sample-quizzes')
 		}
 	];
 

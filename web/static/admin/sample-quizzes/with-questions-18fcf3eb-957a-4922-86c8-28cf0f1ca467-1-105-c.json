@@ -1,0 +1,112 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-22T08:25:10.902Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry C1 Atomic Structure and Mixtures Quiz",
+    "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on atomic structure, historical atomic models, sub-atomic particle locations, and definitions of elements and mixtures. It includes a mix of short answer and multiple-choice questions to test knowledge recall and understanding. The difficulty is primarily foundation to intermediate.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry, Paper 1, Topic 1: Atomic structure and the periodic table; Topic 2: Bonding, structure, and the properties of matter (specifically mixtures).",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "What is an atom?",
+        "answer": "The smallest part of an element that can exist.",
+        "explanation": "Atoms are the fundamental building blocks of matter, retaining the chemical properties of an element.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge Recall",
+        "sourceReference": "C1 questions, Q1"
+      },
+      {
+        "id": "Q2",
+        "prompt": "Which statement best describes the plum pudding model of the atom?",
+        "answer": "A",
+        "explanation": "The plum pudding model, proposed by J.J. Thomson, suggested that an atom is a sphere of uniformly distributed positive charge with electrons (like plums) embedded within it.",
+        "type": "multiple_choice",
+        "options": [
+          "A: A sphere of positive charge with negative electrons embedded in it.",
+          "B: Atoms as solid spheres that could not be divided into smaller parts.",
+          "C: A dense nucleus with electrons orbiting it in fixed energy levels.",
+          "D: A central nucleus containing protons and neutrons, with electrons orbiting randomly."
+        ],
+        "topic": "Atomic Models",
+        "difficulty": "intermediate",
+        "skillFocus": "Understanding Models",
+        "sourceReference": "C1 questions, Q3"
+      },
+      {
+        "id": "Q3",
+        "prompt": "What significant discovery did Niels Bohr make regarding atomic structure?",
+        "answer": "B",
+        "explanation": "Niels Bohr proposed that electrons orbit the nucleus in fixed energy levels, or shells, and that electrons can move between these shells by absorbing or emitting specific amounts of energy.",
+        "type": "multiple_choice",
+        "options": [
+          "A: The existence of an uncharged particle called the neutron.",
+          "B: Electrons orbit in fixed energy levels (shells).",
+          "C: The atom's mass and positive charge are concentrated in a small nucleus.",
+          "D: Atoms are indivisible solid spheres."
+        ],
+        "topic": "Atomic Models, Electron Shells",
+        "difficulty": "intermediate",
+        "skillFocus": "Knowledge Recall, Historical Context",
+        "sourceReference": "C1 questions, Q6"
+      },
+      {
+        "id": "Q4",
+        "prompt": "Where are protons and neutrons located within an atom?",
+        "answer": "In the nucleus.",
+        "explanation": "Protons and neutrons, collectively known as nucleons, reside in the dense central part of the atom called the nucleus.",
+        "type": "short_answer",
+        "topic": "Atomic Structure, Sub-atomic Particles",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge Recall",
+        "sourceReference": "C1 questions, Q8"
+      },
+      {
+        "id": "Q5",
+        "prompt": "What is an element?",
+        "answer": "A substance made of one type of atom.",
+        "explanation": "An element is a pure substance consisting only of atoms that all have the same numbers of protons in their atomic nuclei.",
+        "type": "short_answer",
+        "topic": "Elements, Compounds and Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Definition Recall",
+        "sourceReference": "C1 questions, Q15"
+      },
+      {
+        "id": "Q6",
+        "prompt": "Which of the following is NOT one of the four physical processes that can be used to separate mixtures?",
+        "answer": "D",
+        "explanation": "The four physical processes listed in the source for separating mixtures are filtration, crystallisation, distillation (including fractional distillation), and chromatography. Combustion is a chemical process, not a physical separation technique.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Filtration",
+          "B: Crystallisation",
+          "C: Distillation",
+          "D: Combustion"
+        ],
+        "topic": "Separating Mixtures",
+        "difficulty": "intermediate",
+        "skillFocus": "Application, Knowledge Recall",
+        "sourceReference": "C1 questions, Q19"
+      }
+    ]
+  }
+}

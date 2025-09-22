@@ -6,8 +6,8 @@ import {
 	JudgeVerdictSchema,
 	type InlineSourceFile,
 	type QuizGeneration
-} from './schemas';
-import type { JudgeAudit, JudgeVerdict } from './schemas';
+} from '$lib/llm/schemas';
+import type { JudgeAudit, JudgeVerdict } from '$lib/llm/schemas';
 
 export const JUDGE_RESPONSE_SCHEMA: Schema = {
 	type: Type.OBJECT,
