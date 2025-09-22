@@ -1,27 +1,61 @@
 <script lang="ts">
+  // Layout for /admin using shadcn Sidebar
+  import AppSidebar from '$lib/components/admin/app-sidebar.svelte';
+  import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
+  import { Separator } from '$lib/components/ui/separator/index.js';
+  import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import * as Card from '$lib/components/ui/card/index.js';
   import { buttonVariants } from '$lib/components/ui/button/index.js';
-  import { startGoogleSignInRedirect } from '$lib/utils/firebaseClient';
-  import type { Snippet } from 'svelte';
   import { cn } from '$lib/utils.js';
+  import { invalidateAll, afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { invalidateAll } from '$app/navigation';
+  
   import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
-  import { getFirebaseApp } from '$lib/utils/firebaseClient';
+  import { getFirebaseApp, startGoogleSignInRedirect, firebaseSignOut } from '$lib/utils/firebaseClient';
   import { getAuth, onIdTokenChanged } from 'firebase/auth';
+  import type { Snippet } from 'svelte';
+  import type { LayoutData } from './$types';
 
-  let { data, children }: {
-    data: {
-      user: { uid: string; email: string | null } | null;
-      isAdmin: boolean;
-    };
-    children: Snippet;
-  } = $props();
+  let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
+  // Sidebar props
+  let currentPath = $state('');
+
+  function toTitle(segment: string): string {
+    return segment
+      .split('-')
+      .map((p) => (p ? p[0]!.toUpperCase() + p.slice(1) : ''))
+      .join(' ');
+  }
+
+  type Crumb = { label: string; href: string };
+  const breadcrumbs = $state<Crumb[]>([]);
+  function recomputeBreadcrumbs(pathname: string): void {
+    const parts = pathname.split('/').filter(Boolean);
+    const items: Crumb[] = [];
+    if (parts[0] !== 'admin') {
+      breadcrumbs.splice(0, breadcrumbs.length, ...items);
+      return;
+    }
+    let href = '/admin';
+    items.push({ label: 'Admin', href });
+    for (let i = 1; i < parts.length; i++) {
+      href += `/${parts[i]}`;
+      items.push({ label: toTitle(parts[i]!), href });
+    }
+    breadcrumbs.splice(0, breadcrumbs.length, ...items);
+  }
+
+  async function onSignOut() {
+    await firebaseSignOut();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/admin';
+    }
+  }
+
+  // Sign-in overlay logic from previous layout
   const showLogin = $derived(!data.user);
-
   const ui = $state({ signingIn: false });
-
   async function handleGoogleSignIn(): Promise<void> {
     ui.signingIn = true;
     try {
@@ -32,20 +66,72 @@
   }
 
   onMount(() => {
+    // initial
+    currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    recomputeBreadcrumbs(currentPath);
+
+    // keep breadcrumbs in sync with client-side navigation
+    afterNavigate((nav) => {
+      const next = nav.to?.url?.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : currentPath);
+      currentPath = next;
+      recomputeBreadcrumbs(next);
+    });
+
     const stopCookieSync = startIdTokenCookieSync();
     const auth = getAuth(getFirebaseApp());
     let refreshed = false;
     const stopAuth = onIdTokenChanged(auth, (user) => {
       if (user && !refreshed) {
         refreshed = true;
-        setTimeout(() => { void invalidateAll(); }, 0);
+        setTimeout(() => {
+          void invalidateAll();
+        }, 0);
       }
     });
-    return () => { stopCookieSync(); stopAuth(); };
+    return () => {
+      stopCookieSync();
+      stopAuth();
+    };
   });
 </script>
 
-{@render children?.()}
+{#if !showLogin}
+  <Sidebar.Provider>
+  <AppSidebar
+    currentPath={currentPath}
+    user={{
+      uid: data.user?.uid ?? 'guest',
+      email: data.user?.email ?? null,
+      name: data.user?.name ?? null,
+      photoUrl: data.user?.photoUrl ?? null
+    }}
+    onSignOut={onSignOut}
+  />
+    <Sidebar.Inset>
+      <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <Sidebar.Trigger class="-ml-1" />
+        <Separator orientation="vertical" class="mr-2 h-4" />
+        <Breadcrumb.Root>
+          <Breadcrumb.List>
+            {#each breadcrumbs as c, i (c.href)}
+              <Breadcrumb.Item class={i === 0 ? 'hidden md:block' : ''}>
+                <Breadcrumb.Link href={c.href} aria-current={i === breadcrumbs.length - 1 ? 'page' : undefined}>
+                  {c.label}
+                </Breadcrumb.Link>
+              </Breadcrumb.Item>
+              {#if i < breadcrumbs.length - 1}
+                <Breadcrumb.Separator class={i === 0 ? 'hidden md:block' : ''} />
+              {/if}
+            {/each}
+          </Breadcrumb.List>
+        </Breadcrumb.Root>
+      </header>
+      <div class="flex flex-1 flex-col gap-4 p-4">
+        {@render children?.()}
+      </div>
+    </Sidebar.Inset>
+  </Sidebar.Provider>
+{/if}
 
 {#if showLogin}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

@@ -20,7 +20,12 @@ export const handle = (async ({ event, resolve }) => {
 		if (parsed.success) {
 			try {
 				const payload = await verifyFirebaseIdToken(parsed.data);
-				event.locals.appUser = { uid: payload.sub, email: payload.email ?? null };
+				event.locals.appUser = {
+					uid: payload.sub,
+					email: payload.email ?? null,
+					name: (payload as any).name ?? null,
+					photoUrl: (payload as any).picture ?? null
+				};
 			} catch (e) {
 				console.log('[app-auth] token verification failed');
 			}
@@ -35,7 +40,12 @@ export const handle = (async ({ event, resolve }) => {
 		if (parsed.success) {
 			try {
 				const payload = await verifyFirebaseIdToken(parsed.data);
-				event.locals.appUser = { uid: payload.sub, email: payload.email ?? null };
+				event.locals.appUser = {
+					uid: payload.sub,
+					email: payload.email ?? null,
+					name: (payload as any).name ?? null,
+					photoUrl: (payload as any).picture ?? null
+				};
 				hasValidToken = true;
 				isAdmin = isUserAdmin({ userId: payload.sub } as unknown as { userId: string });
 			} catch (e) {

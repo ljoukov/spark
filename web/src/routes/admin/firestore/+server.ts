@@ -3,7 +3,7 @@ import { z, ZodError } from 'zod';
 import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
 
 // The document holds arbitrary diagnostic data; validate as an object with any keys.
-const DocSchema = z.object({}).passthrough();
+const DocSchema = z.object({}).loose();
 
 export const GET: RequestHandler = async () => {
 	try {
