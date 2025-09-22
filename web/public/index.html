@@ -1,259 +1,284 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Firebase Auth — Redirect Demo</title>
-    <!-- Firebase (compat) — only what we need -->
-    <script defer src="/__/firebase/12.3.0/firebase-app-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-auth-compat.js"></script>
-    <!-- Initialize from your project’s hosting domain config -->
-    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <style>
-      :root {
-        color-scheme: light dark;
-      }
-      html, body {
-        height: 100%;
-      }
-      body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans, 'Apple Color Emoji', 'Segoe UI Emoji';
-        display: grid;
-        place-items: center;
-        background: Canvas;
-        color: CanvasText;
-      }
-      .card {
-        width: min(640px, 92vw);
-        border: 1px solid rgb(0 0 0 / 10%);
-        border-radius: 12px;
-        padding: 20px 18px;
-        box-shadow: 0 12px 34px rgb(0 0 0 / 12%);
-        background: rgb(255 255 255 / 85%);
-        backdrop-filter: blur(8px);
-      }
-      @media (prefers-color-scheme: dark) {
-        .card {
-          background: rgb(17 24 39 / 70%);
-          border-color: rgb(255 255 255 / 12%);
-          box-shadow: 0 18px 48px rgb(0 0 0 / 40%);
-        }
-      }
-      h1 {
-        margin: 0 0 10px 0;
-        font-size: 1.4rem;
-      }
-      p {
-        margin: 6px 0;
-      }
-      .row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 12px;
-      }
-      button {
-        appearance: none;
-        border: 1px solid rgb(0 0 0 / 20%);
-        background: white;
-        color: black;
-        padding: 8px 12px;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      button:hover { filter: brightness(0.98); }
-      button:active { filter: brightness(0.96); }
-      @media (prefers-color-scheme: dark) {
-        button {
-          background: rgb(31 41 55);
-          color: white;
-          border-color: rgb(255 255 255 / 18%);
-        }
-      }
-      code, pre {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-        font-size: 0.9rem;
-      }
-      pre {
-        white-space: pre-wrap;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: rgb(0 0 0 / 6%);
-        border: 1px solid rgb(0 0 0 / 10%);
-      }
-      @media (prefers-color-scheme: dark) {
-        pre {
-          background: rgb(255 255 255 / 6%);
-          border-color: rgb(255 255 255 / 12%);
-        }
-      }
-      .muted { color: rgb(0 0 0 / 60%); }
-      @media (prefers-color-scheme: dark) { .muted { color: rgb(255 255 255 / 70%); } }
-    </style>
-  </head>
-  <body>
-    <main class="card" role="main">
-      <h1>Firebase Google Sign-in (Redirect)</h1>
-      <p class="muted" style="margin-top: 6px;">
-        This page exists to keep Firebase Hosting deployed so that the Firebase Auth helper
-        endpoints under <code>/__/auth/*</code> are available on the hosting domain, and to
-        smoke‑test authentication using the Firebase Web SDK (redirect and popup).
-        It is not part of the SvelteKit app.
-      </p>
-      <p id="status" class="muted">Loading…</p>
-      <div id="user" style="display:none">
-        <p><strong>Signed in as</strong></p>
-        <p id="user-name"></p>
-        <p id="user-uid" class="muted"></p>
-      </div>
-      <div id="actions" class="row">
-        <button id="signin">Sign in with Google (redirect)</button>
-        <button id="signin-popup">Try popup</button>
-        <button id="signout" style="display:none">Sign out</button>
-      </div>
-      <div id="debug" style="margin-top: 12px;">
-        <p class="muted">Debug</p>
-        <pre id="result-box"></pre>
-      </div>
-    </main>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Firebase Auth — Redirect Demo</title>
+		<!-- Firebase (compat) — only what we need -->
+		<script defer src="/__/firebase/12.3.0/firebase-app-compat.js"></script>
+		<script defer src="/__/firebase/12.3.0/firebase-auth-compat.js"></script>
+		<!-- Initialize from your project’s hosting domain config -->
+		<script defer src="/__/firebase/init.js?useEmulator=false"></script>
+		<style>
+			:root {
+				color-scheme: light dark;
+			}
+			html,
+			body {
+				height: 100%;
+			}
+			body {
+				margin: 0;
+				font-family:
+					ui-sans-serif,
+					system-ui,
+					-apple-system,
+					Segoe UI,
+					Roboto,
+					Helvetica,
+					Arial,
+					Noto Sans,
+					'Apple Color Emoji',
+					'Segoe UI Emoji';
+				display: grid;
+				place-items: center;
+				background: Canvas;
+				color: CanvasText;
+			}
+			.card {
+				width: min(640px, 92vw);
+				border: 1px solid rgb(0 0 0 / 10%);
+				border-radius: 12px;
+				padding: 20px 18px;
+				box-shadow: 0 12px 34px rgb(0 0 0 / 12%);
+				background: rgb(255 255 255 / 85%);
+				backdrop-filter: blur(8px);
+			}
+			@media (prefers-color-scheme: dark) {
+				.card {
+					background: rgb(17 24 39 / 70%);
+					border-color: rgb(255 255 255 / 12%);
+					box-shadow: 0 18px 48px rgb(0 0 0 / 40%);
+				}
+			}
+			h1 {
+				margin: 0 0 10px 0;
+				font-size: 1.4rem;
+			}
+			p {
+				margin: 6px 0;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 10px;
+				margin-top: 12px;
+			}
+			button {
+				appearance: none;
+				border: 1px solid rgb(0 0 0 / 20%);
+				background: white;
+				color: black;
+				padding: 8px 12px;
+				border-radius: 8px;
+				cursor: pointer;
+			}
+			button:hover {
+				filter: brightness(0.98);
+			}
+			button:active {
+				filter: brightness(0.96);
+			}
+			@media (prefers-color-scheme: dark) {
+				button {
+					background: rgb(31 41 55);
+					color: white;
+					border-color: rgb(255 255 255 / 18%);
+				}
+			}
+			code,
+			pre {
+				font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+				font-size: 0.9rem;
+			}
+			pre {
+				white-space: pre-wrap;
+				padding: 10px 12px;
+				border-radius: 8px;
+				background: rgb(0 0 0 / 6%);
+				border: 1px solid rgb(0 0 0 / 10%);
+			}
+			@media (prefers-color-scheme: dark) {
+				pre {
+					background: rgb(255 255 255 / 6%);
+					border-color: rgb(255 255 255 / 12%);
+				}
+			}
+			.muted {
+				color: rgb(0 0 0 / 60%);
+			}
+			@media (prefers-color-scheme: dark) {
+				.muted {
+					color: rgb(255 255 255 / 70%);
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="card" role="main">
+			<h1>Firebase Google Sign-in (Redirect)</h1>
+			<p class="muted" style="margin-top: 6px">
+				This page exists to keep Firebase Hosting deployed so that the Firebase Auth helper
+				endpoints under <code>/__/auth/*</code> are available on the hosting domain, and to
+				smoke‑test authentication using the Firebase Web SDK (redirect and popup). It is not part of
+				the SvelteKit app.
+			</p>
+			<p id="status" class="muted">Loading…</p>
+			<div id="user" style="display: none">
+				<p><strong>Signed in as</strong></p>
+				<p id="user-name"></p>
+				<p id="user-uid" class="muted"></p>
+			</div>
+			<div id="actions" class="row">
+				<button id="signin">Sign in with Google (redirect)</button>
+				<button id="signin-popup">Try popup</button>
+				<button id="signout" style="display: none">Sign out</button>
+			</div>
+			<div id="debug" style="margin-top: 12px">
+				<p class="muted">Debug</p>
+				<pre id="result-box"></pre>
+			</div>
+		</main>
 
-    <script>
-      // Wait for Firebase SDKs loaded by init.js
-      window.addEventListener('load', async function () {
-        // Use the configuration provided by Hosting init.js as-is.
-        // This preserves the Firebase-managed authDomain (typically <project>.firebaseapp.com),
-        // which has the correct Google OAuth redirect URI allowlisted.
-        const auth = firebase.auth();
-        const statusEl = document.getElementById('status');
-        const userBox = document.getElementById('user');
-        const nameEl = document.getElementById('user-name');
-        const uidEl = document.getElementById('user-uid');
-        const actions = document.getElementById('actions');
-        const signInBtn = document.getElementById('signin');
-        const signOutBtn = document.getElementById('signout');
-        const signInPopupBtn = document.getElementById('signin-popup');
-        const debugBox = document.getElementById('debug');
-        const resultBox = document.getElementById('result-box');
+		<script>
+			// Wait for Firebase SDKs loaded by init.js
+			window.addEventListener('load', async function () {
+				// Use the configuration provided by Hosting init.js as-is.
+				// This preserves the Firebase-managed authDomain (typically <project>.firebaseapp.com),
+				// which has the correct Google OAuth redirect URI allowlisted.
+				const auth = firebase.auth();
+				const statusEl = document.getElementById('status');
+				const userBox = document.getElementById('user');
+				const nameEl = document.getElementById('user-name');
+				const uidEl = document.getElementById('user-uid');
+				const actions = document.getElementById('actions');
+				const signInBtn = document.getElementById('signin');
+				const signOutBtn = document.getElementById('signout');
+				const signInPopupBtn = document.getElementById('signin-popup');
+				const debugBox = document.getElementById('debug');
+				const resultBox = document.getElementById('result-box');
 
-        function setStatus(text) {
-          statusEl.textContent = text;
-        }
+				function setStatus(text) {
+					statusEl.textContent = text;
+				}
 
-        function showUser(u) {
-          if (u) {
-            userBox.style.display = 'block';
-            signOutBtn.style.display = 'inline-block';
-            nameEl.textContent = u.displayName || u.email || '(no display name)';
-            uidEl.textContent = 'uid: ' + u.uid;
-            setStatus('Signed in');
-          } else {
-            userBox.style.display = 'none';
-            signOutBtn.style.display = 'none';
-            setStatus('Not signed in');
-          }
-        }
+				function showUser(u) {
+					if (u) {
+						userBox.style.display = 'block';
+						signOutBtn.style.display = 'inline-block';
+						nameEl.textContent = u.displayName || u.email || '(no display name)';
+						uidEl.textContent = 'uid: ' + u.uid;
+						setStatus('Signed in');
+					} else {
+						userBox.style.display = 'none';
+						signOutBtn.style.display = 'none';
+						setStatus('Not signed in');
+					}
+				}
 
-        function supportsStorage(api) {
-          try {
-            const key = '__test__' + Math.random();
-            api.setItem(key, '1');
-            const ok = api.getItem(key) === '1';
-            api.removeItem(key);
-            return ok;
-          } catch (e) {
-            return false;
-          }
-        }
+				function supportsStorage(api) {
+					try {
+						const key = '__test__' + Math.random();
+						api.setItem(key, '1');
+						const ok = api.getItem(key) === '1';
+						api.removeItem(key);
+						return ok;
+					} catch (e) {
+						return false;
+					}
+				}
 
-        function dumpEnv(prefix) {
-          const info = {
-            prefix,
-            location: window.location.href,
-            sdkVersion: firebase.SDK_VERSION,
-            appOptions: firebase.app().options,
-            usingAuthDomain: firebase.app().options && firebase.app().options.authDomain,
-            hasLocalStorage: supportsStorage(window.localStorage),
-            hasSessionStorage: supportsStorage(window.sessionStorage),
-            localFirebaseKeys: Object.keys(window.localStorage || {}).filter(k => k.toLowerCase().includes('firebase')),
-            sessionFirebaseKeys: Object.keys(window.sessionStorage || {}).filter(k => k.toLowerCase().includes('firebase'))
-          };
-          console.log('[auth-demo]', info);
-          resultBox.textContent = JSON.stringify(info, null, 2);
-        }
+				function dumpEnv(prefix) {
+					const info = {
+						prefix,
+						location: window.location.href,
+						sdkVersion: firebase.SDK_VERSION,
+						appOptions: firebase.app().options,
+						usingAuthDomain: firebase.app().options && firebase.app().options.authDomain,
+						hasLocalStorage: supportsStorage(window.localStorage),
+						hasSessionStorage: supportsStorage(window.sessionStorage),
+						localFirebaseKeys: Object.keys(window.localStorage || {}).filter((k) =>
+							k.toLowerCase().includes('firebase')
+						),
+						sessionFirebaseKeys: Object.keys(window.sessionStorage || {}).filter((k) =>
+							k.toLowerCase().includes('firebase')
+						)
+					};
+					console.log('[auth-demo]', info);
+					resultBox.textContent = JSON.stringify(info, null, 2);
+				}
 
-        signInBtn.addEventListener('click', async function () {
-          setStatus('Starting redirect…');
-          const provider = new firebase.auth.GoogleAuthProvider();
-          provider.setCustomParameters({ prompt: 'select_account' });
-          try {
-            // Durable across full-page redirects
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-          } catch (e) {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-          }
-          auth.signInWithRedirect(provider).catch(function (err) {
-            setStatus('Redirect error');
-            dumpEnv('redirect-error');
-            resultBox.textContent += '\n' + ((err && err.message) ? err.message : String(err));
-          });
-        });
+				signInBtn.addEventListener('click', async function () {
+					setStatus('Starting redirect…');
+					const provider = new firebase.auth.GoogleAuthProvider();
+					provider.setCustomParameters({ prompt: 'select_account' });
+					try {
+						// Durable across full-page redirects
+						await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+					} catch (e) {
+						await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+					}
+					auth.signInWithRedirect(provider).catch(function (err) {
+						setStatus('Redirect error');
+						dumpEnv('redirect-error');
+						resultBox.textContent += '\n' + (err && err.message ? err.message : String(err));
+					});
+				});
 
-        signInPopupBtn.addEventListener('click', async function () {
-          setStatus('Opening popup…');
-          const provider = new firebase.auth.GoogleAuthProvider();
-          provider.setCustomParameters({ prompt: 'select_account' });
-          try {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-          } catch (e) {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-          }
-          try {
-            const result = await auth.signInWithPopup(provider);
-            dumpEnv('popup-success');
-            resultBox.textContent += '\n' + 'popup signed in';
-            showUser(result.user);
-          } catch (err) {
-            dumpEnv('popup-error');
-            resultBox.textContent += '\n' + ((err && err.message) ? err.message : String(err));
-          }
-        });
+				signInPopupBtn.addEventListener('click', async function () {
+					setStatus('Opening popup…');
+					const provider = new firebase.auth.GoogleAuthProvider();
+					provider.setCustomParameters({ prompt: 'select_account' });
+					try {
+						await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+					} catch (e) {
+						await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+					}
+					try {
+						const result = await auth.signInWithPopup(provider);
+						dumpEnv('popup-success');
+						resultBox.textContent += '\n' + 'popup signed in';
+						showUser(result.user);
+					} catch (err) {
+						dumpEnv('popup-error');
+						resultBox.textContent += '\n' + (err && err.message ? err.message : String(err));
+					}
+				});
 
-        signOutBtn.addEventListener('click', function () {
-          auth.signOut().catch(function (err) {
-            console.error('Sign-out error:', err);
-          });
-        });
+				signOutBtn.addEventListener('click', function () {
+					auth.signOut().catch(function (err) {
+						console.error('Sign-out error:', err);
+					});
+				});
 
-        auth.onAuthStateChanged(function (u) {
-          console.log('[auth-demo] onAuthStateChanged:', !!u, u && { uid: u.uid, email: u.email });
-          showUser(u);
-        });
+				auth.onAuthStateChanged(function (u) {
+					console.log('[auth-demo] onAuthStateChanged:', !!u, u && { uid: u.uid, email: u.email });
+					showUser(u);
+				});
 
-        (async function () {
-          try {
-            dumpEnv('page-load');
-            try {
-              await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-            } catch (e) {
-              await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-            }
-            const result = await auth.getRedirectResult();
-            if (result && result.user) {
-              dumpEnv('redirect-success');
-              resultBox.textContent += '\n' + 'redirect success';
-              showUser(result.user);
-            } else {
-              resultBox.textContent += '\n' + 'redirect no-result';
-            }
-          } catch (err) {
-            dumpEnv('redirect-catch');
-            resultBox.textContent += '\n' + ((err && err.message) ? err.message : String(err));
-            setStatus('Redirect error');
-          }
-        })();
-      });
-    </script>
-  </body>
-  
+				(async function () {
+					try {
+						dumpEnv('page-load');
+						try {
+							await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+						} catch (e) {
+							await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+						}
+						const result = await auth.getRedirectResult();
+						if (result && result.user) {
+							dumpEnv('redirect-success');
+							resultBox.textContent += '\n' + 'redirect success';
+							showUser(result.user);
+						} else {
+							resultBox.textContent += '\n' + 'redirect no-result';
+						}
+					} catch (err) {
+						dumpEnv('redirect-catch');
+						resultBox.textContent += '\n' + (err && err.message ? err.message : String(err));
+						setStatus('Redirect error');
+					}
+				})();
+			});
+		</script>
+	</body>
 </html>

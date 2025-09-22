@@ -1,13 +1,13 @@
 import { clientFirebaseConfig } from '$lib/config/firebase';
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
-  getAuth,
-  signOut,
-  GoogleAuthProvider,
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence,
-  getRedirectResult
+	getAuth,
+	signOut,
+	GoogleAuthProvider,
+	setPersistence,
+	browserLocalPersistence,
+	browserSessionPersistence,
+	getRedirectResult
 } from 'firebase/auth';
 
 let app: FirebaseApp | undefined;
@@ -20,8 +20,8 @@ export function getFirebaseApp(): FirebaseApp {
 }
 
 export async function firebaseSignOut(): Promise<void> {
-  const auth = getAuth(getFirebaseApp());
-  await signOut(auth);
+	const auth = getAuth(getFirebaseApp());
+	await signOut(auth);
 }
 
 /**
@@ -29,16 +29,16 @@ export async function firebaseSignOut(): Promise<void> {
  * Uses durable persistence to survive the full-page redirect.
  */
 export async function startGoogleSignInRedirect(): Promise<void> {
-  const auth = getAuth(getFirebaseApp());
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch {
-    await setPersistence(auth, browserSessionPersistence);
-  }
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-  // Fire-and-forget; caller typically doesn't await this because it navigates away
-  return (await import('firebase/auth')).signInWithRedirect(auth, provider);
+	const auth = getAuth(getFirebaseApp());
+	try {
+		await setPersistence(auth, browserLocalPersistence);
+	} catch {
+		await setPersistence(auth, browserSessionPersistence);
+	}
+	const provider = new GoogleAuthProvider();
+	provider.setCustomParameters({ prompt: 'select_account' });
+	// Fire-and-forget; caller typically doesn't await this because it navigates away
+	return (await import('firebase/auth')).signInWithRedirect(auth, provider);
 }
 
 /**
@@ -49,10 +49,10 @@ export async function startGoogleSignInRedirect(): Promise<void> {
  * Returns null if there is no redirect result.
  */
 export async function getRedirectResultIdToken(): Promise<string | null> {
-  const auth = getAuth(getFirebaseApp());
-  const result = await getRedirectResult(auth).catch(() => null);
-  if (!result) return null;
-  const { GoogleAuthProvider } = await import('firebase/auth');
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  return credential?.idToken ?? null;
+	const auth = getAuth(getFirebaseApp());
+	const result = await getRedirectResult(auth).catch(() => null);
+	if (!result) return null;
+	const { GoogleAuthProvider } = await import('firebase/auth');
+	const credential = GoogleAuthProvider.credentialFromResult(result);
+	return credential?.idToken ?? null;
 }
