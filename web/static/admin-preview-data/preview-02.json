@@ -1,0 +1,98 @@
+{
+  "id": 2,
+  "sourceRelativePath": "with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "outputFile": "preview-02.json",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry C1 Atomic Structure and Mixtures Quiz",
+    "summary": "This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical atomic models, subatomic particles, electron configuration, and methods for separating mixtures. It includes a mix of recall-based short answer questions and multiple-choice questions, aligning with AQA GCSE Triple Science Chemistry specification requirements. The difficulty ranges from foundation to higher, ensuring comprehensive coverage of core topics.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Triple Science Chemistry, Paper 1: Atomic Structure and the Periodic Table; Chemical Changes; Energy Changes; Rate and Extent of Chemical Change; Organic Chemistry; Chemical Analysis; Chemistry of the Atmosphere; Using Resources.",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "What is an atom?",
+        "answer": "The smallest part of an element that can exist.",
+        "explanation": "An atom is the fundamental building block of matter, defined as the smallest particle of an element that can exist while retaining the chemical identity of that element.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q1"
+      },
+      {
+        "id": "Q2",
+        "prompt": "Which of the following best describes the plum pudding model of the atom?",
+        "answer": "A sphere of positive charge with negative electrons embedded in it.",
+        "explanation": "The plum pudding model, proposed by J.J. Thomson, depicted the atom as a sphere of uniformly distributed positive charge with negatively charged electrons embedded within it, much like plums in a pudding.",
+        "type": "multiple_choice",
+        "options": [
+          "A sphere of positive charge with negative electrons embedded in it.",
+          "Atoms as solid spheres that could not be divided into smaller parts.",
+          "A dense nucleus with electrons orbiting it in fixed energy levels.",
+          "A central nucleus containing protons and neutrons, with electrons in shells."
+        ],
+        "topic": "Atomic Models",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall, Understanding",
+        "sourceReference": "C1 questions, Q3"
+      },
+      {
+        "id": "Q3",
+        "prompt": "What did James Chadwick discover?",
+        "answer": "An uncharged particle called the neutron.",
+        "explanation": "James Chadwick discovered the neutron in 1932, an uncharged subatomic particle found in the nucleus of an atom, which helped to explain the mass of atoms.",
+        "type": "short_answer",
+        "topic": "Subatomic Particles, Atomic Models",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q7"
+      },
+      {
+        "id": "Q4",
+        "prompt": "State the relative charge of a proton, a neutron, and an electron.",
+        "answer": "Proton: +1, Neutron: 0, Electron: -1.",
+        "explanation": "Protons carry a relative charge of +1, electrons carry a relative charge of -1, and neutrons are electrically neutral with a relative charge of 0.",
+        "type": "short_answer",
+        "topic": "Subatomic Particles",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q10"
+      },
+      {
+        "id": "Q5",
+        "prompt": "According to the shell model, how many electrons can occupy the first, second, and third electron shells?",
+        "answer": "Up to 2 in the first shell, and up to 8 in the second and third shells.",
+        "explanation": "For stable atoms, the first electron shell can hold a maximum of 2 electrons, while the second and third shells can each hold up to 8 electrons.",
+        "type": "short_answer",
+        "topic": "Electron Configuration",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q14"
+      },
+      {
+        "id": "Q6",
+        "prompt": "Which of the following lists four physical processes used to separate mixtures?",
+        "answer": "Filtration, crystallisation, distillation, chromatography.",
+        "explanation": "Filtration separates insoluble solids from liquids, crystallisation separates soluble solids from solutions, distillation separates liquids with different boiling points, and chromatography separates substances based on their differential partitioning between a stationary and mobile phase.",
+        "type": "multiple_choice",
+        "options": [
+          "Filtration, crystallisation, distillation, chromatography.",
+          "Combustion, neutralisation, electrolysis, precipitation.",
+          "Melting, boiling, freezing, condensation.",
+          "Oxidation, reduction, displacement, decomposition."
+        ],
+        "topic": "Separating Mixtures",
+        "difficulty": "higher",
+        "skillFocus": "Recall, Application",
+        "sourceReference": "C1 questions, Q19"
+      }
+    ]
+  }
+}

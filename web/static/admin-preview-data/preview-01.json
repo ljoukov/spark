@@ -1,0 +1,97 @@
+{
+  "id": 1,
+  "sourceRelativePath": "no-questions/Y8Lesson-Health-BloodDonations.pdf",
+  "mode": "synthesis",
+  "subject": "biology",
+  "board": "OCR",
+  "questionCount": 6,
+  "outputFile": "preview-01.json",
+  "quiz": {
+    "quizTitle": "GCSE Biology: Blood and Organ Donation",
+    "summary": "This quiz covers the importance of blood, organ, and stem cell donation, the types of individuals who might need these donations, the processes involved in becoming a donor, and the legal framework surrounding organ donation in England. It includes a mix of multiple-choice, short-answer, true/false, and numeric questions to assess understanding of key concepts. The material provided did not contain explicit details for 'syllabusAlignment', so this field has been omitted.",
+    "mode": "synthesis",
+    "subject": "biology",
+    "board": "OCR",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": "According to the provided information, approximately how many new blood donors are needed every day in England to meet demand?",
+        "answer": "D",
+        "explanation": "Slide 6 states: \"Nearly 400 new blood donors are needed every day in England to meet demand.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A. 100",
+          "B. 200",
+          "C. 300",
+          "D. 400"
+        ],
+        "topic": "Importance of blood donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "OCR for page 6"
+      },
+      {
+        "id": "q2",
+        "prompt": "Identify two types of conditions or situations that would lead someone to require a stem cell donation.",
+        "answer": "Someone with blood cancer or a blood disorder.",
+        "explanation": "Slide 5 clearly states that \"Someone with blood cancer or a blood disorder\" might need a stem cell donation.",
+        "type": "short_answer",
+        "topic": "Recipients of stem cell donation",
+        "difficulty": "foundation",
+        "skillFocus": "Identification",
+        "sourceReference": "OCR for page 5"
+      },
+      {
+        "id": "q3",
+        "prompt": "True or False: From 2020, anyone over 18 in England is automatically considered an organ donor upon death, regardless of whether they have registered a decision.",
+        "answer": "False",
+        "explanation": "Slide 13 states: \"From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group\". This means they are not automatically considered a donor if they have opted out.",
+        "type": "true_false",
+        "topic": "Organ donation law",
+        "difficulty": "intermediate",
+        "skillFocus": "Understanding legal frameworks",
+        "sourceReference": "OCR for page 13"
+      },
+      {
+        "id": "q4",
+        "prompt": "How many adults can a single blood donation help, according to the information provided?",
+        "answer": "3",
+        "explanation": "Slide 8 explains that after a donor's blood is split into component parts, \"each donation can help 3 adults or 6 infants.\"",
+        "type": "numeric",
+        "topic": "Impact of blood donation",
+        "difficulty": "foundation",
+        "skillFocus": "Data extraction",
+        "sourceReference": "OCR for page 8"
+      },
+      {
+        "id": "q5",
+        "prompt": "Which of the following is the most common method for donating stem cells, as described in the provided material?",
+        "answer": "B",
+        "explanation": "Slide 10 states that \"Stem cells can be donated in one of two ways: • through the bloodstream (90% of donors) • bone marrow donation procedure (10% of donors)\". Therefore, through the bloodstream is the most common method.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Through a surgical procedure",
+          "B. Through the bloodstream",
+          "C. Directly from bone marrow",
+          "D. Via a cheek swab"
+        ],
+        "topic": "Stem cell donation process",
+        "difficulty": "intermediate",
+        "skillFocus": "Data interpretation",
+        "sourceReference": "OCR for page 10"
+      },
+      {
+        "id": "q6",
+        "prompt": "Explain two distinct reasons why an individual might choose not to donate blood or organs, based on the provided material.",
+        "answer": "An individual might choose not to donate blood due to a fear of needles. They might also choose not to donate organs because they feel uncomfortable with the idea of their organs being used after death, leading them to opt out on the NHS Organ Donation Register.",
+        "explanation": "Slide 16 provides two speech bubbles illustrating reasons for not donating: \"I'm really scared of needles, so giving blood isn't something I feel I'm able to do.\" and \"I feel uncomfortable with the idea of my organs being used after I die, so I recorded my decision to opt out of organ donation on the NHS Organ Donation Register.\"",
+        "type": "short_answer",
+        "topic": "Considerations for individual choice to donate",
+        "difficulty": "higher",
+        "skillFocus": "Analysis and synthesis of reasons",
+        "sourceReference": "OCR for page 16"
+      }
+    ]
+  }
+}

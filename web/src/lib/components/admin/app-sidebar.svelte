@@ -2,6 +2,7 @@
 	import HomeIcon from '@lucide/svelte/icons/home';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -37,6 +38,12 @@
 			href: '/admin/gemini',
 			icon: BotIcon,
 			highlight: (path) => path.startsWith('/admin/gemini')
+		},
+		{
+			title: 'Previews',
+			href: '/admin/previews',
+			icon: ListChecksIcon,
+			highlight: (path) => path.startsWith('/admin/previews')
 		}
 	];
 

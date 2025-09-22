@@ -1,0 +1,98 @@
+{
+  "id": 5,
+  "sourceRelativePath": "with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "outputFile": "preview-05.json",
+  "quiz": {
+    "quizTitle": "GCSE Triple Science Chemistry Retrieval Quiz: C20 Topics",
+    "summary": "This GCSE Triple Science Chemistry quiz, aligned with the AQA specification, covers key topics including corrosion, alloys, polymers, the Haber process, and NPK fertilisers. It features a mix of 2 multiple-choice and 4 short-answer questions designed to test recall, understanding, and application of chemical principles. Questions range in difficulty from foundation to higher, providing a comprehensive review. Note: One factual correction was made to the balanced equation for the Haber process (Q4) to ensure accuracy for exam readiness.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry (8462) and Combined Science: Trilogy (8464) specifications, covering topics such as 'The Earth's resources' and 'Chemical changes'.",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "What is corrosion?",
+        "answer": "A",
+        "explanation": "Corrosion is defined as the destruction of materials, typically metals, by chemical reactions with their environment, often involving oxygen and water.",
+        "type": "multiple_choice",
+        "options": [
+          "A: The destruction of a material through reactions with substances in the environment.",
+          "B: The process of a metal gaining electrons.",
+          "C: The formation of a protective oxide layer on a metal surface.",
+          "D: The reaction of a metal with an acid to produce hydrogen gas."
+        ],
+        "topic": "Corrosion",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Definition",
+        "sourceReference": "C20 questions, Q1"
+      },
+      {
+        "id": "Q2",
+        "prompt": "Name two alloys of copper.",
+        "answer": "Brass and bronze",
+        "explanation": "Brass is an alloy primarily composed of copper and zinc, while bronze is an alloy primarily composed of copper and tin. Both are common and important copper alloys.",
+        "type": "short_answer",
+        "topic": "Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q5"
+      },
+      {
+        "id": "Q3",
+        "prompt": "Which statement accurately describes the main difference between thermosetting and thermosoftening polymers?",
+        "answer": "B",
+        "explanation": "Thermosetting polymers form permanent cross-links between polymer chains when heated, making them rigid and preventing them from softening or melting upon subsequent heating. Thermosoftening polymers have weaker intermolecular forces and can be melted and reshaped repeatedly.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Thermosoftening polymers are formed from monomers, while thermosetting polymers are not.",
+          "B: Thermosetting polymers do not soften when heated, whereas thermosoftening polymers do.",
+          "C: Thermosetting polymers have weak intermolecular forces, while thermosoftening polymers have strong covalent bonds.",
+          "D: Thermosoftening polymers are always recyclable, but thermosetting polymers are never recyclable."
+        ],
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Compare and Contrast",
+        "sourceReference": "C20 questions, Q12"
+      },
+      {
+        "id": "Q4",
+        "prompt": "Write the balanced symbol equation for the Haber process.",
+        "answer": "N₂(g) + 3H₂(g) = 2NH₃(g)",
+        "explanation": "The Haber process combines nitrogen gas (N₂) from the air with hydrogen gas (H₂) to produce ammonia (NH₃). The equation must be balanced to show the conservation of atoms: one molecule of nitrogen reacts with three molecules of hydrogen to produce two molecules of ammonia.",
+        "type": "short_answer",
+        "topic": "Haber Process, Industrial Chemistry",
+        "difficulty": "higher",
+        "skillFocus": "Application, Equation Balancing",
+        "sourceReference": "C20 questions, Q15"
+      },
+      {
+        "id": "Q5",
+        "prompt": "Describe the effect of increasing the pressure of the Haber process on the yield, rate, and cost.",
+        "answer": "Increasing the pressure increases the yield of ammonia, increases the rate of reaction, and increases the cost of the plant and operation.",
+        "explanation": "According to Le Chatelier's principle, increasing pressure shifts the equilibrium towards the side with fewer gas moles (the product side for the Haber process), thus increasing the yield of ammonia. Higher pressure also increases the frequency of collisions between reactant particles, leading to an increased reaction rate. However, building and maintaining high-pressure equipment is more expensive, increasing overall costs.",
+        "type": "short_answer",
+        "topic": "Haber Process, Industrial Chemistry, Le Chatelier's Principle",
+        "difficulty": "higher",
+        "skillFocus": "Analysis, Evaluation",
+        "sourceReference": "C20 questions, Q18"
+      },
+      {
+        "id": "Q6",
+        "prompt": "What is an NPK fertiliser?",
+        "answer": "An NPK fertiliser is a formulation containing soluble compounds of nitrogen, phosphorus, and potassium.",
+        "explanation": "NPK stands for Nitrogen (N), Phosphorus (P), and Potassium (K), which are the three essential macronutrients required by plants for healthy growth. Fertilisers containing these elements in soluble forms are crucial for agriculture to replenish soil nutrients.",
+        "type": "short_answer",
+        "topic": "Fertilisers, Agriculture",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall, Definition",
+        "sourceReference": "C20 questions, Q21"
+      }
+    ]
+  }
+}

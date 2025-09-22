@@ -1,0 +1,104 @@
+{
+  "id": 3,
+  "sourceRelativePath": "with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "outputFile": "preview-03.json",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry C2 Covalent Bonding Retrieval Quiz",
+    "summary": "This quiz covers fundamental concepts of covalent bonding, including the formation and properties of different covalent structures such as giant covalent substances, small molecules, and allotropes of carbon like graphite and fullerenes. It includes a mix of multiple-choice and short-answer questions designed to test recall and understanding of key definitions and explanations.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry C2: Structure, bonding and the properties of matter (Covalent bonding)",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1_CB_001",
+        "prompt": "How are covalent bonds formed?",
+        "answer": "by atoms sharing electrons",
+        "explanation": "Covalent bonds are formed when atoms share pairs of electrons to achieve a stable outer shell, typically between non-metal atoms.",
+        "type": "multiple_choice",
+        "options": [
+          "A: by atoms transferring electrons",
+          "B: by atoms sharing electrons",
+          "C: by atoms gaining electrons",
+          "D: by atoms losing electrons"
+        ],
+        "topic": "Covalent bond formation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q1"
+      },
+      {
+        "id": "Q1_CB_002",
+        "prompt": "Which type of atoms typically form covalent bonds between them?",
+        "answer": "non-metals",
+        "explanation": "Covalent bonds are typically formed between two non-metal atoms, where both atoms need to gain electrons to complete their outer shell.",
+        "type": "multiple_choice",
+        "options": [
+          "A: metals and non-metals",
+          "B: metals",
+          "C: non-metals",
+          "D: noble gases"
+        ],
+        "topic": "Covalent bond formation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q2"
+      },
+      {
+        "id": "Q1_CB_003",
+        "prompt": "Explain why giant covalent substances have high melting points.",
+        "answer": "It takes a lot of energy to break the strong covalent bonds between the atoms.",
+        "explanation": "Giant covalent structures consist of billions of atoms held together by a vast network of strong covalent bonds. A significant amount of thermal energy is required to overcome these strong bonds, leading to high melting and boiling points.",
+        "type": "short_answer",
+        "topic": "Properties of giant covalent structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation, Reasoning",
+        "sourceReference": "C2 questions, Q6"
+      },
+      {
+        "id": "Q1_CB_004",
+        "prompt": "Describe the structure and bonding in graphite.",
+        "answer": "Each carbon atom is bonded to three others in hexagonal rings arranged in layers. It has delocalised electrons and weak forces between the layers.",
+        "explanation": "In graphite, each carbon atom forms three covalent bonds with other carbon atoms, creating hexagonal rings arranged in layers. There are delocalised electrons between the layers, and weak intermolecular forces hold the layers together.",
+        "type": "short_answer",
+        "topic": "Structure of graphite",
+        "difficulty": "intermediate",
+        "skillFocus": "Description",
+        "sourceReference": "C2 questions, Q10"
+      },
+      {
+        "id": "Q1_CB_005",
+        "prompt": "Why can graphite conduct electricity?",
+        "answer": "The delocalised electrons can move through the graphite.",
+        "explanation": "Unlike diamond, graphite has one valence electron from each carbon atom that is not involved in covalent bonding. These electrons become delocalised and are free to move throughout the layers, allowing graphite to conduct electricity.",
+        "type": "short_answer",
+        "topic": "Properties of graphite",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation, Reasoning",
+        "sourceReference": "C2 questions, Q11"
+      },
+      {
+        "id": "Q1_CB_006",
+        "prompt": "What is a fullerene?",
+        "answer": "hollow cage of carbon atoms arranged as a sphere or a tube",
+        "explanation": "Fullerenes are a class of carbon allotropes consisting of hollow molecular cages or tubes, where carbon atoms are arranged in pentagonal and hexagonal rings.",
+        "type": "multiple_choice",
+        "options": [
+          "A: a giant lattice of carbon atoms",
+          "B: a single layer of carbon atoms in a hexagonal lattice",
+          "C: hollow cage of carbon atoms arranged as a sphere or a tube",
+          "D: carbon atoms bonded in a tetrahedral arrangement"
+        ],
+        "topic": "Allotropes of carbon (Fullerenes)",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Definition",
+        "sourceReference": "C2 questions, Q15"
+      }
+    ]
+  }
+}

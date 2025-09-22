@@ -1,0 +1,104 @@
+{
+  "id": 4,
+  "sourceRelativePath": "with-questions/C2.1ExamQs.pdf",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "outputFile": "preview-04.json",
+  "quiz": {
+    "quizTitle": "States of Matter and Chemical Reactions Quiz",
+    "summary": "This quiz covers fundamental concepts in AQA GCSE Chemistry, focusing on states of matter, chemical equations, and the particle model. It includes questions on interpreting graphical data for melting and boiling points, applying knowledge of state symbols in chemical reactions, and understanding the characteristics of particles in different states. The question mix includes short answer and multiple-choice questions, testing both recall and data interpretation skills across foundation, intermediate, and higher difficulty levels.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry: States of Matter, Chemical Changes (writing equations and state symbols), and the Particle Model.",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1a",
+        "prompt": "Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols from the box (aq, g, l, s) to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)",
+        "answer": "aq, g",
+        "explanation": "Lithium hydroxide is formed as a solution in water, hence 'aq' (aqueous). Hydrogen is a gas, hence 'g'.",
+        "type": "short_answer",
+        "topic": "Chemical equations and state symbols",
+        "difficulty": "foundation",
+        "skillFocus": "Application of knowledge",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q1b",
+        "prompt": "Figure 1 shows the melting points (x) and the boiling points (•) of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?",
+        "answer": "C",
+        "explanation": "From Figure 1: Substance A is liquid from approx. -100°C to 0°C (range 100°C). Substance B is liquid from approx. 70°C to 190°C (range 120°C). Substance C is liquid from approx. 10°C to 190°C (range 180°C). Substance D is liquid from approx. -180°C to -120°C (range 60°C). Therefore, substance C has the greatest liquid temperature range.",
+        "type": "multiple_choice",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "topic": "States of matter, melting and boiling points",
+        "difficulty": "intermediate",
+        "skillFocus": "Data interpretation",
+        "sourceReference": "Page 2, Question 1(b), Figure 1"
+      },
+      {
+        "id": "Q1c",
+        "prompt": "Figure 1 shows the melting points (x) and the boiling points (•) of four substances, A, B, C and D. Which two substances are gases at 50 °C?",
+        "answer": "A and D",
+        "explanation": "At 50°C: Substance A has a boiling point of 0°C, so it is a gas. Substance B has a boiling point of 190°C, so it is a liquid. Substance C has a boiling point of 190°C, so it is a liquid. Substance D has a boiling point of -120°C, so it is a gas. Therefore, A and D are gases at 50°C.",
+        "type": "multiple_choice",
+        "options": [
+          "A and B",
+          "B and C",
+          "C and D",
+          "A and D"
+        ],
+        "topic": "States of matter, temperature effects",
+        "difficulty": "intermediate",
+        "skillFocus": "Data interpretation",
+        "sourceReference": "Page 3, Question 1(c), Figure 1"
+      },
+      {
+        "id": "Q1e",
+        "prompt": "Figure 2 shows the apparatus a student used to determine the melting point and the boiling point of substance B. Explain why the student could not use this apparatus to determine the boiling point of substance B.",
+        "answer": "The apparatus shown uses a water bath. Water boils at 100°C. From Figure 1, substance B has a boiling point of approximately 190°C, which is much higher than the boiling point of water. Therefore, the water bath cannot reach the temperature required to boil substance B.",
+        "explanation": "A water bath can only heat substances up to 100°C (the boiling point of water). Substance B has a boiling point of approximately 190°C, which is significantly higher than 100°C. Thus, the water bath cannot provide enough heat to reach the boiling point of substance B.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, heating methods",
+        "difficulty": "higher",
+        "skillFocus": "Scientific reasoning, experimental design",
+        "sourceReference": "Page 4, Question 1(e), Figure 2"
+      },
+      {
+        "id": "Q2a",
+        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Why is this a good model for the movement of particles in a gas? Select the option that includes two correct reasons.",
+        "answer": "The balls are far apart from each other and move randomly.",
+        "explanation": "In a gas, particles are widely spaced (far apart) and move randomly and rapidly. The model accurately represents these two key characteristics.",
+        "type": "multiple_choice",
+        "options": [
+          "The balls move slowly and are far apart from each other.",
+          "The balls are far apart from each other and move randomly.",
+          "The balls are different colours and move slowly.",
+          "The balls move randomly and are different colours."
+        ],
+        "topic": "Particle model of matter, gases",
+        "difficulty": "foundation",
+        "skillFocus": "Conceptual understanding",
+        "sourceReference": "Page 5, Question 2(a)"
+      },
+      {
+        "id": "Q2b",
+        "prompt": "For a given material, in which state of matter: 1. are the particles in a regular arrangement? 2. do the particles have the most kinetic energy?",
+        "answer": "1. Solid. 2. Gas.",
+        "explanation": "Particles in a solid are arranged in a fixed, regular pattern. Particles in a gas have the highest kinetic energy because they move randomly and rapidly, colliding with each other and the container walls.",
+        "type": "short_answer",
+        "topic": "States of matter, particle arrangement, kinetic energy",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of facts",
+        "sourceReference": "Page 5, Question 2(b)"
+      }
+    ]
+  }
+}
