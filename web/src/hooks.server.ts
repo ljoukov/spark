@@ -23,11 +23,11 @@ export const handle = (async ({ event, resolve }) => {
 				event.locals.appUser = {
 					uid: payload.sub,
 					email: payload.email ?? null,
-					name: (payload as any).name ?? null,
-					photoUrl: (payload as any).picture ?? null
+					name: payload.name ?? null,
+					photoUrl: payload.picture ?? null
 				};
-			} catch (e) {
-				console.log('[app-auth] token verification failed');
+			} catch (err) {
+				console.log('[app-auth] token verification failed', err);
 			}
 		}
 	}
@@ -43,13 +43,13 @@ export const handle = (async ({ event, resolve }) => {
 				event.locals.appUser = {
 					uid: payload.sub,
 					email: payload.email ?? null,
-					name: (payload as any).name ?? null,
-					photoUrl: (payload as any).picture ?? null
+					name: payload.name ?? null,
+					photoUrl: payload.picture ?? null
 				};
 				hasValidToken = true;
-				isAdmin = isUserAdmin({ userId: payload.sub } as unknown as { userId: string });
-			} catch (e) {
-				console.log('[admin-auth] token verification failed');
+				isAdmin = isUserAdmin({ userId: payload.sub } as { userId: string });
+			} catch (err) {
+				console.log('[admin-auth] token verification failed', err);
 			}
 		}
 
