@@ -8,6 +8,7 @@
 	let shouldAutoPlay = true;
 	let videoReady = false;
 	let videoEl: HTMLVideoElement | null = null;
+	const INTRO_POSTER = '/intro.jpg';
 
 	function applyTheme(next: Theme) {
 		if (typeof document === 'undefined') {
@@ -72,9 +73,19 @@
 	}
 
 	function handleCanPlay() {
+		if (videoReady) {
+			return;
+		}
 		videoReady = true;
 		if (videoEl) {
 			videoEl.poster = '';
+		}
+	}
+
+	function handleVideoError() {
+		videoReady = false;
+		if (videoEl) {
+			videoEl.poster = INTRO_POSTER;
 		}
 	}
 </script>
@@ -130,19 +141,32 @@
 			<div class="video-shell" class:video-shell--ready={videoReady}>
 				<div class="video-shell__halo" aria-hidden="true"></div>
 				<div class="video-shell__inner" aria-hidden="true"></div>
-				<video
-					bind:this={videoEl}
-					autoplay={shouldAutoPlay}
-					loop
-					playsinline
-					muted={isMuted}
-					preload="auto"
-					poster="/intro.jpg"
-					on:canplay={handleCanPlay}
-				>
-					<source src="/intro.webm" type="video/webm" />
-					<source src="/intro.mp4" type="video/mp4" />
-				</video>
+				<div class="video-shell__media">
+					{#if !videoReady}
+						<img
+							class="video-shell__poster"
+							src={INTRO_POSTER}
+							alt="Preview of the GCSE Spark app experience"
+							loading="eager"
+							decoding="async"
+						/>
+					{/if}
+					<video
+						class="video-shell__video"
+						bind:this={videoEl}
+						autoplay={shouldAutoPlay}
+						loop
+						playsinline
+						muted={isMuted}
+						preload="auto"
+						poster={INTRO_POSTER}
+						on:canplay={handleCanPlay}
+						on:error={handleVideoError}
+					>
+						<source src="/intro.webm" type="video/webm" />
+						<source src="/intro.mp4" type="video/mp4" />
+					</video>
+				</div>
 
 				<button
 					type="button"
@@ -415,15 +439,37 @@
 		opacity: 0.52;
 	}
 
-	.video-shell video {
+	.video-shell__media {
 		position: relative;
 		z-index: 2;
 		width: 100%;
 		height: 100%;
 		border-radius: 1.1rem;
+		overflow: hidden;
 		background: rgba(5, 9, 21, 0.96);
-		object-fit: cover;
 		box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+		transition: box-shadow 220ms ease;
+	}
+
+	.video-shell__poster,
+	.video-shell__video {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.video-shell__poster {
+		z-index: 1;
+		transition: opacity 220ms ease;
+	}
+
+	.video-shell__video {
+		z-index: 2;
+		background: rgba(5, 9, 21, 0.96);
+		opacity: 0;
+		transition: opacity 220ms ease;
 	}
 
 	.video-shell--ready .video-shell__inner {
@@ -431,8 +477,12 @@
 		filter: saturate(1.05);
 	}
 
-	.video-shell--ready video {
+	.video-shell--ready .video-shell__media {
 		box-shadow: 0 34px 72px rgba(15, 23, 42, 0.38);
+	}
+
+	.video-shell--ready .video-shell__video {
+		opacity: 1;
 	}
 
 	.sound-toggle {
