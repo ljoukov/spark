@@ -1,6 +1,6 @@
 import { Type, type Schema } from '@google/genai';
-import type { Part } from '@google/genai/dist/genai.js';
-import { runGeminiCall } from '../utils/gemini';
+import type { Part } from '@google/genai';
+import { runGeminiCall } from '$lib/server/utils/gemini';
 import {
 	JudgeAuditSchema,
 	JudgeVerdictSchema,

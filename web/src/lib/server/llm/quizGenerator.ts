@@ -1,5 +1,5 @@
 import { Type, type Schema } from '@google/genai';
-import type { Part } from '@google/genai/dist/genai.js';
+import type { Part } from '@google/genai';
 import { runGeminiCall } from '../utils/gemini';
 import { QuizGenerationSchema, type InlineSourceFile, type QuizGeneration } from './schemas';
 

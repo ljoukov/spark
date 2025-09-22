@@ -16,8 +16,7 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run",
-		"sync:signin-helpers": "FIREBASE_AUTH_HOST=pic2toon.firebaseapp.com node scripts/sync-signin-helpers.mjs"
+		"test": "npm run test:unit -- --run"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
