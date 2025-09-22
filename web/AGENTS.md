@@ -15,13 +15,75 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 
 **Authentication**
 
-- Why Firebase Hosting
-  - We keep Firebase Hosting deployed only to make the Firebase Auth helper endpoints available at `__/auth/*` and to test client sign-in. See the lightweight demo page at `web/public/index.html`.
-  - The SvelteKit app itself is deployed as a Cloudflare Worker; Hosting is not used for app routing.
-
 - Admin and App Area (`/admin` and `/app`)
   - Uses Firebase Auth in the browser (both redirect and popup options are available) so the client can use Firestore real-time listeners freely. Example UI: `web/src/routes/app/+page.svelte`.
   - All app → server API calls must include a Firebase ID token (e.g., `Authorization: Bearer <idToken>`). The server validates tokens using the Firebase Admin SDK. See helpers in `web/src/lib/server/utils/firebaseAdmin.ts:68` and token verification utilities in `web/src/lib/server/utils/firebaseServer.ts:23`.
 
+  - We keep Firebase Hosting deployed only to make the Firebase Auth helper endpoints available at `__/auth/*` and to test client sign-in. See the lightweight demo page at `web/public/index.html`.
+  - The SvelteKit app itself is deployed as a Cloudflare Worker or Vercel; Hosting is not used for app routing.
+
 - Notes
   - Follow `docs/SPEC.md` for auth and validation requirements. All external inputs must be validated with `zod` and normalized before use.
+
+**Gemini**
+
+Gemini API
+
+- Model selection: Hardcode model IDs per task based on evals. Default to `gemini-2.5-flash` for the quiz extraction/generation/judging pipeline (validated in integration tests). Escalate to `gemini-2.5-pro` only for new tasks that demonstrably require heavier OCR or long-form reasoning. Do not use a `GEMINI_MODEL` env var.
+- API route: `POST /api/admin/chat` — body `{ messages: {role:'user'|'model', content:string}[] }`, streams plain text.
+- `GEMINI_API_KEY` is already set in then env variables.
+
+Gemini Prompting & Structured Output
+
+- Prompting guide: use structured output to get JSON the server can validate.
+  Docs: https://ai.google.dev/gemini-api/docs/structured-output#javascript
+
+Example (Node/TS) using `@google/genai`:
+
+```ts
+import { GoogleGenAI, Type } from '@google/genai';
+
+const ai = new GoogleGenAI({});
+
+export async function exampleStructuredOutput() {
+	const response = await ai.models.generateContent({
+		// Choose model explicitly; no env override.
+		// Use "gemini-2.5-flash" for simple tasks; switch to "gemini-2.5-pro" for harder ones.
+		model: 'gemini-2.5-flash',
+		contents: 'List a few popular cookie recipes, and include the amounts of ingredients.',
+		config: {
+			responseMimeType: 'application/json',
+			responseSchema: {
+				type: Type.ARRAY,
+				items: {
+					type: Type.OBJECT,
+					properties: {
+						recipeName: { type: Type.STRING },
+						ingredients: { type: Type.ARRAY, items: { type: Type.STRING } }
+					},
+					propertyOrdering: ['recipeName', 'ingredients']
+				}
+			}
+		}
+	});
+
+	return response.text; // JSON string per responseMimeType
+}
+```
+
+Validation and retries
+
+- Always validate model JSON with `zod` before use. Normalize with `transform()`.
+- On validation error or transient Gemini error, retry once (max retries = 2 total attempts).
+- Handle known error classes:
+  - Rate-limited: back off (e.g., 500–1000ms jitter) and retry once.
+  - Quota/insufficient funds: do not retry; return 402/429 style error to client.
+  - Invalid request/schema mismatch: log and fix prompt/schema; do not retry blindly.
+- Never trust unvalidated model output for writes; only write validated, typed data.
+
+Model policy examples
+
+- Quiz extraction/judging flows → `gemini-2.5-flash` (escalate only if flash regresses).
+- Free-text grading with rubric → `gemini-2.5-pro`.
+- MCQ/TF/short generation from notes → `gemini-2.5-flash` (escalate to `-pro` on low confidence).
+- Summary bullets → `gemini-2.5-flash`.
