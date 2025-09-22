@@ -87,3 +87,9 @@ Model policy examples
 - Free-text grading with rubric → `gemini-2.5-pro`.
 - MCQ/TF/short generation from notes → `gemini-2.5-flash` (escalate to `-pro` on low confidence).
 - Summary bullets → `gemini-2.5-flash`.
+
+**Testing**
+
+- use vitest
+- use name.test.ts file generally located right in the same dir as the file they test (name.ts and name.test.ts)
+- web/src/tests directory for utilities specifically for testing (eg proxy setup)
