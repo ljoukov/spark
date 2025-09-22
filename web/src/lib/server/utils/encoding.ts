@@ -12,7 +12,14 @@ async function getPrivateKey(): Promise<CryptoKey> {
 		if (rawKey.length !== 32) {
 			throw Error(`getPrivateKey: invalid COOKIE_SECRET_KEY length: ${rawKey.length}`);
 		}
-		pkCache = await crypto.subtle.importKey('raw', rawKey, algorithm, true, ['encrypt', 'decrypt']);
+		const rawKeyBuffer = rawKey.buffer.slice(
+			rawKey.byteOffset,
+			rawKey.byteOffset + rawKey.byteLength
+		) as ArrayBuffer;
+		pkCache = await crypto.subtle.importKey('raw', rawKeyBuffer, algorithm, true, [
+			'encrypt',
+			'decrypt'
+		]);
 	}
 	return pkCache;
 }
@@ -24,10 +31,10 @@ export async function encodeBytes(data: Uint8Array): Promise<Uint8Array> {
 	const encryptedData = await crypto.subtle.encrypt(
 		{
 			name: algorithm,
-			iv: iv
+			iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer
 		},
 		key,
-		data
+		data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
 	);
 	// "iv" (initial value) and encrypted string.
 	return new Uint8Array([encodingVersion, ...iv, ...new Uint8Array(encryptedData)]);
@@ -46,10 +53,13 @@ export async function decodeBytes(encodedData: Uint8Array): Promise<Uint8Array> 
 	const bin = await crypto.subtle.decrypt(
 		{
 			name: algorithm,
-			iv: iv
+			iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer
 		},
 		key,
-		encryptedData
+		encryptedData.buffer.slice(
+			encryptedData.byteOffset,
+			encryptedData.byteOffset + encryptedData.byteLength
+		) as ArrayBuffer
 	);
 	return new Uint8Array(bin);
 }

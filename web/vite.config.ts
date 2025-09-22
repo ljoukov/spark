@@ -11,7 +11,7 @@ const httpsOption = hasCustomCert
 			key: fs.readFileSync(process.env.DEV_HTTPS_KEY!, 'utf8'),
 			cert: fs.readFileSync(process.env.DEV_HTTPS_CERT!, 'utf8')
 		}
-	: true; // use basic self-signed cert via plugin
+	: undefined; // plugin will provide cert and enable https when undefined
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],

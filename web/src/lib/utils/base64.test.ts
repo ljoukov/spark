@@ -1,4 +1,5 @@
 import { base64decode, base64encode } from './base64';
+import { expect, test } from 'vitest';
 
 test('base64encode', () => {
 	const s = 'hello12';
