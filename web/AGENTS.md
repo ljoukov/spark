@@ -12,6 +12,8 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 - routes/api endpoints are for the mobile app only, do not call them directly in SvelteKit app, use native SvelteKit way to call the server instead (see web/docs/sveltekit-docs.md)
 - use zod to validate JSON and data coming from storage, LLMs or network
 - we use shadcn-svelte components library docs are in web/docs/shadcn-svelte.md
+- Use absolute imports (unless current directory)
+- Use $lib/ and $proto/ aliases, e.g. `import { runGeminiCall } from '$lib/server/utils/gemini';`
 
 **Authentication**
 
