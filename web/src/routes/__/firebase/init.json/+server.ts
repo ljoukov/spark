@@ -11,7 +11,7 @@ const initSchema = z
     projectId: z.string(),
     storageBucket: z.string().optional()
   })
-  .passthrough();
+  .loose();
 
 async function fetchAndRewrite(host: string, fetchFn: typeof fetch) {
   const started = Date.now();
