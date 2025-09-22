@@ -1,0 +1,118 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-22T08:26:27.280Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+    "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Triple Science Chemistry Retrieval Quiz: C20 Materials and Industrial Processes",
+    "summary": "This quiz covers key concepts from GCSE Chemistry, specifically focusing on C20 topics such as metals and alloys, polymers, composites, and industrial processes like the Haber process. It includes a mix of multiple-choice and short-answer questions designed to test knowledge recall, definitions, and understanding of chemical equations and conditions. Explanations for each answer have been generated based on general GCSE chemistry knowledge, as the original material only provided answers.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "GCSE Chemistry (AQA)",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1_Corrosion",
+        "prompt": "What is corrosion?",
+        "answer": "B) The destruction of a material through reactions with substances in the environment.",
+        "explanation": "Corrosion is the process where materials, typically metals, degrade due to chemical reactions with their surroundings, such as oxygen and water.",
+        "type": "multiple_choice",
+        "options": [
+          "A) The strengthening of a material by adding other substances.",
+          "B) The destruction of a material through reactions with substances in the environment.",
+          "C) The process of shaping metals using heat.",
+          "D) The formation of a protective layer on a metal surface."
+        ],
+        "topic": "Metals and Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge Recall",
+        "sourceReference": "C20 questions, Q1"
+      },
+      {
+        "id": "Q2_SteelAlloys",
+        "prompt": "What are steel alloys primarily made from?",
+        "answer": "C) Iron, carbon, and other metals.",
+        "explanation": "Steel is an alloy of iron with a small amount of carbon, which makes it stronger and harder than pure iron. Other metals can be added to create different types of steel with specific properties.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Copper and zinc.",
+          "B) Aluminium and magnesium.",
+          "C) Iron, carbon, and other metals.",
+          "D) Gold, silver, and platinum."
+        ],
+        "topic": "Metals and Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge Recall",
+        "sourceReference": "C20 questions, Q7"
+      },
+      {
+        "id": "Q3_Polymers",
+        "prompt": "What is the main difference between thermosetting and thermosoftening polymers?",
+        "answer": "C) Thermosetting polymers do not soften when heated, while thermosoftening polymers do.",
+        "explanation": "Thermosoftening polymers have weak intermolecular forces between polymer chains, allowing them to soften and melt when heated. Thermosetting polymers form strong covalent bonds between chains (cross-links), making them rigid and preventing them from softening or melting upon heating.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Thermosetting polymers can be remoulded, while thermosoftening polymers cannot.",
+          "B) Thermosetting polymers soften when heated, while thermosoftening polymers do not.",
+          "C) Thermosetting polymers do not soften when heated, while thermosoftening polymers do.",
+          "D) Thermosetting polymers are always transparent, while thermosoftening polymers are opaque."
+        ],
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Comparison, Knowledge Recall",
+        "sourceReference": "C20 questions, Q12"
+      },
+      {
+        "id": "Q4_Composites",
+        "prompt": "What is a composite?",
+        "answer": "C) A mixture of a matrix and reinforcements.",
+        "explanation": "A composite material is made from two or more constituent materials with significantly different physical or chemical properties which remain separate and distinct at the macroscopic or microscopic level within the finished structure. They typically consist of a matrix (binder) and a reinforcement material.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A pure metal with a crystalline structure.",
+          "B) A mixture of two or more elements chemically bonded.",
+          "C) A mixture of a matrix and reinforcements.",
+          "D) A material that can be easily melted and reshaped."
+        ],
+        "topic": "Composites",
+        "difficulty": "foundation",
+        "skillFocus": "Definition, Knowledge Recall",
+        "sourceReference": "C20 questions, Q13"
+      },
+      {
+        "id": "Q5_HaberEquation",
+        "prompt": "What is the balanced symbol equation for the Haber process?",
+        "answer": "N₂(g) + 3H₂(g) = 2NH₃(g)",
+        "explanation": "The Haber process synthesises ammonia from nitrogen and hydrogen. The balanced equation shows that one molecule of nitrogen gas reacts with three molecules of hydrogen gas to produce two molecules of ammonia gas. The (g) indicates the gaseous state.",
+        "type": "short_answer",
+        "topic": "Industrial Processes (Haber Process)",
+        "difficulty": "higher",
+        "skillFocus": "Equation Recall, Balancing",
+        "sourceReference": "C20 questions, Q15"
+      },
+      {
+        "id": "Q6_HaberConditions",
+        "prompt": "What are the typical conditions required for the Haber process?",
+        "answer": "450°C, 200 atm, iron catalyst",
+        "explanation": "The Haber process uses specific conditions to achieve a good yield and rate: a temperature of around 450°C, a high pressure of about 200 atmospheres, and an iron catalyst to speed up the reaction without being used up.",
+        "type": "short_answer",
+        "topic": "Industrial Processes (Haber Process)",
+        "difficulty": "intermediate",
+        "skillFocus": "Knowledge Recall",
+        "sourceReference": "C20 questions, Q20"
+      }
+    ]
+  }
+}

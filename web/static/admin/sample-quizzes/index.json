@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2025-09-22T08:24:32.244Z",
+  "samples": [
+    {
+      "id": "no-questions-y8lesson-health-blooddonations",
+      "label": "Sample 1: Y8Lesson-Health-BloodDonations.pdf",
+      "mode": "synthesis",
+      "subject": "biology",
+      "board": "OCR",
+      "questionCount": 6,
+      "request": {
+        "model": "gemini-2.5-flash",
+        "questionCount": 6,
+        "temperature": 0.2
+      },
+      "source": {
+        "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+        "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+      },
+      "quizTitle": "GCSE Biology: Understanding Blood and Organ Donation (OCR)",
+      "summary": "This quiz covers the importance of blood, organ, and stem cell donation, the processes involved, and legal aspects in England, as outlined in the OCR-aligned study material. It includes a mix of multiple-choice, short-answer, true/false, and numeric questions to assess understanding of key concepts and procedures. The material provided did not contain explicit syllabus alignment information beyond the learning intentions, so the alignment is inferred from the content.",
+      "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations.json",
+      "generatedAt": "2025-09-22T08:24:52.686Z"
+    },
+    {
+      "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+      "label": "Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+      "mode": "extraction",
+      "subject": "chemistry",
+      "board": "AQA",
+      "questionCount": 6,
+      "request": {
+        "model": "gemini-2.5-flash",
+        "questionCount": 6,
+        "temperature": 0.2
+      },
+      "source": {
+        "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+        "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+      },
+      "quizTitle": "GCSE Chemistry C1 Atomic Structure and Mixtures Quiz",
+      "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on atomic structure, historical atomic models, sub-atomic particle locations, and definitions of elements and mixtures. It includes a mix of short answer and multiple-choice questions to test knowledge recall and understanding. The difficulty is primarily foundation to intermediate.",
+      "outputPath": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c.json",
+      "generatedAt": "2025-09-22T08:25:10.902Z"
+    },
+    {
+      "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+      "label": "Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+      "mode": "extraction",
+      "subject": "chemistry",
+      "board": "AQA",
+      "questionCount": 6,
+      "request": {
+        "model": "gemini-2.5-flash",
+        "questionCount": 6,
+        "temperature": 0.2
+      },
+      "source": {
+        "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+        "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
+      },
+      "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
+      "summary": "This quiz covers key concepts in Covalent Bonding (C2) as per the AQA GCSE Triple Science Chemistry specification. It includes a mix of recall and descriptive questions, focusing on the formation of covalent bonds, the structure and properties of giant covalent substances, small molecules, polymers, and their respective melting points. The quiz features two multiple-choice questions and four short-answer questions to test understanding of fundamental chemical structures and bonding.",
+      "outputPath": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c.json",
+      "generatedAt": "2025-09-22T08:25:26.332Z"
+    },
+    {
+      "id": "with-questions-c2-1examqs",
+      "label": "Sample 4: C2.1ExamQs.pdf",
+      "mode": "extraction",
+      "subject": "chemistry",
+      "board": "AQA",
+      "questionCount": 6,
+      "request": {
+        "model": "gemini-2.5-flash",
+        "questionCount": 6,
+        "temperature": 0.2
+      },
+      "source": {
+        "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+        "displayName": "C2.1ExamQs.pdf"
+      },
+      "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
+      "summary": "This quiz covers key concepts from AQA GCSE Chemistry, focusing on states of matter, the particle model, chemical equations, and experimental techniques for determining melting and boiling points. It includes a mix of question types: three multiple-choice questions testing data interpretation and conceptual understanding, and three short-answer questions requiring recall, application of knowledge, and scientific reasoning. Questions range in difficulty from foundation to higher, ensuring a comprehensive assessment of understanding. Note: One multiple-choice question (Q2a) was adapted from an original 'tick two boxes' format to fit the single-answer schema.",
+      "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs.json",
+      "generatedAt": "2025-09-22T08:26:01.757Z"
+    },
+    {
+      "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+      "label": "Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+      "mode": "extraction",
+      "subject": "chemistry",
+      "board": "AQA",
+      "questionCount": 6,
+      "request": {
+        "model": "gemini-2.5-flash",
+        "questionCount": 6,
+        "temperature": 0.2
+      },
+      "source": {
+        "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+        "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
+      },
+      "quizTitle": "GCSE Triple Science Chemistry Retrieval Quiz: C20 Materials and Industrial Processes",
+      "summary": "This quiz covers key concepts from GCSE Chemistry, specifically focusing on C20 topics such as metals and alloys, polymers, composites, and industrial processes like the Haber process. It includes a mix of multiple-choice and short-answer questions designed to test knowledge recall, definitions, and understanding of chemical equations and conditions. Explanations for each answer have been generated based on general GCSE chemistry knowledge, as the original material only provided answers.",
+      "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c.json",
+      "generatedAt": "2025-09-22T08:26:27.280Z"
+    }
+  ]
+}
