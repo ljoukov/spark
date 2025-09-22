@@ -8,12 +8,13 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { resolve } from '$app/paths';
+	import type { Pathname } from '$app/types';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
 
 	type NavItem = {
 		title: string;
-		href: string;
+		href: Pathname;
 		icon: typeof HomeIcon;
 		highlight: (path: string) => boolean;
 	};
