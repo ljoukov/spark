@@ -2,7 +2,7 @@
 	import { Command as CommandPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils.js';
 
-	let { class: className, ...restProps } = $props();
+	let { class: className = undefined, ...restProps } = $props();
 </script>
 
 <CommandPrimitive.Loading

@@ -11,6 +11,7 @@
 		...restProps
 	}: WithoutChildrenOrChild<DialogPrimitive.TriggerProps> & {
 		children?: Snippet;
+		child?: DialogPrimitive.TriggerProps['child'];
 	} = $props();
 </script>
 
