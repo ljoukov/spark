@@ -9,6 +9,7 @@ export function applyDocumentTheme(mode: ThemeMode): void {
 	const root = document.documentElement;
 	root.dataset.theme = mode;
 	root.classList.toggle('dark', mode === 'dark');
+	root.style.colorScheme = mode;
 }
 
 /**
