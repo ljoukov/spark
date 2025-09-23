@@ -1,43 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	type Theme = 'light' | 'dark';
-
 	let isMuted = true;
 	let shouldAutoPlay = true;
 	let videoReady = false;
 	let videoEl: HTMLVideoElement | null = null;
 	const INTRO_POSTER = '/intro.jpg';
 
-	function applyTheme(next: Theme) {
-		if (typeof document === 'undefined') {
-			return;
-		}
-		const root = document.documentElement;
-		root.dataset.theme = next;
-		root.classList.toggle('dark', next === 'dark');
-	}
-
-	function setTheme(next: Theme) {
-		applyTheme(next);
-	}
-
-	if (typeof window !== 'undefined') {
-		const initialPreference = window.matchMedia('(prefers-color-scheme: dark)');
-		setTheme(initialPreference.matches ? 'dark' : 'light');
-	}
-
 	onMount(() => {
-		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 		const prefersReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 		shouldAutoPlay = !prefersReduceMotion.matches;
-
-		setTheme(prefersDark.matches ? 'dark' : 'light');
-
-		const handleThemeChange = (event: MediaQueryListEvent) => {
-			setTheme(event.matches ? 'dark' : 'light');
-		};
 
 		const handleMotionChange = (event: MediaQueryListEvent) => {
 			shouldAutoPlay = !event.matches;
@@ -46,11 +19,9 @@
 			}
 		};
 
-		prefersDark.addEventListener('change', handleThemeChange);
 		prefersReduceMotion.addEventListener('change', handleMotionChange);
 
 		return () => {
-			prefersDark.removeEventListener('change', handleThemeChange);
 			prefersReduceMotion.removeEventListener('change', handleMotionChange);
 		};
 	});
@@ -513,6 +484,47 @@
 		border-color: rgba(148, 163, 184, 0.24);
 		background: var(--sound-toggle-bg);
 		color: var(--sound-toggle-foreground);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light']) .page::before) {
+			background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
+		}
+
+		:global(:root:not([data-theme='light']) .page::after) {
+			background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
+		}
+
+		:global(:root:not([data-theme='light']) .slogan__primary) {
+			color: rgba(248, 250, 252, 0.92);
+		}
+
+		:global(:root:not([data-theme='light']) .slogan__secondary) {
+			color: rgba(203, 213, 245, 0.78);
+		}
+
+		:global(:root:not([data-theme='light']) .video-shell) {
+			background: linear-gradient(150deg, rgba(88, 28, 135, 0.5), rgba(2, 6, 23, 0.95));
+			border-color: rgba(148, 163, 184, 0.26);
+			box-shadow: 0 32px 84px rgba(8, 11, 21, 0.88);
+		}
+
+		:global(:root:not([data-theme='light']) .video-shell__halo) {
+			background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
+			opacity: 0.6;
+		}
+
+		:global(:root:not([data-theme='light']) .video-shell__inner) {
+			background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.88));
+			border-color: rgba(148, 163, 184, 0.18);
+			opacity: 0.52;
+		}
+
+		:global(:root:not([data-theme='light']) .sound-toggle) {
+			border-color: rgba(148, 163, 184, 0.24);
+			background: var(--sound-toggle-bg);
+			color: var(--sound-toggle-foreground);
+		}
 	}
 
 	.sound-toggle:hover {
