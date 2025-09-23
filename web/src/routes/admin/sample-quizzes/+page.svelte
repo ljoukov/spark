@@ -86,10 +86,15 @@
 				<Card.Description>Select a dataset to preview its quiz output.</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-3">
-				{#if hasSamples}
-					<Popover.Root bind:open={comboboxOpen}>
-						<Popover.Trigger bind:ref={triggerRef}>
-							{#snippet child({ props })}
+		{#if hasSamples}
+			<Popover.Root
+				open={comboboxOpen}
+				onOpenChange={(value) => {
+					comboboxOpen = value;
+				}}
+			>
+				<Popover.Trigger bind:ref={triggerRef}>
+					{#snippet child({ props }: { props: Record<string, unknown> })}
 								<Button
 									{...props}
 									variant="outline"
