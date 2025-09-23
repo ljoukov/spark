@@ -9,7 +9,7 @@ import {
 } from './schemas';
 import type { JudgeAudit, JudgeVerdict } from './schemas';
 
-const JUDGE_RESPONSE_SCHEMA: Schema = {
+export const JUDGE_RESPONSE_SCHEMA: Schema = {
 	type: Type.OBJECT,
 	properties: {
 		explanation: { type: Type.STRING },
@@ -32,7 +32,7 @@ const JUDGE_RESPONSE_SCHEMA: Schema = {
 	propertyOrdering: ['explanation', 'rubricFindings', 'verdict']
 };
 
-const AUDIT_RESPONSE_SCHEMA: Schema = {
+export const AUDIT_RESPONSE_SCHEMA: Schema = {
 	type: Type.OBJECT,
 	properties: {
 		explanation: { type: Type.STRING },
