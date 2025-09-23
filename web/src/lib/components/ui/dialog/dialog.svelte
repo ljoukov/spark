@@ -11,6 +11,6 @@
 	} = $props();
 </script>
 
-<DialogPrimitive.Root data-slot="dialog-root" {...restProps}>
+<DialogPrimitive.Root {...restProps}>
 	{@render children?.()}
 </DialogPrimitive.Root>

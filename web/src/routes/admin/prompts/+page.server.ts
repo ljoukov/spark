@@ -1,17 +1,14 @@
 import type { Schema } from '@google/genai';
 import type { PageServerLoad } from './$types';
-import {
-	buildGenerationPrompt,
-	buildExtensionPrompt,
-	QUIZ_RESPONSE_SCHEMA
-} from '$lib/server/llm/quizGenerator';
+import { buildGenerationPrompt, QUIZ_RESPONSE_SCHEMA } from '$lib/server/llm/quizPrompts';
+import { buildExtensionPrompt } from '$lib/server/llm/quizGenerator';
 import {
 	buildJudgePrompt,
 	buildAuditPrompt,
 	AUDIT_RESPONSE_SCHEMA,
 	JUDGE_RESPONSE_SCHEMA
 } from '$lib/server/llm/judge';
-import type { QuizGeneration } from '$lib/server/llm/schemas';
+import type { QuizGeneration } from '$lib/llm/schemas';
 
 type PromptVariable = { name: string; description: string };
 
