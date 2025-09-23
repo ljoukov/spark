@@ -374,6 +374,7 @@
 	function applyTheme(mode: 'light' | 'dark') {
 		if (typeof document === 'undefined') return;
 		const root = document.documentElement;
+		root.dataset.theme = mode;
 		root.classList.toggle('dark', mode === 'dark');
 		root.style.colorScheme = mode;
 		if (typeof localStorage !== 'undefined') {
