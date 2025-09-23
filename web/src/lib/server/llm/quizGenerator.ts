@@ -20,7 +20,7 @@ export interface ExtendQuizOptions {
 
 const BASE_PROMPT_HEADER = `You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.`;
 
-const QUIZ_RESPONSE_SCHEMA: Schema = {
+export const QUIZ_RESPONSE_SCHEMA: Schema = {
 	type: Type.OBJECT,
 	properties: {
 		quizTitle: { type: Type.STRING },
