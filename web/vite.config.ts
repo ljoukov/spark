@@ -4,12 +4,17 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const hasCustomCert = !!(process.env.DEV_HTTPS_KEY && process.env.DEV_HTTPS_CERT);
+const localCertDir = path.join(os.homedir(), '.localhost-certs');
+const customKeyPath = path.join(localCertDir, 'localhost-key.pem');
+const customCertPath = path.join(localCertDir, 'localhost.pem');
+const hasCustomCert = fs.existsSync(customKeyPath) && fs.existsSync(customCertPath);
 const httpsOption = hasCustomCert
 	? {
-			key: fs.readFileSync(process.env.DEV_HTTPS_KEY!, 'utf8'),
-			cert: fs.readFileSync(process.env.DEV_HTTPS_CERT!, 'utf8')
+			key: fs.readFileSync(customKeyPath, 'utf8'),
+			cert: fs.readFileSync(customCertPath, 'utf8')
 		}
 	: undefined; // plugin will provide cert and enable https when undefined
 
