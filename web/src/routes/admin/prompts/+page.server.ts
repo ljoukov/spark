@@ -1,6 +1,16 @@
+import type { Schema } from '@google/genai';
 import type { PageServerLoad } from './$types';
-import { buildGenerationPrompt, buildExtensionPrompt } from '$lib/server/llm/quizGenerator';
-import { buildJudgePrompt, buildAuditPrompt } from '$lib/server/llm/judge';
+import {
+	buildGenerationPrompt,
+	buildExtensionPrompt,
+	QUIZ_RESPONSE_SCHEMA
+} from '$lib/server/llm/quizGenerator';
+import {
+	buildJudgePrompt,
+	buildAuditPrompt,
+	AUDIT_RESPONSE_SCHEMA,
+	JUDGE_RESPONSE_SCHEMA
+} from '$lib/server/llm/judge';
 import type { QuizGeneration } from '$lib/server/llm/schemas';
 
 type PromptVariable = { name: string; description: string };
@@ -14,6 +24,7 @@ type PromptDescriptor = {
 	variables: PromptVariable[];
 	notes: string[];
 	example: string;
+	schema?: { title: string; definition: Schema };
 };
 
 const previewQuiz: QuizGeneration = {
@@ -72,7 +83,8 @@ export const load: PageServerLoad = async () => {
 				subject: '{{subject}}',
 				board: '{{board}}',
 				sourceFiles: []
-			})
+			}),
+			schema: { title: 'Quiz response schema', definition: QUIZ_RESPONSE_SCHEMA }
 		},
 		{
 			id: 'quiz-generation-synthesis',
@@ -104,7 +116,8 @@ export const load: PageServerLoad = async () => {
 				subject: '{{subject}}',
 				board: '{{board}}',
 				sourceFiles: []
-			})
+			}),
+			schema: { title: 'Quiz response schema', definition: QUIZ_RESPONSE_SCHEMA }
 		},
 		{
 			id: 'quiz-extension',
@@ -127,7 +140,8 @@ export const load: PageServerLoad = async () => {
 				sourceFiles: [],
 				baseQuiz: previewQuiz,
 				additionalQuestionCount: 4
-			})
+			}),
+			schema: { title: 'Quiz response schema', definition: QUIZ_RESPONSE_SCHEMA }
 		},
 		{
 			id: 'quiz-judge',
@@ -146,7 +160,8 @@ export const load: PageServerLoad = async () => {
 				rubricSummary: '{{rubricSummary}}',
 				sourceFiles: [],
 				candidateQuiz: previewQuiz
-			})
+			}),
+			schema: { title: 'Judge verdict schema', definition: JUDGE_RESPONSE_SCHEMA }
 		},
 		{
 			id: 'quiz-audit',
@@ -159,7 +174,8 @@ export const load: PageServerLoad = async () => {
 				'The judge verdict JSON and the candidate quiz JSON are attached as additional context.',
 				'This prompt always runs on gemini-2.5-pro for higher reasoning capacity.'
 			],
-			example: buildAuditPrompt()
+			example: buildAuditPrompt(),
+			schema: { title: 'Audit response schema', definition: AUDIT_RESPONSE_SCHEMA }
 		}
 	];
 

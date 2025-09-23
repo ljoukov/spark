@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { cn } from '$lib/utils.js';
 	import type { PageData } from './$types';
 
@@ -52,6 +53,14 @@
 			copyState.message = error instanceof Error ? error.message : 'Unable to copy this prompt.';
 		}
 	}
+
+	function formatSchema(schema: unknown): string {
+		try {
+			return JSON.stringify(schema, null, 2);
+		} catch {
+			return 'Unable to render schema.';
+		}
+	}
 </script>
 
 <div class="mx-auto w-full max-w-5xl space-y-6">
@@ -70,13 +79,44 @@
 						<Card.Title>{prompt.title}</Card.Title>
 						<Card.Description>{prompt.description}</Card.Description>
 					</div>
-					<button
-						type="button"
-						class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'whitespace-nowrap')}
-						onclick={() => copyPrompt(prompt.id, prompt.example)}
-					>
-						{getCopyLabel(prompt.id)}
-					</button>
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+						{#if prompt.schema}
+							<Dialog.Root>
+								<Dialog.Trigger
+									type="button"
+									class={cn(
+										buttonVariants({
+											variant: 'secondary',
+											size: 'sm'
+										}),
+										'whitespace-nowrap'
+									)}
+								>
+									View schema
+								</Dialog.Trigger>
+								<Dialog.Content class="max-h-[85vh] overflow-hidden">
+									<Dialog.Header class="space-y-2">
+										<Dialog.Title>{prompt.schema.title}</Dialog.Title>
+										<Dialog.Description>
+											Inspect the structured JSON schema we attach to this request.
+										</Dialog.Description>
+									</Dialog.Header>
+									<div class="max-h-[60vh] overflow-auto rounded-md border bg-muted/50 p-4">
+										<pre class="font-mono text-xs leading-relaxed whitespace-pre">{formatSchema(
+												prompt.schema.definition
+											)}</pre>
+									</div>
+								</Dialog.Content>
+							</Dialog.Root>
+						{/if}
+						<button
+							type="button"
+							class={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'whitespace-nowrap')}
+							onclick={() => copyPrompt(prompt.id, prompt.example)}
+						>
+							{getCopyLabel(prompt.id)}
+						</button>
+					</div>
 				</Card.Header>
 				{#if copyState.activeId === prompt.id && copyState.status === 'error'}
 					<div class="px-6 text-xs font-medium text-destructive">
