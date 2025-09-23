@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-
-	type Theme = 'light' | 'dark';
+	import { startAutomaticThemeSync } from '$lib/utils/theme';
 
 	let isMuted = true;
 	let shouldAutoPlay = true;
@@ -9,35 +8,11 @@
 	let videoEl: HTMLVideoElement | null = null;
 	const INTRO_POSTER = '/intro.jpg';
 
-	function applyTheme(next: Theme) {
-		if (typeof document === 'undefined') {
-			return;
-		}
-		const root = document.documentElement;
-		root.dataset.theme = next;
-		root.classList.toggle('dark', next === 'dark');
-	}
-
-	function setTheme(next: Theme) {
-		applyTheme(next);
-	}
-
-	if (typeof window !== 'undefined') {
-		const initialPreference = window.matchMedia('(prefers-color-scheme: dark)');
-		setTheme(initialPreference.matches ? 'dark' : 'light');
-	}
-
 	onMount(() => {
-		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+		const stopThemeSync = startAutomaticThemeSync();
 		const prefersReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 		shouldAutoPlay = !prefersReduceMotion.matches;
-
-		setTheme(prefersDark.matches ? 'dark' : 'light');
-
-		const handleThemeChange = (event: MediaQueryListEvent) => {
-			setTheme(event.matches ? 'dark' : 'light');
-		};
 
 		const handleMotionChange = (event: MediaQueryListEvent) => {
 			shouldAutoPlay = !event.matches;
@@ -46,11 +21,10 @@
 			}
 		};
 
-		prefersDark.addEventListener('change', handleThemeChange);
 		prefersReduceMotion.addEventListener('change', handleMotionChange);
 
 		return () => {
-			prefersDark.removeEventListener('change', handleThemeChange);
+			stopThemeSync();
 			prefersReduceMotion.removeEventListener('change', handleMotionChange);
 		};
 	});
@@ -244,8 +218,20 @@
 		background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
 	}
 
+	@media (prefers-color-scheme: dark) {
+		.page::before {
+			background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
+		}
+	}
+
 	:global([data-theme='dark'] .page::after) {
 		background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.page::after {
+			background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
+		}
 	}
 
 	.top-bar {
@@ -322,6 +308,12 @@
 		color: rgba(248, 250, 252, 0.92);
 	}
 
+	@media (prefers-color-scheme: dark) {
+		.slogan__primary {
+			color: rgba(248, 250, 252, 0.92);
+		}
+	}
+
 	.slogan__secondary {
 		font-size: clamp(1.1rem, 2.2vw, 1.7rem);
 		font-weight: 400;
@@ -332,6 +324,12 @@
 
 	:global([data-theme='dark'] .slogan__secondary) {
 		color: rgba(203, 213, 245, 0.78);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.slogan__secondary {
+			color: rgba(203, 213, 245, 0.78);
+		}
 	}
 
 	.cta {
@@ -393,6 +391,14 @@
 		box-shadow: 0 32px 84px rgba(8, 11, 21, 0.88);
 	}
 
+	@media (prefers-color-scheme: dark) {
+		.video-shell {
+			background: linear-gradient(150deg, rgba(88, 28, 135, 0.5), rgba(2, 6, 23, 0.95));
+			border-color: rgba(148, 163, 184, 0.26);
+			box-shadow: 0 32px 84px rgba(8, 11, 21, 0.88);
+		}
+	}
+
 	.video-shell__halo {
 		position: absolute;
 		inset: 0;
@@ -410,6 +416,13 @@
 	:global([data-theme='dark'] .video-shell__halo) {
 		background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
 		opacity: 0.6;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.video-shell__halo {
+			background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
+			opacity: 0.6;
+		}
 	}
 
 	@media (min-width: 640px) {
@@ -439,6 +452,14 @@
 		background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.88));
 		border-color: rgba(148, 163, 184, 0.18);
 		opacity: 0.52;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.video-shell__inner {
+			background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.88));
+			border-color: rgba(148, 163, 184, 0.18);
+			opacity: 0.52;
+		}
 	}
 
 	.video-shell__media {
@@ -513,6 +534,14 @@
 		border-color: rgba(148, 163, 184, 0.24);
 		background: var(--sound-toggle-bg);
 		color: var(--sound-toggle-foreground);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.sound-toggle {
+			border-color: rgba(148, 163, 184, 0.24);
+			background: var(--sound-toggle-bg);
+			color: var(--sound-toggle-foreground);
+		}
 	}
 
 	.sound-toggle:hover {

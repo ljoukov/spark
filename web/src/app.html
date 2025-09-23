@@ -16,6 +16,7 @@
 				const theme = prefersDark ? 'dark' : 'light';
 				root.dataset.theme = theme;
 				root.classList.toggle('dark', theme === 'dark');
+				root.style.colorScheme = theme;
 			})();
 		</script>
 		%sveltekit.head%
