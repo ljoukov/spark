@@ -18,11 +18,18 @@ const httpsOption = hasCustomCert
 		}
 	: undefined; // plugin will provide cert and enable https when undefined
 
+const plugins = hasCustomCert
+	? [tailwindcss(), sveltekit(), devtoolsJson()]
+	: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()];
+
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],
+	plugins,
 	server: {
 		host: 'localhost',
 		port: 8080,
+		https: httpsOption
+	},
+	preview: {
 		https: httpsOption
 	},
 	test: {
