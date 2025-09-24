@@ -40,12 +40,12 @@
 		--blob-yellow-soft: hsla(38 92% 91% / 0.88);
 		--blob-pink: hsla(332 85% 86% / 0.92);
 		--blob-blue: hsla(184 95% 91% / 0.82);
-		--blob-opacity: 0.9;
-		--app-content-bg: rgba(255, 255, 255, 0.72);
-		--app-content-border: rgba(255, 255, 255, 0.55);
+		--blob-opacity: 0.75;
+		--app-content-bg: rgba(255, 255, 255, 0.9);
+		--app-content-border: rgba(15, 23, 42, 0.08);
 		--app-content-shadow-primary: 0 40px 120px -50px rgba(15, 23, 42, 0.5);
 		--app-content-shadow-secondary: 0 25px 60px -45px rgba(15, 23, 42, 0.35);
-		--app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.65));
+		--app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.75));
 	}
 
 	.blob-field {
@@ -74,6 +74,7 @@
 		border: 1px solid var(--app-content-border);
 		box-shadow: var(--app-content-shadow-primary), var(--app-content-shadow-secondary);
 		backdrop-filter: blur(28px);
+		color: var(--foreground);
 	}
 
 	/* Dashboard content styles (preserved from local) */
