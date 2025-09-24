@@ -86,15 +86,15 @@
 				<Card.Description>Select a dataset to preview its quiz output.</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-3">
-		{#if hasSamples}
-			<Popover.Root
-				open={comboboxOpen}
-				onOpenChange={(value) => {
-					comboboxOpen = value;
-				}}
-			>
-				<Popover.Trigger bind:ref={triggerRef}>
-					{#snippet child({ props }: { props: Record<string, unknown> })}
+				{#if hasSamples}
+					<Popover.Root
+						open={comboboxOpen}
+						onOpenChange={(value) => {
+							comboboxOpen = value;
+						}}
+					>
+						<Popover.Trigger bind:ref={triggerRef}>
+							{#snippet child({ props }: { props: Record<string, unknown> })}
 								<Button
 									{...props}
 									variant="outline"
@@ -225,7 +225,8 @@
 				<Card.Content>
 					<details class="rounded-lg border bg-muted/20 p-4 text-sm">
 						<summary class="cursor-pointer font-medium">Prompt sent to Gemini</summary>
-						<pre class="mt-3 text-xs leading-relaxed break-words whitespace-pre-wrap">{activeEntry.detail.prompt}</pre>
+						<pre class="mt-3 text-xs leading-relaxed break-words whitespace-pre-wrap">{activeEntry
+								.detail.prompt}</pre>
 					</details>
 				</Card.Content>
 			</Card.Root>
@@ -236,11 +237,13 @@
 			<div class="space-y-4">
 				{#each activeEntry.detail.quiz.questions as question, index (question.id)}
 					<Card.Root>
-						<Card.Header class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+						<Card.Header
+							class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between"
+						>
 							<Card.Title>
 								Question {index + 1} of {questionCount}
 							</Card.Title>
-							<span class="text-xs uppercase tracking-wide text-muted-foreground">
+							<span class="text-xs tracking-wide text-muted-foreground uppercase">
 								{question.type.replace(/_/g, ' ')}
 								{#if question.difficulty}
 									• Difficulty: {question.difficulty}
@@ -251,7 +254,7 @@
 							</span>
 						</Card.Header>
 						<Card.Content class="space-y-4">
-							<p class="text-sm font-medium leading-relaxed">
+							<p class="text-sm leading-relaxed font-medium">
 								{question.prompt}
 							</p>
 							<p class="text-sm text-foreground">
@@ -263,12 +266,14 @@
 							</p>
 							{#if question.options}
 								<div>
-									<p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+									<p class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 										Options
 									</p>
 									<ul class="mt-2 grid gap-2 text-sm md:grid-cols-2">
 										{#each question.options as option, optionIndex (optionIndex)}
-											<li class="w-full rounded border border-border/40 bg-muted/40 px-2 py-1 break-words">
+											<li
+												class="w-full rounded border border-border/40 bg-muted/40 px-2 py-1 break-words"
+											>
 												{option}
 											</li>
 										{/each}

@@ -5,7 +5,4 @@
 	let { class: className = undefined, ...restProps } = $props();
 </script>
 
-<CommandPrimitive.Viewport
-	class={cn('p-1', className)}
-	{...restProps}
-/>
+<CommandPrimitive.Viewport class={cn('p-1', className)} {...restProps} />

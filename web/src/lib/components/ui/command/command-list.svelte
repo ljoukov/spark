@@ -6,10 +6,6 @@
 </script>
 
 <CommandPrimitive.List
-	class={cn(
-		'overflow-y-auto overflow-x-hidden py-1',
-		'max-h-[calc(100vh-12rem)]',
-		className
-	)}
+	class={cn('overflow-x-hidden overflow-y-auto py-1', 'max-h-[calc(100vh-12rem)]', className)}
 	{...restProps}
 />
