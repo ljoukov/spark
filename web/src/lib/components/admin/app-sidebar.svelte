@@ -1,4 +1,5 @@
 <script lang="ts">
+	/* eslint-disable svelte/no-navigation-without-resolve */
 	import HomeIcon from '@lucide/svelte/icons/home';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -8,7 +9,7 @@
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/navigation';
 	import type { Pathname } from '$app/types';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
@@ -78,10 +79,6 @@
 		return target.email ?? 'No email on file';
 	}
 
-	function toHref(path: Pathname): string {
-		return `${base}${path}`;
-	}
-
 	const defaultAvatarSrc = '/images/admin-avatar.svg';
 	const avatarSrc = $derived(user.photoUrl ?? defaultAvatarSrc);
 	const signingOut = $state({ active: false, error: '' });
@@ -136,7 +133,7 @@
 								{#snippet child({ props })}
 									<a
 										{...props}
-										href={toHref(item.href)}
+										href={resolve(item.href).href}
 										class={cn(
 											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined

@@ -1,4 +1,5 @@
 <script lang="ts" module>
+	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { cn, type WithElementRef } from '$lib/utils.js';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 	import { type VariantProps, tv } from 'tailwind-variants';
@@ -40,8 +41,7 @@
 </script>
 
 <script lang="ts">
-	import { base } from '$app/paths';
-	import type { Pathname } from '$app/types';
+	import { resolve } from '$app/navigation';
 
 	const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z+.-]*:/;
 
@@ -59,10 +59,6 @@
 
 	function isAbsoluteOrFragment(target: string): boolean {
 		return ABSOLUTE_URL_PATTERN.test(target) || target.startsWith('#');
-	}
-
-	function resolvePathname(target: Pathname): string {
-		return `${base}${target}`;
 	}
 </script>
 
@@ -93,7 +89,7 @@
 			bind:this={ref}
 			data-slot="button"
 			class={cn(buttonVariants({ variant, size }), className)}
-			href={resolvePathname(href as Pathname)}
+			href={resolve(href as string).href}
 			{...restProps}
 		>
 			{@render children?.()}
