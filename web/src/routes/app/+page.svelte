@@ -14,6 +14,7 @@
 </div>
 
 <style>
+	/* Align app landing glows with marketing page and drive them off theme tokens. */
 	.app-page {
 		position: relative;
 		min-height: 100vh;
@@ -34,6 +35,12 @@
 		--blob-yellow-soft: hsla(38 92% 91% / 0.88);
 		--blob-pink: hsla(332 85% 86% / 0.92);
 		--blob-blue: hsla(184 95% 91% / 0.82);
+		--blob-opacity: 0.9;
+		--app-content-bg: rgba(255, 255, 255, 0.72);
+		--app-content-border: rgba(255, 255, 255, 0.55);
+		--app-content-shadow-primary: 0 40px 120px -50px rgba(15, 23, 42, 0.5);
+		--app-content-shadow-secondary: 0 25px 60px -45px rgba(15, 23, 42, 0.35);
+		--app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.65));
 	}
 
 	.blob-field {
@@ -48,7 +55,7 @@
 			radial-gradient(54% 54% at 72% 18%, var(--blob-pink), transparent 72%),
 			radial-gradient(60% 60% at 24% 80%, var(--blob-blue), transparent 74%),
 			radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
-		opacity: 0.9;
+		opacity: var(--blob-opacity);
 	}
 
 	.app-content {
@@ -58,11 +65,9 @@
 		text-align: center;
 		padding: clamp(2.5rem, 5vw, 3.5rem);
 		border-radius: 1.75rem;
-		background: rgba(255, 255, 255, 0.72);
-		border: 1px solid rgba(255, 255, 255, 0.55);
-		box-shadow:
-			0 40px 120px -50px rgba(15, 23, 42, 0.5),
-			0 25px 60px -45px rgba(15, 23, 42, 0.35);
+		background: var(--app-content-bg);
+		border: 1px solid var(--app-content-border);
+		box-shadow: var(--app-content-shadow-primary), var(--app-content-shadow-secondary);
 		backdrop-filter: blur(28px);
 	}
 
@@ -89,42 +94,62 @@
 			sans-serif;
 		font-size: clamp(1rem, 2.2vw, 1.25rem);
 		line-height: 1.7;
-		color: var(--text-secondary, rgba(15, 23, 42, 0.65));
+		color: var(--app-subtitle-color);
+	}
+
+	:global([data-theme='dark'] .app-page) {
+		--app-surface: linear-gradient(175deg, rgba(2, 6, 23, 0.98), rgba(6, 11, 25, 0.94));
+		--app-halo: rgba(129, 140, 248, 0.36);
+		--blob-gold: rgba(129, 140, 248, 0.45);
+		--blob-yellow: rgba(88, 28, 135, 0.4);
+		--blob-yellow-soft: rgba(56, 189, 248, 0.28);
+		--blob-pink: rgba(129, 140, 248, 0.38);
+		--blob-blue: rgba(56, 189, 248, 0.26);
+		--blob-opacity: 0.78;
+		--app-content-bg: rgba(6, 11, 25, 0.78);
+		--app-content-border: rgba(148, 163, 184, 0.26);
+		--app-content-shadow-primary: 0 48px 140px -60px rgba(2, 6, 23, 0.9);
+		--app-content-shadow-secondary: 0 40px 110px -70px rgba(15, 23, 42, 0.6);
+		--app-subtitle-color: rgba(226, 232, 240, 0.78);
+		color: var(--foreground);
+	}
+
+	:global([data-theme='dark'] .blob-field) {
+		background:
+			radial-gradient(64% 64% at 16% 20%, var(--blob-gold), transparent 72%),
+			radial-gradient(58% 58% at 78% 24%, var(--blob-blue), transparent 74%),
+			radial-gradient(56% 56% at 24% 78%, var(--blob-yellow-soft), transparent 76%),
+			radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
+			radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.app-page {
-			--app-surface: hsl(226 74% 7%);
-			--app-halo: hsla(257 96% 64% / 0.28);
-			--blob-gold: hsla(257 100% 76% / 0.35);
-			--blob-pink: hsla(234 82% 72% / 0.32);
-			--blob-yellow: hsla(275 70% 38% / 0.45);
-			--blob-yellow-soft: hsla(199 92% 60% / 0.32);
-			--blob-blue: hsla(162 84% 40% / 0.28);
+		:global(:root:not([data-theme='light']) .app-page) {
+			--app-surface: linear-gradient(175deg, rgba(2, 6, 23, 0.98), rgba(6, 11, 25, 0.94));
+			--app-halo: rgba(129, 140, 248, 0.36);
+			--blob-gold: rgba(129, 140, 248, 0.45);
+			--blob-yellow: rgba(88, 28, 135, 0.4);
+			--blob-yellow-soft: rgba(56, 189, 248, 0.28);
+			--blob-pink: rgba(129, 140, 248, 0.38);
+			--blob-blue: rgba(56, 189, 248, 0.26);
+			--blob-opacity: 0.78;
+			--app-content-bg: rgba(6, 11, 25, 0.78);
+			--app-content-border: rgba(148, 163, 184, 0.26);
+			--app-content-shadow-primary: 0 48px 140px -60px rgba(2, 6, 23, 0.9);
+			--app-content-shadow-secondary: 0 40px 110px -70px rgba(15, 23, 42, 0.6);
+			--app-subtitle-color: rgba(226, 232, 240, 0.78);
 			color: var(--foreground);
 		}
 
-		.blob-field {
-			opacity: 0.82;
+		:global(:root:not([data-theme='light']) .blob-field) {
 			background:
-				radial-gradient(64% 64% at 18% 18%, var(--blob-gold), transparent 70%),
-				radial-gradient(60% 60% at 78% 18%, var(--blob-yellow-soft), transparent 72%),
-				radial-gradient(56% 56% at 24% 82%, var(--blob-yellow), transparent 76%),
-				radial-gradient(62% 62% at 82% 78%, var(--blob-blue), transparent 78%),
-				radial-gradient(70% 70% at 52% 48%, var(--blob-pink), transparent 80%);
+				radial-gradient(64% 64% at 16% 20%, var(--blob-gold), transparent 72%),
+				radial-gradient(58% 58% at 78% 24%, var(--blob-blue), transparent 74%),
+				radial-gradient(56% 56% at 24% 78%, var(--blob-yellow-soft), transparent 76%),
+				radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
+				radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
 		}
 
-		.app-content {
-			background: rgba(2, 6, 23, 0.74);
-			border: 1px solid rgba(129, 140, 248, 0.3);
-			box-shadow:
-				0 48px 140px -60px rgba(2, 6, 23, 0.9),
-				0 40px 110px -70px rgba(15, 23, 42, 0.6);
-		}
-
-		.app-subtitle {
-			color: rgba(226, 232, 240, 0.78);
-		}
 	}
 
 	@media (max-width: 40rem) {
