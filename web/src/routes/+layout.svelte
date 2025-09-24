@@ -1,7 +1,16 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
+	import { startAutomaticThemeSync } from '$lib/utils/theme';
 
 	let { children } = $props();
+
+	onMount(() => {
+		const stopThemeSync = startAutomaticThemeSync();
+		return () => {
+			stopThemeSync();
+		};
+	});
 </script>
 
 <svelte:head>
