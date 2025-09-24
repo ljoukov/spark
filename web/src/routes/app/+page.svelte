@@ -94,30 +94,36 @@
 
 	@media (prefers-color-scheme: dark) {
 		.app-page {
-			--app-surface: hsl(222 74% 9%);
-			--app-halo: hsla(240 65% 18% / 0.55);
-			--blob-gold: hsla(38 82% 72% / 0.26);
-			--blob-pink: hsla(332 85% 80% / 0.32);
-			--blob-yellow: hsla(38 87% 78% / 0.28);
-			--blob-yellow-soft: hsla(38 87% 88% / 0.28);
-			--blob-blue: hsla(184 95% 88% / 0.35);
+			--app-surface: hsl(226 74% 7%);
+			--app-halo: hsla(257 96% 64% / 0.28);
+			--blob-gold: hsla(257 100% 76% / 0.35);
+			--blob-pink: hsla(234 82% 72% / 0.32);
+			--blob-yellow: hsla(275 70% 38% / 0.45);
+			--blob-yellow-soft: hsla(199 92% 60% / 0.32);
+			--blob-blue: hsla(162 84% 40% / 0.28);
 			color: var(--foreground);
 		}
 
 		.blob-field {
-			opacity: 0.75;
+			opacity: 0.82;
+			background:
+				radial-gradient(64% 64% at 18% 18%, var(--blob-gold), transparent 70%),
+				radial-gradient(60% 60% at 78% 18%, var(--blob-yellow-soft), transparent 72%),
+				radial-gradient(56% 56% at 24% 82%, var(--blob-yellow), transparent 76%),
+				radial-gradient(62% 62% at 82% 78%, var(--blob-blue), transparent 78%),
+				radial-gradient(70% 70% at 52% 48%, var(--blob-pink), transparent 80%);
 		}
 
 		.app-content {
-			background: rgba(7, 12, 24, 0.64);
-			border: 1px solid rgba(148, 163, 184, 0.35);
+			background: rgba(2, 6, 23, 0.74);
+			border: 1px solid rgba(129, 140, 248, 0.3);
 			box-shadow:
-				0 40px 140px -60px rgba(3, 7, 18, 0.85),
-				0 35px 90px -65px rgba(15, 23, 42, 0.55);
+				0 48px 140px -60px rgba(2, 6, 23, 0.9),
+				0 40px 110px -70px rgba(15, 23, 42, 0.6);
 		}
 
 		.app-subtitle {
-			color: rgba(226, 232, 240, 0.72);
+			color: rgba(226, 232, 240, 0.78);
 		}
 	}
 
