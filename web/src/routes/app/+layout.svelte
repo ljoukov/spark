@@ -400,6 +400,7 @@
 		letter-spacing: 0.28em;
 		font-size: 0.7rem;
 		color: var(--auth-dialog-eyebrow, rgba(148, 197, 255, 0.9));
+		font-weight: 600;
 	}
 
 	.auth-header h2 {
@@ -421,12 +422,14 @@
 		letter-spacing: 0.35em;
 		font-size: 0.65rem;
 		color: var(--app-subtitle-color);
+		font-weight: 600;
 	}
 
 	.auth-alt-text {
 		margin: 0;
 		line-height: 1.5;
 		color: var(--app-subtitle-color);
+		font-weight: 500;
 	}
 
 	.auth-alert {
@@ -434,6 +437,7 @@
 		padding: 0.85rem 1.1rem;
 		font-size: 0.9rem;
 		line-height: 1.45;
+		font-weight: 500;
 	}
 
 	.auth-alert.info {
@@ -457,6 +461,7 @@
 		padding: 0.85rem 1.1rem;
 		font-size: 0.8rem;
 		color: var(--app-subtitle-color);
+		font-weight: 500;
 	}
 
 	.auth-footer button {
@@ -512,6 +517,7 @@
 		font-size: 0.95rem;
 		line-height: 1.6;
 		color: var(--auth-dialog-subtitle, rgba(15, 23, 42, 0.72));
+		font-weight: 500;
 	}
 
 	:global(.anon-footer) {

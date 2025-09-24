@@ -97,6 +97,7 @@
 		font-size: 1rem;
 		line-height: 1.7;
 		color: var(--app-subtitle-color);
+		font-weight: 500;
 	}
 
 	.dashboard-actions {
