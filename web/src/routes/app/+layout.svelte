@@ -320,7 +320,10 @@
     --blob-yellow-soft: hsla(38 92% 91% / 0.88);
     --blob-pink: hsla(332 85% 86% / 0.92);
     --blob-blue: hsla(184 95% 91% / 0.82);
-    --blob-opacity: 0.9;
+    --blob-opacity: 0.75;
+    --app-content-bg: rgba(255, 255, 255, 0.9);
+    --app-content-border: rgba(15, 23, 42, 0.08);
+    --app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.75));
 }
 
 .auth-blob-field {
@@ -349,10 +352,10 @@
     max-width: 30rem;
     border-radius: 1.75rem;
     border: 1px solid var(--app-content-border, rgba(255, 255, 255, 0.55));
-		background: var(--app-content-bg, rgba(255, 255, 255, 0.72));
-		color: var(--foreground);
-		box-shadow: 0 30px 80px rgba(15, 23, 42, 0.55);
-	}
+    background: var(--app-content-bg, rgba(255, 255, 255, 0.9));
+    color: var(--foreground);
+    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.55);
+}
 
 	.auth-header {
 		display: flex;
@@ -379,20 +382,20 @@
 		flex-direction: column;
 		gap: 0.5rem;
 		font-size: 0.9rem;
-		color: rgba(226, 232, 240, 0.72);
+    color: var(--app-subtitle-color);
 	}
 
 	.auth-alt-label {
 		text-transform: uppercase;
 		letter-spacing: 0.35em;
 		font-size: 0.65rem;
-		color: rgba(148, 163, 184, 0.7);
+    color: var(--app-subtitle-color);
 	}
 
 	.auth-alt-text {
 		margin: 0;
 		line-height: 1.5;
-		color: rgba(226, 232, 240, 0.78);
+    color: var(--app-subtitle-color);
 	}
 
 	.auth-alert {
@@ -422,7 +425,7 @@
 		background: rgba(148, 163, 184, 0.18);
 		padding: 0.85rem 1.1rem;
 		font-size: 0.8rem;
-		color: rgba(226, 232, 240, 0.82);
+    color: var(--app-subtitle-color);
 	}
 
 	.auth-footer button {
