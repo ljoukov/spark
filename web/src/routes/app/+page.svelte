@@ -5,16 +5,21 @@
 <div class="app-page">
 	<div class="blob-field" aria-hidden="true"></div>
 	<main class="app-content">
-		<h1 class="app-title">Welcome back to Spark</h1>
-		<p class="app-subtitle">
-			Your personalised study flow will live here. Sign in to start creating quizzes, notes and
-			review plans.
-		</p>
+		<section class="dashboard-hero">
+			<h1>Ready to pick up where you left off?</h1>
+			<p>
+				Upload a new set of notes or jump back into your latest GCSE practice session.
+			</p>
+			<div class="dashboard-actions">
+				<button type="button" class="dashboard-button primary">New scan</button>
+				<button type="button" class="dashboard-button secondary">View recent quizzes</button>
+			</div>
+		</section>
 	</main>
 </div>
 
 <style>
-	/* Align app landing glows with marketing page and drive them off theme tokens. */
+	/* Base app background with themed glows (ported from upstream) */
 	.app-page {
 		position: relative;
 		min-height: 100vh;
@@ -61,7 +66,7 @@
 	.app-content {
 		position: relative;
 		z-index: 1;
-		max-width: 36rem;
+		max-width: 42rem;
 		text-align: center;
 		padding: clamp(2.5rem, 5vw, 3.5rem);
 		border-radius: 1.75rem;
@@ -71,30 +76,69 @@
 		backdrop-filter: blur(28px);
 	}
 
-	.app-title {
-		font-family:
-			'Outfit',
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
-		font-weight: 600;
-		font-size: clamp(2.25rem, 5vw, 3rem);
-		margin-bottom: clamp(1rem, 2vw, 1.5rem);
+	/* Dashboard content styles (preserved from local) */
+	.dashboard-hero {
+		max-width: 42rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
 	}
 
-	.app-subtitle {
-		font-family:
-			'Outfit',
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
-		font-size: clamp(1rem, 2.2vw, 1.25rem);
+	.dashboard-hero h1 {
+		margin: 0;
+		font-size: clamp(2.4rem, 3.5vw, 3.4rem);
+		font-weight: 600;
+		line-height: 1.1;
+	}
+
+	.dashboard-hero p {
+		margin: 0;
+		font-size: 1rem;
 		line-height: 1.7;
 		color: var(--app-subtitle-color);
+	}
+
+	.dashboard-actions {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.dashboard-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.85rem 1.6rem;
+		border-radius: 9999px;
+		font-weight: 600;
+		text-decoration: none;
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease,
+			background 0.25s ease;
+		border: 1px solid transparent;
+	}
+
+	.dashboard-button.primary {
+		background: #38bdf8;
+		color: #0f172a;
+		box-shadow: 0 16px 40px rgba(56, 189, 248, 0.35);
+	}
+
+	.dashboard-button.primary:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 18px 45px rgba(56, 189, 248, 0.45);
+	}
+
+	.dashboard-button.secondary {
+		background: rgba(148, 163, 184, 0.15);
+		color: var(--foreground);
+		border-color: rgba(148, 163, 184, 0.26);
+	}
+
+	.dashboard-button.secondary:hover {
+		background: rgba(148, 163, 184, 0.25);
 	}
 
 	:global([data-theme='dark'] .app-page) {
@@ -160,6 +204,14 @@
 		.app-content {
 			padding: clamp(2rem, 7vw, 2.75rem);
 			border-radius: 1.5rem;
+		}
+
+		.dashboard-actions {
+			flex-direction: column;
+		}
+
+		.dashboard-button {
+			width: 100%;
 		}
 	}
 </style>
