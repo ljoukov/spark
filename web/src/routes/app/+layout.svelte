@@ -289,11 +289,11 @@
 <style>
 	:global(:root) {
 		color-scheme: light dark;
-		--auth-dialog-bg: rgba(255, 255, 255, 0.9);
-		--auth-dialog-border: rgba(15, 23, 42, 0.08);
+		--auth-dialog-bg: rgba(255, 255, 255, 0.96);
+		--auth-dialog-border: rgba(15, 23, 42, 0.12);
 		--auth-dialog-foreground: #0f172a;
-		--auth-dialog-subtitle: rgba(15, 23, 42, 0.75);
-		--auth-dialog-shadow: 0 30px 80px rgba(15, 23, 42, 0.4);
+		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
+		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
 	:global([data-theme='dark']) {
@@ -301,7 +301,7 @@
 		--auth-dialog-border: rgba(148, 163, 184, 0.26);
 		--auth-dialog-foreground: #e2e8f0;
 		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
-		--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+		--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
 	}
 
 	@media (prefers-color-scheme: dark) {
@@ -310,7 +310,7 @@
 			--auth-dialog-border: rgba(148, 163, 184, 0.26);
 			--auth-dialog-foreground: #e2e8f0;
 			--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
-			--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+			--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
 		}
 	}
 
@@ -343,14 +343,14 @@
 		--blob-yellow-soft: hsla(38 92% 91% / 0.88);
 		--blob-pink: hsla(332 85% 86% / 0.92);
 		--blob-blue: hsla(184 95% 91% / 0.82);
-		--blob-opacity: 0.75;
-		--app-content-bg: rgba(255, 255, 255, 0.9);
-		--app-content-border: rgba(15, 23, 42, 0.08);
-		--app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.75));
-		--auth-dialog-border: rgba(15, 23, 42, 0.08);
+		--blob-opacity: 0.6;
+		--app-content-bg: rgba(255, 255, 255, 0.96);
+		--app-content-border: rgba(15, 23, 42, 0.12);
+		--app-subtitle-color: var(--text-secondary, rgba(30, 41, 59, 0.78));
+		--auth-dialog-border: rgba(15, 23, 42, 0.12);
 		--auth-dialog-foreground: #0f172a;
-		--auth-dialog-subtitle: rgba(15, 23, 42, 0.75);
-		--auth-dialog-shadow: 0 30px 80px rgba(15, 23, 42, 0.4);
+		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
+		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
 	.auth-blob-field {
@@ -449,7 +449,7 @@
 		align-items: center;
 		justify-content: space-between;
 		border-radius: 1.25rem;
-		background: rgba(148, 163, 184, 0.18);
+		background: rgba(148, 163, 184, 0.12);
 		padding: 0.85rem 1.1rem;
 		font-size: 0.8rem;
 		color: var(--app-subtitle-color);
@@ -459,7 +459,7 @@
 		background: none;
 		border: none;
 		padding: 0;
-		color: #bae6fd;
+		color: #1d4ed8;
 		font-weight: 600;
 		text-decoration: underline;
 		text-decoration-color: transparent;
@@ -470,7 +470,7 @@
 	}
 
 	.auth-footer button:hover {
-		color: #facc15;
+		color: #0f172a;
 		text-decoration-color: currentColor;
 	}
 
