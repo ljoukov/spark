@@ -9,6 +9,7 @@ IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
   - TypeScript: alias `$proto` is configured to simplify importing.
   - Swift types via `swift-protobuf` into `Spark/proto`.
 - `web/` — SvelteKit (latest) project deployed to Vercel. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
+  - UI theming + color tokens are documented in `web/docs/color-system.md`.
 - API logic lives under `web/src/routes/api/*`.
 - Web app lives under `web/src/routes/app`
 - Admin dashboard lives under `web/src/routes/admin`
