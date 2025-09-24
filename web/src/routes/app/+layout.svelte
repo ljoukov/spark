@@ -293,6 +293,7 @@
 		--auth-dialog-border: rgba(15, 23, 42, 0.12);
 		--auth-dialog-foreground: #0f172a;
 		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
+		--auth-dialog-eyebrow: rgba(30, 64, 175, 0.82);
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
@@ -301,6 +302,7 @@
 		--auth-dialog-border: rgba(148, 163, 184, 0.26);
 		--auth-dialog-foreground: #e2e8f0;
 		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+		--auth-dialog-eyebrow: rgba(148, 197, 255, 0.9);
 		--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
 	}
 
@@ -310,6 +312,7 @@
 			--auth-dialog-border: rgba(148, 163, 184, 0.26);
 			--auth-dialog-foreground: #e2e8f0;
 			--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+			--auth-dialog-eyebrow: rgba(148, 197, 255, 0.9);
 			--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
 		}
 	}
@@ -350,6 +353,7 @@
 		--auth-dialog-border: rgba(15, 23, 42, 0.12);
 		--auth-dialog-foreground: #0f172a;
 		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
+		--auth-dialog-eyebrow: rgba(30, 64, 175, 0.82);
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
@@ -395,7 +399,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.28em;
 		font-size: 0.7rem;
-		color: rgba(148, 197, 255, 0.9);
+		color: var(--auth-dialog-eyebrow, rgba(148, 197, 255, 0.9));
 	}
 
 	.auth-header h2 {
