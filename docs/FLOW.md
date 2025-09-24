@@ -203,6 +203,7 @@ Light Progress View (Subjects • Timeline • Numbers)
 
 ## 15) Implementation Checklist
 
+- 🔐 **Access gate:** mandatory Firebase dialog on `/app` with Google redirect or guest mode (guest progress stays on the current device only).
 - 🏁 **Home + One Button:** big “Scan or Upload”; Continue card; insight strip.
 - 🧩 **Capture sheet:** crop/rotate; page type & board/topic chips; confirm.
 - ⚙️ **Auto‑understand mock:** Q&A vs Summary; extract structure; map to topic.
@@ -217,7 +218,7 @@ Light Progress View (Subjects • Timeline • Numbers)
 
 ## 16) Non‑Goals (for this phase)
 
-- 🚫 No accounts/auth or backend integrations (prototype runs on mocks).
+- 🚫 No additional identity providers beyond Google; guest mode is the only backup path and does not sync across devices.
 - 🚫 No heavy gamification (no streak pressure, loot boxes, or leaderboards).
 - 🚫 No complex settings pages—defaults are sensible; edits happen inline.
 
