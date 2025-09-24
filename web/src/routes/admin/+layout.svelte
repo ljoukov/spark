@@ -59,7 +59,11 @@
 	}
 
 	// Sign-in overlay logic from previous layout
-	const showLogin = $derived(!data.user);
+	type AdminAuthState = 'anonymous' | 'allowed' | 'forbidden';
+	const authState = $derived((data.authState ?? 'anonymous') as AdminAuthState);
+	const showShell = $derived(authState === 'allowed');
+	const showLogin = $derived(authState === 'anonymous');
+	const showBlocked = $derived(authState === 'forbidden');
 	const ui = $state({ signingIn: false });
 	async function handleGoogleSignIn(): Promise<void> {
 		ui.signingIn = true;
@@ -109,7 +113,7 @@
 	});
 </script>
 
-{#if !showLogin}
+{#if showShell}
 	<Sidebar.Provider>
 		<AppSidebar
 			{currentPath}
@@ -192,6 +196,35 @@
 						</svg>
 						Sign in with Google
 					{/if}
+				</button>
+			</Card.Content>
+		</Card.Root>
+	</div>
+{/if}
+
+{#if showBlocked}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<Card.Root class="w-full max-w-md border-border bg-card/95 shadow-xl backdrop-blur">
+			<Card.Header>
+				<Card.Title>No Admin Access</Card.Title>
+				<Card.Description>
+					{#if data.user?.email}
+						{data.user.email} does not have admin permissions.
+					{:else}
+						This account does not have admin permissions.
+					{/if}
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="space-y-4">
+				<p class="text-sm text-muted-foreground">
+					Please sign in with an authorized admin account or contact support to request access.
+				</p>
+				<button
+					type="button"
+					class={cn(buttonVariants({ variant: 'default', size: 'default' }), 'w-full')}
+					onclick={onSignOut}
+				>
+					Sign out
 				</button>
 			</Card.Content>
 		</Card.Root>
