@@ -289,6 +289,29 @@
 <style>
 	:global(:root) {
 		color-scheme: light dark;
+		--auth-dialog-bg: rgba(255, 255, 255, 0.9);
+		--auth-dialog-border: rgba(15, 23, 42, 0.08);
+		--auth-dialog-foreground: #0f172a;
+		--auth-dialog-subtitle: rgba(15, 23, 42, 0.75);
+		--auth-dialog-shadow: 0 30px 80px rgba(15, 23, 42, 0.4);
+	}
+
+	:global([data-theme='dark']) {
+		--auth-dialog-bg: rgba(6, 11, 25, 0.78);
+		--auth-dialog-border: rgba(148, 163, 184, 0.26);
+		--auth-dialog-foreground: #e2e8f0;
+		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+		--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) {
+			--auth-dialog-bg: rgba(6, 11, 25, 0.78);
+			--auth-dialog-border: rgba(148, 163, 184, 0.26);
+			--auth-dialog-foreground: #e2e8f0;
+			--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+			--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+		}
 	}
 
 	:global([data-slot='dialog-overlay']) {
@@ -308,38 +331,42 @@
 		align-items: center;
 		justify-content: center;
 		padding: clamp(3rem, 6vw, 6rem) clamp(1.5rem, 4vw, 3.5rem);
-    overflow: hidden;
-    background:
-        radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
-        var(--app-surface);
-    color: var(--text-primary, var(--foreground));
-    --app-surface: hsl(38 82% 97%);
-    --app-halo: hsla(45 87% 90% / 0.65);
-    --blob-gold: hsla(42 96% 84% / 0.9);
-    --blob-yellow: hsla(38 95% 82% / 0.88);
-    --blob-yellow-soft: hsla(38 92% 91% / 0.88);
-    --blob-pink: hsla(332 85% 86% / 0.92);
-    --blob-blue: hsla(184 95% 91% / 0.82);
-    --blob-opacity: 0.75;
-    --app-content-bg: rgba(255, 255, 255, 0.9);
-    --app-content-border: rgba(15, 23, 42, 0.08);
-    --app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.75));
-}
+		overflow: hidden;
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+		color: var(--text-primary, var(--foreground));
+		--app-surface: hsl(38 82% 97%);
+		--app-halo: hsla(45 87% 90% / 0.65);
+		--blob-gold: hsla(42 96% 84% / 0.9);
+		--blob-yellow: hsla(38 95% 82% / 0.88);
+		--blob-yellow-soft: hsla(38 92% 91% / 0.88);
+		--blob-pink: hsla(332 85% 86% / 0.92);
+		--blob-blue: hsla(184 95% 91% / 0.82);
+		--blob-opacity: 0.75;
+		--app-content-bg: rgba(255, 255, 255, 0.9);
+		--app-content-border: rgba(15, 23, 42, 0.08);
+		--app-subtitle-color: var(--text-secondary, rgba(15, 23, 42, 0.75));
+		--auth-dialog-border: rgba(15, 23, 42, 0.08);
+		--auth-dialog-foreground: #0f172a;
+		--auth-dialog-subtitle: rgba(15, 23, 42, 0.75);
+		--auth-dialog-shadow: 0 30px 80px rgba(15, 23, 42, 0.4);
+	}
 
-.auth-blob-field {
-    position: absolute;
-    inset: -40%;
-    pointer-events: none;
-    filter: blur(90px);
-    transform: translateZ(0);
-    background:
-        radial-gradient(68% 68% at 12% 2%, var(--blob-gold), transparent 68%),
-        radial-gradient(58% 58% at 22% 26%, var(--blob-yellow), transparent 70%),
-        radial-gradient(54% 54% at 72% 18%, var(--blob-pink), transparent 72%),
-        radial-gradient(60% 60% at 24% 80%, var(--blob-blue), transparent 74%),
-        radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
-    opacity: var(--blob-opacity);
-}
+	.auth-blob-field {
+		position: absolute;
+		inset: -40%;
+		pointer-events: none;
+		filter: blur(90px);
+		transform: translateZ(0);
+		background:
+			radial-gradient(68% 68% at 12% 2%, var(--blob-gold), transparent 68%),
+			radial-gradient(58% 58% at 22% 26%, var(--blob-yellow), transparent 70%),
+			radial-gradient(54% 54% at 72% 18%, var(--blob-pink), transparent 72%),
+			radial-gradient(60% 60% at 24% 80%, var(--blob-blue), transparent 74%),
+			radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
+		opacity: var(--blob-opacity);
+	}
 
 	/* Auth card is a plain container (not a modal) */
 
@@ -349,13 +376,13 @@
 		flex-direction: column;
 		gap: 1.5rem;
 		padding: 2.75rem 2.5rem 2.25rem;
-    max-width: 30rem;
-    border-radius: 1.75rem;
-    border: 1px solid var(--app-content-border, rgba(255, 255, 255, 0.55));
-    background: var(--app-content-bg, rgba(255, 255, 255, 0.9));
-    color: var(--foreground);
-    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.55);
-}
+		max-width: 30rem;
+		border-radius: 1.75rem;
+		border: 1px solid var(--app-content-border, rgba(255, 255, 255, 0.55));
+		background: var(--app-content-bg, rgba(255, 255, 255, 0.9));
+		color: var(--auth-dialog-foreground, var(--foreground));
+		box-shadow: var(--auth-dialog-shadow, 0 30px 80px rgba(15, 23, 42, 0.55));
+	}
 
 	.auth-header {
 		display: flex;
@@ -382,20 +409,20 @@
 		flex-direction: column;
 		gap: 0.5rem;
 		font-size: 0.9rem;
-    color: var(--app-subtitle-color);
+		color: var(--app-subtitle-color);
 	}
 
 	.auth-alt-label {
 		text-transform: uppercase;
 		letter-spacing: 0.35em;
 		font-size: 0.65rem;
-    color: var(--app-subtitle-color);
+		color: var(--app-subtitle-color);
 	}
 
 	.auth-alt-text {
 		margin: 0;
 		line-height: 1.5;
-    color: var(--app-subtitle-color);
+		color: var(--app-subtitle-color);
 	}
 
 	.auth-alert {
@@ -425,7 +452,7 @@
 		background: rgba(148, 163, 184, 0.18);
 		padding: 0.85rem 1.1rem;
 		font-size: 0.8rem;
-    color: var(--app-subtitle-color);
+		color: var(--app-subtitle-color);
 	}
 
 	.auth-footer button {
@@ -459,10 +486,11 @@
 
 	:global(.anon-dialog) {
 		max-width: 26rem;
-    border-radius: 1.5rem;
-    border: 1px solid var(--app-content-border, rgba(255, 255, 255, 0.26));
-		background: var(--app-content-bg, rgba(255, 255, 255, 0.9));
-		color: var(--foreground);
+		border-radius: 1.5rem;
+		border: 1px solid var(--auth-dialog-border, rgba(15, 23, 42, 0.12));
+		background: var(--auth-dialog-bg, rgba(255, 255, 255, 0.92));
+		color: var(--auth-dialog-foreground, var(--foreground));
+		box-shadow: var(--auth-dialog-shadow, 0 30px 80px rgba(15, 23, 42, 0.55));
 	}
 
 	:global(.anon-header) {
@@ -479,7 +507,7 @@
 		margin-top: 0.85rem;
 		font-size: 0.95rem;
 		line-height: 1.6;
-		color: var(--app-subtitle-color, rgba(15, 23, 42, 0.65));
+		color: var(--auth-dialog-subtitle, rgba(15, 23, 42, 0.72));
 	}
 
 	:global(.anon-footer) {
@@ -543,6 +571,10 @@
 		--app-content-bg: rgba(6, 11, 25, 0.78);
 		--app-content-border: rgba(148, 163, 184, 0.26);
 		--app-subtitle-color: rgba(226, 232, 240, 0.78);
+		--auth-dialog-border: rgba(148, 163, 184, 0.26);
+		--auth-dialog-foreground: #e2e8f0;
+		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+		--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
 		color: var(--foreground);
 	}
 
@@ -568,6 +600,10 @@
 			--app-content-bg: rgba(6, 11, 25, 0.78);
 			--app-content-border: rgba(148, 163, 184, 0.26);
 			--app-subtitle-color: rgba(226, 232, 240, 0.78);
+			--auth-dialog-border: rgba(148, 163, 184, 0.26);
+			--auth-dialog-foreground: #e2e8f0;
+			--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
+			--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
 			color: var(--foreground);
 		}
 
