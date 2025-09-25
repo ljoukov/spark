@@ -3,12 +3,13 @@
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import GavelIcon from '@lucide/svelte/icons/gavel';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { Pathname } from '$app/types';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
@@ -37,7 +38,13 @@
 			title: 'Gemini',
 			href: '/admin/gemini',
 			icon: BotIcon,
-			highlight: (path) => path.startsWith('/admin/gemini')
+			highlight: (path) => path === '/admin/gemini' || path === '/admin/gemini/'
+		},
+		{
+			title: 'Slop judge',
+			href: '/admin/gemini/slop',
+			icon: GavelIcon,
+			highlight: (path) => path.startsWith('/admin/gemini/slop')
 		},
 		{
 			title: 'Prompts',
@@ -76,10 +83,6 @@
 
 	function getEmailLabel(target: AdminUser): string {
 		return target.email ?? 'No email on file';
-	}
-
-	function toHref(path: Pathname): string {
-		return `${base}${path}`;
 	}
 
 	const defaultAvatarSrc = '/images/admin-avatar.svg';
@@ -136,7 +139,7 @@
 								{#snippet child({ props })}
 									<a
 										{...props}
-										href={toHref(item.href)}
+										href={resolve(item.href)}
 										class={cn(
 											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined
