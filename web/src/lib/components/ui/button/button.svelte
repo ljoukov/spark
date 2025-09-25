@@ -41,7 +41,6 @@
 
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { Pathname } from '$app/types';
 
 	const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z+.-]*:/;
 
@@ -85,7 +84,7 @@
 			{@render children?.()}
 		</a>
 	{:else}
-		{@const internalHref = resolve(href as any)}
+		{@const internalHref = resolve(href)}
 		<a
 			bind:this={ref}
 			data-slot="button"
