@@ -326,7 +326,8 @@
 	}
 
 	.app-layout {
-		min-height: 100svh;
+		/* Ensure full-viewport coverage in iOS app mode */
+		min-height: 100dvh;
 	}
 
 	.auth-backdrop {
@@ -363,15 +364,18 @@
 
 	.auth-mesh-bleed {
 		position: fixed;
-		top: calc(-1 * env(safe-area-inset-top));
-		right: calc(-1 * env(safe-area-inset-right));
-		bottom: calc(-1 * env(safe-area-inset-bottom));
-		left: calc(-1 * env(safe-area-inset-left));
+		/* Extend beyond visible viewport to guarantee coverage, even if env() is 0 */
+		top: max(calc(-1 * env(safe-area-inset-top)), -12vh);
+		right: max(calc(-1 * env(safe-area-inset-right)), -12vh);
+		bottom: max(calc(-1 * env(safe-area-inset-bottom)), -12vh);
+		left: max(calc(-1 * env(safe-area-inset-left)), -12vh);
 		pointer-events: none;
 		z-index: -1;
 		overflow: hidden;
+		/* Add a second halo anchored to the bottom to guarantee coverage */
 		background:
 			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			radial-gradient(120% 120% at 50% 110%, var(--app-halo) 0%, transparent 70%),
 			var(--app-surface);
 		background-repeat: no-repeat;
 		background-size: cover;

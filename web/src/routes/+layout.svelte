@@ -15,6 +15,9 @@
 
 <svelte:head>
 	<link rel="icon" href="/favicon.png" />
+	<link rel="manifest" href="/site.webmanifest" />
+	<meta name="application-name" content="Spark" />
+	<meta name="apple-mobile-web-app-title" content="Spark" />
 	<meta name="theme-color" content="#070a1a" media="(prefers-color-scheme: light)" />
 	<meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
 	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />

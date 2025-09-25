@@ -187,6 +187,16 @@
 		box-sizing: border-box;
 	}
 
+	/* Respect iOS safe areas when installed as a web app */
+	@media (display-mode: standalone) {
+		.page {
+			padding-top: calc(env(safe-area-inset-top) + clamp(1.5rem, 4vw, 3rem));
+			padding-right: calc(env(safe-area-inset-right) + clamp(1.25rem, 6vw, 3.75rem));
+			padding-bottom: calc(env(safe-area-inset-bottom) + clamp(2.5rem, 8vw, 4rem));
+			padding-left: calc(env(safe-area-inset-left) + clamp(1.25rem, 6vw, 3.75rem));
+		}
+	}
+
 	.page::before,
 	.page::after {
 		content: '';

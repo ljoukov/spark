@@ -9,6 +9,7 @@ IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
   - TypeScript: alias `$proto` is configured to simplify importing.
   - Swift types via `swift-protobuf` into `Spark/proto`.
 - `web/` — SvelteKit (latest) project deployed to Vercel. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
+  - PWA shell: `static/site.webmanifest` with icons (`icon-192.png`, `icon-512.png`, `favicon.png`, and `apple-touch-icon.png`). Head tags injected from `src/routes/+layout.svelte` (`rel="manifest"`, `apple-mobile-web-app-title`, `apple-touch-icon`, and `theme-color`).
   - UI theming + color tokens are documented in `web/docs/color-system.md`.
 - API logic lives under `web/src/routes/api/*`.
 - Web app lives under `web/src/routes/app`

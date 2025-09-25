@@ -99,7 +99,8 @@ body {
 }
 
 body {
-	min-height: 100svh;
+	/* Use dynamic viewport height so PWA covers unsafe areas on iOS */
+	min-height: 100dvh;
 	margin: 0;
 }
 
