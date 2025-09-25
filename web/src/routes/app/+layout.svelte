@@ -334,7 +334,9 @@
 		align-items: center;
 		justify-content: center;
 		padding: clamp(3rem, 6vw, 6rem) clamp(1.5rem, 4vw, 3.5rem);
-		overflow: hidden;
+		overflow-x: hidden;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
 		background:
 			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
 			var(--app-surface);
@@ -355,6 +357,12 @@
 		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
 		--auth-dialog-eyebrow: rgba(30, 64, 175, 0.82);
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
+	}
+
+	@supports (height: 100dvh) {
+		.auth-backdrop {
+			min-height: 100dvh;
+		}
 	}
 
 	.auth-blob-field {
@@ -386,6 +394,16 @@
 		background: var(--app-content-bg, rgba(255, 255, 255, 0.9));
 		color: var(--auth-dialog-foreground, var(--foreground));
 		box-shadow: var(--auth-dialog-shadow, 0 30px 80px rgba(15, 23, 42, 0.55));
+	}
+
+	@media (max-height: 32rem) {
+		.auth-backdrop {
+			align-items: flex-start;
+		}
+
+		.auth-card {
+			margin-block: clamp(1.5rem, 6vh, 2.5rem);
+		}
 	}
 
 	.auth-header {
