@@ -5,6 +5,8 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import LinkIcon from '@lucide/svelte/icons/link';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -81,6 +83,59 @@
 	const defaultAvatarSrc = '/images/admin-avatar.svg';
 	const avatarSrc = $derived(user.photoUrl ?? defaultAvatarSrc);
 	const signingOut = $state({ active: false, error: '' });
+	const copyState = $state<{ status: 'idle' | 'copied' | 'error'; message: string }>({
+		status: 'idle',
+		message: ''
+	});
+	const copyLoginState = $state<{ status: 'idle' | 'copied' | 'error'; message: string }>({
+		status: 'idle',
+		message: ''
+	});
+
+	async function copyUserId(): Promise<void> {
+		try {
+			if (typeof navigator === 'undefined' || !navigator.clipboard) {
+				copyState.status = 'error';
+				copyState.message = 'Clipboard not available';
+				return;
+			}
+			await navigator.clipboard.writeText(user.uid);
+			copyState.status = 'copied';
+			copyState.message = 'Copied user ID';
+			setTimeout(() => {
+				copyState.status = 'idle';
+				copyState.message = '';
+			}, 1200);
+		} catch (error) {
+			copyState.status = 'error';
+			copyState.message = error instanceof Error ? error.message : 'Failed to copy user ID';
+		}
+	}
+
+	async function copyLoginUrl(): Promise<void> {
+		try {
+			if (!user.loginUrl) {
+				copyLoginState.status = 'error';
+				copyLoginState.message = 'No login URL';
+				return;
+			}
+			if (typeof navigator === 'undefined' || !navigator.clipboard) {
+				copyLoginState.status = 'error';
+				copyLoginState.message = 'Clipboard not available';
+				return;
+			}
+			await navigator.clipboard.writeText(user.loginUrl);
+			copyLoginState.status = 'copied';
+			copyLoginState.message = 'Copied login URL';
+			setTimeout(() => {
+				copyLoginState.status = 'idle';
+				copyLoginState.message = '';
+			}, 1200);
+		} catch (error) {
+			copyLoginState.status = 'error';
+			copyLoginState.message = error instanceof Error ? error.message : 'Failed to copy login URL';
+		}
+	}
 
 	async function handleSignOut() {
 		if (signingOut.active) {
@@ -173,23 +228,63 @@
 					<MoreVerticalIcon class="ml-auto h-4 w-4 opacity-70" />
 				</div>
 			</DropdownMenu.Trigger>
-			<DropdownMenu.Content
-				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-				align="end"
-				side={sidebar.isMobile ? 'bottom' : 'right'}
-				sideOffset={4}
-			>
-				<DropdownMenu.Label class="text-muted-foreground text-xs">Signed in</DropdownMenu.Label>
-				<DropdownMenu.Item class="flex flex-col items-start gap-0">
-					<span class="break-words text-sm font-medium">{getDisplayName(user)}</span>
-					<span class="text-muted-foreground break-words text-xs">{getEmailLabel(user)}</span>
-				</DropdownMenu.Item>
-				<DropdownMenu.Separator />
-				<DropdownMenu.Item
-					onSelect={handleUserMenuSignOut}
-					variant="destructive"
-					disabled={signingOut.active}
+				<DropdownMenu.Content
+					class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
+					align="end"
+					side={sidebar.isMobile ? 'bottom' : 'right'}
+					sideOffset={4}
 				>
+					<DropdownMenu.Label class="text-muted-foreground text-xs">Signed in</DropdownMenu.Label>
+					<DropdownMenu.Item class="flex flex-col items-start gap-0">
+						<span class="break-words text-sm font-medium">{getDisplayName(user)}</span>
+						<span class="text-muted-foreground break-words text-xs">{getEmailLabel(user)}</span>
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Label class="text-muted-foreground text-xs">User ID</DropdownMenu.Label>
+					<DropdownMenu.Item class="cursor-default">
+						<span class="font-mono text-[11px] leading-tight">{user.uid}</span>
+					</DropdownMenu.Item>
+					<DropdownMenu.Item onSelect={copyUserId} class="flex items-center gap-2">
+						<CopyIcon class="h-4 w-4" />
+						{#if copyState.status === 'copied'}
+							<span>Copied</span>
+						{:else}
+							<span>Copy user ID</span>
+						{/if}
+					</DropdownMenu.Item>
+					{#if copyState.status === 'error' && copyState.message}
+						<div class="px-2 pb-1">
+							<p class="text-[11px] text-red-500">{copyState.message}</p>
+						</div>
+					{/if}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Label class="text-muted-foreground text-xs">Login URL</DropdownMenu.Label>
+					<DropdownMenu.Item class="cursor-default">
+						{#if user.loginUrl}
+							<span class="font-mono text-[11px] leading-tight break-all">{user.loginUrl}</span>
+						{:else}
+							<span class="text-muted-foreground text-[11px]">Not set</span>
+						{/if}
+					</DropdownMenu.Item>
+					<DropdownMenu.Item onSelect={copyLoginUrl} class="flex items-center gap-2" disabled={!user.loginUrl}>
+						<LinkIcon class="h-4 w-4" />
+						{#if copyLoginState.status === 'copied'}
+							<span>Copied login URL</span>
+						{:else}
+							<span>Copy login URL</span>
+						{/if}
+					</DropdownMenu.Item>
+					{#if copyLoginState.status === 'error' && copyLoginState.message}
+						<div class="px-2 pb-1">
+							<p class="text-[11px] text-red-500">{copyLoginState.message}</p>
+						</div>
+					{/if}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item
+						onSelect={handleUserMenuSignOut}
+						variant="destructive"
+						disabled={signingOut.active}
+					>
 					<LogOutIcon class="mr-2 h-4 w-4" />
 					{signingOut.active ? 'Signing out…' : 'Log out'}
 				</DropdownMenu.Item>

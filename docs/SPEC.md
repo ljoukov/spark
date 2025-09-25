@@ -65,6 +65,8 @@ name of the oneof in `SparkApiRequestProto.request`.
 ### 3.3 Cloud Services
 
 - **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by the Vercel Edge Runtime using the Admin SDK (running via `firebase-admin` configured for edge-compatible builds).
+
+  Test/preview mode override: when environment variable `TEST_USER` is set to a valid test ID (format `test-(admin|free|paid)-[A-Za-z0-9]{16}`), authentication is fully disabled. The server does not validate ID tokens and forces the authenticated user ID to `TEST_USER`. The client does not rely on Firebase Auth in this mode; UI renders as signed-in with the server-provided user. Admin access in this mode follows the `test-admin-` prefix (admin allowed) vs other prefixes (admin denied). The user display name is read from `/spark/<TEST_USER>/name` in Firestore.
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership.
 
