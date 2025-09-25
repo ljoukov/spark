@@ -10,7 +10,7 @@
 	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
 	import type { LayoutData } from './$types';
 
-	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+    let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
 	type ClientUser = {
 		uid: string;
@@ -35,14 +35,14 @@
 
 	let clientUser = $state<ClientUser | null>(fromServerUser(data.user));
 
-	const ui = $state({
-		showAuth: !data.user,
-		showAnonConfirm: false,
-		signingInWithGoogle: false,
-		signingInAnonymously: false,
-		syncingProfile: false,
-		errorMessage: ''
-	});
+    const ui = $state({
+        showAuth: !data.user,
+        showAnonConfirm: false,
+        signingInWithGoogle: false,
+        signingInAnonymously: false,
+        syncingProfile: false,
+        errorMessage: ''
+    });
 
 	const googleButtonLabel = $derived(
 		ui.signingInWithGoogle ? 'Redirecting to Google…' : 'Continue with Google'
@@ -98,9 +98,14 @@
 		}
 	}
 
-	onMount(() => {
-		const auth = getAuth(getFirebaseApp());
-		stopCookieSync = startIdTokenCookieSync(auth);
+    onMount(() => {
+        // In test mode, skip Firebase entirely — server provides the user
+        if (data.authDisabled) {
+            ui.showAuth = false;
+            return () => {};
+        }
+        const auth = getAuth(getFirebaseApp());
+        stopCookieSync = startIdTokenCookieSync(auth);
 
 		unsubscribeAuth = onAuthStateChanged(auth, (user) => {
 			if (!user) {
@@ -133,11 +138,11 @@
 			})();
 		});
 
-		return () => {
-			stopCookieSync?.();
-			unsubscribeAuth?.();
-		};
-	});
+        return () => {
+            stopCookieSync?.();
+            unsubscribeAuth?.();
+        };
+    });
 
 	async function handleGoogleSignIn() {
 		if (ui.signingInWithGoogle) {

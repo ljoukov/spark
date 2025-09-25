@@ -18,10 +18,29 @@
 		firebaseSignOut
 	} from '$lib/utils/firebaseClient';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
+	import { getFirestore, doc, onSnapshot, type Firestore } from 'firebase/firestore';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
+    import { z } from 'zod';
+    import type { AdminUser } from '$lib/types/admin';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+
+	let adminUser = $state<AdminUser>({
+		uid: data.user?.uid ?? 'guest',
+		email: data.user?.email ?? null,
+		name: data.user?.name ?? null,
+		photoUrl: data.user?.photoUrl ?? null,
+		loginUrl: null
+	});
+
+	const sidebarUser = $derived({
+		uid: adminUser.uid,
+		email: adminUser.email,
+		name: adminUser.name,
+		photoUrl: adminUser.photoUrl,
+		loginUrl: adminUser.loginUrl
+	});
 
 	// Sidebar props
 	let currentPath = $state('');
@@ -94,19 +113,76 @@
 		});
 
 		const stopThemeSync = startAutomaticThemeSync();
-		const stopCookieSync = startIdTokenCookieSync();
-		const auth = getAuth(getFirebaseApp());
-		let refreshed = false;
-		const stopAuth = onIdTokenChanged(auth, (user) => {
-			if (user && !refreshed) {
-				refreshed = true;
-				setTimeout(() => {
-					void invalidateAll();
-				}, 0);
+
+		// Subscribe to Firestore user profile for name/email/photo/loginUrl
+		let stopProfile = () => {};
+		try {
+			if (adminUser.uid && adminUser.uid !== 'guest') {
+				const db: Firestore = getFirestore(getFirebaseApp());
+				const ref = doc(db, 'spark', adminUser.uid);
+				const profileSchema = z
+					.object({
+						name: z.string().trim().min(1).nullable().optional(),
+						email: z.string().email().nullable().optional(),
+						photoUrl: z.string().url().nullable().optional(),
+						loginUrl: z.string().url().nullable().optional(),
+						login: z
+							.object({ url: z.string().url().nullable().optional() })
+							.partial()
+							.nullish(),
+						app: z
+							.object({
+								loginUrl: z.string().url().nullable().optional(),
+								login_url: z.string().url().nullable().optional()
+							})
+							.partial()
+							.nullish()
+					})
+					.partial();
+
+				stopProfile = onSnapshot(ref, (snap) => {
+					if (!snap.exists()) {
+						return;
+					}
+					const raw = snap.data();
+					const parsed = profileSchema.safeParse(raw);
+					if (!parsed.success) {
+						return;
+					}
+					const data = parsed.data;
+					adminUser.name = data.name ?? adminUser.name ?? null;
+					adminUser.email = data.email ?? adminUser.email ?? null;
+					adminUser.photoUrl = data.photoUrl ?? adminUser.photoUrl ?? null;
+					const url =
+						data.loginUrl ??
+						(data.login && data.login.url ? data.login.url : null) ??
+						(data.app && data.app.loginUrl ? data.app.loginUrl : null) ??
+						(data.app && data.app.login_url ? data.app.login_url : null);
+					adminUser.loginUrl = url ?? null;
+				});
 			}
-		});
+		} catch {
+			// ignore client Firestore init errors in preview
+		}
+
+		let stopCookieSync: () => void = () => {};
+		let stopAuth: () => void = () => {};
+		if (!data.authDisabled) {
+			stopCookieSync = startIdTokenCookieSync();
+			const auth = getAuth(getFirebaseApp());
+			let refreshed = false;
+			stopAuth = onIdTokenChanged(auth, (user) => {
+				if (user && !refreshed) {
+					refreshed = true;
+					setTimeout(() => {
+						void invalidateAll();
+					}, 0);
+				}
+			});
+		}
 		return () => {
 			stopThemeSync();
+			stopProfile();
 			stopCookieSync();
 			stopAuth();
 		};
@@ -117,12 +193,7 @@
 	<Sidebar.Provider>
 		<AppSidebar
 			{currentPath}
-			user={{
-				uid: data.user?.uid ?? 'guest',
-				email: data.user?.email ?? null,
-				name: data.user?.name ?? null,
-				photoUrl: data.user?.photoUrl ?? null
-			}}
+			user={sidebarUser}
 			{onSignOut}
 		/>
 		<Sidebar.Inset>
