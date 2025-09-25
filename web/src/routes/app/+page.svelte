@@ -7,9 +7,7 @@
 	<main class="app-content">
 		<section class="dashboard-hero">
 			<h1>Ready to pick up where you left off?</h1>
-			<p>
-				Upload a new set of notes or jump back into your latest GCSE practice session.
-			</p>
+			<p>Upload a new set of notes or jump back into your latest GCSE practice session.</p>
 			<div class="dashboard-actions">
 				<button type="button" class="dashboard-button primary">New scan</button>
 				<button type="button" class="dashboard-button secondary">View recent quizzes</button>
@@ -195,7 +193,6 @@
 				radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
 				radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
 		}
-
 	}
 
 	@media (max-width: 40rem) {

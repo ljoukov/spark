@@ -7,6 +7,6 @@
 
 <CommandPrimitive.GroupHeading
 	data-slot="command-group-heading"
-	class={cn('px-2 pb-1.5 pt-2 text-xs font-medium text-muted-foreground', className)}
+	class={cn('px-2 pt-2 pb-1.5 text-xs font-medium text-muted-foreground', className)}
 	{...restProps}
 />
