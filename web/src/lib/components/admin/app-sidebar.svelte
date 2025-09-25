@@ -8,7 +8,7 @@
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { Pathname } from '$app/types';
 	import { cn } from '$lib/utils.js';
 	import type { AdminUser } from '$lib/types/admin';
@@ -20,7 +20,7 @@
 		highlight: (path: string) => boolean;
 	};
 
-	const primaryNav: NavItem[] = [
+	const primaryNav = [
 		{
 			title: 'Home',
 			href: '/admin',
@@ -51,7 +51,7 @@
 			icon: FileTextIcon,
 			highlight: (path) => path.startsWith('/admin/sample-quizzes')
 		}
-	];
+	] satisfies readonly NavItem[];
 
 	let {
 		currentPath,
@@ -76,10 +76,6 @@
 
 	function getEmailLabel(target: AdminUser): string {
 		return target.email ?? 'No email on file';
-	}
-
-	function toHref(path: Pathname): string {
-		return `${base}${path}`;
 	}
 
 	const defaultAvatarSrc = '/images/admin-avatar.svg';
@@ -134,9 +130,10 @@
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton isActive={item.highlight(currentPath)}>
 								{#snippet child({ props })}
+									{@const href = resolve(item.href as any)}
 									<a
 										{...props}
-										href={toHref(item.href)}
+										{href}
 										class={cn(
 											'flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/80 no-underline transition-colors hover:text-sidebar-foreground',
 											props?.class as string | undefined
