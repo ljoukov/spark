@@ -335,11 +335,14 @@
 		inset: 0;
 		z-index: 0;
 		display: flex;
-		align-items: center;
+		/* Anchor to top when space is tight so scrolling reveals full content */
+		align-items: flex-start;
 		justify-content: center;
 		overflow-y: auto;
 		-webkit-overflow-scrolling: touch;
-		--auth-padding-block: clamp(3rem, 6vw, 6rem);
+		scroll-padding-top: env(safe-area-inset-top);
+		/* Use viewport height to scale vertical padding better in landscape */
+		--auth-padding-block: clamp(1.5rem, 6vh, 4rem);
 		--auth-padding-inline: clamp(1.5rem, 4vw, 3.5rem);
 		padding: calc(env(safe-area-inset-top) + var(--auth-padding-block))
 			calc(env(safe-area-inset-right) + var(--auth-padding-inline))
@@ -653,6 +656,12 @@
 				radial-gradient(56% 56% at 24% 78%, var(--blob-yellow-soft), transparent 76%),
 				radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
 				radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
+		}
+	}
+
+	@media (min-height: 46rem) {
+		.auth-backdrop {
+			align-items: center;
 		}
 	}
 </style>
