@@ -8,12 +8,16 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import type { QuizGeneration } from '$lib/llm/schemas';
-	import type { SampleDetail, SampleOverview } from './+page';
+	import type { SampleDetail, SampleOverview, SlopJudgeDetail } from './+page';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-	type SampleEntry = { overview: SampleOverview; detail: SampleDetail | null };
+	type SampleEntry = {
+		overview: SampleOverview;
+		detail: SampleDetail | null;
+		slop: { base: SlopJudgeDetail | null; extension: SlopJudgeDetail | null };
+	};
 
 	const entries = $derived(data.entries as SampleEntry[]);
 
@@ -33,6 +37,13 @@
 	const baseSlopSummary = $derived(formatSlopSummary(slopBase));
 	const extensionSlopSummary = $derived(formatSlopSummary(slopExtension));
 	const outputs = $derived(activeEntry?.overview.outputs ?? null);
+	const slopDetails = $derived(
+		(activeEntry?.slop ?? { base: null, extension: null }) as SampleEntry['slop']
+	);
+	const baseSlopDetail = $derived((slopDetails.base ?? null) as SlopJudgeDetail | null);
+	const extensionSlopDetail = $derived((slopDetails.extension ?? null) as SlopJudgeDetail | null);
+	const baseContributions = $derived(baseSlopDetail?.contributions ?? []);
+	const extensionContributions = $derived(extensionSlopDetail?.contributions ?? []);
 
 	let comboboxOpen = $state(false);
 	let triggerRef = $state<HTMLButtonElement | null>(null);
@@ -77,6 +88,10 @@
 			label: score.label === 1 ? 'Flagged' : 'Clean',
 			risk: score.riskScore.toFixed(3)
 		};
+	}
+
+	function formatWeight(value: number): string {
+		return `${(value * 100).toFixed(0)}%`;
 	}
 
 	const hasSamples = $derived(entries.length > 0);
@@ -334,6 +349,102 @@
 					</div>
 				</Card.Content>
 			</Card.Root>
+
+			{#if baseContributions.length > 0 || extensionContributions.length > 0}
+				<Card.Root>
+					<Card.Header>
+						<Card.Title>Slop weighting breakdown</Card.Title>
+						<Card.Description>
+							Domain weights applied to each axis for the latest slop run.
+						</Card.Description>
+					</Card.Header>
+					<Card.Content class="grid gap-4 md:grid-cols-2">
+						{#if baseContributions.length > 0 && baseSlopDetail}
+							<section class="rounded-lg border border-border/60 bg-muted/30 p-4">
+								<p class="text-xs font-semibold text-muted-foreground uppercase">
+									Base quiz · Threshold {formatWeight(baseSlopDetail.threshold)}
+								</p>
+								<p class="mt-1 text-sm text-muted-foreground">
+									Risk {baseSlopSummary.risk} · Label {baseSlopSummary.label}
+								</p>
+								<table class="mt-3 w-full border-separate border-spacing-y-1 text-xs">
+									<thead class="text-muted-foreground">
+										<tr class="text-left">
+											<th class="px-1 py-0.5">Axis</th>
+											<th class="px-1 py-0.5">Score</th>
+											<th class="px-1 py-0.5">Weight</th>
+											<th class="px-1 py-0.5">Contribution</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each baseContributions as contribution}
+											<tr>
+												<td class="px-1 py-0.5 font-medium">
+													{contribution.code}
+												</td>
+												<td class="px-1 py-0.5">
+													{contribution.score.toFixed(2)}
+												</td>
+												<td class="px-1 py-0.5">
+													{formatWeight(contribution.weight)}
+												</td>
+												<td class="px-1 py-0.5">
+													{contribution.contribution.toFixed(3)}
+												</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</section>
+						{/if}
+
+						{#if extensionContributions.length > 0 && extensionSlopDetail}
+							<section class="rounded-lg border border-border/60 bg-muted/30 p-4">
+								<p class="text-xs font-semibold text-muted-foreground uppercase">
+									Extension · Threshold {formatWeight(extensionSlopDetail.threshold)}
+								</p>
+								<p class="mt-1 text-sm text-muted-foreground">
+									Risk {extensionSlopSummary.risk} · Label {extensionSlopSummary.label}
+								</p>
+								<table class="mt-3 w-full border-separate border-spacing-y-1 text-xs">
+									<thead class="text-muted-foreground">
+										<tr class="text-left">
+											<th class="px-1 py-0.5">Axis</th>
+											<th class="px-1 py-0.5">Score</th>
+											<th class="px-1 py-0.5">Weight</th>
+											<th class="px-1 py-0.5">Contribution</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each extensionContributions as contribution}
+											<tr>
+												<td class="px-1 py-0.5 font-medium">
+													{contribution.code}
+												</td>
+												<td class="px-1 py-0.5">
+													{contribution.score.toFixed(2)}
+												</td>
+												<td class="px-1 py-0.5">
+													{formatWeight(contribution.weight)}
+												</td>
+												<td class="px-1 py-0.5">
+													{contribution.contribution.toFixed(3)}
+												</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</section>
+						{/if}
+
+						{#if baseContributions.length === 0 && extensionContributions.length === 0}
+							<p class="text-sm text-muted-foreground">
+								No slop contributions available for this sample.
+							</p>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			{/if}
 
 			{#if hasDetail}
 				<Card.Root>
