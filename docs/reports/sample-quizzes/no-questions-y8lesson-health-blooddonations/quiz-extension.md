@@ -1,154 +1,149 @@
 # Sample 1: Y8Lesson-Health-BloodDonations.pdf (synthesis) — Extension Quiz
 
-**Quiz title:** GCSE Biology: Blood and Organ Donation
-**Summary:** This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.
+**Quiz title:** GCSE Biology: Blood, Organ and Stem Cell Donation (Extension)
+**Summary:** This quiz provides 10 additional questions to extend the learner's understanding of blood, organ, and stem cell donation. It focuses on underrepresented topics from the study material, such as the scale of need for donors, specific procedural details, and the importance of donor diversity.
 
 ## Metadata
 
-- Mode: extension
+- Mode: synthesis
 - Subject: biology
 - Exam board: OCR
 - Question count: 10
-- Generated at: 2025-09-25T04:17:27.717Z
-- Model: gemini-2.5-flash (temperature 0.20)
+- Generated at: 2025-09-25T07:20:17.798Z
+- Model: gemini-2.5-pro (temperature 0.20)
 - Source: Y8Lesson-Health-BloodDonations.pdf (data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf)
 
 ## Questions
 
-### 1. What percentage of UK patients needing a stem cell transplant are unable to find a match from a relative and require an unrelated donor?
+### 1. According to the study material, approximately how many new blood donors are needed in England every day?
 
-- Type: multiple_choice
-- Topic: Importance of donation
+- Type: numeric
+- Topic: Blood Donation
 - Difficulty: foundation
-- Skill focus: Recall of specific statistics
+- Skill focus: Recall numerical data
 - Source reference: Page 6
-- Answer: C
-- Options:
-  - A. A) 25%
-  - B. B) 50%
-  - C. C) 75%
-  - D. D) 90%
+- Answer: 400
 
-> Page 6 states, "75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor."
+> Page 6 states, 'Nearly 400 new blood donors are needed every day in England to meet demand.'
 
-### 2. After a blood donation is split into component parts, how many adults or infants can one donation typically help?
+### 2. Under the 2020 'opt-out' organ donation law in England, some individuals are in an 'excluded group'. What example of an excluded group is given in the text?
 
 - Type: multiple_choice
-- Topic: Steps in blood donation
-- Difficulty: foundation
-- Skill focus: Recall of specific details
-- Source reference: Page 8
-- Answer: B
-- Options:
-  - A. A) 1 adult or 2 infants
-  - B. B) 3 adults or 6 infants
-  - C. C) 5 adults or 10 infants
-  - D. D) 2 adults or 4 infants
-
-> Page 8, step 4, explains that "each donation can help 3 adults or 6 infants."
-
-### 3. In the organ donation process, what is the primary role of the specialist nurse when a potential donor dies?
-
-- Type: short_answer
-- Topic: Steps in organ donation
+- Topic: Organ Donation Law
 - Difficulty: intermediate
-- Skill focus: Description of roles and responsibilities
-- Source reference: Page 11
-- Answer: The specialist nurse checks the NHS Organ Donor Register for the individual's decision and then discusses this decision with the donor's family, respecting their faith, beliefs, and culture.
+- Skill focus: Identify specific examples
+- Source reference: Page 13
+- Answer: A. Visitors to England
+- Options:
+  - A. A. Visitors to England
+  - B. B. People over 65
+  - C. C. People with pre-existing medical conditions
+  - D. D. Family members of existing donors
 
-> Page 11, step 3, details that "The specialist nurse will then discuss the donor's registered/last known decision with their family as part of end of life discussions. The donor's faith, beliefs and culture will always be respected." Step 2 also mentions checking the register.
+> Page 13 specifies that excluded groups include, for example, 'visitors to England'. The other options are not mentioned in the text.
 
-### 4. True or False: Someone whose organs have been damaged by disease or injury is a candidate for organ donation.
+### 3. True or False: The most common method of stem cell donation, used by 90% of donors, is the bone marrow donation procedure.
 
 - Type: true_false
-- Topic: Who needs donations
+- Topic: Stem Cell Donation
 - Difficulty: foundation
-- Skill focus: Identification of recipient criteria
-- Source reference: Page 5
-- Answer: True
+- Skill focus: Differentiate between processes based on frequency
+- Source reference: Page 10
+- Answer: False
 
-> Page 5 lists "Someone whose organs have been damaged by disease or injury" as a person who might need organ donation.
+> This is false. Page 10 states that 90% of stem cells are donated 'through the bloodstream'. The bone marrow donation procedure is less common, accounting for 10% of donations.
 
-### 5. What is the minimum age to register with Anthony Nolan for stem cell donation?
-
-- Type: multiple_choice
-- Topic: Steps in stem cell donation
-- Difficulty: foundation
-- Skill focus: Recall of specific age requirements
-- Source reference: Page 9
-- Answer: B
-- Options:
-  - A. A) 15
-  - B. B) 16
-  - C. C) 17
-  - D. D) 18
-
-> Page 9 lists "Anthony Nolan (16+)" as a registry for stem cell donation.
-
-### 6. Name two specific groups of donor types that are identified as being more in demand according to the study material.
+### 4. If a person dies in circumstances where organ donation is possible, what is the first action a specialist nurse would take?
 
 - Type: short_answer
-- Topic: Importance of donation
+- Topic: Organ Donation
 - Difficulty: intermediate
-- Skill focus: Identification of specific categories
+- Skill focus: Sequence a process
+- Source reference: Page 11
+- Answer: Check the NHS Organ Donor Register for a registered decision.
+
+> As outlined in step 2 on page 11, the specialist nurses would first 'check the NHS Organ Donor Register to see if that person had registered a decision about organ and tissue donation.'
+
+### 5. What proportion of UK patients in need of a stem cell transplant are unable to find a suitable match from a relative?
+
+- Type: multiple_choice
+- Topic: Stem Cell Donation
+- Difficulty: intermediate
+- Skill focus: Recall statistical information
 - Source reference: Page 6
-- Answer: Donors from Black African, Black Caribbean, and Asian backgrounds, and young blood, stem cell, and organ donors.
-
-> Page 6 states, "Some donor types are more in demand such as donors from Black African, Black Caribbean and Asian backgrounds and young blood, stem cell and organ donors."
-
-### 7. What is the typical duration of the actual blood donation process itself, excluding registration and post-donation activities?
-
-- Type: multiple_choice
-- Topic: Steps in blood donation
-- Difficulty: foundation
-- Skill focus: Recall of specific timeframes
-- Source reference: Page 8
-- Answer: A
+- Answer: C. 75%
 - Options:
-  - A. A) 5-10 minutes
-  - B. B) 15-20 minutes
-  - C. C) 30-45 minutes
-  - D. D) 1 hour
+  - A. A. 10%
+  - B. B. 25%
+  - C. C. 75%
+  - D. D. 90%
 
-> Page 8, step 3, states, "The donation process takes roughly 1 hour – donating itself just 5-10 minutes."
+> Page 6 states that '75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.'
 
-### 8. Under the 2020 law in England, besides having registered a decision not to donate, what is one specific group of people over 18 who would be excluded from being considered an organ donor?
+### 6. Besides registering a decision on the NHS Organ Donation Register, what other important action is recommended for individuals who wish to be organ donors?
 
 - Type: short_answer
-- Topic: Law around organ donation
-- Difficulty: intermediate
-- Skill focus: Identification of exceptions
-- Source reference: Page 13
-- Answer: Visitors to England.
-
-> Page 13 mentions that "anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group (e.g. visitors to England)."
-
-### 9. For potential stem cell donors who are not registered blood donors, what method is typically used to check their tissue type?
-
-- Type: multiple_choice
-- Topic: Steps in stem cell donation
-- Difficulty: intermediate
-- Skill focus: Recall of procedural details
-- Source reference: Page 9
-- Answer: C
-- Options:
-  - A. A) A full medical examination
-  - B. B) A urine sample
-  - C. C) A cheek swab
-  - D. D) A hair follicle test
-
-> Page 9, under the second '2' step for stem cell donation, states: "Potential stem cell donors will be asked to do a cheek swab to check their tissue type."
-
-### 10. According to the learning intentions on page 1, what is one key aspect students are expected to be able to 'outline' regarding organ donation in England?
-
-- Type: short_answer
-- Topic: Learning intentions
+- Topic: Organ Donation
 - Difficulty: higher
-- Skill focus: Interpretation of learning objectives
-- Source reference: Page 1
-- Answer: Students should be able to outline the law around organ donation in England.
+- Skill focus: Synthesise information
+- Source reference: Page 11, Page 13
+- Answer: Share the decision with family/loved ones.
 
-> Page 1, under 'Learning intentions', includes: "Outline the law around organ donation in England".
+> Page 11 advises donors to 'Share the decision with family/loved ones.' Page 13 also highlights the importance of discussing the choice with family.
+
+### 7. The material lists several situations that may require a blood donation. Which of the following is NOT mentioned?
+
+- Type: multiple_choice
+- Topic: Blood Donation
+- Difficulty: foundation
+- Skill focus: Identify information that is not present (elimination)
+- Source reference: Page 5
+- Answer: D. A birth defect
+- Options:
+  - A. A. Blood loss from surgery
+  - B. B. Blood loss from child birth
+  - C. C. Blood loss from an accident
+  - D. D. A birth defect
+
+> Page 5 lists blood loss from surgery, child birth, and accidents as reasons for needing a blood donation. A birth defect is listed as a reason for needing an organ donation, not a blood donation.
+
+### 8. True or False: To become a potential stem cell donor in the UK, an individual must sign up separately with the British Bone Marrow Registry, Anthony Nolan, and DKMS.
+
+- Type: true_false
+- Topic: Stem Cell Donation
+- Difficulty: intermediate
+- Skill focus: Understand system structure
+- Source reference: Page 9
+- Answer: False
+
+> This is false. Page 9 states, 'There are different registers in the UK but they all form part of one UK registry... Donors need only sign up to one.'
+
+### 9. Within the typical one-hour blood donation appointment, what is the approximate time taken for the actual donation itself?
+
+- Type: short_answer
+- Topic: Blood Donation
+- Difficulty: foundation
+- Skill focus: Extract specific time-related data
+- Source reference: Page 8
+- Answer: 5-10 minutes
+
+> Step 3 on page 8 states, 'The donation process takes roughly 1 hour – donating itself just 5-10 minutes.'
+
+### 10. The study material indicates that some donor types are in higher demand. Which backgrounds are specifically mentioned as being needed?
+
+- Type: multiple_choice
+- Topic: Donation Importance
+- Difficulty: higher
+- Skill focus: Recall specific demographic information
+- Source reference: Page 6
+- Answer: B. Black African, Black Caribbean and Asian
+- Options:
+  - A. A. Eastern European and Scandinavian
+  - B. B. Black African, Black Caribbean and Asian
+  - C. C. Mediterranean and Middle Eastern
+  - D. D. North and South American
+
+> Page 6 explicitly states that 'donors from Black African, Black Caribbean and Asian backgrounds' are more in demand.
 
 ## Prompt
 

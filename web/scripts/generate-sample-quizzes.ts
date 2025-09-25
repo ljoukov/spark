@@ -38,7 +38,7 @@ const PROMPT_FILE_PATHS = [
 	'web/src/lib/server/llm/judge.ts'
 ];
 
-const MODEL_ID = 'gemini-2.5-flash';
+const MODEL_ID = 'gemini-2.5-pro';
 const DEFAULT_TEMPERATURE = 0.2;
 const JUDGE_TEMPERATURE = 0.15;
 const EXTENSION_QUESTION_COUNT = 10;
@@ -63,7 +63,7 @@ type CategoryConfig = Omit<GenerateQuizOptions, 'sourceFiles'>;
 const CATEGORY_DEFAULTS: Record<string, CategoryConfig> = {
 	'with-questions': {
 		mode: 'extraction',
-		questionCount: 6,
+		questionCount: 20,
 		subject: 'chemistry',
 		board: 'AQA',
 		temperature: DEFAULT_TEMPERATURE
@@ -730,25 +730,25 @@ async function runGenerationStage(
 }
 
 function buildPromptLinks(commitHash: string): Array<{ label: string; url: string }> {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    return PROMPT_FILE_PATHS.map((relativePath) => {
-        const posixPath = relativePath.split(path.sep).join('/');
-        return {
-            label: relativePath,
-            url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
-        };
-    });
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	return PROMPT_FILE_PATHS.map((relativePath) => {
+		const posixPath = relativePath.split(path.sep).join('/');
+		return {
+			label: relativePath,
+			url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
+		};
+	});
 }
 
 function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    const posixPath = relativeRepoPath.split(path.sep).join('/');
-    return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	const posixPath = relativeRepoPath.split(path.sep).join('/');
+	return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
 }
 
 function isImageAsset(relativeRepoPath: string): boolean {
-    const ext = path.extname(relativeRepoPath).toLowerCase();
-    return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
+	const ext = path.extname(relativeRepoPath).toLowerCase();
+	return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
 }
 
 function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
@@ -894,17 +894,17 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 	rootLines.push('## Samples');
 	rootLines.push('');
 
-    for (const sample of effectiveIndex.samples) {
-        const sampleDir = path.join(OUTPUT_DIR, sample.id);
-        const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
-        const judge = await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'));
-        const extension = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'));
-        const extensionJudge = await readJson<JudgeFilePayload>(
-            path.join(sampleDir, 'quiz-extension-judgement.json')
-        );
+	for (const sample of effectiveIndex.samples) {
+		const sampleDir = path.join(OUTPUT_DIR, sample.id);
+		const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
+		const judge = await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'));
+		const extension = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'));
+		const extensionJudge = await readJson<JudgeFilePayload>(
+			path.join(sampleDir, 'quiz-extension-judgement.json')
+		);
 
-        const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
-        await mkdir(reportSampleDir, { recursive: true });
+		const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
+		await mkdir(reportSampleDir, { recursive: true });
 
 		const sampleHeading = buildSampleHeading(sample);
 		const baseQuizMd = formatQuizMarkdown(quiz, `${sampleHeading} — Base Quiz`);
@@ -918,55 +918,55 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 		await writeFile(path.join(reportSampleDir, 'quiz.md'), baseQuizMd, 'utf8');
 		await writeFile(path.join(reportSampleDir, 'quiz-judgement.md'), baseJudgeMd, 'utf8');
 		await writeFile(path.join(reportSampleDir, 'quiz-extension.md'), extensionQuizMd, 'utf8');
-        await writeFile(
-            path.join(reportSampleDir, 'quiz-extension-judgement.md'),
-            extensionJudgeMd,
-            'utf8'
-        );
+		await writeFile(
+			path.join(reportSampleDir, 'quiz-extension-judgement.md'),
+			extensionJudgeMd,
+			'utf8'
+		);
 
-        // Write source.md with embedded image and GitHub link
-        const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
-        const sourceImgRelative = path.posix.relative(
-            `docs/reports/sample-quizzes/${sample.id}`,
-            sample.source.relativePath
-        );
-        const sourceMdLines: string[] = [];
-        sourceMdLines.push(`# ${sampleHeading} — Source`);
-        sourceMdLines.push('');
-        sourceMdLines.push(`File: ${sample.source.displayName}`);
-        sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
-        sourceMdLines.push('');
-        if (isImageAsset(sample.source.relativePath)) {
-            sourceMdLines.push(
-                `<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
-            );
-        } else {
-            sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
-        }
-        sourceMdLines.push('');
-        await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
+		// Write source.md with embedded image and GitHub link
+		const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
+		const sourceImgRelative = path.posix.relative(
+			`docs/reports/sample-quizzes/${sample.id}`,
+			sample.source.relativePath
+		);
+		const sourceMdLines: string[] = [];
+		sourceMdLines.push(`# ${sampleHeading} — Source`);
+		sourceMdLines.push('');
+		sourceMdLines.push(`File: ${sample.source.displayName}`);
+		sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
+		sourceMdLines.push('');
+		if (isImageAsset(sample.source.relativePath)) {
+			sourceMdLines.push(
+				`<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
+			);
+		} else {
+			sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
+		}
+		sourceMdLines.push('');
+		await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
 
 		rootLines.push(`### ${sampleHeading}`);
 		rootLines.push('');
 		rootLines.push(`- Source: ${sample.source.displayName} (${sample.source.relativePath})`);
 		rootLines.push(`- Base quiz summary: ${sample.summary}`);
 		rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
-        rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
-        rootLines.push(
-            `- Reports: [Quiz](sample-quizzes/${sample.id}/quiz.md) · [Judge](sample-quizzes/${sample.id}/quiz-judgement.md) · [10 more](sample-quizzes/${sample.id}/quiz-extension.md) · [10 more judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
-        );
-        rootLines.push(
-            `- JSON: [Quiz](${relativeStaticPath(sample.id, 'quiz.json')}) · [Judge](${relativeStaticPath(
-                sample.id,
-                'quiz-judgement.json'
-            )}) · [10 more](${relativeStaticPath(
-                sample.id,
-                'quiz-extension.json'
-            )}) · [10 more judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
-        );
-        rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
-        rootLines.push('');
-    }
+		rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
+		rootLines.push(
+			`- Reports: [Quiz](sample-quizzes/${sample.id}/quiz.md) · [Judge](sample-quizzes/${sample.id}/quiz-judgement.md) · [10 more](sample-quizzes/${sample.id}/quiz-extension.md) · [10 more judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
+		);
+		rootLines.push(
+			`- JSON: [Quiz](${relativeStaticPath(sample.id, 'quiz.json')}) · [Judge](${relativeStaticPath(
+				sample.id,
+				'quiz-judgement.json'
+			)}) · [10 more](${relativeStaticPath(
+				sample.id,
+				'quiz-extension.json'
+			)}) · [10 more judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
+		);
+		rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
+		rootLines.push('');
+	}
 
 	await writeFile(path.join(REPORT_ROOT, 'sample-quizzes.md'), rootLines.join('\n'), 'utf8');
 }

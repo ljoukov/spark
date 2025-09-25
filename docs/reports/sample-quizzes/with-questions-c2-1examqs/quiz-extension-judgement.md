@@ -1,28 +1,28 @@
 # Sample 4: C2.1ExamQs.pdf (extraction) — Extension Judge
 
-**Verdict:** revise
+**Verdict:** approve
 
 ## Summary
 
-The proposed quiz demonstrates strong 'Question quality' with precise, unambiguous, and exam-ready prompts. 'Answer precision' is excellent, with all answers being factually correct and directly grounded in the provided material. The 'Difficulty alignment' is appropriate for GCSE Triple Science, offering a good mix of foundation, intermediate, and higher-level questions. Furthermore, the quiz adheres to 'Safety & tone' guidelines, avoiding misinformation and using appropriate UK English spelling. However, the 'Coverage and balance' dimension requires revision. While the quiz thoroughly covers states of matter and particle theory, it lacks sufficient questions on chemical reactions, which is a significant part of its stated title and summary.
+The proposed quiz demonstrates excellent adherence to the rubric dimensions. The 'Question quality' is consistently high, with precise and unambiguous prompts that are exam-ready. 'Answer precision' is flawless, as all answers are factually correct and directly supported by the provided material or standard GCSE knowledge. The 'Coverage and balance' are strong, effectively extending the initial quiz by introducing stoichiometry, practical considerations, and deeper conceptual understanding of the particle model and phase changes, with a suitable mix of difficulty levels. 'Difficulty alignment' is appropriate for GCSE Triple Science, with questions ranging from foundation to higher-tier concepts. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content and correct UK English spelling.
 
 ## Rubric findings
 
 - **Question quality** — score 1.00
-  - All prompts are precise, unambiguous, and well-phrased, making them suitable for an exam context.
+  - All prompts are precise, unambiguous, and exam-ready. The multiple-choice options are well-formed and provide plausible distractors.
 - **Answer precision** — score 1.00
-  - All provided answers are factually correct and the explanations are clear, accurate, and directly supported by the source material or general scientific principles.
-- **Coverage and balance** — score 0.50
-  - The quiz is heavily skewed towards states of matter and particle theory, with 9 out of 10 questions focusing on these topics. Only one question addresses chemical reactions (state symbols). This imbalance does not align with the quiz title 'GCSE Chemistry: States of Matter and Reactions', which implies broader coverage of reaction-related concepts.
+  - All answers are factually correct and directly grounded in the provided material (figures, equations) or standard GCSE chemistry knowledge related to the topics. Explanations are clear and accurate.
+- **Coverage and balance** — score 0.90
+  - The quiz covers key concepts from the provided material and extends them appropriately (e.g., stoichiometry, practical limitations, energy changes during phase transitions). The difficulty is well-balanced across foundation, intermediate, and higher levels. While all questions are multiple-choice, this is acceptable for an extension quiz.
 - **Difficulty alignment** — score 1.00
-  - The questions offer a suitable range of difficulty, from foundation recall to intermediate data interpretation and higher-level experimental evaluation, appropriate for GCSE Triple Science.
+  - The items are appropriate for GCSE Triple Science. The assigned difficulty levels (foundation, intermediate, higher) are accurate and well-distributed, ensuring varied challenge.
 - **Safety & tone** — score 1.00
-  - The quiz contains no misinformation, harmful, or off-spec content. The tone is appropriate for an educational assessment, and UK English spelling is consistently used.
+  - There is no misinformation, harmful, or off-spec content. The tone is academic and appropriate for GCSE, and UK English spelling is consistently used.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T04:24:04.091Z
+- Evaluated at: 2025-09-25T07:30:27.765Z
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Audit
@@ -31,7 +31,7 @@ The proposed quiz demonstrates strong 'Question quality' with precise, unambiguo
 - Verdict agreement: agree
 - Confidence: high
 
-The judge's verdict is well-reasoned and accurate. The core justification for the 'revise' verdict rests on the 'Coverage and balance' criterion, where the judge correctly identifies a significant imbalance. The quiz title is 'GCSE Chemistry: States of Matter and Reactions', yet 9 out of the 10 questions focus on states of matter and particle theory, with only a single question on chemical reactions (interpreting a state symbol). This skew makes the quiz's title and summary misleading. The judge's positive assessments of 'Question quality', 'Answer precision', and 'Difficulty alignment' are also appropriate, as the questions are generally well-constructed and cover a suitable range of cognitive skills for the target level.
+The judge's verdict is entirely reasonable and well-supported. The candidate's quiz is of excellent quality, providing a set of questions that are factually accurate, well-aligned with the GCSE curriculum, and genuinely extend the concepts presented in the source material. The judge correctly identifies the strengths of the quiz across all rubric dimensions. The scoring is accurate; the 0.9 for 'Coverage and balance' is a fair and nuanced assessment, acknowledging that while the quiz is strong, its reliance solely on multiple-choice questions could be seen as a minor limitation, though acceptable for this task. The overall 'approve' verdict is fully justified.
 
 ## Prompt
 

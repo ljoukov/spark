@@ -1,149 +1,149 @@
 # Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (extraction) — Extension Quiz
 
-**Quiz title:** GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz
-**Summary:** This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 16 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.
+**Quiz title:** GCSE Chemistry: Covalent Bonding and Carbon Allotropes
+**Summary:** An additional 10 questions extending the original quiz on covalent bonding, properties of molecular and giant structures, and the allotropes of carbon. This set introduces multiple-choice and true/false formats to test understanding from new angles.
 
 ## Metadata
 
-- Mode: extension
+- Mode: extraction
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 10
-- Generated at: 2025-09-25T04:21:22.539Z
-- Model: gemini-2.5-flash (temperature 0.20)
+- Generated at: 2025-09-25T07:26:07.329Z
+- Model: gemini-2.5-pro (temperature 0.20)
 - Source: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg)
 
 ## Questions
 
-### 1. Which type of atoms typically form covalent bonds with each other?
+### 1. Which statement correctly explains why simple molecular substances have low boiling points?
 
 - Type: multiple_choice
-- Topic: Covalent Bond Formation
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C2 questions, Q2
-- Answer: non-metals
+- Topic: Simple Molecular Structures
+- Difficulty: intermediate
+- Skill focus: Application of knowledge
+- Source reference: C2 Question 7
+- Answer: B
 - Options:
-  - A. A. Metals and non-metals
-  - B. B. Metals only
-  - C. C. Non-metals only
-  - D. D. Metalloids
+  - A. A. The strong covalent bonds within the molecules are easily broken.
+  - B. B. Only weak intermolecular forces between molecules need to be overcome.
+  - C. C. The substances are formed from non-metal atoms which have low mass.
+  - D. D. They do not contain any delocalised electrons.
 
-> Covalent bonds are predominantly formed between non-metal atoms, as they both tend to gain electrons to achieve a full outer shell, making sharing electrons a stable arrangement.
+> To boil a simple molecular substance, energy is needed to overcome the weak intermolecular forces between the molecules, not the strong covalent bonds within them. This requires only a small amount of energy.
 
-### 2. Describe the structure and bonding of small molecules.
+### 2. True or false: The forces attracting adjacent polymer chains to each other are strong covalent bonds.
 
-- Type: short_answer
-- Topic: Small Molecular Structures
+- Type: true_false
+- Topic: Polymers
 - Difficulty: intermediate
-- Skill focus: Description
-- Source reference: C2 questions, Q4
-- Answer: small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules
+- Skill focus: Distinguishing bond types
+- Source reference: C2 Question 5
+- Answer: False
 
-> Small molecules consist of a limited number of atoms joined by strong covalent bonds. However, the forces between these individual molecules (intermolecular forces) are weak.
+> The atoms within a polymer chain are joined by strong covalent bonds, but the forces between separate polymer chains are weak intermolecular forces.
 
-### 3. Describe the structure and bonding of polymers.
-
-- Type: short_answer
-- Topic: Polymer Structures
-- Difficulty: intermediate
-- Skill focus: Description
-- Source reference: C2 questions, Q5
-- Answer: many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains
-
-> Polymers are large molecules formed from many repeating smaller units (monomers) linked by strong covalent bonds into long chains. Weak intermolecular forces exist between these polymer chains.
-
-### 4. Why do substances made of small molecules generally have low melting points?
+### 3. In the structure of graphite, how many other carbon atoms is each carbon atom covalently bonded to?
 
 - Type: multiple_choice
-- Topic: Properties of Small Molecules
-- Difficulty: foundation
-- Skill focus: Explanation
-- Source reference: C2 questions, Q7
-- Answer: only a small amount of energy is needed to break the weak intermolecular forces
+- Topic: Allotropes of Carbon
+- Difficulty: intermediate
+- Skill focus: Recall of specific structural detail
+- Source reference: C2 Question 10
+- Answer: C
 - Options:
-  - A. A. They have strong covalent bonds that are easily broken.
-  - B. B. Only a small amount of energy is needed to break the weak intermolecular forces between molecules.
-  - C. C. They have delocalised electrons that lower the melting point.
-  - D. D. The atoms are not bonded together.
+  - A. A. One
+  - B. B. Two
+  - C. C. Three
+  - D. D. Four
 
-> Small molecular substances have low melting points because only a small amount of energy is required to overcome the weak intermolecular forces between the molecules, not to break the strong covalent bonds within them.
+> Each carbon atom in graphite forms strong covalent bonds with three other carbon atoms, creating hexagonal rings. The fourth outer electron is delocalised.
 
-### 5. Why do large molecules have higher melting and boiling points than small molecules?
+### 4. What specific structural feature of spherical fullerenes makes them suitable for drug delivery?
 
 - Type: short_answer
-- Topic: Molecular Size and Properties
-- Difficulty: intermediate
-- Skill focus: Explanation
-- Source reference: C2 questions, Q8
-- Answer: the intermolecular forces are stronger in large molecules
-
-> As molecules increase in size, the cumulative strength of the weak intermolecular forces between them becomes greater. More energy is therefore needed to overcome these stronger forces, leading to higher melting and boiling points.
-
-### 6. Why do most covalent substances not conduct electricity?
-
-- Type: multiple_choice
-- Topic: Covalent Substances and Conductivity
-- Difficulty: intermediate
-- Skill focus: Explanation
-- Source reference: C2 questions, Q9
-- Answer: do not have delocalised electrons or ions
-- Options:
-  - A. A. They have strong covalent bonds that prevent electron movement.
-  - B. B. They are typically solids at room temperature.
-  - C. C. They do not have delocalised electrons or ions to carry charge.
-  - D. D. Their atoms are too small to allow charge flow.
-
-> For a substance to conduct electricity, it must possess mobile charge carriers, such as delocalised electrons or free ions. Most covalent substances lack these, as their electrons are held tightly in bonds or within specific atoms.
-
-### 7. Explain why graphite is soft.
-
-- Type: short_answer
-- Topic: Properties of Graphite
-- Difficulty: intermediate
-- Skill focus: Explanation
-- Source reference: C2 questions, Q12
-- Answer: layers are not bonded so can slide over each other
-
-> Graphite is soft because its structure consists of distinct layers of carbon atoms. The forces between these layers are very weak, allowing them to slide easily over one another, which also makes graphite a good lubricant.
-
-### 8. What is graphene?
-
-- Type: multiple_choice
-- Topic: Graphene
-- Difficulty: foundation
-- Skill focus: Definition
-- Source reference: C2 questions, Q13
-- Answer: one layer of graphite
-- Options:
-  - A. A. A type of fullerene.
-  - B. B. A giant covalent structure of silicon.
-  - C. C. One layer of graphite.
-  - D. D. A polymer made of carbon atoms.
-
-> Graphene is a remarkable material consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one layer of graphite.
-
-### 9. Give two properties of graphene.
-
-- Type: short_answer
-- Topic: Properties of Graphene
+- Topic: Allotropes of Carbon
 - Difficulty: higher
-- Skill focus: Recall, Application
-- Source reference: C2 questions, Q14
-- Answer: strong, conducts electricity
+- Skill focus: Linking structure to application
+- Source reference: C2 Question 18
+- Answer: Their hollow cage-like structure allows them to enclose and transport other molecules.
 
-> Graphene is renowned for its exceptional strength, being one of the strongest known materials, and its excellent electrical conductivity due to the presence of delocalised electrons.
+> The source material mentions 'drug delivery (spheres)'. This application relies on the fullerene's ability to trap drug molecules inside its hollow carbon cage for transport within the body.
 
-### 10. Give two properties of nanotubes.
+### 5. Which form of carbon is described as a hollow cylinder?
+
+- Type: multiple_choice
+- Topic: Allotropes of Carbon
+- Difficulty: foundation
+- Skill focus: Recall definition
+- Source reference: C2 Question 16
+- Answer: D
+- Options:
+  - A. A. Graphene
+  - B. B. Graphite
+  - C. C. A spherical fullerene
+  - D. D. A nanotube
+
+> A nanotube is a type of fullerene with a cylindrical structure, essentially a rolled-up sheet of graphene.
+
+### 6. Contrast the type of forces that are overcome when a giant covalent substance melts compared to when a polymer melts.
 
 - Type: short_answer
-- Topic: Nanotubes
+- Topic: Structure and Bonding
 - Difficulty: higher
-- Skill focus: Recall, Application
-- Source reference: C2 questions, Q17
-- Answer: high tensile strength, conduct electricity
+- Skill focus: Comparison and explanation
+- Source reference: C2 Questions 5 & 6
+- Answer: In a giant covalent substance, strong covalent bonds must be broken. In a polymer, the weaker intermolecular forces between the chains are overcome.
 
-> Nanotubes are known for their high tensile strength, meaning they are incredibly strong and resistant to stretching or breaking, and their ability to conduct electricity efficiently.
+> Melting a giant covalent structure requires breaking the strong covalent bonds throughout the lattice. Melting a polymer only requires overcoming the intermolecular forces between the long chains, not the covalent bonds within them.
+
+### 7. True or false: Graphene is an electrical insulator because it is only one atom thick.
+
+- Type: true_false
+- Topic: Allotropes of Carbon
+- Difficulty: foundation
+- Skill focus: Recall properties
+- Source reference: C2 Question 14
+- Answer: False
+
+> Graphene is an excellent conductor of electricity. Its single-layer structure contains delocalised electrons that are free to move and carry charge.
+
+### 8. Which of these substances has delocalised electrons and weak forces between its layers?
+
+- Type: multiple_choice
+- Topic: Allotropes of Carbon
+- Difficulty: intermediate
+- Skill focus: Identify substance from structural description
+- Source reference: C2 Question 10
+- Answer: A
+- Options:
+  - A. A. Graphite
+  - B. B. A polymer
+  - C. C. A small molecule like water
+  - D. D. A generic giant covalent substance
+
+> Graphite has a layered structure where each carbon is bonded to three others. This leaves delocalised electrons that can move, and the layers are held by weak forces, allowing them to slide.
+
+### 9. Explain why large molecules have stronger intermolecular forces than small molecules.
+
+- Type: short_answer
+- Topic: Polymers
+- Difficulty: higher
+- Skill focus: Explain property trends
+- Source reference: C2 Question 8
+- Answer: Large molecules have more surface area and more points of contact between them, leading to stronger overall intermolecular forces compared to smaller molecules.
+
+> The strength of intermolecular forces increases with the size of the molecule. This is why polymers have much higher melting and boiling points than simple molecules.
+
+### 10. What is the fundamental process that occurs when atoms form a covalent bond?
+
+- Type: short_answer
+- Topic: Covalent Bonding
+- Difficulty: foundation
+- Skill focus: Recall definition
+- Source reference: C2 Question 1
+- Answer: Atoms share one or more pairs of electrons.
+
+> Covalent bonding involves the mutual sharing of valence electrons between atoms, typically non-metals, to achieve a stable electron configuration for each atom.
 
 ## Prompt
 

@@ -3,114 +3,250 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:18:23.130Z",
+  "generatedAt": "2025-09-25T07:21:40.093Z",
   "request": {
-    "model": "gemini-2.5-flash",
-    "questionCount": 6,
+    "model": "gemini-2.5-pro",
+    "questionCount": 20,
     "temperature": 0.2
   },
   "source": {
     "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
   },
-  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nRepresent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.\nIf you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.\nWhen the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.\nAlways write in UK English and reference the specification where relevant.\nYou must return exactly 20 questions.\nPrioritise coverage breadth over repetition. If the source has more material than fits, select items so every key theme is still assessed.\nSummaries and field values must never claim coverage that the questions do not provide; explicitly note any unavoidable omissions.\nReturn JSON that matches the provided schema. Field guidance:\n- quizTitle: Concise, exam-style title for the quiz.\n- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with \"Coverage gaps:\" and either say \"none – full coverage achieved.\" or list the specific missing topics/processes.\n- mode: Set to the provided mode value.\n- subject: Copy the provided subject exactly.\n- board: Copy the provided exam board exactly.\n- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.\n- questionCount: Must equal the number of questions returned.\n- questions: Array of question objects defined below.\nEach question object must include:\n- id: Match the original question identifier when present (e.g., \"Q1a\"). Otherwise use sequential IDs (\"Q1\", \"Q2\", ...).\n- prompt: Clean exam-ready wording that still mirrors the source task.\n- answer: Correct, concise answer text.\n- explanation: One to two sentences justifying the answer with source evidence.\n- type: One of multiple_choice, short_answer, true_false, or numeric.\n- options: Only for multiple_choice. Provide exactly four answer texts without prefixing letters—the system adds labels.\n- topic: Short topic label (e.g., \"Atomic structure\").\n- difficulty: Use foundation, intermediate, or higher.\n- skillFocus: Action-oriented description of the assessed skill (e.g., \"Interpret data\", \"Explain process\").\n- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.\n- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling \"phosphorus\" even if the source writes \"phosphorous\").\n- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.\n- Tighten ambiguous wording when needed so the scientific term is explicit (e.g., say \"relative atomic mass\" rather than the vague \"relative mass\").\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.\nVerify that ids and sourceReference values align with the original numbering before returning the JSON.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry C1: Atomic Structure and Bonding Basics",
-    "summary": "This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical atomic models, sub-atomic particles, and definitions of elements, compounds, and mixtures. It includes a mix of recall and descriptive questions, with 3 multiple-choice and 3 short-answer items, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry: Atomic Structure and Mixtures",
+    "summary": "This quiz contains 20 short-answer questions covering atomic structure, the history of the atom, elements, compounds, mixtures, and separation techniques, aligned with the AQA GCSE Chemistry specification. Coverage gaps: none – full coverage achieved.",
     "mode": "extraction",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry (8462) - Atomic Structure and the Periodic Table (4.1.1)",
-    "questionCount": 6,
+    "syllabusAlignment": "AQA GCSE Chemistry: C1 Atomic structure and the periodic table.",
+    "questionCount": 20,
     "questions": [
       {
         "id": "Q1",
         "prompt": "What is an atom?",
         "answer": "The smallest part of an element that can exist.",
-        "explanation": "Atoms are the fundamental building blocks of matter, retaining the chemical properties of an element.",
+        "explanation": "An atom is the fundamental building block of an element, as defined in basic atomic theory.",
         "type": "short_answer",
         "topic": "Atomic Structure",
         "difficulty": "foundation",
-        "skillFocus": "Define",
+        "skillFocus": "Define key term",
         "sourceReference": "C1 questions, Q1"
       },
       {
         "id": "Q2",
-        "prompt": "Which of the following best describes the plum pudding model of the atom?",
-        "answer": "A sphere of positive charge with negative electrons embedded in it.",
-        "explanation": "J.J. Thomson proposed the plum pudding model, where the atom was a uniform sphere of positive charge with electrons scattered within it, like plums in a pudding.",
-        "type": "multiple_choice",
-        "options": [
-          "A. A sphere of positive charge with negative electrons embedded in it.",
-          "B. A dense nucleus with electrons orbiting it in fixed energy levels.",
-          "C. Solid spheres that could not be divided into smaller parts.",
-          "D. A central nucleus containing protons and neutrons, with electrons in shells."
-        ],
-        "topic": "Atomic Models",
+        "prompt": "What is Dalton's model of the atom?",
+        "answer": "Atoms as solid spheres that could not be divided into smaller parts.",
+        "explanation": "John Dalton's early atomic theory proposed that atoms were indivisible, solid spheres, a model that was later superseded.",
+        "type": "short_answer",
+        "topic": "History of the Atom",
         "difficulty": "foundation",
-        "skillFocus": "Describe, Recall",
-        "sourceReference": "C1 questions, Q3"
+        "skillFocus": "Describe scientific model",
+        "sourceReference": "C1 questions, Q2"
       },
       {
         "id": "Q3",
-        "prompt": "What significant discovery did Niels Bohr make regarding the structure of the atom?",
-        "answer": "Electrons orbit in fixed energy levels (shells).",
-        "explanation": "Niels Bohr refined the nuclear model by proposing that electrons orbit the nucleus in specific, fixed energy levels or shells, and can move between these shells by absorbing or emitting energy.",
-        "type": "multiple_choice",
-        "options": [
-          "A. The existence of an uncharged particle called the neutron.",
-          "B. That atoms are solid spheres that cannot be divided.",
-          "C. Electrons orbit in fixed energy levels (shells).",
-          "D. The atom's mass and positive charge are concentrated in a small nucleus."
-        ],
-        "topic": "Atomic Models (Bohr)",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q6"
+        "prompt": "What is the plum pudding model of the atom?",
+        "answer": "A sphere of positive charge with negative electrons embedded in it.",
+        "explanation": "J.J. Thomson's plum pudding model described the atom as a positively charged 'pudding' with negatively charged electrons scattered throughout.",
+        "type": "short_answer",
+        "topic": "History of the Atom",
+        "difficulty": "foundation",
+        "skillFocus": "Describe scientific model",
+        "sourceReference": "C1 questions, Q3"
       },
       {
         "id": "Q4",
-        "prompt": "State the relative mass of each sub-atomic particle: proton, neutron, and electron.",
-        "answer": "Proton: 1, Neutron: 1, Electron: 0 (very small).",
-        "explanation": "Protons and neutrons have approximately the same mass, defined as a relative mass of 1. Electrons are significantly lighter, with a relative mass considered negligible (0) in most calculations.",
+        "prompt": "What did scientists discover in the alpha scattering experiment?",
+        "answer": "Some alpha particles were deflected by the gold foil, which showed that an atom's mass and positive charge must be concentrated in one small space (the nucleus).",
+        "explanation": "Rutherford's gold foil experiment showed that while most alpha particles passed through, some were deflected, leading to the discovery of a small, dense, positively charged nucleus.",
         "type": "short_answer",
-        "topic": "Sub-atomic Particles",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q9"
+        "topic": "History of the Atom",
+        "difficulty": "higher",
+        "skillFocus": "Explain experimental results",
+        "sourceReference": "C1 questions, Q4"
       },
       {
         "id": "Q5",
-        "prompt": "Explain why atoms have no overall electrical charge.",
-        "answer": "Atoms have equal numbers of positive protons and negative electrons.",
-        "explanation": "In a neutral atom, the number of positively charged protons in the nucleus is exactly balanced by the number of negatively charged electrons orbiting the nucleus, resulting in a net charge of zero.",
+        "prompt": "Describe the nuclear model of the atom.",
+        "answer": "A dense nucleus with electrons orbiting it.",
+        "explanation": "The nuclear model, developed from the alpha scattering experiment, places a dense, positive nucleus at the centre of the atom with electrons in orbit around it.",
         "type": "short_answer",
-        "topic": "Atomic Structure",
+        "topic": "History of the Atom",
         "difficulty": "intermediate",
-        "skillFocus": "Explain",
-        "sourceReference": "C1 questions, Q13"
+        "skillFocus": "Describe scientific model",
+        "sourceReference": "C1 questions, Q5"
       },
       {
         "id": "Q6",
+        "prompt": "What did Niels Bohr discover?",
+        "answer": "Electrons orbit in fixed energy levels (shells).",
+        "explanation": "Niels Bohr adapted the nuclear model, proposing that electrons exist in specific, fixed energy levels or shells around the nucleus.",
+        "type": "short_answer",
+        "topic": "History of the Atom",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall scientific discovery",
+        "sourceReference": "C1 questions, Q6"
+      },
+      {
+        "id": "Q7",
+        "prompt": "What did James Chadwick discover?",
+        "answer": "An uncharged particle called the neutron.",
+        "explanation": "James Chadwick's experiments provided evidence for the existence of the neutron, a neutral particle in the nucleus, which explained the missing mass in atoms.",
+        "type": "short_answer",
+        "topic": "History of the Atom",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall scientific discovery",
+        "sourceReference": "C1 questions, Q7"
+      },
+      {
+        "id": "Q8",
+        "prompt": "Where are protons and neutrons found in an atom?",
+        "answer": "In the nucleus.",
+        "explanation": "Protons and neutrons, collectively known as nucleons, are located in the dense central nucleus of the atom.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Recall particle location",
+        "sourceReference": "C1 questions, Q8"
+      },
+      {
+        "id": "Q9",
+        "prompt": "What is the relative mass of each sub-atomic particle?",
+        "answer": "Proton: 1, Neutron: 1, Electron: 0 (very small).",
+        "explanation": "Protons and neutrons each have a relative mass of approximately 1, while the electron's mass is negligible in comparison (about 1/1840).",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties of sub-atomic particles",
+        "sourceReference": "C1 questions, Q9"
+      },
+      {
+        "id": "Q10",
+        "prompt": "What is the relative charge of each sub-atomic particle?",
+        "answer": "Proton: +1, Neutron: 0, Electron: -1.",
+        "explanation": "Protons have a positive charge, electrons have an equal and opposite negative charge, and neutrons are electrically neutral.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties of sub-atomic particles",
+        "sourceReference": "C1 questions, Q10"
+      },
+      {
+        "id": "Q11",
+        "prompt": "How can you find out the number of protons in an atom?",
+        "answer": "Use the atomic number on the Periodic Table.",
+        "explanation": "The atomic number (or proton number) of an element, found on the Periodic Table, is equal to the number of protons in the nucleus of an atom of that element.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Use the Periodic Table",
+        "sourceReference": "C1 questions, Q11"
+      },
+      {
+        "id": "Q12",
+        "prompt": "How can you calculate the number of neutrons in an atom?",
+        "answer": "Mass number - atomic number.",
+        "explanation": "The number of neutrons is found by subtracting the atomic number (number of protons) from the mass number (total number of protons and neutrons).",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "intermediate",
+        "skillFocus": "Perform calculation",
+        "sourceReference": "C1 questions, Q12"
+      },
+      {
+        "id": "Q13",
+        "prompt": "Why do atoms have no overall charge?",
+        "answer": "They have equal numbers of positive protons and negative electrons.",
+        "explanation": "In a neutral atom, the total positive charge of the protons in the nucleus is cancelled out by the total negative charge of the electrons orbiting it.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain a concept",
+        "sourceReference": "C1 questions, Q13"
+      },
+      {
+        "id": "Q14",
+        "prompt": "How many electrons can be placed in the first, second, and third shells?",
+        "answer": "Up to 2 in the first shell and up to 8 in the second and third shells.",
+        "explanation": "The rules for electron shell filling state that the first shell holds a maximum of 2 electrons, while the second and third shells each hold a maximum of 8 electrons.",
+        "type": "short_answer",
+        "topic": "Electron Configuration",
+        "difficulty": "foundation",
+        "skillFocus": "Apply rules of electron configuration",
+        "sourceReference": "C1 questions, Q14"
+      },
+      {
+        "id": "Q15",
+        "prompt": "What is an element?",
+        "answer": "A substance made of one type of atom.",
+        "explanation": "An element is a pure substance consisting only of atoms that all have the same number of protons in their atomic nuclei.",
+        "type": "short_answer",
+        "topic": "Elements, Compounds and Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Define key term",
+        "sourceReference": "C1 questions, Q15"
+      },
+      {
+        "id": "Q16",
         "prompt": "What is a compound?",
         "answer": "A substance made of more than one type of atom chemically joined together.",
-        "explanation": "A compound is formed when two or more different elements are chemically bonded together in fixed proportions. This chemical bonding distinguishes compounds from mixtures.",
-        "type": "multiple_choice",
-        "options": [
-          "A. A substance made of only one type of atom.",
-          "B. Two or more substances not chemically combined.",
-          "C. Atoms of the same element with different numbers of neutrons.",
-          "D. A substance made of more than one type of atom chemically joined together."
-        ],
-        "topic": "Elements, Compounds, Mixtures",
+        "explanation": "A compound consists of two or more different elements that are chemically bonded together in a fixed ratio.",
+        "type": "short_answer",
+        "topic": "Elements, Compounds and Mixtures",
         "difficulty": "foundation",
-        "skillFocus": "Define",
+        "skillFocus": "Define key term",
         "sourceReference": "C1 questions, Q16"
+      },
+      {
+        "id": "Q17",
+        "prompt": "What is a mixture?",
+        "answer": "Two or more substances not chemically combined.",
+        "explanation": "A mixture contains two or more elements or compounds that are not chemically bonded and can be separated by physical means.",
+        "type": "short_answer",
+        "topic": "Elements, Compounds and Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Define key term",
+        "sourceReference": "C1 questions, Q17"
+      },
+      {
+        "id": "Q18",
+        "prompt": "What are isotopes?",
+        "answer": "Atoms of the same element (same number of protons) with different numbers of neutrons.",
+        "explanation": "Isotopes have the same atomic number but different mass numbers because they have a different number of neutrons in their nuclei.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "intermediate",
+        "skillFocus": "Define key term",
+        "sourceReference": "C1 questions, Q18"
+      },
+      {
+        "id": "Q19",
+        "prompt": "Name four physical processes that can be used to separate mixtures.",
+        "answer": "Filtration, crystallisation, distillation, and chromatography.",
+        "explanation": "These physical separation techniques exploit differences in the physical properties of the components in a mixture, such as solubility, boiling point, or particle size.",
+        "type": "short_answer",
+        "topic": "Separation Techniques",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall separation techniques",
+        "sourceReference": "C1 questions, Q19"
+      },
+      {
+        "id": "Q20",
+        "prompt": "What is relative atomic mass?",
+        "answer": "The average mass of all the atoms of an element.",
+        "explanation": "Relative atomic mass (Ar) is the weighted average mass of the isotopes of an element compared to 1/12th the mass of a carbon-12 atom.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "higher",
+        "skillFocus": "Define key term",
+        "sourceReference": "C1 questions, Q20"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -120,7 +256,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2
