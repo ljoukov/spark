@@ -1,0 +1,50 @@
+# Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (extraction) — Extension Judge
+
+**Verdict:** approve
+
+## Summary
+
+The quiz demonstrates strong adherence to the rubric dimensions. Question quality is consistently high, with prompts that are precise, unambiguous, and suitable for GCSE examinations. Answer precision is excellent, as all provided answers are factually correct and directly supported by established scientific principles relevant to GCSE Chemistry. The quiz exhibits good coverage and balance, addressing key concepts within atomic structure and models through a suitable mix of question types. Difficulty alignment is appropriate for GCSE Triple Science, offering a varied challenge level from foundation to higher. Finally, the quiz maintains an appropriate safety and tone, free from misinformation or off-spec content, and consistently uses UK English spelling.
+
+## Rubric findings
+
+- **Question quality** — score 1.00
+  - All prompts are precise, unambiguous, and well-phrased for a GCSE exam context.
+- **Answer precision** — score 1.00
+  - All answers are factually correct, directly grounded in GCSE Chemistry material, and supported by accurate explanations.
+- **Coverage and balance** — score 1.00
+  - The quiz covers a comprehensive range of key concepts related to atomic structure and models, including historical models, sub-atomic particles, electron configuration, and definitions. It also features a good mix of multiple-choice, short-answer, and true/false question types.
+- **Difficulty alignment** — score 1.00
+  - The items are appropriate for GCSE Triple Science, with a suitable variation in challenge levels, ranging from foundation recall to intermediate understanding and higher-level definitions.
+- **Safety & tone** — score 1.00
+  - The quiz contains no misinformation, harmful, or off-spec content. The tone is academic and appropriate for the target audience, and UK English spelling is consistently used.
+
+## Model metadata
+
+- Model: gemini-2.5-flash (temperature 0.15)
+- Evaluated at: 2025-09-25T04:19:38.805Z
+- Source: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg)
+
+## Audit
+
+- Model: gemini-2.5-pro (temperature 0.15)
+- Verdict agreement: agree
+- Confidence: high
+
+The judge's verdict is well-reasoned and accurate. The candidate quiz is a high-quality extension of the source material, transforming a simple question-and-answer list into a varied and effective assessment tool. The judge correctly identifies the strengths of the quiz, including the high quality of the questions, the factual accuracy of the answers and explanations, the appropriate difficulty level for GCSE, and the good coverage of the topics presented in the source image. All rubric scores are justified.
+
+## Prompt
+
+```
+You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.
+Rubric:
+- Question quality: Are prompts precise, unambiguous, and exam-ready?
+- Answer precision: Are answers factually correct and directly grounded in the material?
+- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?
+- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?
+- Safety & tone: Avoid misinformation, harmful or off-spec content.
+Use the GCSE Triple Science context and ensure UK English spelling.
+Return JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.
+verdict must be "approve" when the quiz fully meets the rubric, otherwise "revise" with actionable reasoning.
+Provide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.
+```
