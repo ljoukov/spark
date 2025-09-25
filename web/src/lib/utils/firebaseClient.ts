@@ -7,7 +7,8 @@ import {
 	setPersistence,
 	browserLocalPersistence,
 	browserSessionPersistence,
-	getRedirectResult
+	getRedirectResult,
+	signInWithRedirect
 } from 'firebase/auth';
 
 let app: FirebaseApp | undefined;
@@ -38,7 +39,7 @@ export async function startGoogleSignInRedirect(): Promise<void> {
 	const provider = new GoogleAuthProvider();
 	provider.setCustomParameters({ prompt: 'select_account' });
 	// Fire-and-forget; caller typically doesn't await this because it navigates away
-	return (await import('firebase/auth')).signInWithRedirect(auth, provider);
+	await signInWithRedirect(auth, provider);
 }
 
 /**
@@ -52,7 +53,6 @@ export async function getRedirectResultIdToken(): Promise<string | null> {
 	const auth = getAuth(getFirebaseApp());
 	const result = await getRedirectResult(auth).catch(() => null);
 	if (!result) return null;
-	const { GoogleAuthProvider } = await import('firebase/auth');
 	const credential = GoogleAuthProvider.credentialFromResult(result);
 	return credential?.idToken ?? null;
 }
