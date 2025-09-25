@@ -37,6 +37,7 @@
 </script>
 
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	let {
 		class: className,
 		variant = 'default',
@@ -51,14 +52,21 @@
 </script>
 
 {#if href}
+	{@const resolvedHref = resolve(href ?? '')}
 	<a
 		bind:this={ref}
 		data-slot="button"
 		class={cn(buttonVariants({ variant, size }), className)}
-		href={disabled ? undefined : href}
+		href={resolvedHref}
 		aria-disabled={disabled}
 		role={disabled ? 'link' : undefined}
 		tabindex={disabled ? -1 : undefined}
+		on:click={(event) => {
+			if (disabled) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+		}}
 		{...restProps}
 	>
 		{@render children?.()}

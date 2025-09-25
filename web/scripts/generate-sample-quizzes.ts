@@ -10,10 +10,12 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import {
 	JudgeAuditSchema,
 	JudgeVerdictSchema,
+	SlopVerdictSchema,
 	type InlineSourceFile,
 	type JudgeAudit,
 	type JudgeVerdict,
-	type QuizGeneration
+	type QuizGeneration,
+	type SlopVerdict
 } from '../src/lib/llm/schemas';
 import {
 	BASE_PROMPT_HEADER,
@@ -23,6 +25,12 @@ import {
 	parseQuizFromText,
 	type GenerateQuizOptions
 } from '../src/lib/server/llm/quizPrompts';
+import { SLOP_RESPONSE_SCHEMA, buildSlopJudgePrompt } from '../src/lib/server/llm/slopJudge';
+import {
+	computeSlopAutoSignals,
+	autoSignalsToMarkdown,
+	type SlopAutoSignals
+} from '../src/lib/slop/metrics';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(CURRENT_DIR, '..');
@@ -42,6 +50,8 @@ const MODEL_ID = 'gemini-2.5-flash';
 const DEFAULT_TEMPERATURE = 0.2;
 const JUDGE_TEMPERATURE = 0.15;
 const EXTENSION_QUESTION_COUNT = 10;
+const SLOP_MODELS: readonly string[] = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+const SLOP_TEMPERATURE = 0.15;
 
 const execFileAsync = promisify(execFile);
 
@@ -57,6 +67,15 @@ const proxyUrl =
 if (proxyUrl) {
 	setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
+
+type GenerateMode = 'quiz' | 'extension';
+type JudgeMode = 'quality' | 'slop';
+
+const GENERATE_OPTIONS: readonly GenerateMode[] = ['quiz', 'extension'];
+const JUDGE_OPTIONS: readonly JudgeMode[] = ['quality', 'slop'];
+
+const DEFAULT_GENERATE_MODES: readonly GenerateMode[] = ['quiz', 'extension'];
+const DEFAULT_JUDGE_MODES: readonly JudgeMode[] = ['quality', 'slop'];
 
 type CategoryConfig = Omit<GenerateQuizOptions, 'sourceFiles'>;
 
@@ -175,12 +194,30 @@ type JudgeFilePayload = {
 	};
 };
 
+type SlopFilePayload = {
+	readonly id: string;
+	readonly evaluatedAt: string;
+	readonly prompt: string;
+	readonly source: {
+		readonly relativePath: string;
+		readonly displayName: string;
+	};
+	readonly job: SampleJob;
+	readonly domain: 'news' | 'qa' | 'other';
+	readonly context: string;
+	readonly autoSignals: SlopAutoSignals;
+	readonly model: QuizModelRun;
+	readonly verdict: SlopVerdict;
+};
+
 type GenerationResult = {
 	readonly job: SampleJob;
 	readonly quiz: QuizFilePayload;
-	readonly judge: JudgeFilePayload;
-	readonly extension: QuizFilePayload;
-	readonly extensionJudge: JudgeFilePayload;
+	readonly judge?: JudgeFilePayload;
+	readonly extension?: QuizFilePayload;
+	readonly extensionJudge?: JudgeFilePayload;
+	readonly slop?: SlopFilePayload;
+	readonly extensionSlop?: SlopFilePayload;
 };
 
 type JudgePromptOptions = {
@@ -318,7 +355,7 @@ async function collectJobs(): Promise<SampleJob[]> {
 	return jobs;
 }
 
-async function callModel<T>({
+async function callModel({
 	client,
 	model,
 	schema,
@@ -552,44 +589,191 @@ async function auditJudgeDecisionPayload(
 	};
 }
 
+function quizToEvaluationText(quiz: QuizGeneration): string {
+	const lines: string[] = [];
+	lines.push(quiz.quizTitle);
+	lines.push(quiz.summary);
+	lines.push('');
+	quiz.questions.forEach((question, index) => {
+		lines.push(`${index + 1}. ${question.prompt}`);
+		lines.push(`Answer: ${question.answer}`);
+		lines.push(`Explanation: ${question.explanation}`);
+		if (question.options && question.options.length > 0) {
+			lines.push(`Options: ${question.options.join(' | ')}`);
+		}
+		if (question.topic) {
+			lines.push(`Topic: ${question.topic}`);
+		}
+		if (question.difficulty) {
+			lines.push(`Difficulty: ${question.difficulty}`);
+		}
+		lines.push('');
+	});
+	return lines.join('\n').trim();
+}
+
+async function runSlopDetection(
+	client: GoogleGenAI,
+	job: SampleJob,
+	payload: QuizFilePayload,
+	variant: 'base' | 'extension'
+): Promise<SlopFilePayload> {
+	const text = quizToEvaluationText(payload.quiz);
+	const autoSignals = computeSlopAutoSignals(text);
+	const contextParts = [
+		`${variant === 'base' ? 'Base quiz' : 'Extension quiz'} mode: ${payload.mode}`,
+		payload.quiz.summary
+	].filter(Boolean);
+	const context = contextParts.join(' — ') || 'none';
+	const prompt = buildSlopJudgePrompt({
+		domain: 'qa',
+		context,
+		text,
+		autoSignals
+	});
+	const parts: Part[] = [{ text: prompt }];
+	let lastError: unknown;
+	for (const model of SLOP_MODELS) {
+		try {
+			const { text: responseText, modelId } = await callModel({
+				client,
+				model,
+				schema: SLOP_RESPONSE_SCHEMA,
+				parts,
+				temperature: SLOP_TEMPERATURE
+			});
+			const parsed = JSON.parse(responseText) as unknown;
+			const verdict = SlopVerdictSchema.parse(parsed);
+			return {
+				id: payload.id,
+				evaluatedAt: new Date().toISOString(),
+				prompt,
+				source: payload.source,
+				job,
+				domain: verdict.domain,
+				context,
+				autoSignals,
+				model: {
+					modelId,
+					temperature: SLOP_TEMPERATURE
+				},
+				verdict
+			};
+		} catch (error) {
+			lastError = error;
+		}
+	}
+	throw lastError instanceof Error
+		? lastError
+		: new Error(`Unable to run slop detection for ${payload.id}`);
+}
+
 async function runSampleGeneration(client: GoogleGenAI, job: SampleJob): Promise<GenerationResult> {
+	if (!generateModes.has('quiz')) {
+		throw new Error('Quiz generation is required; include "quiz" in --generate');
+	}
 	const source = await loadInlineSource(job.sourcePath);
 	console.log(`   ↳ generating base quiz (${job.id})`);
 	const quiz = await generateQuizPayload(client, job, source);
-	console.log(`   ↳ judging base quiz (${job.id})`);
-	const judge = await judgeQuizPayload(client, job, source, quiz.quiz);
-	const audit = await auditJudgeDecisionPayload(
-		client,
-		job,
-		source,
-		quiz.quiz,
-		judge.judge.verdict
-	);
-	console.log(`   ↳ generating extension (${job.id})`);
-	const extension = await generateExtensionPayload(client, job, source, quiz.quiz);
-	console.log(`   ↳ judging extension (${job.id})`);
-	const extensionJudge = await judgeQuizPayload(client, job, source, extension.quiz);
-	const extensionAudit = await auditJudgeDecisionPayload(
-		client,
-		job,
-		source,
-		extension.quiz,
-		extensionJudge.judge.verdict
-	);
+
+	let judge: JudgeFilePayload | undefined;
+	if (judgeModes.has('quality')) {
+		console.log(`   ↳ judging base quiz (${job.id})`);
+		const baseJudge = await judgeQuizPayload(client, job, source, quiz.quiz);
+		const audit = await auditJudgeDecisionPayload(
+			client,
+			job,
+			source,
+			quiz.quiz,
+			baseJudge.judge.verdict
+		);
+		judge = {
+			...baseJudge,
+			audit
+		};
+	}
+
+	let slop: SlopFilePayload | undefined;
+	if (judgeModes.has('slop')) {
+		console.log(`   ↳ slop detection for base quiz (${job.id})`);
+		slop = await runSlopDetection(client, job, quiz, 'base');
+	}
+
+	let extension: QuizFilePayload | undefined;
+	let extensionJudge: JudgeFilePayload | undefined;
+	let extensionSlop: SlopFilePayload | undefined;
+
+	if (generateModes.has('extension')) {
+		console.log(`   ↳ generating extension (${job.id})`);
+		const extensionPayload = await generateExtensionPayload(client, job, source, quiz.quiz);
+		extension = extensionPayload;
+		if (judgeModes.has('quality')) {
+			console.log(`   ↳ judging extension (${job.id})`);
+			const extJudge = await judgeQuizPayload(client, job, source, extensionPayload.quiz);
+			const extAudit = await auditJudgeDecisionPayload(
+				client,
+				job,
+				source,
+				extensionPayload.quiz,
+				extJudge.judge.verdict
+			);
+			extensionJudge = {
+				...extJudge,
+				audit: extAudit
+			};
+		}
+		if (judgeModes.has('slop')) {
+			console.log(`   ↳ slop detection for extension (${job.id})`);
+			extensionSlop = await runSlopDetection(client, job, extensionPayload, 'extension');
+		}
+	}
+
 	return {
 		job,
 		quiz,
-		judge: {
-			...judge,
-			audit
-		},
+		judge,
 		extension,
-		extensionJudge: {
-			...extensionJudge,
-			audit: extensionAudit
-		}
+		extensionJudge,
+		slop,
+		extensionSlop
 	};
 }
+
+function parseListOption<T extends string>(
+	flag: string,
+	allowed: readonly T[],
+	fallback: readonly T[]
+): Set<T> {
+	const arg = process.argv.find((value) => value.startsWith(`--${flag}=`));
+	if (!arg) {
+		return new Set(fallback);
+	}
+	const raw = arg.split('=')[1]?.trim();
+	if (!raw) {
+		throw new Error(`--${flag} expects a comma-separated list`);
+	}
+	const entries = raw
+		.split(',')
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
+	if (entries.length === 0) {
+		throw new Error(`--${flag} requires at least one value`);
+	}
+	const invalid = entries.filter((value) => !allowed.includes(value as T));
+	if (invalid.length > 0) {
+		throw new Error(
+			`Unknown ${flag} values: ${invalid.join(', ')}. Allowed: ${allowed.join(', ')}`
+		);
+	}
+	return new Set(entries as T[]);
+}
+
+const generateModes = parseListOption<GenerateMode>(
+	'generate',
+	GENERATE_OPTIONS,
+	DEFAULT_GENERATE_MODES
+);
+const judgeModes = parseListOption<JudgeMode>('judges', JUDGE_OPTIONS, DEFAULT_JUDGE_MODES);
 
 type StageSelection = 'all' | 'generate' | 'render';
 
@@ -629,21 +813,33 @@ type SampleIndexEntry = {
 	readonly generatedAt: string;
 	readonly outputs: {
 		readonly quiz: string;
-		readonly judge: string;
-		readonly extension: string;
-		readonly extensionJudge: string;
+		readonly judge?: string;
+		readonly slop?: string;
+		readonly extension?: string;
+		readonly extensionJudge?: string;
+		readonly extensionSlop?: string;
 	};
-	readonly extension: {
+	readonly extension?: {
 		readonly quizTitle: string;
 		readonly questionCount: number;
 		readonly generatedAt: string;
 	};
-	readonly judge: {
+	readonly judge?: {
 		readonly verdict: JudgeVerdict['verdict'];
 		readonly outputPath: string;
 	};
-	readonly extensionJudge: {
+	readonly extensionJudge?: {
 		readonly verdict: JudgeVerdict['verdict'];
+		readonly outputPath: string;
+	};
+	readonly slop?: {
+		readonly label: 0 | 1;
+		readonly confidence: number;
+		readonly outputPath: string;
+	};
+	readonly extensionSlop?: {
+		readonly label: 0 | 1;
+		readonly confidence: number;
 		readonly outputPath: string;
 	};
 };
@@ -671,9 +867,24 @@ async function runGenerationStage(
 			await mkdir(sampleDir, { recursive: true });
 			await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
 			await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
-			await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
-			await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
-			await writeJson(path.join(sampleDir, 'quiz-extension-judgement.json'), result.extensionJudge);
+			if (result.judge) {
+				await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
+			}
+			if (result.slop) {
+				await writeJson(path.join(sampleDir, 'quiz-slop.json'), result.slop);
+			}
+			if (result.extension) {
+				await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
+			}
+			if (result.extensionJudge) {
+				await writeJson(
+					path.join(sampleDir, 'quiz-extension-judgement.json'),
+					result.extensionJudge
+				);
+			}
+			if (result.extensionSlop) {
+				await writeJson(path.join(sampleDir, 'quiz-extension-slop.json'), result.extensionSlop);
+			}
 			results.push(result);
 			console.log(`[sample-quizzes] Saved outputs for ${job.id}`);
 		} catch (error) {
@@ -703,23 +914,53 @@ async function runGenerationStage(
 			generatedAt: result.quiz.generatedAt,
 			outputs: {
 				quiz: `/admin/sample-quizzes/${result.job.id}/quiz.json`,
-				judge: `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`,
-				extension: `/admin/sample-quizzes/${result.job.id}/quiz-extension.json`,
-				extensionJudge: `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
+				judge: result.judge
+					? `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`
+					: undefined,
+				slop: result.slop ? `/admin/sample-quizzes/${result.job.id}/quiz-slop.json` : undefined,
+				extension: result.extension
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension.json`
+					: undefined,
+				extensionJudge: result.extensionJudge
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
+					: undefined,
+				extensionSlop: result.extensionSlop
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension-slop.json`
+					: undefined
 			},
-			extension: {
-				quizTitle: result.extension.quiz.quizTitle,
-				questionCount: result.extension.quiz.questionCount,
-				generatedAt: result.extension.generatedAt
-			},
-			judge: {
-				verdict: result.judge.judge.verdict.verdict,
-				outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`
-			},
-			extensionJudge: {
-				verdict: result.extensionJudge.judge.verdict.verdict,
-				outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
-			}
+			extension: result.extension
+				? {
+						quizTitle: result.extension.quiz.quizTitle,
+						questionCount: result.extension.quiz.questionCount,
+						generatedAt: result.extension.generatedAt
+					}
+				: undefined,
+			judge: result.judge
+				? {
+						verdict: result.judge.judge.verdict.verdict,
+						outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`
+					}
+				: undefined,
+			extensionJudge: result.extensionJudge
+				? {
+						verdict: result.extensionJudge.judge.verdict.verdict,
+						outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
+					}
+				: undefined,
+			slop: result.slop
+				? {
+						label: result.slop.verdict.overall.label,
+						confidence: result.slop.verdict.overall.confidence,
+						outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-slop.json`
+					}
+				: undefined,
+			extensionSlop: result.extensionSlop
+				? {
+						label: result.extensionSlop.verdict.overall.label,
+						confidence: result.extensionSlop.verdict.overall.confidence,
+						outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-extension-slop.json`
+					}
+				: undefined
 		}))
 	};
 
@@ -730,25 +971,25 @@ async function runGenerationStage(
 }
 
 function buildPromptLinks(commitHash: string): Array<{ label: string; url: string }> {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    return PROMPT_FILE_PATHS.map((relativePath) => {
-        const posixPath = relativePath.split(path.sep).join('/');
-        return {
-            label: relativePath,
-            url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
-        };
-    });
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	return PROMPT_FILE_PATHS.map((relativePath) => {
+		const posixPath = relativePath.split(path.sep).join('/');
+		return {
+			label: relativePath,
+			url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
+		};
+	});
 }
 
 function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    const posixPath = relativeRepoPath.split(path.sep).join('/');
-    return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	const posixPath = relativeRepoPath.split(path.sep).join('/');
+	return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
 }
 
 function isImageAsset(relativeRepoPath: string): boolean {
-    const ext = path.extname(relativeRepoPath).toLowerCase();
-    return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
+	const ext = path.extname(relativeRepoPath).toLowerCase();
+	return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
 }
 
 function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
@@ -859,6 +1100,47 @@ function formatJudgeMarkdown(payload: JudgeFilePayload, heading: string): string
 	return lines.join('\n');
 }
 
+function formatSlopMarkdown(payload: SlopFilePayload, heading: string): string {
+	const lines: string[] = [];
+	lines.push(`# ${heading}`);
+	lines.push('');
+	const label = payload.verdict.overall.label === 1 ? 'slop risk' : 'acceptable';
+	lines.push(`**Overall:** ${label} (confidence ${payload.verdict.overall.confidence.toFixed(2)})`);
+	lines.push(`**Annoyance:** ${payload.verdict.annoyance}`);
+	lines.push(`**Domain:** ${payload.verdict.domain}`);
+	lines.push('');
+	lines.push('## Axes');
+	lines.push('');
+	payload.verdict.axes.forEach((axis) => {
+		lines.push(`- **${axis.code}** — score ${axis.score.toFixed(1)} (${axis.rationale})`);
+		if (axis.spans.length > 0) {
+			axis.spans.forEach((span) => {
+				lines.push(`  - “${span.quote}” (${span.charStart}-${span.charEnd})`);
+			});
+		}
+	});
+	if (payload.verdict.topFixes.length > 0) {
+		lines.push('');
+		lines.push('## Top fixes');
+		lines.push('');
+		payload.verdict.topFixes.forEach((fix) => {
+			lines.push(`- ${fix}`);
+		});
+	}
+	lines.push('');
+	lines.push('## Auto signals');
+	lines.push('');
+	lines.push(autoSignalsToMarkdown(payload.autoSignals));
+	lines.push('');
+	lines.push('## Prompt');
+	lines.push('');
+	lines.push('```');
+	lines.push(payload.prompt);
+	lines.push('```');
+	lines.push('');
+	return lines.join('\n');
+}
+
 async function getCommitHash(): Promise<string> {
 	const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT });
 	return stdout.trim();
@@ -894,79 +1176,159 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 	rootLines.push('## Samples');
 	rootLines.push('');
 
-    for (const sample of effectiveIndex.samples) {
-        const sampleDir = path.join(OUTPUT_DIR, sample.id);
-        const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
-        const judge = await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'));
-        const extension = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'));
-        const extensionJudge = await readJson<JudgeFilePayload>(
-            path.join(sampleDir, 'quiz-extension-judgement.json')
-        );
+	for (const sample of effectiveIndex.samples) {
+		const sampleDir = path.join(OUTPUT_DIR, sample.id);
+		const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
+		const judge = sample.outputs.judge
+			? await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'))
+			: undefined;
+		const slop = sample.outputs.slop
+			? await readJson<SlopFilePayload>(path.join(sampleDir, 'quiz-slop.json'))
+			: undefined;
+		const extension = sample.outputs.extension
+			? await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'))
+			: undefined;
+		const extensionJudge = sample.outputs.extensionJudge
+			? await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-extension-judgement.json'))
+			: undefined;
+		const extensionSlop = sample.outputs.extensionSlop
+			? await readJson<SlopFilePayload>(path.join(sampleDir, 'quiz-extension-slop.json'))
+			: undefined;
 
-        const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
-        await mkdir(reportSampleDir, { recursive: true });
+		const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
+		await mkdir(reportSampleDir, { recursive: true });
 
 		const sampleHeading = buildSampleHeading(sample);
 		const baseQuizMd = formatQuizMarkdown(quiz, `${sampleHeading} — Base Quiz`);
-		const baseJudgeMd = formatJudgeMarkdown(judge, `${sampleHeading} — Base Quiz Judge`);
-		const extensionQuizMd = formatQuizMarkdown(extension, `${sampleHeading} — Extension Quiz`);
-		const extensionJudgeMd = formatJudgeMarkdown(
-			extensionJudge,
-			`${sampleHeading} — Extension Judge`
-		);
+		const baseJudgeMd = judge
+			? formatJudgeMarkdown(judge, `${sampleHeading} — Base Quiz Judge`)
+			: undefined;
+		const baseSlopMd = slop
+			? formatSlopMarkdown(slop, `${sampleHeading} — Base Slop Review`)
+			: undefined;
+		const extensionQuizMd = extension
+			? formatQuizMarkdown(extension, `${sampleHeading} — Extension Quiz`)
+			: undefined;
+		const extensionJudgeMd = extensionJudge
+			? formatJudgeMarkdown(extensionJudge, `${sampleHeading} — Extension Judge`)
+			: undefined;
+		const extensionSlopMd = extensionSlop
+			? formatSlopMarkdown(extensionSlop, `${sampleHeading} — Extension Slop Review`)
+			: undefined;
 
 		await writeFile(path.join(reportSampleDir, 'quiz.md'), baseQuizMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-judgement.md'), baseJudgeMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-extension.md'), extensionQuizMd, 'utf8');
-        await writeFile(
-            path.join(reportSampleDir, 'quiz-extension-judgement.md'),
-            extensionJudgeMd,
-            'utf8'
-        );
+		if (baseJudgeMd) {
+			await writeFile(path.join(reportSampleDir, 'quiz-judgement.md'), baseJudgeMd, 'utf8');
+		}
+		if (baseSlopMd) {
+			await writeFile(path.join(reportSampleDir, 'quiz-slop.md'), baseSlopMd, 'utf8');
+		}
+		if (extensionQuizMd) {
+			await writeFile(path.join(reportSampleDir, 'quiz-extension.md'), extensionQuizMd, 'utf8');
+		}
+		if (extensionJudgeMd) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-extension-judgement.md'),
+				extensionJudgeMd,
+				'utf8'
+			);
+		}
+		if (extensionSlopMd) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-extension-slop.md'),
+				extensionSlopMd,
+				'utf8'
+			);
+		}
 
-        // Write source.md with embedded image and GitHub link
-        const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
-        const sourceImgRelative = path.posix.relative(
-            `docs/reports/sample-quizzes/${sample.id}`,
-            sample.source.relativePath
-        );
-        const sourceMdLines: string[] = [];
-        sourceMdLines.push(`# ${sampleHeading} — Source`);
-        sourceMdLines.push('');
-        sourceMdLines.push(`File: ${sample.source.displayName}`);
-        sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
-        sourceMdLines.push('');
-        if (isImageAsset(sample.source.relativePath)) {
-            sourceMdLines.push(
-                `<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
-            );
-        } else {
-            sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
-        }
-        sourceMdLines.push('');
-        await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
+		// Write source.md with embedded image and GitHub link
+		const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
+		const sourceImgRelative = path.posix.relative(
+			`docs/reports/sample-quizzes/${sample.id}`,
+			sample.source.relativePath
+		);
+		const sourceMdLines: string[] = [];
+		sourceMdLines.push(`# ${sampleHeading} — Source`);
+		sourceMdLines.push('');
+		sourceMdLines.push(`File: ${sample.source.displayName}`);
+		sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
+		sourceMdLines.push('');
+		if (isImageAsset(sample.source.relativePath)) {
+			sourceMdLines.push(
+				`<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
+			);
+		} else {
+			sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
+		}
+		sourceMdLines.push('');
+		await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
 
 		rootLines.push(`### ${sampleHeading}`);
 		rootLines.push('');
 		rootLines.push(`- Source: ${sample.source.displayName} (${sample.source.relativePath})`);
 		rootLines.push(`- Base quiz summary: ${sample.summary}`);
-		rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
-        rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
-        rootLines.push(
-            `- Reports: [Quiz](sample-quizzes/${sample.id}/quiz.md) · [Judge](sample-quizzes/${sample.id}/quiz-judgement.md) · [10 more](sample-quizzes/${sample.id}/quiz-extension.md) · [10 more judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
-        );
-        rootLines.push(
-            `- JSON: [Quiz](${relativeStaticPath(sample.id, 'quiz.json')}) · [Judge](${relativeStaticPath(
-                sample.id,
-                'quiz-judgement.json'
-            )}) · [10 more](${relativeStaticPath(
-                sample.id,
-                'quiz-extension.json'
-            )}) · [10 more judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
-        );
-        rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
-        rootLines.push('');
-    }
+		if (sample.judge) {
+			rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
+		}
+		if (sample.slop) {
+			const baseStatus = sample.slop.label === 1 ? 'flagged' : 'clear';
+			rootLines.push(
+				`- Base slop: ${baseStatus} (confidence ${sample.slop.confidence.toFixed(2)})`
+			);
+		}
+		if (sample.extensionJudge) {
+			rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
+		}
+		if (sample.extensionSlop) {
+			const extStatus = sample.extensionSlop.label === 1 ? 'flagged' : 'clear';
+			rootLines.push(
+				`- Extension slop: ${extStatus} (confidence ${sample.extensionSlop.confidence.toFixed(2)})`
+			);
+		}
+		const reportLinks: string[] = [`[Quiz](sample-quizzes/${sample.id}/quiz.md)`];
+		if (sample.outputs.judge) {
+			reportLinks.push(`[Judge](sample-quizzes/${sample.id}/quiz-judgement.md)`);
+		}
+		if (sample.outputs.slop) {
+			reportLinks.push(`[Slop](sample-quizzes/${sample.id}/quiz-slop.md)`);
+		}
+		if (sample.outputs.extension) {
+			reportLinks.push(`[Extension](sample-quizzes/${sample.id}/quiz-extension.md)`);
+		}
+		if (sample.outputs.extensionJudge) {
+			reportLinks.push(
+				`[Extension judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
+			);
+		}
+		if (sample.outputs.extensionSlop) {
+			reportLinks.push(`[Extension slop](sample-quizzes/${sample.id}/quiz-extension-slop.md)`);
+		}
+		rootLines.push(`- Reports: ${reportLinks.join(' · ')}`);
+
+		const jsonLinks: string[] = [`[Quiz](${relativeStaticPath(sample.id, 'quiz.json')})`];
+		if (sample.outputs.judge) {
+			jsonLinks.push(`[Judge](${relativeStaticPath(sample.id, 'quiz-judgement.json')})`);
+		}
+		if (sample.outputs.slop) {
+			jsonLinks.push(`[Slop](${relativeStaticPath(sample.id, 'quiz-slop.json')})`);
+		}
+		if (sample.outputs.extension) {
+			jsonLinks.push(`[Extension](${relativeStaticPath(sample.id, 'quiz-extension.json')})`);
+		}
+		if (sample.outputs.extensionJudge) {
+			jsonLinks.push(
+				`[Extension judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
+			);
+		}
+		if (sample.outputs.extensionSlop) {
+			jsonLinks.push(
+				`[Extension slop](${relativeStaticPath(sample.id, 'quiz-extension-slop.json')})`
+			);
+		}
+		rootLines.push(`- JSON: ${jsonLinks.join(' · ')}`);
+		rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
+		rootLines.push('');
+	}
 
 	await writeFile(path.join(REPORT_ROOT, 'sample-quizzes.md'), rootLines.join('\n'), 'utf8');
 }

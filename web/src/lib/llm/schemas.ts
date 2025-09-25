@@ -100,3 +100,66 @@ export type QuizQuestion = z.infer<typeof QuizQuestionSchema>;
 export type QuizGeneration = z.infer<typeof QuizGenerationSchema>;
 export type JudgeVerdict = z.infer<typeof JudgeVerdictSchema>;
 export type JudgeAudit = z.infer<typeof JudgeAuditSchema>;
+
+export const SLOP_CODES = [
+	'Density',
+	'Relevance',
+	'Factuality',
+	'Bias',
+	'Structure',
+	'Coherence',
+	'Tone'
+] as const;
+
+const SlopAxisSchemaRaw = z.object({
+	code: z.enum(SLOP_CODES),
+	score_0_to_4: z.number().min(0).max(4),
+	auto_signals: z.record(z.number()).default({}),
+	spans: z
+		.array(
+			z.object({
+				quote: z.string().min(1),
+				char_start: z.number().int().nonnegative(),
+				char_end: z.number().int().nonnegative()
+			})
+		)
+		.default([]),
+	rationale: z.string().min(1)
+});
+
+const SlopVerdictSchemaRaw = z.object({
+	overall_slop: z.object({
+		label: z.union([z.literal(0), z.literal(1)]),
+		confidence: z.number().min(0).max(1)
+	}),
+	domain: z.enum(['news', 'qa', 'other']),
+	annoyance: z.number().int().min(1).max(5),
+	axes: z.array(SlopAxisSchemaRaw),
+	top_fixes: z.array(z.string().min(1)).default([])
+});
+
+export const SlopAxisSchema = SlopAxisSchemaRaw.transform((value) => ({
+	code: value.code,
+	score: value.score_0_to_4,
+	autoSignals: value.auto_signals,
+	spans: value.spans.map((span) => ({
+		quote: span.quote,
+		charStart: span.char_start,
+		charEnd: span.char_end
+	})),
+	rationale: value.rationale
+}));
+
+export const SlopVerdictSchema = SlopVerdictSchemaRaw.transform((value) => ({
+	overall: {
+		label: value.overall_slop.label,
+		confidence: value.overall_slop.confidence
+	},
+	domain: value.domain,
+	annoyance: value.annoyance,
+	axes: value.axes.map((axis) => SlopAxisSchema.parse(axis)),
+	topFixes: value.top_fixes
+}));
+
+export type SlopAxis = z.infer<typeof SlopAxisSchema>;
+export type SlopVerdict = z.infer<typeof SlopVerdictSchema>;
