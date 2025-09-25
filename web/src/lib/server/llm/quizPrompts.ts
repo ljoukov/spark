@@ -112,7 +112,9 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		base.push(
 			'The material already includes questions and answers. Extract high-quality exam-ready items.',
 			'Preserve original wording as much as possible while fixing small typos.',
-			'Return questionCount distinct items that match the source closely.',
+			'When the source already asks questions, transcribe every numbered task and sub-part. If an answer is missing, infer a correct one directly from the source material.',
+			'If the source is mostly notes with few (three or fewer) questions, keep any explicit questions first and then create additional items that still mirror the lesson content.',
+			'Never drop a question or answer that appears in the source. Expand multi-part tasks only when necessary to keep prompt, answer, and marking points aligned.',
 			'Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.',
 			'If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.',
 			'When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.'
