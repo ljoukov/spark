@@ -439,7 +439,7 @@ async function generateExtensionPayload(
 	const generatedAt = new Date().toISOString();
 	return {
 		id: job.id,
-		mode: 'extension',
+		mode: job.mode,
 		subject: job.subject,
 		board: job.board,
 		generatedAt,
