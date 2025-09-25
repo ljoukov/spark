@@ -3,42 +3,64 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:22:27.982Z",
+  "generatedAt": "2025-09-25T07:28:14.313Z",
   "request": {
-    "model": "gemini-2.5-flash",
-    "questionCount": 6,
+    "model": "gemini-2.5-pro",
+    "questionCount": 20,
     "temperature": 0.2
   },
   "source": {
     "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
     "displayName": "C2.1ExamQs.pdf"
   },
-  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nRepresent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.\nIf you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.\nWhen the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.\nAlways write in UK English and reference the specification where relevant.\nYou must return exactly 20 questions.\nPrioritise coverage breadth over repetition. If the source has more material than fits, select items so every key theme is still assessed.\nSummaries and field values must never claim coverage that the questions do not provide; explicitly note any unavoidable omissions.\nReturn JSON that matches the provided schema. Field guidance:\n- quizTitle: Concise, exam-style title for the quiz.\n- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with \"Coverage gaps:\" and either say \"none – full coverage achieved.\" or list the specific missing topics/processes.\n- mode: Set to the provided mode value.\n- subject: Copy the provided subject exactly.\n- board: Copy the provided exam board exactly.\n- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.\n- questionCount: Must equal the number of questions returned.\n- questions: Array of question objects defined below.\nEach question object must include:\n- id: Match the original question identifier when present (e.g., \"Q1a\"). Otherwise use sequential IDs (\"Q1\", \"Q2\", ...).\n- prompt: Clean exam-ready wording that still mirrors the source task.\n- answer: Correct, concise answer text.\n- explanation: One to two sentences justifying the answer with source evidence.\n- type: One of multiple_choice, short_answer, true_false, or numeric.\n- options: Only for multiple_choice. Provide exactly four answer texts without prefixing letters—the system adds labels.\n- topic: Short topic label (e.g., \"Atomic structure\").\n- difficulty: Use foundation, intermediate, or higher.\n- skillFocus: Action-oriented description of the assessed skill (e.g., \"Interpret data\", \"Explain process\").\n- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.\n- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling \"phosphorus\" even if the source writes \"phosphorous\").\n- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.\n- Tighten ambiguous wording when needed so the scientific term is explicit (e.g., say \"relative atomic mass\" rather than the vague \"relative mass\").\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.\nVerify that ids and sourceReference values align with the original numbering before returning the JSON.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
-    "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry: States of Matter and Particle Theory",
+    "summary": "This quiz assesses understanding of states of matter, the particle model, and chemical equations, using multiple-choice, short answer, and numeric questions aligned with the AQA GCSE Chemistry specification. Coverage gaps: The quiz is based on a very limited source document; to meet the question count, multiple questions are derived from a single graph, and broader topics within the syllabus are not covered.",
     "mode": "extraction",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, specifically topics related to states of matter (particle model, changes of state, properties of solids, liquids, and gases) and chemical reactions (reactivity of metals, writing balanced equations with state symbols).",
-    "questionCount": 6,
+    "syllabusAlignment": "AQA GCSE Chemistry: 4.2 Bonding, structure, and the properties of matter; 4.3 Quantitative chemistry",
+    "questionCount": 20,
     "questions": [
       {
-        "id": "Q1a",
-        "prompt": "Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols from the box to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)",
-        "answer": "aq, g",
-        "explanation": "Lithium hydroxide is formed as a solution in water, so its state symbol is 'aq' (aqueous). Hydrogen is a gas produced in the reaction, so its state symbol is 'g'.",
+        "id": "Q1a_i",
+        "prompt": "The equation for lithium reacting with water is 2Li(s) + 2H₂O(l) → 2LiOH(__) + H₂(__). Use the information in the question to provide the correct state symbol for lithium hydroxide.",
+        "answer": "aq",
+        "explanation": "The question states that lithium hydroxide solution is produced. The state symbol for an aqueous solution is (aq).",
         "type": "short_answer",
-        "topic": "Chemical reactions, State symbols",
+        "topic": "Chemical Equations",
         "difficulty": "foundation",
-        "skillFocus": "Applying knowledge of chemical reactions and state symbols.",
-        "sourceReference": "Page 1, Question 1(a)"
+        "skillFocus": "Recall and apply knowledge of state symbols",
+        "sourceReference": "Page 1, Q1a"
+      },
+      {
+        "id": "Q1a_ii",
+        "prompt": "The equation for lithium reacting with water is 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(__). Use the information in the question to provide the correct state symbol for hydrogen.",
+        "answer": "g",
+        "explanation": "The question states that hydrogen is produced. Hydrogen is a gas at room temperature, so its state symbol is (g).",
+        "type": "short_answer",
+        "topic": "Chemical Equations",
+        "difficulty": "foundation",
+        "skillFocus": "Recall and apply knowledge of state symbols",
+        "sourceReference": "Page 1, Q1a"
+      },
+      {
+        "id": "Q1a_iii",
+        "prompt": "Name the two products formed when lithium reacts with water.",
+        "answer": "Lithium hydroxide and hydrogen",
+        "explanation": "The prompt for question 1a explicitly states: 'Lithium reacts with water to produce lithium hydroxide solution and hydrogen.'",
+        "type": "short_answer",
+        "topic": "Reactions of Metals",
+        "difficulty": "foundation",
+        "skillFocus": "Extract information from text",
+        "sourceReference": "Page 1, Q1a"
       },
       {
         "id": "Q1b",
-        "prompt": "Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?",
+        "prompt": "Figure 1 shows the melting and boiling points of four substances. Which substance is liquid over the greatest temperature range?",
         "answer": "C",
-        "explanation": "To find the substance liquid over the greatest temperature range, calculate the difference between its boiling point and melting point. A: 20°C (10 - (-10)). B: 120°C (190 - 70). C: 200°C (210 - 10). D: 20°C (-160 - (-180)). Substance C has the largest range of 200°C.",
+        "explanation": "Substance C is liquid between approximately 10°C and 210°C, a range of 200°C. This is greater than the ranges for A (approx. 75°C), B (approx. 115°C), and D (approx. 20°C).",
         "type": "multiple_choice",
         "options": [
           "A",
@@ -46,16 +68,38 @@
           "C",
           "D"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
+        "topic": "States of Matter",
         "difficulty": "intermediate",
-        "skillFocus": "Interpreting graphical data, calculating temperature ranges.",
-        "sourceReference": "Page 2, Question 1(b), Figure 1"
+        "skillFocus": "Interpret graphical data and perform calculations",
+        "sourceReference": "Page 2, Q1b, Figure 1"
+      },
+      {
+        "id": "Q1b_calc_C",
+        "prompt": "Using the data from Figure 1, calculate the temperature range in degrees Celsius over which substance C is a liquid.",
+        "answer": "200",
+        "explanation": "Substance C has a melting point of approximately 10°C and a boiling point of approximately 210°C. The liquid range is the difference: 210 - 10 = 200°C.",
+        "type": "numeric",
+        "topic": "States of Matter",
+        "difficulty": "intermediate",
+        "skillFocus": "Extract and process graphical data",
+        "sourceReference": "Page 2, Q1b, Figure 1"
+      },
+      {
+        "id": "Q1b_calc_B",
+        "prompt": "Using the data from Figure 1, calculate the temperature range in degrees Celsius over which substance B is a liquid.",
+        "answer": "115",
+        "explanation": "Substance B has a melting point of approximately 75°C and a boiling point of approximately 190°C. The liquid range is the difference: 190 - 75 = 115°C.",
+        "type": "numeric",
+        "topic": "States of Matter",
+        "difficulty": "intermediate",
+        "skillFocus": "Extract and process graphical data",
+        "sourceReference": "Page 2, Q1b, Figure 1"
       },
       {
         "id": "Q1c",
-        "prompt": "Referring to Figure 1, which two substances are gases at 50 °C?",
+        "prompt": "Which two substances shown in Figure 1 are gases at 50 °C?",
         "answer": "A and D",
-        "explanation": "A substance is a gas when its temperature is above its boiling point. At 50°C, Substance A (Boiling Point ~10°C) is a gas. Substance B (Boiling Point ~190°C) is a solid. Substance C (Boiling Point ~210°C) is a liquid. Substance D (Boiling Point ~-160°C) is a gas. Therefore, A and D are gases at 50°C.",
+        "explanation": "A substance is a gas at a temperature above its boiling point. At 50°C, substance A (BP ≈ 0°C) and substance D (BP ≈ -160°C) are both above their boiling points.",
         "type": "multiple_choice",
         "options": [
           "A and B",
@@ -63,54 +107,170 @@
           "C and D",
           "A and D"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
+        "topic": "States of Matter",
         "difficulty": "intermediate",
-        "skillFocus": "Interpreting graphical data, identifying states of matter at specific temperatures.",
-        "sourceReference": "Page 3, Question 1(c), Figure 1"
+        "skillFocus": "Interpret graphical data",
+        "sourceReference": "Page 3, Q1c, Figure 1"
+      },
+      {
+        "id": "Q1d_i",
+        "prompt": "A different substance, E, has a melting point of -50 °C and a boiling point of +120 °C. What would be the state of substance E at 0 °C?",
+        "answer": "Liquid",
+        "explanation": "0°C is above the melting point of -50°C and below the boiling point of +120°C, so substance E would be in the liquid state.",
+        "type": "short_answer",
+        "topic": "States of Matter",
+        "difficulty": "foundation",
+        "skillFocus": "Apply knowledge of state changes",
+        "sourceReference": "Page 3, Q1d"
+      },
+      {
+        "id": "Q1d_ii",
+        "prompt": "Substance E has a melting point of -50 °C and a boiling point of +120 °C. Is its liquid temperature range larger or smaller than that of substance B from Figure 1?",
+        "answer": "Larger",
+        "explanation": "The liquid range for E is 120 - (-50) = 170°C. From Figure 1, the range for B is approximately 190 - 75 = 115°C. Therefore, E's range is larger.",
+        "type": "short_answer",
+        "topic": "States of Matter",
+        "difficulty": "higher",
+        "skillFocus": "Calculate and compare data",
+        "sourceReference": "Page 3, Q1d; Page 2, Figure 1"
       },
       {
         "id": "Q1e",
-        "prompt": "Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.",
-        "answer": "The apparatus uses water as the heating medium. Water boils at 100°C, but substance B has a boiling point of 190°C. Therefore, water cannot reach a high enough temperature to boil substance B.",
-        "explanation": "Substance B has a boiling point of 190°C (from Figure 1). The apparatus uses a water bath for heating. Water boils at 100°C at standard atmospheric pressure, meaning it cannot be heated above this temperature. Consequently, the water bath cannot provide enough heat to raise substance B to its boiling point of 190°C.",
+        "prompt": "Figure 2 shows apparatus for determining melting and boiling points using a water bath. Explain why this apparatus could not be used to determine the boiling point of substance B (shown in Figure 1).",
+        "answer": "The boiling point of substance B is approximately 190°C, which is above the boiling point of water (100°C). A water bath cannot reach a temperature higher than 100°C.",
+        "explanation": "A water bath's temperature is limited by the boiling point of water. To measure a boiling point of 190°C, a heating medium with a higher boiling point, such as an oil bath, would be required.",
         "type": "short_answer",
-        "topic": "Experimental techniques, States of matter, Heating curves",
-        "difficulty": "higher",
-        "skillFocus": "Evaluating experimental procedures, understanding limitations of apparatus.",
-        "sourceReference": "Page 4, Question 1(e), Figure 2"
+        "topic": "Practical Chemistry",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain limitations of experimental apparatus",
+        "sourceReference": "Page 4, Q1e, Figure 2"
       },
       {
-        "id": "Q2a",
-        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Which two characteristics make this a good model for gas particles?",
-        "answer": "The balls are far apart from each other and move randomly.",
-        "explanation": "In the particle model of gases, particles are widely spaced and move randomly and rapidly. The model effectively demonstrates these two key characteristics. The speed of movement is not accurately represented by 'slowly', and colour is irrelevant.",
+        "id": "Q1f",
+        "prompt": "Suggest one reason why the apparatus shown in Figure 2 might not be suitable for determining the exact melting point of a substance.",
+        "answer": "If the substance is impure, it will melt over a range of temperatures rather than at a sharp, exact point.",
+        "explanation": "Impurities disrupt the regular crystal lattice of a solid, lowering the melting point and causing it to melt over a range. This makes determining an 'exact' melting point difficult.",
+        "type": "short_answer",
+        "topic": "Practical Chemistry",
+        "difficulty": "higher",
+        "skillFocus": "Analyse experimental methods",
+        "sourceReference": "Page 4, Q1f"
+      },
+      {
+        "id": "Q2a_i",
+        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Which of the following is a correct reason why this is a good model?",
+        "answer": "The balls move randomly.",
+        "explanation": "A key property of particles in a gas is that they move rapidly and randomly, which is simulated by shaking the balls in the tube.",
         "type": "multiple_choice",
         "options": [
-          "The balls move slowly and are different colours.",
-          "The balls are far apart from each other and move randomly.",
-          "The balls are close together and move slowly.",
-          "The balls are different colours and move randomly."
+          "The balls move randomly.",
+          "The balls are different colours.",
+          "The balls move slowly.",
+          "The balls are in a regular arrangement."
         ],
-        "topic": "Particle model, States of matter",
+        "topic": "Particle Model",
         "difficulty": "foundation",
-        "skillFocus": "Understanding the particle model of gases.",
-        "sourceReference": "Page 5, Question 2(a)"
+        "skillFocus": "Evaluate a scientific model",
+        "sourceReference": "Page 5, Q2a"
       },
       {
-        "id": "Q2b_part1",
-        "prompt": "For a given material, in which state of matter are the particles in a regular arrangement?",
-        "answer": "Solid",
-        "explanation": "In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating pattern (a lattice structure).",
-        "type": "short_answer",
-        "topic": "Particle model, States of matter",
+        "id": "Q2a_ii",
+        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Besides their random movement, what is another feature of gas particles that this model correctly represents?",
+        "answer": "The balls are far apart from each other.",
+        "explanation": "The model shows the balls with large spaces between them, which accurately represents the large intermolecular distances between particles in a gas.",
+        "type": "multiple_choice",
+        "options": [
+          "The balls are far apart from each other.",
+          "The balls have strong forces between them.",
+          "The balls are different colours.",
+          "The balls vibrate in fixed positions."
+        ],
+        "topic": "Particle Model",
         "difficulty": "foundation",
-        "skillFocus": "Recalling characteristics of states of matter.",
-        "sourceReference": "Page 5, Question 2(b)"
+        "skillFocus": "Evaluate a scientific model",
+        "sourceReference": "Page 5, Q2a"
+      },
+      {
+        "id": "Q2b_i",
+        "prompt": "For a given material, in which state of matter are the particles held in a regular arrangement?",
+        "answer": "Solid",
+        "explanation": "In the solid state, particles are held in fixed positions within a regular lattice structure, allowing them only to vibrate.",
+        "type": "short_answer",
+        "topic": "Particle Model",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties of states of matter",
+        "sourceReference": "Page 5, Q2b"
+      },
+      {
+        "id": "Q2b_ii",
+        "prompt": "For a given material, in which state of matter do the particles have the most kinetic energy?",
+        "answer": "Gas",
+        "explanation": "Particles in the gaseous state move most freely and at the highest speeds, meaning they have the greatest amount of kinetic energy.",
+        "type": "short_answer",
+        "topic": "Particle Model",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties of states of matter",
+        "sourceReference": "Page 5, Q2b"
+      },
+      {
+        "id": "Q1b_data_A",
+        "prompt": "Read the approximate melting point of substance A from the graph in Figure 1.",
+        "answer": "-75",
+        "explanation": "The 'x' symbol for substance A, which represents the melting point, is located halfway between -50°C and -100°C on the y-axis.",
+        "type": "numeric",
+        "topic": "States of Matter",
+        "difficulty": "foundation",
+        "skillFocus": "Extract data from a graph",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q1b_data_D",
+        "prompt": "Read the approximate boiling point of substance D from the graph in Figure 1.",
+        "answer": "-160",
+        "explanation": "The filled circle for substance D, which represents the boiling point, is located at approximately -160°C on the y-axis.",
+        "type": "numeric",
+        "topic": "States of Matter",
+        "difficulty": "foundation",
+        "skillFocus": "Extract data from a graph",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q1b_state_C",
+        "prompt": "Using Figure 1, determine the physical state of substance C at exactly 10 °C.",
+        "answer": "Melting / Solid and liquid",
+        "explanation": "10°C is the melting point of substance C. At its melting point, a substance exists as a mixture of solid and liquid as it undergoes the phase change.",
+        "type": "short_answer",
+        "topic": "States of Matter",
+        "difficulty": "intermediate",
+        "skillFocus": "Interpret graphical data",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q1b_state_A",
+        "prompt": "Using Figure 1, determine the physical state of substance A at 50 °C.",
+        "answer": "Gas",
+        "explanation": "The boiling point of substance A is approximately 0°C. Since 50°C is above its boiling point, substance A will be a gas.",
+        "type": "short_answer",
+        "topic": "States of Matter",
+        "difficulty": "foundation",
+        "skillFocus": "Interpret graphical data",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q1b_state_B",
+        "prompt": "Using Figure 1, determine the physical state of substance B at 50 °C.",
+        "answer": "Solid",
+        "explanation": "The melting point of substance B is approximately 75°C. Since 50°C is below its melting point, substance B will be a solid.",
+        "type": "short_answer",
+        "topic": "States of Matter",
+        "difficulty": "foundation",
+        "skillFocus": "Interpret graphical data",
+        "sourceReference": "Page 2, Figure 1"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -120,7 +280,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/C2.1ExamQs.pdf",
     "relativeSourcePath": "data/samples/with-questions/C2.1ExamQs.pdf",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2

@@ -3,114 +3,228 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:20:29.877Z",
+  "generatedAt": "2025-09-25T07:24:47.329Z",
   "request": {
-    "model": "gemini-2.5-flash",
-    "questionCount": 6,
+    "model": "gemini-2.5-pro",
+    "questionCount": 20,
     "temperature": 0.2
   },
   "source": {
     "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
     "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
   },
-  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nRepresent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.\nIf you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.\nWhen the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.\nAlways write in UK English and reference the specification where relevant.\nYou must return exactly 20 questions.\nPrioritise coverage breadth over repetition. If the source has more material than fits, select items so every key theme is still assessed.\nSummaries and field values must never claim coverage that the questions do not provide; explicitly note any unavoidable omissions.\nReturn JSON that matches the provided schema. Field guidance:\n- quizTitle: Concise, exam-style title for the quiz.\n- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with \"Coverage gaps:\" and either say \"none – full coverage achieved.\" or list the specific missing topics/processes.\n- mode: Set to the provided mode value.\n- subject: Copy the provided subject exactly.\n- board: Copy the provided exam board exactly.\n- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.\n- questionCount: Must equal the number of questions returned.\n- questions: Array of question objects defined below.\nEach question object must include:\n- id: Match the original question identifier when present (e.g., \"Q1a\"). Otherwise use sequential IDs (\"Q1\", \"Q2\", ...).\n- prompt: Clean exam-ready wording that still mirrors the source task.\n- answer: Correct, concise answer text.\n- explanation: One to two sentences justifying the answer with source evidence.\n- type: One of multiple_choice, short_answer, true_false, or numeric.\n- options: Only for multiple_choice. Provide exactly four answer texts without prefixing letters—the system adds labels.\n- topic: Short topic label (e.g., \"Atomic structure\").\n- difficulty: Use foundation, intermediate, or higher.\n- skillFocus: Action-oriented description of the assessed skill (e.g., \"Interpret data\", \"Explain process\").\n- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.\n- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling \"phosphorus\" even if the source writes \"phosphorous\").\n- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.\n- Tighten ambiguous wording when needed so the scientific term is explicit (e.g., say \"relative atomic mass\" rather than the vague \"relative mass\").\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.\nVerify that ids and sourceReference values align with the original numbering before returning the JSON.",
   "quiz": {
-    "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
-    "summary": "This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 6 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.",
+    "quizTitle": "GCSE Chemistry: Covalent Bonding and Carbon Allotropes",
+    "summary": "This quiz contains 18 short-answer questions covering covalent bonding, properties of simple and giant covalent structures, and allotropes of carbon, aligned with the AQA specification. Coverage gaps: the source material provided only 18 questions, not the requested 20.",
     "mode": "extraction",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "C2 Covalent bonding (AQA GCSE Triple Science)",
-    "questionCount": 6,
+    "syllabusAlignment": "AQA GCSE Chemistry: C2 Structure and Bonding - Covalent Bonding and Allotropes of Carbon.",
+    "questionCount": 18,
     "questions": [
       {
         "id": "Q1",
         "prompt": "How are covalent bonds formed?",
-        "answer": "by atoms sharing electrons",
-        "explanation": "Covalent bonds are formed when two atoms share one or more pairs of electrons to achieve a stable electron configuration.",
-        "type": "multiple_choice",
-        "options": [
-          "by atoms transferring electrons",
-          "by atoms sharing electrons",
-          "by atoms gaining electrons",
-          "by atoms losing electrons"
-        ],
-        "topic": "Covalent Bonding Basics",
+        "answer": "By atoms sharing electrons.",
+        "explanation": "Covalent bonds involve the sharing of electron pairs between atoms, typically non-metals, to achieve a stable electron configuration.",
+        "type": "short_answer",
+        "topic": "Covalent Bonding",
         "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C2 questions, Q1"
+        "skillFocus": "Recall definition",
+        "sourceReference": "C2 Question 1"
       },
       {
         "id": "Q2",
-        "prompt": "Describe the structure and bonding of a giant covalent substance.",
-        "answer": "billions of atoms bonded together by strong covalent bonds",
-        "explanation": "Giant covalent structures consist of a vast, repeating network of billions of atoms held together by strong covalent bonds throughout the entire structure.",
+        "prompt": "Which type of atoms form covalent bonds between them?",
+        "answer": "Non-metals.",
+        "explanation": "Covalent bonds typically form between non-metal atoms, which have similar electronegativities and share electrons to complete their outer shells.",
         "type": "short_answer",
-        "topic": "Giant Covalent Structures",
-        "difficulty": "intermediate",
-        "skillFocus": "Description",
-        "sourceReference": "C2 questions, Q3"
+        "topic": "Covalent Bonding",
+        "difficulty": "foundation",
+        "skillFocus": "Recall fact",
+        "sourceReference": "C2 Question 2"
       },
       {
         "id": "Q3",
-        "prompt": "Why do giant covalent substances have high melting points?",
-        "answer": "it takes a lot of energy to break the strong covalent bonds between the atoms",
-        "explanation": "Due to the extensive network of strong covalent bonds throughout the entire structure, a significant amount of thermal energy is required to overcome these bonds, resulting in high melting points.",
+        "prompt": "Describe the structure and bonding of a giant covalent substance.",
+        "answer": "Billions of atoms are bonded together by strong covalent bonds throughout the structure.",
+        "explanation": "In a giant covalent structure, there are no individual molecules. All atoms are linked by a network of strong covalent bonds, forming a macromolecular lattice.",
         "type": "short_answer",
-        "topic": "Properties of Giant Covalent Structures",
+        "topic": "Giant Covalent Structures",
         "difficulty": "intermediate",
-        "skillFocus": "Explanation",
-        "sourceReference": "C2 questions, Q6"
+        "skillFocus": "Describe structure and bonding",
+        "sourceReference": "C2 Question 3"
       },
       {
         "id": "Q4",
-        "prompt": "Describe the structure and bonding in graphite.",
-        "answer": "each carbon atom is bonded to three others in hexagonal rings arranged in layers – it has delocalised electrons and weak forces between the layers",
-        "explanation": "Graphite is a giant covalent structure where each carbon atom is covalently bonded to three other carbon atoms, forming hexagonal rings arranged in layers. These layers are held together by weak intermolecular forces, and there are delocalised electrons within the layers.",
+        "prompt": "Describe the structure and bonding of small molecules.",
+        "answer": "Small numbers of atoms group together into molecules with strong covalent bonds within the molecules and weak intermolecular forces between the molecules.",
+        "explanation": "Simple molecular substances consist of discrete molecules held together by weak intermolecular forces, while the atoms within each molecule are joined by strong covalent bonds.",
         "type": "short_answer",
-        "topic": "Graphite Structure",
-        "difficulty": "higher",
-        "skillFocus": "Description",
-        "sourceReference": "C2 questions, Q10"
+        "topic": "Simple Molecular Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Describe structure and bonding",
+        "sourceReference": "C2 Question 4"
       },
       {
         "id": "Q5",
-        "prompt": "Why can graphite conduct electricity?",
-        "answer": "the delocalised electrons can move through the graphite",
-        "explanation": "In graphite, each carbon atom forms only three covalent bonds, leaving one outer electron per atom delocalised. These delocalised electrons are free to move throughout the layers, allowing graphite to conduct electricity.",
-        "type": "multiple_choice",
-        "options": [
-          "It has free ions that can carry charge.",
-          "The strong covalent bonds allow electrons to flow easily.",
-          "It has delocalised electrons that can move through the structure.",
-          "Its layered structure allows for electron transfer between layers."
-        ],
-        "topic": "Properties of Graphite",
+        "prompt": "Describe the structure and bonding of polymers.",
+        "answer": "Many identical molecules are joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.",
+        "explanation": "Polymers are large molecules made of repeating monomer units linked by strong covalent bonds. The long chains are attracted to each other by intermolecular forces.",
+        "type": "short_answer",
+        "topic": "Polymers",
         "difficulty": "intermediate",
-        "skillFocus": "Explanation, Recall",
-        "sourceReference": "C2 questions, Q11"
+        "skillFocus": "Describe structure and bonding",
+        "sourceReference": "C2 Question 5"
       },
       {
         "id": "Q6",
-        "prompt": "What is a fullerene?",
-        "answer": "hollow cage of carbon atoms arranged as a sphere or a tube",
-        "explanation": "Fullerenes are a class of carbon allotropes consisting of hollow molecular cages, typically spherical (like buckyballs) or cylindrical (nanotubes).",
-        "type": "multiple_choice",
-        "options": [
-          "A single layer of graphite.",
-          "A giant covalent lattice of silicon atoms.",
-          "A hollow cage of carbon atoms arranged as a sphere or a tube.",
-          "A long chain of identical monomer units."
-        ],
-        "topic": "Fullerenes",
+        "prompt": "Why do giant covalent substances have high melting points?",
+        "answer": "A large amount of energy is required to break the numerous strong covalent bonds between the atoms.",
+        "explanation": "The high melting and boiling points of giant covalent structures are due to the need to overcome the strong covalent bonds throughout the lattice, which requires a lot of thermal energy.",
+        "type": "short_answer",
+        "topic": "Giant Covalent Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain properties",
+        "sourceReference": "C2 Question 6"
+      },
+      {
+        "id": "Q7",
+        "prompt": "Why do small molecules have low melting points?",
+        "answer": "Only a small amount of energy is needed to overcome the weak intermolecular forces between molecules.",
+        "explanation": "When a simple molecular substance melts or boils, it is the weak intermolecular forces that are broken, not the strong covalent bonds within the molecules. This requires relatively little energy.",
+        "type": "short_answer",
+        "topic": "Simple Molecular Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain properties",
+        "sourceReference": "C2 Question 7"
+      },
+      {
+        "id": "Q8",
+        "prompt": "Why do large molecules have higher melting and boiling points than small molecules?",
+        "answer": "The intermolecular forces are stronger in large molecules.",
+        "explanation": "Larger molecules have more points of contact, leading to stronger overall intermolecular forces. More energy is needed to overcome these forces compared to the forces between smaller molecules.",
+        "type": "short_answer",
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Compare and explain properties",
+        "sourceReference": "C2 Question 8"
+      },
+      {
+        "id": "Q9",
+        "prompt": "Why do most covalent substances not conduct electricity?",
+        "answer": "They do not have delocalised electrons or free-moving ions to carry an electrical charge.",
+        "explanation": "For a substance to conduct electricity, it must contain charged particles that are free to move. In most covalent substances, electrons are held in fixed bonds and there are no ions.",
+        "type": "short_answer",
+        "topic": "Properties of Covalent Substances",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain properties",
+        "sourceReference": "C2 Question 9"
+      },
+      {
+        "id": "Q10",
+        "prompt": "Describe the structure and bonding in graphite.",
+        "answer": "Each carbon atom is bonded to three others in hexagonal rings arranged in layers. It has delocalised electrons and weak forces between the layers.",
+        "explanation": "Graphite is an allotrope of carbon with a layered, giant covalent structure. The delocalised electrons are responsible for its conductivity, and the weak forces between layers allow them to slide.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "higher",
+        "skillFocus": "Describe structure and bonding",
+        "sourceReference": "C2 Question 10"
+      },
+      {
+        "id": "Q11",
+        "prompt": "Why can graphite conduct electricity?",
+        "answer": "The delocalised electrons are free to move through the structure and carry charge.",
+        "explanation": "Each carbon atom in graphite donates one electron to a delocalised system, creating a 'sea' of electrons that can move along the layers when a voltage is applied.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain properties",
+        "sourceReference": "C2 Question 11"
+      },
+      {
+        "id": "Q12",
+        "prompt": "Explain why graphite is soft.",
+        "answer": "The layers are not covalently bonded to each other and can slide over one another easily due to weak intermolecular forces.",
+        "explanation": "The weak forces of attraction between the layers in graphite require little energy to overcome, allowing the layers to slip. This property makes graphite useful as a lubricant.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain properties",
+        "sourceReference": "C2 Question 12"
+      },
+      {
+        "id": "Q13",
+        "prompt": "What is graphene?",
+        "answer": "A single layer of graphite.",
+        "explanation": "Graphene is a two-dimensional allotrope of carbon consisting of a single layer of atoms arranged in a hexagonal lattice.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
         "difficulty": "foundation",
-        "skillFocus": "Definition, Recall",
-        "sourceReference": "C2 questions, Q15"
+        "skillFocus": "Recall definition",
+        "sourceReference": "C2 Question 13"
+      },
+      {
+        "id": "Q14",
+        "prompt": "Give two properties of graphene.",
+        "answer": "It is very strong and conducts electricity.",
+        "explanation": "Graphene's strength comes from its network of strong covalent bonds, and its conductivity is due to delocalised electrons across the single layer.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties",
+        "sourceReference": "C2 Question 14"
+      },
+      {
+        "id": "Q15",
+        "prompt": "What is a fullerene?",
+        "answer": "A hollow cage of carbon atoms, which can be arranged as a sphere or a tube.",
+        "explanation": "Fullerenes are molecules of carbon with hollow shapes, such as spheres (buckyballs) or cylinders (nanotubes).",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall definition",
+        "sourceReference": "C2 Question 15"
+      },
+      {
+        "id": "Q16",
+        "prompt": "What is a nanotube?",
+        "answer": "A hollow cylinder of carbon atoms.",
+        "explanation": "Carbon nanotubes are a type of fullerene. They are cylindrical molecules consisting of a rolled-up sheet of single-layer carbon atoms (graphene).",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall definition",
+        "sourceReference": "C2 Question 16"
+      },
+      {
+        "id": "Q17",
+        "prompt": "Give two properties of nanotubes.",
+        "answer": "They have a high tensile strength and conduct electricity.",
+        "explanation": "Carbon nanotubes are very strong due to the covalent bonds between the carbon atoms. They can also conduct electricity, and their conductivity depends on their structure.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall properties",
+        "sourceReference": "C2 Question 17"
+      },
+      {
+        "id": "Q18",
+        "prompt": "Give three uses of fullerenes.",
+        "answer": "Lubricants, drug delivery, and in high-tech electronics.",
+        "explanation": "The unique cage-like structures of fullerenes make them suitable for various applications, including trapping other molecules for drug delivery, acting as molecular ball bearings in lubricants, and use in electronics.",
+        "type": "short_answer",
+        "topic": "Allotropes of Carbon",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall applications",
+        "sourceReference": "C2 Question 18"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -120,7 +234,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2

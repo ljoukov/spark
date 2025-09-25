@@ -112,7 +112,10 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		base.push(
 			'The material already includes questions and answers. Extract high-quality exam-ready items.',
 			'Preserve original wording as much as possible while fixing small typos.',
-			'Return questionCount distinct items that match the source closely.'
+			'Return questionCount distinct items that match the source closely.',
+			'Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.',
+			'If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.',
+			'When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.'
 		);
 	} else {
 		base.push(
@@ -123,10 +126,36 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 	}
 	base.push(
 		'Always write in UK English and reference the specification where relevant.',
-		'Return JSON that matches the provided schema. The summary should highlight coverage and question mix.',
 		`You must return exactly ${options.questionCount} questions.`,
-		'For multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.',
-		'Set the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.'
+		'Prioritise coverage breadth over repetition. If the source has more material than fits, select items so every key theme is still assessed.',
+		'Summaries and field values must never claim coverage that the questions do not provide; explicitly note any unavoidable omissions.'
+	);
+	base.push(
+		'Return JSON that matches the provided schema. Field guidance:',
+		'- quizTitle: Concise, exam-style title for the quiz.',
+		'- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with "Coverage gaps:" and either say "none – full coverage achieved." or list the specific missing topics/processes.',
+		'- mode: Set to the provided mode value.',
+		'- subject: Copy the provided subject exactly.',
+		'- board: Copy the provided exam board exactly.',
+		'- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.',
+		'- questionCount: Must equal the number of questions returned.',
+		'- questions: Array of question objects defined below.'
+	);
+	base.push(
+		'Each question object must include:',
+		'- id: Match the original question identifier when present (e.g., "Q1a"). Otherwise use sequential IDs ("Q1", "Q2", ...).',
+		'- prompt: Clean exam-ready wording that still mirrors the source task.',
+		'- answer: Correct, concise answer text.',
+		'- explanation: One to two sentences justifying the answer with source evidence.',
+		'- type: One of multiple_choice, short_answer, true_false, or numeric.',
+		'- options: Only for multiple_choice. Provide exactly four answer texts without prefixing letters—the system adds labels.',
+		'- topic: Short topic label (e.g., "Atomic structure").',
+		'- difficulty: Use foundation, intermediate, or higher.',
+		'- skillFocus: Action-oriented description of the assessed skill (e.g., "Interpret data", "Explain process").',
+		'- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.',
+		'- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling "phosphorus" even if the source writes "phosphorous").',
+		'- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.',
+		'- Tighten ambiguous wording when needed so the scientific term is explicit (e.g., say "relative atomic mass" rather than the vague "relative mass").'
 	);
 	if (options.subject) {
 		base.push(`Subject focus: ${options.subject}.`);
@@ -136,7 +165,8 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 	}
 	base.push(
 		'Include concise sourceReference entries when you can identify page numbers, prompts or captions.',
-		'If the material lacks enough detail for a requirement, explain the limitation in the summary.'
+		'If the material lacks enough detail for a requirement, explain the limitation in the summary.',
+		'Verify that ids and sourceReference values align with the original numbering before returning the JSON.'
 	);
 	return base.join('\n');
 }

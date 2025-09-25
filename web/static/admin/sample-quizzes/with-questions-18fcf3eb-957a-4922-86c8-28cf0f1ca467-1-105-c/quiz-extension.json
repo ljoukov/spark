@@ -1,11 +1,11 @@
 {
   "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:19:23.156Z",
+  "generatedAt": "2025-09-25T07:23:16.477Z",
   "request": {
-    "model": "gemini-2.5-flash",
+    "model": "gemini-2.5-pro",
     "questionCount": 10,
     "temperature": 0.2
   },
@@ -15,164 +15,158 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry C1: Atomic Structure and Models (Extended)",
-    "summary": "This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, delving deeper into atomic models, sub-atomic particle properties, electron configuration, and definitions of key atomic terms like isotopes. It includes a mix of multiple-choice, short-answer, and true/false questions, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry: Atomic Structure Extension",
+    "summary": "This quiz provides 10 additional questions to extend learning on atomic structure, historical models, and the properties of elements, compounds, and mixtures. It includes multiple-choice, short-answer, numeric, and true/false questions to test application and deeper understanding.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry (8462) - Atomic Structure and the Periodic Table (4.1.1)",
+    "syllabusAlignment": "AQA GCSE Chemistry: C1 Atomic structure and the periodic table.",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q7",
-        "prompt": "According to Dalton's model, how were atoms described?",
-        "answer": "A. Atoms as solid spheres that could not be divided into smaller parts.",
-        "explanation": "John Dalton's atomic theory, proposed in the early 19th century, described atoms as indivisible, indestructible solid spheres.",
+        "id": "Q21",
+        "prompt": "Which conclusion was drawn directly from the observation that some alpha particles were deflected by the gold foil in the alpha scattering experiment?",
+        "answer": "C",
+        "explanation": "The deflection of positively charged alpha particles showed that they were being repelled by a concentrated positive charge within the atom. This led to the nuclear model, where the positive charge and mass are located in a small, dense nucleus.",
         "type": "multiple_choice",
         "options": [
-          "A. Atoms as solid spheres that could not be divided into smaller parts.",
-          "B. A sphere of positive charge with negative electrons embedded in it.",
-          "C. A dense nucleus with electrons orbiting it.",
-          "D. Atoms with a central nucleus containing protons and neutrons."
+          "A. The existence of electrons.",
+          "B. The atom is mostly empty space.",
+          "C. The atom's positive charge is concentrated in a small nucleus.",
+          "D. The existence of neutrons."
         ],
-        "topic": "Atomic Models (Dalton)",
-        "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q2"
-      },
-      {
-        "id": "Q8",
-        "prompt": "What crucial discovery was made by scientists during the alpha scattering experiment?",
-        "answer": "C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).",
-        "explanation": "The alpha scattering experiment, led by Rutherford, showed that most alpha particles passed straight through gold foil, but some were deflected at large angles, indicating a tiny, dense, positively charged nucleus.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Electrons orbit in fixed energy levels.",
-          "B. Atoms are solid, indivisible spheres.",
-          "C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).",
-          "D. The existence of an uncharged particle called the neutron."
-        ],
-        "topic": "Atomic Models (Rutherford), Alpha Scattering",
-        "difficulty": "intermediate",
-        "skillFocus": "Understand, Recall",
+        "topic": "History of the Atom",
+        "difficulty": "higher",
+        "skillFocus": "Interpret experimental evidence",
         "sourceReference": "C1 questions, Q4"
       },
       {
-        "id": "Q9",
-        "prompt": "Describe the key features of the nuclear model of the atom.",
-        "answer": "A dense nucleus with electrons orbiting it.",
-        "explanation": "The nuclear model, proposed by Rutherford, posits a central, dense, positively charged nucleus containing most of the atom's mass, with negatively charged electrons orbiting around it.",
-        "type": "short_answer",
-        "topic": "Atomic Models (Nuclear)",
-        "difficulty": "intermediate",
-        "skillFocus": "Describe",
-        "sourceReference": "C1 questions, Q5"
-      },
-      {
-        "id": "Q10",
-        "prompt": "Which sub-atomic particle was discovered by James Chadwick?",
-        "answer": "C. The uncharged particle called the neutron.",
-        "explanation": "James Chadwick discovered the neutron in 1932, an uncharged particle with a mass similar to that of a proton, located in the nucleus.",
+        "id": "Q22",
+        "prompt": "Two atoms are isotopes of the same element. Which statement correctly describes the difference between them?",
+        "answer": "B",
+        "explanation": "Isotopes are defined as atoms of the same element (so they must have the same number of protons) but with different numbers of neutrons, which results in a different mass number.",
         "type": "multiple_choice",
         "options": [
-          "A. The positively charged proton.",
-          "B. The negatively charged electron.",
-          "C. The uncharged particle called the neutron.",
-          "D. The nucleus, a dense, positively charged center."
+          "A. They have a different number of protons.",
+          "B. They have a different number of neutrons.",
+          "C. They have a different number of electrons.",
+          "D. They have a different atomic number."
         ],
-        "topic": "Sub-atomic Particles, Atomic History",
-        "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q7"
-      },
-      {
-        "id": "Q11",
-        "prompt": "True or False: Protons and neutrons are located in the electron shells of an atom.",
-        "answer": "False.",
-        "explanation": "Protons and neutrons are found together in the dense central nucleus of an atom, while electrons orbit in shells around the nucleus.",
-        "type": "true_false",
-        "topic": "Atomic Structure, Sub-atomic Particles",
-        "difficulty": "foundation",
-        "skillFocus": "Identify, Recall",
-        "sourceReference": "C1 questions, Q8"
-      },
-      {
-        "id": "Q12",
-        "prompt": "State the relative electrical charge of a proton, a neutron, and an electron.",
-        "answer": "Proton: +1, Neutron: 0, Electron: -1.",
-        "explanation": "Protons carry a relative charge of +1, electrons carry a relative charge of -1, and neutrons are electrically neutral with a relative charge of 0.",
-        "type": "short_answer",
-        "topic": "Sub-atomic Particles",
+        "topic": "Atomic Structure",
         "difficulty": "intermediate",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q10"
+        "skillFocus": "Apply definition",
+        "sourceReference": "C1 questions, Q18"
       },
       {
-        "id": "Q13",
-        "prompt": "How can the number of protons in an atom be determined?",
-        "answer": "B. By referring to the atomic number on the Periodic Table.",
-        "explanation": "The atomic number (or proton number) is unique to each element and represents the number of protons in the nucleus of an atom of that element. It is found on the Periodic Table.",
-        "type": "multiple_choice",
-        "options": [
-          "A. By subtracting the mass number from the atomic number.",
-          "B. By referring to the atomic number on the Periodic Table.",
-          "C. By counting the number of electrons in the outermost shell.",
-          "D. By adding the number of neutrons and electrons."
-        ],
-        "topic": "Atomic Number, Periodic Table",
+        "id": "Q23",
+        "prompt": "An atom has a mass number of 35 and an atomic number of 17. How many neutrons does it have?",
+        "answer": "18",
+        "explanation": "The number of neutrons is calculated by subtracting the atomic number (number of protons) from the mass number (number of protons + neutrons). So, 35 - 17 = 18 neutrons.",
+        "type": "numeric",
+        "topic": "Atomic Structure",
         "difficulty": "foundation",
-        "skillFocus": "Identify, Recall",
-        "sourceReference": "C1 questions, Q11"
-      },
-      {
-        "id": "Q14",
-        "prompt": "How is the number of neutrons in an atom calculated?",
-        "answer": "Mass number - atomic number.",
-        "explanation": "The mass number represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, the number of neutrons can be found.",
-        "type": "short_answer",
-        "topic": "Atomic Structure, Calculations",
-        "difficulty": "intermediate",
-        "skillFocus": "Calculate",
+        "skillFocus": "Calculation",
         "sourceReference": "C1 questions, Q12"
       },
       {
-        "id": "Q15",
-        "prompt": "What is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?",
-        "answer": "C. Up to 2 in the first shell and up to 8 in the second and third shells.",
-        "explanation": "For the first 20 elements, the electron shells fill in a specific order: the first shell holds a maximum of 2 electrons, and the second and third shells can hold up to 8 electrons each (for stable atoms, though the third can hold more in general, 8 is the common rule for GCSE).",
+        "id": "Q24",
+        "prompt": "What is the key difference between the plum pudding model and the later nuclear model of the atom?",
+        "answer": "B",
+        "explanation": "The plum pudding model described a 'sphere of positive charge' with electrons embedded, whereas the nuclear model, based on the alpha scattering experiment, proposed that the positive charge was concentrated in a central nucleus.",
         "type": "multiple_choice",
         "options": [
-          "A. Up to 8 in the first shell, 2 in the second, and 8 in the third.",
-          "B. Up to 2 in the first shell, 8 in the second, and 18 in the third.",
-          "C. Up to 2 in the first shell and up to 8 in the second and third shells.",
-          "D. Up to 2 in the first shell, 8 in the second, and 8 in the third (for stable atoms)."
+          "A. The plum pudding model includes neutrons, but the nuclear model does not.",
+          "B. The nuclear model has a central nucleus, while the plum pudding model has charge spread throughout.",
+          "C. The plum pudding model has electrons in fixed shells, while the nuclear model does not.",
+          "D. The nuclear model describes atoms as indivisible spheres."
         ],
-        "topic": "Electron Shells, Electron Configuration",
+        "topic": "History of the Atom",
         "difficulty": "intermediate",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q14"
+        "skillFocus": "Compare and contrast models",
+        "sourceReference": "C1 questions, Q3, Q5"
       },
       {
-        "id": "Q16",
-        "prompt": "What are isotopes?",
-        "answer": "B. Atoms of the same element (same number of protons) with different numbers of neutrons.",
-        "explanation": "Isotopes are variants of a particular chemical element which have the same number of protons (atomic number) but different numbers of neutrons, and therefore different mass numbers.",
+        "id": "Q25",
+        "prompt": "A compound is formed when two or more substances are mixed together but are not chemically bonded. True or False?",
+        "answer": "False",
+        "explanation": "This statement describes a mixture. A compound is a substance made of more than one type of atom that are chemically joined together.",
+        "type": "true_false",
+        "topic": "Elements, Compounds and Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Distinguish between key terms",
+        "sourceReference": "C1 questions, Q16, Q17"
+      },
+      {
+        "id": "Q26",
+        "prompt": "If a neutral atom loses one electron, what is the overall charge of the resulting particle?",
+        "answer": "Positive (+1)",
+        "explanation": "A neutral atom has an equal number of positive protons and negative electrons. Losing one negative electron leaves an excess of one positive proton, resulting in an overall positive charge.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "intermediate",
+        "skillFocus": "Apply concept of charge",
+        "sourceReference": "C1 questions, Q10, Q13"
+      },
+      {
+        "id": "Q27",
+        "prompt": "Which of the following is a physical process used to separate mixtures?",
+        "answer": "C",
+        "explanation": "Filtration, crystallisation, distillation, and chromatography are all physical processes used for separating mixtures. Combustion, neutralisation and polymerisation are chemical reactions.",
         "type": "multiple_choice",
         "options": [
-          "A. Atoms of different elements with the same mass number.",
-          "B. Atoms of the same element (same number of protons) with different numbers of neutrons.",
-          "C. Ions of the same element with different charges.",
-          "D. Atoms that have gained or lost electrons."
+          "A. Combustion",
+          "B. Neutralisation",
+          "C. Crystallisation",
+          "D. Polymerisation"
         ],
-        "topic": "Isotopes",
+        "topic": "Separation Techniques",
+        "difficulty": "foundation",
+        "skillFocus": "Recall examples",
+        "sourceReference": "C1 questions, Q19"
+      },
+      {
+        "id": "Q28",
+        "prompt": "Explain why the relative atomic mass of an element is rarely a whole number.",
+        "answer": "Because it is the average mass of all the atoms of an element, taking into account the different masses and abundances of its isotopes.",
+        "explanation": "Most elements exist as a mixture of isotopes, which are atoms with the same number of protons but different numbers of neutrons (and thus different masses). The relative atomic mass is a weighted average of these isotopic masses.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
         "difficulty": "higher",
-        "skillFocus": "Define",
-        "sourceReference": "C1 questions, Q18"
+        "skillFocus": "Explain a complex concept",
+        "sourceReference": "C1 questions, Q18, Q20"
+      },
+      {
+        "id": "Q29",
+        "prompt": "The discovery that an atom's mass and positive charge are concentrated in a nucleus was a result of which key experiment?",
+        "answer": "B",
+        "explanation": "The alpha scattering experiment, where alpha particles were fired at gold foil, showed that some particles were deflected, leading to the conclusion that the atom has a small, dense, positive nucleus.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Dalton's solid sphere experiments",
+          "B. The alpha scattering experiment",
+          "C. Bohr's energy level experiments",
+          "D. Chadwick's neutron discovery experiments"
+        ],
+        "topic": "History of the Atom",
+        "difficulty": "intermediate",
+        "skillFocus": "Link experiment to discovery",
+        "sourceReference": "C1 questions, Q4"
+      },
+      {
+        "id": "Q30",
+        "prompt": "An atom has 11 electrons. State its electronic configuration by listing the number of electrons in each shell, starting from the first shell.",
+        "answer": "2,8,1",
+        "explanation": "Electrons fill shells starting with the one closest to the nucleus. The first shell can hold a maximum of 2 electrons, the second can hold a maximum of 8, and the third can also hold up to 8. Therefore, 11 electrons are arranged as 2 in the first shell, 8 in the second, and the remaining 1 in the third.",
+        "type": "short_answer",
+        "topic": "Electron Configuration",
+        "difficulty": "intermediate",
+        "skillFocus": "Apply rules of electron configuration",
+        "sourceReference": "C1 questions, Q14"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -182,7 +176,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2

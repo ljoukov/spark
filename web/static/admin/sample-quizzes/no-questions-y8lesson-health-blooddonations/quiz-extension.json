@@ -1,11 +1,11 @@
 {
   "id": "no-questions-y8lesson-health-blooddonations",
-  "mode": "extension",
+  "mode": "synthesis",
   "subject": "biology",
   "board": "OCR",
-  "generatedAt": "2025-09-25T04:17:27.717Z",
+  "generatedAt": "2025-09-25T07:20:17.798Z",
   "request": {
-    "model": "gemini-2.5-flash",
+    "model": "gemini-2.5-pro",
     "questionCount": 10,
     "temperature": 0.2
   },
@@ -15,158 +15,152 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Biology: Blood and Organ Donation",
-    "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.",
+    "quizTitle": "GCSE Biology: Blood, Organ and Stem Cell Donation (Extension)",
+    "summary": "This quiz provides 10 additional questions to extend the learner's understanding of blood, organ, and stem cell donation. It focuses on underrepresented topics from the study material, such as the scale of need for donors, specific procedural details, and the importance of donor diversity.",
     "mode": "extension",
     "subject": "biology",
     "board": "OCR",
-    "syllabusAlignment": "GCSE Triple Science Biology topics related to human health and medical procedures, specifically donation.",
+    "syllabusAlignment": "OCR GCSE (9-1) Biology A (Gateway Science) / B (Twenty First Century Science) - Human biology topics.",
     "questionCount": 10,
     "questions": [
       {
         "id": "Q7",
-        "prompt": "What percentage of UK patients needing a stem cell transplant are unable to find a match from a relative and require an unrelated donor?",
-        "answer": "C",
-        "explanation": "Page 6 states, \"75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.\"",
-        "type": "multiple_choice",
-        "options": [
-          "A) 25%",
-          "B) 50%",
-          "C) 75%",
-          "D) 90%"
-        ],
-        "topic": "Importance of donation",
+        "prompt": "According to the study material, approximately how many new blood donors are needed in England every day?",
+        "answer": "400",
+        "explanation": "Page 6 states, 'Nearly 400 new blood donors are needed every day in England to meet demand.'",
+        "type": "numeric",
+        "topic": "Blood Donation",
         "difficulty": "foundation",
-        "skillFocus": "Recall of specific statistics",
+        "skillFocus": "Recall numerical data",
         "sourceReference": "Page 6"
       },
       {
         "id": "Q8",
-        "prompt": "After a blood donation is split into component parts, how many adults or infants can one donation typically help?",
-        "answer": "B",
-        "explanation": "Page 8, step 4, explains that \"each donation can help 3 adults or 6 infants.\"",
+        "prompt": "Under the 2020 'opt-out' organ donation law in England, some individuals are in an 'excluded group'. What example of an excluded group is given in the text?",
+        "answer": "A. Visitors to England",
+        "explanation": "Page 13 specifies that excluded groups include, for example, 'visitors to England'. The other options are not mentioned in the text.",
         "type": "multiple_choice",
         "options": [
-          "A) 1 adult or 2 infants",
-          "B) 3 adults or 6 infants",
-          "C) 5 adults or 10 infants",
-          "D) 2 adults or 4 infants"
+          "A. Visitors to England",
+          "B. People over 65",
+          "C. People with pre-existing medical conditions",
+          "D. Family members of existing donors"
         ],
-        "topic": "Steps in blood donation",
-        "difficulty": "foundation",
-        "skillFocus": "Recall of specific details",
-        "sourceReference": "Page 8"
-      },
-      {
-        "id": "Q9",
-        "prompt": "In the organ donation process, what is the primary role of the specialist nurse when a potential donor dies?",
-        "answer": "The specialist nurse checks the NHS Organ Donor Register for the individual's decision and then discusses this decision with the donor's family, respecting their faith, beliefs, and culture.",
-        "explanation": "Page 11, step 3, details that \"The specialist nurse will then discuss the donor's registered/last known decision with their family as part of end of life discussions. The donor's faith, beliefs and culture will always be respected.\" Step 2 also mentions checking the register.",
-        "type": "short_answer",
-        "topic": "Steps in organ donation",
+        "topic": "Organ Donation Law",
         "difficulty": "intermediate",
-        "skillFocus": "Description of roles and responsibilities",
-        "sourceReference": "Page 11"
-      },
-      {
-        "id": "Q10",
-        "prompt": "True or False: Someone whose organs have been damaged by disease or injury is a candidate for organ donation.",
-        "answer": "True",
-        "explanation": "Page 5 lists \"Someone whose organs have been damaged by disease or injury\" as a person who might need organ donation.",
-        "type": "true_false",
-        "topic": "Who needs donations",
-        "difficulty": "foundation",
-        "skillFocus": "Identification of recipient criteria",
-        "sourceReference": "Page 5"
-      },
-      {
-        "id": "Q11",
-        "prompt": "What is the minimum age to register with Anthony Nolan for stem cell donation?",
-        "answer": "B",
-        "explanation": "Page 9 lists \"Anthony Nolan (16+)\" as a registry for stem cell donation.",
-        "type": "multiple_choice",
-        "options": [
-          "A) 15",
-          "B) 16",
-          "C) 17",
-          "D) 18"
-        ],
-        "topic": "Steps in stem cell donation",
-        "difficulty": "foundation",
-        "skillFocus": "Recall of specific age requirements",
-        "sourceReference": "Page 9"
-      },
-      {
-        "id": "Q12",
-        "prompt": "Name two specific groups of donor types that are identified as being more in demand according to the study material.",
-        "answer": "Donors from Black African, Black Caribbean, and Asian backgrounds, and young blood, stem cell, and organ donors.",
-        "explanation": "Page 6 states, \"Some donor types are more in demand such as donors from Black African, Black Caribbean and Asian backgrounds and young blood, stem cell and organ donors.\"",
-        "type": "short_answer",
-        "topic": "Importance of donation",
-        "difficulty": "intermediate",
-        "skillFocus": "Identification of specific categories",
-        "sourceReference": "Page 6"
-      },
-      {
-        "id": "Q13",
-        "prompt": "What is the typical duration of the actual blood donation process itself, excluding registration and post-donation activities?",
-        "answer": "A",
-        "explanation": "Page 8, step 3, states, \"The donation process takes roughly 1 hour – donating itself just 5-10 minutes.\"",
-        "type": "multiple_choice",
-        "options": [
-          "A) 5-10 minutes",
-          "B) 15-20 minutes",
-          "C) 30-45 minutes",
-          "D) 1 hour"
-        ],
-        "topic": "Steps in blood donation",
-        "difficulty": "foundation",
-        "skillFocus": "Recall of specific timeframes",
-        "sourceReference": "Page 8"
-      },
-      {
-        "id": "Q14",
-        "prompt": "Under the 2020 law in England, besides having registered a decision not to donate, what is one specific group of people over 18 who would be excluded from being considered an organ donor?",
-        "answer": "Visitors to England.",
-        "explanation": "Page 13 mentions that \"anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group (e.g. visitors to England).\"",
-        "type": "short_answer",
-        "topic": "Law around organ donation",
-        "difficulty": "intermediate",
-        "skillFocus": "Identification of exceptions",
+        "skillFocus": "Identify specific examples",
         "sourceReference": "Page 13"
       },
       {
-        "id": "Q15",
-        "prompt": "For potential stem cell donors who are not registered blood donors, what method is typically used to check their tissue type?",
-        "answer": "C",
-        "explanation": "Page 9, under the second '2' step for stem cell donation, states: \"Potential stem cell donors will be asked to do a cheek swab to check their tissue type.\"",
+        "id": "Q9",
+        "prompt": "True or False: The most common method of stem cell donation, used by 90% of donors, is the bone marrow donation procedure.",
+        "answer": "False",
+        "explanation": "This is false. Page 10 states that 90% of stem cells are donated 'through the bloodstream'. The bone marrow donation procedure is less common, accounting for 10% of donations.",
+        "type": "true_false",
+        "topic": "Stem Cell Donation",
+        "difficulty": "foundation",
+        "skillFocus": "Differentiate between processes based on frequency",
+        "sourceReference": "Page 10"
+      },
+      {
+        "id": "Q10",
+        "prompt": "If a person dies in circumstances where organ donation is possible, what is the first action a specialist nurse would take?",
+        "answer": "Check the NHS Organ Donor Register for a registered decision.",
+        "explanation": "As outlined in step 2 on page 11, the specialist nurses would first 'check the NHS Organ Donor Register to see if that person had registered a decision about organ and tissue donation.'",
+        "type": "short_answer",
+        "topic": "Organ Donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Sequence a process",
+        "sourceReference": "Page 11"
+      },
+      {
+        "id": "Q11",
+        "prompt": "What proportion of UK patients in need of a stem cell transplant are unable to find a suitable match from a relative?",
+        "answer": "C. 75%",
+        "explanation": "Page 6 states that '75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.'",
         "type": "multiple_choice",
         "options": [
-          "A) A full medical examination",
-          "B) A urine sample",
-          "C) A cheek swab",
-          "D) A hair follicle test"
+          "A. 10%",
+          "B. 25%",
+          "C. 75%",
+          "D. 90%"
         ],
-        "topic": "Steps in stem cell donation",
+        "topic": "Stem Cell Donation",
         "difficulty": "intermediate",
-        "skillFocus": "Recall of procedural details",
+        "skillFocus": "Recall statistical information",
+        "sourceReference": "Page 6"
+      },
+      {
+        "id": "Q12",
+        "prompt": "Besides registering a decision on the NHS Organ Donation Register, what other important action is recommended for individuals who wish to be organ donors?",
+        "answer": "Share the decision with family/loved ones.",
+        "explanation": "Page 11 advises donors to 'Share the decision with family/loved ones.' Page 13 also highlights the importance of discussing the choice with family.",
+        "type": "short_answer",
+        "topic": "Organ Donation",
+        "difficulty": "higher",
+        "skillFocus": "Synthesise information",
+        "sourceReference": "Page 11, Page 13"
+      },
+      {
+        "id": "Q13",
+        "prompt": "The material lists several situations that may require a blood donation. Which of the following is NOT mentioned?",
+        "answer": "D. A birth defect",
+        "explanation": "Page 5 lists blood loss from surgery, child birth, and accidents as reasons for needing a blood donation. A birth defect is listed as a reason for needing an organ donation, not a blood donation.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Blood loss from surgery",
+          "B. Blood loss from child birth",
+          "C. Blood loss from an accident",
+          "D. A birth defect"
+        ],
+        "topic": "Blood Donation",
+        "difficulty": "foundation",
+        "skillFocus": "Identify information that is not present (elimination)",
+        "sourceReference": "Page 5"
+      },
+      {
+        "id": "Q14",
+        "prompt": "True or False: To become a potential stem cell donor in the UK, an individual must sign up separately with the British Bone Marrow Registry, Anthony Nolan, and DKMS.",
+        "answer": "False",
+        "explanation": "This is false. Page 9 states, 'There are different registers in the UK but they all form part of one UK registry... Donors need only sign up to one.'",
+        "type": "true_false",
+        "topic": "Stem Cell Donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Understand system structure",
         "sourceReference": "Page 9"
       },
       {
-        "id": "Q16",
-        "prompt": "According to the learning intentions on page 1, what is one key aspect students are expected to be able to 'outline' regarding organ donation in England?",
-        "answer": "Students should be able to outline the law around organ donation in England.",
-        "explanation": "Page 1, under 'Learning intentions', includes: \"Outline the law around organ donation in England\".",
+        "id": "Q15",
+        "prompt": "Within the typical one-hour blood donation appointment, what is the approximate time taken for the actual donation itself?",
+        "answer": "5-10 minutes",
+        "explanation": "Step 3 on page 8 states, 'The donation process takes roughly 1 hour – donating itself just 5-10 minutes.'",
         "type": "short_answer",
-        "topic": "Learning intentions",
+        "topic": "Blood Donation",
+        "difficulty": "foundation",
+        "skillFocus": "Extract specific time-related data",
+        "sourceReference": "Page 8"
+      },
+      {
+        "id": "Q16",
+        "prompt": "The study material indicates that some donor types are in higher demand. Which backgrounds are specifically mentioned as being needed?",
+        "answer": "B. Black African, Black Caribbean and Asian",
+        "explanation": "Page 6 explicitly states that 'donors from Black African, Black Caribbean and Asian backgrounds' are more in demand.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Eastern European and Scandinavian",
+          "B. Black African, Black Caribbean and Asian",
+          "C. Mediterranean and Middle Eastern",
+          "D. North and South American"
+        ],
+        "topic": "Donation Importance",
         "difficulty": "higher",
-        "skillFocus": "Interpretation of learning objectives",
-        "sourceReference": "Page 1"
+        "skillFocus": "Recall specific demographic information",
+        "sourceReference": "Page 6"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {

@@ -1,159 +1,154 @@
 # Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (extraction) — Extension Quiz
 
-**Quiz title:** GCSE Chemistry C1: Atomic Structure and Models (Extended)
-**Summary:** This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, delving deeper into atomic models, sub-atomic particle properties, electron configuration, and definitions of key atomic terms like isotopes. It includes a mix of multiple-choice, short-answer, and true/false questions, aligning with AQA GCSE Chemistry specifications.
+**Quiz title:** GCSE Chemistry: Atomic Structure Extension
+**Summary:** This quiz provides 10 additional questions to extend learning on atomic structure, historical models, and the properties of elements, compounds, and mixtures. It includes multiple-choice, short-answer, numeric, and true/false questions to test application and deeper understanding.
 
 ## Metadata
 
-- Mode: extension
+- Mode: extraction
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 10
-- Generated at: 2025-09-25T04:19:23.156Z
-- Model: gemini-2.5-flash (temperature 0.20)
+- Generated at: 2025-09-25T07:23:16.477Z
+- Model: gemini-2.5-pro (temperature 0.20)
 - Source: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg)
 
 ## Questions
 
-### 1. According to Dalton's model, how were atoms described?
+### 1. Which conclusion was drawn directly from the observation that some alpha particles were deflected by the gold foil in the alpha scattering experiment?
 
 - Type: multiple_choice
-- Topic: Atomic Models (Dalton)
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C1 questions, Q2
-- Answer: A. Atoms as solid spheres that could not be divided into smaller parts.
-- Options:
-  - A. A. Atoms as solid spheres that could not be divided into smaller parts.
-  - B. B. A sphere of positive charge with negative electrons embedded in it.
-  - C. C. A dense nucleus with electrons orbiting it.
-  - D. D. Atoms with a central nucleus containing protons and neutrons.
-
-> John Dalton's atomic theory, proposed in the early 19th century, described atoms as indivisible, indestructible solid spheres.
-
-### 2. What crucial discovery was made by scientists during the alpha scattering experiment?
-
-- Type: multiple_choice
-- Topic: Atomic Models (Rutherford), Alpha Scattering
-- Difficulty: intermediate
-- Skill focus: Understand, Recall
+- Topic: History of the Atom
+- Difficulty: higher
+- Skill focus: Interpret experimental evidence
 - Source reference: C1 questions, Q4
-- Answer: C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).
+- Answer: C
 - Options:
-  - A. A. Electrons orbit in fixed energy levels.
-  - B. B. Atoms are solid, indivisible spheres.
-  - C. C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).
-  - D. D. The existence of an uncharged particle called the neutron.
+  - A. A. The existence of electrons.
+  - B. B. The atom is mostly empty space.
+  - C. C. The atom's positive charge is concentrated in a small nucleus.
+  - D. D. The existence of neutrons.
 
-> The alpha scattering experiment, led by Rutherford, showed that most alpha particles passed straight through gold foil, but some were deflected at large angles, indicating a tiny, dense, positively charged nucleus.
+> The deflection of positively charged alpha particles showed that they were being repelled by a concentrated positive charge within the atom. This led to the nuclear model, where the positive charge and mass are located in a small, dense nucleus.
 
-### 3. Describe the key features of the nuclear model of the atom.
-
-- Type: short_answer
-- Topic: Atomic Models (Nuclear)
-- Difficulty: intermediate
-- Skill focus: Describe
-- Source reference: C1 questions, Q5
-- Answer: A dense nucleus with electrons orbiting it.
-
-> The nuclear model, proposed by Rutherford, posits a central, dense, positively charged nucleus containing most of the atom's mass, with negatively charged electrons orbiting around it.
-
-### 4. Which sub-atomic particle was discovered by James Chadwick?
+### 2. Two atoms are isotopes of the same element. Which statement correctly describes the difference between them?
 
 - Type: multiple_choice
-- Topic: Sub-atomic Particles, Atomic History
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C1 questions, Q7
-- Answer: C. The uncharged particle called the neutron.
+- Topic: Atomic Structure
+- Difficulty: intermediate
+- Skill focus: Apply definition
+- Source reference: C1 questions, Q18
+- Answer: B
 - Options:
-  - A. A. The positively charged proton.
-  - B. B. The negatively charged electron.
-  - C. C. The uncharged particle called the neutron.
-  - D. D. The nucleus, a dense, positively charged center.
+  - A. A. They have a different number of protons.
+  - B. B. They have a different number of neutrons.
+  - C. C. They have a different number of electrons.
+  - D. D. They have a different atomic number.
 
-> James Chadwick discovered the neutron in 1932, an uncharged particle with a mass similar to that of a proton, located in the nucleus.
+> Isotopes are defined as atoms of the same element (so they must have the same number of protons) but with different numbers of neutrons, which results in a different mass number.
 
-### 5. True or False: Protons and neutrons are located in the electron shells of an atom.
+### 3. An atom has a mass number of 35 and an atomic number of 17. How many neutrons does it have?
+
+- Type: numeric
+- Topic: Atomic Structure
+- Difficulty: foundation
+- Skill focus: Calculation
+- Source reference: C1 questions, Q12
+- Answer: 18
+
+> The number of neutrons is calculated by subtracting the atomic number (number of protons) from the mass number (number of protons + neutrons). So, 35 - 17 = 18 neutrons.
+
+### 4. What is the key difference between the plum pudding model and the later nuclear model of the atom?
+
+- Type: multiple_choice
+- Topic: History of the Atom
+- Difficulty: intermediate
+- Skill focus: Compare and contrast models
+- Source reference: C1 questions, Q3, Q5
+- Answer: B
+- Options:
+  - A. A. The plum pudding model includes neutrons, but the nuclear model does not.
+  - B. B. The nuclear model has a central nucleus, while the plum pudding model has charge spread throughout.
+  - C. C. The plum pudding model has electrons in fixed shells, while the nuclear model does not.
+  - D. D. The nuclear model describes atoms as indivisible spheres.
+
+> The plum pudding model described a 'sphere of positive charge' with electrons embedded, whereas the nuclear model, based on the alpha scattering experiment, proposed that the positive charge was concentrated in a central nucleus.
+
+### 5. A compound is formed when two or more substances are mixed together but are not chemically bonded. True or False?
 
 - Type: true_false
-- Topic: Atomic Structure, Sub-atomic Particles
+- Topic: Elements, Compounds and Mixtures
 - Difficulty: foundation
-- Skill focus: Identify, Recall
-- Source reference: C1 questions, Q8
-- Answer: False.
+- Skill focus: Distinguish between key terms
+- Source reference: C1 questions, Q16, Q17
+- Answer: False
 
-> Protons and neutrons are found together in the dense central nucleus of an atom, while electrons orbit in shells around the nucleus.
+> This statement describes a mixture. A compound is a substance made of more than one type of atom that are chemically joined together.
 
-### 6. State the relative electrical charge of a proton, a neutron, and an electron.
+### 6. If a neutral atom loses one electron, what is the overall charge of the resulting particle?
 
 - Type: short_answer
-- Topic: Sub-atomic Particles
+- Topic: Atomic Structure
 - Difficulty: intermediate
-- Skill focus: Recall
-- Source reference: C1 questions, Q10
-- Answer: Proton: +1, Neutron: 0, Electron: -1.
+- Skill focus: Apply concept of charge
+- Source reference: C1 questions, Q10, Q13
+- Answer: Positive (+1)
 
-> Protons carry a relative charge of +1, electrons carry a relative charge of -1, and neutrons are electrically neutral with a relative charge of 0.
+> A neutral atom has an equal number of positive protons and negative electrons. Losing one negative electron leaves an excess of one positive proton, resulting in an overall positive charge.
 
-### 7. How can the number of protons in an atom be determined?
+### 7. Which of the following is a physical process used to separate mixtures?
 
 - Type: multiple_choice
-- Topic: Atomic Number, Periodic Table
+- Topic: Separation Techniques
 - Difficulty: foundation
-- Skill focus: Identify, Recall
-- Source reference: C1 questions, Q11
-- Answer: B. By referring to the atomic number on the Periodic Table.
+- Skill focus: Recall examples
+- Source reference: C1 questions, Q19
+- Answer: C
 - Options:
-  - A. A. By subtracting the mass number from the atomic number.
-  - B. B. By referring to the atomic number on the Periodic Table.
-  - C. C. By counting the number of electrons in the outermost shell.
-  - D. D. By adding the number of neutrons and electrons.
+  - A. A. Combustion
+  - B. B. Neutralisation
+  - C. C. Crystallisation
+  - D. D. Polymerisation
 
-> The atomic number (or proton number) is unique to each element and represents the number of protons in the nucleus of an atom of that element. It is found on the Periodic Table.
+> Filtration, crystallisation, distillation, and chromatography are all physical processes used for separating mixtures. Combustion, neutralisation and polymerisation are chemical reactions.
 
-### 8. How is the number of neutrons in an atom calculated?
+### 8. Explain why the relative atomic mass of an element is rarely a whole number.
 
 - Type: short_answer
-- Topic: Atomic Structure, Calculations
-- Difficulty: intermediate
-- Skill focus: Calculate
-- Source reference: C1 questions, Q12
-- Answer: Mass number - atomic number.
-
-> The mass number represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, the number of neutrons can be found.
-
-### 9. What is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?
-
-- Type: multiple_choice
-- Topic: Electron Shells, Electron Configuration
-- Difficulty: intermediate
-- Skill focus: Recall
-- Source reference: C1 questions, Q14
-- Answer: C. Up to 2 in the first shell and up to 8 in the second and third shells.
-- Options:
-  - A. A. Up to 8 in the first shell, 2 in the second, and 8 in the third.
-  - B. B. Up to 2 in the first shell, 8 in the second, and 18 in the third.
-  - C. C. Up to 2 in the first shell and up to 8 in the second and third shells.
-  - D. D. Up to 2 in the first shell, 8 in the second, and 8 in the third (for stable atoms).
-
-> For the first 20 elements, the electron shells fill in a specific order: the first shell holds a maximum of 2 electrons, and the second and third shells can hold up to 8 electrons each (for stable atoms, though the third can hold more in general, 8 is the common rule for GCSE).
-
-### 10. What are isotopes?
-
-- Type: multiple_choice
-- Topic: Isotopes
+- Topic: Atomic Structure
 - Difficulty: higher
-- Skill focus: Define
-- Source reference: C1 questions, Q18
-- Answer: B. Atoms of the same element (same number of protons) with different numbers of neutrons.
-- Options:
-  - A. A. Atoms of different elements with the same mass number.
-  - B. B. Atoms of the same element (same number of protons) with different numbers of neutrons.
-  - C. C. Ions of the same element with different charges.
-  - D. D. Atoms that have gained or lost electrons.
+- Skill focus: Explain a complex concept
+- Source reference: C1 questions, Q18, Q20
+- Answer: Because it is the average mass of all the atoms of an element, taking into account the different masses and abundances of its isotopes.
 
-> Isotopes are variants of a particular chemical element which have the same number of protons (atomic number) but different numbers of neutrons, and therefore different mass numbers.
+> Most elements exist as a mixture of isotopes, which are atoms with the same number of protons but different numbers of neutrons (and thus different masses). The relative atomic mass is a weighted average of these isotopic masses.
+
+### 9. The discovery that an atom's mass and positive charge are concentrated in a nucleus was a result of which key experiment?
+
+- Type: multiple_choice
+- Topic: History of the Atom
+- Difficulty: intermediate
+- Skill focus: Link experiment to discovery
+- Source reference: C1 questions, Q4
+- Answer: B
+- Options:
+  - A. A. Dalton's solid sphere experiments
+  - B. B. The alpha scattering experiment
+  - C. C. Bohr's energy level experiments
+  - D. D. Chadwick's neutron discovery experiments
+
+> The alpha scattering experiment, where alpha particles were fired at gold foil, showed that some particles were deflected, leading to the conclusion that the atom has a small, dense, positive nucleus.
+
+### 10. An atom has 11 electrons. State its electronic configuration by listing the number of electrons in each shell, starting from the first shell.
+
+- Type: short_answer
+- Topic: Electron Configuration
+- Difficulty: intermediate
+- Skill focus: Apply rules of electron configuration
+- Source reference: C1 questions, Q14
+- Answer: 2,8,1
+
+> Electrons fill shells starting with the one closest to the nucleus. The first shell can hold a maximum of 2 electrons, the second can hold a maximum of 8, and the third can also hold up to 8. Therefore, 11 electrons are arranged as 2 in the first shell, 8 in the second, and the remaining 1 in the third.
 
 ## Prompt
 

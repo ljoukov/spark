@@ -1,11 +1,11 @@
 {
   "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:26:03.210Z",
+  "generatedAt": "2025-09-25T07:33:12.263Z",
   "request": {
-    "model": "gemini-2.5-flash",
+    "model": "gemini-2.5-pro",
     "questionCount": 10,
     "temperature": 0.2
   },
@@ -15,158 +15,146 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: C20 Retrieval Practice - Extension",
-    "summary": "This extension quiz provides 10 new questions covering additional concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It delves into various aspects of corrosion protection, different types of alloys, properties of glass and ceramics, polymer classifications, composite materials, and the effects of changing conditions in the Haber process. The questions are designed to test recall, understanding, and analytical skills, with difficulty levels ranging from foundation to higher.",
+    "quizTitle": "GCSE Chemistry: Materials and Chemical Processes - Extension",
+    "summary": "An additional 10 questions extending the initial quiz on materials and chemical processes. This set introduces new question formats and focuses on NPK fertilisers, reaction stoichiometry, and specific properties of materials, all based on the provided C20 retrieval practice sheet.",
     "mode": "extension",
-    "subject": "chemistry",
-    "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, C20 Chemical and Allied Industries (specifically sections on metals, alloys, corrosion, glass, ceramics, polymers, composites, and the Haber process).",
+    "subject": "Chemistry",
+    "board": "GCSE Triple Science",
+    "syllabusAlignment": "GCSE Chemistry: Using resources.",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q_new_1",
-        "prompt": "What are three physical barriers commonly used to protect against corrosion?",
-        "answer": "Grease, paint, and a thin layer of metal.",
-        "explanation": "Physical barriers prevent oxygen and water from reaching the metal surface, thus stopping the corrosion process. Common examples include applying grease, painting the surface, or coating it with a less reactive metal like tin or zinc.",
-        "type": "short_answer",
-        "topic": "Corrosion Protection",
-        "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C20 questions, Q2"
-      },
-      {
-        "id": "Q_new_2",
-        "prompt": "Which of the following best describes sacrificial protection against corrosion?",
-        "answer": "B",
-        "explanation": "Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal being protected. The more reactive metal corrodes preferentially, sacrificing itself to protect the other metal.",
+        "id": "Q22",
+        "prompt": "What does the 'NPK' in NPK fertiliser stand for?",
+        "answer": "D",
+        "explanation": "NPK fertilisers are formulations containing soluble compounds of Nitrogen (N), Phosphorus (P), and Potassium (K), which are essential nutrients for plant growth.",
         "type": "multiple_choice",
         "options": [
-          "A. Applying a layer of paint to the metal surface.",
-          "B. Adding a more reactive metal to the surface of a material.",
-          "C. Using an inert gas to prevent oxygen contact.",
-          "D. Coating the metal with a less reactive metal."
+          "A) Nitrogen, Platinum, Krypton",
+          "B) Sodium, Phosphorus, Krypton",
+          "C) Nitrogen, Polonium, Calcium",
+          "D) Nitrogen, Phosphorus, Potassium"
         ],
-        "topic": "Corrosion Protection",
-        "difficulty": "intermediate",
-        "skillFocus": "Understanding concepts",
-        "sourceReference": "C20 questions, Q3"
-      },
-      {
-        "id": "Q_new_3",
-        "prompt": "Gold alloys used in jewellery are typically made from gold combined with which other metals?",
-        "answer": "B",
-        "explanation": "Pure gold is very soft. To make it more durable and to alter its colour for jewellery, it is alloyed with other metals. Common alloying metals include copper, zinc, and silver.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Iron, nickel, and chromium",
-          "B. Copper, zinc, and silver",
-          "C. Aluminium, magnesium, and silicon",
-          "D. Lead, tin, and antimony"
-        ],
-        "topic": "Alloys",
+        "topic": "Fertilisers",
         "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C20 questions, Q6"
+        "skillFocus": "Recall acronym",
+        "sourceReference": "C20 questions, Q21"
       },
       {
-        "id": "Q_new_4",
-        "prompt": "What is a key property of aluminium alloys that makes them widely used in industries like aerospace and transport?",
-        "answer": "They generally have low densities.",
-        "explanation": "Aluminium alloys are valued for their low density, which translates to a high strength-to-weight ratio. This property is crucial for applications where weight reduction is important, such as in aircraft and vehicle manufacturing.",
-        "type": "short_answer",
-        "topic": "Alloys",
+        "id": "Q23",
+        "prompt": "According to the balanced equation for the Haber process, N₂(g) + 3H₂(g) ⇌ 2NH₃(g), how many moles of hydrogen gas are required to produce two moles of ammonia?",
+        "answer": "3",
+        "explanation": "The stoichiometry of the balanced symbol equation shows that 3 moles of hydrogen gas (3H₂) react with 1 mole of nitrogen gas (N₂) to produce 2 moles of ammonia (2NH₃).",
+        "type": "numeric",
+        "topic": "Haber Process",
         "difficulty": "intermediate",
-        "skillFocus": "Recall, Application",
-        "sourceReference": "C20 questions, Q8"
-      },
-      {
-        "id": "Q_new_5",
-        "prompt": "State the main difference in properties between soda-lime glass and borosilicate glass.",
-        "answer": "Borosilicate glass has a much higher melting point (and better thermal shock resistance) compared to soda-lime glass.",
-        "explanation": "Soda-lime glass is common window and bottle glass. Borosilicate glass (like Pyrex) contains boron oxide, which gives it a higher melting point and makes it more resistant to thermal shock, making it suitable for laboratory glassware and ovenware.",
-        "type": "short_answer",
-        "topic": "Ceramics/Glass",
-        "difficulty": "intermediate",
-        "skillFocus": "Comparison, Recall",
-        "sourceReference": "C20 questions, Q9"
-      },
-      {
-        "id": "Q_new_6",
-        "prompt": "Which of the following are two common examples of clay ceramics?",
-        "answer": "C",
-        "explanation": "Clay ceramics are made by shaping wet clay and then firing it at high temperatures. Pottery (like earthenware and stoneware) and bricks are classic examples of products made from clay.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Steel and cast iron",
-          "B. Plywood and reinforced concrete",
-          "C. Pottery and bricks",
-          "D. Glass and plastic"
-        ],
-        "topic": "Ceramics",
-        "difficulty": "foundation",
-        "skillFocus": "Recall, Examples",
-        "sourceReference": "C20 questions, Q10"
-      },
-      {
-        "id": "Q_new_7",
-        "prompt": "Explain the main difference in behaviour between thermosetting and thermosoftening polymers when heated.",
-        "answer": "Thermosetting polymers do not soften when heated, whereas thermosoftening polymers do soften when heated.",
-        "explanation": "Thermosoftening polymers have weak intermolecular forces between polymer chains, allowing them to soften and melt when heated and be reshaped. Thermosetting polymers form strong covalent cross-links between their polymer chains during formation, making them rigid and preventing them from softening or melting upon heating; they char or burn instead.",
-        "type": "short_answer",
-        "topic": "Polymers",
-        "difficulty": "intermediate",
-        "skillFocus": "Comparison, Understanding properties",
-        "sourceReference": "C20 questions, Q12"
-      },
-      {
-        "id": "Q_new_8",
-        "prompt": "What is the definition of a composite material?",
-        "answer": "A composite is a mixture of a matrix and reinforcements.",
-        "explanation": "Composite materials are formed by combining two or more different materials, which remain separate and distinct at the macroscopic level within the finished structure. They typically consist of a matrix (binder) and a reinforcement material, with the aim of achieving properties superior to those of the individual components.",
-        "type": "short_answer",
-        "topic": "Composites",
-        "difficulty": "foundation",
-        "skillFocus": "Definition, Recall",
+        "skillFocus": "Interpret chemical equation",
         "sourceReference": "C20 questions, Q15"
       },
       {
-        "id": "Q_new_9",
-        "prompt": "In the Haber process, what is the effect of increasing the temperature on the yield, rate, and cost of ammonia production?",
-        "answer": "B",
-        "explanation": "The forward reaction in the Haber process is exothermic, so increasing the temperature shifts the equilibrium to the left (reactants), decreasing the yield of ammonia. However, higher temperatures increase the kinetic energy of particles, leading to more frequent and energetic collisions, thus increasing the reaction rate. Increased energy input also contributes to higher operational costs.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Increase yield, decrease rate, decrease cost",
-          "B. Decrease yield, increase rate, increase cost",
-          "C. Increase yield, increase rate, decrease cost",
-          "D. Decrease yield, decrease rate, increase cost"
-        ],
-        "topic": "Haber Process",
-        "difficulty": "higher",
-        "skillFocus": "Analysis, Le Chatelier's Principle",
-        "sourceReference": "C20 questions, Q17"
+        "id": "Q24",
+        "prompt": "Besides iron, what essential non-metal element is a key component of steel alloys?",
+        "answer": "Carbon",
+        "explanation": "Steel is an alloy of iron with carbon, and often other metals are added to give specific properties.",
+        "type": "short_answer",
+        "topic": "Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Recall composition",
+        "sourceReference": "C20 questions, Q7"
       },
       {
-        "id": "Q_new_10",
-        "prompt": "How does increasing the pressure affect the yield, rate, and cost of the Haber process?",
-        "answer": "A",
-        "explanation": "The Haber process involves a decrease in the number of gas moles from reactants (1 N₂ + 3 H₂ = 4 moles) to product (2 NH₃ = 2 moles). According to Le Chatelier's principle, increasing pressure shifts the equilibrium towards the side with fewer moles of gas, thus increasing the yield of ammonia. Higher pressure also increases the concentration of gas molecules, leading to more frequent collisions and a faster reaction rate. However, maintaining high pressure requires stronger equipment and more energy, increasing costs.",
+        "id": "Q25",
+        "prompt": "Thermosetting polymers can be easily melted and reshaped upon heating.",
+        "answer": "False",
+        "explanation": "Thermosetting polymers do not soften when heated due to strong cross-links between the polymer chains. It is thermosoftening polymers that can be melted and reshaped.",
+        "type": "true_false",
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Differentiate properties",
+        "sourceReference": "C20 questions, Q12"
+      },
+      {
+        "id": "Q26",
+        "prompt": "Which of the following materials is an example of a composite?",
+        "answer": "D",
+        "explanation": "Plywood is a composite material, made from layers of wood veneer (reinforcement) held together by an adhesive (matrix). Brass, steel, and borosilicate glass are not composites.",
         "type": "multiple_choice",
         "options": [
-          "A. Increase yield, increase rate, increase cost",
-          "B. Decrease yield, decrease rate, decrease cost",
-          "C. Increase yield, decrease rate, increase cost",
-          "D. Decrease yield, increase rate, decrease cost"
+          "A) Brass",
+          "B) Borosilicate glass",
+          "C) Steel",
+          "D) Plywood"
+        ],
+        "topic": "Composites",
+        "difficulty": "foundation",
+        "skillFocus": "Identify example",
+        "sourceReference": "C20 questions, Q14"
+      },
+      {
+        "id": "Q27",
+        "prompt": "What is the specific pressure used as a compromise condition for the Haber process?",
+        "answer": "B",
+        "explanation": "The industrial conditions for the Haber process are a compromise to achieve a good yield and rate at a manageable cost. The pressure used is 200 atmospheres.",
+        "type": "multiple_choice",
+        "options": [
+          "A) 450 atm",
+          "B) 200 atm",
+          "C) 450 °C",
+          "D) 200 Pa"
         ],
         "topic": "Haber Process",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall specific condition",
+        "sourceReference": "C20 questions, Q20"
+      },
+      {
+        "id": "Q28",
+        "prompt": "A composite material is defined as a mixture of a matrix and what other component?",
+        "answer": "Reinforcements",
+        "explanation": "Composites are made of two main parts: the matrix, which surrounds and binds together the other component, known as the reinforcements (e.g., fibres or fragments).",
+        "type": "short_answer",
+        "topic": "Composites",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall definition component",
+        "sourceReference": "C20 questions, Q13"
+      },
+      {
+        "id": "Q29",
+        "prompt": "Which type of glass is particularly suitable for laboratory use due to its high melting point?",
+        "answer": "Borosilicate glass",
+        "explanation": "Borosilicate glass has a much higher melting point than soda-lime glass, making it resistant to the high temperatures and thermal shock often encountered in a laboratory.",
+        "type": "short_answer",
+        "topic": "Ceramics and Glass",
+        "difficulty": "intermediate",
+        "skillFocus": "Apply property to use",
+        "sourceReference": "C20 questions, Q9"
+      },
+      {
+        "id": "Q30",
+        "prompt": "What two substances are required, in addition to iron, for rust to form?",
+        "answer": "Water and oxygen",
+        "explanation": "Rusting is the specific name for the corrosion of iron, and it is a chemical reaction that requires the presence of both oxygen (from the air) and water.",
+        "type": "short_answer",
+        "topic": "Corrosion",
+        "difficulty": "foundation",
+        "skillFocus": "Recall reactants",
+        "sourceReference": "C20 questions, Q4"
+      },
+      {
+        "id": "Q31",
+        "prompt": "For the chemical compounds in an NPK fertiliser to be effective, what key property must they possess?",
+        "answer": "They must be soluble.",
+        "explanation": "The compounds of nitrogen, phosphorus, and potassium must be soluble in water so that they can be absorbed by the roots of plants from the soil.",
+        "type": "short_answer",
+        "topic": "Fertilisers",
         "difficulty": "higher",
-        "skillFocus": "Analysis, Le Chatelier's Principle",
-        "sourceReference": "C20 questions, Q18"
+        "skillFocus": "Explain requirement",
+        "sourceReference": "C20 questions, Q21"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -176,7 +164,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2
