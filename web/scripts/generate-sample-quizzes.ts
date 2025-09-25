@@ -13,7 +13,9 @@ import {
 	type InlineSourceFile,
 	type JudgeAudit,
 	type JudgeVerdict,
-	type QuizGeneration
+	type QuizGeneration,
+	type SlopAutoSignals,
+	type SlopJudgement
 } from '../src/lib/llm/schemas';
 import {
 	BASE_PROMPT_HEADER,
@@ -23,6 +25,13 @@ import {
 	parseQuizFromText,
 	type GenerateQuizOptions
 } from '../src/lib/server/llm/quizPrompts';
+import {
+	DEFAULT_SLOP_RISK_THRESHOLD,
+	buildSlopJudgePrompt,
+	computeWeightedRisk as computeSlopWeightedRisk,
+	parseSlopJudgement
+} from '../src/lib/slop/judge';
+import { computeSlopAutoSignals } from '../src/lib/slop/metrics';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(CURRENT_DIR, '..');
@@ -35,13 +44,21 @@ const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'sample-quizzes');
 const PROMPT_FILE_PATHS = [
 	'web/src/lib/server/llm/quizPrompts.ts',
 	'web/src/lib/server/llm/quizGenerator.ts',
-	'web/src/lib/server/llm/judge.ts'
+	'web/src/lib/server/llm/judge.ts',
+	'web/src/lib/slop/judge.ts'
 ];
 
 const MODEL_ID = 'gemini-2.5-flash';
 const DEFAULT_TEMPERATURE = 0.2;
 const JUDGE_TEMPERATURE = 0.15;
 const EXTENSION_QUESTION_COUNT = 10;
+const SLOP_JUDGE_TEMPERATURE = 0.1;
+
+const GENERATE_MODES = ['quiz', 'extension'] as const;
+type GenerateMode = (typeof GENERATE_MODES)[number];
+
+const JUDGE_MODES = ['quality', 'slop'] as const;
+type JudgeMode = (typeof JUDGE_MODES)[number];
 
 const execFileAsync = promisify(execFile);
 
@@ -156,7 +173,7 @@ type QuizFilePayload = {
 	readonly job: SampleJob;
 };
 
-type JudgeFilePayload = {
+type QualityJudgeFilePayload = {
 	readonly id: string;
 	readonly evaluatedAt: string;
 	readonly prompt: string;
@@ -175,12 +192,34 @@ type JudgeFilePayload = {
 	};
 };
 
+type SlopJudgeFilePayload = {
+	readonly id: string;
+	readonly evaluatedAt: string;
+	readonly prompt: string;
+	readonly domain: 'news' | 'qa' | 'other';
+	readonly context: string | null;
+	readonly text: string;
+	readonly autoSignals: SlopAutoSignals;
+	readonly judgement: SlopJudgement;
+	readonly model: QuizModelRun;
+	readonly riskScore: number;
+	readonly recommendedLabel: 0 | 1;
+	readonly threshold: number;
+	readonly contributions: ReturnType<typeof computeSlopWeightedRisk>['contributions'];
+};
+
 type GenerationResult = {
 	readonly job: SampleJob;
-	readonly quiz: QuizFilePayload;
-	readonly judge: JudgeFilePayload;
-	readonly extension: QuizFilePayload;
-	readonly extensionJudge: JudgeFilePayload;
+	readonly quiz?: QuizFilePayload;
+	readonly extension?: QuizFilePayload;
+	readonly quality?: {
+		readonly quiz?: QualityJudgeFilePayload;
+		readonly extension?: QualityJudgeFilePayload;
+	};
+	readonly slop?: {
+		readonly quiz?: SlopJudgeFilePayload;
+		readonly extension?: SlopJudgeFilePayload;
+	};
 };
 
 type JudgePromptOptions = {
@@ -327,7 +366,7 @@ async function callModel<T>({
 }: {
 	client: GoogleGenAI;
 	model: string;
-	schema: Schema;
+	schema?: Schema;
 	parts: Part[];
 	temperature: number;
 }): Promise<{ text: string; modelId: string }> {
@@ -341,8 +380,8 @@ async function callModel<T>({
 		],
 		config: {
 			responseMimeType: 'application/json',
-			responseSchema: schema,
-			temperature
+			temperature,
+			...(schema ? { responseSchema: schema } : {})
 		}
 	});
 	const text = response.text;
@@ -462,12 +501,109 @@ async function generateExtensionPayload(
 	};
 }
 
+function serialiseQuizForSlop(quiz: QuizGeneration): string {
+	const lines: string[] = [];
+	lines.push(`Quiz title: ${quiz.quizTitle}`);
+	lines.push(`Summary: ${quiz.summary}`);
+	lines.push(`Mode: ${quiz.mode}`);
+	if (quiz.subject) {
+		lines.push(`Subject: ${quiz.subject}`);
+	}
+	if (quiz.board) {
+		lines.push(`Board: ${quiz.board}`);
+	}
+	lines.push(`Question count: ${quiz.questionCount}`);
+	lines.push('');
+	quiz.questions.forEach((question, index) => {
+		lines.push(`Q${index + 1}: ${question.prompt}`);
+		if (question.topic) {
+			lines.push(`Topic: ${question.topic}`);
+		}
+		if (question.difficulty) {
+			lines.push(`Difficulty: ${question.difficulty}`);
+		}
+		if (question.skillFocus) {
+			lines.push(`Skill focus: ${question.skillFocus}`);
+		}
+		lines.push(`Answer: ${question.answer}`);
+		if (question.options && question.options.length > 0) {
+			lines.push('Options:');
+			question.options.forEach((option, optionIndex) => {
+				const label = String.fromCharCode(65 + optionIndex);
+				lines.push(`- ${label}. ${option}`);
+			});
+		}
+		lines.push(`Explanation: ${question.explanation}`);
+		if (question.sourceReference) {
+			lines.push(`Source reference: ${question.sourceReference}`);
+		}
+		lines.push('');
+	});
+	return lines.join('\n');
+}
+
+async function slopJudgeQuizPayload(
+	client: GoogleGenAI,
+	job: SampleJob,
+	quiz: QuizGeneration,
+	variant: 'quiz' | 'extension'
+): Promise<SlopJudgeFilePayload> {
+	const text = serialiseQuizForSlop(quiz);
+	const autoSignals = computeSlopAutoSignals(text);
+	const prompt = buildSlopJudgePrompt({
+		domain: 'qa',
+		text,
+		context: quiz.summary,
+		autoSignals,
+		requestId: `${job.id}-${variant}-slop`
+	});
+	const parts: Part[] = [{ text: prompt }];
+	const { text: responseText, modelId } = await callModel({
+		client,
+		model: 'gemini-2.5-pro',
+		schema: undefined,
+		parts,
+		temperature: SLOP_JUDGE_TEMPERATURE
+	});
+	let parsed: SlopJudgement;
+	try {
+		parsed = parseSlopJudgement(responseText);
+	} catch (error) {
+		console.error('Invalid slop judgement payload', {
+			responseText,
+			error
+		});
+		throw error;
+	}
+	const { riskScore, contributions } = computeSlopWeightedRisk(parsed, 'qa');
+	const evaluatedAt = new Date().toISOString();
+	const recommendedLabel: 0 | 1 = riskScore >= DEFAULT_SLOP_RISK_THRESHOLD ? 1 : 0;
+	return {
+		id: job.id,
+		evaluatedAt,
+		prompt,
+		domain: 'qa',
+		context: quiz.summary ?? null,
+		text,
+		autoSignals,
+		judgement: parsed,
+		model: {
+			modelId,
+			temperature: SLOP_JUDGE_TEMPERATURE
+		},
+		riskScore: Number(riskScore.toFixed(4)),
+		recommendedLabel,
+		threshold: DEFAULT_SLOP_RISK_THRESHOLD,
+		contributions
+	};
+}
+
 async function judgeQuizPayload(
 	client: GoogleGenAI,
 	job: SampleJob,
 	source: InlineSourceFile,
 	quiz: QuizGeneration
-): Promise<JudgeFilePayload> {
+): Promise<QualityJudgeFilePayload> {
 	const prompt = buildJudgePrompt({
 		sourceFiles: [source],
 		candidateQuiz: quiz
@@ -521,7 +657,7 @@ async function auditJudgeDecisionPayload(
 	source: InlineSourceFile,
 	quiz: QuizGeneration,
 	judgeVerdict: JudgeVerdict
-): Promise<JudgeFilePayload['audit']> {
+): Promise<QualityJudgeFilePayload['audit']> {
 	const prompt = buildAuditPrompt();
 	const parts: Part[] = [
 		{ text: prompt },
@@ -552,43 +688,90 @@ async function auditJudgeDecisionPayload(
 	};
 }
 
-async function runSampleGeneration(client: GoogleGenAI, job: SampleJob): Promise<GenerationResult> {
+async function runSampleGeneration(
+	client: GoogleGenAI,
+	job: SampleJob,
+	generateModes: Set<GenerateMode>,
+	judgeModes: Set<JudgeMode>
+): Promise<GenerationResult> {
+	if (generateModes.has('extension') && !generateModes.has('quiz')) {
+		throw new Error(
+			'Extension generation requires base quiz generation. Include "quiz" in --generate.'
+		);
+	}
+
 	const source = await loadInlineSource(job.sourcePath);
-	console.log(`   ↳ generating base quiz (${job.id})`);
-	const quiz = await generateQuizPayload(client, job, source);
-	console.log(`   ↳ judging base quiz (${job.id})`);
-	const judge = await judgeQuizPayload(client, job, source, quiz.quiz);
-	const audit = await auditJudgeDecisionPayload(
-		client,
-		job,
-		source,
-		quiz.quiz,
-		judge.judge.verdict
-	);
-	console.log(`   ↳ generating extension (${job.id})`);
-	const extension = await generateExtensionPayload(client, job, source, quiz.quiz);
-	console.log(`   ↳ judging extension (${job.id})`);
-	const extensionJudge = await judgeQuizPayload(client, job, source, extension.quiz);
-	const extensionAudit = await auditJudgeDecisionPayload(
-		client,
-		job,
-		source,
-		extension.quiz,
-		extensionJudge.judge.verdict
-	);
-	return {
-		job,
-		quiz,
-		judge: {
-			...judge,
-			audit
-		},
-		extension,
-		extensionJudge: {
-			...extensionJudge,
-			audit: extensionAudit
+	const result: GenerationResult = { job };
+
+	if (generateModes.has('quiz')) {
+		console.log(`   ↳ generating base quiz (${job.id})`);
+		const quiz = await generateQuizPayload(client, job, source);
+		result.quiz = quiz;
+
+		if (judgeModes.has('quality')) {
+			console.log(`   ↳ judging base quiz (${job.id})`);
+			const judge = await judgeQuizPayload(client, job, source, quiz.quiz);
+			const audit = await auditJudgeDecisionPayload(
+				client,
+				job,
+				source,
+				quiz.quiz,
+				judge.judge.verdict
+			);
+			result.quality = {
+				...(result.quality ?? {}),
+				quiz: {
+					...judge,
+					audit
+				}
+			};
 		}
-	};
+
+		if (judgeModes.has('slop')) {
+			console.log(`   ↳ slop detection (base quiz ${job.id})`);
+			const slop = await slopJudgeQuizPayload(client, job, quiz.quiz, 'quiz');
+			result.slop = {
+				...(result.slop ?? {}),
+				quiz: slop
+			};
+		}
+
+		if (generateModes.has('extension')) {
+			console.log(`   ↳ generating extension (${job.id})`);
+			const extension = await generateExtensionPayload(client, job, source, quiz.quiz);
+			result.extension = extension;
+
+			if (judgeModes.has('quality')) {
+				console.log(`   ↳ judging extension (${job.id})`);
+				const extensionJudge = await judgeQuizPayload(client, job, source, extension.quiz);
+				const extensionAudit = await auditJudgeDecisionPayload(
+					client,
+					job,
+					source,
+					extension.quiz,
+					extensionJudge.judge.verdict
+				);
+				result.quality = {
+					...(result.quality ?? {}),
+					extension: {
+						...extensionJudge,
+						audit: extensionAudit
+					}
+				};
+			}
+
+			if (judgeModes.has('slop')) {
+				console.log(`   ↳ slop detection (extension ${job.id})`);
+				const extensionSlop = await slopJudgeQuizPayload(client, job, extension.quiz, 'extension');
+				result.slop = {
+					...(result.slop ?? {}),
+					extension: extensionSlop
+				};
+			}
+		}
+	}
+
+	return result;
 }
 
 type StageSelection = 'all' | 'generate' | 'render';
@@ -605,6 +788,45 @@ function parseStageSelection(): StageSelection {
 	throw new Error(`Unknown stage selection: ${value}`);
 }
 
+function parseModeArg<T extends string>(
+	prefix: string,
+	allowed: readonly T[],
+	defaults: readonly T[]
+): Set<T> {
+	const arg = process.argv.find((value) => value.startsWith(prefix));
+	if (!arg) {
+		return new Set(defaults);
+	}
+	const raw = arg.split('=')[1]?.trim();
+	if (!raw) {
+		return new Set();
+	}
+	const values = raw
+		.split(',')
+		.map((item) => item.trim())
+		.filter(Boolean);
+	if (values.length === 0) {
+		return new Set();
+	}
+	const allowedSet = new Set(allowed);
+	const result = new Set<T>();
+	for (const value of values) {
+		if (!allowedSet.has(value as T)) {
+			throw new Error(`Unknown option for ${prefix.slice(2, -1)}: ${value}`);
+		}
+		result.add(value as T);
+	}
+	return result;
+}
+
+function parseGenerateModes(): Set<GenerateMode> {
+	return parseModeArg('--generate=', GENERATE_MODES, GENERATE_MODES);
+}
+
+function parseJudgeModes(): Set<JudgeMode> {
+	return parseModeArg('--judges=', JUDGE_MODES, ['quality']);
+}
+
 async function writeJson(filePath: string, data: unknown): Promise<void> {
 	await writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
@@ -614,37 +836,54 @@ async function readJson<T>(filePath: string): Promise<T> {
 	return JSON.parse(raw) as T;
 }
 
+async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
+	try {
+		return await readJson<T>(filePath);
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			'code' in error &&
+			(error as { code?: string }).code === 'ENOENT'
+		) {
+			return null;
+		}
+		throw error;
+	}
+}
+
 type SampleIndexEntry = {
 	readonly id: string;
 	readonly label: string;
 	readonly mode: SampleJob['mode'];
 	readonly subject?: string;
 	readonly board?: string;
-	readonly questionCount: number;
-	readonly request: QuizFilePayload['request'];
+	readonly questionCount?: number;
+	readonly request?: QuizFilePayload['request'];
 	readonly source: QuizFilePayload['source'];
-	readonly quizTitle: string;
-	readonly summary: string;
-	readonly outputPath: string;
-	readonly generatedAt: string;
+	readonly quizTitle?: string;
+	readonly summary?: string;
+	readonly outputPath?: string;
+	readonly generatedAt?: string;
 	readonly outputs: {
-		readonly quiz: string;
-		readonly judge: string;
-		readonly extension: string;
-		readonly extensionJudge: string;
+		readonly quiz?: string;
+		readonly qualityJudge?: string;
+		readonly slop?: string;
+		readonly extension?: string;
+		readonly extensionQualityJudge?: string;
+		readonly extensionSlop?: string;
 	};
-	readonly extension: {
+	readonly extension?: {
 		readonly quizTitle: string;
 		readonly questionCount: number;
 		readonly generatedAt: string;
+	} | null;
+	readonly quality?: {
+		readonly baseVerdict?: JudgeVerdict['verdict'];
+		readonly extensionVerdict?: JudgeVerdict['verdict'];
 	};
-	readonly judge: {
-		readonly verdict: JudgeVerdict['verdict'];
-		readonly outputPath: string;
-	};
-	readonly extensionJudge: {
-		readonly verdict: JudgeVerdict['verdict'];
-		readonly outputPath: string;
+	readonly slop?: {
+		readonly base?: { readonly label: 0 | 1; readonly riskScore: number };
+		readonly extension?: { readonly label: 0 | 1; readonly riskScore: number };
 	};
 };
 
@@ -655,7 +894,9 @@ type SampleIndex = {
 
 async function runGenerationStage(
 	client: GoogleGenAI,
-	jobs: SampleJob[]
+	jobs: SampleJob[],
+	generateModes: Set<GenerateMode>,
+	judgeModes: Set<JudgeMode>
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
 	await rm(OUTPUT_DIR, { recursive: true, force: true });
 	await mkdir(OUTPUT_DIR, { recursive: true });
@@ -666,14 +907,31 @@ async function runGenerationStage(
 			`[sample-quizzes] Generating ${job.id} (${job.mode}) from ${job.relativeSourcePath}...`
 		);
 		try {
-			const result = await runSampleGeneration(client, job);
+			const result = await runSampleGeneration(client, job, generateModes, judgeModes);
 			const sampleDir = path.join(OUTPUT_DIR, job.id);
 			await mkdir(sampleDir, { recursive: true });
-			await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
-			await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
-			await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
-			await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
-			await writeJson(path.join(sampleDir, 'quiz-extension-judgement.json'), result.extensionJudge);
+			if (result.quiz) {
+				await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
+				await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
+			}
+			if (result.quality?.quiz) {
+				await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.quality.quiz);
+			}
+			if (result.slop?.quiz) {
+				await writeJson(path.join(sampleDir, 'quiz-slop.json'), result.slop.quiz);
+			}
+			if (result.extension) {
+				await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
+			}
+			if (result.quality?.extension) {
+				await writeJson(
+					path.join(sampleDir, 'quiz-extension-judgement.json'),
+					result.quality.extension
+				);
+			}
+			if (result.slop?.extension) {
+				await writeJson(path.join(sampleDir, 'quiz-extension-slop.json'), result.slop.extension);
+			}
 			results.push(result);
 			console.log(`[sample-quizzes] Saved outputs for ${job.id}`);
 		} catch (error) {
@@ -694,32 +952,63 @@ async function runGenerationStage(
 			mode: result.job.mode,
 			subject: result.job.subject,
 			board: result.job.board,
-			questionCount: result.quiz.quiz.questionCount,
-			request: result.quiz.request,
-			source: result.quiz.source,
-			quizTitle: result.quiz.quiz.quizTitle,
-			summary: result.quiz.quiz.summary,
-			outputPath: `/admin/sample-quizzes/${result.job.id}/detail.json`,
-			generatedAt: result.quiz.generatedAt,
+			questionCount: result.quiz?.quiz.questionCount,
+			request: result.quiz?.request,
+			source: result.quiz?.source ?? {
+				relativePath: result.job.relativeSourcePath,
+				displayName: result.job.displayName
+			},
+			quizTitle: result.quiz?.quiz.quizTitle,
+			summary: result.quiz?.quiz.summary,
+			outputPath: result.quiz ? `/admin/sample-quizzes/${result.job.id}/detail.json` : undefined,
+			generatedAt: result.quiz?.generatedAt,
 			outputs: {
-				quiz: `/admin/sample-quizzes/${result.job.id}/quiz.json`,
-				judge: `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`,
-				extension: `/admin/sample-quizzes/${result.job.id}/quiz-extension.json`,
-				extensionJudge: `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
+				quiz: result.quiz ? `/admin/sample-quizzes/${result.job.id}/quiz.json` : undefined,
+				qualityJudge: result.quality?.quiz
+					? `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`
+					: undefined,
+				slop: result.slop?.quiz
+					? `/admin/sample-quizzes/${result.job.id}/quiz-slop.json`
+					: undefined,
+				extension: result.extension
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension.json`
+					: undefined,
+				extensionQualityJudge: result.quality?.extension
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
+					: undefined,
+				extensionSlop: result.slop?.extension
+					? `/admin/sample-quizzes/${result.job.id}/quiz-extension-slop.json`
+					: undefined
 			},
-			extension: {
-				quizTitle: result.extension.quiz.quizTitle,
-				questionCount: result.extension.quiz.questionCount,
-				generatedAt: result.extension.generatedAt
-			},
-			judge: {
-				verdict: result.judge.judge.verdict.verdict,
-				outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-judgement.json`
-			},
-			extensionJudge: {
-				verdict: result.extensionJudge.judge.verdict.verdict,
-				outputPath: `/admin/sample-quizzes/${result.job.id}/quiz-extension-judgement.json`
-			}
+			extension: result.extension
+				? {
+						quizTitle: result.extension.quiz.quizTitle,
+						questionCount: result.extension.quiz.questionCount,
+						generatedAt: result.extension.generatedAt
+					}
+				: null,
+			quality: result.quality
+				? {
+						baseVerdict: result.quality.quiz?.judge.verdict.verdict,
+						extensionVerdict: result.quality.extension?.judge.verdict.verdict
+					}
+				: undefined,
+			slop: result.slop
+				? {
+						base: result.slop.quiz
+							? {
+									label: result.slop.quiz.recommendedLabel,
+									riskScore: result.slop.quiz.riskScore
+								}
+							: undefined,
+						extension: result.slop.extension
+							? {
+									label: result.slop.extension.recommendedLabel,
+									riskScore: result.slop.extension.riskScore
+								}
+							: undefined
+					}
+				: undefined
 		}))
 	};
 
@@ -730,25 +1019,25 @@ async function runGenerationStage(
 }
 
 function buildPromptLinks(commitHash: string): Array<{ label: string; url: string }> {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    return PROMPT_FILE_PATHS.map((relativePath) => {
-        const posixPath = relativePath.split(path.sep).join('/');
-        return {
-            label: relativePath,
-            url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
-        };
-    });
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	return PROMPT_FILE_PATHS.map((relativePath) => {
+		const posixPath = relativePath.split(path.sep).join('/');
+		return {
+			label: relativePath,
+			url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
+		};
+	});
 }
 
 function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
-    const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-    const posixPath = relativeRepoPath.split(path.sep).join('/');
-    return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
+	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
+	const posixPath = relativeRepoPath.split(path.sep).join('/');
+	return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
 }
 
 function isImageAsset(relativeRepoPath: string): boolean {
-    const ext = path.extname(relativeRepoPath).toLowerCase();
-    return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
+	const ext = path.extname(relativeRepoPath).toLowerCase();
+	return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
 }
 
 function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
@@ -813,7 +1102,7 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 	return lines.join('\n');
 }
 
-function formatJudgeMarkdown(payload: JudgeFilePayload, heading: string): string {
+function formatJudgeMarkdown(payload: QualityJudgeFilePayload, heading: string): string {
 	const lines: string[] = [];
 	lines.push(`# ${heading}`);
 	lines.push('');
@@ -859,6 +1148,57 @@ function formatJudgeMarkdown(payload: JudgeFilePayload, heading: string): string
 	return lines.join('\n');
 }
 
+function formatSlopMarkdown(payload: SlopJudgeFilePayload, heading: string): string {
+	const lines: string[] = [];
+	lines.push(`# ${heading}`);
+	lines.push('');
+	lines.push(`**Model risk label:** ${payload.recommendedLabel === 1 ? 'slop' : 'clean'}`);
+	lines.push(
+		`**Weighted risk:** ${payload.riskScore.toFixed(3)} (threshold ${payload.threshold.toFixed(2)})`
+	);
+	lines.push(
+		`**Model confidence:** ${payload.judgement.overall_slop.confidence.toFixed(2)} (${payload.judgement.overall_slop.label === 1 ? 'LLM flagged slop' : 'LLM marked clean'})`
+	);
+	lines.push(`**Annoyance rating:** ${payload.judgement.annoyance}/5`);
+	lines.push('');
+	lines.push('## Top fixes');
+	lines.push('');
+	if (payload.judgement.top_fixes.length === 0) {
+		lines.push('- (none reported)');
+	} else {
+		payload.judgement.top_fixes.forEach((fix) => {
+			lines.push(`- ${fix}`);
+		});
+	}
+	lines.push('');
+	lines.push('## Axis scores');
+	lines.push('');
+	payload.judgement.axes.forEach((axis) => {
+		lines.push(`- **${axis.code}** — score ${axis.score_0_to_4.toFixed(1)}`);
+		lines.push(`  - ${axis.rationale}`);
+		if (axis.spans.length > 0) {
+			lines.push('  - Spans:');
+			axis.spans.forEach((span) => {
+				lines.push(`    - [${span.char_start}, ${span.char_end}) “${span.quote.trim()}”`);
+			});
+		}
+	});
+	lines.push('');
+	lines.push('## Auto signals');
+	lines.push('');
+	Object.entries(payload.autoSignals).forEach(([key, value]) => {
+		lines.push(`- ${key}: ${value}`);
+	});
+	lines.push('');
+	lines.push('## Prompt');
+	lines.push('');
+	lines.push('```');
+	lines.push(payload.prompt);
+	lines.push('```');
+	lines.push('');
+	return lines.join('\n');
+}
+
 async function getCommitHash(): Promise<string> {
 	const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT });
 	return stdout.trim();
@@ -894,85 +1234,190 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 	rootLines.push('## Samples');
 	rootLines.push('');
 
-    for (const sample of effectiveIndex.samples) {
-        const sampleDir = path.join(OUTPUT_DIR, sample.id);
-        const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
-        const judge = await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'));
-        const extension = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'));
-        const extensionJudge = await readJson<JudgeFilePayload>(
-            path.join(sampleDir, 'quiz-extension-judgement.json')
-        );
+	for (const sample of effectiveIndex.samples) {
+		const sampleDir = path.join(OUTPUT_DIR, sample.id);
+		const quiz = sample.outputs.quiz
+			? await readJsonIfExists<QuizFilePayload>(path.join(sampleDir, 'quiz.json'))
+			: null;
+		const quality = sample.outputs.qualityJudge
+			? await readJsonIfExists<QualityJudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'))
+			: null;
+		const slop = sample.outputs.slop
+			? await readJsonIfExists<SlopJudgeFilePayload>(path.join(sampleDir, 'quiz-slop.json'))
+			: null;
+		const extension = sample.outputs.extension
+			? await readJsonIfExists<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'))
+			: null;
+		const extensionQuality = sample.outputs.extensionQualityJudge
+			? await readJsonIfExists<QualityJudgeFilePayload>(
+					path.join(sampleDir, 'quiz-extension-judgement.json')
+				)
+			: null;
+		const extensionSlop = sample.outputs.extensionSlop
+			? await readJsonIfExists<SlopJudgeFilePayload>(
+					path.join(sampleDir, 'quiz-extension-slop.json')
+				)
+			: null;
 
-        const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
-        await mkdir(reportSampleDir, { recursive: true });
+		const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
+		await mkdir(reportSampleDir, { recursive: true });
 
 		const sampleHeading = buildSampleHeading(sample);
-		const baseQuizMd = formatQuizMarkdown(quiz, `${sampleHeading} — Base Quiz`);
-		const baseJudgeMd = formatJudgeMarkdown(judge, `${sampleHeading} — Base Quiz Judge`);
-		const extensionQuizMd = formatQuizMarkdown(extension, `${sampleHeading} — Extension Quiz`);
-		const extensionJudgeMd = formatJudgeMarkdown(
-			extensionJudge,
-			`${sampleHeading} — Extension Judge`
+		if (quiz) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz.md'),
+				formatQuizMarkdown(quiz, `${sampleHeading} — Base Quiz`),
+				'utf8'
+			);
+		}
+		if (quality) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-judgement.md'),
+				formatJudgeMarkdown(quality, `${sampleHeading} — Base Quiz Judge`),
+				'utf8'
+			);
+		}
+		if (slop) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-slop.md'),
+				formatSlopMarkdown(slop, `${sampleHeading} — Base Quiz Slop Detection`),
+				'utf8'
+			);
+		}
+		if (extension) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-extension.md'),
+				formatQuizMarkdown(extension, `${sampleHeading} — Extension Quiz`),
+				'utf8'
+			);
+		}
+		if (extensionQuality) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-extension-judgement.md'),
+				formatJudgeMarkdown(extensionQuality, `${sampleHeading} — Extension Quality Judge`),
+				'utf8'
+			);
+		}
+		if (extensionSlop) {
+			await writeFile(
+				path.join(reportSampleDir, 'quiz-extension-slop.md'),
+				formatSlopMarkdown(extensionSlop, `${sampleHeading} — Extension Slop Detection`),
+				'utf8'
+			);
+		}
+
+		const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
+		const sourceImgRelative = path.posix.relative(
+			`docs/reports/sample-quizzes/${sample.id}`,
+			sample.source.relativePath
 		);
-
-		await writeFile(path.join(reportSampleDir, 'quiz.md'), baseQuizMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-judgement.md'), baseJudgeMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-extension.md'), extensionQuizMd, 'utf8');
-        await writeFile(
-            path.join(reportSampleDir, 'quiz-extension-judgement.md'),
-            extensionJudgeMd,
-            'utf8'
-        );
-
-        // Write source.md with embedded image and GitHub link
-        const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
-        const sourceImgRelative = path.posix.relative(
-            `docs/reports/sample-quizzes/${sample.id}`,
-            sample.source.relativePath
-        );
-        const sourceMdLines: string[] = [];
-        sourceMdLines.push(`# ${sampleHeading} — Source`);
-        sourceMdLines.push('');
-        sourceMdLines.push(`File: ${sample.source.displayName}`);
-        sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
-        sourceMdLines.push('');
-        if (isImageAsset(sample.source.relativePath)) {
-            sourceMdLines.push(
-                `<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
-            );
-        } else {
-            sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
-        }
-        sourceMdLines.push('');
-        await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
+		const sourceMdLines: string[] = [];
+		sourceMdLines.push(`# ${sampleHeading} — Source`);
+		sourceMdLines.push('');
+		sourceMdLines.push(`File: ${sample.source.displayName}`);
+		sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
+		sourceMdLines.push('');
+		if (isImageAsset(sample.source.relativePath)) {
+			sourceMdLines.push(
+				`<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
+			);
+		} else {
+			sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
+		}
+		sourceMdLines.push('');
+		await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
 
 		rootLines.push(`### ${sampleHeading}`);
 		rootLines.push('');
 		rootLines.push(`- Source: ${sample.source.displayName} (${sample.source.relativePath})`);
-		rootLines.push(`- Base quiz summary: ${sample.summary}`);
-		rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
-        rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
-        rootLines.push(
-            `- Reports: [Quiz](sample-quizzes/${sample.id}/quiz.md) · [Judge](sample-quizzes/${sample.id}/quiz-judgement.md) · [10 more](sample-quizzes/${sample.id}/quiz-extension.md) · [10 more judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
-        );
-        rootLines.push(
-            `- JSON: [Quiz](${relativeStaticPath(sample.id, 'quiz.json')}) · [Judge](${relativeStaticPath(
-                sample.id,
-                'quiz-judgement.json'
-            )}) · [10 more](${relativeStaticPath(
-                sample.id,
-                'quiz-extension.json'
-            )}) · [10 more judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
-        );
-        rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
-        rootLines.push('');
-    }
+		if (sample.summary) {
+			rootLines.push(`- Base quiz summary: ${sample.summary}`);
+		}
+		if (sample.quality?.baseVerdict) {
+			rootLines.push(`- Quality verdict: ${sample.quality.baseVerdict}`);
+		}
+		if (sample.slop?.base) {
+			rootLines.push(
+				`- Slop risk: ${sample.slop.base.riskScore.toFixed(3)} (${sample.slop.base.label === 1 ? 'flagged' : 'clean'})`
+			);
+		}
+		if (sample.extension) {
+			rootLines.push(
+				`- Extension: ${sample.extension.questionCount} questions (generated ${sample.extension.generatedAt})`
+			);
+		}
+		if (sample.quality?.extensionVerdict) {
+			rootLines.push(`- Extension quality verdict: ${sample.quality.extensionVerdict}`);
+		}
+		if (sample.slop?.extension) {
+			rootLines.push(
+				`- Extension slop risk: ${sample.slop.extension.riskScore.toFixed(3)} (${sample.slop.extension.label === 1 ? 'flagged' : 'clean'})`
+			);
+		}
+
+		const reportLinks: string[] = [];
+		if (quiz) {
+			reportLinks.push(`[Quiz](sample-quizzes/${sample.id}/quiz.md)`);
+		}
+		if (quality) {
+			reportLinks.push(`[Quality judge](sample-quizzes/${sample.id}/quiz-judgement.md)`);
+		}
+		if (slop) {
+			reportLinks.push(`[Slop](sample-quizzes/${sample.id}/quiz-slop.md)`);
+		}
+		if (extension) {
+			reportLinks.push(`[Extension quiz](sample-quizzes/${sample.id}/quiz-extension.md)`);
+		}
+		if (extensionQuality) {
+			reportLinks.push(
+				`[Extension judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
+			);
+		}
+		if (extensionSlop) {
+			reportLinks.push(`[Extension slop](sample-quizzes/${sample.id}/quiz-extension-slop.md)`);
+		}
+		if (reportLinks.length > 0) {
+			rootLines.push(`- Reports: ${reportLinks.join(' · ')}`);
+		}
+
+		const jsonLinks: string[] = [];
+		if (quiz) {
+			jsonLinks.push(`[Quiz](${relativeStaticPath(sample.id, 'quiz.json')})`);
+		}
+		if (quality) {
+			jsonLinks.push(`[Quality judge](${relativeStaticPath(sample.id, 'quiz-judgement.json')})`);
+		}
+		if (slop) {
+			jsonLinks.push(`[Slop](${relativeStaticPath(sample.id, 'quiz-slop.json')})`);
+		}
+		if (extension) {
+			jsonLinks.push(`[Extension](${relativeStaticPath(sample.id, 'quiz-extension.json')})`);
+		}
+		if (extensionQuality) {
+			jsonLinks.push(
+				`[Extension judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
+			);
+		}
+		if (extensionSlop) {
+			jsonLinks.push(
+				`[Extension slop](${relativeStaticPath(sample.id, 'quiz-extension-slop.json')})`
+			);
+		}
+		if (jsonLinks.length > 0) {
+			rootLines.push(`- JSON: ${jsonLinks.join(' · ')}`);
+		}
+
+		rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
+		rootLines.push('');
+	}
 
 	await writeFile(path.join(REPORT_ROOT, 'sample-quizzes.md'), rootLines.join('\n'), 'utf8');
 }
 
 async function main(): Promise<void> {
 	const stage = parseStageSelection();
+	const generateModes = parseGenerateModes();
+	const judgeModes = parseJudgeModes();
 
 	if (stage !== 'render') {
 		const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -986,8 +1431,13 @@ async function main(): Promise<void> {
 			console.warn('[sample-quizzes] No sample files found.');
 			return;
 		}
+		if (generateModes.size === 0) {
+			console.error('[sample-quizzes] No generation modes selected.');
+			process.exitCode = 1;
+			return;
+		}
 		const client = new GoogleGenAI({ apiKey });
-		const { index } = await runGenerationStage(client, jobs);
+		const { index } = await runGenerationStage(client, jobs, generateModes, judgeModes);
 		if (stage === 'generate') {
 			return;
 		}

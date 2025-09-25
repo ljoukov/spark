@@ -1,7 +1,7 @@
 # Sample 1: Y8Lesson-Health-BloodDonations.pdf (synthesis) — Base Quiz
 
-**Quiz title:** GCSE Biology: Blood and Organ Donation
-**Summary:** This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.
+**Quiz title:** GCSE Triple Science: Blood, Organ, and Stem Cell Donation
+**Summary:** This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.
 
 ## Metadata
 
@@ -9,92 +9,87 @@
 - Subject: biology
 - Exam board: OCR
 - Question count: 6
-- Generated at: 2025-09-25T04:16:26.956Z
+- Generated at: 2025-09-25T08:02:15.993Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: Y8Lesson-Health-BloodDonations.pdf (data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf)
 
 ## Questions
 
-### 1. According to the provided material, approximately how many new blood donors are needed every day in England to meet demand?
+### 1. According to the provided material, approximately how many new blood donors are needed daily in England to meet demand?
 
 - Type: multiple_choice
 - Topic: Importance of donation
 - Difficulty: foundation
 - Skill focus: Recall
-- Source reference: Page 6
-- Answer: C
+- Source reference: Page 6, "Why are donations important?"
+- Answer: D
 - Options:
   - A. A) 100
-  - B. B) 250
-  - C. C) 400
-  - D. D) 750
+  - B. B) 200
+  - C. C) 300
+  - D. D) 400
 
 > Page 6 states, "Nearly 400 new blood donors are needed every day in England to meet demand."
 
-### 2. Identify two types of patients who might require a stem cell donation.
+### 2. Identify two types of individuals who might require an organ donation, as stated in the study material.
 
 - Type: short_answer
 - Topic: Who needs donations
 - Difficulty: foundation
 - Skill focus: Identification
-- Source reference: Page 5
-- Answer: Patients with blood cancer or a blood disorder.
+- Source reference: Page 5, "Who might need each type of donation?"
+- Answer: Someone whose organs have been damaged by disease or injury, or someone who has a birth defect.
 
-> Page 5 indicates that "Someone with blood cancer or a blood disorder" might need a stem cell donation.
+> Page 5 lists "Someone whose organs have been damaged by disease or injury" and "Someone who has a birth defect" under 'Organ donation'.
 
-### 3. True or False: Since 2020, in England, individuals under 18 are automatically considered organ donors unless they have registered a decision not to donate.
+### 3. How many adults can one blood donation help, according to the information provided about the blood donation process?
+
+- Type: numeric
+- Topic: Blood donation process
+- Difficulty: foundation
+- Skill focus: Data extraction
+- Source reference: Page 8, "What's involved in being a blood donor"
+- Answer: 3
+
+> Page 8 explains that after testing, a donor's blood is split into component parts, and "each donation can help 3 adults or 6 infants."
+
+### 4. True or False: From 2020, anyone over the age of 18 in England is automatically considered an organ donor unless they have explicitly registered a decision not to donate.
 
 - Type: true_false
 - Topic: Law around organ donation
 - Difficulty: intermediate
-- Skill focus: Analysis of legal details
-- Source reference: Page 13
-- Answer: False
+- Skill focus: Understanding legal frameworks
+- Source reference: Page 13, "Organ donation: legal changes to save more lives"
+- Answer: True
 
-> Page 13 states, "From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group." This explicitly refers to those "over 18", not under.
+> Page 13 states, "From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group."
 
-### 4. What is the minimum age required to register online to become a blood donor in England, according to the provided information?
+### 5. Which of the following is the most common method for donating stem cells, according to the provided material?
 
 - Type: multiple_choice
-- Topic: Steps in blood donation
-- Difficulty: foundation
-- Skill focus: Recall of specific details
-- Source reference: Page 8
-- Answer: A
-- Options:
-  - A. A) 16
-  - B. B) 17
-  - C. C) 18
-  - D. D) 21
-
-> Page 8, step 1, states: "Register online from 16+ at blood.co.uk."
-
-### 5. Describe the two methods by which stem cells can be donated, and state which method accounts for the majority of donations.
-
-- Type: short_answer
-- Topic: Steps in stem cell donation
+- Topic: Stem cell donation process
 - Difficulty: intermediate
-- Skill focus: Description and quantitative recall
-- Source reference: Page 10
-- Answer: Stem cells can be donated through the bloodstream (90% of donors) or via a bone marrow donation procedure (10% of donors). The bloodstream method accounts for the majority of donations.
-
-> Page 10, step 4 under 'Donate', outlines that stem cells can be donated "through the bloodstream (90% of donors)" or through a "bone marrow donation procedure (10% of donors)".
-
-### 6. Which of the following is a reason explicitly mentioned in the material for why an individual might choose not to donate blood?
-
-- Type: multiple_choice
-- Topic: Considerations in choice to donate
-- Difficulty: foundation
-- Skill focus: Extraction of specific reasons
-- Source reference: Page 16
+- Skill focus: Data interpretation
+- Source reference: Page 10, "What's involved in being a stem cell donor?"
 - Answer: B
 - Options:
-  - A. A) Religious objections
-  - B. B) Fear of needles
-  - C. C) Lack of time
-  - D. D) Concerns about privacy
+  - A. A) Through a bone marrow donation procedure
+  - B. B) Through the bloodstream
+  - C. C) Directly from umbilical cord blood
+  - D. D) Via a surgical removal of lymph nodes
 
-> Page 16 includes a speech bubble stating, "I'm really scared of needles, so giving blood isn't something I feel I'm able to do."
+> Page 10 states that "Stem cells can be donated in one of two ways: through the bloodstream (90% of donors) or bone marrow donation procedure (10% of donors)." Therefore, through the bloodstream is the most common.
+
+### 6. Explain two reasons why an individual might choose not to donate, based on the examples provided in the study material.
+
+- Type: short_answer
+- Topic: Individual choice to donate
+- Difficulty: higher
+- Skill focus: Analysis of considerations
+- Source reference: Page 16, "Why do people choose not to donate?"
+- Answer: An individual might choose not to donate blood due to a fear of needles. Another reason for choosing not to donate organs is feeling uncomfortable with the idea of their organs being used after death, leading them to opt out on the NHS Organ Donation Register.
+
+> Page 16 provides two speech bubbles illustrating reasons for not donating: "I'm really scared of needles, so giving blood isn't something I feel I'm able to do." and "I feel uncomfortable with the idea of my organs being used after I die, so I recorded my decision to opt out of organ donation on the NHS Organ Donation Register."
 
 ## Prompt
 

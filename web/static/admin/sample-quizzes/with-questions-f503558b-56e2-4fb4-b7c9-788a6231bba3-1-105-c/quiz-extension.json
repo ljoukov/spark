@@ -1,9 +1,9 @@
 {
   "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:26:03.210Z",
+  "generatedAt": "2025-09-25T08:16:56.299Z",
   "request": {
     "model": "gemini-2.5-flash",
     "questionCount": 10,
@@ -15,153 +15,183 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: C20 Retrieval Practice - Extension",
-    "summary": "This extension quiz provides 10 new questions covering additional concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It delves into various aspects of corrosion protection, different types of alloys, properties of glass and ceramics, polymer classifications, composite materials, and the effects of changing conditions in the Haber process. The questions are designed to test recall, understanding, and analytical skills, with difficulty levels ranging from foundation to higher.",
+    "quizTitle": "GCSE Triple Science Chemistry Quiz: C20 Retrieval (Extended)",
+    "summary": "This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, C20 Chemical and Allied Industries (specifically sections on metals, alloys, corrosion, glass, ceramics, polymers, composites, and the Haber process).",
+    "syllabusAlignment": "AQA GCSE Triple Science Chemistry C20: The Earth's Resources and Industrial Chemistry",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q_new_1",
-        "prompt": "What are three physical barriers commonly used to protect against corrosion?",
-        "answer": "Grease, paint, and a thin layer of metal.",
-        "explanation": "Physical barriers prevent oxygen and water from reaching the metal surface, thus stopping the corrosion process. Common examples include applying grease, painting the surface, or coating it with a less reactive metal like tin or zinc.",
-        "type": "short_answer",
-        "topic": "Corrosion Protection",
+        "id": "Q2",
+        "prompt": "Which of the following is a physical barrier used to protect against corrosion?",
+        "answer": "A",
+        "explanation": "Physical barriers like grease, paint, or a thin layer of metal prevent oxygen and water from reaching the metal surface, thus inhibiting corrosion.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Grease, paint, or a thin layer of metal",
+          "B: Sacrificial protection using a more reactive metal",
+          "C: Alloying the metal with another element",
+          "D: Electroplating with a less reactive metal"
+        ],
+        "topic": "Corrosion prevention",
         "difficulty": "foundation",
-        "skillFocus": "Recall",
+        "skillFocus": "Knowledge recall",
         "sourceReference": "C20 questions, Q2"
       },
       {
-        "id": "Q_new_2",
-        "prompt": "Which of the following best describes sacrificial protection against corrosion?",
+        "id": "Q4",
+        "prompt": "Rust is specifically formed through a reaction involving which three substances?",
         "answer": "B",
-        "explanation": "Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal being protected. The more reactive metal corrodes preferentially, sacrificing itself to protect the other metal.",
+        "explanation": "Rusting is the specific corrosion of iron, which requires both oxygen and water to occur.",
         "type": "multiple_choice",
         "options": [
-          "A. Applying a layer of paint to the metal surface.",
-          "B. Adding a more reactive metal to the surface of a material.",
-          "C. Using an inert gas to prevent oxygen contact.",
-          "D. Coating the metal with a less reactive metal."
+          "A: Copper, zinc, and carbon dioxide",
+          "B: Iron, water, and oxygen",
+          "C: Aluminium, nitrogen, and hydrogen",
+          "D: Steel, acid, and heat"
         ],
-        "topic": "Corrosion Protection",
-        "difficulty": "intermediate",
-        "skillFocus": "Understanding concepts",
-        "sourceReference": "C20 questions, Q3"
-      },
-      {
-        "id": "Q_new_3",
-        "prompt": "Gold alloys used in jewellery are typically made from gold combined with which other metals?",
-        "answer": "B",
-        "explanation": "Pure gold is very soft. To make it more durable and to alter its colour for jewellery, it is alloyed with other metals. Common alloying metals include copper, zinc, and silver.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Iron, nickel, and chromium",
-          "B. Copper, zinc, and silver",
-          "C. Aluminium, magnesium, and silicon",
-          "D. Lead, tin, and antimony"
-        ],
-        "topic": "Alloys",
+        "topic": "Corrosion, Rusting",
         "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C20 questions, Q6"
+        "skillFocus": "Knowledge recall",
+        "sourceReference": "C20 questions, Q4"
       },
       {
-        "id": "Q_new_4",
-        "prompt": "What is a key property of aluminium alloys that makes them widely used in industries like aerospace and transport?",
-        "answer": "They generally have low densities.",
-        "explanation": "Aluminium alloys are valued for their low density, which translates to a high strength-to-weight ratio. This property is crucial for applications where weight reduction is important, such as in aircraft and vehicle manufacturing.",
-        "type": "short_answer",
-        "topic": "Alloys",
+        "id": "Q5",
+        "prompt": "Which pair correctly identifies two common alloys of copper?",
+        "answer": "C",
+        "explanation": "Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are well-known copper alloys.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Steel and duralumin",
+          "B: Solder and pewter",
+          "C: Brass and bronze",
+          "D: Amalgam and electrum"
+        ],
+        "topic": "Alloys, Copper",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge recall",
+        "sourceReference": "C20 questions, Q5"
+      },
+      {
+        "id": "Q7",
+        "prompt": "What are steel alloys primarily made from?",
+        "answer": "A",
+        "explanation": "Steel is an alloy of iron with a small percentage of carbon, and often other elements like chromium or nickel to impart specific properties.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Iron, carbon, and other metals",
+          "B: Aluminium, silicon, and oxygen",
+          "C: Copper, zinc, and tin",
+          "D: Gold, silver, and platinum"
+        ],
+        "topic": "Alloys, Steel",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge recall",
+        "sourceReference": "C20 questions, Q7"
+      },
+      {
+        "id": "Q8",
+        "prompt": "A key property of aluminium alloys that makes them useful in industries like aerospace is that they generally have:",
+        "answer": "D",
+        "explanation": "Aluminium alloys are valued for their low density, which contributes to lightweight structures, making them ideal for aircraft and vehicles.",
+        "type": "multiple_choice",
+        "options": [
+          "A: High melting points",
+          "B: Excellent electrical conductivity",
+          "C: Extreme hardness",
+          "D: Low densities"
+        ],
+        "topic": "Alloys, Aluminium",
         "difficulty": "intermediate",
-        "skillFocus": "Recall, Application",
+        "skillFocus": "Understanding properties and uses",
         "sourceReference": "C20 questions, Q8"
       },
       {
-        "id": "Q_new_5",
-        "prompt": "State the main difference in properties between soda-lime glass and borosilicate glass.",
-        "answer": "Borosilicate glass has a much higher melting point (and better thermal shock resistance) compared to soda-lime glass.",
-        "explanation": "Soda-lime glass is common window and bottle glass. Borosilicate glass (like Pyrex) contains boron oxide, which gives it a higher melting point and makes it more resistant to thermal shock, making it suitable for laboratory glassware and ovenware.",
-        "type": "short_answer",
-        "topic": "Ceramics/Glass",
+        "id": "Q9",
+        "prompt": "What is the main difference in properties between soda-lime glass and borosilicate glass?",
+        "answer": "B",
+        "explanation": "Borosilicate glass (like Pyrex) contains boron oxide, which gives it a much higher melting point and better thermal shock resistance compared to soda-lime glass.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Soda-lime glass is more resistant to chemical attack",
+          "B: Borosilicate glass has a much higher melting point",
+          "C: Soda-lime glass is used for laboratory equipment",
+          "D: Borosilicate glass is more easily recycled"
+        ],
+        "topic": "Ceramics, Glass",
         "difficulty": "intermediate",
-        "skillFocus": "Comparison, Recall",
+        "skillFocus": "Comparing materials",
         "sourceReference": "C20 questions, Q9"
       },
       {
-        "id": "Q_new_6",
-        "prompt": "Which of the following are two common examples of clay ceramics?",
-        "answer": "C",
-        "explanation": "Clay ceramics are made by shaping wet clay and then firing it at high temperatures. Pottery (like earthenware and stoneware) and bricks are classic examples of products made from clay.",
+        "id": "Q10",
+        "prompt": "Which of the following pairs are examples of clay ceramics?",
+        "answer": "A",
+        "explanation": "Pottery and bricks are traditional ceramics made by shaping clay and then firing it at high temperatures.",
         "type": "multiple_choice",
         "options": [
-          "A. Steel and cast iron",
-          "B. Plywood and reinforced concrete",
-          "C. Pottery and bricks",
-          "D. Glass and plastic"
+          "A: Pottery and bricks",
+          "B: Glass and concrete",
+          "C: Steel and aluminium",
+          "D: Plastic and rubber"
         ],
-        "topic": "Ceramics",
+        "topic": "Ceramics, Clay",
         "difficulty": "foundation",
-        "skillFocus": "Recall, Examples",
+        "skillFocus": "Knowledge recall",
         "sourceReference": "C20 questions, Q10"
       },
       {
-        "id": "Q_new_7",
-        "prompt": "Explain the main difference in behaviour between thermosetting and thermosoftening polymers when heated.",
-        "answer": "Thermosetting polymers do not soften when heated, whereas thermosoftening polymers do soften when heated.",
-        "explanation": "Thermosoftening polymers have weak intermolecular forces between polymer chains, allowing them to soften and melt when heated and be reshaped. Thermosetting polymers form strong covalent cross-links between their polymer chains during formation, making them rigid and preventing them from softening or melting upon heating; they char or burn instead.",
-        "type": "short_answer",
+        "id": "Q12",
+        "prompt": "What is the key distinction between thermosetting and thermosoftening polymers when heated?",
+        "answer": "C",
+        "explanation": "Thermosoftening polymers have weak intermolecular forces that allow them to soften and melt when heated, whereas thermosetting polymers form strong covalent cross-links that prevent them from softening or melting.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Thermosetting polymers can be remoulded, thermosoftening cannot",
+          "B: Thermosoftening polymers are always stronger than thermosetting polymers",
+          "C: Thermosetting polymers do not soften when heated, while thermosoftening polymers do",
+          "D: Thermosetting polymers are formed from monomers, thermosoftening are not"
+        ],
         "topic": "Polymers",
         "difficulty": "intermediate",
-        "skillFocus": "Comparison, Understanding properties",
+        "skillFocus": "Understanding material properties",
         "sourceReference": "C20 questions, Q12"
       },
       {
-        "id": "Q_new_8",
-        "prompt": "What is the definition of a composite material?",
-        "answer": "A composite is a mixture of a matrix and reinforcements.",
-        "explanation": "Composite materials are formed by combining two or more different materials, which remain separate and distinct at the macroscopic level within the finished structure. They typically consist of a matrix (binder) and a reinforcement material, with the aim of achieving properties superior to those of the individual components.",
-        "type": "short_answer",
-        "topic": "Composites",
-        "difficulty": "foundation",
-        "skillFocus": "Definition, Recall",
-        "sourceReference": "C20 questions, Q15"
-      },
-      {
-        "id": "Q_new_9",
-        "prompt": "In the Haber process, what is the effect of increasing the temperature on the yield, rate, and cost of ammonia production?",
+        "id": "Q17",
+        "prompt": "What is the effect of increasing the temperature in the Haber process on the yield, rate, and cost?",
         "answer": "B",
-        "explanation": "The forward reaction in the Haber process is exothermic, so increasing the temperature shifts the equilibrium to the left (reactants), decreasing the yield of ammonia. However, higher temperatures increase the kinetic energy of particles, leading to more frequent and energetic collisions, thus increasing the reaction rate. Increased energy input also contributes to higher operational costs.",
+        "explanation": "The Haber process is an exothermic reaction, so increasing temperature shifts the equilibrium to the left, decreasing yield. However, higher temperatures increase the kinetic energy of particles, leading to a faster reaction rate. Operating at higher temperatures also incurs higher energy costs.",
         "type": "multiple_choice",
         "options": [
-          "A. Increase yield, decrease rate, decrease cost",
-          "B. Decrease yield, increase rate, increase cost",
-          "C. Increase yield, increase rate, decrease cost",
-          "D. Decrease yield, decrease rate, increase cost"
+          "A: Increase yield, decrease rate, decrease cost",
+          "B: Decrease yield, increase rate, increase cost",
+          "C: Increase yield, increase rate, decrease cost",
+          "D: Decrease yield, decrease rate, increase cost"
         ],
-        "topic": "Haber Process",
+        "topic": "Haber process, Chemical equilibrium, Reaction kinetics",
         "difficulty": "higher",
-        "skillFocus": "Analysis, Le Chatelier's Principle",
+        "skillFocus": "Analyzing process conditions",
         "sourceReference": "C20 questions, Q17"
       },
       {
-        "id": "Q_new_10",
-        "prompt": "How does increasing the pressure affect the yield, rate, and cost of the Haber process?",
+        "id": "Q20",
+        "prompt": "Which set of conditions is typically used for the Haber process?",
         "answer": "A",
-        "explanation": "The Haber process involves a decrease in the number of gas moles from reactants (1 N₂ + 3 H₂ = 4 moles) to product (2 NH₃ = 2 moles). According to Le Chatelier's principle, increasing pressure shifts the equilibrium towards the side with fewer moles of gas, thus increasing the yield of ammonia. Higher pressure also increases the concentration of gas molecules, leading to more frequent collisions and a faster reaction rate. However, maintaining high pressure requires stronger equipment and more energy, increasing costs.",
+        "explanation": "The Haber process uses a compromise temperature of around 450°C and a high pressure of 200 atmospheres, with an iron catalyst, to achieve a reasonable yield and rate economically.",
         "type": "multiple_choice",
         "options": [
-          "A. Increase yield, increase rate, increase cost",
-          "B. Decrease yield, decrease rate, decrease cost",
-          "C. Increase yield, decrease rate, increase cost",
-          "D. Decrease yield, increase rate, decrease cost"
+          "A: 450°C, 200 atm, iron catalyst",
+          "B: 200°C, 1 atm, platinum catalyst",
+          "C: 700°C, 100 atm, vanadium(V) oxide catalyst",
+          "D: 300°C, 500 atm, nickel catalyst"
         ],
-        "topic": "Haber Process",
-        "difficulty": "higher",
-        "skillFocus": "Analysis, Le Chatelier's Principle",
-        "sourceReference": "C20 questions, Q18"
+        "topic": "Haber process, Industrial conditions",
+        "difficulty": "intermediate",
+        "skillFocus": "Knowledge recall of industrial processes",
+        "sourceReference": "C20 questions, Q20"
       }
     ]
   },

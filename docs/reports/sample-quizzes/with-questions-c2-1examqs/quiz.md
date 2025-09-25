@@ -1,7 +1,7 @@
 # Sample 4: C2.1ExamQs.pdf (extraction) — Base Quiz
 
-**Quiz title:** GCSE Chemistry: States of Matter and Reactions
-**Summary:** This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.
+**Quiz title:** GCSE Chemistry: States of Matter and Chemical Reactions
+**Summary:** This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.
 
 ## Metadata
 
@@ -9,29 +9,29 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 6
-- Generated at: 2025-09-25T04:22:27.982Z
+- Generated at: 2025-09-25T08:11:54.607Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Questions
 
-### 1. Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols from the box to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)
+### 1. Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)
 
 - Type: short_answer
-- Topic: Chemical reactions, State symbols
-- Difficulty: foundation
-- Skill focus: Applying knowledge of chemical reactions and state symbols.
+- Topic: Chemical reactions and equations
+- Difficulty: intermediate
+- Skill focus: Application of knowledge, recall of state symbols
 - Source reference: Page 1, Question 1(a)
 - Answer: aq, g
 
-> Lithium hydroxide is formed as a solution in water, so its state symbol is 'aq' (aqueous). Hydrogen is a gas produced in the reaction, so its state symbol is 'g'.
+> Lithium hydroxide solution is an aqueous solution, denoted by 'aq'. Hydrogen is a gas, denoted by 'g'.
 
 ### 2. Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?
 
 - Type: multiple_choice
-- Topic: States of matter, Phase changes, Data interpretation
+- Topic: States of matter and changes of state
 - Difficulty: intermediate
-- Skill focus: Interpreting graphical data, calculating temperature ranges.
+- Skill focus: Data analysis, graph interpretation
 - Source reference: Page 2, Question 1(b), Figure 1
 - Answer: C
 - Options:
@@ -40,14 +40,14 @@
   - C. C
   - D. D
 
-> To find the substance liquid over the greatest temperature range, calculate the difference between its boiling point and melting point. A: 20°C (10 - (-10)). B: 120°C (190 - 70). C: 200°C (210 - 10). D: 20°C (-160 - (-180)). Substance C has the largest range of 200°C.
+> Substance C has a melting point of approximately 10°C and a boiling point of approximately 200°C, giving it a liquid range of 190°C (200 - 10), which is the largest among the given substances.
 
 ### 3. Referring to Figure 1, which two substances are gases at 50 °C?
 
 - Type: multiple_choice
-- Topic: States of matter, Phase changes, Data interpretation
+- Topic: States of matter and changes of state
 - Difficulty: intermediate
-- Skill focus: Interpreting graphical data, identifying states of matter at specific temperatures.
+- Skill focus: Data analysis, graph interpretation
 - Source reference: Page 3, Question 1(c), Figure 1
 - Answer: A and D
 - Options:
@@ -56,45 +56,50 @@
   - C. C and D
   - D. A and D
 
-> A substance is a gas when its temperature is above its boiling point. At 50°C, Substance A (Boiling Point ~10°C) is a gas. Substance B (Boiling Point ~190°C) is a solid. Substance C (Boiling Point ~210°C) is a liquid. Substance D (Boiling Point ~-160°C) is a gas. Therefore, A and D are gases at 50°C.
+> At 50°C, substance A (boiling point ~0°C) and substance D (boiling point ~-160°C) would both have boiled and therefore be in a gaseous state.
 
-### 4. Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.
-
-- Type: short_answer
-- Topic: Experimental techniques, States of matter, Heating curves
-- Difficulty: higher
-- Skill focus: Evaluating experimental procedures, understanding limitations of apparatus.
-- Source reference: Page 4, Question 1(e), Figure 2
-- Answer: The apparatus uses water as the heating medium. Water boils at 100°C, but substance B has a boiling point of 190°C. Therefore, water cannot reach a high enough temperature to boil substance B.
-
-> Substance B has a boiling point of 190°C (from Figure 1). The apparatus uses a water bath for heating. Water boils at 100°C at standard atmospheric pressure, meaning it cannot be heated above this temperature. Consequently, the water bath cannot provide enough heat to raise substance B to its boiling point of 190°C.
-
-### 5. A student shakes a tube containing small balls to model the movement of particles in a gas. Which two characteristics make this a good model for gas particles?
+### 4. Substance E has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at 0 °C?
 
 - Type: multiple_choice
-- Topic: Particle model, States of matter
+- Topic: States of matter and changes of state
 - Difficulty: foundation
-- Skill focus: Understanding the particle model of gases.
-- Source reference: Page 5, Question 2(a)
-- Answer: The balls are far apart from each other and move randomly.
+- Skill focus: Application of knowledge
+- Source reference: Page 3, Question 1(d)
+- Answer: Liquid
 - Options:
-  - A. The balls move slowly and are different colours.
-  - B. The balls are far apart from each other and move randomly.
-  - C. The balls are close together and move slowly.
-  - D. The balls are different colours and move randomly.
+  - A. Solid
+  - B. Liquid
+  - C. Gas
+  - D. Plasma
 
-> In the particle model of gases, particles are widely spaced and move randomly and rapidly. The model effectively demonstrates these two key characteristics. The speed of movement is not accurately represented by 'slowly', and colour is irrelevant.
+> At 0°C, substance E is above its melting point (-50°C) and below its boiling point (120°C), meaning it is in a liquid state.
 
-### 6. For a given material, in which state of matter are the particles in a regular arrangement?
+### 5. Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.
 
 - Type: short_answer
-- Topic: Particle model, States of matter
-- Difficulty: foundation
-- Skill focus: Recalling characteristics of states of matter.
-- Source reference: Page 5, Question 2(b)
-- Answer: Solid
+- Topic: Experimental techniques, heating methods
+- Difficulty: higher
+- Skill focus: Analysis, explanation, evaluation of experimental design
+- Source reference: Page 4, Question 1(e), Figure 1 and Figure 2
+- Answer: The apparatus uses a water bath, which can only heat substances up to 100°C. Substance B has a boiling point of approximately 190°C, which is higher than the maximum temperature achievable with a water bath.
 
-> In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating pattern (a lattice structure).
+> A water bath is limited to heating substances up to 100°C, its own boiling point. Since substance B's boiling point is 190°C (from Figure 1), a water bath cannot provide sufficient heat to reach this temperature.
+
+### 6. A student shakes a tube containing small balls to model the movement of particles in a gas. Which of the following is a characteristic of this model that accurately represents gas particles?
+
+- Type: multiple_choice
+- Topic: Particle model, states of matter
+- Difficulty: foundation
+- Skill focus: Recall, understanding models
+- Source reference: Page 5, Question 2(a)
+- Answer: The balls are far apart from each other.
+- Options:
+  - A. The balls move slowly.
+  - B. The balls are far apart from each other.
+  - C. The balls are different colours.
+  - D. The balls move in fixed positions.
+
+> In a gas, particles are far apart from each other and move randomly. The model effectively demonstrates the large separation between particles.
 
 ## Prompt
 

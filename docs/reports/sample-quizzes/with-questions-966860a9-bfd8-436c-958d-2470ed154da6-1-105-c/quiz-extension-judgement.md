@@ -1,28 +1,28 @@
-# Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (extraction) — Extension Judge
+# Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (extraction) — Extension Quality Judge
 
-**Verdict:** revise
+**Verdict:** approve
 
 ## Summary
 
-The quiz demonstrates strong adherence to 'Question quality' and 'Answer precision', with prompts being clear, unambiguous, and directly aligned with the provided source material. 'Difficulty alignment' is appropriate for GCSE Triple Science, offering a suitable range of challenge. 'Safety & tone' are excellent, with no misinformation or off-spec content. However, there are significant issues with 'Coverage and balance'. The quiz summary states it includes 16 questions, but only 10 are provided. Furthermore, several key concepts from the source material, such as the fundamental formation of covalent bonds (Q1 from source), the detailed structure of giant covalent substances (Q3, Q6 from source), and the definition of fullerenes (Q15 from source), are omitted, despite fullerenes being mentioned in the quiz summary as a covered topic. This indicates a lack of comprehensive coverage and internal inconsistency.
+The proposed quiz demonstrates excellent quality across all rubric dimensions. The 'Question quality' is high, with prompts that are precise, unambiguous, and directly derived from the provided GCSE retrieval practice material, making them exam-ready. 'Answer precision' is faultless; all answers are factually correct, directly grounded in the source text, and supported by clear, accurate explanations. The 'Coverage and balance' are appropriate for an 'extension' quiz on Covalent Bonding, covering key concepts like giant covalent structures, small molecules, polymers, and various carbon allotropes with a suitable mix of short answer and multiple-choice questions. 'Difficulty alignment' is well-judged, with questions ranging from foundation to higher, appropriate for GCSE Triple Science. Finally, 'Safety & tone' are fully met, with no misinformation or off-spec content, and consistent use of UK English spelling.
 
 ## Rubric findings
 
 - **Question quality** — score 1.00
-  - All prompts are precise, unambiguous, and exam-ready, directly reflecting the questions from the source material.
+  - All prompts are precise, unambiguous, and directly reflect the questions from the source material, making them highly suitable for GCSE students.
 - **Answer precision** — score 1.00
-  - All answers are factually correct and directly grounded in the material provided in the answers column of the source image. The explanations are also accurate and helpful.
-- **Coverage and balance** — score 0.50
-  - The quiz summary states '16 questions' but only 10 are present. Key concepts from the source material, such as the fundamental formation of covalent bonds, the structure of giant covalent substances, and the definition of fullerenes, are missing. The summary mentions fullerenes, but no definition question for them is included, indicating a lack of comprehensive coverage and internal inconsistency.
+  - Every answer is factually correct, directly matches the provided source answers, and is accompanied by a clear and accurate explanation.
+- **Coverage and balance** — score 1.00
+  - The quiz effectively covers key concepts of covalent bonding and carbon allotropes as presented in the source material. The mix of short answer and multiple-choice questions is appropriate for a retrieval quiz, and the 'extension' nature is clearly defined.
 - **Difficulty alignment** — score 1.00
-  - The items are appropriate for GCSE Triple Science and show a good variation in challenge levels (foundation, intermediate, higher).
+  - The questions are well-aligned with GCSE Triple Science, with a suitable variation in challenge levels (foundation, intermediate, higher) as indicated and justified by the content.
 - **Safety & tone** — score 1.00
-  - The quiz avoids misinformation, harmful, or off-spec content, maintaining an appropriate educational tone.
+  - The quiz content is purely academic, free from misinformation, harmful, or off-spec material. UK English spelling is consistently used throughout.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T04:21:37.980Z
+- Evaluated at: 2025-09-25T08:10:14.089Z
 - Source: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg)
 
 ## Audit
@@ -31,7 +31,7 @@ The quiz demonstrates strong adherence to 'Question quality' and 'Answer precisi
 - Verdict agreement: agree
 - Confidence: high
 
-The judge's verdict is entirely correct and well-supported. The primary issue is with 'Coverage and balance'. The judge accurately identifies the internal inconsistency where the quiz summary claims there are 16 questions, but the quiz itself only contains 10. Furthermore, the judge correctly points out that several key topics from the source material, which are also mentioned in the quiz's own summary (e.g., fullerenes, fundamental formation of covalent bonds), are missing from the actual questions. This lack of comprehensive coverage and the factual error in the summary fully justify the 'revise' verdict and the 0.5 score for that criterion. The judge's positive assessments of the other criteria are also accurate, as the questions that are present are of high quality and directly reflect the source.
+The judge's assessment is entirely correct. The candidate quiz is a high-quality and faithful adaptation of the provided source material. All questions and answers are taken directly from the textbook page, ensuring factual accuracy and alignment. The judge correctly identifies the strengths of the quiz across all rubric dimensions, including the precise questions, correct answers, appropriate coverage for an 'extension' quiz, and suitable difficulty alignment for the target GCSE level. The judge's reasoning is sound and their 'approve' verdict is well-justified.
 
 ## Prompt
 

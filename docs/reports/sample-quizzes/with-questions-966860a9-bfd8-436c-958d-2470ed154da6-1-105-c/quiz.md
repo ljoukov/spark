@@ -1,7 +1,7 @@
 # Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (extraction) — Base Quiz
 
-**Quiz title:** GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz
-**Summary:** This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 6 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.
+**Quiz title:** AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz
+**Summary:** This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.
 
 ## Metadata
 
@@ -9,7 +9,7 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 6
-- Generated at: 2025-09-25T04:20:29.877Z
+- Generated at: 2025-09-25T08:08:25.363Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg)
 
@@ -18,29 +18,34 @@
 ### 1. How are covalent bonds formed?
 
 - Type: multiple_choice
-- Topic: Covalent Bonding Basics
+- Topic: Covalent Bond Formation
 - Difficulty: foundation
 - Skill focus: Recall
 - Source reference: C2 questions, Q1
-- Answer: by atoms sharing electrons
+- Answer: By atoms sharing electrons
 - Options:
-  - A. by atoms transferring electrons
-  - B. by atoms sharing electrons
-  - C. by atoms gaining electrons
-  - D. by atoms losing electrons
+  - A. By atoms sharing electrons
+  - B. By atoms transferring electrons
+  - C. By atoms gaining electrons
+  - D. By atoms losing electrons
 
-> Covalent bonds are formed when two atoms share one or more pairs of electrons to achieve a stable electron configuration.
+> Covalent bonds are formed when two non-metal atoms share one or more pairs of electrons to achieve a stable outer electron shell.
 
-### 2. Describe the structure and bonding of a giant covalent substance.
+### 2. Which type of atoms typically form covalent bonds between them?
 
-- Type: short_answer
-- Topic: Giant Covalent Structures
-- Difficulty: intermediate
-- Skill focus: Description
-- Source reference: C2 questions, Q3
-- Answer: billions of atoms bonded together by strong covalent bonds
+- Type: multiple_choice
+- Topic: Types of Atoms in Covalent Bonds
+- Difficulty: foundation
+- Skill focus: Recall
+- Source reference: C2 questions, Q2
+- Answer: Non-metals
+- Options:
+  - A. Metals and non-metals
+  - B. Non-metals
+  - C. Metals
+  - D. Noble gases
 
-> Giant covalent structures consist of a vast, repeating network of billions of atoms held together by strong covalent bonds throughout the entire structure.
+> Covalent bonds primarily occur between non-metal atoms, as they both have high electronegativity and tend to share electrons rather than transfer them.
 
 ### 3. Why do giant covalent substances have high melting points?
 
@@ -49,52 +54,47 @@
 - Difficulty: intermediate
 - Skill focus: Explanation
 - Source reference: C2 questions, Q6
-- Answer: it takes a lot of energy to break the strong covalent bonds between the atoms
+- Answer: It takes a lot of energy to break the strong covalent bonds between the atoms.
 
-> Due to the extensive network of strong covalent bonds throughout the entire structure, a significant amount of thermal energy is required to overcome these bonds, resulting in high melting points.
+> Giant covalent structures consist of billions of atoms held together by a vast network of strong covalent bonds. A significant amount of thermal energy is required to overcome these strong bonds throughout the entire structure, leading to very high melting points.
 
-### 4. Describe the structure and bonding in graphite.
+### 4. Why do small molecules have low melting points?
 
 - Type: short_answer
-- Topic: Graphite Structure
-- Difficulty: higher
-- Skill focus: Description
-- Source reference: C2 questions, Q10
-- Answer: each carbon atom is bonded to three others in hexagonal rings arranged in layers – it has delocalised electrons and weak forces between the layers
+- Topic: Properties of Simple Molecular Structures
+- Difficulty: intermediate
+- Skill focus: Explanation
+- Source reference: C2 questions, Q7
+- Answer: Only a small amount of energy is needed to break the weak intermolecular forces.
 
-> Graphite is a giant covalent structure where each carbon atom is covalently bonded to three other carbon atoms, forming hexagonal rings arranged in layers. These layers are held together by weak intermolecular forces, and there are delocalised electrons within the layers.
+> Small molecules are held together by strong covalent bonds within the molecule, but the forces between individual molecules (intermolecular forces) are weak. Only a small amount of energy is required to overcome these weak intermolecular forces, resulting in low melting and boiling points.
 
 ### 5. Why can graphite conduct electricity?
 
-- Type: multiple_choice
-- Topic: Properties of Graphite
+- Type: short_answer
+- Topic: Graphite Properties
 - Difficulty: intermediate
-- Skill focus: Explanation, Recall
+- Skill focus: Explanation
 - Source reference: C2 questions, Q11
-- Answer: the delocalised electrons can move through the graphite
-- Options:
-  - A. It has free ions that can carry charge.
-  - B. The strong covalent bonds allow electrons to flow easily.
-  - C. It has delocalised electrons that can move through the structure.
-  - D. Its layered structure allows for electron transfer between layers.
+- Answer: The delocalised electrons can move through the graphite.
 
-> In graphite, each carbon atom forms only three covalent bonds, leaving one outer electron per atom delocalised. These delocalised electrons are free to move throughout the layers, allowing graphite to conduct electricity.
+> In graphite, each carbon atom is bonded to three other carbon atoms, leaving one outer electron per atom free. These electrons become delocalised and are free to move between the layers, allowing graphite to conduct electricity.
 
-### 6. What is a fullerene?
+### 6. What is graphene?
 
 - Type: multiple_choice
-- Topic: Fullerenes
+- Topic: Graphene Definition
 - Difficulty: foundation
-- Skill focus: Definition, Recall
-- Source reference: C2 questions, Q15
-- Answer: hollow cage of carbon atoms arranged as a sphere or a tube
+- Skill focus: Definition
+- Source reference: C2 questions, Q13
+- Answer: A single layer of graphite
 - Options:
-  - A. A single layer of graphite.
-  - B. A giant covalent lattice of silicon atoms.
-  - C. A hollow cage of carbon atoms arranged as a sphere or a tube.
-  - D. A long chain of identical monomer units.
+  - A. A single layer of graphite
+  - B. A hollow cage of carbon atoms
+  - C. A hollow cylinder of carbon atoms
+  - D. A giant covalent lattice of silicon atoms
 
-> Fullerenes are a class of carbon allotropes consisting of hollow molecular cages, typically spherical (like buckyballs) or cylindrical (nanotubes).
+> Graphene is an allotrope of carbon consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one atomic layer of graphite.
 
 ## Prompt
 

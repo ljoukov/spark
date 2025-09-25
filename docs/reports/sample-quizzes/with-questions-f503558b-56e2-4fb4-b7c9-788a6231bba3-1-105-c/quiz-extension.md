@@ -1,154 +1,179 @@
 # Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (extraction) — Extension Quiz
 
-**Quiz title:** GCSE Chemistry: C20 Retrieval Practice - Extension
-**Summary:** This extension quiz provides 10 new questions covering additional concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It delves into various aspects of corrosion protection, different types of alloys, properties of glass and ceramics, polymer classifications, composite materials, and the effects of changing conditions in the Haber process. The questions are designed to test recall, understanding, and analytical skills, with difficulty levels ranging from foundation to higher.
+**Quiz title:** GCSE Triple Science Chemistry Quiz: C20 Retrieval (Extended)
+**Summary:** This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.
 
 ## Metadata
 
-- Mode: extension
+- Mode: extraction
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 10
-- Generated at: 2025-09-25T04:26:03.210Z
+- Generated at: 2025-09-25T08:16:56.299Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg)
 
 ## Questions
 
-### 1. What are three physical barriers commonly used to protect against corrosion?
+### 1. Which of the following is a physical barrier used to protect against corrosion?
 
-- Type: short_answer
-- Topic: Corrosion Protection
+- Type: multiple_choice
+- Topic: Corrosion prevention
 - Difficulty: foundation
-- Skill focus: Recall
+- Skill focus: Knowledge recall
 - Source reference: C20 questions, Q2
-- Answer: Grease, paint, and a thin layer of metal.
+- Answer: A
+- Options:
+  - A. A: Grease, paint, or a thin layer of metal
+  - B. B: Sacrificial protection using a more reactive metal
+  - C. C: Alloying the metal with another element
+  - D. D: Electroplating with a less reactive metal
 
-> Physical barriers prevent oxygen and water from reaching the metal surface, thus stopping the corrosion process. Common examples include applying grease, painting the surface, or coating it with a less reactive metal like tin or zinc.
+> Physical barriers like grease, paint, or a thin layer of metal prevent oxygen and water from reaching the metal surface, thus inhibiting corrosion.
 
-### 2. Which of the following best describes sacrificial protection against corrosion?
+### 2. Rust is specifically formed through a reaction involving which three substances?
 
 - Type: multiple_choice
-- Topic: Corrosion Protection
-- Difficulty: intermediate
-- Skill focus: Understanding concepts
-- Source reference: C20 questions, Q3
+- Topic: Corrosion, Rusting
+- Difficulty: foundation
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q4
 - Answer: B
 - Options:
-  - A. A. Applying a layer of paint to the metal surface.
-  - B. B. Adding a more reactive metal to the surface of a material.
-  - C. C. Using an inert gas to prevent oxygen contact.
-  - D. D. Coating the metal with a less reactive metal.
+  - A. A: Copper, zinc, and carbon dioxide
+  - B. B: Iron, water, and oxygen
+  - C. C: Aluminium, nitrogen, and hydrogen
+  - D. D: Steel, acid, and heat
 
-> Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal being protected. The more reactive metal corrodes preferentially, sacrificing itself to protect the other metal.
+> Rusting is the specific corrosion of iron, which requires both oxygen and water to occur.
 
-### 3. Gold alloys used in jewellery are typically made from gold combined with which other metals?
-
-- Type: multiple_choice
-- Topic: Alloys
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C20 questions, Q6
-- Answer: B
-- Options:
-  - A. A. Iron, nickel, and chromium
-  - B. B. Copper, zinc, and silver
-  - C. C. Aluminium, magnesium, and silicon
-  - D. D. Lead, tin, and antimony
-
-> Pure gold is very soft. To make it more durable and to alter its colour for jewellery, it is alloyed with other metals. Common alloying metals include copper, zinc, and silver.
-
-### 4. What is a key property of aluminium alloys that makes them widely used in industries like aerospace and transport?
-
-- Type: short_answer
-- Topic: Alloys
-- Difficulty: intermediate
-- Skill focus: Recall, Application
-- Source reference: C20 questions, Q8
-- Answer: They generally have low densities.
-
-> Aluminium alloys are valued for their low density, which translates to a high strength-to-weight ratio. This property is crucial for applications where weight reduction is important, such as in aircraft and vehicle manufacturing.
-
-### 5. State the main difference in properties between soda-lime glass and borosilicate glass.
-
-- Type: short_answer
-- Topic: Ceramics/Glass
-- Difficulty: intermediate
-- Skill focus: Comparison, Recall
-- Source reference: C20 questions, Q9
-- Answer: Borosilicate glass has a much higher melting point (and better thermal shock resistance) compared to soda-lime glass.
-
-> Soda-lime glass is common window and bottle glass. Borosilicate glass (like Pyrex) contains boron oxide, which gives it a higher melting point and makes it more resistant to thermal shock, making it suitable for laboratory glassware and ovenware.
-
-### 6. Which of the following are two common examples of clay ceramics?
+### 3. Which pair correctly identifies two common alloys of copper?
 
 - Type: multiple_choice
-- Topic: Ceramics
+- Topic: Alloys, Copper
 - Difficulty: foundation
-- Skill focus: Recall, Examples
-- Source reference: C20 questions, Q10
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q5
 - Answer: C
 - Options:
-  - A. A. Steel and cast iron
-  - B. B. Plywood and reinforced concrete
-  - C. C. Pottery and bricks
-  - D. D. Glass and plastic
+  - A. A: Steel and duralumin
+  - B. B: Solder and pewter
+  - C. C: Brass and bronze
+  - D. D: Amalgam and electrum
 
-> Clay ceramics are made by shaping wet clay and then firing it at high temperatures. Pottery (like earthenware and stoneware) and bricks are classic examples of products made from clay.
+> Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are well-known copper alloys.
 
-### 7. Explain the main difference in behaviour between thermosetting and thermosoftening polymers when heated.
-
-- Type: short_answer
-- Topic: Polymers
-- Difficulty: intermediate
-- Skill focus: Comparison, Understanding properties
-- Source reference: C20 questions, Q12
-- Answer: Thermosetting polymers do not soften when heated, whereas thermosoftening polymers do soften when heated.
-
-> Thermosoftening polymers have weak intermolecular forces between polymer chains, allowing them to soften and melt when heated and be reshaped. Thermosetting polymers form strong covalent cross-links between their polymer chains during formation, making them rigid and preventing them from softening or melting upon heating; they char or burn instead.
-
-### 8. What is the definition of a composite material?
-
-- Type: short_answer
-- Topic: Composites
-- Difficulty: foundation
-- Skill focus: Definition, Recall
-- Source reference: C20 questions, Q15
-- Answer: A composite is a mixture of a matrix and reinforcements.
-
-> Composite materials are formed by combining two or more different materials, which remain separate and distinct at the macroscopic level within the finished structure. They typically consist of a matrix (binder) and a reinforcement material, with the aim of achieving properties superior to those of the individual components.
-
-### 9. In the Haber process, what is the effect of increasing the temperature on the yield, rate, and cost of ammonia production?
+### 4. What are steel alloys primarily made from?
 
 - Type: multiple_choice
-- Topic: Haber Process
+- Topic: Alloys, Steel
+- Difficulty: foundation
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q7
+- Answer: A
+- Options:
+  - A. A: Iron, carbon, and other metals
+  - B. B: Aluminium, silicon, and oxygen
+  - C. C: Copper, zinc, and tin
+  - D. D: Gold, silver, and platinum
+
+> Steel is an alloy of iron with a small percentage of carbon, and often other elements like chromium or nickel to impart specific properties.
+
+### 5. A key property of aluminium alloys that makes them useful in industries like aerospace is that they generally have:
+
+- Type: multiple_choice
+- Topic: Alloys, Aluminium
+- Difficulty: intermediate
+- Skill focus: Understanding properties and uses
+- Source reference: C20 questions, Q8
+- Answer: D
+- Options:
+  - A. A: High melting points
+  - B. B: Excellent electrical conductivity
+  - C. C: Extreme hardness
+  - D. D: Low densities
+
+> Aluminium alloys are valued for their low density, which contributes to lightweight structures, making them ideal for aircraft and vehicles.
+
+### 6. What is the main difference in properties between soda-lime glass and borosilicate glass?
+
+- Type: multiple_choice
+- Topic: Ceramics, Glass
+- Difficulty: intermediate
+- Skill focus: Comparing materials
+- Source reference: C20 questions, Q9
+- Answer: B
+- Options:
+  - A. A: Soda-lime glass is more resistant to chemical attack
+  - B. B: Borosilicate glass has a much higher melting point
+  - C. C: Soda-lime glass is used for laboratory equipment
+  - D. D: Borosilicate glass is more easily recycled
+
+> Borosilicate glass (like Pyrex) contains boron oxide, which gives it a much higher melting point and better thermal shock resistance compared to soda-lime glass.
+
+### 7. Which of the following pairs are examples of clay ceramics?
+
+- Type: multiple_choice
+- Topic: Ceramics, Clay
+- Difficulty: foundation
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q10
+- Answer: A
+- Options:
+  - A. A: Pottery and bricks
+  - B. B: Glass and concrete
+  - C. C: Steel and aluminium
+  - D. D: Plastic and rubber
+
+> Pottery and bricks are traditional ceramics made by shaping clay and then firing it at high temperatures.
+
+### 8. What is the key distinction between thermosetting and thermosoftening polymers when heated?
+
+- Type: multiple_choice
+- Topic: Polymers
+- Difficulty: intermediate
+- Skill focus: Understanding material properties
+- Source reference: C20 questions, Q12
+- Answer: C
+- Options:
+  - A. A: Thermosetting polymers can be remoulded, thermosoftening cannot
+  - B. B: Thermosoftening polymers are always stronger than thermosetting polymers
+  - C. C: Thermosetting polymers do not soften when heated, while thermosoftening polymers do
+  - D. D: Thermosetting polymers are formed from monomers, thermosoftening are not
+
+> Thermosoftening polymers have weak intermolecular forces that allow them to soften and melt when heated, whereas thermosetting polymers form strong covalent cross-links that prevent them from softening or melting.
+
+### 9. What is the effect of increasing the temperature in the Haber process on the yield, rate, and cost?
+
+- Type: multiple_choice
+- Topic: Haber process, Chemical equilibrium, Reaction kinetics
 - Difficulty: higher
-- Skill focus: Analysis, Le Chatelier's Principle
+- Skill focus: Analyzing process conditions
 - Source reference: C20 questions, Q17
 - Answer: B
 - Options:
-  - A. A. Increase yield, decrease rate, decrease cost
-  - B. B. Decrease yield, increase rate, increase cost
-  - C. C. Increase yield, increase rate, decrease cost
-  - D. D. Decrease yield, decrease rate, increase cost
+  - A. A: Increase yield, decrease rate, decrease cost
+  - B. B: Decrease yield, increase rate, increase cost
+  - C. C: Increase yield, increase rate, decrease cost
+  - D. D: Decrease yield, decrease rate, increase cost
 
-> The forward reaction in the Haber process is exothermic, so increasing the temperature shifts the equilibrium to the left (reactants), decreasing the yield of ammonia. However, higher temperatures increase the kinetic energy of particles, leading to more frequent and energetic collisions, thus increasing the reaction rate. Increased energy input also contributes to higher operational costs.
+> The Haber process is an exothermic reaction, so increasing temperature shifts the equilibrium to the left, decreasing yield. However, higher temperatures increase the kinetic energy of particles, leading to a faster reaction rate. Operating at higher temperatures also incurs higher energy costs.
 
-### 10. How does increasing the pressure affect the yield, rate, and cost of the Haber process?
+### 10. Which set of conditions is typically used for the Haber process?
 
 - Type: multiple_choice
-- Topic: Haber Process
-- Difficulty: higher
-- Skill focus: Analysis, Le Chatelier's Principle
-- Source reference: C20 questions, Q18
+- Topic: Haber process, Industrial conditions
+- Difficulty: intermediate
+- Skill focus: Knowledge recall of industrial processes
+- Source reference: C20 questions, Q20
 - Answer: A
 - Options:
-  - A. A. Increase yield, increase rate, increase cost
-  - B. B. Decrease yield, decrease rate, decrease cost
-  - C. C. Increase yield, decrease rate, increase cost
-  - D. D. Decrease yield, increase rate, decrease cost
+  - A. A: 450°C, 200 atm, iron catalyst
+  - B. B: 200°C, 1 atm, platinum catalyst
+  - C. C: 700°C, 100 atm, vanadium(V) oxide catalyst
+  - D. D: 300°C, 500 atm, nickel catalyst
 
-> The Haber process involves a decrease in the number of gas moles from reactants (1 N₂ + 3 H₂ = 4 moles) to product (2 NH₃ = 2 moles). According to Le Chatelier's principle, increasing pressure shifts the equilibrium towards the side with fewer moles of gas, thus increasing the yield of ammonia. Higher pressure also increases the concentration of gas molecules, leading to more frequent collisions and a faster reaction rate. However, maintaining high pressure requires stronger equipment and more energy, increasing costs.
+> The Haber process uses a compromise temperature of around 450°C and a high pressure of 200 atmospheres, with an iron catalyst, to achieve a reasonable yield and rate economically.
 
 ## Prompt
 

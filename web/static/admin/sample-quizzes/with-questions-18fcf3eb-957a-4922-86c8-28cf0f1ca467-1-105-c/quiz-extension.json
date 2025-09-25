@@ -1,9 +1,9 @@
 {
   "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:19:23.156Z",
+  "generatedAt": "2025-09-25T08:06:56.183Z",
   "request": {
     "model": "gemini-2.5-flash",
     "questionCount": 10,
@@ -15,159 +15,169 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry C1: Atomic Structure and Models (Extended)",
-    "summary": "This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, delving deeper into atomic models, sub-atomic particle properties, electron configuration, and definitions of key atomic terms like isotopes. It includes a mix of multiple-choice, short-answer, and true/false questions, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz",
+    "summary": "This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, further exploring atomic structure, historical models of the atom, properties of sub-atomic particles, and calculations related to atomic composition. It includes 10 new questions, with a mix of multiple-choice and short-answer items, covering fresh angles and underrepresented subtopics from the supplied material. The difficulty ranges from foundation to higher.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry (8462) - Atomic Structure and the Periodic Table (4.1.1)",
+    "syllabusAlignment": "AQA GCSE Chemistry (8462) - Atomic Structure and the Periodic Table (4.1.1), Purity, mixtures and formulations (4.2.1)",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q7",
-        "prompt": "According to Dalton's model, how were atoms described?",
-        "answer": "A. Atoms as solid spheres that could not be divided into smaller parts.",
-        "explanation": "John Dalton's atomic theory, proposed in the early 19th century, described atoms as indivisible, indestructible solid spheres.",
+        "id": "Q_new_1_dalton_model",
+        "prompt": "According to Dalton's model, what was the fundamental nature of atoms?",
+        "answer": "Atoms were solid spheres that could not be divided into smaller parts.",
+        "explanation": "John Dalton's atomic theory proposed that atoms were indivisible, indestructible solid spheres, and that all atoms of a given element were identical.",
         "type": "multiple_choice",
         "options": [
-          "A. Atoms as solid spheres that could not be divided into smaller parts.",
-          "B. A sphere of positive charge with negative electrons embedded in it.",
-          "C. A dense nucleus with electrons orbiting it.",
-          "D. Atoms with a central nucleus containing protons and neutrons."
+          "A. Atoms were solid spheres that could not be divided into smaller parts.",
+          "B. Atoms consisted of a positive sphere with electrons embedded within it.",
+          "C. Atoms had a dense, positively charged nucleus with electrons orbiting it.",
+          "D. Atoms were composed of protons, neutrons, and electrons in distinct energy levels."
         ],
-        "topic": "Atomic Models (Dalton)",
+        "topic": "Atomic Models",
         "difficulty": "foundation",
         "skillFocus": "Recall",
         "sourceReference": "C1 questions, Q2"
       },
       {
-        "id": "Q8",
-        "prompt": "What crucial discovery was made by scientists during the alpha scattering experiment?",
-        "answer": "C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).",
-        "explanation": "The alpha scattering experiment, led by Rutherford, showed that most alpha particles passed straight through gold foil, but some were deflected at large angles, indicating a tiny, dense, positively charged nucleus.",
+        "id": "Q_new_2_alpha_scattering_discovery",
+        "prompt": "The alpha scattering experiment, conducted by Rutherford and his team, led to which significant discovery about atomic structure?",
+        "answer": "An atom's mass and positive charge are concentrated in a small, dense nucleus.",
+        "explanation": "The deflection of some alpha particles by the gold foil indicated that the atom's positive charge and most of its mass were concentrated in a tiny central region, which Rutherford named the nucleus.",
         "type": "multiple_choice",
         "options": [
-          "A. Electrons orbit in fixed energy levels.",
-          "B. Atoms are solid, indivisible spheres.",
-          "C. That an atom's mass and positive charge are concentrated in one small space (the nucleus).",
-          "D. The existence of an uncharged particle called the neutron."
+          "A. Electrons orbit in fixed energy levels or shells.",
+          "B. Atoms were solid, indivisible spheres.",
+          "C. An atom's mass and positive charge are concentrated in a small, dense nucleus.",
+          "D. The atom is a sphere of positive charge with negative electrons embedded."
         ],
-        "topic": "Atomic Models (Rutherford), Alpha Scattering",
-        "difficulty": "intermediate",
-        "skillFocus": "Understand, Recall",
-        "sourceReference": "C1 questions, Q4"
+        "topic": "Atomic Models, Experimental Evidence",
+        "difficulty": "higher",
+        "skillFocus": "Understanding"
       },
       {
-        "id": "Q9",
-        "prompt": "Describe the key features of the nuclear model of the atom.",
-        "answer": "A dense nucleus with electrons orbiting it.",
-        "explanation": "The nuclear model, proposed by Rutherford, posits a central, dense, positively charged nucleus containing most of the atom's mass, with negatively charged electrons orbiting around it.",
-        "type": "short_answer",
-        "topic": "Atomic Models (Nuclear)",
+        "id": "Q_new_3_nuclear_model_description",
+        "prompt": "Which statement best describes the nuclear model of the atom?",
+        "answer": "It consists of a dense nucleus with electrons orbiting it.",
+        "explanation": "The nuclear model, proposed by Rutherford, describes the atom as having a small, dense, positively charged nucleus at its center, with negatively charged electrons orbiting around it.",
+        "type": "multiple_choice",
+        "options": [
+          "A. A uniform sphere of positive charge with electrons scattered throughout.",
+          "B. A dense nucleus with electrons orbiting it.",
+          "C. Indivisible solid spheres.",
+          "D. Electrons existing in fixed energy levels (shells)."
+        ],
+        "topic": "Atomic Models",
         "difficulty": "intermediate",
-        "skillFocus": "Describe",
-        "sourceReference": "C1 questions, Q5"
+        "skillFocus": "Recall"
       },
       {
-        "id": "Q10",
-        "prompt": "Which sub-atomic particle was discovered by James Chadwick?",
-        "answer": "C. The uncharged particle called the neutron.",
+        "id": "Q_new_4_chadwick_discovery",
+        "prompt": "Which sub-atomic particle, an uncharged particle, was discovered by James Chadwick?",
+        "answer": "The neutron.",
         "explanation": "James Chadwick discovered the neutron in 1932, an uncharged particle with a mass similar to that of a proton, located in the nucleus.",
         "type": "multiple_choice",
         "options": [
-          "A. The positively charged proton.",
-          "B. The negatively charged electron.",
-          "C. The uncharged particle called the neutron.",
-          "D. The nucleus, a dense, positively charged center."
+          "A. The proton.",
+          "B. The electron.",
+          "C. The neutron.",
+          "D. The alpha particle."
         ],
-        "topic": "Sub-atomic Particles, Atomic History",
+        "topic": "Sub-atomic Particles, History of Atomic Theory",
         "difficulty": "foundation",
         "skillFocus": "Recall",
         "sourceReference": "C1 questions, Q7"
       },
       {
-        "id": "Q11",
-        "prompt": "True or False: Protons and neutrons are located in the electron shells of an atom.",
-        "answer": "False.",
-        "explanation": "Protons and neutrons are found together in the dense central nucleus of an atom, while electrons orbit in shells around the nucleus.",
-        "type": "true_false",
+        "id": "Q_new_5_proton_neutron_location",
+        "prompt": "In which specific region of an atom are protons and neutrons found?",
+        "answer": "In the nucleus.",
+        "explanation": "Protons and neutrons, collectively known as nucleons, are tightly packed together in the central part of the atom called the nucleus.",
+        "type": "multiple_choice",
+        "options": [
+          "A. In the electron shells.",
+          "B. Orbiting the nucleus.",
+          "C. In the nucleus.",
+          "D. Distributed throughout the atom's volume."
+        ],
         "topic": "Atomic Structure, Sub-atomic Particles",
         "difficulty": "foundation",
-        "skillFocus": "Identify, Recall",
+        "skillFocus": "Recall",
         "sourceReference": "C1 questions, Q8"
       },
       {
-        "id": "Q12",
-        "prompt": "State the relative electrical charge of a proton, a neutron, and an electron.",
-        "answer": "Proton: +1, Neutron: 0, Electron: -1.",
-        "explanation": "Protons carry a relative charge of +1, electrons carry a relative charge of -1, and neutrons are electrically neutral with a relative charge of 0.",
-        "type": "short_answer",
-        "topic": "Sub-atomic Particles",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall",
-        "sourceReference": "C1 questions, Q10"
-      },
-      {
-        "id": "Q13",
-        "prompt": "How can the number of protons in an atom be determined?",
-        "answer": "B. By referring to the atomic number on the Periodic Table.",
-        "explanation": "The atomic number (or proton number) is unique to each element and represents the number of protons in the nucleus of an atom of that element. It is found on the Periodic Table.",
+        "id": "Q_new_6_relative_mass_subatomic",
+        "prompt": "What are the approximate relative masses of a proton, neutron, and electron, respectively?",
+        "answer": "Proton: 1, Neutron: 1, Electron: 0 (very small).",
+        "explanation": "Protons and neutrons have a relative mass of approximately 1 atomic mass unit each, while electrons have a negligible relative mass, often approximated as 0 for calculations.",
         "type": "multiple_choice",
         "options": [
-          "A. By subtracting the mass number from the atomic number.",
-          "B. By referring to the atomic number on the Periodic Table.",
-          "C. By counting the number of electrons in the outermost shell.",
-          "D. By adding the number of neutrons and electrons."
+          "A. Proton: 1, Neutron: 1, Electron: 0 (very small).",
+          "B. Proton: 0, Neutron: 1, Electron: 1.",
+          "C. Proton: 1, Neutron: 0, Electron: 1.",
+          "D. Proton: 1, Neutron: 1, Electron: -1."
         ],
+        "topic": "Sub-atomic Particles",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q9"
+      },
+      {
+        "id": "Q_new_7_determine_protons",
+        "prompt": "How can you determine the number of protons in an atom of a specific element?",
+        "answer": "By referring to the atomic number on the Periodic Table.",
+        "explanation": "The atomic number (Z) of an element, found on the Periodic Table, directly corresponds to the number of protons in the nucleus of an atom of that element.",
+        "type": "short_answer",
         "topic": "Atomic Number, Periodic Table",
         "difficulty": "foundation",
-        "skillFocus": "Identify, Recall",
+        "skillFocus": "Recall",
         "sourceReference": "C1 questions, Q11"
       },
       {
-        "id": "Q14",
-        "prompt": "How is the number of neutrons in an atom calculated?",
-        "answer": "Mass number - atomic number.",
-        "explanation": "The mass number represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, the number of neutrons can be found.",
+        "id": "Q_new_8_calculate_neutrons",
+        "prompt": "Explain how to calculate the number of neutrons in an atom, given its mass number and atomic number.",
+        "answer": "Subtract the atomic number from the mass number.",
+        "explanation": "The mass number (A) represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, you get the number of neutrons.",
         "type": "short_answer",
-        "topic": "Atomic Structure, Calculations",
+        "topic": "Atomic Structure, Mass Number",
         "difficulty": "intermediate",
-        "skillFocus": "Calculate",
+        "skillFocus": "Application",
         "sourceReference": "C1 questions, Q12"
       },
       {
-        "id": "Q15",
-        "prompt": "What is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?",
-        "answer": "C. Up to 2 in the first shell and up to 8 in the second and third shells.",
-        "explanation": "For the first 20 elements, the electron shells fill in a specific order: the first shell holds a maximum of 2 electrons, and the second and third shells can hold up to 8 electrons each (for stable atoms, though the third can hold more in general, 8 is the common rule for GCSE).",
+        "id": "Q_new_9_no_overall_charge",
+        "prompt": "Why do atoms typically have no overall electrical charge?",
+        "answer": "They contain equal numbers of positive protons and negative electrons.",
+        "explanation": "In a neutral atom, the number of positively charged protons in the nucleus is equal to the number of negatively charged electrons orbiting the nucleus, resulting in a net charge of zero.",
         "type": "multiple_choice",
         "options": [
-          "A. Up to 8 in the first shell, 2 in the second, and 8 in the third.",
-          "B. Up to 2 in the first shell, 8 in the second, and 18 in the third.",
-          "C. Up to 2 in the first shell and up to 8 in the second and third shells.",
-          "D. Up to 2 in the first shell, 8 in the second, and 8 in the third (for stable atoms)."
+          "A. They only contain neutrons, which are neutral.",
+          "B. They contain equal numbers of positive protons and negative electrons.",
+          "C. The positive charge of the nucleus is cancelled out by the negative charge of the neutrons.",
+          "D. Electrons are uncharged when in fixed energy levels."
         ],
-        "topic": "Electron Shells, Electron Configuration",
+        "topic": "Atomic Structure, Charge Balance",
+        "difficulty": "intermediate",
+        "skillFocus": "Understanding",
+        "sourceReference": "C1 questions, Q13"
+      },
+      {
+        "id": "Q_new_10_electron_shells_capacity",
+        "prompt": "According to the Bohr model, what is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?",
+        "answer": "Up to 2 in the first shell and up to 8 in the second and third shells.",
+        "explanation": "The electron shells have specific capacities: the first shell can hold up to 2 electrons, and the second and third shells can hold up to 8 electrons each (for the first 20 elements, which is typically covered at GCSE).",
+        "type": "multiple_choice",
+        "options": [
+          "A. 2, 8, 8",
+          "B. 2, 2, 8",
+          "C. 8, 8, 2",
+          "D. 2, 8, 18"
+        ],
+        "topic": "Electron Configuration, Bohr Model",
         "difficulty": "intermediate",
         "skillFocus": "Recall",
         "sourceReference": "C1 questions, Q14"
-      },
-      {
-        "id": "Q16",
-        "prompt": "What are isotopes?",
-        "answer": "B. Atoms of the same element (same number of protons) with different numbers of neutrons.",
-        "explanation": "Isotopes are variants of a particular chemical element which have the same number of protons (atomic number) but different numbers of neutrons, and therefore different mass numbers.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Atoms of different elements with the same mass number.",
-          "B. Atoms of the same element (same number of protons) with different numbers of neutrons.",
-          "C. Ions of the same element with different charges.",
-          "D. Atoms that have gained or lost electrons."
-        ],
-        "topic": "Isotopes",
-        "difficulty": "higher",
-        "skillFocus": "Define",
-        "sourceReference": "C1 questions, Q18"
       }
     ]
   },

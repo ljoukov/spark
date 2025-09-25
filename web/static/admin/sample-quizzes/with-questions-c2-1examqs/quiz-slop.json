@@ -1,0 +1,191 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "evaluatedAt": "2025-09-25T08:13:14.931Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nTEXT: <<<Quiz title: GCSE Chemistry: States of Matter and Chemical Reactions\nSummary: This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)\nTopic: Chemical reactions and equations\nDifficulty: intermediate\nSkill focus: Application of knowledge, recall of state symbols\nAnswer: aq, g\nExplanation: Lithium hydroxide solution is an aqueous solution, denoted by 'aq'. Hydrogen is a gas, denoted by 'g'.\nSource reference: Page 1, Question 1(a)\n\nQ2: Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: C\nOptions:\n- A. A\n- B. B\n- C. C\n- D. D\nExplanation: Substance C has a melting point of approximately 10°C and a boiling point of approximately 200°C, giving it a liquid range of 190°C (200 - 10), which is the largest among the given substances.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ3: Referring to Figure 1, which two substances are gases at 50 °C?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: A and D\nOptions:\n- A. A and B\n- B. B and C\n- C. C and D\n- D. A and D\nExplanation: At 50°C, substance A (boiling point ~0°C) and substance D (boiling point ~-160°C) would both have boiled and therefore be in a gaseous state.\nSource reference: Page 3, Question 1(c), Figure 1\n\nQ4: Substance E has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at 0 °C?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Application of knowledge\nAnswer: Liquid\nOptions:\n- A. Solid\n- B. Liquid\n- C. Gas\n- D. Plasma\nExplanation: At 0°C, substance E is above its melting point (-50°C) and below its boiling point (120°C), meaning it is in a liquid state.\nSource reference: Page 3, Question 1(d)\n\nQ5: Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.\nTopic: Experimental techniques, heating methods\nDifficulty: higher\nSkill focus: Analysis, explanation, evaluation of experimental design\nAnswer: The apparatus uses a water bath, which can only heat substances up to 100°C. Substance B has a boiling point of approximately 190°C, which is higher than the maximum temperature achievable with a water bath.\nExplanation: A water bath is limited to heating substances up to 100°C, its own boiling point. Since substance B's boiling point is 190°C (from Figure 1), a water bath cannot provide sufficient heat to reach this temperature.\nSource reference: Page 4, Question 1(e), Figure 1 and Figure 2\n\nQ6: A student shakes a tube containing small balls to model the movement of particles in a gas. Which of the following is a characteristic of this model that accurately represents gas particles?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Recall, understanding models\nAnswer: The balls are far apart from each other.\nOptions:\n- A. The balls move slowly.\n- B. The balls are far apart from each other.\n- C. The balls are different colours.\n- D. The balls move in fixed positions.\nExplanation: In a gas, particles are far apart from each other and move randomly. The model effectively demonstrates the large separation between particles.\nSource reference: Page 5, Question 2(a)\n>>>\nAUTO_SIGNALS:\n- tokens: 683\n- sentences: 46\n- words: 683\n- info_entropy_mean: 7.0114\n- info_entropy_stddev: 1.6164\n- idea_density: 8.3478\n- repetition_compression_ratio: 0.291\n- templates_per_token: 0.4275\n- subj_lexicon_ratio: 0\n- avg_sentence_len: 14.8478\n- flesch_reading_ease: 57.25\n- fk_grade: 8.96\n- gunning_fog: 12.15\nREQUEST_ID: with-questions-c2-1examqs-quiz-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.",
+  "text": "Quiz title: GCSE Chemistry: States of Matter and Chemical Reactions\nSummary: This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)\nTopic: Chemical reactions and equations\nDifficulty: intermediate\nSkill focus: Application of knowledge, recall of state symbols\nAnswer: aq, g\nExplanation: Lithium hydroxide solution is an aqueous solution, denoted by 'aq'. Hydrogen is a gas, denoted by 'g'.\nSource reference: Page 1, Question 1(a)\n\nQ2: Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: C\nOptions:\n- A. A\n- B. B\n- C. C\n- D. D\nExplanation: Substance C has a melting point of approximately 10°C and a boiling point of approximately 200°C, giving it a liquid range of 190°C (200 - 10), which is the largest among the given substances.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ3: Referring to Figure 1, which two substances are gases at 50 °C?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: A and D\nOptions:\n- A. A and B\n- B. B and C\n- C. C and D\n- D. A and D\nExplanation: At 50°C, substance A (boiling point ~0°C) and substance D (boiling point ~-160°C) would both have boiled and therefore be in a gaseous state.\nSource reference: Page 3, Question 1(c), Figure 1\n\nQ4: Substance E has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at 0 °C?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Application of knowledge\nAnswer: Liquid\nOptions:\n- A. Solid\n- B. Liquid\n- C. Gas\n- D. Plasma\nExplanation: At 0°C, substance E is above its melting point (-50°C) and below its boiling point (120°C), meaning it is in a liquid state.\nSource reference: Page 3, Question 1(d)\n\nQ5: Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.\nTopic: Experimental techniques, heating methods\nDifficulty: higher\nSkill focus: Analysis, explanation, evaluation of experimental design\nAnswer: The apparatus uses a water bath, which can only heat substances up to 100°C. Substance B has a boiling point of approximately 190°C, which is higher than the maximum temperature achievable with a water bath.\nExplanation: A water bath is limited to heating substances up to 100°C, its own boiling point. Since substance B's boiling point is 190°C (from Figure 1), a water bath cannot provide sufficient heat to reach this temperature.\nSource reference: Page 4, Question 1(e), Figure 1 and Figure 2\n\nQ6: A student shakes a tube containing small balls to model the movement of particles in a gas. Which of the following is a characteristic of this model that accurately represents gas particles?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Recall, understanding models\nAnswer: The balls are far apart from each other.\nOptions:\n- A. The balls move slowly.\n- B. The balls are far apart from each other.\n- C. The balls are different colours.\n- D. The balls move in fixed positions.\nExplanation: In a gas, particles are far apart from each other and move randomly. The model effectively demonstrates the large separation between particles.\nSource reference: Page 5, Question 2(a)\n",
+  "autoSignals": {
+    "tokens": 683,
+    "sentences": 46,
+    "words": 683,
+    "info_entropy_mean": 7.0114,
+    "info_entropy_stddev": 1.6164,
+    "idea_density": 8.3478,
+    "repetition_compression_ratio": 0.291,
+    "templates_per_token": 0.4275,
+    "subj_lexicon_ratio": 0,
+    "avg_sentence_len": 14.8478,
+    "flesch_reading_ease": 57.25,
+    "fk_grade": 8.96,
+    "gunning_fog": 12.15
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 1,
+      "confidence": 0.9
+    },
+    "domain": "qa",
+    "annoyance": 4,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.0114,
+          "idea_density": 8.3478
+        },
+        "spans": [],
+        "rationale": "The text is concise and information-rich, with no filler language. It is direct and suitable for its purpose as a quiz."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 1,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "States of Matter and Chemical Reactions",
+            "char_start": 26,
+            "char_end": 65
+          }
+        ],
+        "rationale": "The title includes \"Chemical Reactions,\" but only one of six questions addresses this, making the title slightly misleading. The focus is on states of matter."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 4,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "Figure 1 shows",
+            "char_start": 574,
+            "char_end": 588
+          },
+          {
+            "quote": "Referring to Figure 1",
+            "char_start": 933,
+            "char_end": 954
+          },
+          {
+            "quote": "Figure 2 shows",
+            "char_start": 1530,
+            "char_end": 1544
+          }
+        ],
+        "rationale": "The text is unusable as a standalone quiz. Three of the six questions refer to \"Figure 1\" and \"Figure 2,\" which are not provided."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0
+        },
+        "spans": [],
+        "rationale": "The text is an objective set of science questions and answers, showing no bias or unjustified subjectivity."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 2,
+        "auto_signals": {
+          "templates_per_token": 0.4275,
+          "repetition_compression_ratio": 0.291
+        },
+        "spans": [
+          {
+            "quote": "Topic: Chemical reactions and equations\nDifficulty: intermediate\nSkill focus: Application of knowledge, recall of state symbols",
+            "char_start": 472,
+            "char_end": 590
+          },
+          {
+            "quote": "Topic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation",
+            "char_start": 789,
+            "char_end": 910
+          }
+        ],
+        "rationale": "The quiz follows a rigid, repetitive template for each question (Topic, Difficulty, Skill focus, etc.), which is functional but highly formulaic."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 4,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "Q2: Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?",
+            "char_start": 570,
+            "char_end": 728
+          },
+          {
+            "quote": "Q5: Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.",
+            "char_start": 1526,
+            "char_end": 1750
+          }
+        ],
+        "rationale": "The logical flow is completely broken. The reader is repeatedly asked to analyze figures that are missing, making half of the quiz incomprehensible and unsolvable."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "flesch_reading_ease": 57.25,
+          "fk_grade": 8.96
+        },
+        "spans": [],
+        "rationale": "The tone is formal, clear, and perfectly suited for a GCSE-level educational assessment. It is neither too simple nor overly complex."
+      }
+    ],
+    "top_fixes": [
+      "Incorporate the missing 'Figure 1' and 'Figure 2' so that questions 2, 3, and 5 are answerable."
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.55,
+  "recommendedLabel": 1,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    },
+    {
+      "code": "Factuality",
+      "score": 4,
+      "weight": 0.35,
+      "contribution": 0.35
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 2,
+      "weight": 0.25,
+      "contribution": 0.125
+    },
+    {
+      "code": "Coherence",
+      "score": 4,
+      "weight": 0.05,
+      "contribution": 0.05
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

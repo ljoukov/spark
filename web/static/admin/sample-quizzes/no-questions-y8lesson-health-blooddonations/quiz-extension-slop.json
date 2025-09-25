@@ -1,0 +1,161 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "evaluatedAt": "2025-09-25T08:05:11.171Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nTEXT: <<<Quiz title: GCSE Triple Science: Blood, Organ, and Stem Cell Donation\nSummary: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nMode: extension\nSubject: biology\nBoard: OCR\nQuestion count: 10\n\nQ1: What percentage of UK patients needing a stem cell transplant are unable to find a match from a relative and require an unrelated donor?\nTopic: Importance of donation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: C\nOptions:\n- A. A) 25%\n- B. B) 50%\n- C. C) 75%\n- D. D) 90%\nExplanation: Page 6 states that \"75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ2: What is the minimum age to register online to become a blood donor in England?\nTopic: Blood donation process\nDifficulty: foundation\nSkill focus: Identification\nAnswer: A\nOptions:\n- A. A) 16+\n- B. B) 17+\n- C. C) 18+\n- D. D) 21+\nExplanation: Page 8 indicates that individuals can \"Register online from 16+ at blood.co.uk.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ3: Name two different registers in the UK that form part of the stem cell donation registry.\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Identification\nAnswer: British Bone Marrow Registry, Anthony Nolan, or DKMS. (Any two of these are acceptable).\nExplanation: Page 9 lists the British Bone Marrow Registry, Anthony Nolan, and DKMS as different registers that form part of the UK registry.\nSource reference: Page 9, \"What's involved in being a stem cell donor?\"\n\nQ4: According to the study material, how many lives can one organ donor save and transform?\nTopic: Organ donation importance\nDifficulty: foundation\nSkill focus: Data extraction\nAnswer: 9\nExplanation: Page 11 states, \"One organ donor can save and transform up to nine lives and many more by donating tissue.\"\nSource reference: Page 11, \"What's involved in being an organ and tissue donor?\"\n\nQ5: True or False: Even with the opt-out law for organ donation in England, families will still be consulted about organ donation, and their faiths, beliefs, and culture will be respected.\nTopic: Law around organ donation\nDifficulty: intermediate\nSkill focus: Understanding legal frameworks\nAnswer: True\nExplanation: Page 13 explicitly states, \"However, families will still be consulted around organ donation and their faiths, beliefs and culture will continue to be respected.\"\nSource reference: Page 13, \"Organ donation: legal changes to save more lives\"\n\nQ6: After a blood donation, what is done with the donor's blood before distribution to hospitals?\nTopic: Blood donation process\nDifficulty: intermediate\nSkill focus: Process understanding\nAnswer: C\nOptions:\n- A. A) It is immediately transfused to a patient.\n- B. B) It is frozen whole for later use.\n- C. C) It is tested, its blood group is found, and it is split into component parts.\n- D. D) It is sent directly to research facilities.\nExplanation: Page 8 details that \"A donor's blood is tested and they find out their blood group. The blood is split into component parts, so each donation can help 3 adults or 6 infants.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ7: What percentage of stem cell donations are carried out through the bone marrow donation procedure?\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Data interpretation\nAnswer: D\nOptions:\n- A. A) 90%\n- B. B) 50%\n- C. C) 25%\n- D. D) 10%\nExplanation: Page 10 states that stem cells can be donated \"through the bloodstream (90% of donors)\" or via \"bone marrow donation procedure (10% of donors).\"\nSource reference: Page 10, \"What's involved in being a stem cell donor?\"\n\nQ8: Besides blood cancer or blood disorders, identify two situations where someone might need a blood donation.\nTopic: Who needs donations\nDifficulty: foundation\nSkill focus: Identification\nAnswer: Someone experiencing blood loss from surgery, someone experiencing blood loss from child birth, or someone experiencing blood loss from an accident. (Any two of these are acceptable).\nExplanation: Page 5 lists 'Blood donation' recipients as \"Someone experiencing blood loss from surgery,\" \"Someone experiencing blood loss from child birth,\" and \"Someone experiencing blood loss from an accident,\" in addition to blood cancer or blood disorder.\nSource reference: Page 5, \"Who might need each type of donation?\"\n\nQ9: Which of the following donor types are specifically mentioned as being more in demand in the UK?\nTopic: Importance of donation\nDifficulty: higher\nSkill focus: Analysis of social factors\nAnswer: A\nOptions:\n- A. A) Donors from Black African, Black Caribbean, and Asian backgrounds.\n- B. B) Donors with rare blood types.\n- C. C) Donors over the age of 60.\n- D. D) Donors who have previously received a transplant.\nExplanation: Page 6 highlights that \"Some donor types are more in demand such as donors from Black African, Black Caribbean and Asian backgrounds and young blood, stem cell and organ donors.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ10: Why is it important for someone who wants to be an organ donor to register their decision and discuss their choice with their family?\nTopic: Individual choice to donate\nDifficulty: higher\nSkill focus: Analysis of considerations\nAnswer: It is important to register the decision so that specialist nurses can check the NHS Organ Donor Register if donation is a possibility after death. Discussing with family ensures they are aware of the decision and can respect it, as specialist nurses will still consult families as part of end-of-life discussions, respecting their faith, beliefs, and culture.\nExplanation: Page 11 advises to \"Register the decision... Share the decision with family/loved ones.\" Page 13 further emphasizes, \"If someone does want to be a donor, why is it important that that they register their decision and discuss their choice with their family?\" and notes that \"families will still be consulted around organ donation and their faiths, beliefs and culture will continue to be respected.\"\nSource reference: Page 11, \"What's involved in being an organ and tissue donor?\"; Page 13, \"Organ donation: legal changes to save more lives\"\n>>>\nAUTO_SIGNALS:\n- tokens: 1065\n- sentences: 52\n- words: 1065\n- info_entropy_mean: 7.463\n- info_entropy_stddev: 1.5928\n- idea_density: 12.7308\n- repetition_compression_ratio: 0.2557\n- templates_per_token: 0.5268\n- subj_lexicon_ratio: 0.0047\n- avg_sentence_len: 20.4808\n- flesch_reading_ease: 49.1\n- fk_grade: 11.5\n- gunning_fog: 16.15\nREQUEST_ID: no-questions-y8lesson-health-blooddonations-extension-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.",
+  "text": "Quiz title: GCSE Triple Science: Blood, Organ, and Stem Cell Donation\nSummary: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nMode: extension\nSubject: biology\nBoard: OCR\nQuestion count: 10\n\nQ1: What percentage of UK patients needing a stem cell transplant are unable to find a match from a relative and require an unrelated donor?\nTopic: Importance of donation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: C\nOptions:\n- A. A) 25%\n- B. B) 50%\n- C. C) 75%\n- D. D) 90%\nExplanation: Page 6 states that \"75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ2: What is the minimum age to register online to become a blood donor in England?\nTopic: Blood donation process\nDifficulty: foundation\nSkill focus: Identification\nAnswer: A\nOptions:\n- A. A) 16+\n- B. B) 17+\n- C. C) 18+\n- D. D) 21+\nExplanation: Page 8 indicates that individuals can \"Register online from 16+ at blood.co.uk.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ3: Name two different registers in the UK that form part of the stem cell donation registry.\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Identification\nAnswer: British Bone Marrow Registry, Anthony Nolan, or DKMS. (Any two of these are acceptable).\nExplanation: Page 9 lists the British Bone Marrow Registry, Anthony Nolan, and DKMS as different registers that form part of the UK registry.\nSource reference: Page 9, \"What's involved in being a stem cell donor?\"\n\nQ4: According to the study material, how many lives can one organ donor save and transform?\nTopic: Organ donation importance\nDifficulty: foundation\nSkill focus: Data extraction\nAnswer: 9\nExplanation: Page 11 states, \"One organ donor can save and transform up to nine lives and many more by donating tissue.\"\nSource reference: Page 11, \"What's involved in being an organ and tissue donor?\"\n\nQ5: True or False: Even with the opt-out law for organ donation in England, families will still be consulted about organ donation, and their faiths, beliefs, and culture will be respected.\nTopic: Law around organ donation\nDifficulty: intermediate\nSkill focus: Understanding legal frameworks\nAnswer: True\nExplanation: Page 13 explicitly states, \"However, families will still be consulted around organ donation and their faiths, beliefs and culture will continue to be respected.\"\nSource reference: Page 13, \"Organ donation: legal changes to save more lives\"\n\nQ6: After a blood donation, what is done with the donor's blood before distribution to hospitals?\nTopic: Blood donation process\nDifficulty: intermediate\nSkill focus: Process understanding\nAnswer: C\nOptions:\n- A. A) It is immediately transfused to a patient.\n- B. B) It is frozen whole for later use.\n- C. C) It is tested, its blood group is found, and it is split into component parts.\n- D. D) It is sent directly to research facilities.\nExplanation: Page 8 details that \"A donor's blood is tested and they find out their blood group. The blood is split into component parts, so each donation can help 3 adults or 6 infants.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ7: What percentage of stem cell donations are carried out through the bone marrow donation procedure?\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Data interpretation\nAnswer: D\nOptions:\n- A. A) 90%\n- B. B) 50%\n- C. C) 25%\n- D. D) 10%\nExplanation: Page 10 states that stem cells can be donated \"through the bloodstream (90% of donors)\" or via \"bone marrow donation procedure (10% of donors).\"\nSource reference: Page 10, \"What's involved in being a stem cell donor?\"\n\nQ8: Besides blood cancer or blood disorders, identify two situations where someone might need a blood donation.\nTopic: Who needs donations\nDifficulty: foundation\nSkill focus: Identification\nAnswer: Someone experiencing blood loss from surgery, someone experiencing blood loss from child birth, or someone experiencing blood loss from an accident. (Any two of these are acceptable).\nExplanation: Page 5 lists 'Blood donation' recipients as \"Someone experiencing blood loss from surgery,\" \"Someone experiencing blood loss from child birth,\" and \"Someone experiencing blood loss from an accident,\" in addition to blood cancer or blood disorder.\nSource reference: Page 5, \"Who might need each type of donation?\"\n\nQ9: Which of the following donor types are specifically mentioned as being more in demand in the UK?\nTopic: Importance of donation\nDifficulty: higher\nSkill focus: Analysis of social factors\nAnswer: A\nOptions:\n- A. A) Donors from Black African, Black Caribbean, and Asian backgrounds.\n- B. B) Donors with rare blood types.\n- C. C) Donors over the age of 60.\n- D. D) Donors who have previously received a transplant.\nExplanation: Page 6 highlights that \"Some donor types are more in demand such as donors from Black African, Black Caribbean and Asian backgrounds and young blood, stem cell and organ donors.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ10: Why is it important for someone who wants to be an organ donor to register their decision and discuss their choice with their family?\nTopic: Individual choice to donate\nDifficulty: higher\nSkill focus: Analysis of considerations\nAnswer: It is important to register the decision so that specialist nurses can check the NHS Organ Donor Register if donation is a possibility after death. Discussing with family ensures they are aware of the decision and can respect it, as specialist nurses will still consult families as part of end-of-life discussions, respecting their faith, beliefs, and culture.\nExplanation: Page 11 advises to \"Register the decision... Share the decision with family/loved ones.\" Page 13 further emphasizes, \"If someone does want to be a donor, why is it important that that they register their decision and discuss their choice with their family?\" and notes that \"families will still be consulted around organ donation and their faiths, beliefs and culture will continue to be respected.\"\nSource reference: Page 11, \"What's involved in being an organ and tissue donor?\"; Page 13, \"Organ donation: legal changes to save more lives\"\n",
+  "autoSignals": {
+    "tokens": 1065,
+    "sentences": 52,
+    "words": 1065,
+    "info_entropy_mean": 7.463,
+    "info_entropy_stddev": 1.5928,
+    "idea_density": 12.7308,
+    "repetition_compression_ratio": 0.2557,
+    "templates_per_token": 0.5268,
+    "subj_lexicon_ratio": 0.0047,
+    "avg_sentence_len": 20.4808,
+    "flesch_reading_ease": 49.1,
+    "fk_grade": 11.5,
+    "gunning_fog": 16.15
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.9
+    },
+    "domain": "qa",
+    "annoyance": 2,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "\"If someone does want to be a donor, why is it important that that they register their decision and discuss their choice with their family?\"",
+            "char_start": 4031,
+            "char_end": 4162
+          }
+        ],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "A. A) 25%",
+            "char_start": 510,
+            "char_end": 519
+          }
+        ],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "No significant issues noted."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "someone experiencing blood loss from child birth, or someone experiencing blood loss from an accident.",
+            "char_start": 3006,
+            "char_end": 3111
+          },
+          {
+            "quote": "that that",
+            "char_start": 4094,
+            "char_end": 4102
+          }
+        ],
+        "rationale": "No significant issues noted."
+      }
+    ],
+    "top_fixes": [
+      "Correct the duplicated lettering in all multiple-choice options (e.g., change \"A. A)\" to \"A.\").",
+      "Remove the redundant question quoted in the explanation for Q10 to improve clarity and conciseness.",
+      "Fix the \"that that\" typo in the explanation for Q10."
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 0,
+      "weight": 0.35,
+      "contribution": 0
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 0,
+      "weight": 0.25,
+      "contribution": 0
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

@@ -4,34 +4,34 @@
 
 ## Summary
 
-The quiz demonstrates strong 'Answer precision', with all responses being factually correct and directly grounded in the provided material. 'Difficulty alignment' is also appropriate for GCSE Triple Science, offering a suitable range of challenge. Furthermore, 'Safety & tone' are excellent, with no misinformation or off-spec content. However, the quiz requires revision due to issues with 'Question quality' in one instance and 'Coverage and balance' as several questions from the source material were omitted.
+The proposed quiz demonstrates good 'Answer precision' and adheres to 'Safety & tone' guidelines. However, it requires significant revisions primarily due to issues with 'Question quality' and 'Coverage and balance'. Several questions from the source material have been omitted or substantially altered, changing the intended assessment of skills and knowledge. This impacts the overall fidelity to the original quiz and its comprehensive coverage of the topics.
 
 ## Rubric findings
 
-- **Question quality** — score 0.70
-  - Most prompts are precise, unambiguous, and exam-ready. However, Question 2a's JSON structure for its 'type' and 'options' is inconsistent with the original prompt's instruction to 'Tick (✓) two boxes,' making it ambiguous how a user would interact with it in the quiz format.
-- **Answer precision** — score 1.00
-  - All answers provided are factually correct and directly supported by the provided text, figures, and standard GCSE Chemistry knowledge.
-- **Coverage and balance** — score 0.60
-  - The questions cover key concepts related to states of matter and chemical reactions, with a suitable mix of multiple-choice and short-answer types. However, several questions from the original source material (Q1d, Q1f, and the second part of Q2b) have been omitted, leading to incomplete coverage of the provided content.
-- **Difficulty alignment** — score 1.00
-  - The questions are well-aligned with GCSE Triple Science difficulty, ranging from foundation-level recall to intermediate data interpretation and higher-level application of experimental understanding.
+- **Question quality** — score 0.50
+  - While individual prompts are precise, the quiz deviates significantly from the source material. Question 1(d) was changed from a plotting task to a multiple-choice question, and Question 2(a) was changed from a 'tick two boxes' format to a single-choice multiple-choice question. This alters the nature and intent of the original questions.
+- **Answer precision** — score 0.90
+  - The answers provided for the questions included in the quiz are factually correct and directly grounded in the material presented (or the modified question's premise). There are no factual errors in the given answers or explanations.
+- **Coverage and balance** — score 0.30
+  - The quiz suffers from poor coverage and balance as two questions (1f and 2b) from the original source material are entirely missing. Additionally, the alteration of question types for 1(d) and 2(a) means that certain skills (e.g., plotting on a graph, identifying multiple characteristics) are not assessed as intended by the source paper.
+- **Difficulty alignment** — score 0.70
+  - The questions that are present are generally appropriate for GCSE Triple Science. However, the omission of certain questions and the simplification of others (e.g., changing a plotting task to a conceptual multiple-choice) reduce the overall variation in challenge and the range of higher-order thinking skills tested by the original paper.
 - **Safety & tone** — score 1.00
-  - The quiz is free from misinformation, harmful content, or off-spec material. The tone is appropriate for a GCSE educational context, and UK English spelling is consistently used.
+  - The quiz contains no misinformation, harmful, or off-spec content. The tone is appropriate for a GCSE assessment.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T04:22:54.084Z
+- Evaluated at: 2025-09-25T08:12:17.496Z
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Audit
 
 - Model: gemini-2.5-pro (temperature 0.15)
-- Verdict agreement: needs_review
+- Verdict agreement: agree
 - Confidence: high
 
-The judge's verdict to 'revise' is defensible, primarily due to the valid point raised under 'Coverage and balance'. The candidate quiz did omit several extractable questions from the source material (Q1f and the second part of Q2b). However, the judge's reasoning for downgrading 'Question quality' is flawed. The judge criticized the adaptation of question 2a from a 'tick two' format to a multiple-choice question, calling it 'inconsistent' and 'ambiguous'. This adaptation, where the correct option combines the two correct statements, is a standard and clear way to convert a multi-select question into a single-choice format. It is not ambiguous. Because the judge's reasoning is partially incorrect, the overall judgement needs review.
+The judge's verdict is well-reasoned and accurate. The judge correctly identifies that the candidate quiz significantly alters the source material by changing question types (e.g., changing a plotting question 1d into a multiple-choice question) and simplifying others (changing a 'tick two' question 2a into a single-choice question). The judge also correctly notes the complete omission of questions 1f and 2b. These changes fundamentally impact the skills being assessed and the coverage of the original quiz, justifying the low scores for 'Question quality' and 'Coverage and balance' and the overall 'revise' verdict.
 
 ## Prompt
 

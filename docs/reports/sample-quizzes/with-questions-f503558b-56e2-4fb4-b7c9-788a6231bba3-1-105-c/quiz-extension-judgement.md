@@ -1,28 +1,28 @@
-# Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (extraction) — Extension Judge
+# Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (extraction) — Extension Quality Judge
 
-**Verdict:** approve
+**Verdict:** revise
 
 ## Summary
 
-The proposed quiz demonstrates excellent quality across all rubric dimensions. The 'Question quality' is high, with prompts being precise, unambiguous, and exam-ready, effectively building upon the original source material. 'Answer precision' is consistently strong, providing factually correct and well-justified responses that are directly grounded in the material. The 'Coverage and balance' are commendable, addressing key concepts from the C20 'Chemical and Allied Industries' topic with a suitable mix of short answer and multiple-choice questions. 'Difficulty alignment' is appropriate for GCSE Triple Science, offering a varied challenge from foundation recall to higher-level analytical questions, particularly in the Haber process section. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content, and correct UK English spelling.
+The quiz demonstrates strong adherence to `Question quality` and `Answer precision`, with prompts that are clear, unambiguous, and factually correct, directly aligning with the provided source material. The `Difficulty alignment` is appropriate for GCSE Triple Science, offering a suitable range of challenge. Furthermore, the `Safety & tone` are excellent, with no off-spec or harmful content. However, the quiz falls short in `Coverage and balance` due to significant inaccuracies in its `summary` and `mode` fields, which misrepresent the quiz's content and structure.
 
 ## Rubric findings
 
 - **Question quality** — score 1.00
-  - Prompts are consistently precise, unambiguous, and well-phrased for GCSE level. The multiple-choice questions are well-constructed, offering clear options.
+  - All prompts are precise, unambiguous, and well-phrased for an exam context, effectively converting the original retrieval questions into multiple-choice format.
 - **Answer precision** — score 1.00
-  - All answers are factually correct, directly address the prompts, and are consistent with the provided source material. Explanations are thorough and add significant value.
-- **Coverage and balance** — score 1.00
-  - The quiz provides excellent coverage of key concepts from the specified C20 topic, including corrosion, alloys, ceramics, polymers, composites, and the Haber process. There is a balanced mix of 5 short answer and 5 multiple-choice questions.
+  - All answers are factually correct, directly grounded in the provided source material, and accompanied by accurate and concise explanations.
+- **Coverage and balance** — score 0.50
+  - While the topics covered are relevant to GCSE Triple Science C20, the quiz's 'summary' inaccurately states the question count (16 vs 10), claims the inclusion of a short-answer question (when all are multiple-choice), and incorrectly describes the questions as 'new' and 'exploring fresh angles' when they are direct conversions of existing retrieval questions. The 'mode' as 'extension' is also misleading given this context.
 - **Difficulty alignment** — score 1.00
-  - The difficulty levels are well-aligned with GCSE Triple Science, ranging from foundation recall to intermediate understanding and higher-level analysis (e.g., Le Chatelier's Principle in the Haber process questions), providing appropriate variation in challenge.
+  - The questions are appropriate for GCSE Triple Science, with a good mix of foundation, intermediate, and higher-level challenge, particularly evident in the Haber process questions.
 - **Safety & tone** — score 1.00
-  - The content is factual, scientifically accurate, and directly relevant to the AQA GCSE Chemistry C20 syllabus. No misinformation, harmful, or off-spec content was detected, and UK English spelling is correctly used.
+  - The quiz contains no misinformation, harmful, or off-spec content. The tone is appropriate for an educational resource, and UK English spelling is consistently used.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T04:26:21.274Z
+- Evaluated at: 2025-09-25T08:17:13.150Z
 - Source: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg)
 
 ## Audit
@@ -31,7 +31,7 @@ The proposed quiz demonstrates excellent quality across all rubric dimensions. T
 - Verdict agreement: agree
 - Confidence: high
 
-The judge's verdict is correct. The candidate quiz is an excellent extension of the source material. It systematically converts the questions and answers from the provided image into a well-structured quiz format, alternating between short-answer and multiple-choice questions. The questions, answers, and explanations are all factually accurate and directly align with the source content. The judge's assessment of high quality across all rubric criteria—question quality, answer precision, coverage, difficulty, and safety—is fully justified.
+The judge's verdict is well-reasoned and accurate. The judge correctly identifies that while the questions and answers are high quality and factually correct based on the source material, the quiz's metadata contains significant errors. The `summary` misstates the number of questions (claiming 16 when there are 10), incorrectly claims a short-answer question is included, and falsely describes the questions as 'new' and the quiz as an 'extension' when they are direct conversions from the source. These inaccuracies fully justify the low score for 'Coverage and balance' and the overall 'revise' verdict.
 
 ## Prompt
 

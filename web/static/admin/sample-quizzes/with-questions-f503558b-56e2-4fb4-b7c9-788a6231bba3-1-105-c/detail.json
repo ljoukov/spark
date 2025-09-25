@@ -3,7 +3,7 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:24:46.685Z",
+  "generatedAt": "2025-09-25T08:15:24.951Z",
   "request": {
     "model": "gemini-2.5-flash",
     "questionCount": 6,
@@ -15,91 +15,109 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: C20 Retrieval Practice",
-    "summary": "This quiz covers 6 key concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It includes questions on corrosion, alloys, the Haber process, and NPK fertilisers, with a mix of short answer and multiple-choice formats to test recall and understanding. The difficulty ranges from foundation to intermediate. Specific AQA specification points are not provided in the source material, so syllabus alignment is general to the C20 topic.",
+    "quizTitle": "GCSE Triple Science Chemistry Quiz: C20 Retrieval",
+    "summary": "This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.",
     "mode": "extraction",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, C20 Chemical and Allied Industries (specifically sections on metals, alloys, and the Haber process/fertilisers).",
+    "syllabusAlignment": "AQA GCSE Triple Science Chemistry C20: The Earth's Resources and Industrial Chemistry",
     "questionCount": 6,
     "questions": [
       {
-        "id": "Q1_Corrosion",
+        "id": "Q1",
         "prompt": "What is corrosion?",
-        "answer": "The destruction of a material through reactions with substances in the environment.",
-        "explanation": "Corrosion is a natural process that converts a refined metal into a more stable form, such as its oxide, hydroxide, or sulfide. It is the gradual destruction of materials (usually metals) by chemical and/or electrochemical reaction with their environment.",
-        "type": "short_answer",
-        "topic": "Corrosion",
+        "answer": "A",
+        "explanation": "Corrosion is the process where materials, typically metals, degrade due to chemical reactions with their environment, often involving oxygen and water. This leads to the destruction of the material's properties.",
+        "type": "multiple_choice",
+        "options": [
+          "A: The destruction of a material through reactions with substances in the environment",
+          "B: The process of strengthening metals by heating and cooling",
+          "C: The formation of a protective layer on a metal surface",
+          "D: The breaking down of a material by physical forces"
+        ],
+        "topic": "Metals, Corrosion",
         "difficulty": "foundation",
-        "skillFocus": "Recall",
+        "skillFocus": "Knowledge recall",
         "sourceReference": "C20 questions, Q1"
       },
       {
-        "id": "Q4_RustFormation",
-        "prompt": "How is rust formed?",
-        "answer": "Rust is formed by the reaction between iron, water, and oxygen.",
-        "explanation": "Rusting is a specific type of corrosion that affects iron and steel. It requires both oxygen and water to occur. The iron reacts with oxygen in the presence of water to form hydrated iron(III) oxide, which is commonly known as rust.",
-        "type": "short_answer",
-        "topic": "Rusting",
-        "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C20 questions, Q4"
-      },
-      {
-        "id": "Q5_CopperAlloys",
-        "prompt": "Which of the following pairs are two common alloys of copper?",
+        "id": "Q3",
+        "prompt": "What is sacrificial protection?",
         "answer": "A",
-        "explanation": "Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are widely used due to their properties, which are often superior to pure copper.",
+        "explanation": "Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal to be protected. The more reactive metal corrodes preferentially, protecting the other metal from oxidation.",
         "type": "multiple_choice",
         "options": [
-          "Brass and bronze",
-          "Steel and aluminium",
-          "Gold and silver",
-          "Iron and carbon"
+          "A: Adding a more reactive metal to the surface of a material",
+          "B: Coating a metal with paint or grease",
+          "C: Using an inert gas to prevent oxidation",
+          "D: Applying an electrical current to prevent rust"
         ],
-        "topic": "Alloys",
-        "difficulty": "foundation",
-        "skillFocus": "Recall",
-        "sourceReference": "C20 questions, Q5"
+        "topic": "Metals, Corrosion prevention",
+        "difficulty": "intermediate",
+        "skillFocus": "Knowledge recall, understanding application",
+        "sourceReference": "C20 questions, Q3"
       },
       {
-        "id": "Q13_HaberEquation",
+        "id": "Q6",
+        "prompt": "What are gold alloys in jewellery made from?",
+        "answer": "A",
+        "explanation": "Gold is often alloyed with other metals like copper, zinc, and silver to increase its hardness and durability for use in jewellery, as pure gold is very soft and easily scratched.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Gold with copper, zinc, and silver",
+          "B: Gold with platinum and palladium",
+          "C: Gold with iron and carbon",
+          "D: Gold with aluminium and titanium"
+        ],
+        "topic": "Alloys, Metals",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge recall",
+        "sourceReference": "C20 questions, Q6"
+      },
+      {
+        "id": "Q15",
         "prompt": "What is the balanced symbol equation for the Haber process?",
         "answer": "N₂(g) + 3H₂(g) = 2NH₃(g)",
-        "explanation": "The Haber process combines nitrogen gas (N₂) from the air with hydrogen gas (H₂) derived from natural gas to produce ammonia (NH₃). The equation must be balanced to show the conservation of atoms.",
+        "explanation": "The Haber process synthesises ammonia from nitrogen and hydrogen. The balanced equation shows one molecule of nitrogen reacting with three molecules of hydrogen to produce two molecules of ammonia, ensuring conservation of atoms.",
         "type": "short_answer",
-        "topic": "Haber Process",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall, Equation balancing",
-        "sourceReference": "C20 questions, Q13"
+        "topic": "Industrial processes, Haber process, Chemical equations",
+        "difficulty": "higher",
+        "skillFocus": "Application of knowledge, balancing equations",
+        "sourceReference": "C20 questions, Q15"
       },
       {
-        "id": "Q18_HaberConditions",
-        "prompt": "What are the typical conditions used for the Haber process?",
-        "answer": "The conditions for the Haber process are 450°C, 200 atmospheres (atm) pressure, and an iron catalyst.",
-        "explanation": "These conditions are chosen as a compromise to achieve a good yield of ammonia at a reasonable rate. A higher temperature increases the rate but decreases the yield, while a higher pressure increases both yield and rate. The iron catalyst speeds up the reaction without being used up.",
-        "type": "short_answer",
-        "topic": "Haber Process",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall, Understanding industrial processes",
-        "sourceReference": "C20 questions, Q18"
-      },
-      {
-        "id": "Q19_NPKFertiliser",
-        "prompt": "What is an NPK fertiliser?",
+        "id": "Q19",
+        "prompt": "What catalyst do we use for the Haber process?",
         "answer": "A",
-        "explanation": "NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential nutrients for plant growth, each playing a vital role in different aspects of plant health and development.",
+        "explanation": "Iron is used as a catalyst in the Haber process to speed up the rate of reaction without being consumed, allowing the process to be economically viable at lower temperatures and pressures than would otherwise be needed.",
         "type": "multiple_choice",
         "options": [
-          "A formulation containing soluble compounds of nitrogen, phosphorous, and potassium.",
-          "A compound used to increase soil acidity.",
-          "A substance that kills pests on crops.",
-          "A mixture of sand, clay, and organic matter."
+          "A: Iron",
+          "B: Vanadium(V) oxide",
+          "C: Nickel",
+          "D: Platinum"
         ],
-        "topic": "Fertilisers",
+        "topic": "Industrial processes, Haber process, Catalysts",
         "difficulty": "intermediate",
-        "skillFocus": "Recall, Definition",
+        "skillFocus": "Knowledge recall",
         "sourceReference": "C20 questions, Q19"
+      },
+      {
+        "id": "Q21",
+        "prompt": "What is an NPK fertiliser?",
+        "answer": "A",
+        "explanation": "NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential macronutrients required by plants for healthy growth.",
+        "type": "multiple_choice",
+        "options": [
+          "A: A formulation containing soluble compounds of nitrogen, phosphorus, and potassium",
+          "B: A fertiliser made only from natural organic matter",
+          "C: A compound used to kill pests in agriculture",
+          "D: A substance that increases soil acidity"
+        ],
+        "topic": "Fertilisers, Agriculture",
+        "difficulty": "foundation",
+        "skillFocus": "Knowledge recall, definition",
+        "sourceReference": "C20 questions, Q21"
       }
     ]
   },

@@ -1,0 +1,198 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "evaluatedAt": "2025-09-25T08:16:24.689Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.\nTEXT: <<<Quiz title: GCSE Triple Science Chemistry Quiz: C20 Retrieval\nSummary: This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: What is corrosion?\nTopic: Metals, Corrosion\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: The destruction of a material through reactions with substances in the environment\n- B. B: The process of strengthening metals by heating and cooling\n- C. C: The formation of a protective layer on a metal surface\n- D. D: The breaking down of a material by physical forces\nExplanation: Corrosion is the process where materials, typically metals, degrade due to chemical reactions with their environment, often involving oxygen and water. This leads to the destruction of the material's properties.\nSource reference: C20 questions, Q1\n\nQ2: What is sacrificial protection?\nTopic: Metals, Corrosion prevention\nDifficulty: intermediate\nSkill focus: Knowledge recall, understanding application\nAnswer: A\nOptions:\n- A. A: Adding a more reactive metal to the surface of a material\n- B. B: Coating a metal with paint or grease\n- C. C: Using an inert gas to prevent oxidation\n- D. D: Applying an electrical current to prevent rust\nExplanation: Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal to be protected. The more reactive metal corrodes preferentially, protecting the other metal from oxidation.\nSource reference: C20 questions, Q3\n\nQ3: What are gold alloys in jewellery made from?\nTopic: Alloys, Metals\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Gold with copper, zinc, and silver\n- B. B: Gold with platinum and palladium\n- C. C: Gold with iron and carbon\n- D. D: Gold with aluminium and titanium\nExplanation: Gold is often alloyed with other metals like copper, zinc, and silver to increase its hardness and durability for use in jewellery, as pure gold is very soft and easily scratched.\nSource reference: C20 questions, Q6\n\nQ4: What is the balanced symbol equation for the Haber process?\nTopic: Industrial processes, Haber process, Chemical equations\nDifficulty: higher\nSkill focus: Application of knowledge, balancing equations\nAnswer: N₂(g) + 3H₂(g) = 2NH₃(g)\nExplanation: The Haber process synthesises ammonia from nitrogen and hydrogen. The balanced equation shows one molecule of nitrogen reacting with three molecules of hydrogen to produce two molecules of ammonia, ensuring conservation of atoms.\nSource reference: C20 questions, Q15\n\nQ5: What catalyst do we use for the Haber process?\nTopic: Industrial processes, Haber process, Catalysts\nDifficulty: intermediate\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Iron\n- B. B: Vanadium(V) oxide\n- C. C: Nickel\n- D. D: Platinum\nExplanation: Iron is used as a catalyst in the Haber process to speed up the rate of reaction without being consumed, allowing the process to be economically viable at lower temperatures and pressures than would otherwise be needed.\nSource reference: C20 questions, Q19\n\nQ6: What is an NPK fertiliser?\nTopic: Fertilisers, Agriculture\nDifficulty: foundation\nSkill focus: Knowledge recall, definition\nAnswer: A\nOptions:\n- A. A: A formulation containing soluble compounds of nitrogen, phosphorus, and potassium\n- B. B: A fertiliser made only from natural organic matter\n- C. C: A compound used to kill pests in agriculture\n- D. D: A substance that increases soil acidity\nExplanation: NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential macronutrients required by plants for healthy growth.\nSource reference: C20 questions, Q21\n>>>\nAUTO_SIGNALS:\n- tokens: 609\n- sentences: 41\n- words: 609\n- info_entropy_mean: 7.3095\n- info_entropy_stddev: 1.5502\n- idea_density: 9.1951\n- repetition_compression_ratio: 0.3095\n- templates_per_token: 0.3202\n- subj_lexicon_ratio: 0.0016\n- avg_sentence_len: 14.8537\n- flesch_reading_ease: 35.62\n- fk_grade: 11.98\n- gunning_fog: 15.99\nREQUEST_ID: with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-quiz-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.",
+  "text": "Quiz title: GCSE Triple Science Chemistry Quiz: C20 Retrieval\nSummary: This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: What is corrosion?\nTopic: Metals, Corrosion\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: The destruction of a material through reactions with substances in the environment\n- B. B: The process of strengthening metals by heating and cooling\n- C. C: The formation of a protective layer on a metal surface\n- D. D: The breaking down of a material by physical forces\nExplanation: Corrosion is the process where materials, typically metals, degrade due to chemical reactions with their environment, often involving oxygen and water. This leads to the destruction of the material's properties.\nSource reference: C20 questions, Q1\n\nQ2: What is sacrificial protection?\nTopic: Metals, Corrosion prevention\nDifficulty: intermediate\nSkill focus: Knowledge recall, understanding application\nAnswer: A\nOptions:\n- A. A: Adding a more reactive metal to the surface of a material\n- B. B: Coating a metal with paint or grease\n- C. C: Using an inert gas to prevent oxidation\n- D. D: Applying an electrical current to prevent rust\nExplanation: Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal to be protected. The more reactive metal corrodes preferentially, protecting the other metal from oxidation.\nSource reference: C20 questions, Q3\n\nQ3: What are gold alloys in jewellery made from?\nTopic: Alloys, Metals\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Gold with copper, zinc, and silver\n- B. B: Gold with platinum and palladium\n- C. C: Gold with iron and carbon\n- D. D: Gold with aluminium and titanium\nExplanation: Gold is often alloyed with other metals like copper, zinc, and silver to increase its hardness and durability for use in jewellery, as pure gold is very soft and easily scratched.\nSource reference: C20 questions, Q6\n\nQ4: What is the balanced symbol equation for the Haber process?\nTopic: Industrial processes, Haber process, Chemical equations\nDifficulty: higher\nSkill focus: Application of knowledge, balancing equations\nAnswer: N₂(g) + 3H₂(g) = 2NH₃(g)\nExplanation: The Haber process synthesises ammonia from nitrogen and hydrogen. The balanced equation shows one molecule of nitrogen reacting with three molecules of hydrogen to produce two molecules of ammonia, ensuring conservation of atoms.\nSource reference: C20 questions, Q15\n\nQ5: What catalyst do we use for the Haber process?\nTopic: Industrial processes, Haber process, Catalysts\nDifficulty: intermediate\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Iron\n- B. B: Vanadium(V) oxide\n- C. C: Nickel\n- D. D: Platinum\nExplanation: Iron is used as a catalyst in the Haber process to speed up the rate of reaction without being consumed, allowing the process to be economically viable at lower temperatures and pressures than would otherwise be needed.\nSource reference: C20 questions, Q19\n\nQ6: What is an NPK fertiliser?\nTopic: Fertilisers, Agriculture\nDifficulty: foundation\nSkill focus: Knowledge recall, definition\nAnswer: A\nOptions:\n- A. A: A formulation containing soluble compounds of nitrogen, phosphorus, and potassium\n- B. B: A fertiliser made only from natural organic matter\n- C. C: A compound used to kill pests in agriculture\n- D. D: A substance that increases soil acidity\nExplanation: NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential macronutrients required by plants for healthy growth.\nSource reference: C20 questions, Q21\n",
+  "autoSignals": {
+    "tokens": 609,
+    "sentences": 41,
+    "words": 609,
+    "info_entropy_mean": 7.3095,
+    "info_entropy_stddev": 1.5502,
+    "idea_density": 9.1951,
+    "repetition_compression_ratio": 0.3095,
+    "templates_per_token": 0.3202,
+    "subj_lexicon_ratio": 0.0016,
+    "avg_sentence_len": 14.8537,
+    "flesch_reading_ease": 35.62,
+    "fk_grade": 11.98,
+    "gunning_fog": 15.99
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.9
+    },
+    "domain": "qa",
+    "annoyance": 2,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "idea_density": 9.1951,
+          "repetition_compression_ratio": 0.3095
+        },
+        "spans": [
+          {
+            "quote": "A. A:",
+            "char_start": 387,
+            "char_end": 392
+          },
+          {
+            "quote": "B. B:",
+            "char_start": 472,
+            "char_end": 477
+          }
+        ],
+        "rationale": "The text is mostly concise, but the repeated letters in the multiple-choice options (e.g., \"A. A:\") are redundant filler."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "idea_density": 9.1951,
+          "info_entropy_mean": 7.3095
+        },
+        "spans": [],
+        "rationale": "The quiz questions and explanations are all directly relevant to the specified AQA GCSE Chemistry C20 topics, with no off-topic content."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 2,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0016
+        },
+        "spans": [
+          {
+            "quote": "=",
+            "char_start": 1301,
+            "char_end": 1302
+          }
+        ],
+        "rationale": "The Haber process is a reversible reaction and must be represented with an equilibrium symbol (⇌), not an equals sign (=), a significant error."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0016
+        },
+        "spans": [],
+        "rationale": "The content is a factual science quiz, presenting information objectively without any discernible bias or missing points of view."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "templates_per_token": 0.3202,
+          "repetition_compression_ratio": 0.3095
+        },
+        "spans": [
+          {
+            "quote": "A. A:",
+            "char_start": 387,
+            "char_end": 392
+          },
+          {
+            "quote": "B. B:",
+            "char_start": 472,
+            "char_end": 477
+          },
+          {
+            "quote": "C. C:",
+            "char_start": 537,
+            "char_end": 542
+          },
+          {
+            "quote": "D. D:",
+            "char_start": 599,
+            "char_end": 604
+          }
+        ],
+        "rationale": "While the overall quiz format is appropriately structured, the multiple-choice options are unnecessarily repetitive (e.g., \"A. A:\"), creating a minor templating flaw."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.3095,
+          "avg_sentence_len": 14.8537
+        },
+        "spans": [],
+        "rationale": "The quiz presents a logical sequence of questions within the stated topics, and each explanation clearly justifies the correct answer."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "flesch_reading_ease": 35.62,
+          "fk_grade": 11.98,
+          "gunning_fog": 15.99
+        },
+        "spans": [
+          {
+            "quote": "A. A:",
+            "char_start": 387,
+            "char_end": 392
+          }
+        ],
+        "rationale": "The tone is suitably academic, but the redundant lettering in the options (\"A. A:\") makes the text slightly clunky and less fluent."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.2875,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 2,
+      "weight": 0.35,
+      "contribution": 0.175
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 1,
+      "weight": 0.25,
+      "contribution": 0.0625
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    }
+  ]
+}

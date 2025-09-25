@@ -1,7 +1,7 @@
 # Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (extraction) — Base Quiz
 
-**Quiz title:** GCSE Chemistry C1: Atomic Structure and Bonding Basics
-**Summary:** This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical atomic models, sub-atomic particles, and definitions of elements, compounds, and mixtures. It includes a mix of recall and descriptive questions, with 3 multiple-choice and 3 short-answer items, aligning with AQA GCSE Chemistry specifications.
+**Quiz title:** GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz
+**Summary:** This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.
 
 ## Metadata
 
@@ -9,7 +9,7 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 6
-- Generated at: 2025-09-25T04:18:23.130Z
+- Generated at: 2025-09-25T08:05:28.310Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg)
 
@@ -20,81 +20,81 @@
 - Type: short_answer
 - Topic: Atomic Structure
 - Difficulty: foundation
-- Skill focus: Define
+- Skill focus: Recall
 - Source reference: C1 questions, Q1
 - Answer: The smallest part of an element that can exist.
 
-> Atoms are the fundamental building blocks of matter, retaining the chemical properties of an element.
+> An atom is the fundamental building block of matter, defined as the smallest particle of a chemical element that retains its chemical identity.
 
 ### 2. Which of the following best describes the plum pudding model of the atom?
 
 - Type: multiple_choice
 - Topic: Atomic Models
-- Difficulty: foundation
-- Skill focus: Describe, Recall
+- Difficulty: intermediate
+- Skill focus: Understanding
 - Source reference: C1 questions, Q3
 - Answer: A sphere of positive charge with negative electrons embedded in it.
 - Options:
-  - A. A. A sphere of positive charge with negative electrons embedded in it.
-  - B. B. A dense nucleus with electrons orbiting it in fixed energy levels.
-  - C. C. Solid spheres that could not be divided into smaller parts.
-  - D. D. A central nucleus containing protons and neutrons, with electrons in shells.
+  - A. A sphere of positive charge with negative electrons embedded in it.
+  - B. A dense nucleus with electrons orbiting it in fixed energy levels.
+  - C. Solid spheres that could not be divided into smaller parts.
+  - D. A central nucleus containing protons and neutrons, with electrons in shells.
 
-> J.J. Thomson proposed the plum pudding model, where the atom was a uniform sphere of positive charge with electrons scattered within it, like plums in a pudding.
+> The plum pudding model, proposed by J.J. Thomson, depicted the atom as a uniform sphere of positive charge with electrons scattered within it, like plums in a pudding.
 
-### 3. What significant discovery did Niels Bohr make regarding the structure of the atom?
+### 3. What key discovery did Niels Bohr make regarding atomic structure?
 
-- Type: multiple_choice
-- Topic: Atomic Models (Bohr)
+- Type: short_answer
+- Topic: Atomic Models
 - Difficulty: intermediate
 - Skill focus: Recall
 - Source reference: C1 questions, Q6
 - Answer: Electrons orbit in fixed energy levels (shells).
-- Options:
-  - A. A. The existence of an uncharged particle called the neutron.
-  - B. B. That atoms are solid spheres that cannot be divided.
-  - C. C. Electrons orbit in fixed energy levels (shells).
-  - D. D. The atom's mass and positive charge are concentrated in a small nucleus.
 
-> Niels Bohr refined the nuclear model by proposing that electrons orbit the nucleus in specific, fixed energy levels or shells, and can move between these shells by absorbing or emitting energy.
+> Bohr's model proposed that electrons exist in specific orbits or shells around the nucleus, each with a distinct energy level, explaining the stability of atoms and their emission spectra.
 
-### 4. State the relative mass of each sub-atomic particle: proton, neutron, and electron.
-
-- Type: short_answer
-- Topic: Sub-atomic Particles
-- Difficulty: intermediate
-- Skill focus: Recall
-- Source reference: C1 questions, Q9
-- Answer: Proton: 1, Neutron: 1, Electron: 0 (very small).
-
-> Protons and neutrons have approximately the same mass, defined as a relative mass of 1. Electrons are significantly lighter, with a relative mass considered negligible (0) in most calculations.
-
-### 5. Explain why atoms have no overall electrical charge.
-
-- Type: short_answer
-- Topic: Atomic Structure
-- Difficulty: intermediate
-- Skill focus: Explain
-- Source reference: C1 questions, Q13
-- Answer: Atoms have equal numbers of positive protons and negative electrons.
-
-> In a neutral atom, the number of positively charged protons in the nucleus is exactly balanced by the number of negatively charged electrons orbiting the nucleus, resulting in a net charge of zero.
-
-### 6. What is a compound?
+### 4. What are the relative charges of a proton, neutron, and electron, respectively?
 
 - Type: multiple_choice
-- Topic: Elements, Compounds, Mixtures
+- Topic: Sub-atomic Particles
 - Difficulty: foundation
-- Skill focus: Define
-- Source reference: C1 questions, Q16
-- Answer: A substance made of more than one type of atom chemically joined together.
+- Skill focus: Recall
+- Source reference: C1 questions, Q10
+- Answer: Proton: +1, Neutron: 0, Electron: -1
 - Options:
-  - A. A. A substance made of only one type of atom.
-  - B. B. Two or more substances not chemically combined.
-  - C. C. Atoms of the same element with different numbers of neutrons.
-  - D. D. A substance made of more than one type of atom chemically joined together.
+  - A. Proton: +1, Neutron: 0, Electron: -1
+  - B. Proton: 0, Neutron: +1, Electron: -1
+  - C. Proton: +1, Neutron: -1, Electron: 0
+  - D. Proton: -1, Neutron: 0, Electron: +1
 
-> A compound is formed when two or more different elements are chemically bonded together in fixed proportions. This chemical bonding distinguishes compounds from mixtures.
+> Protons carry a relative charge of +1, neutrons are neutral with a relative charge of 0, and electrons carry a relative charge of -1.
+
+### 5. Define isotopes.
+
+- Type: short_answer
+- Topic: Isotopes
+- Difficulty: intermediate
+- Skill focus: Understanding
+- Source reference: C1 questions, Q18
+- Answer: Atoms of the same element (same number of protons) with different numbers of neutrons.
+
+> Isotopes are variants of a particular chemical element which have different numbers of neutrons, and therefore different mass numbers, but the same number of protons.
+
+### 6. Which of the following lists four physical processes used to separate mixtures?
+
+- Type: multiple_choice
+- Topic: Separation Techniques
+- Difficulty: higher
+- Skill focus: Recall
+- Source reference: C1 questions, Q19
+- Answer: Filtration, crystallisation, distillation, chromatography
+- Options:
+  - A. Filtration, crystallisation, distillation, chromatography
+  - B. Combustion, neutralisation, electrolysis, precipitation
+  - C. Melting, boiling, freezing, condensation
+  - D. Oxidation, reduction, displacement, decomposition
+
+> Filtration separates insoluble solids from liquids. Crystallisation separates a soluble solid from a solution. Distillation separates liquids with different boiling points or a soluble solid from a liquid. Chromatography separates substances based on their differential partitioning between a stationary and a mobile phase.
 
 ## Prompt
 

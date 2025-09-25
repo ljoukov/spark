@@ -1,0 +1,157 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "evaluatedAt": "2025-09-25T08:17:56.520Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.\nTEXT: <<<Quiz title: GCSE Triple Science Chemistry Quiz: C20 Retrieval (Extended)\nSummary: This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: Which of the following is a physical barrier used to protect against corrosion?\nTopic: Corrosion prevention\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Grease, paint, or a thin layer of metal\n- B. B: Sacrificial protection using a more reactive metal\n- C. C: Alloying the metal with another element\n- D. D: Electroplating with a less reactive metal\nExplanation: Physical barriers like grease, paint, or a thin layer of metal prevent oxygen and water from reaching the metal surface, thus inhibiting corrosion.\nSource reference: C20 questions, Q2\n\nQ2: Rust is specifically formed through a reaction involving which three substances?\nTopic: Corrosion, Rusting\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: B\nOptions:\n- A. A: Copper, zinc, and carbon dioxide\n- B. B: Iron, water, and oxygen\n- C. C: Aluminium, nitrogen, and hydrogen\n- D. D: Steel, acid, and heat\nExplanation: Rusting is the specific corrosion of iron, which requires both oxygen and water to occur.\nSource reference: C20 questions, Q4\n\nQ3: Which pair correctly identifies two common alloys of copper?\nTopic: Alloys, Copper\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: C\nOptions:\n- A. A: Steel and duralumin\n- B. B: Solder and pewter\n- C. C: Brass and bronze\n- D. D: Amalgam and electrum\nExplanation: Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are well-known copper alloys.\nSource reference: C20 questions, Q5\n\nQ4: What are steel alloys primarily made from?\nTopic: Alloys, Steel\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Iron, carbon, and other metals\n- B. B: Aluminium, silicon, and oxygen\n- C. C: Copper, zinc, and tin\n- D. D: Gold, silver, and platinum\nExplanation: Steel is an alloy of iron with a small percentage of carbon, and often other elements like chromium or nickel to impart specific properties.\nSource reference: C20 questions, Q7\n\nQ5: A key property of aluminium alloys that makes them useful in industries like aerospace is that they generally have:\nTopic: Alloys, Aluminium\nDifficulty: intermediate\nSkill focus: Understanding properties and uses\nAnswer: D\nOptions:\n- A. A: High melting points\n- B. B: Excellent electrical conductivity\n- C. C: Extreme hardness\n- D. D: Low densities\nExplanation: Aluminium alloys are valued for their low density, which contributes to lightweight structures, making them ideal for aircraft and vehicles.\nSource reference: C20 questions, Q8\n\nQ6: What is the main difference in properties between soda-lime glass and borosilicate glass?\nTopic: Ceramics, Glass\nDifficulty: intermediate\nSkill focus: Comparing materials\nAnswer: B\nOptions:\n- A. A: Soda-lime glass is more resistant to chemical attack\n- B. B: Borosilicate glass has a much higher melting point\n- C. C: Soda-lime glass is used for laboratory equipment\n- D. D: Borosilicate glass is more easily recycled\nExplanation: Borosilicate glass (like Pyrex) contains boron oxide, which gives it a much higher melting point and better thermal shock resistance compared to soda-lime glass.\nSource reference: C20 questions, Q9\n\nQ7: Which of the following pairs are examples of clay ceramics?\nTopic: Ceramics, Clay\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Pottery and bricks\n- B. B: Glass and concrete\n- C. C: Steel and aluminium\n- D. D: Plastic and rubber\nExplanation: Pottery and bricks are traditional ceramics made by shaping clay and then firing it at high temperatures.\nSource reference: C20 questions, Q10\n\nQ8: What is the key distinction between thermosetting and thermosoftening polymers when heated?\nTopic: Polymers\nDifficulty: intermediate\nSkill focus: Understanding material properties\nAnswer: C\nOptions:\n- A. A: Thermosetting polymers can be remoulded, thermosoftening cannot\n- B. B: Thermosoftening polymers are always stronger than thermosetting polymers\n- C. C: Thermosetting polymers do not soften when heated, while thermosoftening polymers do\n- D. D: Thermosetting polymers are formed from monomers, thermosoftening are not\nExplanation: Thermosoftening polymers have weak intermolecular forces that allow them to soften and melt when heated, whereas thermosetting polymers form strong covalent cross-links that prevent them from softening or melting.\nSource reference: C20 questions, Q12\n\nQ9: What is the effect of increasing the temperature in the Haber process on the yield, rate, and cost?\nTopic: Haber process, Chemical equilibrium, Reaction kinetics\nDifficulty: higher\nSkill focus: Analyzing process conditions\nAnswer: B\nOptions:\n- A. A: Increase yield, decrease rate, decrease cost\n- B. B: Decrease yield, increase rate, increase cost\n- C. C: Increase yield, increase rate, decrease cost\n- D. D: Decrease yield, decrease rate, increase cost\nExplanation: The Haber process is an exothermic reaction, so increasing temperature shifts the equilibrium to the left, decreasing yield. However, higher temperatures increase the kinetic energy of particles, leading to a faster reaction rate. Operating at higher temperatures also incurs higher energy costs.\nSource reference: C20 questions, Q17\n\nQ10: Which set of conditions is typically used for the Haber process?\nTopic: Haber process, Industrial conditions\nDifficulty: intermediate\nSkill focus: Knowledge recall of industrial processes\nAnswer: A\nOptions:\n- A. A: 450°C, 200 atm, iron catalyst\n- B. B: 200°C, 1 atm, platinum catalyst\n- C. C: 700°C, 100 atm, vanadium(V) oxide catalyst\n- D. D: 300°C, 500 atm, nickel catalyst\nExplanation: The Haber process uses a compromise temperature of around 450°C and a high pressure of 200 atmospheres, with an iron catalyst, to achieve a reasonable yield and rate economically.\nSource reference: C20 questions, Q20\n>>>\nAUTO_SIGNALS:\n- tokens: 960\n- sentences: 67\n- words: 960\n- info_entropy_mean: 7.5498\n- info_entropy_stddev: 1.6872\n- idea_density: 9.3433\n- repetition_compression_ratio: 0.2842\n- templates_per_token: 0.3375\n- subj_lexicon_ratio: 0.0031\n- avg_sentence_len: 14.3284\n- flesch_reading_ease: 39.57\n- fk_grade: 11.3\n- gunning_fog: 14.94\nREQUEST_ID: with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c-extension-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.",
+  "text": "Quiz title: GCSE Triple Science Chemistry Quiz: C20 Retrieval (Extended)\nSummary: This extended quiz covers 16 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, ceramics, polymers, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. This extension adds 10 new questions, exploring fresh angles and subtopics from the provided study material.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: Which of the following is a physical barrier used to protect against corrosion?\nTopic: Corrosion prevention\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Grease, paint, or a thin layer of metal\n- B. B: Sacrificial protection using a more reactive metal\n- C. C: Alloying the metal with another element\n- D. D: Electroplating with a less reactive metal\nExplanation: Physical barriers like grease, paint, or a thin layer of metal prevent oxygen and water from reaching the metal surface, thus inhibiting corrosion.\nSource reference: C20 questions, Q2\n\nQ2: Rust is specifically formed through a reaction involving which three substances?\nTopic: Corrosion, Rusting\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: B\nOptions:\n- A. A: Copper, zinc, and carbon dioxide\n- B. B: Iron, water, and oxygen\n- C. C: Aluminium, nitrogen, and hydrogen\n- D. D: Steel, acid, and heat\nExplanation: Rusting is the specific corrosion of iron, which requires both oxygen and water to occur.\nSource reference: C20 questions, Q4\n\nQ3: Which pair correctly identifies two common alloys of copper?\nTopic: Alloys, Copper\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: C\nOptions:\n- A. A: Steel and duralumin\n- B. B: Solder and pewter\n- C. C: Brass and bronze\n- D. D: Amalgam and electrum\nExplanation: Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are well-known copper alloys.\nSource reference: C20 questions, Q5\n\nQ4: What are steel alloys primarily made from?\nTopic: Alloys, Steel\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Iron, carbon, and other metals\n- B. B: Aluminium, silicon, and oxygen\n- C. C: Copper, zinc, and tin\n- D. D: Gold, silver, and platinum\nExplanation: Steel is an alloy of iron with a small percentage of carbon, and often other elements like chromium or nickel to impart specific properties.\nSource reference: C20 questions, Q7\n\nQ5: A key property of aluminium alloys that makes them useful in industries like aerospace is that they generally have:\nTopic: Alloys, Aluminium\nDifficulty: intermediate\nSkill focus: Understanding properties and uses\nAnswer: D\nOptions:\n- A. A: High melting points\n- B. B: Excellent electrical conductivity\n- C. C: Extreme hardness\n- D. D: Low densities\nExplanation: Aluminium alloys are valued for their low density, which contributes to lightweight structures, making them ideal for aircraft and vehicles.\nSource reference: C20 questions, Q8\n\nQ6: What is the main difference in properties between soda-lime glass and borosilicate glass?\nTopic: Ceramics, Glass\nDifficulty: intermediate\nSkill focus: Comparing materials\nAnswer: B\nOptions:\n- A. A: Soda-lime glass is more resistant to chemical attack\n- B. B: Borosilicate glass has a much higher melting point\n- C. C: Soda-lime glass is used for laboratory equipment\n- D. D: Borosilicate glass is more easily recycled\nExplanation: Borosilicate glass (like Pyrex) contains boron oxide, which gives it a much higher melting point and better thermal shock resistance compared to soda-lime glass.\nSource reference: C20 questions, Q9\n\nQ7: Which of the following pairs are examples of clay ceramics?\nTopic: Ceramics, Clay\nDifficulty: foundation\nSkill focus: Knowledge recall\nAnswer: A\nOptions:\n- A. A: Pottery and bricks\n- B. B: Glass and concrete\n- C. C: Steel and aluminium\n- D. D: Plastic and rubber\nExplanation: Pottery and bricks are traditional ceramics made by shaping clay and then firing it at high temperatures.\nSource reference: C20 questions, Q10\n\nQ8: What is the key distinction between thermosetting and thermosoftening polymers when heated?\nTopic: Polymers\nDifficulty: intermediate\nSkill focus: Understanding material properties\nAnswer: C\nOptions:\n- A. A: Thermosetting polymers can be remoulded, thermosoftening cannot\n- B. B: Thermosoftening polymers are always stronger than thermosetting polymers\n- C. C: Thermosetting polymers do not soften when heated, while thermosoftening polymers do\n- D. D: Thermosetting polymers are formed from monomers, thermosoftening are not\nExplanation: Thermosoftening polymers have weak intermolecular forces that allow them to soften and melt when heated, whereas thermosetting polymers form strong covalent cross-links that prevent them from softening or melting.\nSource reference: C20 questions, Q12\n\nQ9: What is the effect of increasing the temperature in the Haber process on the yield, rate, and cost?\nTopic: Haber process, Chemical equilibrium, Reaction kinetics\nDifficulty: higher\nSkill focus: Analyzing process conditions\nAnswer: B\nOptions:\n- A. A: Increase yield, decrease rate, decrease cost\n- B. B: Decrease yield, increase rate, increase cost\n- C. C: Increase yield, increase rate, decrease cost\n- D. D: Decrease yield, decrease rate, increase cost\nExplanation: The Haber process is an exothermic reaction, so increasing temperature shifts the equilibrium to the left, decreasing yield. However, higher temperatures increase the kinetic energy of particles, leading to a faster reaction rate. Operating at higher temperatures also incurs higher energy costs.\nSource reference: C20 questions, Q17\n\nQ10: Which set of conditions is typically used for the Haber process?\nTopic: Haber process, Industrial conditions\nDifficulty: intermediate\nSkill focus: Knowledge recall of industrial processes\nAnswer: A\nOptions:\n- A. A: 450°C, 200 atm, iron catalyst\n- B. B: 200°C, 1 atm, platinum catalyst\n- C. C: 700°C, 100 atm, vanadium(V) oxide catalyst\n- D. D: 300°C, 500 atm, nickel catalyst\nExplanation: The Haber process uses a compromise temperature of around 450°C and a high pressure of 200 atmospheres, with an iron catalyst, to achieve a reasonable yield and rate economically.\nSource reference: C20 questions, Q20\n",
+  "autoSignals": {
+    "tokens": 960,
+    "sentences": 67,
+    "words": 960,
+    "info_entropy_mean": 7.5498,
+    "info_entropy_stddev": 1.6872,
+    "idea_density": 9.3433,
+    "repetition_compression_ratio": 0.2842,
+    "templates_per_token": 0.3375,
+    "subj_lexicon_ratio": 0.0031,
+    "avg_sentence_len": 14.3284,
+    "flesch_reading_ease": 39.57,
+    "fk_grade": 11.3,
+    "gunning_fog": 14.94
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.95
+    },
+    "domain": "qa",
+    "annoyance": 1,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "idea_density": 9.3433,
+          "repetition_compression_ratio": 0.2842
+        },
+        "spans": [],
+        "rationale": "The text is concise and functional. Explanations are brief and to the point, with no unnecessary filler words or phrases."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0031
+        },
+        "spans": [],
+        "rationale": "All questions and explanations are directly relevant to the specified GCSE chemistry topics, with no tangents or off-topic material."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.5498
+        },
+        "spans": [],
+        "rationale": "The chemical principles, definitions, and industrial process conditions presented in the questions and explanations are accurate for the specified curriculum."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0031
+        },
+        "spans": [],
+        "rationale": "The quiz presents factual questions and answers without any subjective language, opinion, or skewed perspectives. It is entirely objective."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "templates_per_token": 0.3375,
+          "repetition_compression_ratio": 0.2842
+        },
+        "spans": [
+          {
+            "quote": "A. A: Grease, paint, or a thin layer of metal",
+            "char_start": 468,
+            "char_end": 512
+          }
+        ],
+        "rationale": "The quiz format is necessarily templated, but the options are redundantly labelled (e.g., \"A. A:\"), which is a minor structural flaw."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "avg_sentence_len": 14.3284
+        },
+        "spans": [],
+        "rationale": "The quiz progresses logically through related chemistry topics, and each question-answer-explanation block is internally consistent and easy to follow."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "flesch_reading_ease": 39.57,
+          "fk_grade": 11.3
+        },
+        "spans": [],
+        "rationale": "The tone is consistently formal and educational, using clear and precise language suitable for the target audience of GCSE students."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.0625,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 0,
+      "weight": 0.35,
+      "contribution": 0
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 1,
+      "weight": 0.25,
+      "contribution": 0.0625
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

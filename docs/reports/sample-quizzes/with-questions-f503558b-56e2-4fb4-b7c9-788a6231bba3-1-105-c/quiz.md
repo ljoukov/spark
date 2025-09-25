@@ -1,7 +1,7 @@
 # Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (extraction) — Base Quiz
 
-**Quiz title:** GCSE Chemistry: C20 Retrieval Practice
-**Summary:** This quiz covers 6 key concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It includes questions on corrosion, alloys, the Haber process, and NPK fertilisers, with a mix of short answer and multiple-choice formats to test recall and understanding. The difficulty ranges from foundation to intermediate. Specific AQA specification points are not provided in the source material, so syllabus alignment is general to the C20 topic.
+**Quiz title:** GCSE Triple Science Chemistry Quiz: C20 Retrieval
+**Summary:** This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.
 
 ## Metadata
 
@@ -9,7 +9,7 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 6
-- Generated at: 2025-09-25T04:24:46.685Z
+- Generated at: 2025-09-25T08:15:24.951Z
 - Model: gemini-2.5-flash (temperature 0.20)
 - Source: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg)
 
@@ -17,79 +17,94 @@
 
 ### 1. What is corrosion?
 
-- Type: short_answer
-- Topic: Corrosion
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C20 questions, Q1
-- Answer: The destruction of a material through reactions with substances in the environment.
-
-> Corrosion is a natural process that converts a refined metal into a more stable form, such as its oxide, hydroxide, or sulfide. It is the gradual destruction of materials (usually metals) by chemical and/or electrochemical reaction with their environment.
-
-### 2. How is rust formed?
-
-- Type: short_answer
-- Topic: Rusting
-- Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C20 questions, Q4
-- Answer: Rust is formed by the reaction between iron, water, and oxygen.
-
-> Rusting is a specific type of corrosion that affects iron and steel. It requires both oxygen and water to occur. The iron reacts with oxygen in the presence of water to form hydrated iron(III) oxide, which is commonly known as rust.
-
-### 3. Which of the following pairs are two common alloys of copper?
-
 - Type: multiple_choice
-- Topic: Alloys
+- Topic: Metals, Corrosion
 - Difficulty: foundation
-- Skill focus: Recall
-- Source reference: C20 questions, Q5
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q1
 - Answer: A
 - Options:
-  - A. Brass and bronze
-  - B. Steel and aluminium
-  - C. Gold and silver
-  - D. Iron and carbon
+  - A. A: The destruction of a material through reactions with substances in the environment
+  - B. B: The process of strengthening metals by heating and cooling
+  - C. C: The formation of a protective layer on a metal surface
+  - D. D: The breaking down of a material by physical forces
 
-> Brass is an alloy of copper and zinc, while bronze is an alloy of copper and tin. Both are widely used due to their properties, which are often superior to pure copper.
+> Corrosion is the process where materials, typically metals, degrade due to chemical reactions with their environment, often involving oxygen and water. This leads to the destruction of the material's properties.
+
+### 2. What is sacrificial protection?
+
+- Type: multiple_choice
+- Topic: Metals, Corrosion prevention
+- Difficulty: intermediate
+- Skill focus: Knowledge recall, understanding application
+- Source reference: C20 questions, Q3
+- Answer: A
+- Options:
+  - A. A: Adding a more reactive metal to the surface of a material
+  - B. B: Coating a metal with paint or grease
+  - C. C: Using an inert gas to prevent oxidation
+  - D. D: Applying an electrical current to prevent rust
+
+> Sacrificial protection involves connecting a more reactive metal (the sacrificial anode) to the metal to be protected. The more reactive metal corrodes preferentially, protecting the other metal from oxidation.
+
+### 3. What are gold alloys in jewellery made from?
+
+- Type: multiple_choice
+- Topic: Alloys, Metals
+- Difficulty: foundation
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q6
+- Answer: A
+- Options:
+  - A. A: Gold with copper, zinc, and silver
+  - B. B: Gold with platinum and palladium
+  - C. C: Gold with iron and carbon
+  - D. D: Gold with aluminium and titanium
+
+> Gold is often alloyed with other metals like copper, zinc, and silver to increase its hardness and durability for use in jewellery, as pure gold is very soft and easily scratched.
 
 ### 4. What is the balanced symbol equation for the Haber process?
 
 - Type: short_answer
-- Topic: Haber Process
-- Difficulty: intermediate
-- Skill focus: Recall, Equation balancing
-- Source reference: C20 questions, Q13
+- Topic: Industrial processes, Haber process, Chemical equations
+- Difficulty: higher
+- Skill focus: Application of knowledge, balancing equations
+- Source reference: C20 questions, Q15
 - Answer: N₂(g) + 3H₂(g) = 2NH₃(g)
 
-> The Haber process combines nitrogen gas (N₂) from the air with hydrogen gas (H₂) derived from natural gas to produce ammonia (NH₃). The equation must be balanced to show the conservation of atoms.
+> The Haber process synthesises ammonia from nitrogen and hydrogen. The balanced equation shows one molecule of nitrogen reacting with three molecules of hydrogen to produce two molecules of ammonia, ensuring conservation of atoms.
 
-### 5. What are the typical conditions used for the Haber process?
+### 5. What catalyst do we use for the Haber process?
 
-- Type: short_answer
-- Topic: Haber Process
+- Type: multiple_choice
+- Topic: Industrial processes, Haber process, Catalysts
 - Difficulty: intermediate
-- Skill focus: Recall, Understanding industrial processes
-- Source reference: C20 questions, Q18
-- Answer: The conditions for the Haber process are 450°C, 200 atmospheres (atm) pressure, and an iron catalyst.
+- Skill focus: Knowledge recall
+- Source reference: C20 questions, Q19
+- Answer: A
+- Options:
+  - A. A: Iron
+  - B. B: Vanadium(V) oxide
+  - C. C: Nickel
+  - D. D: Platinum
 
-> These conditions are chosen as a compromise to achieve a good yield of ammonia at a reasonable rate. A higher temperature increases the rate but decreases the yield, while a higher pressure increases both yield and rate. The iron catalyst speeds up the reaction without being used up.
+> Iron is used as a catalyst in the Haber process to speed up the rate of reaction without being consumed, allowing the process to be economically viable at lower temperatures and pressures than would otherwise be needed.
 
 ### 6. What is an NPK fertiliser?
 
 - Type: multiple_choice
-- Topic: Fertilisers
-- Difficulty: intermediate
-- Skill focus: Recall, Definition
-- Source reference: C20 questions, Q19
+- Topic: Fertilisers, Agriculture
+- Difficulty: foundation
+- Skill focus: Knowledge recall, definition
+- Source reference: C20 questions, Q21
 - Answer: A
 - Options:
-  - A. A formulation containing soluble compounds of nitrogen, phosphorous, and potassium.
-  - B. A compound used to increase soil acidity.
-  - C. A substance that kills pests on crops.
-  - D. A mixture of sand, clay, and organic matter.
+  - A. A: A formulation containing soluble compounds of nitrogen, phosphorus, and potassium
+  - B. B: A fertiliser made only from natural organic matter
+  - C. C: A compound used to kill pests in agriculture
+  - D. D: A substance that increases soil acidity
 
-> NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential nutrients for plant growth, each playing a vital role in different aspects of plant health and development.
+> NPK fertilisers are formulations containing soluble compounds of nitrogen (N), phosphorus (P), and potassium (K). These are essential macronutrients required by plants for healthy growth.
 
 ## Prompt
 
