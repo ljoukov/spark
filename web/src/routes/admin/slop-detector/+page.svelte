@@ -18,6 +18,7 @@
 	type FormErrors = Partial<Record<FormErrorKey, string[]>>;
 
 	const result = $derived(actionState && actionState.success ? actionState.result : null);
+	const contributions = $derived(result?.contributions ?? []);
 	const runValues = $derived((actionState ? actionState.values : null) as ActionValues | null);
 	const errors = $derived(
 		(actionState && !actionState.success
@@ -92,6 +93,10 @@
 
 	function formatLabel(label: 0 | 1): string {
 		return label === 1 ? 'Slop' : 'Clean';
+	}
+
+	function formatWeight(value: number): string {
+		return `${(value * 100).toFixed(0)}%`;
 	}
 </script>
 
@@ -280,6 +285,37 @@
 				{/each}
 			</Card.Content>
 		</Card.Root>
+
+		{#if contributions.length > 0}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Weighted contributions</Card.Title>
+					<Card.Description>How each axis influenced the domain risk score.</Card.Description>
+				</Card.Header>
+				<Card.Content class="overflow-x-auto">
+					<table class="min-w-full border-separate border-spacing-y-1 text-sm">
+						<thead class="text-xs text-muted-foreground uppercase">
+							<tr class="text-left">
+								<th class="px-2 py-1">Axis</th>
+								<th class="px-2 py-1">Score</th>
+								<th class="px-2 py-1">Weight</th>
+								<th class="px-2 py-1">Contribution</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each contributions as entry}
+								<tr class="align-middle">
+									<td class="px-2 py-1 font-semibold">{entry.code}</td>
+									<td class="px-2 py-1">{entry.score.toFixed(2)}</td>
+									<td class="px-2 py-1">{formatWeight(entry.weight)}</td>
+									<td class="px-2 py-1">{entry.contribution.toFixed(3)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
 		<Card.Root>
 			<Card.Header>
