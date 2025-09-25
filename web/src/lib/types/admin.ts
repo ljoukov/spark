@@ -1,8 +1,9 @@
 export type AdminUser = {
-	uid: string;
-	email: string | null;
-	name?: string | null;
-	photoUrl?: string | null;
+    uid: string;
+    email: string | null;
+    name?: string | null;
+    photoUrl?: string | null;
+    loginUrl?: string | null;
 };
 
 export type AdminSessionState =
