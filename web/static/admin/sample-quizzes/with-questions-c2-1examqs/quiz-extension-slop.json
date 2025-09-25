@@ -1,0 +1,145 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "evaluatedAt": "2025-09-25T08:15:08.056Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This extended quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, the particle model of gases, and basic chemical equation analysis. It includes 10 new questions, bringing the total to 16, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nTEXT: <<<Quiz title: GCSE Chemistry: States of Matter and Chemical Reactions\nSummary: This extended quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, the particle model of gases, and basic chemical equation analysis. It includes 10 new questions, bringing the total to 16, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: In the reaction 2Li(s) + 2H2O(l) → 2LiOH(aq) + H2(g), what are the two reactants?\nTopic: Chemical reactions and equations\nDifficulty: foundation\nSkill focus: Identification of reactants\nAnswer: C) Lithium and Water\nOptions:\n- A. A) Lithium and Hydrogen\n- B. B) Water and Lithium hydroxide\n- C. C) Lithium and Water\n- D. D) Lithium hydroxide and Hydrogen\nExplanation: Reactants are the substances present at the start of a chemical reaction. In the given equation, lithium (Li) and water (H2O) are on the left side, indicating they are the reactants.\nSource reference: Page 1, Question 1(a)\n\nQ2: What is the chemical formula for lithium hydroxide, one of the products formed when lithium reacts with water?\nTopic: Chemical reactions and equations\nDifficulty: foundation\nSkill focus: Recall of chemical formulas from context\nAnswer: B) LiOH\nOptions:\n- A. A) LiO\n- B. B) LiOH\n- C. C) LiH2O\n- D. D) Li2O\nExplanation: The chemical equation explicitly states '2LiOH' as a product, which is the formula for lithium hydroxide.\nSource reference: Page 1, Question 1(a)\n\nQ3: Based on Figure 1, which substance is a solid at 0 °C?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: B) B\nOptions:\n- A. A) A\n- B. B) B\n- C. C) C\n- D. D) D\nExplanation: Substance B has a melting point of approximately 70°C. Since 0°C is below its melting point, substance B would be in a solid state at this temperature.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ4: According to Figure 1, what is the approximate boiling point of substance B?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Data extraction from graph\nAnswer: C) 190 °C\nOptions:\n- A. A) 70 °C\n- B. B) 100 °C\n- C. C) 190 °C\n- D. D) 200 °C\nExplanation: By reading the graph for substance B, the boiling point (marked with a solid circle) is approximately 190°C.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ5: Based on Figure 1, what is the approximate melting point of substance A?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Data extraction from graph\nAnswer: B) -20 °C\nOptions:\n- A. A) -100 °C\n- B. B) -20 °C\n- C. C) 0 °C\n- D. D) 50 °C\nExplanation: By reading the graph for substance A, the melting point (marked with an 'x') is approximately -20°C.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ6: Suggest one reason why the student could not use the apparatus shown in Figure 2 to determine the exact melting point of substance B.\nTopic: Experimental techniques, measurement accuracy\nDifficulty: higher\nSkill focus: Analysis of experimental design, identification of sources of error\nAnswer: The thermometer is placed in the water bath, not directly in substance B, meaning it measures the water temperature rather than the substance's temperature directly. OR The water bath provides indirect heating, which may not ensure uniform or precise temperature measurement of substance B.\nExplanation: For an exact melting point, the thermometer should be immersed directly into the substance being measured. In Figure 2, the thermometer is in the water, which acts as a heating medium, but does not directly measure the temperature of substance B itself, leading to potential inaccuracies.\nSource reference: Page 4, Question 1(f), Figure 2\n\nQ7: What is the primary function of the water in the apparatus shown in Figure 2 when determining melting/boiling points?\nTopic: Experimental techniques, heating methods\nDifficulty: intermediate\nSkill focus: Understanding experimental setup\nAnswer: C) To provide indirect and even heating\nOptions:\n- A. A) To react with substance B\n- B. B) To cool substance B\n- C. C) To provide indirect and even heating\n- D. D) To dissolve substance B\nExplanation: A water bath is commonly used to heat substances gently and evenly. The water ensures that the substance B is heated gradually and uniformly, preventing localized overheating.\nSource reference: Page 4, Question 1(e), Figure 2\n\nQ8: For a given material, in which state of matter are the particles typically arranged in a regular, fixed pattern?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Recall of particle arrangement in states of matter\nAnswer: C) Solid\nOptions:\n- A. A) Gas\n- B. B) Liquid\n- C. C) Solid\n- D. D) Plasma\nExplanation: In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating lattice structure.\nSource reference: Page 5, Question 2(b)\n\nQ9: For a given material, in which state of matter do the particles possess the most kinetic energy?\nTopic: Particle model, states of matter\nDifficulty: intermediate\nSkill focus: Recall of kinetic energy in states of matter\nAnswer: C) Gas\nOptions:\n- A. A) Solid\n- B. B) Liquid\n- C. C) Gas\n- D. D) Plasma\nExplanation: Gas particles have the highest kinetic energy because they are far apart and move rapidly and randomly, colliding frequently with each other and the container walls.\nSource reference: Page 5, Question 2(b)\n\nQ10: A student shakes a tube containing small balls to model the movement of particles in a gas. Besides being far apart, which other characteristic of gas particle movement does this model effectively demonstrate?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Understanding models, recall of gas properties\nAnswer: C) The particles move randomly\nOptions:\n- A. A) The particles move slowly\n- B. B) The particles are in fixed positions\n- C. C) The particles move randomly\n- D. D) The particles are different colours\nExplanation: The shaking motion causes the balls to move in unpredictable directions and paths, accurately representing the random motion of gas particles. The study material explicitly lists 'The balls move randomly' as a good characteristic.\nSource reference: Page 5, Question 2(a)\n>>>\nAUTO_SIGNALS:\n- tokens: 1047\n- sentences: 68\n- words: 1047\n- info_entropy_mean: 7.2097\n- info_entropy_stddev: 1.8705\n- idea_density: 8.75\n- repetition_compression_ratio: 0.2605\n- templates_per_token: 0.5005\n- subj_lexicon_ratio: 0\n- avg_sentence_len: 15.3971\n- flesch_reading_ease: 49.16\n- fk_grade: 10.23\n- gunning_fog: 13.72\nREQUEST_ID: with-questions-c2-1examqs-extension-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This extended quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, the particle model of gases, and basic chemical equation analysis. It includes 10 new questions, bringing the total to 16, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.",
+  "text": "Quiz title: GCSE Chemistry: States of Matter and Chemical Reactions\nSummary: This extended quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, the particle model of gases, and basic chemical equation analysis. It includes 10 new questions, bringing the total to 16, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: In the reaction 2Li(s) + 2H2O(l) → 2LiOH(aq) + H2(g), what are the two reactants?\nTopic: Chemical reactions and equations\nDifficulty: foundation\nSkill focus: Identification of reactants\nAnswer: C) Lithium and Water\nOptions:\n- A. A) Lithium and Hydrogen\n- B. B) Water and Lithium hydroxide\n- C. C) Lithium and Water\n- D. D) Lithium hydroxide and Hydrogen\nExplanation: Reactants are the substances present at the start of a chemical reaction. In the given equation, lithium (Li) and water (H2O) are on the left side, indicating they are the reactants.\nSource reference: Page 1, Question 1(a)\n\nQ2: What is the chemical formula for lithium hydroxide, one of the products formed when lithium reacts with water?\nTopic: Chemical reactions and equations\nDifficulty: foundation\nSkill focus: Recall of chemical formulas from context\nAnswer: B) LiOH\nOptions:\n- A. A) LiO\n- B. B) LiOH\n- C. C) LiH2O\n- D. D) Li2O\nExplanation: The chemical equation explicitly states '2LiOH' as a product, which is the formula for lithium hydroxide.\nSource reference: Page 1, Question 1(a)\n\nQ3: Based on Figure 1, which substance is a solid at 0 °C?\nTopic: States of matter and changes of state\nDifficulty: intermediate\nSkill focus: Data analysis, graph interpretation\nAnswer: B) B\nOptions:\n- A. A) A\n- B. B) B\n- C. C) C\n- D. D) D\nExplanation: Substance B has a melting point of approximately 70°C. Since 0°C is below its melting point, substance B would be in a solid state at this temperature.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ4: According to Figure 1, what is the approximate boiling point of substance B?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Data extraction from graph\nAnswer: C) 190 °C\nOptions:\n- A. A) 70 °C\n- B. B) 100 °C\n- C. C) 190 °C\n- D. D) 200 °C\nExplanation: By reading the graph for substance B, the boiling point (marked with a solid circle) is approximately 190°C.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ5: Based on Figure 1, what is the approximate melting point of substance A?\nTopic: States of matter and changes of state\nDifficulty: foundation\nSkill focus: Data extraction from graph\nAnswer: B) -20 °C\nOptions:\n- A. A) -100 °C\n- B. B) -20 °C\n- C. C) 0 °C\n- D. D) 50 °C\nExplanation: By reading the graph for substance A, the melting point (marked with an 'x') is approximately -20°C.\nSource reference: Page 2, Question 1(b), Figure 1\n\nQ6: Suggest one reason why the student could not use the apparatus shown in Figure 2 to determine the exact melting point of substance B.\nTopic: Experimental techniques, measurement accuracy\nDifficulty: higher\nSkill focus: Analysis of experimental design, identification of sources of error\nAnswer: The thermometer is placed in the water bath, not directly in substance B, meaning it measures the water temperature rather than the substance's temperature directly. OR The water bath provides indirect heating, which may not ensure uniform or precise temperature measurement of substance B.\nExplanation: For an exact melting point, the thermometer should be immersed directly into the substance being measured. In Figure 2, the thermometer is in the water, which acts as a heating medium, but does not directly measure the temperature of substance B itself, leading to potential inaccuracies.\nSource reference: Page 4, Question 1(f), Figure 2\n\nQ7: What is the primary function of the water in the apparatus shown in Figure 2 when determining melting/boiling points?\nTopic: Experimental techniques, heating methods\nDifficulty: intermediate\nSkill focus: Understanding experimental setup\nAnswer: C) To provide indirect and even heating\nOptions:\n- A. A) To react with substance B\n- B. B) To cool substance B\n- C. C) To provide indirect and even heating\n- D. D) To dissolve substance B\nExplanation: A water bath is commonly used to heat substances gently and evenly. The water ensures that the substance B is heated gradually and uniformly, preventing localized overheating.\nSource reference: Page 4, Question 1(e), Figure 2\n\nQ8: For a given material, in which state of matter are the particles typically arranged in a regular, fixed pattern?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Recall of particle arrangement in states of matter\nAnswer: C) Solid\nOptions:\n- A. A) Gas\n- B. B) Liquid\n- C. C) Solid\n- D. D) Plasma\nExplanation: In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating lattice structure.\nSource reference: Page 5, Question 2(b)\n\nQ9: For a given material, in which state of matter do the particles possess the most kinetic energy?\nTopic: Particle model, states of matter\nDifficulty: intermediate\nSkill focus: Recall of kinetic energy in states of matter\nAnswer: C) Gas\nOptions:\n- A. A) Solid\n- B. B) Liquid\n- C. C) Gas\n- D. D) Plasma\nExplanation: Gas particles have the highest kinetic energy because they are far apart and move rapidly and randomly, colliding frequently with each other and the container walls.\nSource reference: Page 5, Question 2(b)\n\nQ10: A student shakes a tube containing small balls to model the movement of particles in a gas. Besides being far apart, which other characteristic of gas particle movement does this model effectively demonstrate?\nTopic: Particle model, states of matter\nDifficulty: foundation\nSkill focus: Understanding models, recall of gas properties\nAnswer: C) The particles move randomly\nOptions:\n- A. A) The particles move slowly\n- B. B) The particles are in fixed positions\n- C. C) The particles move randomly\n- D. D) The particles are different colours\nExplanation: The shaking motion causes the balls to move in unpredictable directions and paths, accurately representing the random motion of gas particles. The study material explicitly lists 'The balls move randomly' as a good characteristic.\nSource reference: Page 5, Question 2(a)\n",
+  "autoSignals": {
+    "tokens": 1047,
+    "sentences": 68,
+    "words": 1047,
+    "info_entropy_mean": 7.2097,
+    "info_entropy_stddev": 1.8705,
+    "idea_density": 8.75,
+    "repetition_compression_ratio": 0.2605,
+    "templates_per_token": 0.5005,
+    "subj_lexicon_ratio": 0,
+    "avg_sentence_len": 15.3971,
+    "flesch_reading_ease": 49.16,
+    "fk_grade": 10.23,
+    "gunning_fog": 13.72
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 1,
+      "confidence": 1
+    },
+    "domain": "qa",
+    "annoyance": 4,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "repetition_compression_ratio": 0.2605,
+          "idea_density": 8.75
+        },
+        "spans": [],
+        "rationale": "The multiple-choice options have redundant prefixes (e.g., 'A. A)'), which adds unnecessary clutter but does not severely impact readability."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "All questions, answers, and explanations are directly relevant to the stated GCSE Chemistry topics and the provided chemical equation."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 4,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The quiz is fundamentally broken as it repeatedly references 'Figure 1' and 'Figure 2', which are not provided, making half the questions impossible to answer."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0
+        },
+        "spans": [],
+        "rationale": "The text is an objective science quiz and contains no subjective statements, unjustified opinions, or biased framing."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 3,
+        "auto_signals": {
+          "templates_per_token": 0.5005,
+          "repetition_compression_ratio": 0.2605
+        },
+        "spans": [],
+        "rationale": "A glaring structural flaw is the consistent, redundant formatting of all multiple-choice options (e.g., 'A. A)', 'B. B)'), indicating a rigid, flawed template."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 3,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The logical flow is severely disrupted because multiple questions depend entirely on external figures that are missing, rendering the quiz incoherent and unusable."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "flesch_reading_ease": 49.16,
+          "gunning_fog": 13.72
+        },
+        "spans": [],
+        "rationale": "The tone is mostly appropriate, but the redundant option formatting feels clunky, and one explanation's self-referential justification is unnatural."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.625,
+  "recommendedLabel": 1,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 4,
+      "weight": 0.35,
+      "contribution": 0.35
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 3,
+      "weight": 0.25,
+      "contribution": 0.1875
+    },
+    {
+      "code": "Coherence",
+      "score": 3,
+      "weight": 0.05,
+      "contribution": 0.0375
+    },
+    {
+      "code": "Tone",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    }
+  ]
+}

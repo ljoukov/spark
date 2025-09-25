@@ -3,7 +3,7 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:20:29.877Z",
+  "generatedAt": "2025-09-25T08:08:25.363Z",
   "request": {
     "model": "gemini-2.5-flash",
     "questionCount": 6,
@@ -15,47 +15,53 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
   "quiz": {
-    "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
-    "summary": "This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 6 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.",
+    "quizTitle": "AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz",
+    "summary": "This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.",
     "mode": "extraction",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "C2 Covalent bonding (AQA GCSE Triple Science)",
+    "syllabusAlignment": "AQA GCSE Chemistry, C2 Covalent Bonding (Structure and Bonding)",
     "questionCount": 6,
     "questions": [
       {
-        "id": "Q1",
+        "id": "Q1_CB_MC1",
         "prompt": "How are covalent bonds formed?",
-        "answer": "by atoms sharing electrons",
-        "explanation": "Covalent bonds are formed when two atoms share one or more pairs of electrons to achieve a stable electron configuration.",
+        "answer": "By atoms sharing electrons",
+        "explanation": "Covalent bonds are formed when two non-metal atoms share one or more pairs of electrons to achieve a stable outer electron shell.",
         "type": "multiple_choice",
         "options": [
-          "by atoms transferring electrons",
-          "by atoms sharing electrons",
-          "by atoms gaining electrons",
-          "by atoms losing electrons"
+          "By atoms sharing electrons",
+          "By atoms transferring electrons",
+          "By atoms gaining electrons",
+          "By atoms losing electrons"
         ],
-        "topic": "Covalent Bonding Basics",
+        "topic": "Covalent Bond Formation",
         "difficulty": "foundation",
         "skillFocus": "Recall",
         "sourceReference": "C2 questions, Q1"
       },
       {
-        "id": "Q2",
-        "prompt": "Describe the structure and bonding of a giant covalent substance.",
-        "answer": "billions of atoms bonded together by strong covalent bonds",
-        "explanation": "Giant covalent structures consist of a vast, repeating network of billions of atoms held together by strong covalent bonds throughout the entire structure.",
-        "type": "short_answer",
-        "topic": "Giant Covalent Structures",
-        "difficulty": "intermediate",
-        "skillFocus": "Description",
-        "sourceReference": "C2 questions, Q3"
+        "id": "Q2_CB_MC2",
+        "prompt": "Which type of atoms typically form covalent bonds between them?",
+        "answer": "Non-metals",
+        "explanation": "Covalent bonds primarily occur between non-metal atoms, as they both have high electronegativity and tend to share electrons rather than transfer them.",
+        "type": "multiple_choice",
+        "options": [
+          "Metals and non-metals",
+          "Non-metals",
+          "Metals",
+          "Noble gases"
+        ],
+        "topic": "Types of Atoms in Covalent Bonds",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q2"
       },
       {
-        "id": "Q3",
+        "id": "Q3_CB_SA1",
         "prompt": "Why do giant covalent substances have high melting points?",
-        "answer": "it takes a lot of energy to break the strong covalent bonds between the atoms",
-        "explanation": "Due to the extensive network of strong covalent bonds throughout the entire structure, a significant amount of thermal energy is required to overcome these bonds, resulting in high melting points.",
+        "answer": "It takes a lot of energy to break the strong covalent bonds between the atoms.",
+        "explanation": "Giant covalent structures consist of billions of atoms held together by a vast network of strong covalent bonds. A significant amount of thermal energy is required to overcome these strong bonds throughout the entire structure, leading to very high melting points.",
         "type": "short_answer",
         "topic": "Properties of Giant Covalent Structures",
         "difficulty": "intermediate",
@@ -63,49 +69,43 @@
         "sourceReference": "C2 questions, Q6"
       },
       {
-        "id": "Q4",
-        "prompt": "Describe the structure and bonding in graphite.",
-        "answer": "each carbon atom is bonded to three others in hexagonal rings arranged in layers – it has delocalised electrons and weak forces between the layers",
-        "explanation": "Graphite is a giant covalent structure where each carbon atom is covalently bonded to three other carbon atoms, forming hexagonal rings arranged in layers. These layers are held together by weak intermolecular forces, and there are delocalised electrons within the layers.",
+        "id": "Q4_CB_SA2",
+        "prompt": "Why do small molecules have low melting points?",
+        "answer": "Only a small amount of energy is needed to break the weak intermolecular forces.",
+        "explanation": "Small molecules are held together by strong covalent bonds within the molecule, but the forces between individual molecules (intermolecular forces) are weak. Only a small amount of energy is required to overcome these weak intermolecular forces, resulting in low melting and boiling points.",
         "type": "short_answer",
-        "topic": "Graphite Structure",
-        "difficulty": "higher",
-        "skillFocus": "Description",
-        "sourceReference": "C2 questions, Q10"
+        "topic": "Properties of Simple Molecular Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q7"
       },
       {
-        "id": "Q5",
+        "id": "Q5_CB_SA3",
         "prompt": "Why can graphite conduct electricity?",
-        "answer": "the delocalised electrons can move through the graphite",
-        "explanation": "In graphite, each carbon atom forms only three covalent bonds, leaving one outer electron per atom delocalised. These delocalised electrons are free to move throughout the layers, allowing graphite to conduct electricity.",
-        "type": "multiple_choice",
-        "options": [
-          "It has free ions that can carry charge.",
-          "The strong covalent bonds allow electrons to flow easily.",
-          "It has delocalised electrons that can move through the structure.",
-          "Its layered structure allows for electron transfer between layers."
-        ],
-        "topic": "Properties of Graphite",
+        "answer": "The delocalised electrons can move through the graphite.",
+        "explanation": "In graphite, each carbon atom is bonded to three other carbon atoms, leaving one outer electron per atom free. These electrons become delocalised and are free to move between the layers, allowing graphite to conduct electricity.",
+        "type": "short_answer",
+        "topic": "Graphite Properties",
         "difficulty": "intermediate",
-        "skillFocus": "Explanation, Recall",
+        "skillFocus": "Explanation",
         "sourceReference": "C2 questions, Q11"
       },
       {
-        "id": "Q6",
-        "prompt": "What is a fullerene?",
-        "answer": "hollow cage of carbon atoms arranged as a sphere or a tube",
-        "explanation": "Fullerenes are a class of carbon allotropes consisting of hollow molecular cages, typically spherical (like buckyballs) or cylindrical (nanotubes).",
+        "id": "Q6_CB_MC3",
+        "prompt": "What is graphene?",
+        "answer": "A single layer of graphite",
+        "explanation": "Graphene is an allotrope of carbon consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one atomic layer of graphite.",
         "type": "multiple_choice",
         "options": [
-          "A single layer of graphite.",
-          "A giant covalent lattice of silicon atoms.",
-          "A hollow cage of carbon atoms arranged as a sphere or a tube.",
-          "A long chain of identical monomer units."
+          "A single layer of graphite",
+          "A hollow cage of carbon atoms",
+          "A hollow cylinder of carbon atoms",
+          "A giant covalent lattice of silicon atoms"
         ],
-        "topic": "Fullerenes",
+        "topic": "Graphene Definition",
         "difficulty": "foundation",
-        "skillFocus": "Definition, Recall",
-        "sourceReference": "C2 questions, Q15"
+        "skillFocus": "Definition",
+        "sourceReference": "C2 questions, Q13"
       }
     ]
   },

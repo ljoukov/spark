@@ -1,0 +1,149 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "evaluatedAt": "2025-09-25T08:06:23.463Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.\nTEXT: <<<Quiz title: GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz\nSummary: This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: What is an atom?\nTopic: Atomic Structure\nDifficulty: foundation\nSkill focus: Recall\nAnswer: The smallest part of an element that can exist.\nExplanation: An atom is the fundamental building block of matter, defined as the smallest particle of a chemical element that retains its chemical identity.\nSource reference: C1 questions, Q1\n\nQ2: Which of the following best describes the plum pudding model of the atom?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: A sphere of positive charge with negative electrons embedded in it.\nOptions:\n- A. A sphere of positive charge with negative electrons embedded in it.\n- B. A dense nucleus with electrons orbiting it in fixed energy levels.\n- C. Solid spheres that could not be divided into smaller parts.\n- D. A central nucleus containing protons and neutrons, with electrons in shells.\nExplanation: The plum pudding model, proposed by J.J. Thomson, depicted the atom as a uniform sphere of positive charge with electrons scattered within it, like plums in a pudding.\nSource reference: C1 questions, Q3\n\nQ3: What key discovery did Niels Bohr make regarding atomic structure?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: Electrons orbit in fixed energy levels (shells).\nExplanation: Bohr's model proposed that electrons exist in specific orbits or shells around the nucleus, each with a distinct energy level, explaining the stability of atoms and their emission spectra.\nSource reference: C1 questions, Q6\n\nQ4: What are the relative charges of a proton, neutron, and electron, respectively?\nTopic: Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Proton: +1, Neutron: 0, Electron: -1\nOptions:\n- A. Proton: +1, Neutron: 0, Electron: -1\n- B. Proton: 0, Neutron: +1, Electron: -1\n- C. Proton: +1, Neutron: -1, Electron: 0\n- D. Proton: -1, Neutron: 0, Electron: +1\nExplanation: Protons carry a relative charge of +1, neutrons are neutral with a relative charge of 0, and electrons carry a relative charge of -1.\nSource reference: C1 questions, Q10\n\nQ5: Define isotopes.\nTopic: Isotopes\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: Atoms of the same element (same number of protons) with different numbers of neutrons.\nExplanation: Isotopes are variants of a particular chemical element which have different numbers of neutrons, and therefore different mass numbers, but the same number of protons.\nSource reference: C1 questions, Q18\n\nQ6: Which of the following lists four physical processes used to separate mixtures?\nTopic: Separation Techniques\nDifficulty: higher\nSkill focus: Recall\nAnswer: Filtration, crystallisation, distillation, chromatography\nOptions:\n- A. Filtration, crystallisation, distillation, chromatography\n- B. Combustion, neutralisation, electrolysis, precipitation\n- C. Melting, boiling, freezing, condensation\n- D. Oxidation, reduction, displacement, decomposition\nExplanation: Filtration separates insoluble solids from liquids. Crystallisation separates a soluble solid from a solution. Distillation separates liquids with different boiling points or a soluble solid from a liquid. Chromatography separates substances based on their differential partitioning between a stationary and a mobile phase.\nSource reference: C1 questions, Q19\n>>>\nAUTO_SIGNALS:\n- tokens: 545\n- sentences: 40\n- words: 545\n- info_entropy_mean: 7.2102\n- info_entropy_stddev: 1.3943\n- idea_density: 8.95\n- repetition_compression_ratio: 0.2903\n- templates_per_token: 0.3798\n- subj_lexicon_ratio: 0\n- avg_sentence_len: 13.625\n- flesch_reading_ease: 31.72\n- fk_grade: 12.22\n- gunning_fog: 16.75\nREQUEST_ID: with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-quiz-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.",
+  "text": "Quiz title: GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz\nSummary: This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: What is an atom?\nTopic: Atomic Structure\nDifficulty: foundation\nSkill focus: Recall\nAnswer: The smallest part of an element that can exist.\nExplanation: An atom is the fundamental building block of matter, defined as the smallest particle of a chemical element that retains its chemical identity.\nSource reference: C1 questions, Q1\n\nQ2: Which of the following best describes the plum pudding model of the atom?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: A sphere of positive charge with negative electrons embedded in it.\nOptions:\n- A. A sphere of positive charge with negative electrons embedded in it.\n- B. A dense nucleus with electrons orbiting it in fixed energy levels.\n- C. Solid spheres that could not be divided into smaller parts.\n- D. A central nucleus containing protons and neutrons, with electrons in shells.\nExplanation: The plum pudding model, proposed by J.J. Thomson, depicted the atom as a uniform sphere of positive charge with electrons scattered within it, like plums in a pudding.\nSource reference: C1 questions, Q3\n\nQ3: What key discovery did Niels Bohr make regarding atomic structure?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: Electrons orbit in fixed energy levels (shells).\nExplanation: Bohr's model proposed that electrons exist in specific orbits or shells around the nucleus, each with a distinct energy level, explaining the stability of atoms and their emission spectra.\nSource reference: C1 questions, Q6\n\nQ4: What are the relative charges of a proton, neutron, and electron, respectively?\nTopic: Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Proton: +1, Neutron: 0, Electron: -1\nOptions:\n- A. Proton: +1, Neutron: 0, Electron: -1\n- B. Proton: 0, Neutron: +1, Electron: -1\n- C. Proton: +1, Neutron: -1, Electron: 0\n- D. Proton: -1, Neutron: 0, Electron: +1\nExplanation: Protons carry a relative charge of +1, neutrons are neutral with a relative charge of 0, and electrons carry a relative charge of -1.\nSource reference: C1 questions, Q10\n\nQ5: Define isotopes.\nTopic: Isotopes\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: Atoms of the same element (same number of protons) with different numbers of neutrons.\nExplanation: Isotopes are variants of a particular chemical element which have different numbers of neutrons, and therefore different mass numbers, but the same number of protons.\nSource reference: C1 questions, Q18\n\nQ6: Which of the following lists four physical processes used to separate mixtures?\nTopic: Separation Techniques\nDifficulty: higher\nSkill focus: Recall\nAnswer: Filtration, crystallisation, distillation, chromatography\nOptions:\n- A. Filtration, crystallisation, distillation, chromatography\n- B. Combustion, neutralisation, electrolysis, precipitation\n- C. Melting, boiling, freezing, condensation\n- D. Oxidation, reduction, displacement, decomposition\nExplanation: Filtration separates insoluble solids from liquids. Crystallisation separates a soluble solid from a solution. Distillation separates liquids with different boiling points or a soluble solid from a liquid. Chromatography separates substances based on their differential partitioning between a stationary and a mobile phase.\nSource reference: C1 questions, Q19\n",
+  "autoSignals": {
+    "tokens": 545,
+    "sentences": 40,
+    "words": 545,
+    "info_entropy_mean": 7.2102,
+    "info_entropy_stddev": 1.3943,
+    "idea_density": 8.95,
+    "repetition_compression_ratio": 0.2903,
+    "templates_per_token": 0.3798,
+    "subj_lexicon_ratio": 0,
+    "avg_sentence_len": 13.625,
+    "flesch_reading_ease": 31.72,
+    "fk_grade": 12.22,
+    "gunning_fog": 16.75
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 1
+    },
+    "domain": "qa",
+    "annoyance": 1,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "idea_density": 8.95,
+          "repetition_compression_ratio": 0.2903
+        },
+        "spans": [],
+        "rationale": "The text is concise and information-rich. Explanations add value without unnecessary wording, which is ideal for a study aid."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "Every question and explanation is directly relevant to the stated topics of atomic structure and separation techniques for GCSE Chemistry."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0
+        },
+        "spans": [],
+        "rationale": "The chemical concepts, historical models, and definitions provided in the questions, answers, and explanations are all factually correct."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0
+        },
+        "spans": [],
+        "rationale": "The quiz presents objective scientific facts and established models. There is no subjectivity or bias in the questions or answers."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "templates_per_token": 0.3798,
+          "repetition_compression_ratio": 0.2903
+        },
+        "spans": [],
+        "rationale": "The consistent, templated structure for each question is a strength, making the quiz clear, easy to follow, and functional."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.2102
+        },
+        "spans": [],
+        "rationale": "The questions are ordered logically, starting with the basic definition of an atom and progressing through models, particles, and related concepts."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "flesch_reading_ease": 31.72,
+          "fk_grade": 12.22
+        },
+        "spans": [],
+        "rationale": "The tone is appropriately academic and clear for a GCSE-level quiz. The language is precise and avoids jargon where possible."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 0,
+      "weight": 0.35,
+      "contribution": 0
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 0,
+      "weight": 0.25,
+      "contribution": 0
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

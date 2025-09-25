@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-09-25T04:26:41.457Z",
+  "generatedAt": "2025-09-25T08:17:56.524Z",
   "samples": [
     {
       "id": "no-questions-y8lesson-health-blooddonations",
@@ -17,28 +17,36 @@
         "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
         "displayName": "Y8Lesson-Health-BloodDonations.pdf"
       },
-      "quizTitle": "GCSE Biology: Blood and Organ Donation",
-      "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.",
+      "quizTitle": "GCSE Triple Science: Blood, Organ, and Stem Cell Donation",
+      "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.",
       "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/detail.json",
-      "generatedAt": "2025-09-25T04:16:26.956Z",
+      "generatedAt": "2025-09-25T08:02:15.993Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz.json",
-        "judge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-judgement.json",
+        "qualityJudge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-judgement.json",
+        "slop": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-slop.json",
         "extension": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension.json",
-        "extensionJudge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension-judgement.json"
+        "extensionQualityJudge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension-judgement.json",
+        "extensionSlop": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension-slop.json"
       },
       "extension": {
-        "quizTitle": "GCSE Biology: Blood and Organ Donation",
+        "quizTitle": "GCSE Triple Science: Blood, Organ, and Stem Cell Donation",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T04:17:27.717Z"
+        "generatedAt": "2025-09-25T08:03:51.896Z"
       },
-      "judge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-judgement.json"
+      "quality": {
+        "baseVerdict": "approve",
+        "extensionVerdict": "approve"
       },
-      "extensionJudge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension-judgement.json"
+      "slop": {
+        "base": {
+          "label": 0,
+          "riskScore": 0.0875
+        },
+        "extension": {
+          "label": 0,
+          "riskScore": 0
+        }
       }
     },
     {
@@ -57,28 +65,36 @@
         "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
         "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
       },
-      "quizTitle": "GCSE Chemistry C1: Atomic Structure and Bonding Basics",
-      "summary": "This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical atomic models, sub-atomic particles, and definitions of elements, compounds, and mixtures. It includes a mix of recall and descriptive questions, with 3 multiple-choice and 3 short-answer items, aligning with AQA GCSE Chemistry specifications.",
+      "quizTitle": "GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz",
+      "summary": "This quiz covers fundamental concepts in GCSE Chemistry C1, focusing on atomic structure, historical models of the atom, properties of sub-atomic particles, and methods for separating mixtures. It includes a mix of recall and understanding questions, with 3 multiple-choice and 3 short-answer items. The difficulty ranges from foundation to higher.",
       "outputPath": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T04:18:23.130Z",
+      "generatedAt": "2025-09-25T08:05:28.310Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz.json",
-        "judge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-judgement.json",
+        "qualityJudge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-judgement.json",
+        "slop": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-slop.json",
         "extension": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension.json",
-        "extensionJudge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension-judgement.json"
+        "extensionQualityJudge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension-judgement.json",
+        "extensionSlop": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension-slop.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry C1: Atomic Structure and Models (Extended)",
+        "quizTitle": "GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T04:19:23.156Z"
+        "generatedAt": "2025-09-25T08:06:56.183Z"
       },
-      "judge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-judgement.json"
+      "quality": {
+        "baseVerdict": "approve",
+        "extensionVerdict": "revise"
       },
-      "extensionJudge": {
-        "verdict": "approve",
-        "outputPath": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension-judgement.json"
+      "slop": {
+        "base": {
+          "label": 0,
+          "riskScore": 0
+        },
+        "extension": {
+          "label": 0,
+          "riskScore": 0.3125
+        }
       }
     },
     {
@@ -97,28 +113,36 @@
         "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
         "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
       },
-      "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
-      "summary": "This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 6 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.",
+      "quizTitle": "AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz",
+      "summary": "This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.",
       "outputPath": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T04:20:29.877Z",
+      "generatedAt": "2025-09-25T08:08:25.363Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz.json",
-        "judge": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-judgement.json",
+        "qualityJudge": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-judgement.json",
+        "slop": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-slop.json",
         "extension": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-extension.json",
-        "extensionJudge": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-extension-judgement.json"
+        "extensionQualityJudge": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-extension-judgement.json",
+        "extensionSlop": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-extension-slop.json"
       },
       "extension": {
-        "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
+        "quizTitle": "AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz - Extension",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T04:21:22.539Z"
+        "generatedAt": "2025-09-25T08:09:56.326Z"
       },
-      "judge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-judgement.json"
+      "quality": {
+        "baseVerdict": "revise",
+        "extensionVerdict": "approve"
       },
-      "extensionJudge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-extension-judgement.json"
+      "slop": {
+        "base": {
+          "label": 0,
+          "riskScore": 0.0625
+        },
+        "extension": {
+          "label": 0,
+          "riskScore": 0.2625
+        }
       }
     },
     {
@@ -137,28 +161,36 @@
         "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
         "displayName": "C2.1ExamQs.pdf"
       },
-      "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
-      "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.",
+      "quizTitle": "GCSE Chemistry: States of Matter and Chemical Reactions",
+      "summary": "This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, and the particle model of gases. It includes 3 multiple-choice questions and 3 short-answer questions, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.",
       "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/detail.json",
-      "generatedAt": "2025-09-25T04:22:27.982Z",
+      "generatedAt": "2025-09-25T08:11:54.607Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz.json",
-        "judge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-judgement.json",
+        "qualityJudge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-judgement.json",
+        "slop": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-slop.json",
         "extension": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension.json",
-        "extensionJudge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-judgement.json"
+        "extensionQualityJudge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-judgement.json",
+        "extensionSlop": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-slop.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
+        "quizTitle": "GCSE Chemistry: States of Matter and Chemical Reactions",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T04:23:48.515Z"
+        "generatedAt": "2025-09-25T08:13:50.312Z"
       },
-      "judge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-judgement.json"
+      "quality": {
+        "baseVerdict": "revise",
+        "extensionVerdict": "approve"
       },
-      "extensionJudge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-judgement.json"
+      "slop": {
+        "base": {
+          "label": 1,
+          "riskScore": 0.55
+        },
+        "extension": {
+          "label": 1,
+          "riskScore": 0.625
+        }
       }
     },
     {
@@ -177,28 +209,36 @@
         "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
         "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
       },
-      "quizTitle": "GCSE Chemistry: C20 Retrieval Practice",
-      "summary": "This quiz covers 6 key concepts from the AQA GCSE Chemistry C20 'Chemical and Allied Industries' topic. It includes questions on corrosion, alloys, the Haber process, and NPK fertilisers, with a mix of short answer and multiple-choice formats to test recall and understanding. The difficulty ranges from foundation to intermediate. Specific AQA specification points are not provided in the source material, so syllabus alignment is general to the C20 topic.",
+      "quizTitle": "GCSE Triple Science Chemistry Quiz: C20 Retrieval",
+      "summary": "This quiz covers 6 key chemistry concepts from the C20 section of the AQA GCSE Triple Science specification. It includes a mix of knowledge recall and application questions, focusing on corrosion, alloys, industrial processes (Haber process), and fertilisers. The questions are primarily multiple-choice with one short-answer question, offering a balanced assessment of understanding. Some questions required minor typo corrections for accuracy.",
       "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T04:24:46.685Z",
+      "generatedAt": "2025-09-25T08:15:24.951Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz.json",
-        "judge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-judgement.json",
+        "qualityJudge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-judgement.json",
+        "slop": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-slop.json",
         "extension": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension.json",
-        "extensionJudge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension-judgement.json"
+        "extensionQualityJudge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension-judgement.json",
+        "extensionSlop": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension-slop.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry: C20 Retrieval Practice - Extension",
+        "quizTitle": "GCSE Triple Science Chemistry Quiz: C20 Retrieval (Extended)",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T04:26:03.210Z"
+        "generatedAt": "2025-09-25T08:16:56.299Z"
       },
-      "judge": {
-        "verdict": "revise",
-        "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-judgement.json"
+      "quality": {
+        "baseVerdict": "approve",
+        "extensionVerdict": "revise"
       },
-      "extensionJudge": {
-        "verdict": "approve",
-        "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension-judgement.json"
+      "slop": {
+        "base": {
+          "label": 0,
+          "riskScore": 0.2875
+        },
+        "extension": {
+          "label": 0,
+          "riskScore": 0.0625
+        }
       }
     }
   ]

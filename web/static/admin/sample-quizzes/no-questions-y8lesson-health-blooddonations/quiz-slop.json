@@ -1,0 +1,151 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "evaluatedAt": "2025-09-25T08:03:19.476Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nTEXT: <<<Quiz title: GCSE Triple Science: Blood, Organ, and Stem Cell Donation\nSummary: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nMode: synthesis\nSubject: biology\nBoard: OCR\nQuestion count: 6\n\nQ1: According to the provided material, approximately how many new blood donors are needed daily in England to meet demand?\nTopic: Importance of donation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: D\nOptions:\n- A. A) 100\n- B. B) 200\n- C. C) 300\n- D. D) 400\nExplanation: Page 6 states, \"Nearly 400 new blood donors are needed every day in England to meet demand.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ2: Identify two types of individuals who might require an organ donation, as stated in the study material.\nTopic: Who needs donations\nDifficulty: foundation\nSkill focus: Identification\nAnswer: Someone whose organs have been damaged by disease or injury, or someone who has a birth defect.\nExplanation: Page 5 lists \"Someone whose organs have been damaged by disease or injury\" and \"Someone who has a birth defect\" under 'Organ donation'.\nSource reference: Page 5, \"Who might need each type of donation?\"\n\nQ3: How many adults can one blood donation help, according to the information provided about the blood donation process?\nTopic: Blood donation process\nDifficulty: foundation\nSkill focus: Data extraction\nAnswer: 3\nExplanation: Page 8 explains that after testing, a donor's blood is split into component parts, and \"each donation can help 3 adults or 6 infants.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ4: True or False: From 2020, anyone over the age of 18 in England is automatically considered an organ donor unless they have explicitly registered a decision not to donate.\nTopic: Law around organ donation\nDifficulty: intermediate\nSkill focus: Understanding legal frameworks\nAnswer: True\nExplanation: Page 13 states, \"From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group.\"\nSource reference: Page 13, \"Organ donation: legal changes to save more lives\"\n\nQ5: Which of the following is the most common method for donating stem cells, according to the provided material?\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Data interpretation\nAnswer: B\nOptions:\n- A. A) Through a bone marrow donation procedure\n- B. B) Through the bloodstream\n- C. C) Directly from umbilical cord blood\n- D. D) Via a surgical removal of lymph nodes\nExplanation: Page 10 states that \"Stem cells can be donated in one of two ways: through the bloodstream (90% of donors) or bone marrow donation procedure (10% of donors).\" Therefore, through the bloodstream is the most common.\nSource reference: Page 10, \"What's involved in being a stem cell donor?\"\n\nQ6: Explain two reasons why an individual might choose not to donate, based on the examples provided in the study material.\nTopic: Individual choice to donate\nDifficulty: higher\nSkill focus: Analysis of considerations\nAnswer: An individual might choose not to donate blood due to a fear of needles. Another reason for choosing not to donate organs is feeling uncomfortable with the idea of their organs being used after death, leading them to opt out on the NHS Organ Donation Register.\nExplanation: Page 16 provides two speech bubbles illustrating reasons for not donating: \"I'm really scared of needles, so giving blood isn't something I feel I'm able to do.\" and \"I feel uncomfortable with the idea of my organs being used after I die, so I recorded my decision to opt out of organ donation on the NHS Organ Donation Register.\"\nSource reference: Page 16, \"Why do people choose not to donate?\"\n>>>\nAUTO_SIGNALS:\n- tokens: 667\n- sentences: 23\n- words: 667\n- info_entropy_mean: 7.445\n- info_entropy_stddev: 1.4203\n- idea_density: 18.2174\n- repetition_compression_ratio: 0.2987\n- templates_per_token: 0.4303\n- subj_lexicon_ratio: 0.0045\n- avg_sentence_len: 29\n- flesch_reading_ease: 38.26\n- fk_grade: 15.13\n- gunning_fog: 19.34\nREQUEST_ID: no-questions-y8lesson-health-blooddonations-quiz-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.",
+  "text": "Quiz title: GCSE Triple Science: Blood, Organ, and Stem Cell Donation\nSummary: This quiz covers key aspects of blood, organ, and stem cell donation, aligning with GCSE Biology (OCR specification). It includes questions on the importance of donation, the types of individuals who might need donations, the processes involved in blood and stem cell donation, and the legal framework surrounding organ donation in England. The quiz features a mix of multiple-choice, short-answer, true/false, and numeric questions to assess a range of recall and analytical skills.\nMode: synthesis\nSubject: biology\nBoard: OCR\nQuestion count: 6\n\nQ1: According to the provided material, approximately how many new blood donors are needed daily in England to meet demand?\nTopic: Importance of donation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: D\nOptions:\n- A. A) 100\n- B. B) 200\n- C. C) 300\n- D. D) 400\nExplanation: Page 6 states, \"Nearly 400 new blood donors are needed every day in England to meet demand.\"\nSource reference: Page 6, \"Why are donations important?\"\n\nQ2: Identify two types of individuals who might require an organ donation, as stated in the study material.\nTopic: Who needs donations\nDifficulty: foundation\nSkill focus: Identification\nAnswer: Someone whose organs have been damaged by disease or injury, or someone who has a birth defect.\nExplanation: Page 5 lists \"Someone whose organs have been damaged by disease or injury\" and \"Someone who has a birth defect\" under 'Organ donation'.\nSource reference: Page 5, \"Who might need each type of donation?\"\n\nQ3: How many adults can one blood donation help, according to the information provided about the blood donation process?\nTopic: Blood donation process\nDifficulty: foundation\nSkill focus: Data extraction\nAnswer: 3\nExplanation: Page 8 explains that after testing, a donor's blood is split into component parts, and \"each donation can help 3 adults or 6 infants.\"\nSource reference: Page 8, \"What's involved in being a blood donor\"\n\nQ4: True or False: From 2020, anyone over the age of 18 in England is automatically considered an organ donor unless they have explicitly registered a decision not to donate.\nTopic: Law around organ donation\nDifficulty: intermediate\nSkill focus: Understanding legal frameworks\nAnswer: True\nExplanation: Page 13 states, \"From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group.\"\nSource reference: Page 13, \"Organ donation: legal changes to save more lives\"\n\nQ5: Which of the following is the most common method for donating stem cells, according to the provided material?\nTopic: Stem cell donation process\nDifficulty: intermediate\nSkill focus: Data interpretation\nAnswer: B\nOptions:\n- A. A) Through a bone marrow donation procedure\n- B. B) Through the bloodstream\n- C. C) Directly from umbilical cord blood\n- D. D) Via a surgical removal of lymph nodes\nExplanation: Page 10 states that \"Stem cells can be donated in one of two ways: through the bloodstream (90% of donors) or bone marrow donation procedure (10% of donors).\" Therefore, through the bloodstream is the most common.\nSource reference: Page 10, \"What's involved in being a stem cell donor?\"\n\nQ6: Explain two reasons why an individual might choose not to donate, based on the examples provided in the study material.\nTopic: Individual choice to donate\nDifficulty: higher\nSkill focus: Analysis of considerations\nAnswer: An individual might choose not to donate blood due to a fear of needles. Another reason for choosing not to donate organs is feeling uncomfortable with the idea of their organs being used after death, leading them to opt out on the NHS Organ Donation Register.\nExplanation: Page 16 provides two speech bubbles illustrating reasons for not donating: \"I'm really scared of needles, so giving blood isn't something I feel I'm able to do.\" and \"I feel uncomfortable with the idea of my organs being used after I die, so I recorded my decision to opt out of organ donation on the NHS Organ Donation Register.\"\nSource reference: Page 16, \"Why do people choose not to donate?\"\n",
+  "autoSignals": {
+    "tokens": 667,
+    "sentences": 23,
+    "words": 667,
+    "info_entropy_mean": 7.445,
+    "info_entropy_stddev": 1.4203,
+    "idea_density": 18.2174,
+    "repetition_compression_ratio": 0.2987,
+    "templates_per_token": 0.4303,
+    "subj_lexicon_ratio": 0.0045,
+    "avg_sentence_len": 29,
+    "flesch_reading_ease": 38.26,
+    "fk_grade": 15.13,
+    "gunning_fog": 19.34
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 1
+    },
+    "domain": "qa",
+    "annoyance": 1,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.445,
+          "idea_density": 18.2174
+        },
+        "spans": [],
+        "rationale": "The quiz format is inherently concise and information-dense. Each question and explanation is direct and free of filler."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0045
+        },
+        "spans": [],
+        "rationale": "All content directly addresses the stated topic of blood, organ, and stem cell donation, aligning perfectly with the quiz's summary."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The quiz is internally consistent, with all answers and explanations correctly referencing the provided source material. The information is accurate for the topic."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0045
+        },
+        "spans": [],
+        "rationale": "The text is objective and fact-based. It even includes a question on reasons for not donating, presenting a balanced perspective."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "templates_per_token": 0.4303,
+          "repetition_compression_ratio": 0.2987
+        },
+        "spans": [],
+        "rationale": "The text follows a rigid, repetitive template for each question block. While highly formulaic, this structure is appropriate and effective for a quiz."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "avg_sentence_len": 29
+        },
+        "spans": [],
+        "rationale": "The quiz progresses logically through sub-topics, and each question's components (question, answer, explanation) are perfectly aligned and easy to follow."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "flesch_reading_ease": 38.26,
+          "fk_grade": 15.13
+        },
+        "spans": [],
+        "rationale": "The redundant lettering in multiple-choice options (e.g., \"A. A)\") is slightly awkward and unnatural, representing a minor stylistic flaw."
+      }
+    ],
+    "top_fixes": [
+      "Correct the redundant lettering in multiple-choice options (e.g., change 'A. A) 100' to 'A. 100')."
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.0875,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 0,
+      "weight": 0.35,
+      "contribution": 0
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 1,
+      "weight": 0.25,
+      "contribution": 0.0625
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    }
+  ]
+}

@@ -1,12 +1,13 @@
 <script lang="ts">
-	import HomeIcon from '@lucide/svelte/icons/home';
-	import BotIcon from '@lucide/svelte/icons/bot';
-	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import LogOutIcon from '@lucide/svelte/icons/log-out';
-	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
-	import CopyIcon from '@lucide/svelte/icons/copy';
-	import LinkIcon from '@lucide/svelte/icons/link';
+import HomeIcon from '@lucide/svelte/icons/home';
+import BotIcon from '@lucide/svelte/icons/bot';
+import DatabaseIcon from '@lucide/svelte/icons/database';
+import FileTextIcon from '@lucide/svelte/icons/file-text';
+import LogOutIcon from '@lucide/svelte/icons/log-out';
+import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
+import CopyIcon from '@lucide/svelte/icons/copy';
+import LinkIcon from '@lucide/svelte/icons/link';
+import ScanSearchIcon from '@lucide/svelte/icons/scan-search';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -47,13 +48,19 @@
 			icon: FileTextIcon,
 			highlight: (path) => path.startsWith('/admin/prompts')
 		},
-		{
-			title: 'Sample quizzes',
-			href: '/admin/sample-quizzes',
-			icon: FileTextIcon,
-			highlight: (path) => path.startsWith('/admin/sample-quizzes')
-		}
-	] satisfies readonly NavItem[];
+                {
+                        title: 'Sample quizzes',
+                        href: '/admin/sample-quizzes',
+                        icon: FileTextIcon,
+                        highlight: (path) => path.startsWith('/admin/sample-quizzes')
+                },
+                {
+                        title: 'Slop detector',
+                        href: '/admin/slop-detector',
+                        icon: ScanSearchIcon,
+                        highlight: (path) => path.startsWith('/admin/slop-detector')
+                }
+        ] satisfies readonly NavItem[];
 
 	let {
 		currentPath,

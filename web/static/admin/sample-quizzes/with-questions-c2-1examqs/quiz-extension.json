@@ -1,9 +1,9 @@
 {
   "id": "with-questions-c2-1examqs",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:23:48.515Z",
+  "generatedAt": "2025-09-25T08:13:50.312Z",
   "request": {
     "model": "gemini-2.5-flash",
     "questionCount": 10,
@@ -15,153 +15,177 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
-    "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry: States of Matter and Chemical Reactions",
+    "summary": "This extended quiz covers key concepts in GCSE Chemistry, focusing on states of matter, changes of state, interpretation of melting and boiling point data from graphs, experimental techniques for determining these points, the particle model of gases, and basic chemical equation analysis. It includes 10 new questions, bringing the total to 16, providing a balanced assessment of recall, application, and analytical skills. The quiz aligns with AQA GCSE Triple Science Chemistry specifications.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, specifically topics related to states of matter (particle model, changes of state, properties of solids, liquids, and gases) and chemical reactions (reactivity of metals, writing balanced equations with state symbols).",
+    "syllabusAlignment": "AQA GCSE Chemistry (8462) - C1.1 States of matter, C1.2 Mixtures, C2.1 Structure and bonding, C3.1 Quantitative chemistry (state symbols).",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q_new_1",
-        "prompt": "Based on Figure 1, what is the state of substance B at 100°C?",
-        "answer": "Liquid",
-        "explanation": "From Figure 1, substance B has a melting point of approximately 70°C and a boiling point of approximately 190°C. Since 100°C is above its melting point but below its boiling point, substance B will be in the liquid state.",
+        "id": "Q7",
+        "prompt": "In the reaction 2Li(s) + 2H2O(l) → 2LiOH(aq) + H2(g), what are the two reactants?",
+        "answer": "C) Lithium and Water",
+        "explanation": "Reactants are the substances present at the start of a chemical reaction. In the given equation, lithium (Li) and water (H2O) are on the left side, indicating they are the reactants.",
         "type": "multiple_choice",
         "options": [
-          "Solid",
-          "Liquid",
-          "Gas",
-          "Solid and Liquid coexisting"
+          "A) Lithium and Hydrogen",
+          "B) Water and Lithium hydroxide",
+          "C) Lithium and Water",
+          "D) Lithium hydroxide and Hydrogen"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
-        "difficulty": "intermediate",
-        "skillFocus": "Interpreting graphical data, identifying states of matter at specific temperatures.",
-        "sourceReference": "Page 2, Figure 1"
+        "topic": "Chemical reactions and equations",
+        "difficulty": "foundation",
+        "skillFocus": "Identification of reactants",
+        "sourceReference": "Page 1, Question 1(a)"
       },
       {
-        "id": "Q_new_2",
-        "prompt": "For a given material, in which state of matter do the particles have the most kinetic energy?",
-        "answer": "Gas",
-        "explanation": "Particles in the gaseous state have the highest kinetic energy because they are moving rapidly and randomly, with large distances between them, allowing for greater freedom of movement compared to liquids or solids.",
-        "type": "short_answer",
-        "topic": "Particle model, States of matter, Kinetic energy",
+        "id": "Q8",
+        "prompt": "What is the chemical formula for lithium hydroxide, one of the products formed when lithium reacts with water?",
+        "answer": "B) LiOH",
+        "explanation": "The chemical equation explicitly states '2LiOH' as a product, which is the formula for lithium hydroxide.",
+        "type": "multiple_choice",
+        "options": [
+          "A) LiO",
+          "B) LiOH",
+          "C) LiH2O",
+          "D) Li2O"
+        ],
+        "topic": "Chemical reactions and equations",
         "difficulty": "foundation",
-        "skillFocus": "Recalling characteristics of states of matter and particle energy.",
+        "skillFocus": "Recall of chemical formulas from context",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q9",
+        "prompt": "Based on Figure 1, which substance is a solid at 0 °C?",
+        "answer": "B) B",
+        "explanation": "Substance B has a melting point of approximately 70°C. Since 0°C is below its melting point, substance B would be in a solid state at this temperature.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A",
+          "B) B",
+          "C) C",
+          "D) D"
+        ],
+        "topic": "States of matter and changes of state",
+        "difficulty": "intermediate",
+        "skillFocus": "Data analysis, graph interpretation",
+        "sourceReference": "Page 2, Question 1(b), Figure 1"
+      },
+      {
+        "id": "Q10",
+        "prompt": "According to Figure 1, what is the approximate boiling point of substance B?",
+        "answer": "C) 190 °C",
+        "explanation": "By reading the graph for substance B, the boiling point (marked with a solid circle) is approximately 190°C.",
+        "type": "multiple_choice",
+        "options": [
+          "A) 70 °C",
+          "B) 100 °C",
+          "C) 190 °C",
+          "D) 200 °C"
+        ],
+        "topic": "States of matter and changes of state",
+        "difficulty": "foundation",
+        "skillFocus": "Data extraction from graph",
+        "sourceReference": "Page 2, Question 1(b), Figure 1"
+      },
+      {
+        "id": "Q11",
+        "prompt": "Based on Figure 1, what is the approximate melting point of substance A?",
+        "answer": "B) -20 °C",
+        "explanation": "By reading the graph for substance A, the melting point (marked with an 'x') is approximately -20°C.",
+        "type": "multiple_choice",
+        "options": [
+          "A) -100 °C",
+          "B) -20 °C",
+          "C) 0 °C",
+          "D) 50 °C"
+        ],
+        "topic": "States of matter and changes of state",
+        "difficulty": "foundation",
+        "skillFocus": "Data extraction from graph",
+        "sourceReference": "Page 2, Question 1(b), Figure 1"
+      },
+      {
+        "id": "Q12",
+        "prompt": "Suggest one reason why the student could not use the apparatus shown in Figure 2 to determine the exact melting point of substance B.",
+        "answer": "The thermometer is placed in the water bath, not directly in substance B, meaning it measures the water temperature rather than the substance's temperature directly. OR The water bath provides indirect heating, which may not ensure uniform or precise temperature measurement of substance B.",
+        "explanation": "For an exact melting point, the thermometer should be immersed directly into the substance being measured. In Figure 2, the thermometer is in the water, which acts as a heating medium, but does not directly measure the temperature of substance B itself, leading to potential inaccuracies.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, measurement accuracy",
+        "difficulty": "higher",
+        "skillFocus": "Analysis of experimental design, identification of sources of error",
+        "sourceReference": "Page 4, Question 1(f), Figure 2"
+      },
+      {
+        "id": "Q13",
+        "prompt": "What is the primary function of the water in the apparatus shown in Figure 2 when determining melting/boiling points?",
+        "answer": "C) To provide indirect and even heating",
+        "explanation": "A water bath is commonly used to heat substances gently and evenly. The water ensures that the substance B is heated gradually and uniformly, preventing localized overheating.",
+        "type": "multiple_choice",
+        "options": [
+          "A) To react with substance B",
+          "B) To cool substance B",
+          "C) To provide indirect and even heating",
+          "D) To dissolve substance B"
+        ],
+        "topic": "Experimental techniques, heating methods",
+        "difficulty": "intermediate",
+        "skillFocus": "Understanding experimental setup",
+        "sourceReference": "Page 4, Question 1(e), Figure 2"
+      },
+      {
+        "id": "Q14",
+        "prompt": "For a given material, in which state of matter are the particles typically arranged in a regular, fixed pattern?",
+        "answer": "C) Solid",
+        "explanation": "In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating lattice structure.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Gas",
+          "B) Liquid",
+          "C) Solid",
+          "D) Plasma"
+        ],
+        "topic": "Particle model, states of matter",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of particle arrangement in states of matter",
         "sourceReference": "Page 5, Question 2(b)"
       },
       {
-        "id": "Q_new_3",
-        "prompt": "A different substance, E, has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at -75 °C?",
-        "answer": "Solid",
-        "explanation": "Substance E has a melting point of -50°C. At -75°C, the temperature is below its melting point, meaning it will be in the solid state.",
+        "id": "Q15",
+        "prompt": "For a given material, in which state of matter do the particles possess the most kinetic energy?",
+        "answer": "C) Gas",
+        "explanation": "Gas particles have the highest kinetic energy because they are far apart and move rapidly and randomly, colliding frequently with each other and the container walls.",
         "type": "multiple_choice",
         "options": [
-          "Solid",
-          "Liquid",
-          "Gas",
-          "Solid and Liquid coexisting"
+          "A) Solid",
+          "B) Liquid",
+          "C) Gas",
+          "D) Plasma"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
+        "topic": "Particle model, states of matter",
         "difficulty": "intermediate",
-        "skillFocus": "Applying knowledge of melting points to determine state at a given temperature.",
-        "sourceReference": "Page 3, Question 1(d)"
+        "skillFocus": "Recall of kinetic energy in states of matter",
+        "sourceReference": "Page 5, Question 2(b)"
       },
       {
-        "id": "Q_new_4",
-        "prompt": "Suggest one reason why the student could not use the apparatus in Figure 2 to determine the exact melting point of substance B.",
-        "answer": "The thermometer is in the water, not directly in substance B, so it measures the water temperature, not the substance's temperature. There might be a temperature difference between the water and substance B.",
-        "explanation": "For an exact measurement, the thermometer should be immersed directly into the substance whose melting point is being determined. In Figure 2, the thermometer is in the water bath, which may not be at the exact same temperature as substance B, leading to an inaccurate reading for substance B's melting point.",
-        "type": "short_answer",
-        "topic": "Experimental techniques, States of matter, Accuracy",
-        "difficulty": "higher",
-        "skillFocus": "Evaluating experimental procedures, identifying sources of error.",
-        "sourceReference": "Page 4, Question 1(f)"
-      },
-      {
-        "id": "Q_new_5",
-        "prompt": "Which of the following best describes the arrangement of particles in a liquid?",
-        "answer": "Closely packed but able to slide past each other",
-        "explanation": "In a liquid, particles are still relatively close together but are not held in fixed positions like in a solid. They can move and slide past one another, which is why liquids can flow and take the shape of their container.",
+        "id": "Q16",
+        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Besides being far apart, which other characteristic of gas particle movement does this model effectively demonstrate?",
+        "answer": "C) The particles move randomly",
+        "explanation": "The shaking motion causes the balls to move in unpredictable directions and paths, accurately representing the random motion of gas particles. The study material explicitly lists 'The balls move randomly' as a good characteristic.",
         "type": "multiple_choice",
         "options": [
-          "Closely packed in fixed positions",
-          "Widely spaced and moving randomly",
-          "Closely packed but able to slide past each other",
-          "Arranged in a regular lattice structure"
+          "A) The particles move slowly",
+          "B) The particles are in fixed positions",
+          "C) The particles move randomly",
+          "D) The particles are different colours"
         ],
-        "topic": "Particle model, States of matter",
+        "topic": "Particle model, states of matter",
         "difficulty": "foundation",
-        "skillFocus": "Recalling characteristics of states of matter.",
-        "sourceReference": "General knowledge from Page 1, Page 5"
-      },
-      {
-        "id": "Q_new_6",
-        "prompt": "Describe how the movement of particles changes when a liquid turns into a gas.",
-        "answer": "When a liquid turns into a gas, the particles gain enough kinetic energy to overcome the forces of attraction between them. They move much faster, become widely spaced, and move randomly and chaotically throughout the entire volume available.",
-        "explanation": "As a liquid is heated to its boiling point, particles absorb energy, increasing their kinetic energy. This allows them to break free from the intermolecular forces holding them in a relatively fixed volume, leading to a transition to the gaseous state where particles are far apart and move with high speed and randomness.",
-        "type": "short_answer",
-        "topic": "Particle model, States of matter, Phase changes",
-        "difficulty": "intermediate",
-        "skillFocus": "Explaining changes in particle behavior during phase transitions.",
-        "sourceReference": "General knowledge from Page 1, Page 5"
-      },
-      {
-        "id": "Q_new_7",
-        "prompt": "Referring to Figure 1, which substance has a melting point closest to 0°C?",
-        "answer": "A",
-        "explanation": "From Figure 1: Substance A has a melting point of approximately -10°C. Substance B has a melting point of approximately 70°C. Substance C has a melting point of approximately 10°C. Substance D has a melting point of approximately -180°C. Of these, -10°C (Substance A) is closest to 0°C.",
-        "type": "multiple_choice",
-        "options": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "topic": "States of matter, Data interpretation",
-        "difficulty": "foundation",
-        "skillFocus": "Reading and interpreting graphical data points.",
-        "sourceReference": "Page 2, Figure 1"
-      },
-      {
-        "id": "Q_new_8",
-        "prompt": "What is the general term for the process where a solid turns directly into a gas without passing through a liquid phase?",
-        "answer": "Sublimation",
-        "explanation": "Sublimation is the phase transition of a substance directly from the solid to the gas state, without passing through the liquid state. An example is dry ice (solid carbon dioxide) turning into gaseous carbon dioxide.",
-        "type": "short_answer",
-        "topic": "States of matter, Phase changes",
-        "difficulty": "foundation",
-        "skillFocus": "Recalling scientific terminology for phase changes.",
-        "sourceReference": "General knowledge from Page 1"
-      },
-      {
-        "id": "Q_new_9",
-        "prompt": "If the small balls in the model (Question 2) were to represent a liquid, which statement would be true about their movement and arrangement compared to a gas?",
-        "answer": "The balls would be more closely packed and move more slowly than in a gas.",
-        "explanation": "In a liquid, particles are more closely packed than in a gas, and while they can move past each other, their movement is less energetic and random compared to gas particles. They would have less kinetic energy than gas particles, but not be in fixed positions like a solid.",
-        "type": "multiple_choice",
-        "options": [
-          "The balls would be more widely spaced and move more randomly than in a gas.",
-          "The balls would be more closely packed and move more slowly than in a gas.",
-          "The balls would be in fixed positions and vibrate, unlike in a gas.",
-          "The balls would have less kinetic energy but still be widely spaced."
-        ],
-        "topic": "Particle model, States of matter, Analogy",
-        "difficulty": "intermediate",
-        "skillFocus": "Applying the particle model to different states and comparing them.",
-        "sourceReference": "Page 5, Question 2(a) and 2(b)"
-      },
-      {
-        "id": "Q_new_10",
-        "prompt": "In the reaction 2Li(s) + 2H2O(l) → 2LiOH(aq) + H2(g), what does the symbol '(s)' next to Lithium (Li) represent?",
-        "answer": "Solid",
-        "explanation": "In chemical equations, state symbols indicate the physical state of the reactants and products. '(s)' stands for solid, '(l)' for liquid, '(g)' for gas, and '(aq)' for aqueous solution.",
-        "type": "short_answer",
-        "topic": "Chemical reactions, State symbols",
-        "difficulty": "foundation",
-        "skillFocus": "Interpreting state symbols in chemical equations.",
-        "sourceReference": "Page 1, Question 1(a)"
+        "skillFocus": "Understanding models, recall of gas properties",
+        "sourceReference": "Page 5, Question 2(a)"
       }
     ]
   },

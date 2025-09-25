@@ -1,0 +1,151 @@
+{
+  "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+  "evaluatedAt": "2025-09-25T08:09:22.738Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.\nTEXT: <<<Quiz title: AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz\nSummary: This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: How are covalent bonds formed?\nTopic: Covalent Bond Formation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: By atoms sharing electrons\nOptions:\n- A. By atoms sharing electrons\n- B. By atoms transferring electrons\n- C. By atoms gaining electrons\n- D. By atoms losing electrons\nExplanation: Covalent bonds are formed when two non-metal atoms share one or more pairs of electrons to achieve a stable outer electron shell.\nSource reference: C2 questions, Q1\n\nQ2: Which type of atoms typically form covalent bonds between them?\nTopic: Types of Atoms in Covalent Bonds\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Non-metals\nOptions:\n- A. Metals and non-metals\n- B. Non-metals\n- C. Metals\n- D. Noble gases\nExplanation: Covalent bonds primarily occur between non-metal atoms, as they both have high electronegativity and tend to share electrons rather than transfer them.\nSource reference: C2 questions, Q2\n\nQ3: Why do giant covalent substances have high melting points?\nTopic: Properties of Giant Covalent Structures\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: It takes a lot of energy to break the strong covalent bonds between the atoms.\nExplanation: Giant covalent structures consist of billions of atoms held together by a vast network of strong covalent bonds. A significant amount of thermal energy is required to overcome these strong bonds throughout the entire structure, leading to very high melting points.\nSource reference: C2 questions, Q6\n\nQ4: Why do small molecules have low melting points?\nTopic: Properties of Simple Molecular Structures\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: Only a small amount of energy is needed to break the weak intermolecular forces.\nExplanation: Small molecules are held together by strong covalent bonds within the molecule, but the forces between individual molecules (intermolecular forces) are weak. Only a small amount of energy is required to overcome these weak intermolecular forces, resulting in low melting and boiling points.\nSource reference: C2 questions, Q7\n\nQ5: Why can graphite conduct electricity?\nTopic: Graphite Properties\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: The delocalised electrons can move through the graphite.\nExplanation: In graphite, each carbon atom is bonded to three other carbon atoms, leaving one outer electron per atom free. These electrons become delocalised and are free to move between the layers, allowing graphite to conduct electricity.\nSource reference: C2 questions, Q11\n\nQ6: What is graphene?\nTopic: Graphene Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: A single layer of graphite\nOptions:\n- A. A single layer of graphite\n- B. A hollow cage of carbon atoms\n- C. A hollow cylinder of carbon atoms\n- D. A giant covalent lattice of silicon atoms\nExplanation: Graphene is an allotrope of carbon consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one atomic layer of graphite.\nSource reference: C2 questions, Q13\n>>>\nAUTO_SIGNALS:\n- tokens: 552\n- sentences: 35\n- words: 552\n- info_entropy_mean: 7.0875\n- info_entropy_stddev: 1.4369\n- idea_density: 11\n- repetition_compression_ratio: 0.2785\n- templates_per_token: 0.346\n- subj_lexicon_ratio: 0.0036\n- avg_sentence_len: 15.7714\n- flesch_reading_ease: 34.65\n- fk_grade: 12.34\n- gunning_fog: 15.87\nREQUEST_ID: with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-quiz-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.",
+  "text": "Quiz title: AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz\nSummary: This quiz covers fundamental concepts of covalent bonding, including its formation, the types of atoms involved, and the properties and structures of different covalent substances. It includes questions on giant covalent structures, simple molecular structures, and carbon allotropes such as graphite and graphene. The quiz features a mix of multiple-choice and short-answer questions, focusing on recall and explanation skills. All questions are directly extracted from the provided C2 Retrieval practice material, ensuring close alignment with the source content.\nMode: extraction\nSubject: chemistry\nBoard: AQA\nQuestion count: 6\n\nQ1: How are covalent bonds formed?\nTopic: Covalent Bond Formation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: By atoms sharing electrons\nOptions:\n- A. By atoms sharing electrons\n- B. By atoms transferring electrons\n- C. By atoms gaining electrons\n- D. By atoms losing electrons\nExplanation: Covalent bonds are formed when two non-metal atoms share one or more pairs of electrons to achieve a stable outer electron shell.\nSource reference: C2 questions, Q1\n\nQ2: Which type of atoms typically form covalent bonds between them?\nTopic: Types of Atoms in Covalent Bonds\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Non-metals\nOptions:\n- A. Metals and non-metals\n- B. Non-metals\n- C. Metals\n- D. Noble gases\nExplanation: Covalent bonds primarily occur between non-metal atoms, as they both have high electronegativity and tend to share electrons rather than transfer them.\nSource reference: C2 questions, Q2\n\nQ3: Why do giant covalent substances have high melting points?\nTopic: Properties of Giant Covalent Structures\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: It takes a lot of energy to break the strong covalent bonds between the atoms.\nExplanation: Giant covalent structures consist of billions of atoms held together by a vast network of strong covalent bonds. A significant amount of thermal energy is required to overcome these strong bonds throughout the entire structure, leading to very high melting points.\nSource reference: C2 questions, Q6\n\nQ4: Why do small molecules have low melting points?\nTopic: Properties of Simple Molecular Structures\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: Only a small amount of energy is needed to break the weak intermolecular forces.\nExplanation: Small molecules are held together by strong covalent bonds within the molecule, but the forces between individual molecules (intermolecular forces) are weak. Only a small amount of energy is required to overcome these weak intermolecular forces, resulting in low melting and boiling points.\nSource reference: C2 questions, Q7\n\nQ5: Why can graphite conduct electricity?\nTopic: Graphite Properties\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: The delocalised electrons can move through the graphite.\nExplanation: In graphite, each carbon atom is bonded to three other carbon atoms, leaving one outer electron per atom free. These electrons become delocalised and are free to move between the layers, allowing graphite to conduct electricity.\nSource reference: C2 questions, Q11\n\nQ6: What is graphene?\nTopic: Graphene Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: A single layer of graphite\nOptions:\n- A. A single layer of graphite\n- B. A hollow cage of carbon atoms\n- C. A hollow cylinder of carbon atoms\n- D. A giant covalent lattice of silicon atoms\nExplanation: Graphene is an allotrope of carbon consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one atomic layer of graphite.\nSource reference: C2 questions, Q13\n",
+  "autoSignals": {
+    "tokens": 552,
+    "sentences": 35,
+    "words": 552,
+    "info_entropy_mean": 7.0875,
+    "info_entropy_stddev": 1.4369,
+    "idea_density": 11,
+    "repetition_compression_ratio": 0.2785,
+    "templates_per_token": 0.346,
+    "subj_lexicon_ratio": 0.0036,
+    "avg_sentence_len": 15.7714,
+    "flesch_reading_ease": 34.65,
+    "fk_grade": 12.34,
+    "gunning_fog": 15.87
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.9
+    },
+    "domain": "qa",
+    "annoyance": 1,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "info_entropy_mean": 7.0875,
+          "idea_density": 11
+        },
+        "spans": [],
+        "rationale": "The text is information-rich and avoids filler. The core quiz content is concise and directly addresses the learning objectives."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "All content is directly relevant to the stated topic of covalent bonding for AQA GCSE Chemistry, with no tangents."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The chemical concepts presented in the questions, answers, and explanations are accurate for the specified educational level (GCSE)."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0036
+        },
+        "spans": [],
+        "rationale": "The content is objective and factual, as expected for a science quiz. There is no subjective language or missing perspective."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "templates_per_token": 0.346,
+          "repetition_compression_ratio": 0.2785
+        },
+        "spans": [
+          {
+            "quote": "Q1: How are covalent bonds formed?\nTopic: Covalent Bond Formation\nDifficulty: foundation\nSkill focus: Recall\nAnswer: By atoms sharing electrons",
+            "char_start": 298,
+            "char_end": 421
+          }
+        ],
+        "rationale": "The quiz format is inherently repetitive (Q, Topic, Answer, etc.), but this is functional and appropriate for the context."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The questions progress logically from basic definitions to more complex properties and specific examples, creating a clear learning path."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "flesch_reading_ease": 34.65,
+          "fk_grade": 12.34
+        },
+        "spans": [],
+        "rationale": "The language is clear, formal, and appropriate for an educational quiz, effectively communicating complex scientific concepts to students."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.0625,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 0,
+      "weight": 0.35,
+      "contribution": 0
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 1,
+      "weight": 0.25,
+      "contribution": 0.0625
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

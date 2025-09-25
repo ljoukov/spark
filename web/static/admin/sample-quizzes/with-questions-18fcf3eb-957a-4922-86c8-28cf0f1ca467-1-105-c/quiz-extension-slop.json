@@ -1,0 +1,176 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "evaluatedAt": "2025-09-25T08:08:03.906Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, further exploring atomic structure, historical models of the atom, properties of sub-atomic particles, and calculations related to atomic composition. It includes 10 new questions, with a mix of multiple-choice and short-answer items, covering fresh angles and underrepresented subtopics from the supplied material. The difficulty ranges from foundation to higher.\nTEXT: <<<Quiz title: GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz\nSummary: This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, further exploring atomic structure, historical models of the atom, properties of sub-atomic particles, and calculations related to atomic composition. It includes 10 new questions, with a mix of multiple-choice and short-answer items, covering fresh angles and underrepresented subtopics from the supplied material. The difficulty ranges from foundation to higher.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: According to Dalton's model, what was the fundamental nature of atoms?\nTopic: Atomic Models\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Atoms were solid spheres that could not be divided into smaller parts.\nOptions:\n- A. A. Atoms were solid spheres that could not be divided into smaller parts.\n- B. B. Atoms consisted of a positive sphere with electrons embedded within it.\n- C. C. Atoms had a dense, positively charged nucleus with electrons orbiting it.\n- D. D. Atoms were composed of protons, neutrons, and electrons in distinct energy levels.\nExplanation: John Dalton's atomic theory proposed that atoms were indivisible, indestructible solid spheres, and that all atoms of a given element were identical.\nSource reference: C1 questions, Q2\n\nQ2: The alpha scattering experiment, conducted by Rutherford and his team, led to which significant discovery about atomic structure?\nTopic: Atomic Models, Experimental Evidence\nDifficulty: higher\nSkill focus: Understanding\nAnswer: An atom's mass and positive charge are concentrated in a small, dense nucleus.\nOptions:\n- A. A. Electrons orbit in fixed energy levels or shells.\n- B. B. Atoms were solid, indivisible spheres.\n- C. C. An atom's mass and positive charge are concentrated in a small, dense nucleus.\n- D. D. The atom is a sphere of positive charge with negative electrons embedded.\nExplanation: The deflection of some alpha particles by the gold foil indicated that the atom's positive charge and most of its mass were concentrated in a tiny central region, which Rutherford named the nucleus.\n\nQ3: Which statement best describes the nuclear model of the atom?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: It consists of a dense nucleus with electrons orbiting it.\nOptions:\n- A. A. A uniform sphere of positive charge with electrons scattered throughout.\n- B. B. A dense nucleus with electrons orbiting it.\n- C. C. Indivisible solid spheres.\n- D. D. Electrons existing in fixed energy levels (shells).\nExplanation: The nuclear model, proposed by Rutherford, describes the atom as having a small, dense, positively charged nucleus at its center, with negatively charged electrons orbiting around it.\n\nQ4: Which sub-atomic particle, an uncharged particle, was discovered by James Chadwick?\nTopic: Sub-atomic Particles, History of Atomic Theory\nDifficulty: foundation\nSkill focus: Recall\nAnswer: The neutron.\nOptions:\n- A. A. The proton.\n- B. B. The electron.\n- C. C. The neutron.\n- D. D. The alpha particle.\nExplanation: James Chadwick discovered the neutron in 1932, an uncharged particle with a mass similar to that of a proton, located in the nucleus.\nSource reference: C1 questions, Q7\n\nQ5: In which specific region of an atom are protons and neutrons found?\nTopic: Atomic Structure, Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: In the nucleus.\nOptions:\n- A. A. In the electron shells.\n- B. B. Orbiting the nucleus.\n- C. C. In the nucleus.\n- D. D. Distributed throughout the atom's volume.\nExplanation: Protons and neutrons, collectively known as nucleons, are tightly packed together in the central part of the atom called the nucleus.\nSource reference: C1 questions, Q8\n\nQ6: What are the approximate relative masses of a proton, neutron, and electron, respectively?\nTopic: Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Proton: 1, Neutron: 1, Electron: 0 (very small).\nOptions:\n- A. A. Proton: 1, Neutron: 1, Electron: 0 (very small).\n- B. B. Proton: 0, Neutron: 1, Electron: 1.\n- C. C. Proton: 1, Neutron: 0, Electron: 1.\n- D. D. Proton: 1, Neutron: 1, Electron: -1.\nExplanation: Protons and neutrons have a relative mass of approximately 1 atomic mass unit each, while electrons have a negligible relative mass, often approximated as 0 for calculations.\nSource reference: C1 questions, Q9\n\nQ7: How can you determine the number of protons in an atom of a specific element?\nTopic: Atomic Number, Periodic Table\nDifficulty: foundation\nSkill focus: Recall\nAnswer: By referring to the atomic number on the Periodic Table.\nExplanation: The atomic number (Z) of an element, found on the Periodic Table, directly corresponds to the number of protons in the nucleus of an atom of that element.\nSource reference: C1 questions, Q11\n\nQ8: Explain how to calculate the number of neutrons in an atom, given its mass number and atomic number.\nTopic: Atomic Structure, Mass Number\nDifficulty: intermediate\nSkill focus: Application\nAnswer: Subtract the atomic number from the mass number.\nExplanation: The mass number (A) represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, you get the number of neutrons.\nSource reference: C1 questions, Q12\n\nQ9: Why do atoms typically have no overall electrical charge?\nTopic: Atomic Structure, Charge Balance\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: They contain equal numbers of positive protons and negative electrons.\nOptions:\n- A. A. They only contain neutrons, which are neutral.\n- B. B. They contain equal numbers of positive protons and negative electrons.\n- C. C. The positive charge of the nucleus is cancelled out by the negative charge of the neutrons.\n- D. D. Electrons are uncharged when in fixed energy levels.\nExplanation: In a neutral atom, the number of positively charged protons in the nucleus is equal to the number of negatively charged electrons orbiting the nucleus, resulting in a net charge of zero.\nSource reference: C1 questions, Q13\n\nQ10: According to the Bohr model, what is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?\nTopic: Electron Configuration, Bohr Model\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: Up to 2 in the first shell and up to 8 in the second and third shells.\nOptions:\n- A. A. 2, 8, 8\n- B. B. 2, 2, 8\n- C. C. 8, 8, 2\n- D. D. 2, 8, 18\nExplanation: The electron shells have specific capacities: the first shell can hold up to 2 electrons, and the second and third shells can hold up to 8 electrons each (for the first 20 elements, which is typically covered at GCSE).\nSource reference: C1 questions, Q14\n>>>\nAUTO_SIGNALS:\n- tokens: 1060\n- sentences: 127\n- words: 1060\n- info_entropy_mean: 7.1993\n- info_entropy_stddev: 1.7155\n- idea_density: 4.9843\n- repetition_compression_ratio: 0.2467\n- templates_per_token: 0.5047\n- subj_lexicon_ratio: 0.0009\n- avg_sentence_len: 8.3465\n- flesch_reading_ease: 50.95\n- fk_grade: 8.23\n- gunning_fog: 12.17\nREQUEST_ID: with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c-extension-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, further exploring atomic structure, historical models of the atom, properties of sub-atomic particles, and calculations related to atomic composition. It includes 10 new questions, with a mix of multiple-choice and short-answer items, covering fresh angles and underrepresented subtopics from the supplied material. The difficulty ranges from foundation to higher.",
+  "text": "Quiz title: GCSE Chemistry C1 Atomic Structure and Separation Techniques Quiz\nSummary: This extended quiz builds upon fundamental concepts in GCSE Chemistry C1, further exploring atomic structure, historical models of the atom, properties of sub-atomic particles, and calculations related to atomic composition. It includes 10 new questions, with a mix of multiple-choice and short-answer items, covering fresh angles and underrepresented subtopics from the supplied material. The difficulty ranges from foundation to higher.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: According to Dalton's model, what was the fundamental nature of atoms?\nTopic: Atomic Models\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Atoms were solid spheres that could not be divided into smaller parts.\nOptions:\n- A. A. Atoms were solid spheres that could not be divided into smaller parts.\n- B. B. Atoms consisted of a positive sphere with electrons embedded within it.\n- C. C. Atoms had a dense, positively charged nucleus with electrons orbiting it.\n- D. D. Atoms were composed of protons, neutrons, and electrons in distinct energy levels.\nExplanation: John Dalton's atomic theory proposed that atoms were indivisible, indestructible solid spheres, and that all atoms of a given element were identical.\nSource reference: C1 questions, Q2\n\nQ2: The alpha scattering experiment, conducted by Rutherford and his team, led to which significant discovery about atomic structure?\nTopic: Atomic Models, Experimental Evidence\nDifficulty: higher\nSkill focus: Understanding\nAnswer: An atom's mass and positive charge are concentrated in a small, dense nucleus.\nOptions:\n- A. A. Electrons orbit in fixed energy levels or shells.\n- B. B. Atoms were solid, indivisible spheres.\n- C. C. An atom's mass and positive charge are concentrated in a small, dense nucleus.\n- D. D. The atom is a sphere of positive charge with negative electrons embedded.\nExplanation: The deflection of some alpha particles by the gold foil indicated that the atom's positive charge and most of its mass were concentrated in a tiny central region, which Rutherford named the nucleus.\n\nQ3: Which statement best describes the nuclear model of the atom?\nTopic: Atomic Models\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: It consists of a dense nucleus with electrons orbiting it.\nOptions:\n- A. A. A uniform sphere of positive charge with electrons scattered throughout.\n- B. B. A dense nucleus with electrons orbiting it.\n- C. C. Indivisible solid spheres.\n- D. D. Electrons existing in fixed energy levels (shells).\nExplanation: The nuclear model, proposed by Rutherford, describes the atom as having a small, dense, positively charged nucleus at its center, with negatively charged electrons orbiting around it.\n\nQ4: Which sub-atomic particle, an uncharged particle, was discovered by James Chadwick?\nTopic: Sub-atomic Particles, History of Atomic Theory\nDifficulty: foundation\nSkill focus: Recall\nAnswer: The neutron.\nOptions:\n- A. A. The proton.\n- B. B. The electron.\n- C. C. The neutron.\n- D. D. The alpha particle.\nExplanation: James Chadwick discovered the neutron in 1932, an uncharged particle with a mass similar to that of a proton, located in the nucleus.\nSource reference: C1 questions, Q7\n\nQ5: In which specific region of an atom are protons and neutrons found?\nTopic: Atomic Structure, Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: In the nucleus.\nOptions:\n- A. A. In the electron shells.\n- B. B. Orbiting the nucleus.\n- C. C. In the nucleus.\n- D. D. Distributed throughout the atom's volume.\nExplanation: Protons and neutrons, collectively known as nucleons, are tightly packed together in the central part of the atom called the nucleus.\nSource reference: C1 questions, Q8\n\nQ6: What are the approximate relative masses of a proton, neutron, and electron, respectively?\nTopic: Sub-atomic Particles\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Proton: 1, Neutron: 1, Electron: 0 (very small).\nOptions:\n- A. A. Proton: 1, Neutron: 1, Electron: 0 (very small).\n- B. B. Proton: 0, Neutron: 1, Electron: 1.\n- C. C. Proton: 1, Neutron: 0, Electron: 1.\n- D. D. Proton: 1, Neutron: 1, Electron: -1.\nExplanation: Protons and neutrons have a relative mass of approximately 1 atomic mass unit each, while electrons have a negligible relative mass, often approximated as 0 for calculations.\nSource reference: C1 questions, Q9\n\nQ7: How can you determine the number of protons in an atom of a specific element?\nTopic: Atomic Number, Periodic Table\nDifficulty: foundation\nSkill focus: Recall\nAnswer: By referring to the atomic number on the Periodic Table.\nExplanation: The atomic number (Z) of an element, found on the Periodic Table, directly corresponds to the number of protons in the nucleus of an atom of that element.\nSource reference: C1 questions, Q11\n\nQ8: Explain how to calculate the number of neutrons in an atom, given its mass number and atomic number.\nTopic: Atomic Structure, Mass Number\nDifficulty: intermediate\nSkill focus: Application\nAnswer: Subtract the atomic number from the mass number.\nExplanation: The mass number (A) represents the total number of protons and neutrons in the nucleus. By subtracting the atomic number (number of protons) from the mass number, you get the number of neutrons.\nSource reference: C1 questions, Q12\n\nQ9: Why do atoms typically have no overall electrical charge?\nTopic: Atomic Structure, Charge Balance\nDifficulty: intermediate\nSkill focus: Understanding\nAnswer: They contain equal numbers of positive protons and negative electrons.\nOptions:\n- A. A. They only contain neutrons, which are neutral.\n- B. B. They contain equal numbers of positive protons and negative electrons.\n- C. C. The positive charge of the nucleus is cancelled out by the negative charge of the neutrons.\n- D. D. Electrons are uncharged when in fixed energy levels.\nExplanation: In a neutral atom, the number of positively charged protons in the nucleus is equal to the number of negatively charged electrons orbiting the nucleus, resulting in a net charge of zero.\nSource reference: C1 questions, Q13\n\nQ10: According to the Bohr model, what is the maximum number of electrons that can be placed in the first, second, and third electron shells, respectively?\nTopic: Electron Configuration, Bohr Model\nDifficulty: intermediate\nSkill focus: Recall\nAnswer: Up to 2 in the first shell and up to 8 in the second and third shells.\nOptions:\n- A. A. 2, 8, 8\n- B. B. 2, 2, 8\n- C. C. 8, 8, 2\n- D. D. 2, 8, 18\nExplanation: The electron shells have specific capacities: the first shell can hold up to 2 electrons, and the second and third shells can hold up to 8 electrons each (for the first 20 elements, which is typically covered at GCSE).\nSource reference: C1 questions, Q14\n",
+  "autoSignals": {
+    "tokens": 1060,
+    "sentences": 127,
+    "words": 1060,
+    "info_entropy_mean": 7.1993,
+    "info_entropy_stddev": 1.7155,
+    "idea_density": 4.9843,
+    "repetition_compression_ratio": 0.2467,
+    "templates_per_token": 0.5047,
+    "subj_lexicon_ratio": 0.0009,
+    "avg_sentence_len": 8.3465,
+    "flesch_reading_ease": 50.95,
+    "fk_grade": 8.23,
+    "gunning_fog": 12.17
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.8
+    },
+    "domain": "qa",
+    "annoyance": 3,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "idea_density": 4.9843,
+          "repetition_compression_ratio": 0.2467
+        },
+        "spans": [
+          {
+            "quote": "an uncharged particle,",
+            "char_start": 2008,
+            "char_end": 2029
+          }
+        ],
+        "rationale": "Mostly concise, but isolated phrases like \"an uncharged particle\" in Q4 add redundant information already implied by the context of discovering the neutron."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {},
+        "spans": [],
+        "rationale": "The quiz questions are all highly relevant to the stated topic of atomic structure. The misleading title is addressed under Factuality."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0009
+        },
+        "spans": [
+          {
+            "quote": "and Separation Techniques",
+            "char_start": 42,
+            "char_end": 65
+          }
+        ],
+        "rationale": "The quiz title includes \"Separation Techniques,\" but the quiz contains no questions on this topic, making the title factually inaccurate regarding the document's content."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.0009
+        },
+        "spans": [],
+        "rationale": "The text is a factual quiz with objective questions and answers. It displays no bias or unjustified subjectivity."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 3,
+        "auto_signals": {
+          "templates_per_token": 0.5047,
+          "repetition_compression_ratio": 0.2467
+        },
+        "spans": [
+          {
+            "quote": "- A. A.",
+            "char_start": 746,
+            "char_end": 752
+          },
+          {
+            "quote": "Answer: Up to 2 in the first shell and up to 8 in the second and third shells.",
+            "char_start": 4208,
+            "char_end": 4290
+          }
+        ],
+        "rationale": "A glaring, repetitive formatting error (\"A. A.\", \"B. B.\") plagues every multiple-choice question. Additionally, Q10 provides a full-sentence answer instead of the option letter."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 1,
+        "auto_signals": {},
+        "spans": [
+          {
+            "quote": "Answer: Up to 2 in the first shell and up to 8 in the second and third shells.\nOptions:\n- A. A. 2, 8, 8",
+            "char_start": 4208,
+            "char_end": 4316
+          }
+        ],
+        "rationale": "The quiz is mostly coherent, but Q10 presents a full-sentence answer before listing multiple-choice options, which is inconsistent with the format and disrupts the flow."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "flesch_reading_ease": 50.95,
+          "fk_grade": 8.23
+        },
+        "spans": [],
+        "rationale": "The language is clear, formal, and perfectly suited for its purpose as a GCSE chemistry quiz, aiding comprehension without being overly complex or simplistic."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.3125,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 1,
+      "weight": 0.35,
+      "contribution": 0.0875
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 3,
+      "weight": 0.25,
+      "contribution": 0.1875
+    },
+    {
+      "code": "Coherence",
+      "score": 1,
+      "weight": 0.05,
+      "contribution": 0.0125
+    },
+    {
+      "code": "Tone",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    }
+  ]
+}

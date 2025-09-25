@@ -1,0 +1,169 @@
+{
+  "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+  "evaluatedAt": "2025-09-25T08:11:12.231Z",
+  "prompt": "You are a meticulous copy editor. Judge the quality of the given text — not whether it is AI-written.\nWork in three passes: (1) skim and summarise the purpose/audience; (2) extract minimal spans proving issues; (3) score each axis 0-4 with ≤25 word rationale, then produce JSON.\nGeneral guidance: focus on reader value, consider context, and code the single most significant issue per span. Prefer precise spans over long quotes.\nRubric:\n- Density — flag filler or low-information wording. 0=clean, 4=pervasive filler.\n- Relevance — stays on task; penalise tangents. 0=on-task, 4=mostly irrelevant.\n- Factuality — accuracy and hallucinations. 0=correct, 4=core fabrications.\n- Bias — unjustified subjectivity or missing POV. 0=balanced, 4=pervasive skew.\n- Structure — repetition or templated phrasing. 0=varied, 4=formulaic skeleton.\n- Coherence — logical flow. 0=flows, 4=incoherent or contradictory.\n- Tone — fluency, verbosity, complexity. 0=natural, 4=burdens comprehension.\nScoring scale:\n- 0 — no issue observed.\n- 1 — slight issue; isolated.\n- 2 — recurring issue in local spans.\n- 3 — major issue across sections.\n- 4 — severe issue dominating the text.\nDomain weighting guidance:\n- News: emphasise Density, Relevance, Tone, Coherence, Bias.\n- QA: emphasise Factuality and Structure; Density/Relevance secondary.\n- Other: average of the two profiles.\nWhen quoting spans include char_start and char_end indices from the TEXT block (0-indexed, inclusive/exclusive).\nFor each axis include an auto_signals array of {\"name\":<metric>,\"value\":<number>} entries (max 4) using the most relevant metrics from AUTO_SIGNALS.\nAfter scoring compute domain-weighted risk = Σ((score/4)×weight). Use threshold 0.55 to set overall_slop.label (1=slop,0=clean). Confidence should reflect certainty in that label.\nReturn JSON only, matching the schema.\nDOMAIN: qa\nCONTEXT: This extension quiz builds upon fundamental concepts of covalent bonding, delving deeper into the structures and properties of giant covalent substances, small molecules, and polymers. It also expands on carbon allotropes, including detailed descriptions of graphite, graphene, fullerenes, and nanotubes, and their specific properties and uses. The questions are designed to test recall, explanation, and descriptive skills, strictly adhering to the provided C2 Retrieval practice material and avoiding duplication from the initial quiz.\nTEXT: <<<Quiz title: AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz - Extension\nSummary: This extension quiz builds upon fundamental concepts of covalent bonding, delving deeper into the structures and properties of giant covalent substances, small molecules, and polymers. It also expands on carbon allotropes, including detailed descriptions of graphite, graphene, fullerenes, and nanotubes, and their specific properties and uses. The questions are designed to test recall, explanation, and descriptive skills, strictly adhering to the provided C2 Retrieval practice material and avoiding duplication from the initial quiz.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: Describe the general structure and bonding characteristics of a giant covalent substance.\nTopic: Giant Covalent Structure\nDifficulty: intermediate\nSkill focus: Description\nAnswer: Billions of atoms bonded together by strong covalent bonds.\nExplanation: Giant covalent substances form extensive networks where billions of atoms are held together by strong covalent bonds throughout the entire structure, creating a vast lattice.\nSource reference: C2 questions, Q3\n\nQ2: Which statement accurately describes the structure and bonding within and between small molecules?\nTopic: Small Molecular Structure\nDifficulty: intermediate\nSkill focus: Description/Analysis\nAnswer: Small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules.\nOptions:\n- A. Small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules.\n- B. Billions of atoms bonded together by strong covalent bonds throughout the entire structure.\n- C. Many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.\n- D. Atoms are held together by strong electrostatic forces between oppositely charged ions.\nExplanation: Small molecules are discrete units where a few atoms are strongly covalently bonded together. However, the forces *between* these individual molecules are weak intermolecular forces, which are easily overcome.\nSource reference: C2 questions, Q4\n\nQ3: Describe the structure and bonding of polymers.\nTopic: Polymer Structure\nDifficulty: intermediate\nSkill focus: Description\nAnswer: Many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.\nExplanation: Polymers are large molecules composed of many identical repeating units (monomers) linked by strong covalent bonds to form long chains. Weak intermolecular forces exist between these polymer chains.\nSource reference: C2 questions, Q5\n\nQ4: Compared to small molecules, why do large molecules typically exhibit higher melting and boiling points?\nTopic: Properties of Large Molecules\nDifficulty: intermediate\nSkill focus: Explanation/Reasoning\nAnswer: The intermolecular forces are stronger in large molecules.\nOptions:\n- A. The covalent bonds within large molecules are stronger.\n- B. Large molecules have more delocalised electrons.\n- C. The intermolecular forces are stronger in large molecules.\n- D. Large molecules have a more complex crystal lattice structure.\nExplanation: As the size of molecules increases, the cumulative strength of the intermolecular forces between them also increases. More energy is required to overcome these stronger forces, leading to higher melting and boiling points.\nSource reference: C2 questions, Q8\n\nQ5: Explain why the majority of covalent substances are unable to conduct electricity.\nTopic: Covalent Substances and Conductivity\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: They do not have delocalised electrons or ions.\nExplanation: Electrical conductivity requires the presence of mobile charged particles, such as delocalised electrons or free ions. Most covalent substances have all their outer electrons localised in bonds and do not form ions, hence they cannot conduct electricity.\nSource reference: C2 questions, Q9\n\nQ6: Detail the structure and bonding characteristics of graphite.\nTopic: Graphite Structure and Bonding\nDifficulty: higher\nSkill focus: Description/Analysis\nAnswer: Each carbon atom is bonded to three others in hexagonal rings arranged in layers – it has delocalised electrons and weak forces between the layers.\nExplanation: Graphite consists of layers of carbon atoms, where each carbon atom is covalently bonded to three other carbon atoms in hexagonal rings. This leaves one outer electron per carbon atom delocalised, and weak intermolecular forces exist between the layers.\nSource reference: C2 questions, Q10\n\nQ7: What property of graphite's structure accounts for its softness and ability to act as a lubricant?\nTopic: Graphite Properties\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: Layers are not bonded so can slide over each other.\nOptions:\n- A. It has delocalised electrons that allow for easy movement.\n- B. The carbon atoms are only weakly bonded together.\n- C. Layers are not bonded so can slide over each other.\n- D. It forms a hollow cage structure.\nExplanation: The weak intermolecular forces between the distinct layers of carbon atoms in graphite allow these layers to easily slide past one another, which makes graphite soft and slippery, useful as a lubricant.\nSource reference: C2 questions, Q12\n\nQ8: List two distinct properties of graphene.\nTopic: Graphene Properties\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Strong, conducts electricity.\nExplanation: Graphene is known for its exceptional strength due to its robust covalent bonding network and its ability to conduct electricity efficiently because of its delocalised electrons.\nSource reference: C2 questions, Q14\n\nQ9: Which statement correctly defines a fullerene?\nTopic: Fullerene Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: A hollow cage of carbon atoms arranged as a sphere or a tube.\nOptions:\n- A. A single layer of graphite.\n- B. A hollow cage of carbon atoms arranged as a sphere or a tube.\n- C. A giant lattice of carbon atoms with strong covalent bonds.\n- D. A long chain of repeating monomer units.\nExplanation: Fullerenes are a class of carbon allotropes characterized by their hollow, cage-like structures, which can be spherical (like buckyballs) or cylindrical (nanotubes).\nSource reference: C2 questions, Q15\n\nQ10: Define what a nanotube is in the context of carbon allotropes.\nTopic: Nanotube Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: Hollow cylinder of carbon atoms.\nExplanation: A nanotube is a specific type of fullerene, characterized by its cylindrical, hollow structure composed entirely of carbon atoms.\nSource reference: C2 questions, Q16\n>>>\nAUTO_SIGNALS:\n- tokens: 970\n- sentences: 71\n- words: 970\n- info_entropy_mean: 7.3707\n- info_entropy_stddev: 1.5536\n- idea_density: 9.7324\n- repetition_compression_ratio: 0.2406\n- templates_per_token: 0.467\n- subj_lexicon_ratio: 0.001\n- avg_sentence_len: 13.662\n- flesch_reading_ease: 27.08\n- fk_grade: 12.88\n- gunning_fog: 16.06\nREQUEST_ID: with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c-extension-slop\nRETURN: {\"overall_slop\":{\"label\":0|1,\"confidence\":0-1},\"domain\":\"news|qa|other\",\"annoyance\":1-5,\"axes\":[...],\"top_fixes\":[\"...\"]}",
+  "domain": "qa",
+  "context": "This extension quiz builds upon fundamental concepts of covalent bonding, delving deeper into the structures and properties of giant covalent substances, small molecules, and polymers. It also expands on carbon allotropes, including detailed descriptions of graphite, graphene, fullerenes, and nanotubes, and their specific properties and uses. The questions are designed to test recall, explanation, and descriptive skills, strictly adhering to the provided C2 Retrieval practice material and avoiding duplication from the initial quiz.",
+  "text": "Quiz title: AQA GCSE Chemistry C2 Covalent Bonding Retrieval Quiz - Extension\nSummary: This extension quiz builds upon fundamental concepts of covalent bonding, delving deeper into the structures and properties of giant covalent substances, small molecules, and polymers. It also expands on carbon allotropes, including detailed descriptions of graphite, graphene, fullerenes, and nanotubes, and their specific properties and uses. The questions are designed to test recall, explanation, and descriptive skills, strictly adhering to the provided C2 Retrieval practice material and avoiding duplication from the initial quiz.\nMode: extension\nSubject: chemistry\nBoard: AQA\nQuestion count: 10\n\nQ1: Describe the general structure and bonding characteristics of a giant covalent substance.\nTopic: Giant Covalent Structure\nDifficulty: intermediate\nSkill focus: Description\nAnswer: Billions of atoms bonded together by strong covalent bonds.\nExplanation: Giant covalent substances form extensive networks where billions of atoms are held together by strong covalent bonds throughout the entire structure, creating a vast lattice.\nSource reference: C2 questions, Q3\n\nQ2: Which statement accurately describes the structure and bonding within and between small molecules?\nTopic: Small Molecular Structure\nDifficulty: intermediate\nSkill focus: Description/Analysis\nAnswer: Small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules.\nOptions:\n- A. Small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules.\n- B. Billions of atoms bonded together by strong covalent bonds throughout the entire structure.\n- C. Many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.\n- D. Atoms are held together by strong electrostatic forces between oppositely charged ions.\nExplanation: Small molecules are discrete units where a few atoms are strongly covalently bonded together. However, the forces *between* these individual molecules are weak intermolecular forces, which are easily overcome.\nSource reference: C2 questions, Q4\n\nQ3: Describe the structure and bonding of polymers.\nTopic: Polymer Structure\nDifficulty: intermediate\nSkill focus: Description\nAnswer: Many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.\nExplanation: Polymers are large molecules composed of many identical repeating units (monomers) linked by strong covalent bonds to form long chains. Weak intermolecular forces exist between these polymer chains.\nSource reference: C2 questions, Q5\n\nQ4: Compared to small molecules, why do large molecules typically exhibit higher melting and boiling points?\nTopic: Properties of Large Molecules\nDifficulty: intermediate\nSkill focus: Explanation/Reasoning\nAnswer: The intermolecular forces are stronger in large molecules.\nOptions:\n- A. The covalent bonds within large molecules are stronger.\n- B. Large molecules have more delocalised electrons.\n- C. The intermolecular forces are stronger in large molecules.\n- D. Large molecules have a more complex crystal lattice structure.\nExplanation: As the size of molecules increases, the cumulative strength of the intermolecular forces between them also increases. More energy is required to overcome these stronger forces, leading to higher melting and boiling points.\nSource reference: C2 questions, Q8\n\nQ5: Explain why the majority of covalent substances are unable to conduct electricity.\nTopic: Covalent Substances and Conductivity\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: They do not have delocalised electrons or ions.\nExplanation: Electrical conductivity requires the presence of mobile charged particles, such as delocalised electrons or free ions. Most covalent substances have all their outer electrons localised in bonds and do not form ions, hence they cannot conduct electricity.\nSource reference: C2 questions, Q9\n\nQ6: Detail the structure and bonding characteristics of graphite.\nTopic: Graphite Structure and Bonding\nDifficulty: higher\nSkill focus: Description/Analysis\nAnswer: Each carbon atom is bonded to three others in hexagonal rings arranged in layers – it has delocalised electrons and weak forces between the layers.\nExplanation: Graphite consists of layers of carbon atoms, where each carbon atom is covalently bonded to three other carbon atoms in hexagonal rings. This leaves one outer electron per carbon atom delocalised, and weak intermolecular forces exist between the layers.\nSource reference: C2 questions, Q10\n\nQ7: What property of graphite's structure accounts for its softness and ability to act as a lubricant?\nTopic: Graphite Properties\nDifficulty: intermediate\nSkill focus: Explanation\nAnswer: Layers are not bonded so can slide over each other.\nOptions:\n- A. It has delocalised electrons that allow for easy movement.\n- B. The carbon atoms are only weakly bonded together.\n- C. Layers are not bonded so can slide over each other.\n- D. It forms a hollow cage structure.\nExplanation: The weak intermolecular forces between the distinct layers of carbon atoms in graphite allow these layers to easily slide past one another, which makes graphite soft and slippery, useful as a lubricant.\nSource reference: C2 questions, Q12\n\nQ8: List two distinct properties of graphene.\nTopic: Graphene Properties\nDifficulty: foundation\nSkill focus: Recall\nAnswer: Strong, conducts electricity.\nExplanation: Graphene is known for its exceptional strength due to its robust covalent bonding network and its ability to conduct electricity efficiently because of its delocalised electrons.\nSource reference: C2 questions, Q14\n\nQ9: Which statement correctly defines a fullerene?\nTopic: Fullerene Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: A hollow cage of carbon atoms arranged as a sphere or a tube.\nOptions:\n- A. A single layer of graphite.\n- B. A hollow cage of carbon atoms arranged as a sphere or a tube.\n- C. A giant lattice of carbon atoms with strong covalent bonds.\n- D. A long chain of repeating monomer units.\nExplanation: Fullerenes are a class of carbon allotropes characterized by their hollow, cage-like structures, which can be spherical (like buckyballs) or cylindrical (nanotubes).\nSource reference: C2 questions, Q15\n\nQ10: Define what a nanotube is in the context of carbon allotropes.\nTopic: Nanotube Definition\nDifficulty: foundation\nSkill focus: Definition\nAnswer: Hollow cylinder of carbon atoms.\nExplanation: A nanotube is a specific type of fullerene, characterized by its cylindrical, hollow structure composed entirely of carbon atoms.\nSource reference: C2 questions, Q16\n",
+  "autoSignals": {
+    "tokens": 970,
+    "sentences": 71,
+    "words": 970,
+    "info_entropy_mean": 7.3707,
+    "info_entropy_stddev": 1.5536,
+    "idea_density": 9.7324,
+    "repetition_compression_ratio": 0.2406,
+    "templates_per_token": 0.467,
+    "subj_lexicon_ratio": 0.001,
+    "avg_sentence_len": 13.662,
+    "flesch_reading_ease": 27.08,
+    "fk_grade": 12.88,
+    "gunning_fog": 16.06
+  },
+  "judgement": {
+    "overall_slop": {
+      "label": 0,
+      "confidence": 0.9
+    },
+    "domain": "qa",
+    "annoyance": 2,
+    "axes": [
+      {
+        "code": "Density",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "flesch_reading_ease": 27.08,
+          "fk_grade": 12.88,
+          "gunning_fog": 16.06,
+          "avg_sentence_len": 13.662
+        },
+        "spans": [
+          {
+            "quote": "delving deeper into the structures and properties of giant covalent substances, small molecules, and polymers. It also expands on carbon allotropes, including detailed descriptions of graphite, graphene, fullerenes, and nanotubes, and their specific properties and uses",
+            "char_start": 104,
+            "char_end": 379
+          }
+        ],
+        "rationale": "The introductory summary contains some verbose phrasing, but the core quiz content is generally concise and to the point."
+      },
+      {
+        "code": "Relevance",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "idea_density": 9.7324,
+          "info_entropy_mean": 7.3707
+        },
+        "spans": [],
+        "rationale": "All questions and explanations are directly relevant to the stated topic of covalent bonding and carbon allotropes for the specified curriculum."
+      },
+      {
+        "code": "Factuality",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.001
+        },
+        "spans": [
+          {
+            "quote": "Layers are not bonded",
+            "char_start": 3102,
+            "char_end": 3122
+          }
+        ],
+        "rationale": "The answer to Q7, \"Layers are not bonded,\" is an oversimplification. They are bonded by weak intermolecular forces, a key concept at this level."
+      },
+      {
+        "code": "Bias",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "subj_lexicon_ratio": 0.001
+        },
+        "spans": [],
+        "rationale": "The content is a factual science quiz and presents information objectively without any discernible bias or missing points of view."
+      },
+      {
+        "code": "Structure",
+        "score_0_to_4": 2,
+        "auto_signals": {
+          "templates_per_token": 0.467,
+          "repetition_compression_ratio": 0.2406
+        },
+        "spans": [],
+        "rationale": "The text follows a rigid, repetitive template for every question (Question, Topic, Difficulty, Skill, Answer, Explanation, Source), making the structure highly formulaic."
+      },
+      {
+        "code": "Coherence",
+        "score_0_to_4": 0,
+        "auto_signals": {
+          "idea_density": 9.7324,
+          "info_entropy_mean": 7.3707
+        },
+        "spans": [],
+        "rationale": "The quiz flows logically from general concepts of covalent bonding to specific examples like carbon allotropes, with clear connections between questions and answers."
+      },
+      {
+        "code": "Tone",
+        "score_0_to_4": 1,
+        "auto_signals": {
+          "flesch_reading_ease": 27.08,
+          "fk_grade": 12.88,
+          "gunning_fog": 16.06,
+          "avg_sentence_len": 13.662
+        },
+        "spans": [],
+        "rationale": "While generally appropriate for a quiz, the summary is verbose, and the overall text has a high reading-level score, potentially hindering comprehension for some students."
+      }
+    ],
+    "top_fixes": []
+  },
+  "model": {
+    "modelId": "gemini-2.5-pro",
+    "temperature": 0.1
+  },
+  "riskScore": 0.2625,
+  "recommendedLabel": 0,
+  "threshold": 0.55,
+  "contributions": [
+    {
+      "code": "Density",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    },
+    {
+      "code": "Relevance",
+      "score": 0,
+      "weight": 0.1,
+      "contribution": 0
+    },
+    {
+      "code": "Factuality",
+      "score": 1,
+      "weight": 0.35,
+      "contribution": 0.0875
+    },
+    {
+      "code": "Bias",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Structure",
+      "score": 2,
+      "weight": 0.25,
+      "contribution": 0.125
+    },
+    {
+      "code": "Coherence",
+      "score": 0,
+      "weight": 0.05,
+      "contribution": 0
+    },
+    {
+      "code": "Tone",
+      "score": 1,
+      "weight": 0.1,
+      "contribution": 0.025
+    }
+  ]
+}
