@@ -1,0 +1,128 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "mode": "synthesis",
+  "subject": "biology",
+  "board": "OCR",
+  "generatedAt": "2025-09-25T04:16:26.956Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material does not contain explicit questions. Synthesize rigorous GCSE questions.\nMix short_answer, multiple_choice, true_false, and numeric items.\nGround every answer and explanation directly in the supplied notes.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: biology.\nExam board context: OCR.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Biology: Blood and Organ Donation",
+    "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.",
+    "mode": "synthesis",
+    "subject": "biology",
+    "board": "OCR",
+    "syllabusAlignment": "GCSE Triple Science Biology topics related to human health and medical procedures, specifically donation.",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "According to the provided material, approximately how many new blood donors are needed every day in England to meet demand?",
+        "answer": "C",
+        "explanation": "Page 6 states, \"Nearly 400 new blood donors are needed every day in England to meet demand.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) 100",
+          "B) 250",
+          "C) 400",
+          "D) 750"
+        ],
+        "topic": "Importance of donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "Page 6"
+      },
+      {
+        "id": "Q2",
+        "prompt": "Identify two types of patients who might require a stem cell donation.",
+        "answer": "Patients with blood cancer or a blood disorder.",
+        "explanation": "Page 5 indicates that \"Someone with blood cancer or a blood disorder\" might need a stem cell donation.",
+        "type": "short_answer",
+        "topic": "Who needs donations",
+        "difficulty": "foundation",
+        "skillFocus": "Identification",
+        "sourceReference": "Page 5"
+      },
+      {
+        "id": "Q3",
+        "prompt": "True or False: Since 2020, in England, individuals under 18 are automatically considered organ donors unless they have registered a decision not to donate.",
+        "answer": "False",
+        "explanation": "Page 13 states, \"From 2020, anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group.\" This explicitly refers to those \"over 18\", not under.",
+        "type": "true_false",
+        "topic": "Law around organ donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Analysis of legal details",
+        "sourceReference": "Page 13"
+      },
+      {
+        "id": "Q4",
+        "prompt": "What is the minimum age required to register online to become a blood donor in England, according to the provided information?",
+        "answer": "A",
+        "explanation": "Page 8, step 1, states: \"Register online from 16+ at blood.co.uk.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) 16",
+          "B) 17",
+          "C) 18",
+          "D) 21"
+        ],
+        "topic": "Steps in blood donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of specific details",
+        "sourceReference": "Page 8"
+      },
+      {
+        "id": "Q5",
+        "prompt": "Describe the two methods by which stem cells can be donated, and state which method accounts for the majority of donations.",
+        "answer": "Stem cells can be donated through the bloodstream (90% of donors) or via a bone marrow donation procedure (10% of donors). The bloodstream method accounts for the majority of donations.",
+        "explanation": "Page 10, step 4 under 'Donate', outlines that stem cells can be donated \"through the bloodstream (90% of donors)\" or through a \"bone marrow donation procedure (10% of donors)\".",
+        "type": "short_answer",
+        "topic": "Steps in stem cell donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Description and quantitative recall",
+        "sourceReference": "Page 10"
+      },
+      {
+        "id": "Q6",
+        "prompt": "Which of the following is a reason explicitly mentioned in the material for why an individual might choose not to donate blood?",
+        "answer": "B",
+        "explanation": "Page 16 includes a speech bubble stating, \"I'm really scared of needles, so giving blood isn't something I feel I'm able to do.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) Religious objections",
+          "B) Fear of needles",
+          "C) Lack of time",
+          "D) Concerns about privacy"
+        ],
+        "topic": "Considerations in choice to donate",
+        "difficulty": "foundation",
+        "skillFocus": "Extraction of specific reasons",
+        "sourceReference": "Page 16"
+      }
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-flash",
+    "temperature": 0.2
+  },
+  "job": {
+    "id": "no-questions-y8lesson-health-blooddonations",
+    "category": "no-questions",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf",
+    "sourcePath": "/workspace/spark/data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "relativeSourcePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "mode": "synthesis",
+    "questionCount": 6,
+    "subject": "biology",
+    "board": "OCR",
+    "temperature": 0.2
+  }
+}

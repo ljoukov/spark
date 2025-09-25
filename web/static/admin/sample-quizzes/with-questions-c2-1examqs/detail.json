@@ -1,0 +1,128 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-25T04:22:27.982Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
+    "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry, specifically topics related to states of matter (particle model, changes of state, properties of solids, liquids, and gases) and chemical reactions (reactivity of metals, writing balanced equations with state symbols).",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1a",
+        "prompt": "Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols from the box to complete the chemical equation: 2Li(s) + 2H2O(l) → 2LiOH(__) + H2(__)",
+        "answer": "aq, g",
+        "explanation": "Lithium hydroxide is formed as a solution in water, so its state symbol is 'aq' (aqueous). Hydrogen is a gas produced in the reaction, so its state symbol is 'g'.",
+        "type": "short_answer",
+        "topic": "Chemical reactions, State symbols",
+        "difficulty": "foundation",
+        "skillFocus": "Applying knowledge of chemical reactions and state symbols.",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q1b",
+        "prompt": "Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?",
+        "answer": "C",
+        "explanation": "To find the substance liquid over the greatest temperature range, calculate the difference between its boiling point and melting point. A: 20°C (10 - (-10)). B: 120°C (190 - 70). C: 200°C (210 - 10). D: 20°C (-160 - (-180)). Substance C has the largest range of 200°C.",
+        "type": "multiple_choice",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "topic": "States of matter, Phase changes, Data interpretation",
+        "difficulty": "intermediate",
+        "skillFocus": "Interpreting graphical data, calculating temperature ranges.",
+        "sourceReference": "Page 2, Question 1(b), Figure 1"
+      },
+      {
+        "id": "Q1c",
+        "prompt": "Referring to Figure 1, which two substances are gases at 50 °C?",
+        "answer": "A and D",
+        "explanation": "A substance is a gas when its temperature is above its boiling point. At 50°C, Substance A (Boiling Point ~10°C) is a gas. Substance B (Boiling Point ~190°C) is a solid. Substance C (Boiling Point ~210°C) is a liquid. Substance D (Boiling Point ~-160°C) is a gas. Therefore, A and D are gases at 50°C.",
+        "type": "multiple_choice",
+        "options": [
+          "A and B",
+          "B and C",
+          "C and D",
+          "A and D"
+        ],
+        "topic": "States of matter, Phase changes, Data interpretation",
+        "difficulty": "intermediate",
+        "skillFocus": "Interpreting graphical data, identifying states of matter at specific temperatures.",
+        "sourceReference": "Page 3, Question 1(c), Figure 1"
+      },
+      {
+        "id": "Q1e",
+        "prompt": "Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus could not be used to determine the boiling point of substance B.",
+        "answer": "The apparatus uses water as the heating medium. Water boils at 100°C, but substance B has a boiling point of 190°C. Therefore, water cannot reach a high enough temperature to boil substance B.",
+        "explanation": "Substance B has a boiling point of 190°C (from Figure 1). The apparatus uses a water bath for heating. Water boils at 100°C at standard atmospheric pressure, meaning it cannot be heated above this temperature. Consequently, the water bath cannot provide enough heat to raise substance B to its boiling point of 190°C.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, States of matter, Heating curves",
+        "difficulty": "higher",
+        "skillFocus": "Evaluating experimental procedures, understanding limitations of apparatus.",
+        "sourceReference": "Page 4, Question 1(e), Figure 2"
+      },
+      {
+        "id": "Q2a",
+        "prompt": "A student shakes a tube containing small balls to model the movement of particles in a gas. Which two characteristics make this a good model for gas particles?",
+        "answer": "The balls are far apart from each other and move randomly.",
+        "explanation": "In the particle model of gases, particles are widely spaced and move randomly and rapidly. The model effectively demonstrates these two key characteristics. The speed of movement is not accurately represented by 'slowly', and colour is irrelevant.",
+        "type": "multiple_choice",
+        "options": [
+          "The balls move slowly and are different colours.",
+          "The balls are far apart from each other and move randomly.",
+          "The balls are close together and move slowly.",
+          "The balls are different colours and move randomly."
+        ],
+        "topic": "Particle model, States of matter",
+        "difficulty": "foundation",
+        "skillFocus": "Understanding the particle model of gases.",
+        "sourceReference": "Page 5, Question 2(a)"
+      },
+      {
+        "id": "Q2b_part1",
+        "prompt": "For a given material, in which state of matter are the particles in a regular arrangement?",
+        "answer": "Solid",
+        "explanation": "In a solid, particles are closely packed in fixed positions and arranged in a regular, repeating pattern (a lattice structure).",
+        "type": "short_answer",
+        "topic": "Particle model, States of matter",
+        "difficulty": "foundation",
+        "skillFocus": "Recalling characteristics of states of matter.",
+        "sourceReference": "Page 5, Question 2(b)"
+      }
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-flash",
+    "temperature": 0.2
+  },
+  "job": {
+    "id": "with-questions-c2-1examqs",
+    "category": "with-questions",
+    "displayName": "C2.1ExamQs.pdf",
+    "sourcePath": "/workspace/spark/data/samples/with-questions/C2.1ExamQs.pdf",
+    "relativeSourcePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "mode": "extraction",
+    "questionCount": 6,
+    "subject": "chemistry",
+    "board": "AQA",
+    "temperature": 0.2
+  }
+}
