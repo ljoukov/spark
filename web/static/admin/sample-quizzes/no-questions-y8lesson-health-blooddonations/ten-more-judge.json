@@ -1,0 +1,43 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "variant": "ten-more",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:31:04.485Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "quizPath": "ten-more-quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent quality across all rubric dimensions. The 'Question quality' is high, with prompts that are precise, unambiguous, and clearly exam-ready, directly referencing the provided learning materials. 'Answer precision' is consistently accurate, with all answers factually correct and well-grounded in the source content, supported by clear explanations and source references. The 'Coverage and balance' are commendable, as the questions effectively address all key learning intentions outlined in the material, offering a suitable mix of question types and difficulty levels. 'Difficulty alignment' is appropriate for GCSE Triple Science, with a good range of challenge from recall to analytical questions. Finally, 'Safety & tone' are maintained throughout, with no misinformation, harmful content, and consistent use of UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "All prompts are precise, unambiguous, and well-phrased, making them suitable for an exam context. They directly relate to the provided slides, ensuring clarity for students."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers are factually correct and directly derived from the provided study material. The explanations are clear and accurately cite the relevant pages and sections."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 1,
+        "justification": "The quiz effectively covers all key concepts and learning intentions presented in the slides, including the importance, processes, legal aspects, and ethical considerations of donation. There is a good balance of multiple-choice, numeric, and short-answer question types."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are appropriate for GCSE Triple Science, ranging from foundation-level recall to higher-level analysis and interpretation, providing a varied challenge suitable for the target audience."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz maintains an objective and educational tone, free from misinformation or any content that could be considered harmful or off-spec. UK English spelling is consistently used."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "variant": "ten-more",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:36:43.955Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+    "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
+  },
+  "quizPath": "ten-more-quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent adherence to the rubric dimensions. Question quality is consistently high, with prompts that are precise, unambiguous, and exam-ready. Answer precision is flawless, as all answers are factually correct and directly grounded in the provided C20 retrieval material. The coverage and balance are appropriate for an extension quiz, addressing key concepts across various topics within the C20 chapter, including corrosion, alloys, ceramics, polymers, composites, and the Haber process. Difficulty alignment is well-managed, with questions appropriately categorised from 'foundation' to 'higher' to suit GCSE Triple Science. Finally, the quiz maintains an appropriate safety and tone, free from misinformation or off-spec content, and uses UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "All prompts are precise, unambiguous, and directly reflect the questions from the C20 retrieval material, making them highly exam-ready."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "Every answer provided is factually correct and perfectly matches the corresponding answers in the source material. Explanations are accurate and supportive."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 1,
+        "justification": "The quiz covers a suitable range of key concepts from the C20 material, including various aspects of materials science and industrial processes. The mix of multiple-choice and short-answer questions is appropriate for a retrieval quiz."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are well-aligned with GCSE Triple Science, featuring a varied challenge from 'foundation' recall to 'higher' analysis, as indicated by the assigned difficulty levels."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz is free from misinformation, harmful, or off-spec content. The tone is appropriate for an educational context, and UK English spelling is consistently used."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

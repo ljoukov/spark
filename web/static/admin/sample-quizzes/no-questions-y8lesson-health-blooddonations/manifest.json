@@ -1,0 +1,21 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "label": "Sample 1: Y8Lesson-Health-BloodDonations.pdf",
+  "category": "no-questions",
+  "mode": "synthesis",
+  "subject": "biology",
+  "board": "OCR",
+  "questionCount": 6,
+  "tenMoreQuestionCount": 10,
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "files": {
+    "quiz": "quiz.json",
+    "quizJudge": "quiz-judge.json",
+    "tenMoreQuiz": "ten-more-quiz.json",
+    "tenMoreJudge": "ten-more-judge.json",
+    "report": "report.md"
+  }
+}

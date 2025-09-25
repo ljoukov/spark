@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "variant": "ten-more",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:35:27.255Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "quizPath": "ten-more-quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent quality across all rubric dimensions. The 'Question quality' is high, with prompts that are precise, unambiguous, and exam-ready, effectively drawing from the provided source material. 'Answer precision' is consistently accurate, with all answers being factually correct and directly grounded in the material presented in the figures and text. The 'Coverage and balance' are commendable, offering a suitable mix of multiple-choice and short-answer questions that address key concepts such as states of matter, chemical equations, data interpretation, and experimental techniques. 'Difficulty alignment' is appropriate for GCSE Triple Science, with a varied challenge level that caters to different cognitive skills. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content, and correct UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "All prompts are precise, unambiguous, and well-phrased, making them suitable for GCSE examination. They effectively guide students to the required information or application of knowledge."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All provided answers are factually correct and directly align with the information presented in the source material (chemical equation, Figure 1, Figure 2, and the particle model description). Explanations are clear and accurate."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 1,
+        "justification": "The quiz covers a good range of key concepts from states of matter, chemical reactions, data interpretation from graphs, and experimental techniques. There is a suitable balance between multiple-choice and short-answer questions, ensuring a comprehensive assessment."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are well-aligned with GCSE Triple Science expectations, offering a varied challenge from foundational recall and data extraction to intermediate interpretation and higher-level application and critical evaluation of models and experimental design."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz contains no misinformation, harmful, or off-spec content. The tone is academic and appropriate for the target audience, and UK English spelling is consistently used."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

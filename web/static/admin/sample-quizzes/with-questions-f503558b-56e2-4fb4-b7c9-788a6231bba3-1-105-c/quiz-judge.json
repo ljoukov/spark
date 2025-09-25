@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "variant": "primary",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:36:01.173Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+    "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
+  },
+  "quizPath": "quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent quality across all rubric dimensions. Question prompts are precise and unambiguous, making them highly suitable for GCSE assessment. Answer precision is outstanding, with all answers being factually correct and directly grounded in the provided material; notably, the balanced symbol equation for the Haber process (Q15) was accurately corrected from the source, enhancing its educational value. The quiz achieves good coverage and balance for its length, addressing key concepts such as corrosion, alloys, the Haber process, and fertilisers, and incorporating a suitable mix of short answer and multiple-choice question types. Difficulty alignment is appropriate for GCSE Triple Science, offering a varied challenge level. Finally, the quiz adheres to safety and tone guidelines, presenting accurate content in an appropriate educational register with correct UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "Prompts are consistently precise, unambiguous, and well-phrased, making them exam-ready and clear for students."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers are factually correct and directly supported by the source material. The proactive correction of the Haber process equation (Q15) demonstrates a high level of accuracy and attention to detail."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 0.9,
+        "justification": "The quiz provides a good selection of key concepts from the C20 material, covering important topics like corrosion, alloys, the Haber process, and fertilisers. The mix of short answer and multiple-choice questions is well-balanced for a concise quiz."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are well-aligned with GCSE Triple Science difficulty, offering a suitable range from foundation recall to intermediate application, appropriate for the target audience."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz is free from misinformation, harmful, or off-spec content. The tone is appropriate for an educational resource, and UK English spelling is consistently used."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

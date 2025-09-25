@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+  "variant": "ten-more",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:33:29.339Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
+  },
+  "quizPath": "ten-more-quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent adherence to all rubric dimensions. The 'Question quality' is high, with prompts that are precise, unambiguous, and exam-ready, directly mirroring the style and content expected at GCSE level. 'Answer precision' is faultless, as all answers and their accompanying explanations are factually correct and directly grounded in the provided source material. The 'Coverage and balance' are appropriate for GCSE Triple Science, addressing key concepts of covalent bonding, structures, properties, and carbon allotropes with a suitable mix of short-answer and multiple-choice question types. 'Difficulty alignment' is well-judged, with questions appropriately categorised from foundation to higher, ensuring varied challenge. Finally, 'Safety & tone' are impeccable, with no misinformation, harmful, or off-spec content, and consistent use of UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "Prompts are precise, unambiguous, and directly align with GCSE exam expectations, effectively testing understanding of covalent bonding and allotropes."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers and explanations are factually correct and directly derived from the provided source material, demonstrating high accuracy."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 1,
+        "justification": "The quiz covers essential concepts of covalent bonding and carbon allotropes, offering a balanced mix of short-answer and multiple-choice questions suitable for a retrieval quiz."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "Questions are appropriately challenging for GCSE Triple Science, with a good spread of foundation, intermediate, and higher difficulty levels."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz is free from misinformation, harmful, or off-spec content, maintaining an appropriate educational tone and using correct UK English spelling."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

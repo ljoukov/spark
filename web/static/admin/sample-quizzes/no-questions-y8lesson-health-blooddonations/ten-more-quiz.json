@@ -1,0 +1,168 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "variant": "ten-more",
+  "mode": "extension",
+  "generatedAt": "2025-09-25T04:30:49.316Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "baseQuizPath": "quiz.json",
+  "quiz": {
+    "quizTitle": "GCSE Biology: Blood, Organ, and Stem Cell Donation",
+    "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, drawing directly from the provided study material. It includes a mix of question types: two multiple-choice questions, two short-answer questions, one true/false question, and one numeric question. Topics covered include the donation process for blood and stem cells, the importance of donation, legal aspects of organ donation in England, and individual considerations for choosing to donate or not.",
+    "mode": "extension",
+    "subject": "biology",
+    "board": "OCR",
+    "syllabusAlignment": "GCSE Triple Science Biology - Human Biology, Health and Disease (Donation)",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "Q7",
+        "prompt": "According to the provided information, how long does the actual blood donation process typically take, excluding registration and post-donation rest?",
+        "answer": "B",
+        "explanation": "Page 8, step 3 states: \"The donation process takes roughly 1 hour – donating itself just 5-10 minutes.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A. Roughly 1 hour",
+          "B. 5-10 minutes",
+          "C. 30 minutes",
+          "D. 2 hours"
+        ],
+        "topic": "Blood Donation Process",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "Page 8, \"What's involved in being a blood donor\", step 3"
+      },
+      {
+        "id": "Q8",
+        "prompt": "How many lives can one organ donor save and transform, according to the material?",
+        "answer": "9",
+        "explanation": "Page 11, step 4 states: \"One organ donor can save and transform up to nine lives and many more by donating tissue.\"",
+        "type": "numeric",
+        "topic": "Organ Donation Impact",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Data Extraction",
+        "sourceReference": "Page 11, \"What's involved in being an organ and tissue donor?\", step 4"
+      },
+      {
+        "id": "Q9",
+        "prompt": "Which of the following is a recognized stem cell registry mentioned in the provided material?",
+        "answer": "B",
+        "explanation": "Page 9 lists 'Anthony Nolan (16+)' as one of the stem cell registries.",
+        "type": "multiple_choice",
+        "options": [
+          "A. British Heart Foundation",
+          "B. Anthony Nolan",
+          "C. Red Cross",
+          "D. NHS Blood Bank"
+        ],
+        "topic": "Stem Cell Donation Registration",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall",
+        "sourceReference": "Page 9, \"What's involved in being a stem cell donor?\""
+      },
+      {
+        "id": "Q10",
+        "prompt": "Besides blood loss from surgery or accidents, identify two other specific situations where someone might need a blood donation, as listed in the material.",
+        "answer": "Someone experiencing blood loss from child birth; someone with blood cancer or a blood disorder.",
+        "explanation": "Page 5, under 'Blood donation', lists 'Someone experiencing blood loss from child birth' and 'Someone with blood cancer or a blood disorder' as reasons for needing blood donation.",
+        "type": "short_answer",
+        "topic": "Blood Donation Recipients",
+        "difficulty": "intermediate",
+        "skillFocus": "Extraction, Categorization",
+        "sourceReference": "Page 5, \"Who might need each type of donation?\", Blood donation column"
+      },
+      {
+        "id": "Q11",
+        "prompt": "Even with the opt-out system for organ donation in England, why is it still important for families to be consulted, according to the material?",
+        "answer": "Families will be consulted around organ donation, and their faiths, beliefs and culture will continue to be respected.",
+        "explanation": "Page 13 states: \"However, families will steel be consulted around organ donation and their faiths, beliefs and culture will continue to be respected.\"",
+        "type": "short_answer",
+        "topic": "Organ Donation Law and Ethics",
+        "difficulty": "higher",
+        "skillFocus": "Interpretation, Analysis",
+        "sourceReference": "Page 13, \"Organ donation: legal changes to save more lives\""
+      },
+      {
+        "id": "Q12",
+        "prompt": "What is the primary purpose of stem cell donation as indicated by the types of patients who need it?",
+        "answer": "B",
+        "explanation": "Page 5, under 'Stem cell donation', states that it is for 'Someone with blood cancer or a blood disorder.'",
+        "type": "multiple_choice",
+        "options": [
+          "A. To replace damaged organs",
+          "B. To treat blood cancer or blood disorders",
+          "C. To replenish blood lost during surgery",
+          "D. To provide tissue for research"
+        ],
+        "topic": "Purpose of Stem Cell Donation",
+        "difficulty": "foundation",
+        "skillFocus": "Application, Inference",
+        "sourceReference": "Page 5, \"Who might need each type of donation?\", Stem cell donation column"
+      },
+      {
+        "id": "Q13",
+        "prompt": "According to the material, which specific donor types are more in demand, and why is this highlighted?",
+        "answer": "Donors from Black African, Black Caribbean and Asian backgrounds, as well as young blood, stem cell and organ donors, are more in demand. This is highlighted because 75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor, implying a need for a diverse donor pool to increase matching chances.",
+        "explanation": "Page 6, the third bullet point, identifies the specific donor types in demand. The preceding bullet point explains the difficulty in finding matches for stem cell transplants, which provides context for why diverse donor types are crucial.",
+        "type": "short_answer",
+        "topic": "Importance of Diverse Donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Synthesis, Explanation",
+        "sourceReference": "Page 6, \"Why are donations important?\""
+      },
+      {
+        "id": "Q14",
+        "prompt": "After a person dies and specialist nurses check the NHS Organ Donor Register for their decision, what is the next crucial step in the organ donation process?",
+        "answer": "C",
+        "explanation": "Page 11, step 3, describes that \"The specialist nurse will then discuss the donor's registered/last known decision with their family as part of end of life discussions. The donor's faith, beliefs and culture will always be respected.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A. The organs are immediately harvested for transplant.",
+          "B. The donor's body is prepared for burial.",
+          "C. A specialist nurse discusses the decision with the donor's family, respecting their faith, beliefs, and culture.",
+          "D. The family is informed that donation will proceed regardless of their views."
+        ],
+        "topic": "Organ Donation Process",
+        "difficulty": "intermediate",
+        "skillFocus": "Sequence, Interpretation",
+        "sourceReference": "Page 11, \"What's involved in being an organ and tissue donor?\", step 3"
+      },
+      {
+        "id": "Q15",
+        "prompt": "After blood is donated and tested, what happens to it, and how many individuals can a single donation help?",
+        "answer": "A donor's blood is tested and split into component parts. Each donation can help 3 adults or 6 infants.",
+        "explanation": "Page 8, step 4, explains: \"A donor's blood is tested and they find out their blood group. The blood is split into component parts, so each donation can help 3 adults or 6 infants.\"",
+        "type": "short_answer",
+        "topic": "Blood Donation Processing and Impact",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Data Extraction",
+        "sourceReference": "Page 8, \"What's involved in being a blood donor\", step 4"
+      },
+      {
+        "id": "Q16",
+        "prompt": "The material asks, \"If someone does want to be a donor, why is it important that they register their decision and discuss their choice with their family?\" Which of the following best summarizes the importance of this action?",
+        "answer": "D",
+        "explanation": "Page 13 highlights the importance of registering a decision and discussing it with family. This ensures the individual's wishes are clearly known and respected, and helps to prepare and support the family in upholding those wishes during a difficult time, especially given that families will still be consulted and their beliefs respected.",
+        "type": "multiple_choice",
+        "options": [
+          "A. It is legally required for all donors to discuss with family.",
+          "B. Family consent overrides a registered decision.",
+          "C. It allows the family to make the final decision on behalf of the deceased.",
+          "D. To ensure their wishes are known and respected, and to ease the decision-making process for their family during a difficult time."
+        ],
+        "topic": "Considerations for Donation",
+        "difficulty": "higher",
+        "skillFocus": "Analysis, Inference",
+        "sourceReference": "Page 13, \"Organ donation: legal changes to save more lives\", third bullet point"
+      }
+    ]
+  }
+}

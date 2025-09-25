@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "variant": "primary",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:31:37.806Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+  },
+  "quizPath": "quiz.json",
+  "verdict": {
+    "explanation": "The quiz demonstrates strong adherence to the rubric. Question prompts are precise and unambiguous, directly reflecting exam-ready language. Answers are factually correct and accurately derived from the provided source material. The quiz effectively covers key concepts related to atomic structure, sub-atomic particles, atomic models, and mixtures, offering a suitable balance of short-answer and multiple-choice question types. Difficulty levels are appropriately aligned for GCSE Triple Science, ranging from foundation to intermediate. Furthermore, the content is safe, free from misinformation, and maintains an appropriate educational tone, using UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "Prompts are consistently precise, unambiguous, and suitable for GCSE examination. For example, 'What is an atom?' and 'State four physical processes that can be used to separate mixtures?' are clear and direct."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers are factually correct and directly grounded in the provided material, with clear explanations. The multiple-choice option for Q5 is correctly identified and justified."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 0.9,
+        "justification": "The quiz covers key concepts from atomic structure and mixtures effectively, aligning well with the stated C1 topics. While the question types are predominantly short-answer, the inclusion of one multiple-choice question provides some variety. For a small quiz of 6 questions, the balance is suitable."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are well-aligned with GCSE Triple Science difficulty, incorporating a suitable mix of foundation and intermediate challenge levels, which is appropriate for the target audience."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz is free from misinformation, harmful, or off-spec content, and maintains an appropriate educational tone with correct UK English spelling throughout."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

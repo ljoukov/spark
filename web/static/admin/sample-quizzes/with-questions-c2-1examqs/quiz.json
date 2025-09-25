@@ -1,0 +1,112 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-25T04:34:07.122Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry: States of Matter and Experimental Techniques",
+    "summary": "This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, chemical equations, and experimental techniques for determining melting and boiling points. It includes a mix of multiple-choice questions requiring data interpretation from graphs and short-answer questions assessing understanding of experimental design and chemical principles. The quiz aligns with AQA GCSE Triple Science (Chemistry) specifications, particularly topics related to the particle model and practical skills. Note: The provided source material for Figure 1 contains an anomaly for substance A where the boiling point appears lower than the melting point; interpretations for questions 1(b) and 1(c) are made based on the most plausible intended meaning for other substances.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry: The particle model, states of matter, chemical reactions, experimental determination of melting and boiling points.",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1a",
+        "prompt": "Complete the chemical equation for the reaction of lithium with water by adding the correct state symbols: 2Li(s) + 2H₂O(l) → 2LiOH(__) + H₂(__)",
+        "answer": "aq, g",
+        "explanation": "Lithium hydroxide (LiOH) is soluble in water, forming an aqueous solution (aq). Hydrogen (H₂) is a gas (g) produced in the reaction.",
+        "type": "short_answer",
+        "topic": "Chemical reactions, states of matter",
+        "difficulty": "foundation",
+        "skillFocus": "Recall and application of chemical notation",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q1b",
+        "prompt": "Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which substance is liquid over the greatest temperature range?",
+        "answer": "C",
+        "explanation": "The liquid range is the difference between the boiling point and the melting point. For B: 180°C - 70°C = 110°C. For C: 200°C - 0°C = 200°C. For D: -160°C - (-180°C) = 20°C. Substance C has the largest liquid range.",
+        "type": "multiple_choice",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "topic": "States of matter, data interpretation",
+        "difficulty": "intermediate",
+        "skillFocus": "Data analysis, calculation",
+        "sourceReference": "Page 2, Figure 1, Question 1(b)"
+      },
+      {
+        "id": "Q1c",
+        "prompt": "Figure 1 shows the melting points and boiling points of four substances, A, B, C and D. Which two substances are gases at 50 °C?",
+        "answer": "A and D",
+        "explanation": "A substance is a gas when its temperature is above its boiling point. At 50°C, substance A (boiling point approx -100°C) and substance D (boiling point approx -160°C) are both above their boiling points, and therefore are gases.",
+        "type": "multiple_choice",
+        "options": [
+          "A and B",
+          "B and C",
+          "C and D",
+          "A and D"
+        ],
+        "topic": "States of matter, data interpretation",
+        "difficulty": "intermediate",
+        "skillFocus": "Data analysis, understanding phase changes",
+        "sourceReference": "Page 3, Figure 1, Question 1(c)"
+      },
+      {
+        "id": "Q1d",
+        "prompt": "Substance E has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at 0 °C?",
+        "answer": "Liquid",
+        "explanation": "At 0 °C, the temperature is above the melting point (-50 °C) and below the boiling point (120 °C), so substance E would be in a liquid state.",
+        "type": "multiple_choice",
+        "options": [
+          "Solid",
+          "Liquid",
+          "Gas",
+          "Plasma"
+        ],
+        "topic": "States of matter, phase changes",
+        "difficulty": "foundation",
+        "skillFocus": "Application of knowledge",
+        "sourceReference": "Page 3, Question 1(d)"
+      },
+      {
+        "id": "Q1e",
+        "prompt": "Figure 2 shows apparatus used to determine the melting and boiling points of substance B. Explain why this apparatus is unsuitable for determining the boiling point of substance B.",
+        "answer": "Substance B has a boiling point of approximately 180°C (from Figure 1). The apparatus uses a water bath, which boils at 100°C. Therefore, the water bath cannot reach the temperature required to boil substance B.",
+        "explanation": "The maximum temperature a water bath can reach is 100°C (the boiling point of water). Since substance B has a boiling point of 180°C, the water bath cannot provide sufficient heat to make substance B boil.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, states of matter",
+        "difficulty": "higher",
+        "skillFocus": "Scientific reasoning, evaluation of experimental design",
+        "sourceReference": "Page 4, Figure 2, Question 1(e)"
+      },
+      {
+        "id": "Q1f",
+        "prompt": "Suggest one reason why the student could not use the apparatus shown in Figure 2 to determine the exact melting point of substance B.",
+        "answer": "The thermometer is placed in the water bath, not directly in substance B. This means it measures the water temperature, not the exact temperature of substance B itself, leading to potential inaccuracies in the melting point measurement.",
+        "explanation": "For an accurate measurement of the melting point, the thermometer should be in direct contact with the substance being tested. In this setup, the thermometer is in the surrounding water bath, which may not be at the exact same temperature as substance B, especially during phase changes.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, accuracy",
+        "difficulty": "higher",
+        "skillFocus": "Critical evaluation of experimental setup, understanding sources of error",
+        "sourceReference": "Page 4, Figure 2, Question 1(f)"
+      }
+    ]
+  }
+}

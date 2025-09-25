@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "variant": "primary",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:34:34.499Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "quizPath": "quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates strong 'Answer precision', with all responses being factually correct and well-justified based on the provided material. 'Difficulty alignment' is also excellent, offering a suitable range of challenge appropriate for GCSE Triple Science. Furthermore, 'Safety & tone' are maintained throughout. However, the quiz's 'Question quality' is slightly impacted by a significant anomaly in the source's Figure 1 for substance A (boiling point lower than melting point), which, despite being acknowledged in the quiz summary, could still cause confusion. More critically, the 'Coverage and balance' is incomplete as questions 2(a) and 2(b) from the source material, which address the particle model and kinetic energy, have been omitted.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 0.8,
+        "justification": "Prompts are generally precise and unambiguous. However, the inherent flaw in Figure 1 for substance A (boiling point lower than melting point) in the source material, though acknowledged in the quiz summary, slightly detracts from the overall quality of the data interpretation questions (1b, 1c) as they rely on this problematic data."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers are factually correct and directly grounded in the material. Explanations are clear, concise, and accurate, even when interpreting the flawed data for substance A consistently."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 0.6,
+        "justification": "While the included questions offer a good mix of types and cover key concepts related to states of matter and experimental techniques, questions 2(a) and 2(b) from the provided source material (which cover the particle model and kinetic energy) are entirely omitted, leading to incomplete coverage of the source content."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are well-aligned with GCSE Triple Science, offering a suitable range from foundation (e.g., Q1a, Q1d) to higher-tier challenge (e.g., Q1e, Q1f)."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz avoids misinformation (beyond the acknowledged flaw in the source graph), harmful, or off-spec content, and uses appropriate UK English spelling."
+      }
+    ],
+    "verdict": "revise"
+  }
+}

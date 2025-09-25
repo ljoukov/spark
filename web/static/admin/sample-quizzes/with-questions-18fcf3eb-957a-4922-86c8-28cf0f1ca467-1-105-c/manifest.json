@@ -1,0 +1,21 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "label": "Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+  "category": "with-questions",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "tenMoreQuestionCount": 10,
+  "source": {
+    "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+  },
+  "files": {
+    "quiz": "quiz.json",
+    "quizJudge": "quiz-judge.json",
+    "tenMoreQuiz": "ten-more-quiz.json",
+    "tenMoreJudge": "ten-more-judge.json",
+    "report": "report.md"
+  }
+}

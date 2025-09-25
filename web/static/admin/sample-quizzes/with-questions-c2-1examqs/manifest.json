@@ -1,0 +1,21 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "label": "Sample 4: C2.1ExamQs.pdf",
+  "category": "with-questions",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "questionCount": 6,
+  "tenMoreQuestionCount": 10,
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "files": {
+    "quiz": "quiz.json",
+    "quizJudge": "quiz-judge.json",
+    "tenMoreQuiz": "ten-more-quiz.json",
+    "tenMoreJudge": "ten-more-judge.json",
+    "report": "report.md"
+  }
+}

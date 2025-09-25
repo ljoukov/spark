@@ -1,0 +1,192 @@
+{
+  "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
+  "variant": "ten-more",
+  "mode": "extension",
+  "generatedAt": "2025-09-25T04:36:27.741Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+    "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "baseQuizPath": "quiz.json",
+  "quiz": {
+    "quizTitle": "AQA GCSE Chemistry: C20 Retrieval Quiz",
+    "summary": "This quiz extends the initial set with 10 new questions, bringing the total to 16. It further explores concepts from AQA GCSE Chemistry, including different methods of corrosion prevention, specific alloy compositions and properties, types of glass and ceramics, polymer classifications, composite materials, and the detailed effects of conditions on the Haber process. All questions are strictly based on the provided C20 retrieval material, offering fresh angles and subtopics.",
+    "mode": "extension",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry Specification (e.g., 4.9.1.1 Corrosion and its prevention, 4.9.1.2 Alloys, 4.9.2.1 The Haber process, 4.9.2.2 Fertilisers, 4.9.3.1 Ceramics, 4.9.3.2 Polymers, 4.9.3.3 Composites)",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "C20-Q2",
+        "prompt": "Which of the following are physical barriers used to protect against corrosion?",
+        "answer": "A) Grease, paint, and a thin layer of metal",
+        "explanation": "Physical barriers prevent oxygen and water from reaching the metal surface, thereby inhibiting the corrosion process. Grease, paint, and thin layers of less reactive metals (like tin plating) are common examples.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Grease, paint, and a thin layer of metal",
+          "B) Sacrificial protection and galvanising",
+          "C) Anodising and electroplating",
+          "D) Alloying and cathodic protection"
+        ],
+        "topic": "Corrosion Protection",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q2"
+      },
+      {
+        "id": "C20-Q4",
+        "prompt": "How is rust formed?",
+        "answer": "A) Reaction between iron, water, and oxygen",
+        "explanation": "Rust is the common term for the corrosion of iron and its alloys, such as steel. It specifically occurs when iron reacts with both oxygen and water in the environment.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Reaction between iron, water, and oxygen",
+          "B) Reaction between iron and carbon dioxide",
+          "C) Reaction between iron and nitrogen",
+          "D) Reaction between iron and sulfur"
+        ],
+        "topic": "Corrosion",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q4"
+      },
+      {
+        "id": "C20-Q6",
+        "prompt": "What are gold alloys in jewellery typically made from?",
+        "answer": "A) Gold with copper, zinc, and silver",
+        "explanation": "Pure gold is very soft, so it is often alloyed with other metals like copper, zinc, and silver to increase its hardness, durability, and sometimes to alter its colour for jewellery making.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Gold with copper, zinc, and silver",
+          "B) Gold with platinum and palladium",
+          "C) Gold with iron and carbon",
+          "D) Gold with aluminium and magnesium"
+        ],
+        "topic": "Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q6"
+      },
+      {
+        "id": "C20-Q7",
+        "prompt": "What are steel alloys primarily made from?",
+        "answer": "A) Iron, carbon, and other metals",
+        "explanation": "Steel is fundamentally an alloy of iron and carbon. Various other metals are often added in small quantities to create different types of steel with specific properties, such as stainless steel.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Iron, carbon, and other metals",
+          "B) Aluminium, copper, and zinc",
+          "C) Copper, tin, and lead",
+          "D) Gold, silver, and platinum"
+        ],
+        "topic": "Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q7"
+      },
+      {
+        "id": "C20-Q8",
+        "prompt": "What is a characteristic property of aluminium alloys?",
+        "answer": "A) Generally have low densities",
+        "explanation": "Aluminium itself is a lightweight metal, and its alloys retain this property of generally having low densities, making them valuable for applications where weight reduction is important, such as in aircraft and vehicles.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Generally have low densities",
+          "B) Have very high melting points",
+          "C) Are highly reactive with acids",
+          "D) Are magnetic"
+        ],
+        "topic": "Alloys",
+        "difficulty": "intermediate",
+        "skillFocus": "Understanding",
+        "sourceReference": "C20 questions, Q8"
+      },
+      {
+        "id": "C20-Q9",
+        "prompt": "What is the main difference between soda-lime glass and borosilicate glass?",
+        "answer": "A) Borosilicate glass has a much higher melting point",
+        "explanation": "Borosilicate glass, which contains boron oxide, has a significantly higher melting point and better resistance to thermal shock compared to soda-lime glass, making it suitable for laboratory glassware and ovenware.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Borosilicate glass has a much higher melting point",
+          "B) Soda-lime glass is used for laboratory equipment",
+          "C) Borosilicate glass is more easily recycled",
+          "D) Soda-lime glass is more resistant to thermal shock"
+        ],
+        "topic": "Ceramics/Glass",
+        "difficulty": "intermediate",
+        "skillFocus": "Comparison",
+        "sourceReference": "C20 questions, Q9"
+      },
+      {
+        "id": "C20-Q10",
+        "prompt": "Which of the following are examples of clay ceramics?",
+        "answer": "A) Pottery and bricks",
+        "explanation": "Clay ceramics are traditional ceramics made from clay, which is shaped and then hardened by firing at high temperatures. Pottery and bricks are classic examples of such materials.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Pottery and bricks",
+          "B) Glass and concrete",
+          "C) Steel and aluminium",
+          "D) Polymers and composites"
+        ],
+        "topic": "Ceramics",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C20 questions, Q10"
+      },
+      {
+        "id": "C20-Q12",
+        "prompt": "What is the main difference in behavior between thermosetting and thermosoftening polymers when heated?",
+        "answer": "A) Thermosetting polymers do not soften when heated, thermosoftening polymers do",
+        "explanation": "Thermosoftening polymers soften and melt when heated because their intermolecular forces are overcome, allowing them to be reshaped. Thermosetting polymers form permanent cross-links during their initial heating and curing, which prevents them from softening or melting upon subsequent heating.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Thermosetting polymers do not soften when heated, thermosoftening polymers do",
+          "B) Thermosoftening polymers are stronger than thermosetting polymers",
+          "C) Thermosetting polymers can be remoulded multiple times, thermosetting cannot",
+          "D) Thermosoftening polymers have cross-links between polymer chains, thermosetting do not"
+        ],
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Comparison",
+        "sourceReference": "C20 questions, Q12"
+      },
+      {
+        "id": "C20-Q13",
+        "prompt": "What is a composite material?",
+        "answer": "A mixture of a matrix and reinforcements",
+        "explanation": "A composite material is engineered by combining two or more distinct materials, typically a 'matrix' (or binder) and 'reinforcements' (like fibres or particles), to achieve properties superior to those of the individual components.",
+        "type": "short_answer",
+        "topic": "Composites",
+        "difficulty": "foundation",
+        "skillFocus": "Definition",
+        "sourceReference": "C20 questions, Q13"
+      },
+      {
+        "id": "C20-Q17",
+        "prompt": "What is the effect of increasing the temperature of the Haber process on the yield, rate, and cost?",
+        "answer": "A) Decrease yield, increase rate, increase cost",
+        "explanation": "The Haber process is an exothermic reaction. Increasing the temperature shifts the equilibrium to the left (reactants), thus decreasing the yield of ammonia. However, higher temperatures increase the kinetic energy of reactant particles, leading to more frequent and energetic collisions, which increases the reaction rate. Operating at higher temperatures also requires more energy input, increasing the overall cost.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Decrease yield, increase rate, increase cost",
+          "B) Increase yield, decrease rate, decrease cost",
+          "C) Increase yield, increase rate, increase cost",
+          "D) Decrease yield, decrease rate, decrease cost"
+        ],
+        "topic": "Haber Process",
+        "difficulty": "higher",
+        "skillFocus": "Analysis",
+        "sourceReference": "C20 questions, Q17"
+      }
+    ]
+  }
+}

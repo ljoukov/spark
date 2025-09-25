@@ -1,0 +1,150 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "variant": "ten-more",
+  "mode": "extension",
+  "generatedAt": "2025-09-25T04:32:04.922Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "baseQuizPath": "quiz.json",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry C1: Atomic Structure, Models, and Mixtures (Extended)",
+    "summary": "This extended quiz builds upon fundamental concepts from AQA GCSE Chemistry C1, delving deeper into atomic models (Dalton, Plum Pudding, Nuclear), the discovery and properties of sub-atomic particles (protons, neutrons, electrons), electron shell configurations, and the definition of isotopes. It includes 10 new questions, expanding on the initial quiz to provide a comprehensive review of atomic structure and related concepts.",
+    "mode": "extension",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "Aligns with AQA GCSE Chemistry (8462) specification, covering topics related to 'Atomic structure and the Periodic Table' and 'Bonding, structure, and the properties of matter' (specifically mixtures).",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "Q7",
+        "prompt": "Which statement accurately describes Dalton's model of the atom?",
+        "answer": "B",
+        "explanation": "Dalton's model was an early atomic theory proposing that atoms were indivisible, solid spheres, which was a foundational concept in chemistry.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Atoms contain a dense nucleus with orbiting electrons.",
+          "B: Atoms as solid spheres that could not be divided into smaller parts.",
+          "C: Atoms are spheres of positive charge with embedded negative electrons.",
+          "D: Electrons orbit in fixed energy levels (shells)."
+        ],
+        "topic": "Atomic Models",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Identify",
+        "sourceReference": "C1 questions, Q2"
+      },
+      {
+        "id": "Q8",
+        "prompt": "Describe the plum pudding model of the atom.",
+        "answer": "A sphere of positive charge with negative electrons embedded in it.",
+        "explanation": "The plum pudding model, proposed by J.J. Thomson, suggested that an atom was a uniform sphere of positive charge with negatively charged electrons scattered within it, much like plums in a pudding.",
+        "type": "short_answer",
+        "topic": "Atomic Models",
+        "difficulty": "foundation",
+        "skillFocus": "Describe",
+        "sourceReference": "C1 questions, Q3"
+      },
+      {
+        "id": "Q9",
+        "prompt": "Briefly describe the nuclear model of the atom.",
+        "answer": "A dense nucleus with electrons orbiting it.",
+        "explanation": "The nuclear model, developed by Rutherford, established that an atom has a tiny, dense, positively charged nucleus at its centre, with electrons orbiting around it.",
+        "type": "short_answer",
+        "topic": "Atomic Models",
+        "difficulty": "intermediate",
+        "skillFocus": "Describe",
+        "sourceReference": "C1 questions, Q5"
+      },
+      {
+        "id": "Q10",
+        "prompt": "What sub-atomic particle did James Chadwick discover?",
+        "answer": "The uncharged particle called the neutron.",
+        "explanation": "James Chadwick discovered the neutron in 1932, explaining the existence of isotopes and the missing mass in atomic nuclei.",
+        "type": "short_answer",
+        "topic": "Sub-atomic Particles",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q7"
+      },
+      {
+        "id": "Q11",
+        "prompt": "Where are protons and neutrons found within an atom?",
+        "answer": "In the nucleus.",
+        "explanation": "Both protons and neutrons are located in the atom's central nucleus, which accounts for most of the atom's mass.",
+        "type": "short_answer",
+        "topic": "Sub-atomic Particles",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q8"
+      },
+      {
+        "id": "Q12",
+        "prompt": "State the relative mass of a proton, neutron, and electron.",
+        "answer": "Proton: 1, Neutron: 1, Electron: 0 (very small).",
+        "explanation": "Protons and neutrons have approximately the same relative mass of 1, while electrons are much lighter, with a relative mass considered negligible (approximately 1/1836).",
+        "type": "short_answer",
+        "topic": "Sub-atomic Particles",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C1 questions, Q9"
+      },
+      {
+        "id": "Q13",
+        "prompt": "How is the number of protons in an atom determined?",
+        "answer": "By the atomic number on the Periodic Table.",
+        "explanation": "The atomic number (Z) is unique to each element and directly corresponds to the number of protons in the nucleus of an atom of that element.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Apply",
+        "sourceReference": "C1 questions, Q11"
+      },
+      {
+        "id": "Q14",
+        "prompt": "Explain how to calculate the number of neutrons in an atom.",
+        "answer": "Subtract the atomic number from the mass number (mass number - atomic number).",
+        "explanation": "The mass number (A) represents the total number of protons and neutrons in the nucleus. By subtracting the number of protons (atomic number), you find the number of neutrons.",
+        "type": "short_answer",
+        "topic": "Atomic Structure",
+        "difficulty": "intermediate",
+        "skillFocus": "Apply, Calculate",
+        "sourceReference": "C1 questions, Q12"
+      },
+      {
+        "id": "Q15",
+        "prompt": "What is the maximum number of electrons that can be held in the first, second, and third electron shells, respectively?",
+        "answer": "Up to 2 in the first shell and up to 8 in the second and third shells.",
+        "explanation": "For the first 20 elements, electrons fill shells in a specific order: 2 in the first, then up to 8 in the second, and up to 8 in the third, influencing an atom's chemical properties.",
+        "type": "short_answer",
+        "topic": "Electron Shells",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall, Apply",
+        "sourceReference": "C1 questions, Q14"
+      },
+      {
+        "id": "Q16",
+        "prompt": "Which definition correctly describes isotopes?",
+        "answer": "C",
+        "explanation": "Isotopes are atoms of the same element, meaning they have the same number of protons, but they differ in the number of neutrons, leading to different mass numbers.",
+        "type": "multiple_choice",
+        "options": [
+          "A: Atoms of different elements with the same number of neutrons.",
+          "B: Atoms of the same element with different numbers of protons.",
+          "C: Atoms of the same element with different numbers of neutrons.",
+          "D: Atoms with an overall positive or negative charge."
+        ],
+        "topic": "Isotopes",
+        "difficulty": "intermediate",
+        "skillFocus": "Define, Identify",
+        "sourceReference": "C1 questions, Q18"
+      }
+    ]
+  }
+}

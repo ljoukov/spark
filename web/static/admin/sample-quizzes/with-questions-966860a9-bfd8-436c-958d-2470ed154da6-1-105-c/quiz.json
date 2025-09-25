@@ -1,0 +1,112 @@
+{
+  "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+  "mode": "extraction",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-25T04:32:37.115Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material already includes questions and answers. Extract high-quality exam-ready items.\nPreserve original wording as much as possible while fixing small typos.\nReturn questionCount distinct items that match the source closely.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: chemistry.\nExam board context: AQA.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry: Covalent Bonding and Allotropes Retrieval Quiz",
+    "summary": "This quiz covers fundamental concepts of covalent bonding, including formation, types of atoms involved, and the structures and properties of various covalent substances. It also includes questions on carbon allotropes like graphite, graphene, and fullerenes. The quiz features a mix of multiple-choice and short-answer questions, designed to test recall and explanatory skills. The syllabus alignment is general to AQA GCSE Chemistry C2 topics, as specific specification points were not provided in the source material.",
+    "mode": "extraction",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry C2: Structure, Bonding and the Properties of Matter (Covalent Bonding and Allotropes of Carbon)",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "C2-Q1",
+        "prompt": "How are covalent bonds formed?",
+        "answer": "B) By atoms sharing electrons",
+        "explanation": "Covalent bonds are formed when two non-metal atoms share a pair of electrons, allowing both atoms to achieve a stable outer electron shell.",
+        "type": "multiple_choice",
+        "options": [
+          "A) By atoms transferring electrons",
+          "B) By atoms sharing electrons",
+          "C) By atoms gaining electrons",
+          "D) By atoms losing electrons"
+        ],
+        "topic": "Covalent bonding basics",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q1"
+      },
+      {
+        "id": "C2-Q2",
+        "prompt": "Which type of atoms form covalent bonds between them?",
+        "answer": "C) Non-metals only",
+        "explanation": "Covalent bonds typically form between non-metal atoms as they both have a strong attraction for electrons and can achieve a stable electron configuration by sharing.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Metals and non-metals",
+          "B) Metals only",
+          "C) Non-metals only",
+          "D) Ions"
+        ],
+        "topic": "Covalent bonding basics",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q2"
+      },
+      {
+        "id": "C2-Q6",
+        "prompt": "Why do giant covalent substances have high melting points?",
+        "answer": "It takes a lot of energy to break the strong covalent bonds between the atoms.",
+        "explanation": "Giant covalent substances, such as diamond or silicon dioxide, have extremely high melting points because a vast amount of energy is required to overcome the strong covalent bonds extending throughout the entire structure.",
+        "type": "short_answer",
+        "topic": "Giant covalent structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q6"
+      },
+      {
+        "id": "C2-Q11",
+        "prompt": "Why can graphite conduct electricity?",
+        "answer": "The delocalised electrons can move through the graphite.",
+        "explanation": "Graphite's unique layered structure allows for the presence of delocalised electrons, which are free to move between the layers, enabling it to conduct electricity.",
+        "type": "short_answer",
+        "topic": "Graphite structure and properties",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q11"
+      },
+      {
+        "id": "C2-Q13",
+        "prompt": "What is graphene?",
+        "answer": "C) One layer of graphite",
+        "explanation": "Graphene is a single, two-dimensional layer of graphite, consisting of carbon atoms arranged in a hexagonal lattice.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A hollow cage of carbon atoms",
+          "B) A hollow cylinder of carbon atoms",
+          "C) One layer of graphite",
+          "D) A giant covalent lattice of silicon"
+        ],
+        "topic": "Allotropes of carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q13"
+      },
+      {
+        "id": "C2-Q18",
+        "prompt": "Give three uses of fullerenes.",
+        "answer": "Lubricants, drug delivery (spheres), high-tech electronics.",
+        "explanation": "Fullerenes, such as buckyballs and nanotubes, have diverse applications due to their unique structures and properties, including use as lubricants, in targeted drug delivery systems, and in advanced electronic components.",
+        "type": "short_answer",
+        "topic": "Fullerenes and their uses",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall, Application",
+        "sourceReference": "C2 questions, Q18"
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
+  "variant": "ten-more",
+  "model": "gemini-2.5-flash",
+  "evaluatedAt": "2025-09-25T04:32:21.994Z",
+  "prompt": "You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.\nRubric:\n- Question quality: Are prompts precise, unambiguous, and exam-ready?\n- Answer precision: Are answers factually correct and directly grounded in the material?\n- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?\n- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?\n- Safety & tone: Avoid misinformation, harmful or off-spec content.\nUse the GCSE Triple Science context and ensure UK English spelling.\nReturn JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.\nverdict must be \"approve\" when the quiz fully meets the rubric, otherwise \"revise\" with actionable reasoning.\nProvide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.",
+  "source": {
+    "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
+  },
+  "quizPath": "ten-more-quiz.json",
+  "verdict": {
+    "explanation": "The proposed quiz demonstrates excellent adherence to the rubric dimensions. The 'Question quality' is consistently high, with prompts being precise, unambiguous, and exam-ready. 'Answer precision' is faultless, as all answers are factually correct and directly grounded in the provided source material, with clear and accurate explanations. The 'Coverage and balance' are appropriate for GCSE C1 topics, including atomic models, sub-atomic particles, electron shells, and isotopes, with a suitable mix of question types. 'Difficulty alignment' is well-judged, offering a range of foundation and intermediate questions suitable for GCSE Triple Science. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content, and correct UK English spelling.",
+    "rubricFindings": [
+      {
+        "criterion": "Question quality",
+        "score": 1,
+        "justification": "All prompts are precise, unambiguous, and suitable for GCSE, with well-executed conversions to multiple-choice format where applicable."
+      },
+      {
+        "criterion": "Answer precision",
+        "score": 1,
+        "justification": "All answers are factually correct, directly derived from the source material, and accompanied by accurate explanations."
+      },
+      {
+        "criterion": "Coverage and balance",
+        "score": 1,
+        "justification": "The quiz effectively covers key C1 concepts from the source image, including atomic models, sub-atomic particles, electron shells, and isotopes, with a balanced mix of question types."
+      },
+      {
+        "criterion": "Difficulty alignment",
+        "score": 1,
+        "justification": "The questions are appropriately aligned for GCSE Triple Science, offering a suitable range of foundation and intermediate challenge levels."
+      },
+      {
+        "criterion": "Safety & tone",
+        "score": 1,
+        "justification": "The quiz contains no misinformation, harmful, or off-spec content, and maintains an appropriate educational tone with correct UK English spelling."
+      }
+    ],
+    "verdict": "approve"
+  }
+}

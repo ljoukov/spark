@@ -1,0 +1,106 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "mode": "synthesis",
+  "subject": "biology",
+  "board": "OCR",
+  "generatedAt": "2025-09-25T04:30:07.471Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 6,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe material does not contain explicit questions. Synthesize rigorous GCSE questions.\nMix short_answer, multiple_choice, true_false, and numeric items.\nGround every answer and explanation directly in the supplied notes.\nAlways write in UK English and reference the specification where relevant.\nReturn JSON that matches the provided schema. The summary should highlight coverage and question mix.\nYou must return exactly 6 questions.\nFor multiple_choice items, include exactly four options labelled A, B, C, and D in the options array.\nSet the difficulty field to foundation, intermediate, or higher; choose the closest match when uncertain.\nSubject focus: biology.\nExam board context: OCR.\nInclude concise sourceReference entries when you can identify page numbers, prompts or captions.\nIf the material lacks enough detail for a requirement, explain the limitation in the summary.",
+  "quiz": {
+    "quizTitle": "GCSE Biology: Blood, Organ, and Stem Cell Donation",
+    "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, drawing directly from the provided study material. It includes a mix of question types: two multiple-choice questions, two short-answer questions, one true/false question, and one numeric question. Topics covered include the donation process for blood and stem cells, the importance of donation, legal aspects of organ donation in England, and individual considerations for choosing to donate or not. The questions are designed to assess recall, interpretation, and analytical skills relevant to GCSE Biology (OCR specification).",
+    "mode": "synthesis",
+    "subject": "biology",
+    "board": "OCR",
+    "syllabusAlignment": "GCSE Triple Science Biology - Human Biology, Health and Disease (Donation)",
+    "questionCount": 6,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "According to the provided information, what is the minimum age to register online to become a blood donor in England?",
+        "answer": "A",
+        "explanation": "Slide 8 states: \"Register online from 16+ at blood.co.uk.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A. 16",
+          "B. 17",
+          "C. 18",
+          "D. 21"
+        ],
+        "topic": "Blood Donation Process",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "Page 8, \"What's involved in being a blood donor\", step 1"
+      },
+      {
+        "id": "Q2",
+        "prompt": "Explain two reasons why blood and stem cell donations are important for individuals and society, according to the provided material.",
+        "answer": "Blood donations are important because nearly 400 new blood donors are needed every day in England to meet demand. Stem cell donations are important because 75% of UK patients in need of a stem cell transplant cannot find a match from a relative and require an unrelated donor.",
+        "explanation": "The material highlights the daily demand for blood donors and the high percentage of stem cell patients needing unrelated matches, demonstrating the critical need for these donations to save and improve lives.",
+        "type": "short_answer",
+        "topic": "Importance of Donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation, Synthesis",
+        "sourceReference": "Page 6, \"Why are donations important?\""
+      },
+      {
+        "id": "Q3",
+        "prompt": "True or False: In England, from 2020, anyone over 18 is automatically considered an organ donor upon death, regardless of whether they have registered a decision.",
+        "answer": "False",
+        "explanation": "From 2020, anyone over 18 in England is considered an organ donor unless they have registered a decision *not* to donate or are in an excluded group. Therefore, it is not regardless of whether they have registered a decision, but rather *unless* they have registered a decision not to donate.",
+        "type": "true_false",
+        "topic": "Organ Donation Law",
+        "difficulty": "intermediate",
+        "skillFocus": "Interpretation, Recall",
+        "sourceReference": "Page 13, \"Organ donation: legal changes to save more lives\""
+      },
+      {
+        "id": "Q4",
+        "prompt": "What percentage of stem cell donations are typically carried out through the bloodstream, as stated in the provided information?",
+        "answer": "90",
+        "explanation": "The material specifies that stem cells can be donated in one of two ways, with \"through the bloodstream (90% of donors)\" being the more common method.",
+        "type": "numeric",
+        "topic": "Stem Cell Donation Process",
+        "difficulty": "foundation",
+        "skillFocus": "Recall, Data Extraction",
+        "sourceReference": "Page 10, \"What's involved in being a stem cell donor?\", step 4"
+      },
+      {
+        "id": "Q5",
+        "prompt": "Which of the following individuals would most likely require an organ donation, according to the provided material?",
+        "answer": "C",
+        "explanation": "Page 5 explicitly states that \"Someone whose organs have been damaged by disease or injury\" and \"Someone who has a birth defect\" are individuals who might need organ donation. Options A, B, and D relate to blood or stem cell donations.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Someone experiencing significant blood loss from an accident.",
+          "B. Someone with blood cancer or a blood disorder.",
+          "C. Someone whose organs have been damaged by disease or injury.",
+          "D. Someone needing a routine blood transfusion."
+        ],
+        "topic": "Organ Donation Recipients",
+        "difficulty": "intermediate",
+        "skillFocus": "Application, Discrimination",
+        "sourceReference": "Page 5, \"Who might need each type of donation?\", Organ donation column"
+      },
+      {
+        "id": "Q6",
+        "prompt": "Identify two distinct reasons an individual might choose not to donate blood or organs, based on the information provided.",
+        "answer": "An individual might choose not to donate blood due to a fear of needles. They might also choose not to donate organs because they feel uncomfortable with the idea of their organs being used after death, leading them to opt out on the NHS Organ Donation Register.",
+        "explanation": "The material on page 16 presents two speech bubbles illustrating these specific reasons for choosing not to donate.",
+        "type": "short_answer",
+        "topic": "Considerations for Donation",
+        "difficulty": "higher",
+        "skillFocus": "Analysis, Extraction",
+        "sourceReference": "Page 16, \"Why do people choose not to donate?\""
+      }
+    ]
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "id": "with-questions-c2-1examqs",
+  "variant": "ten-more",
+  "mode": "extension",
+  "generatedAt": "2025-09-25T04:35:12.619Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
+    "displayName": "C2.1ExamQs.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "baseQuizPath": "quiz.json",
+  "quiz": {
+    "quizTitle": "GCSE Chemistry: States of Matter and Experimental Techniques",
+    "summary": "This quiz covers key concepts in GCSE Chemistry, focusing on states of matter, chemical equations, and experimental techniques for determining melting and boiling points. It includes a mix of multiple-choice questions requiring data interpretation from graphs and short-answer questions assessing understanding of experimental design and chemical principles. The quiz aligns with AQA GCSE Triple Science (Chemistry) specifications, particularly topics related to the particle model and practical skills. Note: The provided source material for Figure 1 contains an anomaly for substance A where the boiling point appears lower than the melting point; interpretations for questions 1(b) and 1(c) are made based on the most plausible intended meaning for other substances.",
+    "mode": "extension",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "AQA GCSE Chemistry: The particle model, states of matter, chemical reactions, experimental determination of melting and boiling points.",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "Q_new_1",
+        "prompt": "The reaction between lithium and water produces lithium hydroxide and hydrogen gas. What type of chemical reaction is this?",
+        "answer": "C",
+        "explanation": "In this reaction, lithium (a more reactive metal) displaces hydrogen from water, forming lithium hydroxide and releasing hydrogen gas. This is a characteristic of a displacement reaction.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Neutralisation",
+          "B) Precipitation",
+          "C) Displacement",
+          "D) Combustion"
+        ],
+        "topic": "Chemical reactions, reactivity series",
+        "difficulty": "intermediate",
+        "skillFocus": "Classification of chemical reactions",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q_new_2",
+        "prompt": "In the completed chemical equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what does the state symbol '(aq)' represent?",
+        "answer": "C",
+        "explanation": "The state symbol '(aq)' stands for 'aqueous', meaning the substance is dissolved in water to form a solution.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A solid dissolved in acid",
+          "B) A gas dissolved in water",
+          "C) A substance dissolved in water",
+          "D) A liquid at room temperature"
+        ],
+        "topic": "Chemical notation, states of matter",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of chemical notation",
+        "sourceReference": "Page 1, Question 1(a)"
+      },
+      {
+        "id": "Q_new_3",
+        "prompt": "According to Figure 1, which substance is a solid at -10°C?",
+        "answer": "C",
+        "explanation": "Substance C has a melting point of 0°C. At -10°C, which is below its melting point, substance C would be in a solid state.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A",
+          "B) B",
+          "C) C",
+          "D) D"
+        ],
+        "topic": "States of matter, data interpretation",
+        "difficulty": "intermediate",
+        "skillFocus": "Data analysis, understanding phase changes",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q_new_4",
+        "prompt": "Based on Figure 1, which substance has the highest boiling point?",
+        "answer": "C",
+        "explanation": "By observing the boiling points (represented by the top of the vertical lines or the '•' symbol) in Figure 1, substance C has a boiling point of approximately 200°C, which is the highest among the given substances.",
+        "type": "multiple_choice",
+        "options": [
+          "A) A",
+          "B) B",
+          "C) C",
+          "D) D"
+        ],
+        "topic": "States of matter, data interpretation",
+        "difficulty": "foundation",
+        "skillFocus": "Data extraction from graphs",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q_new_5",
+        "prompt": "Using Figure 1, determine the state of substance B at 100°C.",
+        "answer": "B",
+        "explanation": "Substance B has a melting point of approximately 70°C and a boiling point of approximately 180°C. Since 100°C is above its melting point and below its boiling point, substance B would be in a liquid state.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Solid",
+          "B) Liquid",
+          "C) Gas",
+          "D) Plasma"
+        ],
+        "topic": "States of matter, phase changes",
+        "difficulty": "intermediate",
+        "skillFocus": "Data interpretation, application of phase change rules",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "Q_new_6",
+        "prompt": "In the experimental setup shown in Figure 2, what is the primary purpose of using a water bath to heat substance B?",
+        "answer": "B",
+        "explanation": "A water bath provides a more uniform and controlled temperature environment for heating substances compared to direct heating, which helps in obtaining more accurate melting or boiling point measurements.",
+        "type": "multiple_choice",
+        "options": [
+          "A) To prevent substance B from reacting with air",
+          "B) To ensure even and controlled heating of substance B",
+          "C) To cool substance B down slowly",
+          "D) To measure the volume of substance B"
+        ],
+        "topic": "Experimental techniques, laboratory safety",
+        "difficulty": "foundation",
+        "skillFocus": "Understanding experimental procedures",
+        "sourceReference": "Page 4, Figure 2"
+      },
+      {
+        "id": "Q_new_7",
+        "prompt": "If substance B had a boiling point of 250°C, what alternative heating method would be more suitable than a water bath for determining its boiling point?",
+        "answer": "An oil bath or a heating mantle.",
+        "explanation": "A water bath cannot exceed 100°C. For substances with higher boiling points like 250°C, an oil bath (which can reach higher temperatures) or a heating mantle (for direct, controlled heating of a flask) would be necessary.",
+        "type": "short_answer",
+        "topic": "Experimental techniques, laboratory apparatus",
+        "difficulty": "higher",
+        "skillFocus": "Application of practical knowledge, problem-solving in experimental design",
+        "sourceReference": "Page 4, Figure 2"
+      },
+      {
+        "id": "Q_new_8",
+        "prompt": "The model of shaking balls is good for representing particles in a gas. However, suggest one limitation of this model when trying to accurately represent real gas particles.",
+        "answer": "The balls do not represent the actual microscopic size of gas particles / the model does not show intermolecular forces between particles / the balls are all the same size and shape, unlike real gas particles which can vary / the model doesn't accurately represent the empty space between particles.",
+        "explanation": "While useful for illustrating random motion and separation, the model simplifies many aspects. Real gas particles are microscopic, have specific chemical properties, and interact via weak intermolecular forces, none of which are perfectly represented by macroscopic balls.",
+        "type": "short_answer",
+        "topic": "Particle model, scientific models",
+        "difficulty": "higher",
+        "skillFocus": "Critical evaluation of scientific models",
+        "sourceReference": "Page 4, Question 2"
+      },
+      {
+        "id": "Q_new_9",
+        "prompt": "Describe the arrangement and movement of particles in a liquid.",
+        "answer": "Particles in a liquid are close together but randomly arranged. They can move past each other (flow) and have random motion.",
+        "explanation": "In a liquid, particles are held by intermolecular forces but have enough kinetic energy to overcome fixed positions, allowing them to slide past one another. This gives liquids a definite volume but no definite shape.",
+        "type": "short_answer",
+        "topic": "States of matter, particle theory",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall and description of particle theory",
+        "sourceReference": "Page 5, Question 2(b)"
+      },
+      {
+        "id": "Q_new_10",
+        "prompt": "For a given material, how does the average kinetic energy of its particles relate to its temperature?",
+        "answer": "C",
+        "explanation": "Temperature is a direct measure of the average kinetic energy of the particles within a substance. As temperature increases, particles move faster on average, thus possessing higher average kinetic energy.",
+        "type": "multiple_choice",
+        "options": [
+          "A) Average kinetic energy decreases as temperature increases",
+          "B) Average kinetic energy is unrelated to temperature",
+          "C) Average kinetic energy increases as temperature increases",
+          "D) Average kinetic energy is constant regardless of temperature"
+        ],
+        "topic": "Kinetic theory, temperature",
+        "difficulty": "foundation",
+        "skillFocus": "Understanding the kinetic theory of matter",
+        "sourceReference": "Page 5, Question 2(b)"
+      }
+    ]
+  }
+}
