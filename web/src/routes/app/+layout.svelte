@@ -337,6 +337,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
 		--auth-padding-block: clamp(3rem, 6vw, 6rem);
 		--auth-padding-inline: clamp(1.5rem, 4vw, 3.5rem);
 		padding: calc(env(safe-area-inset-top) + var(--auth-padding-block))
