@@ -1,0 +1,178 @@
+{
+  "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+  "mode": "extension",
+  "subject": "chemistry",
+  "board": "AQA",
+  "generatedAt": "2025-09-25T04:21:22.539Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "quiz": {
+    "quizTitle": "GCSE Triple Science Chemistry: Covalent Bonding Retrieval Quiz",
+    "summary": "This quiz covers key concepts in Covalent Bonding, aligning with the AQA GCSE Triple Science C2 specification. It includes 16 questions, featuring a mix of multiple-choice and short-answer formats, designed to test recall, description, and explanation skills. Topics range from the fundamental formation of covalent bonds and the structure of giant covalent substances to specific examples like graphite and fullerenes. The questions are drawn directly from the provided study material, ensuring close alignment with the source content.",
+    "mode": "extension",
+    "subject": "chemistry",
+    "board": "AQA",
+    "syllabusAlignment": "C2 Covalent bonding (AQA GCSE Triple Science)",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "Q7",
+        "prompt": "Which type of atoms typically form covalent bonds with each other?",
+        "answer": "non-metals",
+        "explanation": "Covalent bonds are predominantly formed between non-metal atoms, as they both tend to gain electrons to achieve a full outer shell, making sharing electrons a stable arrangement.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Metals and non-metals",
+          "B. Metals only",
+          "C. Non-metals only",
+          "D. Metalloids"
+        ],
+        "topic": "Covalent Bond Formation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall",
+        "sourceReference": "C2 questions, Q2"
+      },
+      {
+        "id": "Q8",
+        "prompt": "Describe the structure and bonding of small molecules.",
+        "answer": "small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules",
+        "explanation": "Small molecules consist of a limited number of atoms joined by strong covalent bonds. However, the forces between these individual molecules (intermolecular forces) are weak.",
+        "type": "short_answer",
+        "topic": "Small Molecular Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Description",
+        "sourceReference": "C2 questions, Q4"
+      },
+      {
+        "id": "Q9",
+        "prompt": "Describe the structure and bonding of polymers.",
+        "answer": "many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains",
+        "explanation": "Polymers are large molecules formed from many repeating smaller units (monomers) linked by strong covalent bonds into long chains. Weak intermolecular forces exist between these polymer chains.",
+        "type": "short_answer",
+        "topic": "Polymer Structures",
+        "difficulty": "intermediate",
+        "skillFocus": "Description",
+        "sourceReference": "C2 questions, Q5"
+      },
+      {
+        "id": "Q10",
+        "prompt": "Why do substances made of small molecules generally have low melting points?",
+        "answer": "only a small amount of energy is needed to break the weak intermolecular forces",
+        "explanation": "Small molecular substances have low melting points because only a small amount of energy is required to overcome the weak intermolecular forces between the molecules, not to break the strong covalent bonds within them.",
+        "type": "multiple_choice",
+        "options": [
+          "A. They have strong covalent bonds that are easily broken.",
+          "B. Only a small amount of energy is needed to break the weak intermolecular forces between molecules.",
+          "C. They have delocalised electrons that lower the melting point.",
+          "D. The atoms are not bonded together."
+        ],
+        "topic": "Properties of Small Molecules",
+        "difficulty": "foundation",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q7"
+      },
+      {
+        "id": "Q11",
+        "prompt": "Why do large molecules have higher melting and boiling points than small molecules?",
+        "answer": "the intermolecular forces are stronger in large molecules",
+        "explanation": "As molecules increase in size, the cumulative strength of the weak intermolecular forces between them becomes greater. More energy is therefore needed to overcome these stronger forces, leading to higher melting and boiling points.",
+        "type": "short_answer",
+        "topic": "Molecular Size and Properties",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q8"
+      },
+      {
+        "id": "Q12",
+        "prompt": "Why do most covalent substances not conduct electricity?",
+        "answer": "do not have delocalised electrons or ions",
+        "explanation": "For a substance to conduct electricity, it must possess mobile charge carriers, such as delocalised electrons or free ions. Most covalent substances lack these, as their electrons are held tightly in bonds or within specific atoms.",
+        "type": "multiple_choice",
+        "options": [
+          "A. They have strong covalent bonds that prevent electron movement.",
+          "B. They are typically solids at room temperature.",
+          "C. They do not have delocalised electrons or ions to carry charge.",
+          "D. Their atoms are too small to allow charge flow."
+        ],
+        "topic": "Covalent Substances and Conductivity",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q9"
+      },
+      {
+        "id": "Q13",
+        "prompt": "Explain why graphite is soft.",
+        "answer": "layers are not bonded so can slide over each other",
+        "explanation": "Graphite is soft because its structure consists of distinct layers of carbon atoms. The forces between these layers are very weak, allowing them to slide easily over one another, which also makes graphite a good lubricant.",
+        "type": "short_answer",
+        "topic": "Properties of Graphite",
+        "difficulty": "intermediate",
+        "skillFocus": "Explanation",
+        "sourceReference": "C2 questions, Q12"
+      },
+      {
+        "id": "Q14",
+        "prompt": "What is graphene?",
+        "answer": "one layer of graphite",
+        "explanation": "Graphene is a remarkable material consisting of a single, two-dimensional layer of carbon atoms arranged in a hexagonal lattice, essentially one layer of graphite.",
+        "type": "multiple_choice",
+        "options": [
+          "A. A type of fullerene.",
+          "B. A giant covalent structure of silicon.",
+          "C. One layer of graphite.",
+          "D. A polymer made of carbon atoms."
+        ],
+        "topic": "Graphene",
+        "difficulty": "foundation",
+        "skillFocus": "Definition",
+        "sourceReference": "C2 questions, Q13"
+      },
+      {
+        "id": "Q15",
+        "prompt": "Give two properties of graphene.",
+        "answer": "strong, conducts electricity",
+        "explanation": "Graphene is renowned for its exceptional strength, being one of the strongest known materials, and its excellent electrical conductivity due to the presence of delocalised electrons.",
+        "type": "short_answer",
+        "topic": "Properties of Graphene",
+        "difficulty": "higher",
+        "skillFocus": "Recall, Application",
+        "sourceReference": "C2 questions, Q14"
+      },
+      {
+        "id": "Q16",
+        "prompt": "Give two properties of nanotubes.",
+        "answer": "high tensile strength, conduct electricity",
+        "explanation": "Nanotubes are known for their high tensile strength, meaning they are incredibly strong and resistant to stretching or breaking, and their ability to conduct electricity efficiently.",
+        "type": "short_answer",
+        "topic": "Nanotubes",
+        "difficulty": "higher",
+        "skillFocus": "Recall, Application",
+        "sourceReference": "C2 questions, Q17"
+      }
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-flash",
+    "temperature": 0.2
+  },
+  "job": {
+    "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
+    "category": "with-questions",
+    "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "sourcePath": "/workspace/spark/data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "relativeSourcePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "mode": "extraction",
+    "questionCount": 6,
+    "subject": "chemistry",
+    "board": "AQA",
+    "temperature": 0.2
+  }
+}

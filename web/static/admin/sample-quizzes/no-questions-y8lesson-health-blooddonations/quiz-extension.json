@@ -1,0 +1,184 @@
+{
+  "id": "no-questions-y8lesson-health-blooddonations",
+  "mode": "extension",
+  "subject": "biology",
+  "board": "OCR",
+  "generatedAt": "2025-09-25T04:17:27.717Z",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "questionCount": 10,
+    "temperature": 0.2
+  },
+  "source": {
+    "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf"
+  },
+  "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
+  "quiz": {
+    "quizTitle": "GCSE Biology: Blood and Organ Donation",
+    "summary": "This quiz covers key aspects of blood, organ, and stem cell donation, including reasons for donation, the donation process, legal considerations, and reasons for choosing not to donate. It features a mix of multiple-choice, short-answer, and true/false questions, ensuring comprehensive coverage of the provided study material.",
+    "mode": "extension",
+    "subject": "biology",
+    "board": "OCR",
+    "syllabusAlignment": "GCSE Triple Science Biology topics related to human health and medical procedures, specifically donation.",
+    "questionCount": 10,
+    "questions": [
+      {
+        "id": "Q7",
+        "prompt": "What percentage of UK patients needing a stem cell transplant are unable to find a match from a relative and require an unrelated donor?",
+        "answer": "C",
+        "explanation": "Page 6 states, \"75% of UK patients in need of a stem cell transplant are not able to find a match from a relative and need an unrelated donor.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) 25%",
+          "B) 50%",
+          "C) 75%",
+          "D) 90%"
+        ],
+        "topic": "Importance of donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of specific statistics",
+        "sourceReference": "Page 6"
+      },
+      {
+        "id": "Q8",
+        "prompt": "After a blood donation is split into component parts, how many adults or infants can one donation typically help?",
+        "answer": "B",
+        "explanation": "Page 8, step 4, explains that \"each donation can help 3 adults or 6 infants.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) 1 adult or 2 infants",
+          "B) 3 adults or 6 infants",
+          "C) 5 adults or 10 infants",
+          "D) 2 adults or 4 infants"
+        ],
+        "topic": "Steps in blood donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of specific details",
+        "sourceReference": "Page 8"
+      },
+      {
+        "id": "Q9",
+        "prompt": "In the organ donation process, what is the primary role of the specialist nurse when a potential donor dies?",
+        "answer": "The specialist nurse checks the NHS Organ Donor Register for the individual's decision and then discusses this decision with the donor's family, respecting their faith, beliefs, and culture.",
+        "explanation": "Page 11, step 3, details that \"The specialist nurse will then discuss the donor's registered/last known decision with their family as part of end of life discussions. The donor's faith, beliefs and culture will always be respected.\" Step 2 also mentions checking the register.",
+        "type": "short_answer",
+        "topic": "Steps in organ donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Description of roles and responsibilities",
+        "sourceReference": "Page 11"
+      },
+      {
+        "id": "Q10",
+        "prompt": "True or False: Someone whose organs have been damaged by disease or injury is a candidate for organ donation.",
+        "answer": "True",
+        "explanation": "Page 5 lists \"Someone whose organs have been damaged by disease or injury\" as a person who might need organ donation.",
+        "type": "true_false",
+        "topic": "Who needs donations",
+        "difficulty": "foundation",
+        "skillFocus": "Identification of recipient criteria",
+        "sourceReference": "Page 5"
+      },
+      {
+        "id": "Q11",
+        "prompt": "What is the minimum age to register with Anthony Nolan for stem cell donation?",
+        "answer": "B",
+        "explanation": "Page 9 lists \"Anthony Nolan (16+)\" as a registry for stem cell donation.",
+        "type": "multiple_choice",
+        "options": [
+          "A) 15",
+          "B) 16",
+          "C) 17",
+          "D) 18"
+        ],
+        "topic": "Steps in stem cell donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of specific age requirements",
+        "sourceReference": "Page 9"
+      },
+      {
+        "id": "Q12",
+        "prompt": "Name two specific groups of donor types that are identified as being more in demand according to the study material.",
+        "answer": "Donors from Black African, Black Caribbean, and Asian backgrounds, and young blood, stem cell, and organ donors.",
+        "explanation": "Page 6 states, \"Some donor types are more in demand such as donors from Black African, Black Caribbean and Asian backgrounds and young blood, stem cell and organ donors.\"",
+        "type": "short_answer",
+        "topic": "Importance of donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Identification of specific categories",
+        "sourceReference": "Page 6"
+      },
+      {
+        "id": "Q13",
+        "prompt": "What is the typical duration of the actual blood donation process itself, excluding registration and post-donation activities?",
+        "answer": "A",
+        "explanation": "Page 8, step 3, states, \"The donation process takes roughly 1 hour – donating itself just 5-10 minutes.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) 5-10 minutes",
+          "B) 15-20 minutes",
+          "C) 30-45 minutes",
+          "D) 1 hour"
+        ],
+        "topic": "Steps in blood donation",
+        "difficulty": "foundation",
+        "skillFocus": "Recall of specific timeframes",
+        "sourceReference": "Page 8"
+      },
+      {
+        "id": "Q14",
+        "prompt": "Under the 2020 law in England, besides having registered a decision not to donate, what is one specific group of people over 18 who would be excluded from being considered an organ donor?",
+        "answer": "Visitors to England.",
+        "explanation": "Page 13 mentions that \"anyone over 18 in England will be considered an organ donor when they die unless they have registered a decision not to donate or are in an excluded group (e.g. visitors to England).\"",
+        "type": "short_answer",
+        "topic": "Law around organ donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Identification of exceptions",
+        "sourceReference": "Page 13"
+      },
+      {
+        "id": "Q15",
+        "prompt": "For potential stem cell donors who are not registered blood donors, what method is typically used to check their tissue type?",
+        "answer": "C",
+        "explanation": "Page 9, under the second '2' step for stem cell donation, states: \"Potential stem cell donors will be asked to do a cheek swab to check their tissue type.\"",
+        "type": "multiple_choice",
+        "options": [
+          "A) A full medical examination",
+          "B) A urine sample",
+          "C) A cheek swab",
+          "D) A hair follicle test"
+        ],
+        "topic": "Steps in stem cell donation",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall of procedural details",
+        "sourceReference": "Page 9"
+      },
+      {
+        "id": "Q16",
+        "prompt": "According to the learning intentions on page 1, what is one key aspect students are expected to be able to 'outline' regarding organ donation in England?",
+        "answer": "Students should be able to outline the law around organ donation in England.",
+        "explanation": "Page 1, under 'Learning intentions', includes: \"Outline the law around organ donation in England\".",
+        "type": "short_answer",
+        "topic": "Learning intentions",
+        "difficulty": "higher",
+        "skillFocus": "Interpretation of learning objectives",
+        "sourceReference": "Page 1"
+      }
+    ]
+  },
+  "model": {
+    "modelId": "gemini-2.5-flash",
+    "temperature": 0.2
+  },
+  "job": {
+    "id": "no-questions-y8lesson-health-blooddonations",
+    "category": "no-questions",
+    "displayName": "Y8Lesson-Health-BloodDonations.pdf",
+    "sourcePath": "/workspace/spark/data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "relativeSourcePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
+    "mode": "synthesis",
+    "questionCount": 6,
+    "subject": "biology",
+    "board": "OCR",
+    "temperature": 0.2
+  }
+}
