@@ -3,13 +3,13 @@
 </svelte:head>
 
 <div class="app-page">
-	<div class="blob-field" aria-hidden="true"></div>
+	<div class="app-mesh-bleed" aria-hidden="true">
+		<div class="blob-field" aria-hidden="true"></div>
+	</div>
 	<main class="app-content">
 		<section class="dashboard-hero">
 			<h1>Ready to pick up where you left off?</h1>
-			<p>
-				Upload a new set of notes or jump back into your latest GCSE practice session.
-			</p>
+			<p>Upload a new set of notes or jump back into your latest GCSE practice session.</p>
 			<div class="dashboard-actions">
 				<button type="button" class="dashboard-button primary">New scan</button>
 				<button type="button" class="dashboard-button secondary">View recent quizzes</button>
@@ -22,16 +22,17 @@
 	/* Base app background with themed glows (ported from upstream) */
 	.app-page {
 		position: relative;
-		min-height: 100vh;
+		min-height: 100svh;
 		width: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: clamp(2.5rem, 5vw, 4rem);
-		overflow: hidden;
-		background:
-			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
-			var(--app-surface);
+		--app-padding-block: clamp(2.5rem, 5vw, 4rem);
+		--app-padding-inline: clamp(2.5rem, 5vw, 4rem);
+		padding: calc(env(safe-area-inset-top) + var(--app-padding-block))
+			calc(env(safe-area-inset-right) + var(--app-padding-inline))
+			calc(env(safe-area-inset-bottom) + var(--app-padding-block))
+			calc(env(safe-area-inset-left) + var(--app-padding-inline));
 		color: var(--text-primary, var(--foreground));
 		--app-surface: hsl(38 82% 97%);
 		--app-halo: hsla(45 87% 90% / 0.65);
@@ -48,9 +49,27 @@
 		--app-subtitle-color: var(--text-secondary, rgba(30, 41, 59, 0.78));
 	}
 
+	.app-mesh-bleed {
+		position: fixed;
+		top: calc(-1 * env(safe-area-inset-top));
+		right: calc(-1 * env(safe-area-inset-right));
+		bottom: calc(-1 * env(safe-area-inset-bottom));
+		left: calc(-1 * env(safe-area-inset-left));
+		pointer-events: none;
+		z-index: -1;
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+		background-repeat: no-repeat;
+		background-size: cover;
+	}
+
 	.blob-field {
 		position: absolute;
-		inset: -40%;
+		top: calc(-40% - env(safe-area-inset-top));
+		right: calc(-40% - env(safe-area-inset-right));
+		bottom: calc(-40% - env(safe-area-inset-bottom));
+		left: calc(-40% - env(safe-area-inset-left));
 		pointer-events: none;
 		filter: blur(90px);
 		transform: translateZ(0);
@@ -195,7 +214,6 @@
 				radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
 				radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
 		}
-
 	}
 
 	@media (max-width: 40rem) {

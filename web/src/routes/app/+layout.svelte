@@ -193,7 +193,9 @@
 
 {#if ui.showAuth}
 	<div class="auth-backdrop" aria-hidden={clientUser !== null}>
-		<div class="auth-blob-field" aria-hidden="true"></div>
+		<div class="auth-mesh-bleed" aria-hidden="true">
+			<div class="auth-blob-field" aria-hidden="true"></div>
+		</div>
 		<div class="auth-card">
 			<header class="auth-header">
 				<p class="auth-eyebrow">Welcome to Spark</p>
@@ -324,20 +326,22 @@
 	}
 
 	.app-layout {
-		min-height: 100vh;
+		min-height: 100svh;
 	}
 
 	.auth-backdrop {
 		position: fixed;
 		inset: 0;
+		z-index: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: clamp(3rem, 6vw, 6rem) clamp(1.5rem, 4vw, 3.5rem);
-		overflow: hidden;
-		background:
-			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
-			var(--app-surface);
+		--auth-padding-block: clamp(3rem, 6vw, 6rem);
+		--auth-padding-inline: clamp(1.5rem, 4vw, 3.5rem);
+		padding: calc(env(safe-area-inset-top) + var(--auth-padding-block))
+			calc(env(safe-area-inset-right) + var(--auth-padding-inline))
+			calc(env(safe-area-inset-bottom) + var(--auth-padding-block))
+			calc(env(safe-area-inset-left) + var(--auth-padding-inline));
 		color: var(--text-primary, var(--foreground));
 		--app-surface: hsl(38 82% 97%);
 		--app-halo: hsla(45 87% 90% / 0.65);
@@ -357,9 +361,28 @@
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
+	.auth-mesh-bleed {
+		position: fixed;
+		top: calc(-1 * env(safe-area-inset-top));
+		right: calc(-1 * env(safe-area-inset-right));
+		bottom: calc(-1 * env(safe-area-inset-bottom));
+		left: calc(-1 * env(safe-area-inset-left));
+		pointer-events: none;
+		z-index: -1;
+		overflow: hidden;
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+		background-repeat: no-repeat;
+		background-size: cover;
+	}
+
 	.auth-blob-field {
 		position: absolute;
-		inset: -40%;
+		top: calc(-40% - env(safe-area-inset-top));
+		right: calc(-40% - env(safe-area-inset-right));
+		bottom: calc(-40% - env(safe-area-inset-bottom));
+		left: calc(-40% - env(safe-area-inset-left));
 		pointer-events: none;
 		filter: blur(90px);
 		transform: translateZ(0);

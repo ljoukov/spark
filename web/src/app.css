@@ -93,6 +93,16 @@
 	}
 }
 
+html,
+body {
+	height: 100%;
+}
+
+body {
+	min-height: 100svh;
+	margin: 0;
+}
+
 .dark {
 	color-scheme: dark;
 	--background: oklch(0.129 0.042 264.695);
