@@ -9,18 +9,7 @@ import Loading from './command-loading.svelte';
 import Separator from './command-separator.svelte';
 import Viewport from './command-viewport.svelte';
 
-export {
-	Root,
-	Empty,
-	Group,
-	GroupHeading,
-	Input,
-	Item,
-	List,
-	Loading,
-	Separator,
-	Viewport
-};
+export { Root, Empty, Group, GroupHeading, Input, Item, List, Loading, Separator, Viewport };
 
 export const Command = {
 	Root,

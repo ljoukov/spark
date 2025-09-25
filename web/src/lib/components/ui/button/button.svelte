@@ -40,7 +40,7 @@
 </script>
 
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { Pathname } from '$app/types';
 
 	const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z+.-]*:/;
@@ -59,10 +59,6 @@
 
 	function isAbsoluteOrFragment(target: string): boolean {
 		return ABSOLUTE_URL_PATTERN.test(target) || target.startsWith('#');
-	}
-
-	function resolvePathname(target: Pathname): string {
-		return `${base}${target}`;
 	}
 </script>
 
@@ -89,11 +85,12 @@
 			{@render children?.()}
 		</a>
 	{:else}
+		{@const internalHref = resolve(href as any)}
 		<a
 			bind:this={ref}
 			data-slot="button"
 			class={cn(buttonVariants({ variant, size }), className)}
-			href={resolvePathname(href as Pathname)}
+			href={internalHref}
 			{...restProps}
 		>
 			{@render children?.()}
