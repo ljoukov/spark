@@ -6,6 +6,10 @@
 
 :root {
 	color-scheme: light;
+	--safe-area-top: env(safe-area-inset-top, 0px);
+	--safe-area-right: env(safe-area-inset-right, 0px);
+	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-left: env(safe-area-inset-left, 0px);
 	--radius: 0.625rem;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.129 0.042 264.695);
@@ -175,10 +179,17 @@
 }
 
 @layer base {
+	html {
+		height: 100%;
+	}
 	* {
 		@apply border-border outline-ring/50;
 	}
 	body {
 		@apply bg-background text-foreground;
+		margin: 0;
+		height: 100%;
+		min-height: 100vh;
+		min-height: 100svh;
 	}
 }

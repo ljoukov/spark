@@ -325,6 +325,7 @@
 
 	.app-layout {
 		min-height: 100vh;
+		min-height: 100svh;
 	}
 
 	.auth-backdrop {
@@ -333,11 +334,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: clamp(3rem, 6vw, 6rem) clamp(1.5rem, 4vw, 3.5rem);
-		overflow: hidden;
-		background:
-			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
-			var(--app-surface);
+		padding: calc(var(--safe-area-top) + clamp(3rem, 6vw, 6rem))
+			calc(var(--safe-area-right) + clamp(1.5rem, 4vw, 3.5rem))
+			calc(var(--safe-area-bottom) + clamp(3rem, 6vw, 6rem))
+			calc(var(--safe-area-left) + clamp(1.5rem, 4vw, 3.5rem));
+		min-height: 100vh;
+		min-height: 100svh;
+		isolation: isolate;
 		color: var(--text-primary, var(--foreground));
 		--app-surface: hsl(38 82% 97%);
 		--app-halo: hsla(45 87% 90% / 0.65);
@@ -357,9 +360,28 @@
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
+	.auth-backdrop::before {
+		content: '';
+		position: fixed;
+		top: calc(-1 * var(--safe-area-top));
+		right: calc(-1 * var(--safe-area-right));
+		bottom: calc(-1 * var(--safe-area-bottom));
+		left: calc(-1 * var(--safe-area-left));
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+		background-repeat: no-repeat;
+		background-size: cover;
+		z-index: -1;
+		pointer-events: none;
+	}
+
 	.auth-blob-field {
 		position: absolute;
-		inset: -40%;
+		top: calc(-40% - var(--safe-area-top));
+		right: calc(-40% - var(--safe-area-right));
+		bottom: calc(-40% - var(--safe-area-bottom));
+		left: calc(-40% - var(--safe-area-left));
 		pointer-events: none;
 		filter: blur(90px);
 		transform: translateZ(0);
