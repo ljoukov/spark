@@ -7,24 +7,35 @@
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
+	import type { QuizGeneration } from '$lib/llm/schemas';
+	import type { SampleDetail, SampleOverview } from './+page';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-        let selectedId = $state(data.entries[0]?.overview.id ?? '');
-        const activeEntry = $derived(data.entries.find((entry) => entry.overview.id === selectedId));
-        const selectedLabel = $derived(activeEntry?.overview.label ?? '');
-        const questionCount = $derived(activeEntry?.detail?.quiz.questions.length ?? 0);
-        const hasDetail = $derived(Boolean(activeEntry?.detail));
+	type SampleEntry = { overview: SampleOverview; detail: SampleDetail | null };
 
-        const baseQualityVerdict = $derived(activeEntry?.overview.quality?.baseVerdict ?? null);
-        const extensionQualityVerdict = $derived(activeEntry?.overview.quality?.extensionVerdict ?? null);
-        const slopBase = $derived(activeEntry?.overview.slop?.base ?? null);
-        const slopExtension = $derived(activeEntry?.overview.slop?.extension ?? null);
-        const outputs = $derived(activeEntry?.overview.outputs ?? null);
+	const entries = $derived(data.entries as SampleEntry[]);
 
-        let comboboxOpen = $state(false);
-        let triggerRef = $state<HTMLButtonElement | null>(null);
+	let selectedId = $state('');
+	const activeEntry = $derived(entries.find((entry) => entry.overview.id === selectedId) ?? null);
+	const selectedLabel = $derived(activeEntry?.overview.label ?? '');
+
+	const activeQuiz = $derived((activeEntry?.detail?.quiz ?? null) as QuizGeneration | null);
+	const quizQuestions = $derived((activeQuiz?.questions ?? []) as QuizGeneration['questions']);
+	const questionCount = $derived(quizQuestions.length);
+	const hasDetail = $derived(Boolean(activeQuiz));
+
+	const baseQualityVerdict = $derived(activeEntry?.overview.quality?.baseVerdict ?? null);
+	const extensionQualityVerdict = $derived(activeEntry?.overview.quality?.extensionVerdict ?? null);
+	const slopBase = $derived(activeEntry?.overview.slop?.base ?? null);
+	const slopExtension = $derived(activeEntry?.overview.slop?.extension ?? null);
+	const baseSlopSummary = $derived(formatSlopSummary(slopBase));
+	const extensionSlopSummary = $derived(formatSlopSummary(slopExtension));
+	const outputs = $derived(activeEntry?.overview.outputs ?? null);
+
+	let comboboxOpen = $state(false);
+	let triggerRef = $state<HTMLButtonElement | null>(null);
 
 	function selectSample(id: string): void {
 		selectedId = id;
@@ -37,37 +48,38 @@
 		});
 	}
 
-        function formatTimestamp(value: string): string {
-                const date = new Date(value);
-                if (Number.isNaN(date.getTime())) {
-                        return value;
-                }
-                return new Intl.DateTimeFormat('en-GB', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                }).format(date);
-        }
+	function formatTimestamp(value: string): string {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return value;
+		}
+		return new Intl.DateTimeFormat('en-GB', {
+			dateStyle: 'medium',
+			timeStyle: 'short'
+		}).format(date);
+	}
 
-        function formatQualityVerdict(value: string | null): string {
-                if (!value) {
-                        return 'Not run';
-                }
-                return value === 'approve' ? 'Approve' : 'Revise';
-        }
+	function formatQualityVerdict(value: string | null): string {
+		if (!value) {
+			return 'Not run';
+		}
+		return value === 'approve' ? 'Approve' : 'Revise';
+	}
 
-        function formatSlopSummary(
-                score: { label: 0 | 1; riskScore: number } | null
-        ): { label: string; risk: string } {
-                if (!score) {
-                        return { label: 'Not run', risk: '—' };
-                }
-                return {
-                        label: score.label === 1 ? 'Flagged' : 'Clean',
-                        risk: score.riskScore.toFixed(3)
-                };
-        }
+	function formatSlopSummary(score: { label: 0 | 1; riskScore: number } | null): {
+		label: string;
+		risk: string;
+	} {
+		if (!score) {
+			return { label: 'Not run', risk: '—' };
+		}
+		return {
+			label: score.label === 1 ? 'Flagged' : 'Clean',
+			risk: score.riskScore.toFixed(3)
+		};
+	}
 
-	const hasSamples = $derived(data.entries.length > 0);
+	const hasSamples = $derived(entries.length > 0);
 
 	$effect(() => {
 		if (!hasSamples) {
@@ -75,8 +87,8 @@
 			comboboxOpen = false;
 			return;
 		}
-		if (!data.entries.some((entry) => entry.overview.id === selectedId)) {
-			selectedId = data.entries[0]?.overview.id ?? '';
+		if (!entries.some((entry) => entry.overview.id === selectedId)) {
+			selectedId = entries[0]?.overview.id ?? '';
 		}
 	});
 </script>
@@ -95,7 +107,7 @@
 		<Card.Content>
 			<p class="text-sm text-muted-foreground">
 				{#if hasSamples}
-					Showing {data.entries.length} generated sample{data.entries.length === 1 ? '' : 's'}.
+					Showing {entries.length} generated sample{entries.length === 1 ? '' : 's'}.
 				{:else}
 					No generated samples were found. Add files under
 					<code class="rounded bg-muted px-1 py-0.5 text-xs">data/samples</code>
@@ -142,7 +154,7 @@
 								<Command.List>
 									<Command.Empty>No sample found.</Command.Empty>
 									<Command.Group>
-										{#each data.entries as entry (entry.overview.id)}
+										{#each entries as entry (entry.overview.id)}
 											<Command.Item
 												value={entry.overview.id}
 												class="flex items-start gap-2 px-3 py-2"
@@ -181,230 +193,238 @@
 		</Card.Root>
 
 		{#if activeEntry}
-                        <Card.Root class="space-y-6">
-                                <Card.Header>
-                                        <Card.Title>
-                                                {activeEntry.detail?.quiz.quizTitle ?? activeEntry.overview.quizTitle ?? 'Quiz detail unavailable'}
-                                        </Card.Title>
-                                        <Card.Description>
-                                                {activeEntry.overview.source.displayName} · {activeEntry.overview.mode} mode
-                                                {#if activeEntry.detail?.generatedAt}
-                                                        • generated {formatTimestamp(activeEntry.detail.generatedAt)}
-                                                {:else if activeEntry.overview.generatedAt}
-                                                        • generated {formatTimestamp(activeEntry.overview.generatedAt)}
-                                                {/if}
-                                        </Card.Description>
-                                </Card.Header>
-                                <Card.Content class="space-y-8">
-                                        <section>
-                                                <h3 class="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                                                        Overview
-                                                </h3>
-                                                <div class="mt-2 grid gap-3 text-sm md:grid-cols-2">
-                                                        <div>
-                                                                <p class="font-medium">Subject</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {activeEntry.detail?.subject ?? activeEntry.overview.subject ?? 'Not provided'}
-                                                                </p>
-                                                        </div>
-                                                        <div>
-                                                                <p class="font-medium">Board</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {activeEntry.detail?.board ?? activeEntry.overview.board ?? 'Not provided'}
-                                                                </p>
-                                                        </div>
-                                                        <div>
-                                                                <p class="font-medium">Model</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {activeEntry.detail?.request?.model ?? 'Not provided'}
-                                                                </p>
-                                                        </div>
-                                                        <div>
-                                                                <p class="font-medium">Source file</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {activeEntry.detail?.source.relativePath ?? activeEntry.overview.source.relativePath}
-                                                                </p>
-                                                        </div>
-                                                        <div>
-                                                                <p class="font-medium">Requested questions</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {activeEntry.detail?.request?.questionCount ?? activeEntry.overview.questionCount ?? 'Not provided'}
-                                                                </p>
-                                                        </div>
-                                                        <div>
-                                                                <p class="font-medium">Temperature</p>
-                                                                <p class="text-muted-foreground">
-                                                                        {#if typeof activeEntry.detail?.request?.temperature === 'number'}
-                                                                                {activeEntry.detail?.request?.temperature}
-                                                                        {:else}
-                                                                                Not provided
-                                                                        {/if}
-                                                                </p>
-                                                        </div>
-                                                        <div class="md:col-span-2">
-                                                                <p class="font-medium">Downloads</p>
-                                                                <div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                                        {#if outputs?.quiz}
-                                                                                <a class="underline" href={outputs.quiz}>Quiz JSON</a>
-                                                                        {/if}
-                                                                        {#if outputs?.qualityJudge}
-                                                                                <a class="underline" href={outputs.qualityJudge}>Quality judge JSON</a>
-                                                                        {/if}
-                                                                        {#if outputs?.slop}
-                                                                                <a class="underline" href={outputs.slop}>Slop JSON</a>
-                                                                        {/if}
-                                                                        {#if outputs?.extension}
-                                                                                <a class="underline" href={outputs.extension}>Extension JSON</a>
-                                                                        {/if}
-                                                                        {#if outputs?.extensionQualityJudge}
-                                                                                <a class="underline" href={outputs.extensionQualityJudge}>Extension judge JSON</a>
-                                                                        {/if}
-                                                                        {#if outputs?.extensionSlop}
-                                                                                <a class="underline" href={outputs.extensionSlop}>Extension slop JSON</a>
-                                                                        {/if}
-                                                                        {#if !outputs?.quiz && !outputs?.qualityJudge && !outputs?.slop && !outputs?.extension && !outputs?.extensionQualityJudge && !outputs?.extensionSlop}
-                                                                                <span>Not available</span>
-                                                                        {/if}
-                                                                </div>
-                                                        </div>
-                                                </div>
-                                        </section>
+			<Card.Root class="space-y-6">
+				<Card.Header>
+					<Card.Title>
+						{activeEntry.detail?.quiz.quizTitle ??
+							activeEntry.overview.quizTitle ??
+							'Quiz detail unavailable'}
+					</Card.Title>
+					<Card.Description>
+						{activeEntry.overview.source.displayName} · {activeEntry.overview.mode} mode
+						{#if activeEntry.detail?.generatedAt}
+							• generated {formatTimestamp(activeEntry.detail.generatedAt)}
+						{:else if activeEntry.overview.generatedAt}
+							• generated {formatTimestamp(activeEntry.overview.generatedAt)}
+						{/if}
+					</Card.Description>
+				</Card.Header>
+				<Card.Content class="space-y-8">
+					<section>
+						<h3 class="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+							Overview
+						</h3>
+						<div class="mt-2 grid gap-3 text-sm md:grid-cols-2">
+							<div>
+								<p class="font-medium">Subject</p>
+								<p class="text-muted-foreground">
+									{activeEntry.detail?.subject ?? activeEntry.overview.subject ?? 'Not provided'}
+								</p>
+							</div>
+							<div>
+								<p class="font-medium">Board</p>
+								<p class="text-muted-foreground">
+									{activeEntry.detail?.board ?? activeEntry.overview.board ?? 'Not provided'}
+								</p>
+							</div>
+							<div>
+								<p class="font-medium">Model</p>
+								<p class="text-muted-foreground">
+									{activeEntry.detail?.request?.model ?? 'Not provided'}
+								</p>
+							</div>
+							<div>
+								<p class="font-medium">Source file</p>
+								<p class="text-muted-foreground">
+									{activeEntry.detail?.source.relativePath ??
+										activeEntry.overview.source.relativePath}
+								</p>
+							</div>
+							<div>
+								<p class="font-medium">Requested questions</p>
+								<p class="text-muted-foreground">
+									{activeEntry.detail?.request?.questionCount ??
+										activeEntry.overview.questionCount ??
+										'Not provided'}
+								</p>
+							</div>
+							<div>
+								<p class="font-medium">Temperature</p>
+								<p class="text-muted-foreground">
+									{#if typeof activeEntry.detail?.request?.temperature === 'number'}
+										{activeEntry.detail?.request?.temperature}
+									{:else}
+										Not provided
+									{/if}
+								</p>
+							</div>
+							<div class="md:col-span-2">
+								<p class="font-medium">Downloads</p>
+								<div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+									{#if outputs?.quiz}
+										<a class="underline" href={outputs.quiz}>Quiz JSON</a>
+									{/if}
+									{#if outputs?.qualityJudge}
+										<a class="underline" href={outputs.qualityJudge}>Quality judge JSON</a>
+									{/if}
+									{#if outputs?.slop}
+										<a class="underline" href={outputs.slop}>Slop JSON</a>
+									{/if}
+									{#if outputs?.extension}
+										<a class="underline" href={outputs.extension}>Extension JSON</a>
+									{/if}
+									{#if outputs?.extensionQualityJudge}
+										<a class="underline" href={outputs.extensionQualityJudge}
+											>Extension judge JSON</a
+										>
+									{/if}
+									{#if outputs?.extensionSlop}
+										<a class="underline" href={outputs.extensionSlop}>Extension slop JSON</a>
+									{/if}
+									{#if !outputs?.quiz && !outputs?.qualityJudge && !outputs?.slop && !outputs?.extension && !outputs?.extensionQualityJudge && !outputs?.extensionSlop}
+										<span>Not available</span>
+									{/if}
+								</div>
+							</div>
+						</div>
+					</section>
 
-                                        <section>
-                                                <h3 class="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                                                        Summary
-                                                </h3>
-                                                <p class="mt-2 text-sm leading-relaxed whitespace-pre-wrap">
-                                                        {activeEntry.detail?.quiz.summary ?? activeEntry.overview.summary ?? 'Summary unavailable'}
-                                                </p>
-                                        </section>
-                                </Card.Content>
-                        </Card.Root>
+					<section>
+						<h3 class="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+							Summary
+						</h3>
+						<p class="mt-2 text-sm leading-relaxed whitespace-pre-wrap">
+							{activeEntry.detail?.quiz.summary ??
+								activeEntry.overview.summary ??
+								'Summary unavailable'}
+						</p>
+					</section>
+				</Card.Content>
+			</Card.Root>
 
-                        <Card.Root>
-                                <Card.Header>
-                                        <Card.Title>Evaluation summary</Card.Title>
-                                        <Card.Description>Recent judge outputs for this sample.</Card.Description>
-                                </Card.Header>
-                                <Card.Content class="grid gap-4 text-sm md:grid-cols-2">
-                                        <div class="rounded-lg border border-border/60 bg-muted/30 p-4">
-                                                <p class="text-xs font-semibold uppercase text-muted-foreground">Quality rubric</p>
-                                                <p class="mt-2 font-medium">
-                                                        Base quiz: {formatQualityVerdict(baseQualityVerdict)}
-                                                </p>
-                                                <p class="text-sm text-muted-foreground">
-                                                        Extension: {formatQualityVerdict(extensionQualityVerdict)}
-                                                </p>
-                                        </div>
-                                        <div class="rounded-lg border border-border/60 bg-muted/30 p-4">
-                                                <p class="text-xs font-semibold uppercase text-muted-foreground">Slop detection</p>
-                                                {@const baseSlopSummary = formatSlopSummary(slopBase)}
-                                                {@const extensionSlopSummary = formatSlopSummary(slopExtension)}
-                                                <p class="mt-2 font-medium">
-                                                        Base quiz: {baseSlopSummary.label}
-                                                        {#if slopBase}
-                                                                <span class="text-muted-foreground"> · risk {baseSlopSummary.risk}</span>
-                                                        {/if}
-                                                </p>
-                                                <p class="text-sm text-muted-foreground">
-                                                        Extension: {extensionSlopSummary.label}
-                                                        {#if slopExtension}
-                                                                · risk {extensionSlopSummary.risk}
-                                                        {/if}
-                                                </p>
-                                        </div>
-                                </Card.Content>
-                        </Card.Root>
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Evaluation summary</Card.Title>
+					<Card.Description>Recent judge outputs for this sample.</Card.Description>
+				</Card.Header>
+				<Card.Content class="grid gap-4 text-sm md:grid-cols-2">
+					<div class="rounded-lg border border-border/60 bg-muted/30 p-4">
+						<p class="text-xs font-semibold text-muted-foreground uppercase">Quality rubric</p>
+						<p class="mt-2 font-medium">
+							Base quiz: {formatQualityVerdict(baseQualityVerdict)}
+						</p>
+						<p class="text-sm text-muted-foreground">
+							Extension: {formatQualityVerdict(extensionQualityVerdict)}
+						</p>
+					</div>
+					<div class="rounded-lg border border-border/60 bg-muted/30 p-4">
+						<p class="text-xs font-semibold text-muted-foreground uppercase">Slop detection</p>
+						<p class="mt-2 font-medium">
+							Base quiz: {baseSlopSummary.label}
+							{#if slopBase}
+								<span class="text-muted-foreground"> · risk {baseSlopSummary.risk}</span>
+							{/if}
+						</p>
+						<p class="text-sm text-muted-foreground">
+							Extension: {extensionSlopSummary.label}
+							{#if slopExtension}
+								· risk {extensionSlopSummary.risk}
+							{/if}
+						</p>
+					</div>
+				</Card.Content>
+			</Card.Root>
 
-                        {#if hasDetail}
-                                <Card.Root>
-                                        <Card.Header>
-                                                <Card.Title>Gemini prompt</Card.Title>
-                                                <Card.Description>Raw prompt sent to Gemini for this sample.</Card.Description>
-                                        </Card.Header>
-                                        <Card.Content>
-                                                <details class="rounded-lg border bg-muted/20 p-4 text-sm">
-                                                        <summary class="cursor-pointer font-medium">Prompt sent to Gemini</summary>
-                                                        <pre class="mt-3 text-xs leading-relaxed break-words whitespace-pre-wrap">{activeEntry.detail?.prompt}</pre>
-                                                </details>
-                                        </Card.Content>
-                                </Card.Root>
+			{#if hasDetail}
+				<Card.Root>
+					<Card.Header>
+						<Card.Title>Gemini prompt</Card.Title>
+						<Card.Description>Raw prompt sent to Gemini for this sample.</Card.Description>
+					</Card.Header>
+					<Card.Content>
+						<details class="rounded-lg border bg-muted/20 p-4 text-sm">
+							<summary class="cursor-pointer font-medium">Prompt sent to Gemini</summary>
+							<pre class="mt-3 text-xs leading-relaxed break-words whitespace-pre-wrap">{activeEntry
+									.detail?.prompt}</pre>
+						</details>
+					</Card.Content>
+				</Card.Root>
 
-                                <p class="text-sm text-muted-foreground">
-                                        {questionCount} generated question{questionCount === 1 ? '' : 's'}
-                                </p>
-                                <div class="space-y-4">
-                                        {#each activeEntry.detail?.quiz.questions as question, index (question.id)}
-                                                <Card.Root>
-                                                        <Card.Header
-                                                                class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between"
-                                                        >
-                                                                <Card.Title>
-                                                                        Question {index + 1} of {questionCount}
-                                                                </Card.Title>
-                                                                <span class="text-xs tracking-wide text-muted-foreground uppercase">
-                                                                        {question.type.replace(/_/g, ' ')}
-                                                                        {#if question.difficulty}
-                                                                                • Difficulty: {question.difficulty}
-                                                                        {/if}
-                                                                        {#if question.topic}
-                                                                                • Topic: {question.topic}
-                                                                        {/if}
-                                                                </span>
-                                                        </Card.Header>
-                                                        <Card.Content class="space-y-4">
-                                                                <p class="text-sm leading-relaxed font-medium">
-                                                                        {question.prompt}
-                                                                </p>
-                                                                <p class="text-sm text-foreground">
-                                                                        <span class="font-semibold">Answer:</span>
-                                                                        {question.answer}
-                                                                </p>
-                                                                <p class="text-sm text-muted-foreground">
-                                                                        {question.explanation}
-                                                                </p>
-                                                                {#if question.options}
-                                                                        <div>
-                                                                                <p class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                                                                        Options
-                                                                                </p>
-                                                                                <ul class="mt-2 grid gap-2 text-sm md:grid-cols-2">
-                                                                                        {#each question.options as option, optionIndex (optionIndex)}
-                                                                                                <li
-                                                                                                        class="w-full rounded border border-border/40 bg-muted/40 px-2 py-1 break-words"
-                                                                                                >
-                                                                                                        {option}
-                                                                                                </li>
-                                                                                        {/each}
-                                                                                </ul>
-                                                                        </div>
-                                                                {/if}
-                                                                <div class="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-                                                                        {#if question.skillFocus}
-                                                                                <p><span class="font-semibold">Skill focus:</span> {question.skillFocus}</p>
-                                                                        {/if}
-                                                                        {#if question.sourceReference}
-                                                                                <p>
-                                                                                        <span class="font-semibold">Source reference:</span>
-                                                                                        {question.sourceReference}
-                                                                                </p>
-                                                                        {/if}
-                                                                </div>
-                                                        </Card.Content>
-                                                </Card.Root>
-                                        {/each}
-                                </div>
-                        {:else}
-                                <Card.Root>
-                                        <Card.Header>
-                                                <Card.Title>Quiz detail unavailable</Card.Title>
-                                                <Card.Description>
-                                                        This sample does not include quiz content. Check the JSON outputs for more information.
-                                                </Card.Description>
-                                        </Card.Header>
-                                </Card.Root>
-                        {/if}
-
+				<p class="text-sm text-muted-foreground">
+					{questionCount} generated question{questionCount === 1 ? '' : 's'}
+				</p>
+				<div class="space-y-4">
+					{#each quizQuestions as question, index (question.id)}
+						<Card.Root>
+							<Card.Header
+								class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between"
+							>
+								<Card.Title>
+									Question {index + 1} of {questionCount}
+								</Card.Title>
+								<span class="text-xs tracking-wide text-muted-foreground uppercase">
+									{question.type.replace(/_/g, ' ')}
+									{#if question.difficulty}
+										• Difficulty: {question.difficulty}
+									{/if}
+									{#if question.topic}
+										• Topic: {question.topic}
+									{/if}
+								</span>
+							</Card.Header>
+							<Card.Content class="space-y-4">
+								<p class="text-sm leading-relaxed font-medium">
+									{question.prompt}
+								</p>
+								<p class="text-sm text-foreground">
+									<span class="font-semibold">Answer:</span>
+									{question.answer}
+								</p>
+								<p class="text-sm text-muted-foreground">
+									{question.explanation}
+								</p>
+								{#if question.options}
+									<div>
+										<p class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+											Options
+										</p>
+										<ul class="mt-2 grid gap-2 text-sm md:grid-cols-2">
+											{#each question.options as option, optionIndex (optionIndex)}
+												<li
+													class="w-full rounded border border-border/40 bg-muted/40 px-2 py-1 break-words"
+												>
+													{option}
+												</li>
+											{/each}
+										</ul>
+									</div>
+								{/if}
+								<div class="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+									{#if question.skillFocus}
+										<p><span class="font-semibold">Skill focus:</span> {question.skillFocus}</p>
+									{/if}
+									{#if question.sourceReference}
+										<p>
+											<span class="font-semibold">Source reference:</span>
+											{question.sourceReference}
+										</p>
+									{/if}
+								</div>
+							</Card.Content>
+						</Card.Root>
+					{/each}
+				</div>
+			{:else}
+				<Card.Root>
+					<Card.Header>
+						<Card.Title>Quiz detail unavailable</Card.Title>
+						<Card.Description>
+							This sample does not include quiz content. Check the JSON outputs for more
+							information.
+						</Card.Description>
+					</Card.Header>
+				</Card.Root>
+			{/if}
 		{:else}
 			<Card.Root>
 				<Card.Header>

@@ -143,15 +143,16 @@ const SlopAxisAutoSignalEntrySchema = z.object({
 
 const RawSlopAxisAutoSignalsSchema = z
 	.union([
-		z.record(z.union([z.number(), z.string()])),
+		z.record(z.string(), z.union([z.number(), z.string()])),
 		z.array(SlopAxisAutoSignalEntrySchema).max(4)
 	])
 	.optional();
 
 const SlopAxisAutoSignalsSchema = RawSlopAxisAutoSignalsSchema.transform((value) => {
 	if (!value) {
-		return {};
+		return {} satisfies SlopAutoSignals;
 	}
+
 	const entries: Array<{
 		name: string;
 		value: number | string;
@@ -159,8 +160,9 @@ const SlopAxisAutoSignalsSchema = RawSlopAxisAutoSignalsSchema.transform((value)
 		? value
 		: Object.entries(value).map(([name, entryValue]) => ({
 				name,
-				value: entryValue
+				value: entryValue as number | string
 			}));
+
 	const result: Partial<Record<(typeof SLOP_AUTO_SIGNAL_KEYS)[number], number>> = {};
 	for (const entry of entries) {
 		if (!isSlopAutoSignalKey(entry.name)) {
@@ -172,7 +174,8 @@ const SlopAxisAutoSignalsSchema = RawSlopAxisAutoSignalsSchema.transform((value)
 			result[entry.name] = Number(numericValue);
 		}
 	}
-	return result;
+
+	return result satisfies SlopAutoSignals;
 });
 
 export const SlopAxisScoreSchema = z.object({
