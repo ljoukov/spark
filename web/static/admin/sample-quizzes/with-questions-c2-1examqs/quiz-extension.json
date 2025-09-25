@@ -1,11 +1,11 @@
 {
   "id": "with-questions-c2-1examqs",
-  "mode": "extension",
+  "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T04:23:48.515Z",
+  "generatedAt": "2025-09-25T07:30:12.332Z",
   "request": {
-    "model": "gemini-2.5-flash",
+    "model": "gemini-2.5-pro",
     "questionCount": 10,
     "temperature": 0.2
   },
@@ -15,103 +15,53 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: States of Matter and Reactions",
-    "summary": "This quiz covers fundamental concepts in GCSE Chemistry, focusing on states of matter, particle theory, and chemical reactions. It includes questions on interpreting phase change diagrams, applying state symbols in chemical equations, evaluating experimental setups, and understanding the characteristics of particles in different states. The questions are a mix of multiple-choice and short-answer formats, designed to test both knowledge recall and application skills, aligning with AQA GCSE Chemistry specifications.",
+    "quizTitle": "GCSE Chemistry: States of Matter Extension Quiz",
+    "summary": "An additional set of 10 questions extending the initial quiz on states of matter, chemical equations, and the particle model. This quiz introduces new concepts such as stoichiometry, limitations of scientific models, and advanced practical considerations, while continuing to draw strictly from the provided study material.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry, specifically topics related to states of matter (particle model, changes of state, properties of solids, liquids, and gases) and chemical reactions (reactivity of metals, writing balanced equations with state symbols).",
+    "syllabusAlignment": "AQA GCSE Chemistry: 4.2 Bonding, structure, and the properties of matter; 4.3 Quantitative chemistry",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q_new_1",
-        "prompt": "Based on Figure 1, what is the state of substance B at 100°C?",
-        "answer": "Liquid",
-        "explanation": "From Figure 1, substance B has a melting point of approximately 70°C and a boiling point of approximately 190°C. Since 100°C is above its melting point but below its boiling point, substance B will be in the liquid state.",
+        "id": "EXT_01",
+        "prompt": "In the equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what does the state symbol (s) next to Li indicate? A) Lithium is a solution, B) Lithium is a solid, C) Lithium is soluble, D) Lithium is a solvent.",
+        "answer": "Lithium is a solid",
+        "explanation": "The state symbol (s) stands for solid. The equation shows that solid lithium reacts with liquid water.",
         "type": "multiple_choice",
         "options": [
-          "Solid",
-          "Liquid",
-          "Gas",
-          "Solid and Liquid coexisting"
+          "Lithium is a solution",
+          "Lithium is a solid",
+          "Lithium is soluble",
+          "Lithium is a solvent"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
-        "difficulty": "intermediate",
-        "skillFocus": "Interpreting graphical data, identifying states of matter at specific temperatures.",
-        "sourceReference": "Page 2, Figure 1"
-      },
-      {
-        "id": "Q_new_2",
-        "prompt": "For a given material, in which state of matter do the particles have the most kinetic energy?",
-        "answer": "Gas",
-        "explanation": "Particles in the gaseous state have the highest kinetic energy because they are moving rapidly and randomly, with large distances between them, allowing for greater freedom of movement compared to liquids or solids.",
-        "type": "short_answer",
-        "topic": "Particle model, States of matter, Kinetic energy",
+        "topic": "Chemical Equations",
         "difficulty": "foundation",
-        "skillFocus": "Recalling characteristics of states of matter and particle energy.",
-        "sourceReference": "Page 5, Question 2(b)"
+        "skillFocus": "Recall knowledge of state symbols",
+        "sourceReference": "Page 1, Q1a"
       },
       {
-        "id": "Q_new_3",
-        "prompt": "A different substance, E, has a melting point of -50 °C and a boiling point of +120 °C. What is the state of substance E at -75 °C?",
-        "answer": "Solid",
-        "explanation": "Substance E has a melting point of -50°C. At -75°C, the temperature is below its melting point, meaning it will be in the solid state.",
+        "id": "EXT_02",
+        "prompt": "In the balanced chemical equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what is the stoichiometric ratio of lithium (Li) to hydrogen (H₂)? A) 1:1, B) 2:2, C) 2:1, D) 1:2.",
+        "answer": "2:1",
+        "explanation": "The numbers in front of the chemical formulas (coefficients) show the ratio. There is a '2' in front of Li and an implied '1' in front of H₂, so the ratio is 2:1.",
         "type": "multiple_choice",
         "options": [
-          "Solid",
-          "Liquid",
-          "Gas",
-          "Solid and Liquid coexisting"
+          "1:1",
+          "2:2",
+          "2:1",
+          "1:2"
         ],
-        "topic": "States of matter, Phase changes, Data interpretation",
-        "difficulty": "intermediate",
-        "skillFocus": "Applying knowledge of melting points to determine state at a given temperature.",
-        "sourceReference": "Page 3, Question 1(d)"
-      },
-      {
-        "id": "Q_new_4",
-        "prompt": "Suggest one reason why the student could not use the apparatus in Figure 2 to determine the exact melting point of substance B.",
-        "answer": "The thermometer is in the water, not directly in substance B, so it measures the water temperature, not the substance's temperature. There might be a temperature difference between the water and substance B.",
-        "explanation": "For an exact measurement, the thermometer should be immersed directly into the substance whose melting point is being determined. In Figure 2, the thermometer is in the water bath, which may not be at the exact same temperature as substance B, leading to an inaccurate reading for substance B's melting point.",
-        "type": "short_answer",
-        "topic": "Experimental techniques, States of matter, Accuracy",
+        "topic": "Stoichiometry",
         "difficulty": "higher",
-        "skillFocus": "Evaluating experimental procedures, identifying sources of error.",
-        "sourceReference": "Page 4, Question 1(f)"
+        "skillFocus": "Interpret balanced chemical equations",
+        "sourceReference": "Page 1, Q1a"
       },
       {
-        "id": "Q_new_5",
-        "prompt": "Which of the following best describes the arrangement of particles in a liquid?",
-        "answer": "Closely packed but able to slide past each other",
-        "explanation": "In a liquid, particles are still relatively close together but are not held in fixed positions like in a solid. They can move and slide past one another, which is why liquids can flow and take the shape of their container.",
-        "type": "multiple_choice",
-        "options": [
-          "Closely packed in fixed positions",
-          "Widely spaced and moving randomly",
-          "Closely packed but able to slide past each other",
-          "Arranged in a regular lattice structure"
-        ],
-        "topic": "Particle model, States of matter",
-        "difficulty": "foundation",
-        "skillFocus": "Recalling characteristics of states of matter.",
-        "sourceReference": "General knowledge from Page 1, Page 5"
-      },
-      {
-        "id": "Q_new_6",
-        "prompt": "Describe how the movement of particles changes when a liquid turns into a gas.",
-        "answer": "When a liquid turns into a gas, the particles gain enough kinetic energy to overcome the forces of attraction between them. They move much faster, become widely spaced, and move randomly and chaotically throughout the entire volume available.",
-        "explanation": "As a liquid is heated to its boiling point, particles absorb energy, increasing their kinetic energy. This allows them to break free from the intermolecular forces holding them in a relatively fixed volume, leading to a transition to the gaseous state where particles are far apart and move with high speed and randomness.",
-        "type": "short_answer",
-        "topic": "Particle model, States of matter, Phase changes",
-        "difficulty": "intermediate",
-        "skillFocus": "Explaining changes in particle behavior during phase transitions.",
-        "sourceReference": "General knowledge from Page 1, Page 5"
-      },
-      {
-        "id": "Q_new_7",
-        "prompt": "Referring to Figure 1, which substance has a melting point closest to 0°C?",
-        "answer": "A",
-        "explanation": "From Figure 1: Substance A has a melting point of approximately -10°C. Substance B has a melting point of approximately 70°C. Substance C has a melting point of approximately 10°C. Substance D has a melting point of approximately -180°C. Of these, -10°C (Substance A) is closest to 0°C.",
+        "id": "EXT_03",
+        "prompt": "According to Figure 1, which substance has the highest boiling point? A) A, B) B, C) C, D) D.",
+        "answer": "C",
+        "explanation": "The boiling point is represented by the filled circle. Substance C's boiling point is at approximately 210°C, which is the highest value on the chart.",
         "type": "multiple_choice",
         "options": [
           "A",
@@ -119,54 +69,134 @@
           "C",
           "D"
         ],
-        "topic": "States of matter, Data interpretation",
+        "topic": "States of Matter",
         "difficulty": "foundation",
-        "skillFocus": "Reading and interpreting graphical data points.",
+        "skillFocus": "Extract data from a graph",
         "sourceReference": "Page 2, Figure 1"
       },
       {
-        "id": "Q_new_8",
-        "prompt": "What is the general term for the process where a solid turns directly into a gas without passing through a liquid phase?",
-        "answer": "Sublimation",
-        "explanation": "Sublimation is the phase transition of a substance directly from the solid to the gas state, without passing through the liquid state. An example is dry ice (solid carbon dioxide) turning into gaseous carbon dioxide.",
-        "type": "short_answer",
-        "topic": "States of matter, Phase changes",
-        "difficulty": "foundation",
-        "skillFocus": "Recalling scientific terminology for phase changes.",
-        "sourceReference": "General knowledge from Page 1"
-      },
-      {
-        "id": "Q_new_9",
-        "prompt": "If the small balls in the model (Question 2) were to represent a liquid, which statement would be true about their movement and arrangement compared to a gas?",
-        "answer": "The balls would be more closely packed and move more slowly than in a gas.",
-        "explanation": "In a liquid, particles are more closely packed than in a gas, and while they can move past each other, their movement is less energetic and random compared to gas particles. They would have less kinetic energy than gas particles, but not be in fixed positions like a solid.",
+        "id": "EXT_04",
+        "prompt": "Using Figure 1, identify a temperature at which substance A is a gas, but substance B is a solid. A) -50 °C, B) 0 °C, C) 50 °C, D) 100 °C.",
+        "answer": "50 °C",
+        "explanation": "At 50°C, the temperature is above substance A's boiling point (approx. 0°C), making it a gas. At the same time, 50°C is below substance B's melting point (approx. 75°C), meaning it is still a solid.",
         "type": "multiple_choice",
         "options": [
-          "The balls would be more widely spaced and move more randomly than in a gas.",
-          "The balls would be more closely packed and move more slowly than in a gas.",
-          "The balls would be in fixed positions and vibrate, unlike in a gas.",
-          "The balls would have less kinetic energy but still be widely spaced."
+          "-50 °C",
+          "0 °C",
+          "50 °C",
+          "100 °C"
         ],
-        "topic": "Particle model, States of matter, Analogy",
+        "topic": "States of Matter",
         "difficulty": "intermediate",
-        "skillFocus": "Applying the particle model to different states and comparing them.",
-        "sourceReference": "Page 5, Question 2(a) and 2(b)"
+        "skillFocus": "Compare and interpret graphical data",
+        "sourceReference": "Page 2, Figure 1"
       },
       {
-        "id": "Q_new_10",
-        "prompt": "In the reaction 2Li(s) + 2H2O(l) → 2LiOH(aq) + H2(g), what does the symbol '(s)' next to Lithium (Li) represent?",
-        "answer": "Solid",
-        "explanation": "In chemical equations, state symbols indicate the physical state of the reactants and products. '(s)' stands for solid, '(l)' for liquid, '(g)' for gas, and '(aq)' for aqueous solution.",
-        "type": "short_answer",
-        "topic": "Chemical reactions, State symbols",
+        "id": "EXT_05",
+        "prompt": "Which of the substances A, B, C, or D from Figure 1 would be a liquid at standard room temperature (approximately 20°C)? A) A, B) B, C) C, D) D.",
+        "answer": "C",
+        "explanation": "For a substance to be liquid, the temperature must be above its melting point and below its boiling point. At 20°C, only substance C (MP ≈ 10°C, BP ≈ 210°C) is in its liquid range.",
+        "type": "multiple_choice",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "topic": "States of Matter",
+        "difficulty": "intermediate",
+        "skillFocus": "Apply graphical data to a real-world context",
+        "sourceReference": "Page 2, Figure 1"
+      },
+      {
+        "id": "EXT_06",
+        "prompt": "The apparatus in Figure 2 uses a water bath. What piece of equipment could replace the water bath to allow for the measurement of substance B's boiling point (approx. 190°C)? A) An ice bath, B) A larger beaker of water, C) An oil bath, D) A cooling fan.",
+        "answer": "An oil bath",
+        "explanation": "A water bath cannot exceed 100°C. To reach higher temperatures like 190°C safely, an oil bath or sand bath is used, as oil has a much higher boiling point than water.",
+        "type": "multiple_choice",
+        "options": [
+          "An ice bath",
+          "A larger beaker of water",
+          "An oil bath",
+          "A cooling fan"
+        ],
+        "topic": "Practical Chemistry",
+        "difficulty": "intermediate",
+        "skillFocus": "Suggest improvements to experimental procedures",
+        "sourceReference": "Page 4, Q1e, Figure 2"
+      },
+      {
+        "id": "EXT_07",
+        "prompt": "Besides the substance being impure, what is another potential source of error when using the apparatus in Figure 2 that could lead to an inaccurate temperature reading? A) The Bunsen burner flame is yellow, B) Reading the thermometer from an angle, C) Using distilled water in the bath, D) The test tube is too clean.",
+        "answer": "Reading the thermometer from an angle",
+        "explanation": "Reading a measurement scale from an angle instead of at eye level can cause parallax error, leading to an inaccurate reading. This is a common source of error in experiments involving thermometers, burettes, or rulers.",
+        "type": "multiple_choice",
+        "options": [
+          "The Bunsen burner flame is yellow",
+          "Reading the thermometer from an angle",
+          "Using distilled water in the bath",
+          "The test tube is too clean"
+        ],
+        "topic": "Practical Chemistry",
+        "difficulty": "higher",
+        "skillFocus": "Identify sources of experimental error",
+        "sourceReference": "Page 4, Q1f, Figure 2"
+      },
+      {
+        "id": "EXT_08",
+        "prompt": "Which statement best describes the movement and energy of particles in substance B when it is in the solid state (e.g., at 25°C)? A) They move randomly and have high kinetic energy, B) They slide past each other and have medium kinetic energy, C) They are stationary and have no kinetic energy, D) They vibrate about fixed positions and have low kinetic energy.",
+        "answer": "They vibrate about fixed positions and have low kinetic energy",
+        "explanation": "In the solid state, particles are held in a fixed, regular arrangement (a lattice). They possess kinetic energy, but it is not enough to overcome the forces of attraction, so their movement is restricted to vibrations around their fixed positions.",
+        "type": "multiple_choice",
+        "options": [
+          "They move randomly and have high kinetic energy",
+          "They slide past each other and have medium kinetic energy",
+          "They are stationary and have no kinetic energy",
+          "They vibrate about fixed positions and have low kinetic energy"
+        ],
+        "topic": "Particle Model",
         "difficulty": "foundation",
-        "skillFocus": "Interpreting state symbols in chemical equations.",
-        "sourceReference": "Page 1, Question 1(a)"
+        "skillFocus": "Describe the properties of particles in a solid",
+        "sourceReference": "Page 5, Q2b"
+      },
+      {
+        "id": "EXT_09",
+        "prompt": "The model of shaking balls in a tube (Question 2) is used to represent a gas. Which of the following is a key limitation of this model? A) The balls are too colourful, B) The model does not represent the forces of attraction between particles, C) The balls move too randomly, D) The balls are too far apart.",
+        "answer": "The model does not represent the forces of attraction between particles",
+        "explanation": "Real gas particles have weak intermolecular forces of attraction between them. The solid balls in the model do not have any equivalent forces, which is a significant way in which the model is inaccurate.",
+        "type": "multiple_choice",
+        "options": [
+          "The balls are too colourful",
+          "The model does not represent the forces of attraction between particles",
+          "The balls move too randomly",
+          "The balls are too far apart"
+        ],
+        "topic": "Particle Model",
+        "difficulty": "higher",
+        "skillFocus": "Evaluate the limitations of a scientific model",
+        "sourceReference": "Page 4, Q2"
+      },
+      {
+        "id": "EXT_10",
+        "prompt": "For any given pure substance, what happens to the average kinetic energy of its particles while it is melting at a constant pressure? A) It increases, B) It decreases, C) It remains constant, D) It drops to zero.",
+        "answer": "It remains constant",
+        "explanation": "During a phase change like melting, the energy being supplied (latent heat) is used to overcome the forces holding the particles in their fixed positions (increasing their potential energy), not to increase their speed. Therefore, the temperature, which is a measure of the average kinetic energy, remains constant until all the solid has melted.",
+        "type": "multiple_choice",
+        "options": [
+          "It increases",
+          "It decreases",
+          "It remains constant",
+          "It drops to zero"
+        ],
+        "topic": "States of Matter",
+        "difficulty": "higher",
+        "skillFocus": "Apply knowledge of energy changes during phase transitions",
+        "sourceReference": "Page 2, Figure 1"
       }
     ]
   },
   "model": {
-    "modelId": "gemini-2.5-flash",
+    "modelId": "gemini-2.5-pro",
     "temperature": 0.2
   },
   "job": {
@@ -176,7 +206,7 @@
     "sourcePath": "/workspace/spark/data/samples/with-questions/C2.1ExamQs.pdf",
     "relativeSourcePath": "data/samples/with-questions/C2.1ExamQs.pdf",
     "mode": "extraction",
-    "questionCount": 6,
+    "questionCount": 20,
     "subject": "chemistry",
     "board": "AQA",
     "temperature": 0.2
