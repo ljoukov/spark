@@ -14,6 +14,8 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 - we use shadcn-svelte components library docs are in web/docs/shadcn-svelte.md
 - Use absolute imports (unless current directory)
 - Use $lib/ and $proto/ aliases, e.g. `import { runGeminiCall } from '$lib/server/utils/gemini';`
+- Prefer static imports. Do **not** use dynamic `import()` in the web app unless specifically asked—mixing modes prevents Vite
+  from emitting separate chunks and surfaces warnings during build.
 
 **Authentication**
 
@@ -95,3 +97,7 @@ Model policy examples
 - use vitest
 - use name.test.ts file generally located right in the same dir as the file they test (name.ts and name.test.ts)
 - web/src/tests directory for utilities specifically for testing (eg proxy setup)
+- Vite emits bundler warnings (for example, about dynamic imports) during `npm run build`. Run the build when touching import
+  graphs to catch these early.
+- `npm run all-tests` runs lint, check, test, and build sequentially. Codex is encouraged to run it for larger changes before
+  submitting work.
