@@ -23576,3 +23576,8 @@ npx sv add vitest
 - the relevant packages installed and scripts added to your `package.json`
 - client/server-aware testing setup for Svelte in your Vite config file
 - demo tests
+
+# More Details
+
+If this document doesn't have SvelteKit information you require read the full documentation in
+`./sveltekit-full-docs.md`.
