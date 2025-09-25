@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-09-25T07:33:43.161Z",
+  "generatedAt": "2025-09-25T22:37:00.420Z",
   "samples": [
     {
       "id": "no-questions-y8lesson-health-blooddonations",
@@ -17,10 +17,10 @@
         "relativePath": "data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf",
         "displayName": "Y8Lesson-Health-BloodDonations.pdf"
       },
-      "quizTitle": "GCSE Biology: Blood, Organ and Stem Cell Donation",
-      "summary": "This quiz assesses understanding of blood, organ, and stem cell donation, covering reasons for donation, processes, and the law in England, with a mix of question types aligned with the OCR GCSE Biology specification. Coverage gaps: The quiz does not cover the specific biological mechanisms of tissue matching or rejection, nor detailed ethical considerations from different faith perspectives, as these were not detailed in the source material.",
+      "quizTitle": "GCSE Biology: Blood, Organ, and Stem Cell Donation",
+      "summary": "This quiz assesses understanding of blood, organ, and stem cell donation, covering reasons, processes, and the law in England, with multiple choice, short answer, true/false, and numeric questions aligned with the OCR specification. Coverage gaps: The quiz does not assess the specific considerations involved in an individual's choice to donate or not to donate, as the source material presents these as discussion points rather than factual content.",
       "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/detail.json",
-      "generatedAt": "2025-09-25T07:18:49.612Z",
+      "generatedAt": "2025-09-25T22:23:51.126Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz.json",
         "judge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-judgement.json",
@@ -28,12 +28,12 @@
         "extensionJudge": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-extension-judgement.json"
       },
       "extension": {
-        "quizTitle": "GCSE Biology: Blood, Organ and Stem Cell Donation (Extension)",
+        "quizTitle": "GCSE Biology: Blood, Organ, and Stem Cell Donation",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T07:20:17.798Z"
+        "generatedAt": "2025-09-25T22:25:02.378Z"
       },
       "judge": {
-        "verdict": "approve",
+        "verdict": "revise",
         "outputPath": "/admin/sample-quizzes/no-questions-y8lesson-health-blooddonations/quiz-judgement.json"
       },
       "extensionJudge": {
@@ -57,10 +57,10 @@
         "relativePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
         "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg"
       },
-      "quizTitle": "GCSE Chemistry: Atomic Structure and Mixtures",
-      "summary": "This quiz contains 20 short-answer questions covering atomic structure, the history of the atom, elements, compounds, mixtures, and separation techniques, aligned with the AQA GCSE Chemistry specification. Coverage gaps: none – full coverage achieved.",
+      "quizTitle": "AQA GCSE Chemistry: C1 Atomic Structure and Elements",
+      "summary": "This quiz assesses fundamental knowledge of atomic structure, the history of the atom, elements, compounds, mixtures, and separation techniques using short-answer questions, aligned with the AQA GCSE Chemistry specification. Coverage gaps: none – full coverage achieved.",
       "outputPath": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T07:21:40.093Z",
+      "generatedAt": "2025-09-25T22:26:22.737Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz.json",
         "judge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-judgement.json",
@@ -68,9 +68,9 @@
         "extensionJudge": "/admin/sample-quizzes/with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c/quiz-extension-judgement.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry: Atomic Structure Extension",
+        "quizTitle": "AQA GCSE Chemistry: C1 Atomic Structure Extension",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T07:23:16.477Z"
+        "generatedAt": "2025-09-25T22:27:35.367Z"
       },
       "judge": {
         "verdict": "approve",
@@ -87,7 +87,7 @@
       "mode": "extraction",
       "subject": "chemistry",
       "board": "AQA",
-      "questionCount": 18,
+      "questionCount": 20,
       "request": {
         "model": "gemini-2.5-pro",
         "questionCount": 20,
@@ -98,9 +98,9 @@
         "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg"
       },
       "quizTitle": "GCSE Chemistry: Covalent Bonding and Carbon Allotropes",
-      "summary": "This quiz contains 18 short-answer questions covering covalent bonding, properties of simple and giant covalent structures, and allotropes of carbon, aligned with the AQA specification. Coverage gaps: the source material provided only 18 questions, not the requested 20.",
+      "summary": "This quiz assesses understanding of covalent bonding, simple and giant molecular structures, polymers, and the properties of carbon allotropes, based on AQA GCSE Chemistry specifications. Coverage gaps: none – full coverage achieved.",
       "outputPath": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T07:24:47.329Z",
+      "generatedAt": "2025-09-25T22:28:59.797Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz.json",
         "judge": "/admin/sample-quizzes/with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c/quiz-judgement.json",
@@ -110,7 +110,7 @@
       "extension": {
         "quizTitle": "GCSE Chemistry: Covalent Bonding and Carbon Allotropes",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T07:26:07.329Z"
+        "generatedAt": "2025-09-25T22:29:58.933Z"
       },
       "judge": {
         "verdict": "approve",
@@ -137,10 +137,10 @@
         "relativePath": "data/samples/with-questions/C2.1ExamQs.pdf",
         "displayName": "C2.1ExamQs.pdf"
       },
-      "quizTitle": "GCSE Chemistry: States of Matter and Particle Theory",
-      "summary": "This quiz assesses understanding of states of matter, the particle model, and chemical equations, using multiple-choice, short answer, and numeric questions aligned with the AQA GCSE Chemistry specification. Coverage gaps: The quiz is based on a very limited source document; to meet the question count, multiple questions are derived from a single graph, and broader topics within the syllabus are not covered.",
+      "quizTitle": "GCSE Chemistry: States of Matter & Particle Model",
+      "summary": "This quiz assesses understanding of states of matter, changes of state, and the particle model, using multiple-choice, short-answer, and numeric questions aligned with the AQA specification. Coverage gaps: none – full coverage achieved.",
       "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/detail.json",
-      "generatedAt": "2025-09-25T07:28:14.313Z",
+      "generatedAt": "2025-09-25T22:31:58.844Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz.json",
         "judge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-judgement.json",
@@ -148,16 +148,16 @@
         "extensionJudge": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-judgement.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry: States of Matter Extension Quiz",
+        "quizTitle": "GCSE Chemistry: States of Matter & Particle Model (Extension)",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T07:30:12.332Z"
+        "generatedAt": "2025-09-25T22:33:49.950Z"
       },
       "judge": {
         "verdict": "revise",
         "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-judgement.json"
       },
       "extensionJudge": {
-        "verdict": "approve",
+        "verdict": "revise",
         "outputPath": "/admin/sample-quizzes/with-questions-c2-1examqs/quiz-extension-judgement.json"
       }
     },
@@ -178,9 +178,9 @@
         "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg"
       },
       "quizTitle": "GCSE Chemistry: Materials and Chemical Processes",
-      "summary": "This quiz contains 20 short-answer questions covering corrosion, alloys, ceramics, polymers, composites, and the Haber process, aligned with the AQA GCSE Chemistry specification. Coverage gaps: Question 21 on NPK fertilisers from the source material has been omitted to meet the required question count.",
+      "summary": "This quiz contains 20 short-answer questions covering corrosion, alloys, polymers, composites, and the Haber process, aligned with the AQA GCSE Chemistry specification. Coverage gaps: NPK fertilisers are not covered.",
       "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/detail.json",
-      "generatedAt": "2025-09-25T07:31:56.336Z",
+      "generatedAt": "2025-09-25T22:35:16.686Z",
       "outputs": {
         "quiz": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz.json",
         "judge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-judgement.json",
@@ -188,12 +188,12 @@
         "extensionJudge": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-extension-judgement.json"
       },
       "extension": {
-        "quizTitle": "GCSE Chemistry: Materials and Chemical Processes - Extension",
+        "quizTitle": "GCSE Chemistry: Materials and Processes Extension",
         "questionCount": 10,
-        "generatedAt": "2025-09-25T07:33:12.263Z"
+        "generatedAt": "2025-09-25T22:36:22.426Z"
       },
       "judge": {
-        "verdict": "approve",
+        "verdict": "revise",
         "outputPath": "/admin/sample-quizzes/with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c/quiz-judgement.json"
       },
       "extensionJudge": {

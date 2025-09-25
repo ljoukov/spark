@@ -1,13 +1,16 @@
 import type { Schema } from '@google/genai';
 import type { PageServerLoad } from './$types';
-import { buildGenerationPrompt, QUIZ_RESPONSE_SCHEMA } from '$lib/server/llm/quizPrompts';
-import { buildExtensionPrompt } from '$lib/server/llm/quizGenerator';
+import {
+	buildGenerationPrompt,
+	buildExtensionPrompt,
+	QUIZ_RESPONSE_SCHEMA
+} from '$lib/server/llm/quizPrompts';
 import {
 	buildJudgePrompt,
 	buildAuditPrompt,
 	AUDIT_RESPONSE_SCHEMA,
 	JUDGE_RESPONSE_SCHEMA
-} from '$lib/server/llm/judge';
+} from '$lib/server/llm/eval/judge';
 import type { QuizGeneration } from '$lib/llm/schemas';
 
 type PromptVariable = { name: string; description: string };
@@ -130,13 +133,13 @@ export const load: PageServerLoad = async () => {
 				}
 			],
 			notes: [
-				'Inline source files and the existing quiz JSON are attached as separate parts.',
+				'Inline source files are attached as separate parts, followed by a <PAST_QUIZES> block listing previous prompts.',
 				'The preview quiz shown here only demonstrates the structure passed to the model.'
 			],
 			example: buildExtensionPrompt({
-				sourceFiles: [],
-				baseQuiz: previewQuiz,
-				additionalQuestionCount: 4
+				additionalQuestionCount: 4,
+				subject: previewQuiz.subject,
+				board: previewQuiz.board
 			}),
 			schema: { title: 'Quiz response schema', definition: QUIZ_RESPONSE_SCHEMA }
 		},
@@ -144,7 +147,7 @@ export const load: PageServerLoad = async () => {
 			id: 'quiz-judge',
 			title: 'Quiz judging rubric',
 			description: 'Guides Gemini when scoring a generated quiz against our quality rubric.',
-			models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+			models: ['gemini-2.5-pro'],
 			usedBy: 'judgeQuiz',
 			variables: [
 				{
@@ -152,7 +155,10 @@ export const load: PageServerLoad = async () => {
 					description: 'Optional additional rubric notes appended when provided by the caller.'
 				}
 			],
-			notes: ['The candidate quiz JSON and source files are attached as extra parts for judging.'],
+			notes: [
+				'The candidate quiz JSON and source files are attached as extra parts for judging.',
+				'This prompt always runs on gemini-2.5-pro.'
+			],
 			example: buildJudgePrompt({
 				rubricSummary: '{{rubricSummary}}',
 				sourceFiles: [],

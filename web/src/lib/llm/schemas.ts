@@ -6,6 +6,9 @@ export interface InlineSourceFile {
 	readonly data: string;
 }
 
+// LLM responses still report whether they refined source questions ("extraction"),
+// authored new ones ("synthesis"), or added follow-ups ("extension"), so keep all
+// three modes in the schema even though callers no longer pre-select them.
 export const QUIZ_MODES = ['extraction', 'synthesis', 'extension'] as const;
 
 export const QUESTION_TYPES = ['multiple_choice', 'short_answer', 'true_false', 'numeric'] as const;
@@ -43,14 +46,14 @@ export const QuizQuestionSchema = z
 	.superRefine((value, ctx) => {
 		if (value.type === 'multiple_choice' && (!value.options || value.options.length !== 4)) {
 			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				message: 'multiple_choice questions must include exactly four options',
 				path: ['options']
 			});
 		}
 		if (value.type !== 'multiple_choice' && value.options && value.options.length > 0) {
 			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				message: 'options are only allowed for multiple_choice questions',
 				path: ['options']
 			});
@@ -62,8 +65,8 @@ export const QuizGenerationSchema = z
 		quizTitle: z.string().min(1, 'quizTitle is required'),
 		summary: z.string().min(1, 'summary is required'),
 		mode: z.enum(QUIZ_MODES),
-		subject: z.string().min(1).optional(),
-		board: z.string().min(1).optional(),
+		subject: z.string().optional(),
+		board: z.string().optional(),
 		syllabusAlignment: z.string().min(1).optional(),
 		questionCount: z.number().int().positive(),
 		questions: z.array(QuizQuestionSchema).min(1)
@@ -71,7 +74,7 @@ export const QuizGenerationSchema = z
 	.superRefine((value, ctx) => {
 		if (value.questions.length !== value.questionCount) {
 			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				message: 'questionCount must match the number of questions returned',
 				path: ['questionCount']
 			});

@@ -3,7 +3,7 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T07:26:07.329Z",
+  "generatedAt": "2025-09-25T22:29:58.933Z",
   "request": {
     "model": "gemini-2.5-pro",
     "questionCount": 10,
@@ -16,146 +16,142 @@
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
     "quizTitle": "GCSE Chemistry: Covalent Bonding and Carbon Allotropes",
-    "summary": "An additional 10 questions extending the original quiz on covalent bonding, properties of molecular and giant structures, and the allotropes of carbon. This set introduces multiple-choice and true/false formats to test understanding from new angles.",
+    "summary": "This quiz assesses understanding of covalent bonding, simple and giant molecular structures, polymers, and the properties of carbon allotropes, based on AQA GCSE Chemistry specifications. This set of questions extends the initial assessment by exploring the concepts in greater depth and from different angles.",
     "mode": "extension",
-    "subject": "Chemistry",
+    "subject": "chemistry",
     "board": "AQA",
-    "syllabusAlignment": "AQA GCSE Chemistry: C2 Structure and Bonding - Covalent Bonding and Allotropes of Carbon.",
+    "syllabusAlignment": "AQA GCSE Chemistry: C2 Covalent bonding, structure and properties of matter.",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q19",
-        "prompt": "Which statement correctly explains why simple molecular substances have low boiling points?",
-        "answer": "B",
-        "explanation": "To boil a simple molecular substance, energy is needed to overcome the weak intermolecular forces between the molecules, not the strong covalent bonds within them. This requires only a small amount of energy.",
-        "type": "multiple_choice",
-        "options": [
-          "A. The strong covalent bonds within the molecules are easily broken.",
-          "B. Only weak intermolecular forces between molecules need to be overcome.",
-          "C. The substances are formed from non-metal atoms which have low mass.",
-          "D. They do not contain any delocalised electrons."
-        ],
-        "topic": "Simple Molecular Structures",
-        "difficulty": "intermediate",
-        "skillFocus": "Application of knowledge",
-        "sourceReference": "C2 Question 7"
-      },
-      {
-        "id": "Q20",
-        "prompt": "True or false: The forces attracting adjacent polymer chains to each other are strong covalent bonds.",
-        "answer": "False",
-        "explanation": "The atoms within a polymer chain are joined by strong covalent bonds, but the forces between separate polymer chains are weak intermolecular forces.",
-        "type": "true_false",
-        "topic": "Polymers",
-        "difficulty": "intermediate",
-        "skillFocus": "Distinguishing bond types",
-        "sourceReference": "C2 Question 5"
-      },
-      {
         "id": "Q21",
-        "prompt": "In the structure of graphite, how many other carbon atoms is each carbon atom covalently bonded to?",
-        "answer": "C",
-        "explanation": "Each carbon atom in graphite forms strong covalent bonds with three other carbon atoms, creating hexagonal rings. The fourth outer electron is delocalised.",
+        "prompt": "Which statement correctly contrasts the forces overcome when melting a simple molecular substance and a giant covalent substance?",
+        "answer": "B",
+        "explanation": "When melting a simple molecular substance, weak intermolecular forces are overcome. For a giant covalent substance, a large number of strong covalent bonds must be broken, which requires significantly more energy.",
         "type": "multiple_choice",
         "options": [
-          "A. One",
-          "B. Two",
-          "C. Three",
-          "D. Four"
+          "A. Strong covalent bonds are broken in both types of substances.",
+          "B. Weak intermolecular forces are broken in simple molecules, while strong covalent bonds are broken in giant structures.",
+          "C. Weak intermolecular forces are broken in both types of substances.",
+          "D. Strong covalent bonds are broken in simple molecules, while weak intermolecular forces are broken in giant structures."
         ],
-        "topic": "Allotropes of Carbon",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall of specific structural detail",
-        "sourceReference": "C2 Question 10"
+        "topic": "Structure and Properties",
+        "difficulty": "higher",
+        "skillFocus": "Compare and contrast"
       },
       {
         "id": "Q22",
-        "prompt": "What specific structural feature of spherical fullerenes makes them suitable for drug delivery?",
-        "answer": "Their hollow cage-like structure allows them to enclose and transport other molecules.",
-        "explanation": "The source material mentions 'drug delivery (spheres)'. This application relies on the fullerene's ability to trap drug molecules inside its hollow carbon cage for transport within the body.",
+        "prompt": "What specific shape of fullerene is mentioned as being suitable for drug delivery?",
+        "answer": "Spheres (or spherical).",
+        "explanation": "The source material specifies that spherical fullerenes are used for drug delivery, as their hollow cage structure can encapsulate molecules.",
         "type": "short_answer",
         "topic": "Allotropes of Carbon",
-        "difficulty": "higher",
-        "skillFocus": "Linking structure to application",
-        "sourceReference": "C2 Question 18"
+        "difficulty": "intermediate",
+        "skillFocus": "Recall specific application"
       },
       {
         "id": "Q23",
-        "prompt": "Which form of carbon is described as a hollow cylinder?",
-        "answer": "D",
-        "explanation": "A nanotube is a type of fullerene with a cylindrical structure, essentially a rolled-up sheet of graphene.",
-        "type": "multiple_choice",
-        "options": [
-          "A. Graphene",
-          "B. Graphite",
-          "C. A spherical fullerene",
-          "D. A nanotube"
-        ],
+        "prompt": "A carbon nanotube can be described as a hollow cylinder formed from a rolled-up sheet of graphene. True or False?",
+        "answer": "True",
+        "explanation": "A nanotube is defined as a hollow cylinder of carbon atoms, which is structurally equivalent to a single layer of graphite (graphene) rolled into a tube.",
+        "type": "true_false",
         "topic": "Allotropes of Carbon",
-        "difficulty": "foundation",
-        "skillFocus": "Recall definition",
-        "sourceReference": "C2 Question 16"
+        "difficulty": "intermediate",
+        "skillFocus": "Relate structures"
       },
       {
         "id": "Q24",
-        "prompt": "Contrast the type of forces that are overcome when a giant covalent substance melts compared to when a polymer melts.",
-        "answer": "In a giant covalent substance, strong covalent bonds must be broken. In a polymer, the weaker intermolecular forces between the chains are overcome.",
-        "explanation": "Melting a giant covalent structure requires breaking the strong covalent bonds throughout the lattice. Melting a polymer only requires overcoming the intermolecular forces between the long chains, not the covalent bonds within them.",
-        "type": "short_answer",
-        "topic": "Structure and Bonding",
-        "difficulty": "higher",
-        "skillFocus": "Comparison and explanation",
-        "sourceReference": "C2 Questions 5 & 6"
-      },
-      {
-        "id": "Q25",
-        "prompt": "True or false: Graphene is an electrical insulator because it is only one atom thick.",
-        "answer": "False",
-        "explanation": "Graphene is an excellent conductor of electricity. Its single-layer structure contains delocalised electrons that are free to move and carry charge.",
-        "type": "true_false",
-        "topic": "Allotropes of Carbon",
-        "difficulty": "foundation",
-        "skillFocus": "Recall properties",
-        "sourceReference": "C2 Question 14"
-      },
-      {
-        "id": "Q26",
-        "prompt": "Which of these substances has delocalised electrons and weak forces between its layers?",
-        "answer": "A",
-        "explanation": "Graphite has a layered structure where each carbon is bonded to three others. This leaves delocalised electrons that can move, and the layers are held by weak forces, allowing them to slide.",
+        "prompt": "Graphite is soft and can be used as a lubricant. Which feature of its structure is responsible for this property?",
+        "answer": "C",
+        "explanation": "Graphite consists of layers of carbon atoms that are not bonded together, allowing them to slide over each other easily. This makes the substance soft and slippery.",
         "type": "multiple_choice",
         "options": [
-          "A. Graphite",
-          "B. A polymer",
-          "C. A small molecule like water",
-          "D. A generic giant covalent substance"
+          "A. The strong covalent bonds within the hexagonal rings.",
+          "B. The presence of delocalised electrons.",
+          "C. The weak forces between the layers of atoms.",
+          "D. Each carbon atom being bonded to three others."
         ],
         "topic": "Allotropes of Carbon",
         "difficulty": "intermediate",
-        "skillFocus": "Identify substance from structural description",
-        "sourceReference": "C2 Question 10"
+        "skillFocus": "Link structure to property"
+      },
+      {
+        "id": "Q25",
+        "prompt": "In a polymer, what type of forces exist between the long molecular chains?",
+        "answer": "Weak intermolecular forces.",
+        "explanation": "While the atoms within a polymer chain are joined by strong covalent bonds, the separate chains are held together by weaker intermolecular forces.",
+        "type": "short_answer",
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Recall bonding detail"
+      },
+      {
+        "id": "Q26",
+        "prompt": "Which allotrope of carbon consists of just a single layer of carbon atoms arranged in hexagonal rings?",
+        "answer": "A",
+        "explanation": "Graphene is defined as a single layer of graphite. Fullerenes are hollow cages, and nanotubes are cylinders.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Graphene",
+          "B. Fullerene",
+          "C. Nanotube",
+          "D. Polymer"
+        ],
+        "topic": "Allotropes of Carbon",
+        "difficulty": "foundation",
+        "skillFocus": "Recall definition"
       },
       {
         "id": "Q27",
-        "prompt": "Explain why large molecules have stronger intermolecular forces than small molecules.",
-        "answer": "Large molecules have more surface area and more points of contact between them, leading to stronger overall intermolecular forces compared to smaller molecules.",
-        "explanation": "The strength of intermolecular forces increases with the size of the molecule. This is why polymers have much higher melting and boiling points than simple molecules.",
+        "prompt": "Explain why the boiling point of a substance increases as its molecules get larger.",
+        "answer": "Because the intermolecular forces become stronger as the molecules get larger.",
+        "explanation": "Larger molecules have stronger intermolecular forces between them, which require more energy to overcome, resulting in higher melting and boiling points.",
         "type": "short_answer",
-        "topic": "Polymers",
-        "difficulty": "higher",
-        "skillFocus": "Explain property trends",
-        "sourceReference": "C2 Question 8"
+        "topic": "Simple Molecules",
+        "difficulty": "intermediate",
+        "skillFocus": "Explain trend"
       },
       {
         "id": "Q28",
-        "prompt": "What is the fundamental process that occurs when atoms form a covalent bond?",
-        "answer": "Atoms share one or more pairs of electrons.",
-        "explanation": "Covalent bonding involves the mutual sharing of valence electrons between atoms, typically non-metals, to achieve a stable electron configuration for each atom.",
-        "type": "short_answer",
+        "prompt": "What is the fundamental process that occurs when non-metal atoms form a covalent bond?",
+        "answer": "D",
+        "explanation": "Covalent bonds are formed specifically by the sharing of electrons between non-metal atoms to achieve stable electron configurations.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Transferring electrons",
+          "B. Losing electrons",
+          "C. Gaining electrons",
+          "D. Sharing electrons"
+        ],
         "topic": "Covalent Bonding",
         "difficulty": "foundation",
-        "skillFocus": "Recall definition",
-        "sourceReference": "C2 Question 1"
+        "skillFocus": "Recall definition"
+      },
+      {
+        "id": "Q29",
+        "prompt": "Giant covalent substances have high melting points because a lot of energy is needed to break the weak intermolecular forces between the atoms. True or False?",
+        "answer": "False",
+        "explanation": "This statement is false. Giant covalent substances have high melting points because a lot of energy is needed to break the many strong covalent bonds between the atoms, not weak intermolecular forces.",
+        "type": "true_false",
+        "topic": "Giant Covalent Structures",
+        "difficulty": "higher",
+        "skillFocus": "Identify misconception"
+      },
+      {
+        "id": "Q30",
+        "prompt": "Which pair of properties is common to both graphene and carbon nanotubes?",
+        "answer": "C",
+        "explanation": "Both graphene and nanotubes are known for their high tensile strength and their ability to conduct electricity due to the presence of delocalised electrons.",
+        "type": "multiple_choice",
+        "options": [
+          "A. High melting point and softness",
+          "B. Softness and electrical conductivity",
+          "C. High tensile strength and electrical conductivity",
+          "D. Use in drug delivery and as a lubricant"
+        ],
+        "topic": "Allotropes of Carbon",
+        "difficulty": "higher",
+        "skillFocus": "Synthesise information"
       }
     ]
   },
@@ -167,7 +163,7 @@
     "id": "with-questions-966860a9-bfd8-436c-958d-2470ed154da6-1-105-c",
     "category": "with-questions",
     "displayName": "966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
-    "sourcePath": "/workspace/spark/data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
+    "sourcePath": "/Users/yaroslavvolovich/projects/spark/data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg",
     "mode": "extraction",
     "questionCount": 20,

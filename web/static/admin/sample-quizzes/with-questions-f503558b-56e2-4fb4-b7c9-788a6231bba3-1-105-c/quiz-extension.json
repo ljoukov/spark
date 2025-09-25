@@ -3,7 +3,7 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T07:33:12.263Z",
+  "generatedAt": "2025-09-25T22:36:22.426Z",
   "request": {
     "model": "gemini-2.5-pro",
     "questionCount": 10,
@@ -15,141 +15,159 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: Materials and Chemical Processes - Extension",
-    "summary": "An additional 10 questions extending the initial quiz on materials and chemical processes. This set introduces new question formats and focuses on NPK fertilisers, reaction stoichiometry, and specific properties of materials, all based on the provided C20 retrieval practice sheet.",
+    "quizTitle": "GCSE Chemistry: Materials and Processes Extension",
+    "summary": "An extension quiz with 10 new questions covering NPK fertilisers, alloys, the Haber process, and material properties. This quiz introduces multiple-choice, numeric, and true/false formats to provide a varied assessment of the source material.",
     "mode": "extension",
     "subject": "Chemistry",
     "board": "GCSE Triple Science",
-    "syllabusAlignment": "GCSE Chemistry: Using resources.",
+    "syllabusAlignment": "Chemical Changes and Using Resources",
     "questionCount": 10,
     "questions": [
       {
-        "id": "Q22",
-        "prompt": "What does the 'NPK' in NPK fertiliser stand for?",
-        "answer": "D",
-        "explanation": "NPK fertilisers are formulations containing soluble compounds of Nitrogen (N), Phosphorus (P), and Potassium (K), which are essential nutrients for plant growth.",
+        "id": "Q21",
+        "prompt": "What does the 'P' in NPK fertiliser stand for?",
+        "answer": "B. Phosphorous",
+        "explanation": "NPK fertilisers are formulations containing soluble compounds of the three essential elements for plant growth: Nitrogen (N), Phosphorous (P), and Potassium (K).",
         "type": "multiple_choice",
         "options": [
-          "A) Nitrogen, Platinum, Krypton",
-          "B) Sodium, Phosphorus, Krypton",
-          "C) Nitrogen, Polonium, Calcium",
-          "D) Nitrogen, Phosphorus, Potassium"
+          "A. Platinum",
+          "B. Phosphorous",
+          "C. Potassium",
+          "D. Polonium"
         ],
-        "topic": "Fertilisers",
+        "topic": "NPK Fertilisers",
         "difficulty": "foundation",
-        "skillFocus": "Recall acronym",
-        "sourceReference": "C20 questions, Q21"
+        "skillFocus": "Recall chemical symbols and definitions",
+        "sourceReference": "C20 questions, Q21 Answer"
+      },
+      {
+        "id": "Q22",
+        "prompt": "According to the balanced equation for the Haber process, N₂(g) + 3H₂(g) ⇌ 2NH₃(g), how many moles of hydrogen gas are required to react with one mole of nitrogen gas?",
+        "answer": "3",
+        "explanation": "The stoichiometry of the balanced symbol equation shows that 1 mole of nitrogen gas (N₂) reacts with 3 moles of hydrogen gas (H₂) to produce 2 moles of ammonia (NH₃).",
+        "type": "numeric",
+        "topic": "Haber process",
+        "difficulty": "intermediate",
+        "skillFocus": "Interpret balanced chemical equations",
+        "sourceReference": "C20 questions, Q15 Answer"
       },
       {
         "id": "Q23",
-        "prompt": "According to the balanced equation for the Haber process, N₂(g) + 3H₂(g) ⇌ 2NH₃(g), how many moles of hydrogen gas are required to produce two moles of ammonia?",
-        "answer": "3",
-        "explanation": "The stoichiometry of the balanced symbol equation shows that 3 moles of hydrogen gas (3H₂) react with 1 mole of nitrogen gas (N₂) to produce 2 moles of ammonia (2NH₃).",
-        "type": "numeric",
-        "topic": "Haber Process",
-        "difficulty": "intermediate",
-        "skillFocus": "Interpret chemical equation",
-        "sourceReference": "C20 questions, Q15"
+        "prompt": "True or False: According to the provided material, iron will rust if it is exposed only to oxygen.",
+        "answer": "False",
+        "explanation": "The formation of rust is a reaction that requires the presence of both oxygen and water.",
+        "type": "true_false",
+        "topic": "Rusting",
+        "difficulty": "foundation",
+        "skillFocus": "Recall conditions for a chemical reaction",
+        "sourceReference": "C20 questions, Q4 Answer"
       },
       {
         "id": "Q24",
-        "prompt": "Besides iron, what essential non-metal element is a key component of steel alloys?",
-        "answer": "Carbon",
-        "explanation": "Steel is an alloy of iron with carbon, and often other metals are added to give specific properties.",
-        "type": "short_answer",
-        "topic": "Alloys",
+        "prompt": "Which of the following is an example of a composite material?",
+        "answer": "C. Reinforced concrete",
+        "explanation": "A composite is a mixture of a matrix and reinforcements. Reinforced concrete and plywood are given as examples. Brass is an alloy and bricks are ceramics.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Brass",
+          "B. Bricks",
+          "C. Reinforced concrete",
+          "D. Borosilicate glass"
+        ],
+        "topic": "Composites",
         "difficulty": "foundation",
-        "skillFocus": "Recall composition",
-        "sourceReference": "C20 questions, Q7"
+        "skillFocus": "Identify examples of material types",
+        "sourceReference": "C20 questions, Q14 Answer"
       },
       {
         "id": "Q25",
-        "prompt": "Thermosetting polymers can be easily melted and reshaped upon heating.",
-        "answer": "False",
-        "explanation": "Thermosetting polymers do not soften when heated due to strong cross-links between the polymer chains. It is thermosoftening polymers that can be melted and reshaped.",
-        "type": "true_false",
-        "topic": "Polymers",
+        "prompt": "What is the specific temperature, in degrees Celsius, used as a compromise condition for the Haber process?",
+        "answer": "450",
+        "explanation": "The compromise conditions for the Haber process are a temperature of 450°C, a pressure of 200 atm, and an iron catalyst.",
+        "type": "numeric",
+        "topic": "Haber process",
         "difficulty": "intermediate",
-        "skillFocus": "Differentiate properties",
-        "sourceReference": "C20 questions, Q12"
+        "skillFocus": "Recall specific reaction conditions",
+        "sourceReference": "C20 questions, Q20 Answer"
       },
       {
         "id": "Q26",
-        "prompt": "Which of the following materials is an example of a composite?",
-        "answer": "D",
-        "explanation": "Plywood is a composite material, made from layers of wood veneer (reinforcement) held together by an adhesive (matrix). Brass, steel, and borosilicate glass are not composites.",
+        "prompt": "Which type of polymer is characterised by not softening when it is heated?",
+        "answer": "A. Thermosetting polymers",
+        "explanation": "The key difference is that thermosetting polymers do not soften upon heating, whereas thermosoftening polymers do.",
         "type": "multiple_choice",
         "options": [
-          "A) Brass",
-          "B) Borosilicate glass",
-          "C) Steel",
-          "D) Plywood"
+          "A. Thermosetting polymers",
+          "B. Thermosoftening polymers",
+          "C. Clay polymers",
+          "D. Metallic polymers"
         ],
-        "topic": "Composites",
-        "difficulty": "foundation",
-        "skillFocus": "Identify example",
-        "sourceReference": "C20 questions, Q14"
+        "topic": "Polymers",
+        "difficulty": "intermediate",
+        "skillFocus": "Compare properties of materials",
+        "sourceReference": "C20 questions, Q12 Answer"
       },
       {
         "id": "Q27",
-        "prompt": "What is the specific pressure used as a compromise condition for the Haber process?",
-        "answer": "B",
-        "explanation": "The industrial conditions for the Haber process are a compromise to achieve a good yield and rate at a manageable cost. The pressure used is 200 atmospheres.",
+        "prompt": "Steel is an alloy made primarily from iron and which other element?",
+        "answer": "D. Carbon",
+        "explanation": "Steel alloys are made from iron, carbon, and other metals. Carbon is the key non-metal element added to iron to make steel.",
         "type": "multiple_choice",
         "options": [
-          "A) 450 atm",
-          "B) 200 atm",
-          "C) 450 °C",
-          "D) 200 Pa"
+          "A. Copper",
+          "B. Zinc",
+          "C. Silver",
+          "D. Carbon"
         ],
-        "topic": "Haber Process",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall specific condition",
-        "sourceReference": "C20 questions, Q20"
+        "topic": "Alloys",
+        "difficulty": "foundation",
+        "skillFocus": "Recall the composition of an alloy",
+        "sourceReference": "C20 questions, Q7 Answer"
       },
       {
         "id": "Q28",
-        "prompt": "A composite material is defined as a mixture of a matrix and what other component?",
-        "answer": "Reinforcements",
-        "explanation": "Composites are made of two main parts: the matrix, which surrounds and binds together the other component, known as the reinforcements (e.g., fibres or fragments).",
+        "prompt": "What term is used to describe a substance like an NPK fertiliser, which contains a mixture of soluble compounds?",
+        "answer": "a formulation",
+        "explanation": "An NPK fertiliser is defined as a formulation containing soluble compounds of nitrogen, phosphorous, and potassium.",
         "type": "short_answer",
-        "topic": "Composites",
-        "difficulty": "intermediate",
-        "skillFocus": "Recall definition component",
-        "sourceReference": "C20 questions, Q13"
+        "topic": "NPK Fertilisers",
+        "difficulty": "higher",
+        "skillFocus": "Recall and apply a key term",
+        "sourceReference": "C20 questions, Q21 Answer"
       },
       {
         "id": "Q29",
-        "prompt": "Which type of glass is particularly suitable for laboratory use due to its high melting point?",
-        "answer": "Borosilicate glass",
-        "explanation": "Borosilicate glass has a much higher melting point than soda-lime glass, making it resistant to the high temperatures and thermal shock often encountered in a laboratory.",
-        "type": "short_answer",
-        "topic": "Ceramics and Glass",
+        "prompt": "Which property of borosilicate glass is much higher than that of soda-lime glass, making it suitable for applications involving heat?",
+        "answer": "B. Melting point",
+        "explanation": "The main difference highlighted is that borosilicate glass has a much higher melting point than soda-lime glass.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Density",
+          "B. Melting point",
+          "C. Brittleness",
+          "D. Colour"
+        ],
+        "topic": "Glass and Ceramics",
         "difficulty": "intermediate",
-        "skillFocus": "Apply property to use",
-        "sourceReference": "C20 questions, Q9"
+        "skillFocus": "Compare material properties",
+        "sourceReference": "C20 questions, Q9 Answer"
       },
       {
         "id": "Q30",
-        "prompt": "What two substances are required, in addition to iron, for rust to form?",
-        "answer": "Water and oxygen",
-        "explanation": "Rusting is the specific name for the corrosion of iron, and it is a chemical reaction that requires the presence of both oxygen (from the air) and water.",
-        "type": "short_answer",
-        "topic": "Corrosion",
+        "prompt": "Which of the following is a physical barrier method used to protect against corrosion?",
+        "answer": "A. Paint",
+        "explanation": "Physical barriers like grease, paint, or a thin layer of metal prevent substances in the environment from reacting with the material's surface.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Paint",
+          "B. Sacrificial protection",
+          "C. Alloying",
+          "D. Using a catalyst"
+        ],
+        "topic": "Corrosion prevention",
         "difficulty": "foundation",
-        "skillFocus": "Recall reactants",
-        "sourceReference": "C20 questions, Q4"
-      },
-      {
-        "id": "Q31",
-        "prompt": "For the chemical compounds in an NPK fertiliser to be effective, what key property must they possess?",
-        "answer": "They must be soluble.",
-        "explanation": "The compounds of nitrogen, phosphorus, and potassium must be soluble in water so that they can be absorbed by the roots of plants from the soil.",
-        "type": "short_answer",
-        "topic": "Fertilisers",
-        "difficulty": "higher",
-        "skillFocus": "Explain requirement",
-        "sourceReference": "C20 questions, Q21"
+        "skillFocus": "Identify methods of prevention",
+        "sourceReference": "C20 questions, Q2 Answer"
       }
     ]
   },
@@ -161,7 +179,7 @@
     "id": "with-questions-f503558b-56e2-4fb4-b7c9-788a6231bba3-1-105-c",
     "category": "with-questions",
     "displayName": "F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
-    "sourcePath": "/workspace/spark/data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
+    "sourcePath": "/Users/yaroslavvolovich/projects/spark/data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg",
     "mode": "extraction",
     "questionCount": 20,

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-import { auditJudgeDecision, judgeQuiz } from './judge';
+import { auditJudgeDecision, judgeQuiz } from './eval/judge';
 import {
 	type InlineSourceFile,
 	type JudgeAudit,
@@ -101,7 +101,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		async () => {
 			await ensureSources();
 			extractionQuiz = await generateQuizFromSource({
-				mode: 'extraction',
 				questionCount: 6,
 				sourceFiles: extractionSources,
 				subject: 'chemistry',
@@ -129,7 +128,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		async () => {
 			await ensureSources();
 			synthesisQuiz = await generateQuizFromSource({
-				mode: 'synthesis',
 				questionCount: 6,
 				sourceFiles: synthesisSources,
 				subject: 'biology',
@@ -151,7 +149,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 			await ensureSources();
 			if (!synthesisQuiz) {
 				synthesisQuiz = await generateQuizFromSource({
-					mode: 'synthesis',
 					questionCount: 6,
 					sourceFiles: synthesisSources,
 					subject: 'biology',
@@ -181,7 +178,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		await ensureSources();
 		if (!extractionQuiz) {
 			extractionQuiz = await generateQuizFromSource({
-				mode: 'extraction',
 				questionCount: 6,
 				sourceFiles: extractionSources,
 				subject: 'chemistry',
@@ -204,14 +200,13 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		{ timeout: LONG_TIMEOUT },
 		async () => {
 			await ensureSources();
-			if (!extractionQuiz) {
-				extractionQuiz = await generateQuizFromSource({
-					mode: 'extraction',
-					questionCount: 6,
-					sourceFiles: extractionSources,
-					subject: 'chemistry',
-					board: 'AQA'
-				});
+		if (!extractionQuiz) {
+			extractionQuiz = await generateQuizFromSource({
+				questionCount: 6,
+				sourceFiles: extractionSources,
+				subject: 'chemistry',
+				board: 'AQA'
+			});
 			}
 			if (!extractionVerdict) {
 				extractionVerdict = await judgeQuiz({

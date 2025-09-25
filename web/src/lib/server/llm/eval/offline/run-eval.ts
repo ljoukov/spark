@@ -1,10 +1,18 @@
+import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import { config as loadEnv } from 'dotenv';
 
-import { GoogleGenAI, type Part, type Schema, Type } from '@google/genai';
+import {
+	type Part,
+	type Schema,
+	type GenerateContentResponseUsageMetadata,
+	GenerateContentResponse
+} from '@google/genai';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 
 import {
@@ -14,34 +22,37 @@ import {
 	type JudgeAudit,
 	type JudgeVerdict,
 	type QuizGeneration
-} from '../src/lib/llm/schemas';
+} from '../../../../llm/schemas';
 import {
-	BASE_PROMPT_HEADER,
 	QUIZ_RESPONSE_SCHEMA,
+	buildExtensionPrompt,
 	buildGenerationPrompt,
 	buildSourceParts,
 	parseQuizFromText,
 	type GenerateQuizOptions
-} from '../src/lib/server/llm/quizPrompts';
+} from '../../quizPrompts';
+import { DEFAULT_EXTENSION_QUESTION_COUNT, QUIZ_GENERATION_MODEL_ID } from '../../quizGenerator';
+import {
+	AUDIT_RESPONSE_SCHEMA,
+	JUDGE_RESPONSE_SCHEMA,
+	buildAuditPrompt,
+	buildJudgePrompt,
+	QUIZ_EVAL_MODEL_ID
+} from '../judge';
+import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(CURRENT_DIR, '..');
-const REPO_ROOT = path.resolve(PROJECT_ROOT, '..');
+const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../');
+const REPO_ROOT = path.resolve(WEB_ROOT, '../..');
 const DATA_ROOT = path.join(REPO_ROOT, 'data', 'samples');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'static', 'admin', 'sample-quizzes');
+const OUTPUT_DIR = path.join(WEB_ROOT, 'static', 'admin', 'sample-quizzes');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
 const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'sample-quizzes');
 
-const PROMPT_FILE_PATHS = [
-	'web/src/lib/server/llm/quizPrompts.ts',
-	'web/src/lib/server/llm/quizGenerator.ts',
-	'web/src/lib/server/llm/judge.ts'
-];
-
-const MODEL_ID = 'gemini-2.5-pro';
-const DEFAULT_TEMPERATURE = 0.2;
-const JUDGE_TEMPERATURE = 0.15;
-const EXTENSION_QUESTION_COUNT = 10;
+const LOCAL_ENV_PATH = path.resolve('.env.local');
+if (existsSync(LOCAL_ENV_PATH)) {
+	loadEnv({ path: LOCAL_ENV_PATH });
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -58,30 +69,55 @@ if (proxyUrl) {
 	setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
 
-type CategoryConfig = Omit<GenerateQuizOptions, 'sourceFiles'>;
-
-const CATEGORY_DEFAULTS: Record<string, CategoryConfig> = {
-	'with-questions': {
-		mode: 'extraction',
-		questionCount: 20,
-		subject: 'chemistry',
-		board: 'AQA',
-		temperature: DEFAULT_TEMPERATURE
-	},
-	'no-questions': {
-		mode: 'synthesis',
-		questionCount: 6,
-		subject: 'biology',
-		board: 'OCR',
-		temperature: DEFAULT_TEMPERATURE
+const DEFAULT_SAMPLE_QUESTION_COUNT = (() => {
+	const raw = process.env.SAMPLE_QUESTION_COUNT?.trim();
+	if (!raw) {
+		return 10;
 	}
-};
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isNaN(parsed) || parsed <= 0 ? 10 : parsed;
+})();
 
-const FALLBACK_CONFIG: CategoryConfig = {
-	mode: 'synthesis',
-	questionCount: 6,
-	temperature: DEFAULT_TEMPERATURE
-};
+const PROGRESS_LOG_INTERVAL_MS = 500;
+
+function estimateUploadBytes(parts: Part[]): number {
+	return parts.reduce((total, part) => {
+		if (typeof part.text === 'string') {
+			total += Buffer.byteLength(part.text, 'utf8');
+		}
+		const inlineData = part.inlineData?.data;
+		if (inlineData) {
+			try {
+				total += Buffer.from(inlineData, 'base64').byteLength;
+			} catch (error) {
+				total += inlineData.length;
+			}
+		}
+		const fileUri = part.fileData?.fileUri;
+		if (fileUri) {
+			total += Buffer.byteLength(fileUri, 'utf8');
+		}
+		return total;
+	}, 0);
+}
+
+function formatBytes(bytes: number): string {
+	if (bytes === 0) {
+		return '0 B';
+	}
+	const units = ['B', 'KB', 'MB', 'GB'];
+	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+	const value = bytes / Math.pow(1024, exponent);
+	return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+}
+
+function rawPathForAttempt(basePath: string, attempt: number): string {
+	const directory = path.dirname(basePath);
+	const ext = path.extname(basePath);
+	const baseName = path.basename(basePath, ext);
+	const suffix = `.attempt${attempt}`;
+	return path.join(directory, `${baseName}${suffix}${ext}`);
+}
 
 type SampleJob = {
 	readonly id: string;
@@ -89,62 +125,24 @@ type SampleJob = {
 	readonly displayName: string;
 	readonly sourcePath: string;
 	readonly relativeSourcePath: string;
-	readonly mode: 'extraction' | 'synthesis';
 	readonly questionCount: number;
 	readonly subject?: string;
 	readonly board?: string;
-	readonly temperature?: number;
 };
 
 type QuizModelRun = {
 	readonly modelId: string;
-	readonly temperature: number;
-};
-
-const JUDGE_RESPONSE_SCHEMA: Schema = {
-	type: Type.OBJECT,
-	properties: {
-		explanation: { type: Type.STRING },
-		rubricFindings: {
-			type: Type.ARRAY,
-			items: {
-				type: Type.OBJECT,
-				properties: {
-					criterion: { type: Type.STRING },
-					score: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-					justification: { type: Type.STRING }
-				},
-				required: ['criterion', 'score', 'justification'],
-				propertyOrdering: ['criterion', 'score', 'justification']
-			}
-		},
-		verdict: { type: Type.STRING, enum: ['approve', 'revise'] }
-	},
-	required: ['explanation', 'rubricFindings', 'verdict'],
-	propertyOrdering: ['explanation', 'rubricFindings', 'verdict']
-};
-
-const AUDIT_RESPONSE_SCHEMA: Schema = {
-	type: Type.OBJECT,
-	properties: {
-		explanation: { type: Type.STRING },
-		verdictAgreement: { type: Type.STRING, enum: ['agree', 'needs_review', 'disagree'] },
-		confidence: { type: Type.STRING, enum: ['high', 'medium', 'low'] }
-	},
-	required: ['explanation', 'verdictAgreement', 'confidence'],
-	propertyOrdering: ['explanation', 'verdictAgreement', 'confidence']
 };
 
 type QuizFilePayload = {
 	readonly id: string;
-	readonly mode: SampleJob['mode'];
+	readonly mode: QuizGeneration['mode'];
 	readonly subject?: string;
 	readonly board?: string;
 	readonly generatedAt: string;
 	readonly request: {
 		readonly model: string;
 		readonly questionCount: number;
-		readonly temperature: number;
 	};
 	readonly source: {
 		readonly relativePath: string;
@@ -182,64 +180,6 @@ type GenerationResult = {
 	readonly extension: QuizFilePayload;
 	readonly extensionJudge: JudgeFilePayload;
 };
-
-type JudgePromptOptions = {
-	readonly rubricSummary?: string;
-	readonly candidateQuiz: QuizGeneration;
-	readonly sourceFiles: InlineSourceFile[];
-};
-
-type ExtendQuizOptions = {
-	readonly sourceFiles: InlineSourceFile[];
-	readonly baseQuiz: QuizGeneration;
-	readonly additionalQuestionCount: number;
-};
-
-function buildJudgePrompt(options: JudgePromptOptions): string {
-	return [
-		`You are Spark's internal GCSE quiz quality judge. Review the proposed quiz objectively.`,
-		'Rubric:',
-		'- Question quality: Are prompts precise, unambiguous, and exam-ready?',
-		'- Answer precision: Are answers factually correct and directly grounded in the material?',
-		'- Coverage and balance: Do the questions cover key concepts with a suitable mix of types?',
-		'- Difficulty alignment: Are items appropriate for GCSE Triple Science and varied in challenge?',
-		'- Safety & tone: Avoid misinformation, harmful or off-spec content.',
-		options.rubricSummary
-			? `Additional notes: ${options.rubricSummary}`
-			: 'Use the GCSE Triple Science context and ensure UK English spelling.',
-		'Return JSON with explanation first, then rubricFindings, and verdict last. Explanation must cite rubric dimensions.',
-		'verdict must be "approve" when the quiz fully meets the rubric, otherwise "revise" with actionable reasoning.',
-		'Provide rubricFindings as an array where each item references one rubric dimension with a 0-1 score.'
-	]
-		.filter(Boolean)
-		.join('\n');
-}
-
-function buildAuditPrompt(): string {
-	return [
-		`You are Spark's senior reviewer using gemini-2.5-pro to audit another model's judgement.`,
-		'Assess whether the judge verdict is reasonable given the quiz and rubric. Focus on factual accuracy and rubric fit.',
-		'Return JSON with explanation first, then verdictAgreement, then confidence.',
-		'If the verdict is defensible and reasoning is sound, respond with verdictAgreement="agree".',
-		'Use "needs_review" when the judge raised valid concerns but missed some nuance. Use "disagree" only if the verdict is demonstrably wrong.'
-	].join('\n');
-}
-
-function buildExtensionPrompt(options: ExtendQuizOptions): string {
-	return [
-		BASE_PROMPT_HEADER,
-		'The learner already received an initial quiz, provided below as JSON. They now want additional questions.',
-		'Requirements:',
-		`- Produce exactly ${options.additionalQuestionCount} new questions.`,
-		'- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.',
-		'- Continue to ground every item strictly in the supplied material.',
-		'- Highlight fresh angles or subtopics that were underrepresented previously.',
-		'- Multiple choice responses must include four options labelled A, B, C, and D.',
-		'- Difficulty must be mapped to foundation, intermediate, or higher for every question.',
-		'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly.',
-		'Do not restate the previous questions in the response. Only include the new items.'
-	].join('\n');
-}
 
 function slugify(value: string): string {
 	return (
@@ -287,7 +227,6 @@ async function collectJobs(): Promise<SampleJob[]> {
 		}
 		const category = entry.name;
 		const categoryPath = path.join(DATA_ROOT, category);
-		const config = CATEGORY_DEFAULTS[category] ?? FALLBACK_CONFIG;
 		const files = await readdir(categoryPath, { withFileTypes: true });
 		for (const file of files) {
 			if (!file.isFile()) {
@@ -300,17 +239,14 @@ async function collectJobs(): Promise<SampleJob[]> {
 			slugCounts.set(baseSlug, count + 1);
 			const id = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
 			const relativeSourcePath = path.relative(REPO_ROOT, sourcePath).split(path.sep).join('/');
+			const questionCount = DEFAULT_SAMPLE_QUESTION_COUNT;
 			jobs.push({
 				id,
 				category,
 				displayName,
 				sourcePath,
 				relativeSourcePath,
-				mode: config.mode,
-				questionCount: config.questionCount,
-				subject: config.subject,
-				board: config.board,
-				temperature: config.temperature
+				questionCount
 			});
 		}
 	}
@@ -318,74 +254,162 @@ async function collectJobs(): Promise<SampleJob[]> {
 	return jobs;
 }
 
-async function callModel<T>({
-	client,
+async function callModel({
 	model,
 	schema,
 	parts,
-	temperature
+	rawFilePath,
+	label
 }: {
-	client: GoogleGenAI;
-	model: string;
+	model: GeminiModelId;
 	schema: Schema;
 	parts: Part[];
-	temperature: number;
+	rawFilePath: string;
+	label: string;
 }): Promise<{ text: string; modelId: string }> {
-	const response = await client.models.generateContent({
-		model,
-		contents: [
-			{
-				role: 'user',
-				parts
+	const logPrefix = `      [${model}]`;
+	const uploadBytes = estimateUploadBytes(parts);
+	const maxAttempts = 3;
+
+	let startMillis = 0;
+	let firstChunkMillis = 0;
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		startMillis = Date.now();
+		const attemptLabel = `attempt ${attempt}/${maxAttempts}`;
+		console.log(`${logPrefix}: ${label}, ${attemptLabel}, upload ≈ ${formatBytes(uploadBytes)}`);
+
+		const { text } = await runGeminiCall(async (client) => {
+			const stream = await client.models.generateContentStream({
+				model,
+				contents: [
+					{
+						role: 'user',
+						parts
+					}
+				],
+				config: {
+					responseMimeType: 'application/json',
+					responseSchema: schema
+				}
+			});
+
+			let chunkCount = 0;
+			let firstChunkLogged = false;
+			let lastProgressLog = 0;
+			let latestText = '';
+			let lastLength = 0;
+			let latestUsage: GenerateContentResponseUsageMetadata | undefined;
+			let finalChunk: GenerateContentResponse | undefined;
+
+			for await (const chunk of stream) {
+				chunkCount += 1;
+				finalChunk = chunk;
+				const { text } = chunk;
+				if (text !== undefined) {
+					latestText += text;
+				}
+				if (chunk.usageMetadata) {
+					latestUsage = chunk.usageMetadata;
+				}
+				if (!firstChunkLogged && latestText.length > 0) {
+					firstChunkLogged = true;
+					lastProgressLog = firstChunkMillis = Date.now();
+					lastLength = latestText.length;
+					console.log(
+						`${logPrefix}: received first chunk of ${latestText.length} chars in ${Math.round((firstChunkMillis - startMillis) / 1_000)}s`
+					);
+					continue;
+				}
+				if (
+					firstChunkLogged &&
+					Date.now() - lastProgressLog >= PROGRESS_LOG_INTERVAL_MS &&
+					latestText.length !== lastLength
+				) {
+					console.log(
+						`${logPrefix}: streaming… ${chunkCount} chunk${chunkCount === 1 ? '' : 's'} (~${latestText.length} chars)`
+					);
+					lastProgressLog = Date.now();
+					lastLength = latestText.length;
+				}
 			}
-		],
-		config: {
-			responseMimeType: 'application/json',
-			responseSchema: schema,
-			temperature
+
+			if (!firstChunkLogged) {
+				throw new Error(`${logPrefix}: stream produced no chunks`);
+			}
+
+			const finalText = latestText || finalChunk?.text || '';
+			if (!finalText) {
+				throw new Error(`${logPrefix}: empty response`);
+			}
+
+			const usage =
+				latestUsage ??
+				(finalChunk as { usageMetadata?: GenerateContentResponseUsageMetadata })?.usageMetadata;
+			const elapesMillis = Date.now() - startMillis;
+			const speed =
+				((usage?.thoughtsTokenCount ?? 0) + (usage?.candidatesTokenCount ?? 0)) / elapesMillis;
+			console.log(
+				`${logPrefix}: done in ${Math.round(elapesMillis) / 1000}s, prompt tokens: ${usage?.promptTokenCount ?? 0}, thinking tokens: ${usage?.thoughtsTokenCount ?? 0}, response tokens: ${usage?.candidatesTokenCount ?? 0}, ${Math.round(speed * 1000)} t/s`
+			);
+
+			return { text: finalText, usage };
+		});
+
+		await writeFile(rawFilePath, text, 'utf8');
+		const attemptPath = rawPathForAttempt(rawFilePath, attempt);
+		await writeFile(attemptPath, text, 'utf8');
+		console.log(`${logPrefix}: wrote ${attemptPath}.`);
+
+		const trimmed = text.trimStart();
+		if (!trimmed.startsWith('{')) {
+			console.warn(
+				`${logPrefix}: non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
+			);
+			throw Error('non-JSON LLM response');
 		}
-	});
-	const text = response.text;
-	if (!text) {
-		throw new Error(`Gemini ${model} returned an empty response`);
+		try {
+			JSON.parse(text);
+			return { text, modelId: model };
+		} catch (e) {
+			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}`);
+		}
 	}
-	return { text, modelId: model };
+
+	throw new Error(`${logPrefix}: failed to produce JSON after ${maxAttempts} attempts`);
 }
 
 async function generateQuizPayload(
-	client: GoogleGenAI,
 	job: SampleJob,
-	source: InlineSourceFile
+	source: InlineSourceFile,
+	rawFilePath: string,
+	label: string
 ): Promise<QuizFilePayload> {
 	const options: GenerateQuizOptions = {
-		mode: job.mode,
 		questionCount: job.questionCount,
 		subject: job.subject,
 		board: job.board,
-		sourceFiles: [source],
-		temperature: job.temperature
+		sourceFiles: [source]
 	};
 	const prompt = buildGenerationPrompt(options);
 	const parts = [{ text: prompt }, ...buildSourceParts(options.sourceFiles)];
 	const { text } = await callModel({
-		client,
-		model: MODEL_ID,
+		model: QUIZ_GENERATION_MODEL_ID,
 		schema: QUIZ_RESPONSE_SCHEMA,
 		parts,
-		temperature: options.temperature ?? DEFAULT_TEMPERATURE
+		rawFilePath,
+		label
 	});
 	const quiz = parseQuizFromText(text);
 	const generatedAt = new Date().toISOString();
 	return {
 		id: job.id,
-		mode: job.mode,
-		subject: job.subject,
-		board: job.board,
+		mode: quiz.mode,
+		subject: quiz.subject,
+		board: quiz.board,
 		generatedAt,
 		request: {
-			model: MODEL_ID,
-			questionCount: job.questionCount,
-			temperature: options.temperature ?? DEFAULT_TEMPERATURE
+			model: QUIZ_GENERATION_MODEL_ID,
+			questionCount: job.questionCount
 		},
 		source: {
 			relativePath: job.relativeSourcePath,
@@ -394,42 +418,46 @@ async function generateQuizPayload(
 		prompt,
 		quiz,
 		model: {
-			modelId: MODEL_ID,
-			temperature: options.temperature ?? DEFAULT_TEMPERATURE
+			modelId: QUIZ_GENERATION_MODEL_ID
 		},
 		job
 	};
 }
 
 async function generateExtensionPayload(
-	client: GoogleGenAI,
 	job: SampleJob,
 	source: InlineSourceFile,
-	baseQuiz: QuizGeneration
+	baseQuiz: QuizGeneration,
+	rawFilePath: string,
+	label: string
 ): Promise<QuizFilePayload> {
 	const prompt = buildExtensionPrompt({
-		sourceFiles: [source],
-		baseQuiz,
-		additionalQuestionCount: EXTENSION_QUESTION_COUNT
+		additionalQuestionCount: DEFAULT_EXTENSION_QUESTION_COUNT,
+		subject: baseQuiz.subject ?? job.subject,
+		board: baseQuiz.board ?? job.board
 	});
+	const pastQuizLines = baseQuiz.questions.map(
+		(question, index) => `${index + 1}. ${question.prompt}`
+	);
+	const pastQuizBlock = `<PAST_QUIZES>\n${pastQuizLines.join('\n')}\n</PAST_QUIZES>`;
 	const parts: Part[] = [
 		{ text: prompt },
 		...buildSourceParts([source]),
-		{ text: `Existing quiz JSON:\n${JSON.stringify(baseQuiz, null, 2)}` }
+		{ text: `Previous quiz prompts:\n${pastQuizBlock}` }
 	];
 	const { text } = await callModel({
-		client,
-		model: MODEL_ID,
+		model: QUIZ_GENERATION_MODEL_ID,
 		schema: QUIZ_RESPONSE_SCHEMA,
 		parts,
-		temperature: DEFAULT_TEMPERATURE
+		rawFilePath,
+		label
 	});
 	let quiz = parseQuizFromText(text);
-	if (quiz.questionCount !== EXTENSION_QUESTION_COUNT) {
+	if (quiz.questionCount !== DEFAULT_EXTENSION_QUESTION_COUNT) {
 		console.warn(
-			`[sample-quizzes] Extension for ${job.id} returned ${quiz.questionCount} questions; trimming to ${EXTENSION_QUESTION_COUNT}.`
+			`[sample-quizzes] Extension for ${job.id} returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
 		);
-		const trimmedQuestions = quiz.questions.slice(0, EXTENSION_QUESTION_COUNT);
+		const trimmedQuestions = quiz.questions.slice(0, DEFAULT_EXTENSION_QUESTION_COUNT);
 		quiz = {
 			...quiz,
 			questions: trimmedQuestions,
@@ -439,14 +467,13 @@ async function generateExtensionPayload(
 	const generatedAt = new Date().toISOString();
 	return {
 		id: job.id,
-		mode: job.mode,
-		subject: job.subject,
-		board: job.board,
+		mode: quiz.mode,
+		subject: quiz.subject,
+		board: quiz.board,
 		generatedAt,
 		request: {
-			model: MODEL_ID,
-			questionCount: EXTENSION_QUESTION_COUNT,
-			temperature: DEFAULT_TEMPERATURE
+			model: QUIZ_GENERATION_MODEL_ID,
+			questionCount: DEFAULT_EXTENSION_QUESTION_COUNT
 		},
 		source: {
 			relativePath: job.relativeSourcePath,
@@ -455,18 +482,18 @@ async function generateExtensionPayload(
 		prompt,
 		quiz,
 		model: {
-			modelId: MODEL_ID,
-			temperature: DEFAULT_TEMPERATURE
+			modelId: QUIZ_GENERATION_MODEL_ID
 		},
 		job
 	};
 }
 
 async function judgeQuizPayload(
-	client: GoogleGenAI,
 	job: SampleJob,
 	source: InlineSourceFile,
-	quiz: QuizGeneration
+	quiz: QuizGeneration,
+	rawFilePath: string,
+	label: string
 ): Promise<JudgeFilePayload> {
 	const prompt = buildJudgePrompt({
 		sourceFiles: [source],
@@ -477,50 +504,41 @@ async function judgeQuizPayload(
 		...buildSourceParts([source]),
 		{ text: `Candidate quiz JSON:\n${JSON.stringify(quiz, null, 2)}` }
 	];
-	const models: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro'];
-	let lastError: unknown;
-	for (const model of models) {
-		try {
-			const { text, modelId } = await callModel({
-				client,
-				model,
-				schema: JUDGE_RESPONSE_SCHEMA,
-				parts,
-				temperature: JUDGE_TEMPERATURE
-			});
-			const verdict = JSON.parse(text) as unknown;
-			const parsedVerdict = JudgeVerdictSchema.parse(verdict);
-			const evaluatedAt = new Date().toISOString();
-			return {
-				id: job.id,
-				evaluatedAt,
-				prompt,
-				source: {
-					relativePath: job.relativeSourcePath,
-					displayName: job.displayName
-				},
-				job,
-				judge: {
-					model: {
-						modelId,
-						temperature: JUDGE_TEMPERATURE
-					},
-					verdict: parsedVerdict
-				}
-			};
-		} catch (error) {
-			lastError = error;
+	const { text, modelId } = await callModel({
+		model: QUIZ_EVAL_MODEL_ID,
+		schema: JUDGE_RESPONSE_SCHEMA,
+		parts,
+		rawFilePath,
+		label
+	});
+	const verdict = JSON.parse(text) as unknown;
+	const parsedVerdict = JudgeVerdictSchema.parse(verdict);
+	const evaluatedAt = new Date().toISOString();
+	return {
+		id: job.id,
+		evaluatedAt,
+		prompt,
+		source: {
+			relativePath: job.relativeSourcePath,
+			displayName: job.displayName
+		},
+		job,
+		judge: {
+			model: {
+				modelId
+			},
+			verdict: parsedVerdict
 		}
-	}
-	throw lastError instanceof Error ? lastError : new Error(`Unable to judge quiz for ${job.id}`);
+	};
 }
 
 async function auditJudgeDecisionPayload(
-	client: GoogleGenAI,
 	job: SampleJob,
 	source: InlineSourceFile,
 	quiz: QuizGeneration,
-	judgeVerdict: JudgeVerdict
+	judgeVerdict: JudgeVerdict,
+	rawFilePath: string,
+	label: string
 ): Promise<JudgeFilePayload['audit']> {
 	const prompt = buildAuditPrompt();
 	const parts: Part[] = [
@@ -535,46 +553,72 @@ async function auditJudgeDecisionPayload(
 		}
 	];
 	const { text, modelId } = await callModel({
-		client,
-		model: 'gemini-2.5-pro',
+		model: QUIZ_EVAL_MODEL_ID,
 		schema: AUDIT_RESPONSE_SCHEMA,
 		parts,
-		temperature: JUDGE_TEMPERATURE
+		rawFilePath,
+		label
 	});
 	const parsed = JSON.parse(text) as unknown;
 	const result = JudgeAuditSchema.parse(parsed);
 	return {
 		model: {
-			modelId,
-			temperature: JUDGE_TEMPERATURE
+			modelId
 		},
 		result
 	};
 }
 
-async function runSampleGeneration(client: GoogleGenAI, job: SampleJob): Promise<GenerationResult> {
+async function runSampleGeneration(job: SampleJob, rawDir: string): Promise<GenerationResult> {
 	const source = await loadInlineSource(job.sourcePath);
+	const baseRawPath = path.join(rawDir, 'quiz.txt');
+	const baseJudgeRawPath = path.join(rawDir, 'judge.txt');
+	const baseJudgeAuditRawPath = path.join(rawDir, 'judge-audit.txt');
+	const extensionRawPath = path.join(rawDir, 'extension.txt');
+	const extensionJudgeRawPath = path.join(rawDir, 'extension-judge.txt');
+	const extensionJudgeAuditRawPath = path.join(rawDir, 'extension-judge-audit.txt');
+
 	console.log(`   ↳ generating base quiz (${job.id})`);
-	const quiz = await generateQuizPayload(client, job, source);
+	const quiz = await generateQuizPayload(job, source, baseRawPath, `base quiz ${job.id}`);
 	console.log(`   ↳ judging base quiz (${job.id})`);
-	const judge = await judgeQuizPayload(client, job, source, quiz.quiz);
-	const audit = await auditJudgeDecisionPayload(
-		client,
+	const judge = await judgeQuizPayload(
 		job,
 		source,
 		quiz.quiz,
-		judge.judge.verdict
+		baseJudgeRawPath,
+		`base judgement ${job.id}`
+	);
+	const audit = await auditJudgeDecisionPayload(
+		job,
+		source,
+		quiz.quiz,
+		judge.judge.verdict,
+		baseJudgeAuditRawPath,
+		`base audit ${job.id}`
 	);
 	console.log(`   ↳ generating extension (${job.id})`);
-	const extension = await generateExtensionPayload(client, job, source, quiz.quiz);
+	const extension = await generateExtensionPayload(
+		job,
+		source,
+		quiz.quiz,
+		extensionRawPath,
+		`extension quiz ${job.id}`
+	);
 	console.log(`   ↳ judging extension (${job.id})`);
-	const extensionJudge = await judgeQuizPayload(client, job, source, extension.quiz);
-	const extensionAudit = await auditJudgeDecisionPayload(
-		client,
+	const extensionJudge = await judgeQuizPayload(
 		job,
 		source,
 		extension.quiz,
-		extensionJudge.judge.verdict
+		extensionJudgeRawPath,
+		`extension judgement ${job.id}`
+	);
+	const extensionAudit = await auditJudgeDecisionPayload(
+		job,
+		source,
+		extension.quiz,
+		extensionJudge.judge.verdict,
+		extensionJudgeAuditRawPath,
+		`extension audit ${job.id}`
 	);
 	return {
 		job,
@@ -617,7 +661,7 @@ async function readJson<T>(filePath: string): Promise<T> {
 type SampleIndexEntry = {
 	readonly id: string;
 	readonly label: string;
-	readonly mode: SampleJob['mode'];
+	readonly mode: QuizGeneration['mode'];
 	readonly subject?: string;
 	readonly board?: string;
 	readonly questionCount: number;
@@ -654,7 +698,6 @@ type SampleIndex = {
 };
 
 async function runGenerationStage(
-	client: GoogleGenAI,
 	jobs: SampleJob[]
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
 	await rm(OUTPUT_DIR, { recursive: true, force: true });
@@ -662,13 +705,13 @@ async function runGenerationStage(
 
 	const results: GenerationResult[] = [];
 	for (const job of jobs) {
-		console.log(
-			`[sample-quizzes] Generating ${job.id} (${job.mode}) from ${job.relativeSourcePath}...`
-		);
+		console.log(`[sample-quizzes] Generating ${job.id} from ${job.relativeSourcePath}...`);
+		const sampleDir = path.join(OUTPUT_DIR, job.id);
+		const rawDir = path.join(sampleDir, 'raw');
+		await mkdir(sampleDir, { recursive: true });
+		await mkdir(rawDir, { recursive: true });
 		try {
-			const result = await runSampleGeneration(client, job);
-			const sampleDir = path.join(OUTPUT_DIR, job.id);
-			await mkdir(sampleDir, { recursive: true });
+			const result = await runSampleGeneration(job, rawDir);
 			await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
 			await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
 			await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
@@ -691,9 +734,9 @@ async function runGenerationStage(
 		samples: results.map((result, indexPosition) => ({
 			id: result.job.id,
 			label: `Sample ${indexPosition + 1}: ${result.job.displayName}`,
-			mode: result.job.mode,
-			subject: result.job.subject,
-			board: result.job.board,
+			mode: result.quiz.quiz.mode,
+			subject: result.quiz.quiz.subject,
+			board: result.quiz.quiz.board,
 			questionCount: result.quiz.quiz.questionCount,
 			request: result.quiz.request,
 			source: result.quiz.source,
@@ -729,17 +772,6 @@ async function runGenerationStage(
 	return { results, index };
 }
 
-function buildPromptLinks(commitHash: string): Array<{ label: string; url: string }> {
-	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-	return PROMPT_FILE_PATHS.map((relativePath) => {
-		const posixPath = relativePath.split(path.sep).join('/');
-		return {
-			label: relativePath,
-			url: `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`
-		};
-	});
-}
-
 function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
 	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
 	const posixPath = relativeRepoPath.split(path.sep).join('/');
@@ -769,9 +801,7 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 	}
 	lines.push(`- Question count: ${payload.quiz.questionCount}`);
 	lines.push(`- Generated at: ${payload.generatedAt}`);
-	lines.push(
-		`- Model: ${payload.model.modelId} (temperature ${payload.model.temperature.toFixed(2)})`
-	);
+	lines.push(`- Model: ${payload.model.modelId}`);
 	lines.push(`- Source: ${payload.source.displayName} (${payload.source.relativePath})`);
 	lines.push('');
 	lines.push('## Questions');
@@ -832,18 +862,14 @@ function formatJudgeMarkdown(payload: JudgeFilePayload, heading: string): string
 	lines.push('');
 	lines.push('## Model metadata');
 	lines.push('');
-	lines.push(
-		`- Model: ${payload.judge.model.modelId} (temperature ${payload.judge.model.temperature.toFixed(2)})`
-	);
+	lines.push(`- Model: ${payload.judge.model.modelId}`);
 	lines.push(`- Evaluated at: ${payload.evaluatedAt}`);
 	lines.push(`- Source: ${payload.source.displayName} (${payload.source.relativePath})`);
 	if (payload.audit) {
 		lines.push('');
 		lines.push('## Audit');
 		lines.push('');
-		lines.push(
-			`- Model: ${payload.audit.model.modelId} (temperature ${payload.audit.model.temperature.toFixed(2)})`
-		);
+		lines.push(`- Model: ${payload.audit.model.modelId}`);
 		lines.push(`- Verdict agreement: ${payload.audit.result.verdictAgreement}`);
 		lines.push(`- Confidence: ${payload.audit.result.confidence}`);
 		lines.push('');
@@ -880,16 +906,12 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 	await mkdir(SAMPLE_REPORT_ROOT, { recursive: true });
 
 	const commitHash = await getCommitHash();
-	const promptLinks = buildPromptLinks(commitHash);
 	const rootLines: string[] = [];
 	rootLines.push('# Sample Quiz Generation Report');
 	rootLines.push('');
 	rootLines.push(`- Generated at: ${effectiveIndex.generatedAt}`);
 	rootLines.push(`- Commit: ${commitHash}`);
-	rootLines.push('- Prompt sources:');
-	promptLinks.forEach((link) => {
-		rootLines.push(`  - [${link.label}](${link.url})`);
-	});
+	rootLines.push('- Prompts: pulled from production prompt builders at the commit above.');
 	rootLines.push('');
 	rootLines.push('## Samples');
 	rootLines.push('');
@@ -975,19 +997,12 @@ async function main(): Promise<void> {
 	const stage = parseStageSelection();
 
 	if (stage !== 'render') {
-		const apiKey = process.env.GEMINI_API_KEY?.trim();
-		if (!apiKey) {
-			console.error('[sample-quizzes] GEMINI_API_KEY is not set.');
-			process.exitCode = 1;
-			return;
-		}
 		const jobs = await collectJobs();
 		if (jobs.length === 0) {
 			console.warn('[sample-quizzes] No sample files found.');
 			return;
 		}
-		const client = new GoogleGenAI({ apiKey });
-		const { index } = await runGenerationStage(client, jobs);
+		const { index } = await runGenerationStage(jobs);
 		if (stage === 'generate') {
 			return;
 		}

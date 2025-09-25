@@ -1,4 +1,3 @@
-import { GEMINI_API_KEY } from '$env/static/private';
 import { GoogleGenAI } from '@google/genai';
 
 const MAX_PARALLEL_REQUESTS = 3;
@@ -14,8 +13,8 @@ const RATE_LIMIT_REASONS = new Set(['RATE_LIMIT_EXCEEDED', 'RESOURCE_EXHAUSTED',
 
 export const GEMINI_MODEL_IDS = [
 	'gemini-2.5-pro',
-	'gemini-2.5-flash',
-	'gemini-2.5-flash-lite'
+	'gemini-flash-latest',
+	'gemini-flash-lite-latest'
 ] as const;
 
 export type GeminiModelId = (typeof GEMINI_MODEL_IDS)[number];
@@ -24,13 +23,6 @@ export function isGeminiModelId(value: string): value is GeminiModelId {
 	return (GEMINI_MODEL_IDS as readonly string[]).includes(value);
 }
 
-const client = new GoogleGenAI({
-	apiKey: GEMINI_API_KEY
-	// httpOptions: {
-	//   baseUrl:
-	//     "https://gateway.ai.cloudflare.com/v1/f13a20ae66db550d2eec10bb900bde7d/spark/google-ai-studio",
-	// },
-});
 let activeCount = 0;
 let lastStartTime = 0;
 const queue: Array<{
@@ -45,8 +37,35 @@ function sleep(ms: number): Promise<void> {
 	});
 }
 
-export function getGeminiClient(): GoogleGenAI {
-	return client;
+async function resolveGeminiApiKey(): Promise<string> {
+	const fromProcess = process.env.GEMINI_API_KEY?.trim();
+	if (fromProcess) {
+		return fromProcess;
+	}
+	try {
+		const mod = await import('$env/static/private');
+		const fromModule = typeof mod.GEMINI_API_KEY === 'string' ? mod.GEMINI_API_KEY.trim() : '';
+		if (fromModule) {
+			return fromModule;
+		}
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException)?.code !== 'ERR_MODULE_NOT_FOUND') {
+			console.warn('[gemini] Unable to load $env/static/private:', error);
+		}
+	}
+	throw new Error('GEMINI_API_KEY is not set. Provide it in environment variables.');
+}
+
+let clientPromise: Promise<GoogleGenAI> | undefined;
+
+async function getGeminiClient(): Promise<GoogleGenAI> {
+	if (!clientPromise) {
+		clientPromise = (async () => {
+			const apiKey = await resolveGeminiApiKey();
+			return new GoogleGenAI({ apiKey });
+		})();
+	}
+	return clientPromise;
 }
 
 function getStatus(error: unknown): number | undefined {
@@ -235,5 +254,5 @@ function schedule<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function runGeminiCall<T>(fn: (client: GoogleGenAI) => Promise<T>): Promise<T> {
-	return schedule(() => fn(getGeminiClient())) as Promise<T>;
+	return schedule(async () => fn(await getGeminiClient())) as Promise<T>;
 }
