@@ -4,25 +4,25 @@
 
 ## Summary
 
-The proposed quiz demonstrates excellent quality across all rubric dimensions. The 'Question quality' is consistently high, with prompts that are precise, unambiguous, and suitable for an exam context. 'Answer precision' is flawless, as all answers are factually correct and directly supported by specific references to the provided study material. The 'Coverage and balance' are commendable, offering a suitable mix of question types (multiple choice, true/false, short answer, numeric) and addressing key concepts, statistics, and procedural details from the learning intentions. The 'Difficulty alignment' is appropriate for GCSE Triple Science, with a good range of challenge levels, fitting for an 'extension' quiz. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content.
+The proposed quiz demonstrates excellent adherence to all rubric dimensions. The 'Question quality' is consistently high, with prompts that are precise, unambiguous, and exam-ready. 'Answer precision' is flawless, as all answers are factually correct and directly grounded in the provided material. The 'Coverage and balance' are appropriate for the topic, addressing various aspects of blood, organ, and stem cell donation, including procedural details, statistics, and legal frameworks, with a suitable mix of question types. 'Difficulty alignment' is well-managed, offering a range of challenges from direct recall to interpretation, suitable for GCSE Triple Science. Finally, 'Safety & tone' are maintained throughout, with no misinformation or off-spec content.
 
 ## Rubric findings
 
 - **Question quality** — score 1.00
-  - All prompts are precise, unambiguous, and well-structured, making them exam-ready. They clearly direct the learner to the expected information.
+  - All prompts are precise, unambiguous, and well-phrased for an exam context. They clearly test understanding of the provided material.
 - **Answer precision** — score 1.00
-  - Every answer is factually correct and directly verifiable from the provided study material. The explanations are clear and accurately cite the source pages.
+  - Every answer is factually correct and directly verifiable from the source material, with accurate page references provided.
 - **Coverage and balance** — score 1.00
-  - The quiz effectively covers key concepts related to blood, organ, and stem cell donation, including statistics, legal aspects, and procedural steps. There is a good balance of question types, which is appropriate for an extension quiz.
+  - The questions effectively cover key concepts across blood, organ, and stem cell donation, including processes, statistics, and legal aspects. There is a good balance of multiple-choice, numeric, true/false, and short answer question types.
 - **Difficulty alignment** — score 1.00
-  - The questions are well-aligned with GCSE Triple Science, offering a varied challenge from direct recall to synthesis of information, suitable for extending understanding as intended by the 'extension' mode.
+  - The quiz items are appropriate for GCSE Triple Science, with a varied challenge level ranging from direct recall (foundation) to interpreting legal information and synthesising data from diagrams (higher).
 - **Safety & tone** — score 1.00
-  - The quiz content is entirely factual, educational, and maintains an appropriate, neutral tone. There is no misinformation, harmful, or off-spec content present.
+  - The quiz content is factual, educational, and maintains an appropriate, neutral tone. There is no misinformation, harmful, or off-spec content.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T07:20:31.400Z
+- Evaluated at: 2025-09-25T22:25:15.382Z
 - Source: Y8Lesson-Health-BloodDonations.pdf (data/samples/no-questions/Y8Lesson-Health-BloodDonations.pdf)
 
 ## Audit
@@ -31,7 +31,7 @@ The proposed quiz demonstrates excellent quality across all rubric dimensions. T
 - Verdict agreement: agree
 - Confidence: high
 
-The judge's verdict is entirely reasonable and well-supported. The candidate quiz is of excellent quality, with all questions being clear, factually accurate, and directly traceable to the provided slides. The judge correctly awarded perfect scores across all rubric dimensions. The questions demonstrate good coverage of the material, a suitable range of difficulty for an 'extension' quiz, and a variety of formats (numeric, multiple choice, true/false, short answer). The judge's justifications for each score are sound and accurately reflect the high quality of the submitted quiz.
+The judge's verdict is well-supported and accurate. The candidate's quiz questions are of high quality—they are clear, unambiguous, and directly test information presented in the slides. The answers are all factually correct and properly referenced. The quiz demonstrates excellent coverage of the material, touching on blood, organ, and stem cell donation processes, statistics, and legal aspects, with a good variety of question formats. The difficulty alignment is appropriate for the target GCSE level, with a sensible mix of recall and interpretation questions. The judge's assessment that the quiz meets all rubric criteria with a perfect score is entirely reasonable.
 
 ## Prompt
 

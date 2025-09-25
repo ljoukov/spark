@@ -4,25 +4,25 @@
 
 ## Summary
 
-The quiz demonstrates strong Question quality with precise, unambiguous, and exam-ready prompts. Answer precision is excellent, with all answers factually correct and directly grounded in the provided material. The Difficulty alignment is appropriate for GCSE Triple Science, offering a suitable range of challenge levels from foundation to higher-tier questions. Furthermore, the quiz adheres to Safety & tone guidelines, avoiding any misinformation or off-spec content. However, the Coverage and balance of the quiz is significantly limited by the very narrow scope of the source document, resulting in a heavy concentration on states of matter and particle theory, with insufficient representation of other key GCSE Triple Science topics.
+The quiz demonstrates strong adherence to most rubric dimensions, particularly in Answer precision, Coverage and balance, Difficulty alignment, and Safety & tone. The questions are factually correct, well-aligned with GCSE Triple Science, and cover the key concepts from the provided source material comprehensively, including a good mix of question types. However, a minor revision is needed regarding Question quality. Specifically, the options for question 7 could be refined to ensure all distractors are plausible and directly relevant to the particle model of gases, avoiding options that are clearly contradictory or irrelevant, as one option currently is.
 
 ## Rubric findings
 
-- **Question quality** — score 1.00
-  - Prompts are consistently precise, unambiguous, and well-phrased for an exam context. Multi-part questions from the source are effectively broken down into clear, individual questions.
+- **Question quality** — score 0.90
+  - Prompts are generally precise and exam-ready. However, the options for question 7 include 'The balls are in a regular pattern', which is a weak distractor for a gas model as it describes a solid, not a gas, and deviates from the original source's options for that specific part of the question.
 - **Answer precision** — score 1.00
-  - All provided answers are factually correct, directly derived from the source material, and explanations are accurate and helpful. UK English spelling is maintained.
-- **Coverage and balance** — score 0.40
-  - While the quiz offers a good mix of question types (short answer, multiple choice, numeric) and covers key concepts within the provided text (states of matter, particle model, experimental techniques), its overall coverage for GCSE Triple Science is extremely narrow. It lacks breadth across the broader syllabus, focusing almost exclusively on a single topic area due to the limited source material.
-- **Difficulty alignment** — score 0.90
-  - The questions demonstrate a suitable range of difficulty, from foundation-level recall to intermediate graph interpretation and higher-level analytical tasks, appropriate for GCSE Triple Science. A slight deduction for the high number of very similar graph-reading questions, which could be seen as slightly repetitive in terms of skill assessment.
+  - All answers provided are factually correct and directly grounded in the source material or logical extensions of it. Explanations are clear and accurate.
+- **Coverage and balance** — score 1.00
+  - The quiz effectively covers all key concepts from the source material, expanding the original questions into a suitable number (20) with a good mix of multiple-choice, short-answer, and numeric question types. It addresses state symbols, graphical interpretation of melting/boiling points, practical considerations, and the particle model.
+- **Difficulty alignment** — score 1.00
+  - The items are appropriate for GCSE Triple Science, offering a varied challenge level from foundation (e.g., recalling definitions, reading simple graph data) to intermediate (e.g., interpreting states at specific temperatures, evaluating experimental methods) and higher-level thinking (e.g., identifying limitations of apparatus).
 - **Safety & tone** — score 1.00
-  - The quiz is free from misinformation, harmful content, or off-spec material, maintaining an appropriate educational tone.
+  - The quiz is free from misinformation, harmful content, or off-spec material. The tone is appropriate for an educational context, and UK English spelling is consistently used.
 
 ## Model metadata
 
 - Model: gemini-2.5-flash (temperature 0.15)
-- Evaluated at: 2025-09-25T07:28:35.770Z
+- Evaluated at: 2025-09-25T22:32:34.582Z
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Audit
@@ -31,7 +31,7 @@ The quiz demonstrates strong Question quality with precise, unambiguous, and exa
 - Verdict agreement: disagree
 - Confidence: high
 
-The judge's analysis of the quiz's qualities is largely accurate. The quiz does have excellent question quality and answer precision, but its topical coverage is very narrow. However, the judge's final verdict of 'revise' is inappropriate. The quiz is in 'extraction' mode, meaning the candidate is constrained by the provided source document. The source itself is extremely narrow, focusing only on states of matter. The candidate has done an exceptional job of extracting a high volume of varied and high-quality questions from this limited material, and even correctly identified the coverage limitation in the quiz summary. The narrowness is a flaw of the source, not the candidate's work. Therefore, the quiz should be considered acceptable, as it represents a successful execution of the task within its given constraints.
+The judge's verdict to 'revise' is based on a flawed assessment of question Q7's quality. The judge correctly notes that the candidate model replaced an option from the source material with a new one ('The balls are in a regular pattern'). However, the judge incorrectly labels this a 'weak distractor'. In the context of states of matter, using a property of a solid ('regular pattern') as a distractor for a question about a gas is a standard and effective method for assessing a student's understanding. It directly tests their ability to differentiate between the particle models for different states. The candidate model intelligently adapted a 'tick two' question from the source into two separate multiple-choice questions (Q7 and Q8), creating new and relevant distractors for both. This demonstrates strong quiz generation, not a weakness. The quiz is excellent and does not require revision.
 
 ## Prompt
 

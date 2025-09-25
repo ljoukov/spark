@@ -62,7 +62,7 @@
 			<Card.Description>
 				Generated {formatTimestamp(data.generatedAt)} using the contents of
 				<code class="rounded bg-muted px-1 py-0.5 text-xs">data/samples</code>. Run
-				<code class="rounded bg-muted px-1 py-0.5 text-xs">npm run generate-sample-quizzes</code>
+				<code class="rounded bg-muted px-1 py-0.5 text-xs">npm run eval:offline</code>
 				to refresh these fixtures.
 			</Card.Description>
 		</Card.Header>
@@ -192,16 +192,6 @@
 							<div>
 								<p class="font-medium">Requested questions</p>
 								<p class="text-muted-foreground">{activeEntry.detail.request.questionCount}</p>
-							</div>
-							<div>
-								<p class="font-medium">Temperature</p>
-								<p class="text-muted-foreground">
-									{#if typeof activeEntry.detail.request.temperature === 'number'}
-										{activeEntry.detail.request.temperature}
-									{:else}
-										Not provided
-									{/if}
-								</p>
 							</div>
 						</div>
 					</section>

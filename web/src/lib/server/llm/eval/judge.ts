@@ -1,6 +1,6 @@
 import { Type, type Schema } from '@google/genai';
 import type { Part } from '@google/genai';
-import { runGeminiCall } from '$lib/server/utils/gemini';
+import { runGeminiCall, type GeminiModelId } from '$lib/server/utils/gemini';
 import {
 	JudgeAuditSchema,
 	JudgeVerdictSchema,
@@ -8,6 +8,8 @@ import {
 	type QuizGeneration
 } from '$lib/llm/schemas';
 import type { JudgeAudit, JudgeVerdict } from '$lib/llm/schemas';
+
+export const QUIZ_EVAL_MODEL_ID: GeminiModelId = 'gemini-2.5-pro';
 
 export const JUDGE_RESPONSE_SCHEMA: Schema = {
 	type: Type.OBJECT,
@@ -101,15 +103,15 @@ function toParts(text: string, sources: InlineSourceFile[], extra?: Part): Part[
 	return baseParts;
 }
 
-async function callModel<T>({
+async function callModel({
 	model,
 	parts,
 	schema
 }: {
-	model: 'gemini-2.5-flash' | 'gemini-2.5-pro';
+	model: GeminiModelId;
 	parts: Part[];
 	schema: Schema;
-}): Promise<T> {
+}): Promise<unknown> {
 	const response = await runGeminiCall((client) =>
 		client.models.generateContent({
 			model,
@@ -131,7 +133,7 @@ async function callModel<T>({
 	if (!text) {
 		throw new Error(`Gemini ${model} did not return any text`);
 	}
-	return JSON.parse(text) as T;
+	return JSON.parse(text);
 }
 
 export async function judgeQuiz(options: JudgeOptions): Promise<JudgeVerdict> {
@@ -140,20 +142,12 @@ export async function judgeQuiz(options: JudgeOptions): Promise<JudgeVerdict> {
 		text: `Candidate quiz JSON:\n${JSON.stringify(options.candidateQuiz, null, 2)}`
 	});
 
-	const models: Array<'gemini-2.5-flash' | 'gemini-2.5-pro'> = [
-		'gemini-2.5-flash',
-		'gemini-2.5-pro'
-	];
-	let lastError: unknown;
-	for (const model of models) {
-		try {
-			const parsed = await callModel<unknown>({ model, parts, schema: JUDGE_RESPONSE_SCHEMA });
-			return JudgeVerdictSchema.parse(parsed);
-		} catch (error: unknown) {
-			lastError = error;
-		}
-	}
-	throw lastError instanceof Error ? lastError : new Error('Unable to judge quiz with Gemini');
+	const parsed = await callModel({
+		model: QUIZ_EVAL_MODEL_ID,
+		parts,
+		schema: JUDGE_RESPONSE_SCHEMA
+	});
+	return JudgeVerdictSchema.parse(parsed);
 }
 
 export async function auditJudgeDecision(options: AuditOptions): Promise<JudgeAudit> {
@@ -162,8 +156,8 @@ export async function auditJudgeDecision(options: AuditOptions): Promise<JudgeAu
 		text: `Judge verdict JSON:\n${JSON.stringify(options.judgeVerdict, null, 2)}\n\nCandidate quiz JSON:\n${JSON.stringify(options.candidateQuiz, null, 2)}`
 	});
 
-	const parsed = await callModel<unknown>({
-		model: 'gemini-2.5-pro',
+	const parsed = await callModel({
+		model: QUIZ_EVAL_MODEL_ID,
 		parts,
 		schema: AUDIT_RESPONSE_SCHEMA
 	});

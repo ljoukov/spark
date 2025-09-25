@@ -1,7 +1,7 @@
 # Sample 2: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (extraction) — Extension Quiz
 
-**Quiz title:** GCSE Chemistry: Atomic Structure Extension
-**Summary:** This quiz provides 10 additional questions to extend learning on atomic structure, historical models, and the properties of elements, compounds, and mixtures. It includes multiple-choice, short-answer, numeric, and true/false questions to test application and deeper understanding.
+**Quiz title:** AQA GCSE Chemistry: C1 Atomic Structure Extension
+**Summary:** An extension quiz with 10 new questions designed to test a deeper understanding of atomic structure, historical models, and the classification of matter. This quiz builds upon the foundational knowledge from the initial set by using different question formats and requiring the synthesis of concepts, all based on the provided C1 revision material.
 
 ## Metadata
 
@@ -9,146 +9,156 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 10
-- Generated at: 2025-09-25T07:23:16.477Z
+- Generated at: 2025-09-25T22:27:35.367Z
 - Model: gemini-2.5-pro (temperature 0.20)
 - Source: 18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg (data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg)
 
 ## Questions
 
-### 1. Which conclusion was drawn directly from the observation that some alpha particles were deflected by the gold foil in the alpha scattering experiment?
+### 1. Which sub-atomic particle has a relative mass of 1 and a relative charge of 0?
+
+- Type: multiple_choice
+- Topic: Atomic Structure
+- Difficulty: foundation
+- Skill focus: Interpret properties
+- Source reference: C1 questions, Q9 & Q10
+- Answer: B. Neutron
+- Options:
+  - A. A. Proton
+  - B. B. Neutron
+  - C. C. Electron
+  - D. D. Nucleus
+
+> Based on the provided data, the neutron is the sub-atomic particle with a relative mass of 1 and a neutral charge of 0.
+
+### 2. What was the major difference introduced by the nuclear model compared to the plum pudding model?
 
 - Type: multiple_choice
 - Topic: History of the Atom
-- Difficulty: higher
-- Skill focus: Interpret experimental evidence
-- Source reference: C1 questions, Q4
-- Answer: C
+- Difficulty: intermediate
+- Skill focus: Compare scientific models
+- Source reference: C1 questions, Q3, Q4 & Q5
+- Answer: C. A small, dense, positive nucleus
 - Options:
-  - A. A. The existence of electrons.
-  - B. B. The atom is mostly empty space.
-  - C. C. The atom's positive charge is concentrated in a small nucleus.
-  - D. D. The existence of neutrons.
+  - A. A. The existence of electrons
+  - B. B. The atom being a solid sphere
+  - C. C. A small, dense, positive nucleus
+  - D. D. The presence of neutrons
 
-> The deflection of positively charged alpha particles showed that they were being repelled by a concentrated positive charge within the atom. This led to the nuclear model, where the positive charge and mass are located in a small, dense nucleus.
+> The alpha scattering experiment showed that an atom's mass and positive charge are concentrated in a small central nucleus, which was the key feature of the nuclear model, contrasting with the plum pudding model's 'sphere of positive charge'.
 
-### 2. Two atoms are isotopes of the same element. Which statement correctly describes the difference between them?
+### 3. True or False: The key difference between a compound and a mixture is that the substances in a compound are chemically joined together.
+
+- Type: true_false
+- Topic: Elements, Compounds & Mixtures
+- Difficulty: foundation
+- Skill focus: Differentiate key terms
+- Source reference: C1 questions, Q16 & Q17
+- Answer: True
+
+> A compound is defined as a substance made of atoms that are 'chemically joined together', whereas a mixture consists of substances that are 'not chemically combined'.
+
+### 4. According to the definition of isotopes, which quantity is always the same for atoms of the same element?
 
 - Type: multiple_choice
 - Topic: Atomic Structure
 - Difficulty: intermediate
 - Skill focus: Apply definition
 - Source reference: C1 questions, Q18
-- Answer: B
+- Answer: C. Number of protons
 - Options:
-  - A. A. They have a different number of protons.
-  - B. B. They have a different number of neutrons.
-  - C. C. They have a different number of electrons.
-  - D. D. They have a different atomic number.
+  - A. A. Number of neutrons
+  - B. B. Mass number
+  - C. C. Number of protons
+  - D. D. Relative mass
 
-> Isotopes are defined as atoms of the same element (so they must have the same number of protons) but with different numbers of neutrons, which results in a different mass number.
+> The definition of isotopes explicitly states they are atoms of the same element with the 'same number of protons' but different numbers of neutrons.
 
-### 3. An atom has a mass number of 35 and an atomic number of 17. How many neutrons does it have?
+### 5. What is the maximum total number of electrons that can occupy the first and second shells of an atom combined?
 
 - Type: numeric
-- Topic: Atomic Structure
+- Topic: Electron Shells
 - Difficulty: foundation
-- Skill focus: Calculation
-- Source reference: C1 questions, Q12
-- Answer: 18
+- Skill focus: Apply rules
+- Source reference: C1 questions, Q14
+- Answer: 10
 
-> The number of neutrons is calculated by subtracting the atomic number (number of protons) from the mass number (number of protons + neutrons). So, 35 - 17 = 18 neutrons.
+> The first electron shell can hold a maximum of 2 electrons, and the second shell can hold a maximum of 8. The combined maximum capacity is therefore 2 + 8 = 10.
 
-### 4. What is the key difference between the plum pudding model and the later nuclear model of the atom?
-
-- Type: multiple_choice
-- Topic: History of the Atom
-- Difficulty: intermediate
-- Skill focus: Compare and contrast models
-- Source reference: C1 questions, Q3, Q5
-- Answer: B
-- Options:
-  - A. A. The plum pudding model includes neutrons, but the nuclear model does not.
-  - B. B. The nuclear model has a central nucleus, while the plum pudding model has charge spread throughout.
-  - C. C. The plum pudding model has electrons in fixed shells, while the nuclear model does not.
-  - D. D. The nuclear model describes atoms as indivisible spheres.
-
-> The plum pudding model described a 'sphere of positive charge' with electrons embedded, whereas the nuclear model, based on the alpha scattering experiment, proposed that the positive charge was concentrated in a central nucleus.
-
-### 5. A compound is formed when two or more substances are mixed together but are not chemically bonded. True or False?
-
-- Type: true_false
-- Topic: Elements, Compounds and Mixtures
-- Difficulty: foundation
-- Skill focus: Distinguish between key terms
-- Source reference: C1 questions, Q16, Q17
-- Answer: False
-
-> This statement describes a mixture. A compound is a substance made of more than one type of atom that are chemically joined together.
-
-### 6. If a neutral atom loses one electron, what is the overall charge of the resulting particle?
-
-- Type: short_answer
-- Topic: Atomic Structure
-- Difficulty: intermediate
-- Skill focus: Apply concept of charge
-- Source reference: C1 questions, Q10, Q13
-- Answer: Positive (+1)
-
-> A neutral atom has an equal number of positive protons and negative electrons. Losing one negative electron leaves an excess of one positive proton, resulting in an overall positive charge.
-
-### 7. Which of the following is a physical process used to separate mixtures?
+### 6. Which of the following is NOT listed as a physical process for separating mixtures?
 
 - Type: multiple_choice
 - Topic: Separation Techniques
 - Difficulty: foundation
-- Skill focus: Recall examples
+- Skill focus: Recall processes
 - Source reference: C1 questions, Q19
-- Answer: C
+- Answer: C. Melting
 - Options:
-  - A. A. Combustion
-  - B. B. Neutralisation
-  - C. C. Crystallisation
-  - D. D. Polymerisation
+  - A. A. Filtration
+  - B. B. Crystallisation
+  - C. C. Melting
+  - D. D. Distillation
 
-> Filtration, crystallisation, distillation, and chromatography are all physical processes used for separating mixtures. Combustion, neutralisation and polymerisation are chemical reactions.
+> The four listed physical separation processes are filtration, crystallisation, distillation, and chromatography. Melting is a change of state, not a separation technique mentioned in the text.
 
-### 8. Explain why the relative atomic mass of an element is rarely a whole number.
+### 7. An atom is electrically neutral because the number of positive protons is balanced by an equal number of which other particle?
 
-- Type: short_answer
+- Type: multiple_choice
 - Topic: Atomic Structure
-- Difficulty: higher
-- Skill focus: Explain a complex concept
-- Source reference: C1 questions, Q18, Q20
-- Answer: Because it is the average mass of all the atoms of an element, taking into account the different masses and abundances of its isotopes.
+- Difficulty: foundation
+- Skill focus: Explain concept
+- Source reference: C1 questions, Q13
+- Answer: B. Negative electrons
+- Options:
+  - A. A. Neutral neutrons
+  - B. B. Negative electrons
+  - C. C. Other positive protons
+  - D. D. Negative nuclei
 
-> Most elements exist as a mixture of isotopes, which are atoms with the same number of protons but different numbers of neutrons (and thus different masses). The relative atomic mass is a weighted average of these isotopic masses.
+> Atoms have no overall charge because they contain 'equal numbers of positive protons and negative electrons', and their opposite charges cancel each other out.
 
-### 9. The discovery that an atom's mass and positive charge are concentrated in a nucleus was a result of which key experiment?
+### 8. The alpha scattering experiment provided the crucial evidence that led to the discovery of which feature of the atom?
 
 - Type: multiple_choice
 - Topic: History of the Atom
-- Difficulty: intermediate
-- Skill focus: Link experiment to discovery
+- Difficulty: higher
+- Skill focus: Link experiment to conclusion
 - Source reference: C1 questions, Q4
-- Answer: B
+- Answer: D. A concentrated nucleus
 - Options:
-  - A. A. Dalton's solid sphere experiments
-  - B. B. The alpha scattering experiment
-  - C. C. Bohr's energy level experiments
-  - D. D. Chadwick's neutron discovery experiments
+  - A. A. Fixed electron shells
+  - B. B. The neutron
+  - C. C. The indivisible solid sphere
+  - D. D. A concentrated nucleus
 
-> The alpha scattering experiment, where alpha particles were fired at gold foil, showed that some particles were deflected, leading to the conclusion that the atom has a small, dense, positive nucleus.
+> The deflection of some alpha particles in the experiment showed that the atom's mass and positive charge must be concentrated in one small space, which was named the nucleus.
 
-### 10. An atom has 11 electrons. State its electronic configuration by listing the number of electrons in each shell, starting from the first shell.
+### 9. What term describes two or more substances that are present together but are not chemically combined?
 
 - Type: short_answer
-- Topic: Electron Configuration
-- Difficulty: intermediate
-- Skill focus: Apply rules of electron configuration
-- Source reference: C1 questions, Q14
-- Answer: 2,8,1
+- Topic: Elements, Compounds & Mixtures
+- Difficulty: foundation
+- Skill focus: Define key term
+- Source reference: C1 questions, Q17
+- Answer: A mixture
 
-> Electrons fill shells starting with the one closest to the nucleus. The first shell can hold a maximum of 2 electrons, the second can hold a maximum of 8, and the third can also hold up to 8. Therefore, 11 electrons are arranged as 2 in the first shell, 8 in the second, and the remaining 1 in the third.
+> This is the definition provided for a mixture in the source material: 'two or more substances not chemically combined'.
+
+### 10. The relative atomic mass is an average. What variation between atoms of the same element does this averaging account for?
+
+- Type: multiple_choice
+- Topic: Atomic Structure
+- Difficulty: higher
+- Skill focus: Synthesise concepts
+- Source reference: C1 questions, Q18 & Q20
+- Answer: C. Different numbers of neutrons
+- Options:
+  - A. A. Different numbers of protons
+  - B. B. Different numbers of electrons
+  - C. C. Different numbers of neutrons
+  - D. D. Different chemical bonds
+
+> Relative atomic mass is the 'average mass of all the atoms of an element'. Since isotopes are atoms of the same element with 'different numbers of neutrons', they have different masses. The average mass accounts for this isotopic variation.
 
 ## Prompt
 

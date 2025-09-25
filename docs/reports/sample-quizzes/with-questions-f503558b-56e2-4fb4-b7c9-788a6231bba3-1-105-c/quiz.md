@@ -1,7 +1,7 @@
 # Sample 5: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (extraction) — Base Quiz
 
 **Quiz title:** GCSE Chemistry: Materials and Chemical Processes
-**Summary:** This quiz contains 20 short-answer questions covering corrosion, alloys, ceramics, polymers, composites, and the Haber process, aligned with the AQA GCSE Chemistry specification. Coverage gaps: Question 21 on NPK fertilisers from the source material has been omitted to meet the required question count.
+**Summary:** This quiz contains 20 short-answer questions covering corrosion, alloys, polymers, composites, and the Haber process, aligned with the AQA GCSE Chemistry specification. Coverage gaps: NPK fertilisers are not covered.
 
 ## Metadata
 
@@ -9,7 +9,7 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 20
-- Generated at: 2025-09-25T07:31:56.336Z
+- Generated at: 2025-09-25T22:35:16.686Z
 - Model: gemini-2.5-pro (temperature 0.20)
 - Source: F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg (data/samples/with-questions/F503558B-56E2-4FB4-B7C9-788A6231BBA3_1_105_c.jpeg)
 
@@ -20,44 +20,44 @@
 - Type: short_answer
 - Topic: Corrosion
 - Difficulty: foundation
-- Skill focus: Recall definition
+- Skill focus: Define a key term
 - Source reference: C20 questions, Q1
 - Answer: The destruction of a material through reactions with substances in the environment.
 
-> Corrosion is a natural process where a refined metal is gradually destroyed by chemical or electrochemical reactions with its environment.
+> Corrosion is the gradual destruction of materials, usually metals, by chemical or electrochemical reaction with their environment.
 
 ### 2. What physical barriers can be used to protect against corrosion?
 
 - Type: short_answer
-- Topic: Corrosion
+- Topic: Corrosion prevention
 - Difficulty: foundation
-- Skill focus: Recall examples
+- Skill focus: Recall methods
 - Source reference: C20 questions, Q2
-- Answer: Grease, paint, or a thin layer of another metal.
+- Answer: Grease, paint, or a thin layer of metal.
 
-> Physical barriers work by preventing substances like oxygen and water from coming into contact with the surface of the metal.
+> Physical barriers prevent reactive substances like oxygen and water from coming into contact with the metal surface, thus preventing corrosion.
 
 ### 3. What is sacrificial protection?
 
 - Type: short_answer
-- Topic: Corrosion
+- Topic: Corrosion prevention
 - Difficulty: intermediate
-- Skill focus: Recall definition
+- Skill focus: Define a process
 - Source reference: C20 questions, Q3
 - Answer: Adding a more reactive metal to the surface of a material to be protected.
 
-> Sacrificial protection involves using a more reactive metal which corrodes preferentially, thereby protecting the less reactive metal it is attached to.
+> In sacrificial protection, a more reactive metal is used to coat a less reactive one. The more reactive metal corrodes first, 'sacrificing' itself to protect the other.
 
 ### 4. How is rust formed?
 
 - Type: short_answer
-- Topic: Corrosion
+- Topic: Rusting
 - Difficulty: foundation
-- Skill focus: Describe process
+- Skill focus: Describe a chemical reaction
 - Source reference: C20 questions, Q4
-- Answer: Rust is formed from the reaction between iron, water, and oxygen.
+- Answer: Through a reaction between iron, water, and oxygen.
 
-> Rusting is the specific term for the corrosion of iron and its alloys, a chemical process that requires the presence of both oxygen and water.
+> Rusting is the specific term for the corrosion of iron and its alloys, which requires both oxygen and water to occur.
 
 ### 5. Name two alloys of copper.
 
@@ -68,14 +68,14 @@
 - Source reference: C20 questions, Q5
 - Answer: Brass and bronze.
 
-> Brass is an alloy of copper and zinc, while bronze is an alloy of copper, typically with tin as the main additive.
+> Brass is an alloy of copper and zinc, while bronze is an alloy of copper, usually with tin as the main additive.
 
 ### 6. What are gold alloys used in jewellery made from?
 
 - Type: short_answer
 - Topic: Alloys
 - Difficulty: foundation
-- Skill focus: Recall composition
+- Skill focus: Recall composition of an alloy
 - Source reference: C20 questions, Q6
 - Answer: Gold mixed with copper, zinc, and silver.
 
@@ -86,79 +86,79 @@
 - Type: short_answer
 - Topic: Alloys
 - Difficulty: foundation
-- Skill focus: Recall composition
+- Skill focus: Recall composition of an alloy
 - Source reference: C20 questions, Q7
 - Answer: Iron, carbon, and other metals.
 
-> Steel is an alloy of iron with a small amount of carbon to improve its strength. Other metals can be added to create steels with specific properties.
+> Steel is an alloy of iron with a small amount of carbon to improve its strength and fracture resistance. Other metals can be added to create different types of steel.
 
-### 8. What is a key property of aluminium alloys?
+### 8. What is a property of aluminium alloys?
 
 - Type: short_answer
 - Topic: Alloys
 - Difficulty: foundation
-- Skill focus: Recall property
+- Skill focus: Recall a property
 - Source reference: C20 questions, Q8
 - Answer: They generally have low densities.
 
-> The low density of aluminium alloys makes them strong but lightweight, which is useful for applications like aircraft construction.
+> Aluminium alloys are known for being lightweight (low density) and strong, making them useful in applications like aircraft construction.
 
 ### 9. What is the main difference between soda-lime glass and borosilicate glass?
 
 - Type: short_answer
-- Topic: Ceramics and Glass
+- Topic: Glass and Ceramics
 - Difficulty: intermediate
-- Skill focus: Compare properties
+- Skill focus: Compare materials
 - Source reference: C20 questions, Q9
-- Answer: Borosilicate glass has a much higher melting point than soda-lime glass.
+- Answer: Borosilicate glass has a much higher melting point.
 
-> This property makes borosilicate glass more resistant to thermal shock, so it is suitable for laboratory glassware and cookware.
+> Borosilicate glass is made with boron trioxide, which gives it a very low coefficient of thermal expansion and a higher melting point, making it resistant to thermal shock.
 
 ### 10. Give two examples of clay ceramics.
 
 - Type: short_answer
-- Topic: Ceramics and Glass
+- Topic: Glass and Ceramics
 - Difficulty: foundation
 - Skill focus: Recall examples
 - Source reference: C20 questions, Q10
 - Answer: Pottery and bricks.
 
-> Clay ceramics are made by shaping wet clay and then heating it to a high temperature in a furnace, causing permanent chemical changes.
+> Clay ceramics are made by shaping wet clay and then heating it to a high temperature in a kiln, which causes permanent chemical and physical changes.
 
-### 11. What two factors do the properties of a polymer depend on?
+### 11. What two factors do the properties of polymers depend on?
 
 - Type: short_answer
 - Topic: Polymers
 - Difficulty: intermediate
-- Skill focus: Explain factors
+- Skill focus: Explain factors affecting properties
 - Source reference: C20 questions, Q11
-- Answer: The monomers used to make it, and the conditions under which it is formed.
+- Answer: The monomers used and the conditions under which they are formed.
 
-> The choice of monomer determines the repeating unit, while reaction conditions influence chain length and branching, affecting properties like density and flexibility.
+> The type of monomer determines the repeating unit, while reaction conditions affect the length and branching of the polymer chains, influencing properties like density and strength.
 
 ### 12. What is the main difference between thermosetting and thermosoftening polymers?
 
 - Type: short_answer
 - Topic: Polymers
-- Difficulty: higher
-- Skill focus: Compare properties
+- Difficulty: intermediate
+- Skill focus: Compare materials
 - Source reference: C20 questions, Q12
 - Answer: Thermosetting polymers do not soften when heated, whereas thermosoftening polymers do.
 
-> Thermosetting polymers have cross-links between their chains, forming a rigid structure that does not melt. Thermosoftening polymers have tangled chains with weak intermolecular forces that are easily overcome by heating.
+> Thermosoftening polymers have weak intermolecular forces between chains that are easily overcome by heating. Thermosetting polymers have strong cross-links between chains that do not break on heating.
 
-### 13. What is a composite material?
+### 13. What is a composite?
 
 - Type: short_answer
 - Topic: Composites
-- Difficulty: intermediate
-- Skill focus: Recall definition
+- Difficulty: foundation
+- Skill focus: Define a key term
 - Source reference: C20 questions, Q13
 - Answer: A mixture of a matrix and reinforcements.
 
-> Composites consist of reinforcement fibres or fragments embedded within a matrix material, combining the properties of both components.
+> A composite material is made from two or more constituent materials with significantly different properties. It consists of a reinforcement (e.g., fibres) embedded in a matrix.
 
-### 14. Name two examples of composite materials.
+### 14. Name two composites.
 
 - Type: short_answer
 - Topic: Composites
@@ -167,73 +167,73 @@
 - Source reference: C20 questions, Q14
 - Answer: Plywood and reinforced concrete.
 
-> Plywood is a composite of wood veneers and adhesive, while reinforced concrete is a composite of concrete and steel bars.
+> Plywood is a composite of wood veneers, and reinforced concrete is a composite of concrete (matrix) and steel bars (reinforcement).
 
 ### 15. What is the balanced symbol equation for the Haber process?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: intermediate
-- Skill focus: Recall balanced equation
+- Skill focus: Recall and write a balanced symbol equation
 - Source reference: C20 questions, Q15
 - Answer: N₂(g) + 3H₂(g) ⇌ 2NH₃(g)
 
-> The Haber process combines nitrogen gas and hydrogen gas in a reversible reaction to produce ammonia. One mole of nitrogen reacts with three moles of hydrogen to form two moles of ammonia.
+> The Haber process is the reversible reaction between nitrogen gas and hydrogen gas to produce ammonia. The forward reaction is exothermic.
 
-### 16. What is the primary use for the ammonia produced in the Haber process?
+### 16. What is the ammonia produced in the Haber process used for?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: foundation
-- Skill focus: Recall application
+- Skill focus: State the use of a chemical
 - Source reference: C20 questions, Q16
-- Answer: The primary use of ammonia is in the production of fertilisers.
+- Answer: To manufacture fertilisers.
 
-> Ammonia is a key ingredient in nitrogen-based fertilisers, which are essential for modern agriculture to increase crop yields.
+> Ammonia is a key component in the production of nitrogen-based fertilisers, which are essential for modern agriculture to increase crop yields.
 
 ### 17. What is the effect of increasing the temperature of the Haber process on the yield, rate, and cost?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: higher
-- Skill focus: Explain trade-offs
+- Skill focus: Explain the effect of changing conditions
 - Source reference: C20 questions, Q17
-- Answer: Increasing the temperature decreases the yield, increases the rate of reaction, and increases the cost.
+- Answer: It decreases the yield, increases the rate, and increases the cost.
 
-> The forward reaction is exothermic, so a higher temperature reduces yield. However, it increases the rate. Higher temperatures require more energy, increasing costs.
+> The forward reaction is exothermic, so increasing temperature shifts equilibrium to the left, decreasing yield. However, it increases the rate of reaction and energy costs.
 
 ### 18. What is the effect of increasing the pressure of the Haber process on the yield, rate, and cost?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: higher
-- Skill focus: Explain trade-offs
+- Skill focus: Explain the effect of changing conditions
 - Source reference: C20 questions, Q18
-- Answer: Increasing the pressure increases the yield, increases the rate of reaction, and increases the cost.
+- Answer: It increases the yield, increases the rate, and increases the cost.
 
-> There are fewer moles of gas on the product side, so high pressure increases yield. It also increases the concentration of gas molecules, increasing the rate. Maintaining high pressure is expensive.
+> There are fewer moles of gas on the product side, so increasing pressure shifts equilibrium to the right, increasing yield. It also increases the rate but requires expensive equipment.
 
 ### 19. What catalyst is used for the Haber process?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: foundation
-- Skill focus: Recall catalyst
+- Skill focus: Recall a catalyst
 - Source reference: C20 questions, Q19
-- Answer: An iron catalyst.
+- Answer: Iron.
 
-> An iron catalyst is used to speed up the rate of reaction, allowing the process to be carried out at a lower temperature than would otherwise be feasible.
+> An iron catalyst is used to speed up the rate of reaction in the Haber process, allowing equilibrium to be reached faster at a lower temperature.
 
-### 20. What are the typical industrial conditions for the Haber process?
+### 20. What are the compromise conditions for the Haber process?
 
 - Type: short_answer
-- Topic: Haber Process
+- Topic: Haber process
 - Difficulty: intermediate
-- Skill focus: Recall conditions
+- Skill focus: Recall reaction conditions
 - Source reference: C20 questions, Q20
-- Answer: A temperature of 450°C, a pressure of 200 atmospheres, and an iron catalyst.
+- Answer: A temperature of 450°C, a pressure of 200 atm, and an iron catalyst.
 
-> These conditions are a compromise between achieving a reasonable yield and a fast rate of reaction, while keeping energy and equipment costs manageable.
+> These are compromise conditions that balance the need for a high yield (favoured by low temperature, high pressure) with a fast rate of reaction and manageable costs.
 
 ## Prompt
 
@@ -241,7 +241,9 @@
 You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.
 The material already includes questions and answers. Extract high-quality exam-ready items.
 Preserve original wording as much as possible while fixing small typos.
-Return questionCount distinct items that match the source closely.
+When the source already asks questions, transcribe every numbered task and sub-part. If an answer is missing, infer a correct one directly from the source material.
+If the source is mostly notes with few (three or fewer) questions, keep any explicit questions first and then create additional items that still mirror the lesson content.
+Never drop a question or answer that appears in the source. Expand multi-part tasks only when necessary to keep prompt, answer, and marking points aligned.
 Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.
 If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.
 When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.

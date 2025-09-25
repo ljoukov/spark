@@ -6,8 +6,7 @@ import type { PageLoad } from './$types';
 
 const RequestSchema = z.object({
 	model: z.string().min(1),
-	questionCount: z.number().int().positive(),
-	temperature: z.number().optional()
+	questionCount: z.number().int().positive()
 });
 
 const SourceSchema = z.object({
