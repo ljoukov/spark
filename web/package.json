@@ -17,6 +17,7 @@
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
+		"all-tests": "npm run lint && npm run check && npm run test && npm run build",
 		"generate:sample-quizzes": "tsx scripts/generate-sample-quizzes.ts"
 	},
 	"devDependencies": {

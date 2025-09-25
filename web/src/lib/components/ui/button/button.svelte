@@ -42,23 +42,36 @@
 		variant = 'default',
 		size = 'default',
 		ref = $bindable(null),
-		href = undefined,
+		href: hrefProp = undefined,
 		type = 'button',
 		disabled,
 		children,
 		...restProps
 	}: ButtonProps = $props();
+
+	// Ensure in-app links are base-path aware and satisfy lint rule
+	import { resolve } from '$app/paths';
+	import type { ResolvedPathname } from '$app/types';
 </script>
 
-{#if href}
+{#if hrefProp}
+	{@const href =
+		typeof hrefProp === 'string' && hrefProp.startsWith('/')
+			? (resolve as (route: string) => ResolvedPathname)(hrefProp)
+			: hrefProp}
 	<a
 		bind:this={ref}
 		data-slot="button"
 		class={cn(buttonVariants({ variant, size }), className)}
-		href={disabled ? undefined : href}
+		{href}
 		aria-disabled={disabled}
 		role={disabled ? 'link' : undefined}
 		tabindex={disabled ? -1 : undefined}
+		onclick={(e) => {
+			if (disabled) {
+				e.preventDefault();
+			}
+		}}
 		{...restProps}
 	>
 		{@render children?.()}
