@@ -4,12 +4,10 @@ import type { Part } from '@google/genai';
 import { QuizGenerationSchema, type InlineSourceFile, type QuizGeneration } from '$lib/llm/schemas';
 
 export interface GenerateQuizOptions {
-	readonly mode: 'extraction' | 'synthesis';
 	readonly questionCount: number;
 	readonly subject?: string;
 	readonly board?: string;
 	readonly sourceFiles: InlineSourceFile[];
-	readonly temperature?: number;
 }
 
 export const BASE_PROMPT_HEADER = `You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.`;
@@ -21,7 +19,7 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 		summary: { type: Type.STRING },
 		mode: { type: Type.STRING, enum: ['extraction', 'synthesis', 'extension'] },
 		subject: { type: Type.STRING },
-		board: { type: Type.STRING },
+		// board: { type: Type.STRING },
 		syllabusAlignment: { type: Type.STRING },
 		questionCount: { type: Type.INTEGER, minimum: 1 },
 		questions: {
@@ -68,7 +66,7 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 		'summary',
 		'mode',
 		'subject',
-		'board',
+		//'board',
 		'syllabusAlignment',
 		'questionCount',
 		'questions'
@@ -107,25 +105,15 @@ export function buildSourceParts(files: InlineSourceFile[]): Part[] {
 }
 
 export function buildGenerationPrompt(options: GenerateQuizOptions): string {
-	const base = [BASE_PROMPT_HEADER];
-	if (options.mode === 'extraction') {
-		base.push(
-			'The material already includes questions and answers. Extract high-quality exam-ready items.',
-			'Preserve original wording as much as possible while fixing small typos.',
-			'When the source already asks questions, transcribe every numbered task and sub-part. If an answer is missing, infer a correct one directly from the source material.',
-			'If the source is mostly notes with few (three or fewer) questions, keep any explicit questions first and then create additional items that still mirror the lesson content.',
-			'Never drop a question or answer that appears in the source. Expand multi-part tasks only when necessary to keep prompt, answer, and marking points aligned.',
-			'Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.',
-			'If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.',
-			'When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.'
-		);
-	} else {
-		base.push(
-			'The material does not contain explicit questions. Synthesize rigorous GCSE questions.',
-			'Mix short_answer, multiple_choice, true_false, and numeric items.',
-			'Ground every answer and explanation directly in the supplied notes.'
-		);
-	}
+	const base = [
+		BASE_PROMPT_HEADER,
+		'Before you begin, inspect the supplied material to determine how it presents learning content:',
+		'- If it already contains explicit questions (including exam tasks or worksheets), perform an extraction pass: refine those questions, preserve their intent, and fill in any missing answers directly from the material.',
+		'- If it is mostly expository notes, diagrams, or lessons without explicit questions, perform a synthesis pass: construct new rigorous GCSE assessment items grounded in the content.',
+		'When you extract, keep the original numbering and cover every explicit question or sub-question. When you synthesize, ensure broad coverage across the key ideas and vary the question types.',
+		'Always mix short_answer, multiple_choice, true_false, and numeric items where the material allows, and ground every prompt, answer, and explanation in the supplied content.',
+		'Never fabricate information—everything must be supported by the supplied material.'
+	];
 	base.push(
 		'Always write in UK English and reference the specification where relevant.',
 		`You must return exactly ${options.questionCount} questions.`,
@@ -136,9 +124,9 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'Return JSON that matches the provided schema. Field guidance:',
 		'- quizTitle: Concise, exam-style title for the quiz.',
 		'- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with "Coverage gaps:" and either say "none – full coverage achieved." or list the specific missing topics/processes.',
-		'- mode: Set to the provided mode value.',
+		'- mode: Return "extraction" if you primarily refined existing questions from the material, otherwise "synthesis" when you authored new items.',
 		'- subject: Copy the provided subject exactly.',
-		'- board: Copy the provided exam board exactly.',
+		//'- board: Copy the provided exam board exactly.',
 		'- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.',
 		'- questionCount: Must equal the number of questions returned.',
 		'- questions: Array of question objects defined below.'
@@ -147,10 +135,10 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'Each question object must include:',
 		'- id: Match the original question identifier when present (e.g., "Q1a"). Otherwise use sequential IDs ("Q1", "Q2", ...).',
 		'- prompt: Clean exam-ready wording that still mirrors the source task.',
-		'- answer: Correct, concise answer text.',
+		'- answer: Correct, concise answer text. For multiple_choice include the matching option label (e.g., "A) Car").',
 		'- explanation: One to two sentences justifying the answer with source evidence.',
 		'- type: One of multiple_choice, short_answer, true_false, or numeric.',
-		'- options: Only for multiple_choice. Provide exactly four answer texts without prefixing letters—the system adds labels.',
+		'- options: Only for multiple_choice. Provide exactly four answer texts prefixed with "A) ", "B) ", "C) ", and "D) " in that order.',
 		'- topic: Short topic label (e.g., "Atomic structure").',
 		'- difficulty: Use foundation, intermediate, or higher.',
 		'- skillFocus: Action-oriented description of the assessed skill (e.g., "Interpret data", "Explain process").',
@@ -171,6 +159,37 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'Verify that ids and sourceReference values align with the original numbering before returning the JSON.'
 	);
 	return base.join('\n');
+}
+
+export interface ExtendQuizPromptOptions {
+	readonly additionalQuestionCount: number;
+	readonly subject?: string;
+	readonly board?: string;
+}
+
+export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
+	const lines = [
+		BASE_PROMPT_HEADER,
+		'The learner already received an initial quiz and now needs additional questions drawn from the same study material.',
+		'You will receive the previous quiz prompts inside <PAST_QUIZES> ... </PAST_QUIZES>. Treat these markers as plain text delimiters and do not repeat the block in your response.',
+		'Requirements:',
+		`- Produce exactly ${options.additionalQuestionCount} new questions.`,
+		'- Avoid duplicating any prompt ideas, answer wording, or explanation themes that appear in <PAST_QUIZES>.',
+		'- Continue to ground every item strictly in the supplied material.',
+		'- Highlight fresh angles or subtopics that were underrepresented previously.',
+		'- Multiple choice responses must include four options prefixed with "A) ", "B) ", "C) ", and "D) " in that order. Write the correct answer using the matching label.',
+		'- Difficulty must be mapped to foundation, intermediate, or higher for every question.',
+		'- Keep prompts and answers aligned with requested counts or enumerations from the material.',
+		'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly.',
+		'Do not restate the previous questions in the response. Only include the new items.'
+	];
+	if (options.subject) {
+		lines.push(`Subject focus: ${options.subject}.`);
+	}
+	if (options.board) {
+		lines.push(`Exam board context: ${options.board}.`);
+	}
+	return lines.join('\n');
 }
 
 export function parseQuizFromText(text: string): QuizGeneration {

@@ -18,7 +18,7 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"all-tests": "npm run lint && npm run check && npm run test && npm run build",
-		"generate:sample-quizzes": "tsx scripts/generate-sample-quizzes.ts"
+		"eval:offline": "tsx src/lib/server/llm/eval/offline/run-eval.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -64,6 +64,7 @@
 		"vitest": "^3.2.3",
 		"vitest-browser-svelte": "^0.1.0",
 		"wrangler": "^4.38.0",
-		"zod": "^4.1.11"
+		"zod": "^4.1.11",
+		"dotenv": "^16.4.5"
 	}
 }

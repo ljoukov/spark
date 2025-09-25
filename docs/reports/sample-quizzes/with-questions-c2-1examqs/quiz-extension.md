@@ -1,7 +1,7 @@
 # Sample 4: C2.1ExamQs.pdf (extraction) — Extension Quiz
 
-**Quiz title:** GCSE Chemistry: States of Matter Extension Quiz
-**Summary:** An additional set of 10 questions extending the initial quiz on states of matter, chemical equations, and the particle model. This quiz introduces new concepts such as stoichiometry, limitations of scientific models, and advanced practical considerations, while continuing to draw strictly from the provided study material.
+**Quiz title:** GCSE Chemistry: States of Matter & Particle Model (Extension)
+**Summary:** An extension quiz with 10 new questions focusing on calculations from graphical data, evaluation of experimental methods, stoichiometry, and deeper concepts of the particle model. This builds upon the initial assessment of states of matter and chemical reactions.
 
 ## Metadata
 
@@ -9,171 +9,146 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 10
-- Generated at: 2025-09-25T07:30:12.332Z
+- Generated at: 2025-09-25T22:33:49.950Z
 - Model: gemini-2.5-pro (temperature 0.20)
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Questions
 
-### 1. In the equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what does the state symbol (s) next to Li indicate? A) Lithium is a solution, B) Lithium is a solid, C) Lithium is soluble, D) Lithium is a solvent.
-
-- Type: multiple_choice
-- Topic: Chemical Equations
-- Difficulty: foundation
-- Skill focus: Recall knowledge of state symbols
-- Source reference: Page 1, Q1a
-- Answer: Lithium is a solid
-- Options:
-  - A. Lithium is a solution
-  - B. Lithium is a solid
-  - C. Lithium is soluble
-  - D. Lithium is a solvent
-
-> The state symbol (s) stands for solid. The equation shows that solid lithium reacts with liquid water.
-
-### 2. In the balanced chemical equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what is the stoichiometric ratio of lithium (Li) to hydrogen (H₂)? A) 1:1, B) 2:2, C) 2:1, D) 1:2.
+### 1. According to the balanced equation 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(g), what is the molar ratio of lithium (Li) to hydrogen (H₂)?
 
 - Type: multiple_choice
 - Topic: Stoichiometry
-- Difficulty: higher
+- Difficulty: intermediate
 - Skill focus: Interpret balanced chemical equations
 - Source reference: Page 1, Q1a
-- Answer: 2:1
-- Options:
-  - A. 1:1
-  - B. 2:2
-  - C. 2:1
-  - D. 1:2
-
-> The numbers in front of the chemical formulas (coefficients) show the ratio. There is a '2' in front of Li and an implied '1' in front of H₂, so the ratio is 2:1.
-
-### 3. According to Figure 1, which substance has the highest boiling point? A) A, B) B, C) C, D) D.
-
-- Type: multiple_choice
-- Topic: States of Matter
-- Difficulty: foundation
-- Skill focus: Extract data from a graph
-- Source reference: Page 2, Figure 1
 - Answer: C
 - Options:
-  - A. A
-  - B. B
-  - C. C
-  - D. D
+  - A. A. 1:1
+  - B. B. 1:2
+  - C. C. 2:1
+  - D. D. 2:2
 
-> The boiling point is represented by the filled circle. Substance C's boiling point is at approximately 210°C, which is the highest value on the chart.
+> The numbers in front of the chemical formulas (coefficients) show the ratio. There is a '2' in front of Li and an unwritten '1' in front of H₂, so the ratio is 2:1.
 
-### 4. Using Figure 1, identify a temperature at which substance A is a gas, but substance B is a solid. A) -50 °C, B) 0 °C, C) 50 °C, D) 100 °C.
+### 2. Using Figure 1, calculate the temperature range in degrees Celsius over which substance B is a liquid.
 
-- Type: multiple_choice
-- Topic: States of Matter
+- Type: numeric
+- Topic: Changes of State
 - Difficulty: intermediate
-- Skill focus: Compare and interpret graphical data
+- Skill focus: Calculate from graphical data
 - Source reference: Page 2, Figure 1
-- Answer: 50 °C
-- Options:
-  - A. -50 °C
-  - B. 0 °C
-  - C. 50 °C
-  - D. 100 °C
+- Answer: 115
 
-> At 50°C, the temperature is above substance A's boiling point (approx. 0°C), making it a gas. At the same time, 50°C is below substance B's melting point (approx. 75°C), meaning it is still a solid.
+> Substance B melts at approximately 75°C and boils at approximately 190°C. The liquid range is the difference between these two temperatures: 190 - 75 = 115°C.
 
-### 5. Which of the substances A, B, C, or D from Figure 1 would be a liquid at standard room temperature (approximately 20°C)? A) A, B) B, C) C, D) D.
+### 3. Using Figure 1, which substance has the smallest temperature range between its melting point and boiling point?
 
 - Type: multiple_choice
-- Topic: States of Matter
+- Topic: Changes of State
 - Difficulty: intermediate
-- Skill focus: Apply graphical data to a real-world context
+- Skill focus: Interpret and compare graphical data
 - Source reference: Page 2, Figure 1
-- Answer: C
+- Answer: A
 - Options:
-  - A. A
-  - B. B
-  - C. C
-  - D. D
+  - A. A. D
+  - B. B. A
+  - C. C. B
+  - D. D. C
 
-> For a substance to be liquid, the temperature must be above its melting point and below its boiling point. At 20°C, only substance C (MP ≈ 10°C, BP ≈ 210°C) is in its liquid range.
+> By estimating the ranges: A is ~75°C, B is ~115°C, C is ~200°C, and D is ~20°C (-160 - (-180)). Substance D has the smallest liquid range.
 
-### 6. The apparatus in Figure 2 uses a water bath. What piece of equipment could replace the water bath to allow for the measurement of substance B's boiling point (approx. 190°C)? A) An ice bath, B) A larger beaker of water, C) An oil bath, D) A cooling fan.
+### 4. Suggest one practical improvement to the apparatus in Figure 2 to ensure the heat from the Bunsen burner is distributed more evenly throughout the water.
 
-- Type: multiple_choice
+- Type: short_answer
 - Topic: Practical Chemistry
 - Difficulty: intermediate
-- Skill focus: Suggest improvements to experimental procedures
-- Source reference: Page 4, Q1e, Figure 2
-- Answer: An oil bath
-- Options:
-  - A. An ice bath
-  - B. A larger beaker of water
-  - C. An oil bath
-  - D. A cooling fan
+- Skill focus: Suggest improvements to experimental methods
+- Source reference: Page 4, Figure 2
+- Answer: Stir the water continuously.
 
-> A water bath cannot exceed 100°C. To reach higher temperatures like 190°C safely, an oil bath or sand bath is used, as oil has a much higher boiling point than water.
+> Stirring the water creates convection currents that distribute the thermal energy more evenly, preventing 'hot spots' and ensuring the thermometer gives a more accurate reading of the overall temperature.
 
-### 7. Besides the substance being impure, what is another potential source of error when using the apparatus in Figure 2 that could lead to an inaccurate temperature reading? A) The Bunsen burner flame is yellow, B) Reading the thermometer from an angle, C) Using distilled water in the bath, D) The test tube is too clean.
+### 5. Why would using an oil bath instead of a water bath be a more suitable choice for determining the boiling point of substance B using the apparatus in Figure 2?
 
-- Type: multiple_choice
+- Type: short_answer
 - Topic: Practical Chemistry
 - Difficulty: higher
-- Skill focus: Identify sources of experimental error
-- Source reference: Page 4, Q1f, Figure 2
-- Answer: Reading the thermometer from an angle
-- Options:
-  - A. The Bunsen burner flame is yellow
-  - B. Reading the thermometer from an angle
-  - C. Using distilled water in the bath
-  - D. The test tube is too clean
+- Skill focus: Evaluate and select appropriate apparatus
+- Source reference: Page 4, Q1e
+- Answer: Oil has a much higher boiling point than water, so it can be heated to the 190°C required to boil substance B, whereas the water bath cannot go above 100°C.
 
-> Reading a measurement scale from an angle instead of at eye level can cause parallax error, leading to an inaccurate reading. This is a common source of error in experiments involving thermometers, burettes, or rulers.
+> A water bath is limited by the boiling point of water (100°C). Since substance B boils at approximately 190°C, an oil bath, which can reach higher temperatures, is required to supply enough energy for it to boil.
 
-### 8. Which statement best describes the movement and energy of particles in substance B when it is in the solid state (e.g., at 25°C)? A) They move randomly and have high kinetic energy, B) They slide past each other and have medium kinetic energy, C) They are stationary and have no kinetic energy, D) They vibrate about fixed positions and have low kinetic energy.
-
-- Type: multiple_choice
-- Topic: Particle Model
-- Difficulty: foundation
-- Skill focus: Describe the properties of particles in a solid
-- Source reference: Page 5, Q2b
-- Answer: They vibrate about fixed positions and have low kinetic energy
-- Options:
-  - A. They move randomly and have high kinetic energy
-  - B. They slide past each other and have medium kinetic energy
-  - C. They are stationary and have no kinetic energy
-  - D. They vibrate about fixed positions and have low kinetic energy
-
-> In the solid state, particles are held in a fixed, regular arrangement (a lattice). They possess kinetic energy, but it is not enough to overcome the forces of attraction, so their movement is restricted to vibrations around their fixed positions.
-
-### 9. The model of shaking balls in a tube (Question 2) is used to represent a gas. Which of the following is a key limitation of this model? A) The balls are too colourful, B) The model does not represent the forces of attraction between particles, C) The balls move too randomly, D) The balls are too far apart.
+### 6. The model of gas particles as small balls being shaken in a tube is useful, but has limitations. Which statement describes a key limitation of this model?
 
 - Type: multiple_choice
 - Topic: Particle Model
 - Difficulty: higher
-- Skill focus: Evaluate the limitations of a scientific model
+- Skill focus: Identify limitations of a scientific model
 - Source reference: Page 4, Q2
-- Answer: The model does not represent the forces of attraction between particles
+- Answer: A
 - Options:
-  - A. The balls are too colourful
-  - B. The model does not represent the forces of attraction between particles
-  - C. The balls move too randomly
-  - D. The balls are too far apart
+  - A. A. The model does not represent the intermolecular forces between particles.
+  - B. B. The balls are shown moving randomly, which is incorrect for a gas.
+  - C. C. The balls are far apart, which is incorrect for a gas.
+  - D. D. The model shows the particles as spheres, but real particles are cubes.
 
-> Real gas particles have weak intermolecular forces of attraction between them. The solid balls in the model do not have any equivalent forces, which is a significant way in which the model is inaccurate.
+> Real gas particles have weak forces of attraction (intermolecular forces) between them. The model with hard balls that only interact by colliding does not account for these forces.
 
-### 10. For any given pure substance, what happens to the average kinetic energy of its particles while it is melting at a constant pressure? A) It increases, B) It decreases, C) It remains constant, D) It drops to zero.
+### 7. In which state of matter do particles have enough energy to overcome the forces holding them in fixed positions, but not enough to overcome the forces holding them close together?
+
+- Type: short_answer
+- Topic: Particle Model
+- Difficulty: intermediate
+- Skill focus: Describe particle behaviour in different states
+- Source reference: Page 5, Q2b
+- Answer: Liquid
+
+> In the liquid state, particles can move past one another (overcoming fixed positions) but are still held in close contact by intermolecular forces. In a gas, they have enough energy to overcome these forces almost completely.
+
+### 8. In which state of matter do particles primarily vibrate about fixed positions?
+
+- Type: short_answer
+- Topic: Particle Model
+- Difficulty: foundation
+- Skill focus: Recall properties of states of matter
+- Source reference: Page 5, Q2b
+- Answer: Solid
+
+> In the solid state, particles are held in a regular, fixed lattice and their kinetic energy is primarily in the form of vibrations around these fixed points.
+
+### 9. The text states 'Lithium reacts with water to produce lithium hydroxide solution and hydrogen.' Which of these are the products of the reaction?
+
+- Type: multiple_choice
+- Topic: Chemical Reactions
+- Difficulty: foundation
+- Skill focus: Identify products from a reaction description
+- Source reference: Page 1, Q1a
+- Answer: D
+- Options:
+  - A. A. Lithium and water
+  - B. B. Lithium and hydrogen
+  - C. C. Water and lithium hydroxide
+  - D. D. Lithium hydroxide and hydrogen
+
+> The products are the new substances formed in a chemical reaction. The text explicitly states that lithium hydroxide and hydrogen are produced.
+
+### 10. What is the physical state of substance C at 100°C, according to Figure 1?
 
 - Type: multiple_choice
 - Topic: States of Matter
-- Difficulty: higher
-- Skill focus: Apply knowledge of energy changes during phase transitions
+- Difficulty: foundation
+- Skill focus: Determine state of matter from graphical data
 - Source reference: Page 2, Figure 1
-- Answer: It remains constant
+- Answer: B
 - Options:
-  - A. It increases
-  - B. It decreases
-  - C. It remains constant
-  - D. It drops to zero
+  - A. A. Solid
+  - B. B. Liquid
+  - C. C. Gas
+  - D. D. Aqueous
 
-> During a phase change like melting, the energy being supplied (latent heat) is used to overcome the forces holding the particles in their fixed positions (increasing their potential energy), not to increase their speed. Therefore, the temperature, which is a measure of the average kinetic energy, remains constant until all the solid has melted.
+> Substance C has a melting point of approximately 10°C and a boiling point of approximately 210°C. Since 100°C is between these two temperatures, substance C will be a liquid.
 
 ## Prompt
 

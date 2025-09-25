@@ -1,15 +1,15 @@
 # Sample 3: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (extraction) — Base Quiz
 
 **Quiz title:** GCSE Chemistry: Covalent Bonding and Carbon Allotropes
-**Summary:** This quiz contains 18 short-answer questions covering covalent bonding, properties of simple and giant covalent structures, and allotropes of carbon, aligned with the AQA specification. Coverage gaps: the source material provided only 18 questions, not the requested 20.
+**Summary:** This quiz assesses understanding of covalent bonding, simple and giant molecular structures, polymers, and the properties of carbon allotropes, based on AQA GCSE Chemistry specifications. Coverage gaps: none – full coverage achieved.
 
 ## Metadata
 
 - Mode: extraction
 - Subject: chemistry
 - Exam board: AQA
-- Question count: 18
-- Generated at: 2025-09-25T07:24:47.329Z
+- Question count: 20
+- Generated at: 2025-09-25T22:28:59.797Z
 - Model: gemini-2.5-pro (temperature 0.20)
 - Source: 966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg (data/samples/with-questions/966860A9-BFD8-436C-958D-2470ED154DA6_1_105_c.jpeg)
 
@@ -21,10 +21,10 @@
 - Topic: Covalent Bonding
 - Difficulty: foundation
 - Skill focus: Recall definition
-- Source reference: C2 Question 1
+- Source reference: C2 Questions, Q1
 - Answer: By atoms sharing electrons.
 
-> Covalent bonds involve the sharing of electron pairs between atoms, typically non-metals, to achieve a stable electron configuration.
+> Covalent bonds form when non-metal atoms share pairs of electrons to achieve a stable, full outer shell of electrons.
 
 ### 2. Which type of atoms form covalent bonds between them?
 
@@ -32,32 +32,32 @@
 - Topic: Covalent Bonding
 - Difficulty: foundation
 - Skill focus: Recall fact
-- Source reference: C2 Question 2
+- Source reference: C2 Questions, Q2
 - Answer: Non-metals.
 
-> Covalent bonds typically form between non-metal atoms, which have similar electronegativities and share electrons to complete their outer shells.
+> Covalent bonding occurs between atoms of non-metallic elements, which need to gain electrons to achieve a stable electron configuration.
 
 ### 3. Describe the structure and bonding of a giant covalent substance.
 
 - Type: short_answer
 - Topic: Giant Covalent Structures
 - Difficulty: intermediate
-- Skill focus: Describe structure and bonding
-- Source reference: C2 Question 3
-- Answer: Billions of atoms are bonded together by strong covalent bonds throughout the structure.
+- Skill focus: Describe structure
+- Source reference: C2 Questions, Q3
+- Answer: Billions of atoms bonded together by strong covalent bonds.
 
-> In a giant covalent structure, there are no individual molecules. All atoms are linked by a network of strong covalent bonds, forming a macromolecular lattice.
+> In a giant covalent structure, all atoms are linked by a vast network of strong covalent bonds, forming a single macromolecule.
 
 ### 4. Describe the structure and bonding of small molecules.
 
 - Type: short_answer
-- Topic: Simple Molecular Structures
+- Topic: Simple Molecules
 - Difficulty: intermediate
 - Skill focus: Describe structure and bonding
-- Source reference: C2 Question 4
-- Answer: Small numbers of atoms group together into molecules with strong covalent bonds within the molecules and weak intermolecular forces between the molecules.
+- Source reference: C2 Questions, Q4
+- Answer: Small numbers of atoms group together into molecules with strong covalent bonds between the atoms and weak intermolecular forces between the molecules.
 
-> Simple molecular substances consist of discrete molecules held together by weak intermolecular forces, while the atoms within each molecule are joined by strong covalent bonds.
+> Substances made of small molecules have strong covalent bonds within each molecule but only weak forces of attraction between the molecules.
 
 ### 5. Describe the structure and bonding of polymers.
 
@@ -65,54 +65,54 @@
 - Topic: Polymers
 - Difficulty: intermediate
 - Skill focus: Describe structure and bonding
-- Source reference: C2 Question 5
-- Answer: Many identical molecules are joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.
+- Source reference: C2 Questions, Q5
+- Answer: Many identical molecules joined together by strong covalent bonds in a long chain, with weak intermolecular forces between the chains.
 
-> Polymers are large molecules made of repeating monomer units linked by strong covalent bonds. The long chains are attracted to each other by intermolecular forces.
+> Polymers consist of very long chains of atoms (macromolecules) joined by strong covalent bonds, with weaker intermolecular forces holding the different chains together.
 
 ### 6. Why do giant covalent substances have high melting points?
 
 - Type: short_answer
 - Topic: Giant Covalent Structures
 - Difficulty: intermediate
-- Skill focus: Explain properties
-- Source reference: C2 Question 6
-- Answer: A large amount of energy is required to break the numerous strong covalent bonds between the atoms.
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q6
+- Answer: It takes a lot of energy to break the strong covalent bonds between the atoms.
 
-> The high melting and boiling points of giant covalent structures are due to the need to overcome the strong covalent bonds throughout the lattice, which requires a lot of thermal energy.
+> A large amount of thermal energy is required to overcome the numerous strong covalent bonds throughout the giant lattice structure.
 
 ### 7. Why do small molecules have low melting points?
 
 - Type: short_answer
-- Topic: Simple Molecular Structures
+- Topic: Simple Molecules
 - Difficulty: intermediate
-- Skill focus: Explain properties
-- Source reference: C2 Question 7
-- Answer: Only a small amount of energy is needed to overcome the weak intermolecular forces between molecules.
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q7
+- Answer: Only a small amount of energy is needed to break the weak intermolecular forces.
 
-> When a simple molecular substance melts or boils, it is the weak intermolecular forces that are broken, not the strong covalent bonds within the molecules. This requires relatively little energy.
+> The forces between molecules are weak and easily overcome, so substances made of small molecules have low melting and boiling points.
 
 ### 8. Why do large molecules have higher melting and boiling points than small molecules?
 
 - Type: short_answer
-- Topic: Polymers
+- Topic: Simple Molecules
 - Difficulty: intermediate
-- Skill focus: Compare and explain properties
-- Source reference: C2 Question 8
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q8
 - Answer: The intermolecular forces are stronger in large molecules.
 
-> Larger molecules have more points of contact, leading to stronger overall intermolecular forces. More energy is needed to overcome these forces compared to the forces between smaller molecules.
+> As molecules get larger, the intermolecular forces between them increase in strength, requiring more energy to overcome.
 
 ### 9. Why do most covalent substances not conduct electricity?
 
 - Type: short_answer
-- Topic: Properties of Covalent Substances
+- Topic: Covalent Bonding
 - Difficulty: intermediate
-- Skill focus: Explain properties
-- Source reference: C2 Question 9
-- Answer: They do not have delocalised electrons or free-moving ions to carry an electrical charge.
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q9
+- Answer: They do not have delocalised electrons or ions.
 
-> For a substance to conduct electricity, it must contain charged particles that are free to move. In most covalent substances, electrons are held in fixed bonds and there are no ions.
+> For a substance to conduct electricity, it must contain charged particles that are free to move. Most covalent substances lack free-moving ions or delocalised electrons.
 
 ### 10. Describe the structure and bonding in graphite.
 
@@ -120,32 +120,32 @@
 - Topic: Allotropes of Carbon
 - Difficulty: higher
 - Skill focus: Describe structure and bonding
-- Source reference: C2 Question 10
+- Source reference: C2 Questions, Q10
 - Answer: Each carbon atom is bonded to three others in hexagonal rings arranged in layers. It has delocalised electrons and weak forces between the layers.
 
-> Graphite is an allotrope of carbon with a layered, giant covalent structure. The delocalised electrons are responsible for its conductivity, and the weak forces between layers allow them to slide.
+> Graphite's layered structure, with delocalised electrons and weak intermolecular forces between layers, gives it unique properties like conductivity and softness.
 
 ### 11. Why can graphite conduct electricity?
 
 - Type: short_answer
 - Topic: Allotropes of Carbon
 - Difficulty: intermediate
-- Skill focus: Explain properties
-- Source reference: C2 Question 11
-- Answer: The delocalised electrons are free to move through the structure and carry charge.
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q11
+- Answer: The delocalised electrons can move through the graphite.
 
-> Each carbon atom in graphite donates one electron to a delocalised system, creating a 'sea' of electrons that can move along the layers when a voltage is applied.
+> Each carbon atom in graphite has one delocalised electron that is free to move along the layers and carry charge through the structure.
 
 ### 12. Explain why graphite is soft.
 
 - Type: short_answer
 - Topic: Allotropes of Carbon
 - Difficulty: intermediate
-- Skill focus: Explain properties
-- Source reference: C2 Question 12
-- Answer: The layers are not covalently bonded to each other and can slide over one another easily due to weak intermolecular forces.
+- Skill focus: Explain property
+- Source reference: C2 Questions, Q12
+- Answer: The layers are not bonded so can slide over each other.
 
-> The weak forces of attraction between the layers in graphite require little energy to overcome, allowing the layers to slip. This property makes graphite useful as a lubricant.
+> There are only weak forces between the layers of carbon atoms in graphite, allowing them to slide easily, which makes graphite soft and slippery.
 
 ### 13. What is graphene?
 
@@ -153,10 +153,10 @@
 - Topic: Allotropes of Carbon
 - Difficulty: foundation
 - Skill focus: Recall definition
-- Source reference: C2 Question 13
-- Answer: A single layer of graphite.
+- Source reference: C2 Questions, Q13
+- Answer: One layer of graphite.
 
-> Graphene is a two-dimensional allotrope of carbon consisting of a single layer of atoms arranged in a hexagonal lattice.
+> Graphene is a single layer of carbon atoms arranged in a hexagonal lattice, essentially an individual sheet from a graphite structure.
 
 ### 14. Give two properties of graphene.
 
@@ -164,10 +164,10 @@
 - Topic: Allotropes of Carbon
 - Difficulty: foundation
 - Skill focus: Recall properties
-- Source reference: C2 Question 14
-- Answer: It is very strong and conducts electricity.
+- Source reference: C2 Questions, Q14
+- Answer: Strong, conducts electricity.
 
-> Graphene's strength comes from its network of strong covalent bonds, and its conductivity is due to delocalised electrons across the single layer.
+> Graphene is extremely strong for its mass and is an excellent electrical conductor due to its delocalised electrons across the single layer.
 
 ### 15. What is a fullerene?
 
@@ -175,10 +175,10 @@
 - Topic: Allotropes of Carbon
 - Difficulty: foundation
 - Skill focus: Recall definition
-- Source reference: C2 Question 15
-- Answer: A hollow cage of carbon atoms, which can be arranged as a sphere or a tube.
+- Source reference: C2 Questions, Q15
+- Answer: A hollow cage of carbon atoms arranged as a sphere or a tube.
 
-> Fullerenes are molecules of carbon with hollow shapes, such as spheres (buckyballs) or cylinders (nanotubes).
+> Fullerenes are molecules of carbon atoms with hollow shapes, with structures based on hexagonal rings of carbon atoms, sometimes with pentagonal or heptagonal rings.
 
 ### 16. What is a nanotube?
 
@@ -186,32 +186,54 @@
 - Topic: Allotropes of Carbon
 - Difficulty: foundation
 - Skill focus: Recall definition
-- Source reference: C2 Question 16
+- Source reference: C2 Questions, Q16
 - Answer: A hollow cylinder of carbon atoms.
 
-> Carbon nanotubes are a type of fullerene. They are cylindrical molecules consisting of a rolled-up sheet of single-layer carbon atoms (graphene).
+> Carbon nanotubes are cylindrical fullerenes, which can be thought of as rolled-up sheets of graphene.
 
-### 17. Give two properties of nanotubes.
+### 17. State a mechanical property of nanotubes.
 
 - Type: short_answer
 - Topic: Allotropes of Carbon
 - Difficulty: foundation
-- Skill focus: Recall properties
-- Source reference: C2 Question 17
-- Answer: They have a high tensile strength and conduct electricity.
+- Skill focus: Recall property
+- Source reference: C2 Questions, Q17
+- Answer: High tensile strength.
 
-> Carbon nanotubes are very strong due to the covalent bonds between the carbon atoms. They can also conduct electricity, and their conductivity depends on their structure.
+> Nanotubes have very strong covalent bonds, giving them high tensile strength, meaning they can be stretched without breaking.
 
-### 18. Give three uses of fullerenes.
+### 18. State an electrical property of nanotubes.
+
+- Type: short_answer
+- Topic: Allotropes of Carbon
+- Difficulty: foundation
+- Skill focus: Recall property
+- Source reference: C2 Questions, Q17
+- Answer: They conduct electricity.
+
+> Like graphene, nanotubes have delocalised electrons that are free to move and carry an electrical current.
+
+### 19. Give a use for spherical fullerenes in medicine.
+
+- Type: short_answer
+- Topic: Allotropes of Carbon
+- Difficulty: intermediate
+- Skill focus: Apply knowledge
+- Source reference: C2 Questions, Q18
+- Answer: Drug delivery.
+
+> The hollow cage structure of spherical fullerenes can be used to trap and deliver drug molecules to specific sites in the body.
+
+### 20. Give two other uses for fullerenes.
 
 - Type: short_answer
 - Topic: Allotropes of Carbon
 - Difficulty: intermediate
 - Skill focus: Recall applications
-- Source reference: C2 Question 18
-- Answer: Lubricants, drug delivery, and in high-tech electronics.
+- Source reference: C2 Questions, Q18
+- Answer: Lubricants, high-tech electronics.
 
-> The unique cage-like structures of fullerenes make them suitable for various applications, including trapping other molecules for drug delivery, acting as molecular ball bearings in lubricants, and use in electronics.
+> Fullerenes are used as industrial catalysts and lubricants, and their unique electrical properties make them useful in electronics.
 
 ## Prompt
 
@@ -219,7 +241,9 @@
 You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.
 The material already includes questions and answers. Extract high-quality exam-ready items.
 Preserve original wording as much as possible while fixing small typos.
-Return questionCount distinct items that match the source closely.
+When the source already asks questions, transcribe every numbered task and sub-part. If an answer is missing, infer a correct one directly from the source material.
+If the source is mostly notes with few (three or fewer) questions, keep any explicit questions first and then create additional items that still mirror the lesson content.
+Never drop a question or answer that appears in the source. Expand multi-part tasks only when necessary to keep prompt, answer, and marking points aligned.
 Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.
 If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.
 When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.

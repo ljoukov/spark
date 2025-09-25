@@ -1,7 +1,7 @@
 # Sample 4: C2.1ExamQs.pdf (extraction) — Base Quiz
 
-**Quiz title:** GCSE Chemistry: States of Matter and Particle Theory
-**Summary:** This quiz assesses understanding of states of matter, the particle model, and chemical equations, using multiple-choice, short answer, and numeric questions aligned with the AQA GCSE Chemistry specification. Coverage gaps: The quiz is based on a very limited source document; to meet the question count, multiple questions are derived from a single graph, and broader topics within the syllabus are not covered.
+**Quiz title:** GCSE Chemistry: States of Matter & Particle Model
+**Summary:** This quiz assesses understanding of states of matter, changes of state, and the particle model, using multiple-choice, short-answer, and numeric questions aligned with the AQA specification. Coverage gaps: none – full coverage achieved.
 
 ## Metadata
 
@@ -9,52 +9,30 @@
 - Subject: chemistry
 - Exam board: AQA
 - Question count: 20
-- Generated at: 2025-09-25T07:28:14.313Z
+- Generated at: 2025-09-25T22:31:58.844Z
 - Model: gemini-2.5-pro (temperature 0.20)
 - Source: C2.1ExamQs.pdf (data/samples/with-questions/C2.1ExamQs.pdf)
 
 ## Questions
 
-### 1. The equation for lithium reacting with water is 2Li(s) + 2H₂O(l) → 2LiOH(__) + H₂(__). Use the information in the question to provide the correct state symbol for lithium hydroxide.
+### 1. Lithium reacts with water to produce lithium hydroxide solution and hydrogen. Use the correct state symbols from the box (aq, g, l, s) to complete the chemical equation: 2Li(s) + 2H₂O(l) → 2LiOH(__) + H₂(__)
 
 - Type: short_answer
 - Topic: Chemical Equations
 - Difficulty: foundation
-- Skill focus: Recall and apply knowledge of state symbols
+- Skill focus: Apply knowledge of state symbols
 - Source reference: Page 1, Q1a
-- Answer: aq
+- Answer: 2LiOH(aq) + H₂(g)
 
-> The question states that lithium hydroxide solution is produced. The state symbol for an aqueous solution is (aq).
+> Lithium hydroxide is produced as a solution, so its state symbol is (aq). Hydrogen is a gas, so its state symbol is (g).
 
-### 2. The equation for lithium reacting with water is 2Li(s) + 2H₂O(l) → 2LiOH(aq) + H₂(__). Use the information in the question to provide the correct state symbol for hydrogen.
-
-- Type: short_answer
-- Topic: Chemical Equations
-- Difficulty: foundation
-- Skill focus: Recall and apply knowledge of state symbols
-- Source reference: Page 1, Q1a
-- Answer: g
-
-> The question states that hydrogen is produced. Hydrogen is a gas at room temperature, so its state symbol is (g).
-
-### 3. Name the two products formed when lithium reacts with water.
-
-- Type: short_answer
-- Topic: Reactions of Metals
-- Difficulty: foundation
-- Skill focus: Extract information from text
-- Source reference: Page 1, Q1a
-- Answer: Lithium hydroxide and hydrogen
-
-> The prompt for question 1a explicitly states: 'Lithium reacts with water to produce lithium hydroxide solution and hydrogen.'
-
-### 4. Figure 1 shows the melting and boiling points of four substances. Which substance is liquid over the greatest temperature range?
+### 2. Figure 1 shows the melting and boiling points of four substances. Which substance is liquid over the greatest temperature range?
 
 - Type: multiple_choice
-- Topic: States of Matter
+- Topic: Changes of State
 - Difficulty: intermediate
-- Skill focus: Interpret graphical data and perform calculations
-- Source reference: Page 2, Q1b, Figure 1
+- Skill focus: Interpret graphical data
+- Source reference: Page 2, Q1b
 - Answer: C
 - Options:
   - A. A
@@ -62,37 +40,15 @@
   - C. C
   - D. D
 
-> Substance C is liquid between approximately 10°C and 210°C, a range of 200°C. This is greater than the ranges for A (approx. 75°C), B (approx. 115°C), and D (approx. 20°C).
+> Substance C has a melting point of approximately 10°C and a boiling point of approximately 210°C, giving a liquid range of 200°C, which is the largest range shown on the graph.
 
-### 5. Using the data from Figure 1, calculate the temperature range in degrees Celsius over which substance C is a liquid.
-
-- Type: numeric
-- Topic: States of Matter
-- Difficulty: intermediate
-- Skill focus: Extract and process graphical data
-- Source reference: Page 2, Q1b, Figure 1
-- Answer: 200
-
-> Substance C has a melting point of approximately 10°C and a boiling point of approximately 210°C. The liquid range is the difference: 210 - 10 = 200°C.
-
-### 6. Using the data from Figure 1, calculate the temperature range in degrees Celsius over which substance B is a liquid.
-
-- Type: numeric
-- Topic: States of Matter
-- Difficulty: intermediate
-- Skill focus: Extract and process graphical data
-- Source reference: Page 2, Q1b, Figure 1
-- Answer: 115
-
-> Substance B has a melting point of approximately 75°C and a boiling point of approximately 190°C. The liquid range is the difference: 190 - 75 = 115°C.
-
-### 7. Which two substances shown in Figure 1 are gases at 50 °C?
+### 3. Using Figure 1, which two substances are gases at 50 °C?
 
 - Type: multiple_choice
 - Topic: States of Matter
 - Difficulty: intermediate
 - Skill focus: Interpret graphical data
-- Source reference: Page 3, Q1c, Figure 1
+- Source reference: Page 3, Q1c
 - Answer: A and D
 - Options:
   - A. A and B
@@ -100,9 +56,9 @@
   - C. C and D
   - D. A and D
 
-> A substance is a gas at a temperature above its boiling point. At 50°C, substance A (BP ≈ 0°C) and substance D (BP ≈ -160°C) are both above their boiling points.
+> At 50°C, both substance A (boiling point 0°C) and substance D (boiling point -160°C) are above their boiling points, so they are gases.
 
-### 8. A different substance, E, has a melting point of -50 °C and a boiling point of +120 °C. What would be the state of substance E at 0 °C?
+### 4. A different substance, E, has a melting point of -50 °C and a boiling point of +120 °C. What would be the state of substance E at room temperature (25 °C)?
 
 - Type: short_answer
 - Topic: States of Matter
@@ -111,74 +67,63 @@
 - Source reference: Page 3, Q1d
 - Answer: Liquid
 
-> 0°C is above the melting point of -50°C and below the boiling point of +120°C, so substance E would be in the liquid state.
+> Room temperature (25°C) is above the melting point of substance E (-50°C) but below its boiling point (+120°C), so it will be in the liquid state.
 
-### 9. Substance E has a melting point of -50 °C and a boiling point of +120 °C. Is its liquid temperature range larger or smaller than that of substance B from Figure 1?
-
-- Type: short_answer
-- Topic: States of Matter
-- Difficulty: higher
-- Skill focus: Calculate and compare data
-- Source reference: Page 3, Q1d; Page 2, Figure 1
-- Answer: Larger
-
-> The liquid range for E is 120 - (-50) = 170°C. From Figure 1, the range for B is approximately 190 - 75 = 115°C. Therefore, E's range is larger.
-
-### 10. Figure 2 shows apparatus for determining melting and boiling points using a water bath. Explain why this apparatus could not be used to determine the boiling point of substance B (shown in Figure 1).
+### 5. Figure 2 shows apparatus for determining melting and boiling points. Explain why the student could not use this apparatus to determine the boiling point of substance B.
 
 - Type: short_answer
 - Topic: Practical Chemistry
 - Difficulty: intermediate
-- Skill focus: Explain limitations of experimental apparatus
-- Source reference: Page 4, Q1e, Figure 2
-- Answer: The boiling point of substance B is approximately 190°C, which is above the boiling point of water (100°C). A water bath cannot reach a temperature higher than 100°C.
+- Skill focus: Evaluate experimental methods
+- Source reference: Page 4, Q1e
+- Answer: The boiling point of substance B is approximately 190°C (from Figure 1), but the water bath can only reach a maximum temperature of 100°C.
 
-> A water bath's temperature is limited by the boiling point of water. To measure a boiling point of 190°C, a heating medium with a higher boiling point, such as an oil bath, would be required.
+> A water bath cannot be heated above the boiling point of water (100°C), which is significantly lower than the boiling point of substance B.
 
-### 11. Suggest one reason why the apparatus shown in Figure 2 might not be suitable for determining the exact melting point of a substance.
+### 6. Suggest one reason why the student could not use the apparatus in Figure 2 to determine the exact melting point of substance B.
 
 - Type: short_answer
 - Topic: Practical Chemistry
 - Difficulty: higher
-- Skill focus: Analyse experimental methods
+- Skill focus: Identify limitations of experimental methods
 - Source reference: Page 4, Q1f
-- Answer: If the substance is impure, it will melt over a range of temperatures rather than at a sharp, exact point.
+- Answer: The water is not stirred, leading to uneven heat distribution and an inaccurate temperature reading.
 
-> Impurities disrupt the regular crystal lattice of a solid, lowering the melting point and causing it to melt over a range. This makes determining an 'exact' melting point difficult.
+> Without stirring, parts of the water bath and the substance may be at different temperatures, so the thermometer reading may not reflect the true melting point.
 
-### 12. A student shakes a tube containing small balls to model the movement of particles in a gas. Which of the following is a correct reason why this is a good model?
-
-- Type: multiple_choice
-- Topic: Particle Model
-- Difficulty: foundation
-- Skill focus: Evaluate a scientific model
-- Source reference: Page 5, Q2a
-- Answer: The balls move randomly.
-- Options:
-  - A. The balls move randomly.
-  - B. The balls are different colours.
-  - C. The balls move slowly.
-  - D. The balls are in a regular arrangement.
-
-> A key property of particles in a gas is that they move rapidly and randomly, which is simulated by shaking the balls in the tube.
-
-### 13. A student shakes a tube containing small balls to model the movement of particles in a gas. Besides their random movement, what is another feature of gas particles that this model correctly represents?
+### 7. A student shakes a tube containing small balls to model the movement of particles in a gas. Which of these statements describes a way in which this is a good model?
 
 - Type: multiple_choice
 - Topic: Particle Model
 - Difficulty: foundation
 - Skill focus: Evaluate a scientific model
 - Source reference: Page 5, Q2a
-- Answer: The balls are far apart from each other.
+- Answer: The balls are far apart from each other
 - Options:
-  - A. The balls are far apart from each other.
-  - B. The balls have strong forces between them.
-  - C. The balls are different colours.
-  - D. The balls vibrate in fixed positions.
+  - A. The balls move slowly
+  - B. The balls are far apart from each other
+  - C. The balls are different colours
+  - D. The balls are in a regular pattern
 
-> The model shows the balls with large spaces between them, which accurately represents the large intermolecular distances between particles in a gas.
+> In the gas state, particles are far apart with no regular arrangement, which is modelled by the space between the balls in the tube.
 
-### 14. For a given material, in which state of matter are the particles held in a regular arrangement?
+### 8. A student shakes a tube containing small balls to model the movement of particles in a gas. Which of these statements describes another way in which this is a good model?
+
+- Type: multiple_choice
+- Topic: Particle Model
+- Difficulty: foundation
+- Skill focus: Evaluate a scientific model
+- Source reference: Page 5, Q2a
+- Answer: The balls move randomly
+- Options:
+  - A. The balls move randomly
+  - B. The balls vibrate in fixed positions
+  - C. The balls have strong forces of attraction
+  - D. The balls are all the same colour
+
+> Gas particles move rapidly and randomly, colliding with each other and the container walls. Shaking the tube causes the balls to move randomly, simulating this behaviour.
+
+### 9. For a given material, in which state of matter are the particles in a regular arrangement?
 
 - Type: short_answer
 - Topic: Particle Model
@@ -187,73 +132,133 @@
 - Source reference: Page 5, Q2b
 - Answer: Solid
 
-> In the solid state, particles are held in fixed positions within a regular lattice structure, allowing them only to vibrate.
+> In the solid state, particles are held in fixed positions within a regular lattice structure.
 
-### 15. For a given material, in which state of matter do the particles have the most kinetic energy?
+### 10. For a given material, in which state of matter do the particles have the most kinetic energy?
 
 - Type: short_answer
 - Topic: Particle Model
 - Difficulty: foundation
-- Skill focus: Recall properties of states of matter
+- Skill focus: Relate energy to states of matter
 - Source reference: Page 5, Q2b
 - Answer: Gas
 
-> Particles in the gaseous state move most freely and at the highest speeds, meaning they have the greatest amount of kinetic energy.
+> In the gaseous state, particles move most freely and at the highest speeds, meaning they have the greatest amount of kinetic energy.
 
-### 16. Read the approximate melting point of substance A from the graph in Figure 1.
+### 11. In the reaction of lithium with water, the product lithium hydroxide is shown with the state symbol (aq). What does (aq) stand for?
+
+- Type: short_answer
+- Topic: Chemical Equations
+- Difficulty: foundation
+- Skill focus: Define chemical terminology
+- Source reference: Page 1, Q1a
+- Answer: Aqueous / dissolved in water
+
+> The state symbol (aq) indicates that a substance is in an aqueous solution, meaning it has been dissolved in water.
+
+### 12. Using Figure 1, state the melting point of substance A in °C.
 
 - Type: numeric
-- Topic: States of Matter
+- Topic: Changes of State
 - Difficulty: foundation
-- Skill focus: Extract data from a graph
+- Skill focus: Read data from a graph
 - Source reference: Page 2, Figure 1
 - Answer: -75
 
-> The 'x' symbol for substance A, which represents the melting point, is located halfway between -50°C and -100°C on the y-axis.
+> The 'x' symbol for substance A on the graph aligns with -75 on the Temperature axis, indicating its melting point.
 
-### 17. Read the approximate boiling point of substance D from the graph in Figure 1.
+### 13. Using Figure 1, state the boiling point of substance C in °C.
 
 - Type: numeric
-- Topic: States of Matter
+- Topic: Changes of State
 - Difficulty: foundation
-- Skill focus: Extract data from a graph
+- Skill focus: Read data from a graph
 - Source reference: Page 2, Figure 1
-- Answer: -160
+- Answer: 210
 
-> The filled circle for substance D, which represents the boiling point, is located at approximately -160°C on the y-axis.
+> The filled circle symbol for substance C on the graph aligns with 210 on the Temperature axis, indicating its boiling point.
 
-### 18. Using Figure 1, determine the physical state of substance C at exactly 10 °C.
+### 14. Using the data in Figure 1, determine the state of substance B at 70°C.
 
 - Type: short_answer
 - Topic: States of Matter
 - Difficulty: intermediate
 - Skill focus: Interpret graphical data
 - Source reference: Page 2, Figure 1
-- Answer: Melting / Solid and liquid
-
-> 10°C is the melting point of substance C. At its melting point, a substance exists as a mixture of solid and liquid as it undergoes the phase change.
-
-### 19. Using Figure 1, determine the physical state of substance A at 50 °C.
-
-- Type: short_answer
-- Topic: States of Matter
-- Difficulty: foundation
-- Skill focus: Interpret graphical data
-- Source reference: Page 2, Figure 1
-- Answer: Gas
-
-> The boiling point of substance A is approximately 0°C. Since 50°C is above its boiling point, substance A will be a gas.
-
-### 20. Using Figure 1, determine the physical state of substance B at 50 °C.
-
-- Type: short_answer
-- Topic: States of Matter
-- Difficulty: foundation
-- Skill focus: Interpret graphical data
-- Source reference: Page 2, Figure 1
 - Answer: Solid
 
-> The melting point of substance B is approximately 75°C. Since 50°C is below its melting point, substance B will be a solid.
+> The melting point of substance B is approximately 75°C. Since 70°C is below its melting point, substance B is a solid.
+
+### 15. Using the data in Figure 1, determine the state of substance D at -170°C.
+
+- Type: short_answer
+- Topic: States of Matter
+- Difficulty: intermediate
+- Skill focus: Interpret graphical data
+- Source reference: Page 2, Figure 1
+- Answer: Liquid
+
+> The melting point of substance D is -180°C and its boiling point is -160°C. The temperature -170°C is between these two points, so substance D is a liquid.
+
+### 16. Which substance shown in Figure 1 has the lowest melting point?
+
+- Type: multiple_choice
+- Topic: Changes of State
+- Difficulty: foundation
+- Skill focus: Interpret graphical data
+- Source reference: Page 2, Figure 1
+- Answer: D
+- Options:
+  - A. A
+  - B. B
+  - C. C
+  - D. D
+
+> Substance D has a melting point of approximately -180°C, which is the lowest value shown on the graph for any of the substances.
+
+### 17. The apparatus in Figure 2 uses a water bath for heating. What is the name of the process when a liquid turns into a gas?
+
+- Type: short_answer
+- Topic: Changes of State
+- Difficulty: foundation
+- Skill focus: Recall scientific terminology
+- Source reference: Page 4, Figure 2
+- Answer: Boiling (or evaporation)
+
+> Boiling is the change of state from liquid to gas that occurs throughout the liquid at a specific temperature, the boiling point.
+
+### 18. Describe the arrangement and movement of particles in a liquid.
+
+- Type: short_answer
+- Topic: Particle Model
+- Difficulty: foundation
+- Skill focus: Describe the particle model
+- Source reference: Inferred from Page 5, Q2
+- Answer: Particles are closely packed but are in a random arrangement. They are able to move past one another.
+
+> Unlike solids, liquid particles are not in fixed positions and can slide past each other, but they remain close together, unlike gas particles.
+
+### 19. In the model of a gas shown where a student shakes a tube containing small balls, what do the balls represent?
+
+- Type: short_answer
+- Topic: Particle Model
+- Difficulty: foundation
+- Skill focus: Interpret a scientific model
+- Source reference: Page 4, Q2
+- Answer: Particles (or atoms/molecules)
+
+> The small balls are used in the model to represent the individual particles (atoms or molecules) that make up the gas.
+
+### 20. What is the key difference between the forces of attraction between particles in a liquid compared to a gas?
+
+- Type: short_answer
+- Topic: Particle Model
+- Difficulty: intermediate
+- Skill focus: Compare properties of states of matter
+- Source reference: Inferred from Page 5, Q2
+- Answer: The forces of attraction between particles are stronger in a liquid than in a gas.
+
+> In a liquid, forces of attraction are strong enough to keep particles close together, whereas in a gas, the forces are very weak, allowing particles to move far apart.
 
 ## Prompt
 
@@ -261,7 +266,9 @@
 You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.
 The material already includes questions and answers. Extract high-quality exam-ready items.
 Preserve original wording as much as possible while fixing small typos.
-Return questionCount distinct items that match the source closely.
+When the source already asks questions, transcribe every numbered task and sub-part. If an answer is missing, infer a correct one directly from the source material.
+If the source is mostly notes with few (three or fewer) questions, keep any explicit questions first and then create additional items that still mirror the lesson content.
+Never drop a question or answer that appears in the source. Expand multi-part tasks only when necessary to keep prompt, answer, and marking points aligned.
 Represent the full breadth of the source. Include every major concept, definition, worked example, or sub-question that appears.
 If you must merge short sub-parts to fit the questionCount, retain their core ideas and cite all relevant source references.
 When the source lists numbered exam questions, cover every numbered item and its sub-parts—combine them into one prompt only when the combined question still requires every original answer.

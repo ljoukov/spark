@@ -3,7 +3,7 @@
   "mode": "extraction",
   "subject": "chemistry",
   "board": "AQA",
-  "generatedAt": "2025-09-25T07:23:16.477Z",
+  "generatedAt": "2025-09-25T22:27:35.367Z",
   "request": {
     "model": "gemini-2.5-pro",
     "questionCount": 10,
@@ -15,8 +15,8 @@
   },
   "prompt": "You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.\nThe learner already received an initial quiz, provided below as JSON. They now want additional questions.\nRequirements:\n- Produce exactly 10 new questions.\n- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.\n- Continue to ground every item strictly in the supplied material.\n- Highlight fresh angles or subtopics that were underrepresented previously.\n- Multiple choice responses must include four options labelled A, B, C, and D.\n- Difficulty must be mapped to foundation, intermediate, or higher for every question.\nReturn JSON following the schema. Set mode to \"extension\" and update questionCount accordingly.\nDo not restate the previous questions in the response. Only include the new items.",
   "quiz": {
-    "quizTitle": "GCSE Chemistry: Atomic Structure Extension",
-    "summary": "This quiz provides 10 additional questions to extend learning on atomic structure, historical models, and the properties of elements, compounds, and mixtures. It includes multiple-choice, short-answer, numeric, and true/false questions to test application and deeper understanding.",
+    "quizTitle": "AQA GCSE Chemistry: C1 Atomic Structure Extension",
+    "summary": "An extension quiz with 10 new questions designed to test a deeper understanding of atomic structure, historical models, and the classification of matter. This quiz builds upon the foundational knowledge from the initial set by using different question formats and requiring the synthesis of concepts, all based on the provided C1 revision material.",
     "mode": "extension",
     "subject": "chemistry",
     "board": "AQA",
@@ -25,32 +25,60 @@
     "questions": [
       {
         "id": "Q21",
-        "prompt": "Which conclusion was drawn directly from the observation that some alpha particles were deflected by the gold foil in the alpha scattering experiment?",
-        "answer": "C",
-        "explanation": "The deflection of positively charged alpha particles showed that they were being repelled by a concentrated positive charge within the atom. This led to the nuclear model, where the positive charge and mass are located in a small, dense nucleus.",
+        "prompt": "Which sub-atomic particle has a relative mass of 1 and a relative charge of 0?",
+        "answer": "B. Neutron",
+        "explanation": "Based on the provided data, the neutron is the sub-atomic particle with a relative mass of 1 and a neutral charge of 0.",
         "type": "multiple_choice",
         "options": [
-          "A. The existence of electrons.",
-          "B. The atom is mostly empty space.",
-          "C. The atom's positive charge is concentrated in a small nucleus.",
-          "D. The existence of neutrons."
+          "A. Proton",
+          "B. Neutron",
+          "C. Electron",
+          "D. Nucleus"
         ],
-        "topic": "History of the Atom",
-        "difficulty": "higher",
-        "skillFocus": "Interpret experimental evidence",
-        "sourceReference": "C1 questions, Q4"
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Interpret properties",
+        "sourceReference": "C1 questions, Q9 & Q10"
       },
       {
         "id": "Q22",
-        "prompt": "Two atoms are isotopes of the same element. Which statement correctly describes the difference between them?",
-        "answer": "B",
-        "explanation": "Isotopes are defined as atoms of the same element (so they must have the same number of protons) but with different numbers of neutrons, which results in a different mass number.",
+        "prompt": "What was the major difference introduced by the nuclear model compared to the plum pudding model?",
+        "answer": "C. A small, dense, positive nucleus",
+        "explanation": "The alpha scattering experiment showed that an atom's mass and positive charge are concentrated in a small central nucleus, which was the key feature of the nuclear model, contrasting with the plum pudding model's 'sphere of positive charge'.",
         "type": "multiple_choice",
         "options": [
-          "A. They have a different number of protons.",
-          "B. They have a different number of neutrons.",
-          "C. They have a different number of electrons.",
-          "D. They have a different atomic number."
+          "A. The existence of electrons",
+          "B. The atom being a solid sphere",
+          "C. A small, dense, positive nucleus",
+          "D. The presence of neutrons"
+        ],
+        "topic": "History of the Atom",
+        "difficulty": "intermediate",
+        "skillFocus": "Compare scientific models",
+        "sourceReference": "C1 questions, Q3, Q4 & Q5"
+      },
+      {
+        "id": "Q23",
+        "prompt": "True or False: The key difference between a compound and a mixture is that the substances in a compound are chemically joined together.",
+        "answer": "True",
+        "explanation": "A compound is defined as a substance made of atoms that are 'chemically joined together', whereas a mixture consists of substances that are 'not chemically combined'.",
+        "type": "true_false",
+        "topic": "Elements, Compounds & Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Differentiate key terms",
+        "sourceReference": "C1 questions, Q16 & Q17"
+      },
+      {
+        "id": "Q24",
+        "prompt": "According to the definition of isotopes, which quantity is always the same for atoms of the same element?",
+        "answer": "C. Number of protons",
+        "explanation": "The definition of isotopes explicitly states they are atoms of the same element with the 'same number of protons' but different numbers of neutrons.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Number of neutrons",
+          "B. Mass number",
+          "C. Number of protons",
+          "D. Relative mass"
         ],
         "topic": "Atomic Structure",
         "difficulty": "intermediate",
@@ -58,110 +86,94 @@
         "sourceReference": "C1 questions, Q18"
       },
       {
-        "id": "Q23",
-        "prompt": "An atom has a mass number of 35 and an atomic number of 17. How many neutrons does it have?",
-        "answer": "18",
-        "explanation": "The number of neutrons is calculated by subtracting the atomic number (number of protons) from the mass number (number of protons + neutrons). So, 35 - 17 = 18 neutrons.",
-        "type": "numeric",
-        "topic": "Atomic Structure",
-        "difficulty": "foundation",
-        "skillFocus": "Calculation",
-        "sourceReference": "C1 questions, Q12"
-      },
-      {
-        "id": "Q24",
-        "prompt": "What is the key difference between the plum pudding model and the later nuclear model of the atom?",
-        "answer": "B",
-        "explanation": "The plum pudding model described a 'sphere of positive charge' with electrons embedded, whereas the nuclear model, based on the alpha scattering experiment, proposed that the positive charge was concentrated in a central nucleus.",
-        "type": "multiple_choice",
-        "options": [
-          "A. The plum pudding model includes neutrons, but the nuclear model does not.",
-          "B. The nuclear model has a central nucleus, while the plum pudding model has charge spread throughout.",
-          "C. The plum pudding model has electrons in fixed shells, while the nuclear model does not.",
-          "D. The nuclear model describes atoms as indivisible spheres."
-        ],
-        "topic": "History of the Atom",
-        "difficulty": "intermediate",
-        "skillFocus": "Compare and contrast models",
-        "sourceReference": "C1 questions, Q3, Q5"
-      },
-      {
         "id": "Q25",
-        "prompt": "A compound is formed when two or more substances are mixed together but are not chemically bonded. True or False?",
-        "answer": "False",
-        "explanation": "This statement describes a mixture. A compound is a substance made of more than one type of atom that are chemically joined together.",
-        "type": "true_false",
-        "topic": "Elements, Compounds and Mixtures",
+        "prompt": "What is the maximum total number of electrons that can occupy the first and second shells of an atom combined?",
+        "answer": "10",
+        "explanation": "The first electron shell can hold a maximum of 2 electrons, and the second shell can hold a maximum of 8. The combined maximum capacity is therefore 2 + 8 = 10.",
+        "type": "numeric",
+        "topic": "Electron Shells",
         "difficulty": "foundation",
-        "skillFocus": "Distinguish between key terms",
-        "sourceReference": "C1 questions, Q16, Q17"
+        "skillFocus": "Apply rules",
+        "sourceReference": "C1 questions, Q14"
       },
       {
         "id": "Q26",
-        "prompt": "If a neutral atom loses one electron, what is the overall charge of the resulting particle?",
-        "answer": "Positive (+1)",
-        "explanation": "A neutral atom has an equal number of positive protons and negative electrons. Losing one negative electron leaves an excess of one positive proton, resulting in an overall positive charge.",
-        "type": "short_answer",
-        "topic": "Atomic Structure",
-        "difficulty": "intermediate",
-        "skillFocus": "Apply concept of charge",
-        "sourceReference": "C1 questions, Q10, Q13"
-      },
-      {
-        "id": "Q27",
-        "prompt": "Which of the following is a physical process used to separate mixtures?",
-        "answer": "C",
-        "explanation": "Filtration, crystallisation, distillation, and chromatography are all physical processes used for separating mixtures. Combustion, neutralisation and polymerisation are chemical reactions.",
+        "prompt": "Which of the following is NOT listed as a physical process for separating mixtures?",
+        "answer": "C. Melting",
+        "explanation": "The four listed physical separation processes are filtration, crystallisation, distillation, and chromatography. Melting is a change of state, not a separation technique mentioned in the text.",
         "type": "multiple_choice",
         "options": [
-          "A. Combustion",
-          "B. Neutralisation",
-          "C. Crystallisation",
-          "D. Polymerisation"
+          "A. Filtration",
+          "B. Crystallisation",
+          "C. Melting",
+          "D. Distillation"
         ],
         "topic": "Separation Techniques",
         "difficulty": "foundation",
-        "skillFocus": "Recall examples",
+        "skillFocus": "Recall processes",
         "sourceReference": "C1 questions, Q19"
       },
       {
-        "id": "Q28",
-        "prompt": "Explain why the relative atomic mass of an element is rarely a whole number.",
-        "answer": "Because it is the average mass of all the atoms of an element, taking into account the different masses and abundances of its isotopes.",
-        "explanation": "Most elements exist as a mixture of isotopes, which are atoms with the same number of protons but different numbers of neutrons (and thus different masses). The relative atomic mass is a weighted average of these isotopic masses.",
-        "type": "short_answer",
-        "topic": "Atomic Structure",
-        "difficulty": "higher",
-        "skillFocus": "Explain a complex concept",
-        "sourceReference": "C1 questions, Q18, Q20"
-      },
-      {
-        "id": "Q29",
-        "prompt": "The discovery that an atom's mass and positive charge are concentrated in a nucleus was a result of which key experiment?",
-        "answer": "B",
-        "explanation": "The alpha scattering experiment, where alpha particles were fired at gold foil, showed that some particles were deflected, leading to the conclusion that the atom has a small, dense, positive nucleus.",
+        "id": "Q27",
+        "prompt": "An atom is electrically neutral because the number of positive protons is balanced by an equal number of which other particle?",
+        "answer": "B. Negative electrons",
+        "explanation": "Atoms have no overall charge because they contain 'equal numbers of positive protons and negative electrons', and their opposite charges cancel each other out.",
         "type": "multiple_choice",
         "options": [
-          "A. Dalton's solid sphere experiments",
-          "B. The alpha scattering experiment",
-          "C. Bohr's energy level experiments",
-          "D. Chadwick's neutron discovery experiments"
+          "A. Neutral neutrons",
+          "B. Negative electrons",
+          "C. Other positive protons",
+          "D. Negative nuclei"
+        ],
+        "topic": "Atomic Structure",
+        "difficulty": "foundation",
+        "skillFocus": "Explain concept",
+        "sourceReference": "C1 questions, Q13"
+      },
+      {
+        "id": "Q28",
+        "prompt": "The alpha scattering experiment provided the crucial evidence that led to the discovery of which feature of the atom?",
+        "answer": "D. A concentrated nucleus",
+        "explanation": "The deflection of some alpha particles in the experiment showed that the atom's mass and positive charge must be concentrated in one small space, which was named the nucleus.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Fixed electron shells",
+          "B. The neutron",
+          "C. The indivisible solid sphere",
+          "D. A concentrated nucleus"
         ],
         "topic": "History of the Atom",
-        "difficulty": "intermediate",
-        "skillFocus": "Link experiment to discovery",
+        "difficulty": "higher",
+        "skillFocus": "Link experiment to conclusion",
         "sourceReference": "C1 questions, Q4"
       },
       {
-        "id": "Q30",
-        "prompt": "An atom has 11 electrons. State its electronic configuration by listing the number of electrons in each shell, starting from the first shell.",
-        "answer": "2,8,1",
-        "explanation": "Electrons fill shells starting with the one closest to the nucleus. The first shell can hold a maximum of 2 electrons, the second can hold a maximum of 8, and the third can also hold up to 8. Therefore, 11 electrons are arranged as 2 in the first shell, 8 in the second, and the remaining 1 in the third.",
+        "id": "Q29",
+        "prompt": "What term describes two or more substances that are present together but are not chemically combined?",
+        "answer": "A mixture",
+        "explanation": "This is the definition provided for a mixture in the source material: 'two or more substances not chemically combined'.",
         "type": "short_answer",
-        "topic": "Electron Configuration",
-        "difficulty": "intermediate",
-        "skillFocus": "Apply rules of electron configuration",
-        "sourceReference": "C1 questions, Q14"
+        "topic": "Elements, Compounds & Mixtures",
+        "difficulty": "foundation",
+        "skillFocus": "Define key term",
+        "sourceReference": "C1 questions, Q17"
+      },
+      {
+        "id": "Q30",
+        "prompt": "The relative atomic mass is an average. What variation between atoms of the same element does this averaging account for?",
+        "answer": "C. Different numbers of neutrons",
+        "explanation": "Relative atomic mass is the 'average mass of all the atoms of an element'. Since isotopes are atoms of the same element with 'different numbers of neutrons', they have different masses. The average mass accounts for this isotopic variation.",
+        "type": "multiple_choice",
+        "options": [
+          "A. Different numbers of protons",
+          "B. Different numbers of electrons",
+          "C. Different numbers of neutrons",
+          "D. Different chemical bonds"
+        ],
+        "topic": "Atomic Structure",
+        "difficulty": "higher",
+        "skillFocus": "Synthesise concepts",
+        "sourceReference": "C1 questions, Q18 & Q20"
       }
     ]
   },
@@ -173,7 +185,7 @@
     "id": "with-questions-18fcf3eb-957a-4922-86c8-28cf0f1ca467-1-105-c",
     "category": "with-questions",
     "displayName": "18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
-    "sourcePath": "/workspace/spark/data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
+    "sourcePath": "/Users/yaroslavvolovich/projects/spark/data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "relativeSourcePath": "data/samples/with-questions/18FCF3EB-957A-4922-86C8-28CF0F1CA467_1_105_c.jpeg",
     "mode": "extraction",
     "questionCount": 20,

@@ -1,22 +1,25 @@
 import type { Part } from '@google/genai';
 
-import { runGeminiCall } from '../utils/gemini';
+import { runGeminiCall, type GeminiModelId } from '../utils/gemini';
 import { QuizGenerationSchema, type InlineSourceFile, type QuizGeneration } from '$lib/llm/schemas';
 import {
-	BASE_PROMPT_HEADER,
 	type GenerateQuizOptions,
 	QUIZ_RESPONSE_SCHEMA,
 	buildGenerationPrompt,
 	buildSourceParts,
+	buildExtensionPrompt,
 	normaliseQuizPayload
 } from './quizPrompts';
+
+export const QUIZ_GENERATION_MODEL_ID: GeminiModelId = 'gemini-flash-latest';
+export const DEFAULT_EXTENSION_QUESTION_COUNT = 10;
 
 export type { GenerateQuizOptions } from './quizPrompts';
 
 export interface ExtendQuizOptions {
 	readonly sourceFiles: InlineSourceFile[];
 	readonly baseQuiz: QuizGeneration;
-	readonly additionalQuestionCount: number;
+	readonly additionalQuestionCount?: number;
 }
 
 export async function generateQuizFromSource(
@@ -27,7 +30,7 @@ export async function generateQuizFromSource(
 
 	const response = await runGeminiCall((client) =>
 		client.models.generateContent({
-			model: 'gemini-2.5-flash',
+			model: QUIZ_GENERATION_MODEL_ID,
 			contents: [
 				{
 					role: 'user',
@@ -36,8 +39,7 @@ export async function generateQuizFromSource(
 			],
 			config: {
 				responseMimeType: 'application/json',
-				responseSchema: QUIZ_RESPONSE_SCHEMA,
-				temperature: options.temperature ?? 0.2
+				responseSchema: QUIZ_RESPONSE_SCHEMA
 			}
 		})
 	);
@@ -52,38 +54,31 @@ export async function generateQuizFromSource(
 	return QuizGenerationSchema.parse(normalised);
 }
 
-export function buildExtensionPrompt(options: ExtendQuizOptions): string {
-	return [
-		BASE_PROMPT_HEADER,
-		'The learner already received an initial quiz, provided below as JSON. They now want additional questions.',
-		'Requirements:',
-		`- Produce exactly ${options.additionalQuestionCount} new questions.`,
-		'- Avoid duplicating any prompt ideas, answer wording, or explanation themes present in the base quiz.',
-		'- Continue to ground every item strictly in the supplied material.',
-		'- Highlight fresh angles or subtopics that were underrepresented previously.',
-		'- Multiple choice responses must include four options labelled A, B, C, and D.',
-		'- Difficulty must be mapped to foundation, intermediate, or higher for every question.',
-		'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly.',
-		'Do not restate the previous questions in the response. Only include the new items.'
-	].join('\n');
-}
-
 export async function extendQuizWithMoreQuestions(
 	options: ExtendQuizOptions
 ): Promise<QuizGeneration> {
-	const prompt = buildExtensionPrompt(options);
-	const baseQuizJson = JSON.stringify(options.baseQuiz, null, 2);
+	const additionalQuestionCount =
+		options.additionalQuestionCount ?? DEFAULT_EXTENSION_QUESTION_COUNT;
+	const prompt = buildExtensionPrompt({
+		additionalQuestionCount,
+		subject: options.baseQuiz.subject,
+		board: options.baseQuiz.board
+	});
+	const pastQuizLines = options.baseQuiz.questions.map(
+		(question, index) => `${index + 1}. ${question.prompt}`
+	);
+	const pastQuizBlock = `<PAST_QUIZES>\n${pastQuizLines.join('\n')}\n</PAST_QUIZES>`;
 	const parts: Part[] = [
 		{ text: prompt },
 		...buildSourceParts(options.sourceFiles),
 		{
-			text: `Existing quiz JSON:\n${baseQuizJson}`
+			text: `Previous quiz prompts:\n${pastQuizBlock}`
 		}
 	];
 
 	const response = await runGeminiCall((client) =>
 		client.models.generateContent({
-			model: 'gemini-2.5-flash',
+			model: QUIZ_GENERATION_MODEL_ID,
 			contents: [
 				{
 					role: 'user',
@@ -92,8 +87,7 @@ export async function extendQuizWithMoreQuestions(
 			],
 			config: {
 				responseMimeType: 'application/json',
-				responseSchema: QUIZ_RESPONSE_SCHEMA,
-				temperature: 0.2
+				responseSchema: QUIZ_RESPONSE_SCHEMA
 			}
 		})
 	);
