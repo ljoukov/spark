@@ -15,12 +15,33 @@
 	const activeEntry = $derived(data.entries.find((entry) => entry.overview.id === selectedId));
 	const selectedLabel = $derived(activeEntry?.overview.label ?? '');
 	const questionCount = $derived(activeEntry?.detail.quiz.questions.length ?? 0);
+	const activeJudge = $derived(activeEntry?.judge ?? null);
+	const activeSlop = $derived(activeEntry?.slop ?? null);
+	const activeExtension = $derived(activeEntry?.extension ?? null);
+	const activeExtensionJudge = $derived(activeEntry?.extensionJudge ?? null);
+	const activeExtensionSlop = $derived(activeEntry?.extensionSlop ?? null);
+	const baseSlopSignals = $derived(
+		activeSlop ? Object.entries(activeSlop.autoSignals).sort(([a], [b]) => a.localeCompare(b)) : []
+	);
+	const extensionSlopSignals = $derived(
+		activeExtensionSlop
+			? Object.entries(activeExtensionSlop.autoSignals).sort(([a], [b]) => a.localeCompare(b))
+			: []
+	);
 
 	let comboboxOpen = $state(false);
 	let triggerRef = $state<HTMLButtonElement | null>(null);
 
 	function selectSample(id: string): void {
 		selectedId = id;
+	}
+
+	function describeSlopLabel(label: 0 | 1): string {
+		return label === 1 ? 'Flagged' : 'Clear';
+	}
+
+	function formatAutoSignalName(key: string): string {
+		return key.replace(/_/g, ' ');
 	}
 
 	function closeAndFocusTrigger(): void {
@@ -217,6 +238,173 @@
 				</Card.Content>
 			</Card.Root>
 
+			{#if activeJudge || activeSlop}
+				<div class="grid gap-4 md:grid-cols-2">
+					{#if activeJudge}
+						<Card.Root class="h-full">
+							<Card.Header>
+								<Card.Title>Quality verdict</Card.Title>
+								<Card.Description>
+									{formatTimestamp(activeJudge.evaluatedAt)} ·
+									{activeJudge.judge.model.modelId}
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="space-y-4 text-sm">
+								<div>
+									<p class="font-semibold capitalize">
+										{activeJudge.judge.verdict.verdict}
+									</p>
+									<p class="mt-2 leading-relaxed whitespace-pre-wrap">
+										{activeJudge.judge.verdict.explanation}
+									</p>
+								</div>
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Rubric findings
+									</h4>
+									<ul class="mt-2 space-y-2">
+										{#each activeJudge.judge.verdict.rubricFindings as finding (finding.criterion)}
+											<li>
+												<p class="font-medium text-foreground">
+													{finding.criterion}
+													<span class="ml-1 text-xs text-muted-foreground">
+														score {finding.score.toFixed(2)}
+													</span>
+												</p>
+												<p class="text-muted-foreground">
+													{finding.justification}
+												</p>
+											</li>
+										{/each}
+									</ul>
+								</div>
+								{#if activeJudge.audit}
+									<div class="rounded-lg border bg-muted/30 p-3 text-xs">
+										<p class="font-semibold text-foreground">
+											Audit — {activeJudge.audit.model.modelId}
+										</p>
+										<p class="mt-1 text-muted-foreground">
+											Agreement: {activeJudge.audit.result.verdictAgreement}
+											· Confidence: {activeJudge.audit.result.confidence}
+										</p>
+										<p class="mt-2 whitespace-pre-wrap text-muted-foreground">
+											{activeJudge.audit.result.explanation}
+										</p>
+									</div>
+								{/if}
+							</Card.Content>
+						</Card.Root>
+					{/if}
+					{#if activeSlop}
+						<Card.Root class="h-full">
+							<Card.Header>
+								<Card.Title>Slop detection</Card.Title>
+								<Card.Description>
+									{formatTimestamp(activeSlop.evaluatedAt)} ·
+									{activeSlop.model.modelId}
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="space-y-4 text-sm">
+								<div>
+									<p class="font-semibold">
+										{describeSlopLabel(activeSlop.verdict.overall.label)}
+										<span class="ml-2 text-xs text-muted-foreground">
+											confidence {activeSlop.verdict.overall.confidence.toFixed(2)} · annoyance {activeSlop
+												.verdict.annoyance}
+										</span>
+									</p>
+									{#if activeSlop.context}
+										<p class="mt-1 text-xs text-muted-foreground">
+											Context: {activeSlop.context}
+										</p>
+									{/if}
+								</div>
+								{#if activeSlop.verdict.topFixes.length}
+									<div>
+										<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+											Top fixes
+										</h4>
+										<ul class="mt-2 space-y-1">
+											{#each activeSlop.verdict.topFixes as fix, fixIndex (fixIndex)}
+												<li>• {fix}</li>
+											{/each}
+										</ul>
+									</div>
+								{/if}
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Axes
+									</h4>
+									<div class="mt-2 overflow-x-auto">
+										<table class="w-full min-w-[30rem] text-left text-xs">
+											<thead class="text-muted-foreground">
+												<tr>
+													<th class="px-2 py-1 font-medium">Axis</th>
+													<th class="px-2 py-1 font-medium">Score</th>
+													<th class="px-2 py-1 font-medium">Rationale</th>
+													<th class="px-2 py-1 font-medium">Spans</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each activeSlop.verdict.axes as axis (axis.code)}
+													<tr class="border-t text-foreground">
+														<td class="px-2 py-2 font-medium">{axis.code}</td>
+														<td class="px-2 py-2">{axis.score.toFixed(1)}</td>
+														<td class="px-2 py-2 text-muted-foreground">
+															{axis.rationale}
+														</td>
+														<td class="px-2 py-2">
+															{#if axis.spans.length}
+																<ul class="space-y-1 text-muted-foreground">
+																	{#each axis.spans as span, spanIndex (spanIndex)}
+																		<li>
+																			“{span.quote}”
+																			<span class="ml-1 text-[0.65rem] text-muted-foreground">
+																				({span.charStart}–{span.charEnd})
+																			</span>
+																		</li>
+																	{/each}
+																</ul>
+															{:else}
+																<span class="text-muted-foreground">—</span>
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Auto signals
+									</h4>
+									<dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs md:grid-cols-3">
+										{#each baseSlopSignals as [name, value] (name)}
+											<div>
+												<dt class="font-medium text-foreground">
+													{formatAutoSignalName(name)}
+												</dt>
+												<dd class="text-muted-foreground">{value}</dd>
+											</div>
+										{/each}
+									</dl>
+								</div>
+								<details class="rounded-lg border bg-muted/20 p-3">
+									<summary class="cursor-pointer text-xs font-semibold tracking-wide uppercase">
+										Prompt excerpt
+									</summary>
+									<pre
+										class="mt-2 max-h-64 overflow-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
+{activeSlop.prompt}
+                                                                        </pre>
+								</details>
+							</Card.Content>
+						</Card.Root>
+					{/if}
+				</div>
+			{/if}
+
 			<Card.Root>
 				<Card.Header>
 					<Card.Title>Gemini prompt</Card.Title>
@@ -230,6 +418,190 @@
 					</details>
 				</Card.Content>
 			</Card.Root>
+
+			{#if activeExtension}
+				<Card.Root>
+					<Card.Header>
+						<Card.Title>Extension quiz overview</Card.Title>
+						<Card.Description>
+							Generated {formatTimestamp(activeExtension.generatedAt)} · {activeExtension.quiz
+								.questionCount} questions
+						</Card.Description>
+					</Card.Header>
+					<Card.Content>
+						<p class="text-sm leading-relaxed whitespace-pre-wrap">
+							{activeExtension.quiz.summary}
+						</p>
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
+			{#if activeExtensionJudge || activeExtensionSlop}
+				<div class="grid gap-4 md:grid-cols-2">
+					{#if activeExtensionJudge}
+						<Card.Root class="h-full">
+							<Card.Header>
+								<Card.Title>Extension quality verdict</Card.Title>
+								<Card.Description>
+									{formatTimestamp(activeExtensionJudge.evaluatedAt)} ·
+									{activeExtensionJudge.judge.model.modelId}
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="space-y-4 text-sm">
+								<div>
+									<p class="font-semibold capitalize">
+										{activeExtensionJudge.judge.verdict.verdict}
+									</p>
+									<p class="mt-2 leading-relaxed whitespace-pre-wrap">
+										{activeExtensionJudge.judge.verdict.explanation}
+									</p>
+								</div>
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Rubric findings
+									</h4>
+									<ul class="mt-2 space-y-2">
+										{#each activeExtensionJudge.judge.verdict.rubricFindings as finding (finding.criterion)}
+											<li>
+												<p class="font-medium text-foreground">
+													{finding.criterion}
+													<span class="ml-1 text-xs text-muted-foreground">
+														score {finding.score.toFixed(2)}
+													</span>
+												</p>
+												<p class="text-muted-foreground">
+													{finding.justification}
+												</p>
+											</li>
+										{/each}
+									</ul>
+								</div>
+								{#if activeExtensionJudge.audit}
+									<div class="rounded-lg border bg-muted/30 p-3 text-xs">
+										<p class="font-semibold text-foreground">
+											Audit — {activeExtensionJudge.audit.model.modelId}
+										</p>
+										<p class="mt-1 text-muted-foreground">
+											Agreement: {activeExtensionJudge.audit.result.verdictAgreement}
+											· Confidence: {activeExtensionJudge.audit.result.confidence}
+										</p>
+										<p class="mt-2 whitespace-pre-wrap text-muted-foreground">
+											{activeExtensionJudge.audit.result.explanation}
+										</p>
+									</div>
+								{/if}
+							</Card.Content>
+						</Card.Root>
+					{/if}
+					{#if activeExtensionSlop}
+						<Card.Root class="h-full">
+							<Card.Header>
+								<Card.Title>Extension slop detection</Card.Title>
+								<Card.Description>
+									{formatTimestamp(activeExtensionSlop.evaluatedAt)} ·
+									{activeExtensionSlop.model.modelId}
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="space-y-4 text-sm">
+								<div>
+									<p class="font-semibold">
+										{describeSlopLabel(activeExtensionSlop.verdict.overall.label)}
+										<span class="ml-2 text-xs text-muted-foreground">
+											confidence {activeExtensionSlop.verdict.overall.confidence.toFixed(2)} · annoyance
+											{activeExtensionSlop.verdict.annoyance}
+										</span>
+									</p>
+									{#if activeExtensionSlop.context}
+										<p class="mt-1 text-xs text-muted-foreground">
+											Context: {activeExtensionSlop.context}
+										</p>
+									{/if}
+								</div>
+								{#if activeExtensionSlop.verdict.topFixes.length}
+									<div>
+										<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+											Top fixes
+										</h4>
+										<ul class="mt-2 space-y-1">
+											{#each activeExtensionSlop.verdict.topFixes as fix, fixIndex (fixIndex)}
+												<li>• {fix}</li>
+											{/each}
+										</ul>
+									</div>
+								{/if}
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Axes
+									</h4>
+									<div class="mt-2 overflow-x-auto">
+										<table class="w-full min-w-[30rem] text-left text-xs">
+											<thead class="text-muted-foreground">
+												<tr>
+													<th class="px-2 py-1 font-medium">Axis</th>
+													<th class="px-2 py-1 font-medium">Score</th>
+													<th class="px-2 py-1 font-medium">Rationale</th>
+													<th class="px-2 py-1 font-medium">Spans</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each activeExtensionSlop.verdict.axes as axis (axis.code)}
+													<tr class="border-t text-foreground">
+														<td class="px-2 py-2 font-medium">{axis.code}</td>
+														<td class="px-2 py-2">{axis.score.toFixed(1)}</td>
+														<td class="px-2 py-2 text-muted-foreground">
+															{axis.rationale}
+														</td>
+														<td class="px-2 py-2">
+															{#if axis.spans.length}
+																<ul class="space-y-1 text-muted-foreground">
+																	{#each axis.spans as span, spanIndex (spanIndex)}
+																		<li>
+																			“{span.quote}”
+																			<span class="ml-1 text-[0.65rem] text-muted-foreground">
+																				({span.charStart}–{span.charEnd})
+																			</span>
+																		</li>
+																	{/each}
+																</ul>
+															{:else}
+																<span class="text-muted-foreground">—</span>
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+								<div>
+									<h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Auto signals
+									</h4>
+									<dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs md:grid-cols-3">
+										{#each extensionSlopSignals as [name, value] (name)}
+											<div>
+												<dt class="font-medium text-foreground">
+													{formatAutoSignalName(name)}
+												</dt>
+												<dd class="text-muted-foreground">{value}</dd>
+											</div>
+										{/each}
+									</dl>
+								</div>
+								<details class="rounded-lg border bg-muted/20 p-3">
+									<summary class="cursor-pointer text-xs font-semibold tracking-wide uppercase">
+										Prompt excerpt
+									</summary>
+									<pre
+										class="mt-2 max-h-64 overflow-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
+{activeExtensionSlop.prompt}
+                                                                        </pre>
+								</details>
+							</Card.Content>
+						</Card.Root>
+					{/if}
+				</div>
+			{/if}
 
 			<p class="text-sm text-muted-foreground">
 				{questionCount} generated question{questionCount === 1 ? '' : 's'}

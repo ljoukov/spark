@@ -21,8 +21,8 @@
 	import { getFirestore, doc, onSnapshot, type Firestore } from 'firebase/firestore';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
-    import { z } from 'zod';
-    import type { AdminUser } from '$lib/types/admin';
+	import { z } from 'zod';
+	import type { AdminUser } from '$lib/types/admin';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
@@ -126,10 +126,7 @@
 						email: z.string().email().nullable().optional(),
 						photoUrl: z.string().url().nullable().optional(),
 						loginUrl: z.string().url().nullable().optional(),
-						login: z
-							.object({ url: z.string().url().nullable().optional() })
-							.partial()
-							.nullish(),
+						login: z.object({ url: z.string().url().nullable().optional() }).partial().nullish(),
 						app: z
 							.object({
 								loginUrl: z.string().url().nullable().optional(),
@@ -191,11 +188,7 @@
 
 {#if showShell}
 	<Sidebar.Provider>
-		<AppSidebar
-			{currentPath}
-			user={sidebarUser}
-			{onSignOut}
-		/>
+		<AppSidebar {currentPath} user={sidebarUser} {onSignOut} />
 		<Sidebar.Inset>
 			<header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
 				<Sidebar.Trigger class="-ml-1" />
