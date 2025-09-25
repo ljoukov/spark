@@ -89,7 +89,7 @@ const AUTO_SIGNAL_ENTRY_SCHEMA: Schema = {
 const AUTO_SIGNAL_SCHEMA: Schema = {
 	type: Type.ARRAY,
 	items: AUTO_SIGNAL_ENTRY_SCHEMA,
-	maxItems: 4
+	maxItems: '4'
 };
 
 const SPAN_SCHEMA: Schema = {
@@ -109,7 +109,7 @@ const AXIS_SCHEMA: Schema = {
 		code: { type: Type.STRING },
 		score_0_to_4: { type: Type.NUMBER },
 		auto_signals: AUTO_SIGNAL_SCHEMA,
-		spans: { type: Type.ARRAY, items: SPAN_SCHEMA, maxItems: 6 },
+		spans: { type: Type.ARRAY, items: SPAN_SCHEMA, maxItems: '6' },
 		rationale: { type: Type.STRING }
 	},
 	required: ['code', 'score_0_to_4', 'auto_signals', 'spans', 'rationale']
@@ -128,8 +128,8 @@ export const SLOP_JUDGE_RESPONSE_SCHEMA: Schema = {
 		},
 		domain: { type: Type.STRING },
 		annoyance: { type: Type.INTEGER },
-		axes: { type: Type.ARRAY, items: AXIS_SCHEMA, maxItems: 7 },
-		top_fixes: { type: Type.ARRAY, items: { type: Type.STRING }, maxItems: 6 }
+		axes: { type: Type.ARRAY, items: AXIS_SCHEMA, maxItems: '7' },
+		top_fixes: { type: Type.ARRAY, items: { type: Type.STRING }, maxItems: '6' }
 	},
 	required: ['overall_slop', 'domain', 'annoyance', 'axes', 'top_fixes']
 };
