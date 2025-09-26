@@ -82,18 +82,10 @@ const QuizQuestionSchema = z
 				}
 			}
 			if (value.answer.length > 1) {
-				const hasNoneOfAbove = value.options.some((option) => /none of the above/i.test(option));
-				if (!hasNoneOfAbove) {
+				if (value.options.length < 2) {
 					ctx.addIssue({
 						code: 'custom',
-						message: 'multiple_answer questions must include "None of the above" as one option',
-						path: ['options']
-					});
-				}
-				if (value.options.length < 3) {
-					ctx.addIssue({
-						code: 'custom',
-						message: 'multiple_answer questions must offer at least 3 options',
+						message: 'multiple_answer questions must offer at least 2 options',
 						path: ['options']
 					});
 				}
