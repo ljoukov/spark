@@ -2,7 +2,6 @@
 	import HomeIcon from '@lucide/svelte/icons/home';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -41,18 +40,6 @@
 			icon: BotIcon,
 			highlight: (path) => path.startsWith('/admin/gemini')
 		},
-		{
-			title: 'Prompts',
-			href: '/admin/prompts',
-			icon: FileTextIcon,
-			highlight: (path) => path.startsWith('/admin/prompts')
-		},
-		{
-			title: 'Sample quizzes',
-			href: '/admin/sample-quizzes',
-			icon: FileTextIcon,
-			highlight: (path) => path.startsWith('/admin/sample-quizzes')
-		}
 	] satisfies readonly NavItem[];
 
 	let {
