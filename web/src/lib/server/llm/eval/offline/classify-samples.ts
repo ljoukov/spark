@@ -31,7 +31,9 @@ if (existsSync(LOCAL_ENV_PATH)) {
 const GEMINI_MODEL_ID = 'gemini-flash-lite-latest';
 const MAX_CONCURRENCY = 256;
 const CACHE_FILE_NAME = 'classification-cache.json';
-const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.svg']);
+const ERROR_LOG_FILE_NAME = 'classification-errors.log';
+// Gemini (see SPEC) only accepts PDFs and raster images, keep the allowlist tight.
+const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const GRADE_BUCKETS = ['foundation', 'intermediate', 'higher', 'mixed'] as const;
 
 const PAGE_BUCKETS = [
@@ -58,6 +60,78 @@ const EXAM_BOARDS = [
 const MATERIAL_TYPES = ['study', 'revision', 'test', 'other'] as const;
 
 const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const;
+const DEFAULT_CONFIDENCE: (typeof CONFIDENCE_LEVELS)[number] = 'medium';
+
+const CONFIDENCE_SYNONYMS: Record<string, (typeof CONFIDENCE_LEVELS)[number]> = {
+	high: 'high',
+	'highly confident': 'high',
+	'very high': 'high',
+	strong: 'high',
+	certain: 'high',
+	confident: 'high',
+	assured: 'high',
+	medium: 'medium',
+	moderate: 'medium',
+	average: 'medium',
+	balanced: 'medium',
+	steady: 'medium',
+	low: 'low',
+	'fairly low': 'low',
+	weak: 'low',
+	uncertain: 'low',
+	unsure: 'low',
+	doubtful: 'low',
+	unknown: 'low',
+	limited: 'low',
+	minimal: 'low'
+};
+
+function normaliseConfidenceInput(value: unknown): unknown {
+	if (value === undefined || value === null) {
+		return DEFAULT_CONFIDENCE;
+	}
+	if (typeof value !== 'string') {
+		return DEFAULT_CONFIDENCE;
+	}
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return DEFAULT_CONFIDENCE;
+	}
+	const canonicalWhitespace = trimmed.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+	const lower = canonicalWhitespace.toLowerCase();
+	const stripped = lower
+		.replace(/\bconfidence(?:\s+level)?\b/g, '')
+		.replace(/\blevel\b/g, '')
+		.replace(/\bscore\b/g, '')
+		.replace(/:+$/, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+	const direct = CONFIDENCE_SYNONYMS[stripped];
+	if (direct) {
+		return direct;
+	}
+	const tokens = stripped.split(' ').filter(Boolean);
+	for (let i = 0; i < tokens.length; i += 1) {
+		const solo = tokens[i];
+		const duo = tokens[i + 1] ? `${solo} ${tokens[i + 1]}` : undefined;
+		if (duo) {
+			const duoMatch = CONFIDENCE_SYNONYMS[duo];
+			if (duoMatch) {
+				return duoMatch;
+			}
+		}
+		const tokenMatch = CONFIDENCE_SYNONYMS[solo];
+		if (tokenMatch) {
+			return tokenMatch;
+		}
+	}
+	if (stripped && CONFIDENCE_LEVELS.includes(stripped as (typeof CONFIDENCE_LEVELS)[number])) {
+		return stripped;
+	}
+	return DEFAULT_CONFIDENCE;
+}
+
+const ConfidenceSchema = z.preprocess(normaliseConfidenceInput, z.enum(CONFIDENCE_LEVELS));
 
 const CLASSIFICATION_SCHEMA: Schema = {
 	type: Type.OBJECT,
@@ -113,7 +187,7 @@ const ClassificationSchema = z.object({
 	materialType: z.enum(MATERIAL_TYPES),
 	summary: z.string().min(1),
 	rationale: z.string().min(1),
-	confidence: z.enum(CONFIDENCE_LEVELS),
+	confidence: ConfidenceSchema,
 	tags: z.array(z.string().min(1)).optional(),
 	shortName: z
 		.string()
@@ -303,8 +377,6 @@ function detectMimeType(ext: string): string {
 			return 'image/jpeg';
 		case '.png':
 			return 'image/png';
-		case '.svg':
-			return 'image/svg+xml';
 		default:
 			return 'application/octet-stream';
 	}
@@ -467,6 +539,80 @@ function formatError(error: unknown): string {
 	}
 }
 
+function buildValidationErrorMessage({
+	issues,
+	payload,
+	rawText,
+	label
+}: {
+	issues: z.ZodIssue[];
+	payload: unknown;
+	rawText: string;
+	label: string;
+}): string {
+	const issueLines = issues.map((issue) => {
+		const pathLabel = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+		const value = formatValueForError(getValueAtPath(payload, issue.path));
+		const received = value === undefined ? '' : ` (received ${value})`;
+		return `${pathLabel}: ${issue.message}${received}`;
+	});
+	const payloadJson = safeStringify(payload, 2);
+	const rawTextSection = rawText && rawText.trim() && rawText.trim() !== payloadJson.trim()
+		? `\nRaw response text:\n${rawText}`
+		: '';
+	return `Validation failed for ${label}:\n${issueLines.join('\n')}\nPayload:\n${payloadJson}${rawTextSection}`;
+}
+
+function safeStringify(value: unknown, spacing = 2): string {
+	try {
+		return JSON.stringify(value, null, spacing);
+	} catch {
+		return String(value);
+	}
+}
+
+function getValueAtPath(payload: unknown, path: (string | number)[]): unknown {
+	let current: unknown = payload;
+	for (const segment of path) {
+		if (current === null || typeof current !== 'object') {
+			return undefined;
+		}
+		if (Array.isArray(current)) {
+			const index = typeof segment === 'number' ? segment : Number.parseInt(String(segment), 10);
+			if (!Number.isFinite(index) || index < 0 || index >= current.length) {
+				return undefined;
+			}
+			current = current[index];
+			continue;
+		}
+		const key = String(segment);
+		if (!(key in (current as Record<string, unknown>))) {
+			return undefined;
+		}
+		current = (current as Record<string, unknown>)[key];
+	}
+	return current;
+}
+
+function formatValueForError(value: unknown): string | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+	if (value === null) {
+		return 'null';
+	}
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		const clipped = trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
+		return JSON.stringify(clipped);
+	}
+	if (typeof value === 'number' || typeof value === 'boolean') {
+		return String(value);
+	}
+	const json = safeStringify(value);
+	return json.length > 200 ? `${json.slice(0, 197)}...` : json;
+}
+
 async function classifyBatch({
 	files,
 	options,
@@ -503,7 +649,18 @@ async function classifyBatch({
 						`Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`
 					);
 				}
-				const classification = normaliseClassification(ClassificationSchema.parse(parsed));
+				const validation = ClassificationSchema.safeParse(parsed);
+				if (!validation.success) {
+					throw new Error(
+						buildValidationErrorMessage({
+							issues: validation.error.issues,
+							payload: parsed,
+							rawText: text,
+							label: file.relativePath
+						})
+					);
+				}
+				const classification = normaliseClassification(validation.data);
 				if (!options.dryRun) {
 					cacheData[file.relativePath] = {
 						classification,
@@ -650,7 +807,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 	try {
 		await stat(filePath);
 		return true;
-	} catch (error: unknown) {
+	} catch {
 		return false;
 	}
 }
@@ -701,14 +858,22 @@ function incrementCount(map: Map<string, number>, key: string): void {
 	map.set(key, (map.get(key) ?? 0) + 1);
 }
 
-function formatCountMap(map: Map<string, number>): string {
+function formatCountEntries(map: Map<string, number>): [string, number][] {
+	return Array.from(map.entries()).sort((a, b) => {
+		const diff = b[1] - a[1];
+		return diff !== 0 ? diff : a[0].localeCompare(b[0]);
+	});
+}
+
+function printCountSection({ label, map }: { label: string; map: Map<string, number> }): void {
 	if (map.size === 0) {
-		return 'none';
+		console.log(`  - ${label}: none`);
+		return;
 	}
-	return Array.from(map.entries())
-		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-		.map(([key, count]) => `${key}: ${count}`)
-		.join(', ');
+	console.log(`  - ${label}:`);
+	for (const [key, count] of formatCountEntries(map)) {
+		console.log(`    ${key}: ${count}`);
+	}
 }
 
 async function main(): Promise<void> {
@@ -723,6 +888,7 @@ async function main(): Promise<void> {
 		return;
 	}
 	const cachePath = join(options.src, CACHE_FILE_NAME);
+	const errorLogPath = join(options.src, ERROR_LOG_FILE_NAME);
 	const cacheData = await loadCache(cachePath);
 	const alreadyClassified: ClassifiedSample[] = [];
 	const pending: SampleFile[] = [];
@@ -802,7 +968,6 @@ async function main(): Promise<void> {
 
 	const boardCounts = new Map<string, number>();
 	const gradeCounts = new Map<string, number>();
-	const boardGradeCounts = new Map<string, number>();
 	const materialCounts = new Map<string, number>();
 	const pageBucketCounts = new Map<string, number>();
 
@@ -810,10 +975,6 @@ async function main(): Promise<void> {
 		const { classification } = entry;
 		incrementCount(boardCounts, boardToPath(classification.examBoard));
 		incrementCount(gradeCounts, gradeToPath(classification.gradeBucket));
-		incrementCount(
-			boardGradeCounts,
-			`${boardToPath(classification.examBoard)}/${gradeToPath(classification.gradeBucket)}`
-		);
 		incrementCount(materialCounts, typeToPath(classification.materialType));
 		incrementCount(pageBucketCounts, bucketToPath(classification.pageBucket));
 	}
@@ -848,11 +1009,10 @@ async function main(): Promise<void> {
 	}
 	if (allClassified.length > 0) {
 		console.log(`Category breakdown (${allClassified.length} classified files):`);
-		console.log(`  - Boards: ${formatCountMap(boardCounts)}`);
-		console.log(`  - Grade buckets: ${formatCountMap(gradeCounts)}`);
-		console.log(`  - Board/grade: ${formatCountMap(boardGradeCounts)}`);
-		console.log(`  - Material types: ${formatCountMap(materialCounts)}`);
-		console.log(`  - Page buckets: ${formatCountMap(pageBucketCounts)}`);
+		printCountSection({ label: 'Boards', map: boardCounts });
+		printCountSection({ label: 'Grade buckets', map: gradeCounts });
+		printCountSection({ label: 'Material types', map: materialCounts });
+		printCountSection({ label: 'Page buckets', map: pageBucketCounts });
 	}
 	if (retriedCount > 0) {
 		console.log(
@@ -860,10 +1020,25 @@ async function main(): Promise<void> {
 		);
 	}
 	if (failures.length > 0) {
-		console.warn(`Skipped ${failures.length} files due to classification errors.`);
-		for (const failure of failures) {
-			console.warn(` - ${failure.file.relativePath}: ${formatError(failure.error)}`);
+		let errorLogWritten = false;
+		const logLines = failures
+			.map(
+				(failure) =>
+					`[${new Date().toISOString()}] ${failure.file.relativePath}: ${formatError(
+						failure.error
+					)}`
+				)
+			.join('\n');
+		if (!options.dryRun) {
+			await writeFile(errorLogPath, `${logLines}\n`, 'utf8');
+			errorLogWritten = true;
 		}
+		const destinationNote = errorLogWritten
+			? `Details written to ${errorLogPath}.`
+			: `Details would be written to ${errorLogPath} (dry run).`;
+		console.warn(
+			`Skipped ${failures.length} files due to classification errors. ${destinationNote}`
+		);
 	}
 }
 
