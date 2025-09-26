@@ -21,10 +21,10 @@ import {
 	type InlineSourceFile,
 	type JudgeAudit,
 	type JudgeVerdict,
-	type QuizGeneration
+	type QuizGeneration,
+	QUIZ_RESPONSE_SCHEMA
 } from '../../../../llm/schemas';
 import {
-	QUIZ_RESPONSE_SCHEMA,
 	buildExtensionPrompt,
 	buildGenerationPrompt,
 	buildSourceParts,
@@ -32,9 +32,9 @@ import {
 	type GenerateQuizOptions
 } from '../../quizPrompts';
 import {
-    DEFAULT_EXTENSION_QUESTION_COUNT,
-    DEFAULT_GENERATION_QUESTION_COUNT,
-    QUIZ_GENERATION_MODEL_ID
+	DEFAULT_EXTENSION_QUESTION_COUNT,
+	DEFAULT_GENERATION_QUESTION_COUNT,
+	QUIZ_GENERATION_MODEL_ID
 } from '../../quizGenerator';
 import {
 	AUDIT_RESPONSE_SCHEMA,
@@ -46,8 +46,8 @@ import {
 import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../');
-const REPO_ROOT = path.resolve(WEB_ROOT, '../..');
+const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
+const REPO_ROOT = path.resolve(WEB_ROOT, '../');
 const DATA_ROOT = path.join(REPO_ROOT, 'data', 'samples');
 const OUTPUT_DIR = path.join(WEB_ROOT, 'static', 'admin', 'sample-quizzes');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
@@ -70,7 +70,7 @@ const proxyUrl =
 	process.env.npm_config_http_proxy;
 
 if (proxyUrl) {
-    setGlobalDispatcher(new ProxyAgent(proxyUrl));
+	setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
 
 const PROGRESS_LOG_INTERVAL_MS = 500;
@@ -84,7 +84,7 @@ function estimateUploadBytes(parts: Part[]): number {
 		if (inlineData) {
 			try {
 				total += Buffer.from(inlineData, 'base64').byteLength;
-			} catch (error) {
+			} catch {
 				total += inlineData.length;
 			}
 		}
@@ -231,16 +231,16 @@ async function collectJobs(): Promise<SampleJob[]> {
 			const count = slugCounts.get(baseSlug) ?? 0;
 			slugCounts.set(baseSlug, count + 1);
 			const id = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
-				const relativeSourcePath = path.relative(REPO_ROOT, sourcePath).split(path.sep).join('/');
-				const questionCount = DEFAULT_GENERATION_QUESTION_COUNT;
-				jobs.push({
-					id,
-					category,
-					displayName,
-					sourcePath,
-					relativeSourcePath,
-					questionCount
-				});
+			const relativeSourcePath = path.relative(REPO_ROOT, sourcePath).split(path.sep).join('/');
+			const questionCount = DEFAULT_GENERATION_QUESTION_COUNT;
+			jobs.push({
+				id,
+				category,
+				displayName,
+				sourcePath,
+				relativeSourcePath,
+				questionCount
+			});
 		}
 	}
 	jobs.sort((a, b) => a.id.localeCompare(b.id));
@@ -364,7 +364,7 @@ async function callModel({
 			JSON.parse(text);
 			return { text, modelId: model };
 		} catch (e) {
-			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}`);
+			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}: ${e}`);
 		}
 	}
 
@@ -424,7 +424,7 @@ async function generateExtensionPayload(
 ): Promise<QuizFilePayload> {
 	const prompt = buildExtensionPrompt({
 		additionalQuestionCount: DEFAULT_EXTENSION_QUESTION_COUNT,
-		subject: baseQuiz.subject ?? job.subject,
+		subject: baseQuiz.subject ?? job.subject
 	});
 	const pastQuizLines = baseQuiz.questions.map(
 		(question, index) => `${index + 1}. ${question.prompt}`
@@ -656,7 +656,6 @@ type SampleIndexEntry = {
 	readonly request: QuizFilePayload['request'];
 	readonly source: QuizFilePayload['source'];
 	readonly quizTitle: string;
-	readonly summary: string;
 	readonly outputPath: string;
 	readonly generatedAt: string;
 	readonly outputs: {
@@ -728,7 +727,6 @@ async function runGenerationStage(
 			request: result.quiz.request,
 			source: result.quiz.source,
 			quizTitle: result.quiz.quiz.quizTitle,
-			summary: result.quiz.quiz.summary,
 			outputPath: `/admin/sample-quizzes/${result.job.id}/detail.json`,
 			generatedAt: result.quiz.generatedAt,
 			outputs: {
@@ -775,7 +773,6 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 	lines.push(`# ${heading}`);
 	lines.push('');
 	lines.push(`**Quiz title:** ${payload.quiz.quizTitle}`);
-	lines.push(`**Summary:** ${payload.quiz.summary}`);
 	lines.push('');
 	lines.push('## Metadata');
 	lines.push('');
@@ -794,15 +791,6 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 		lines.push(`### ${index + 1}. ${question.prompt}`);
 		lines.push('');
 		lines.push(`- Type: ${question.type}`);
-		if (question.topic) {
-			lines.push(`- Topic: ${question.topic}`);
-		}
-		if (question.difficulty) {
-			lines.push(`- Difficulty: ${question.difficulty}`);
-		}
-		if (question.skillFocus) {
-			lines.push(`- Skill focus: ${question.skillFocus}`);
-		}
 		if (question.sourceReference) {
 			lines.push(`- Source reference: ${question.sourceReference}`);
 		}
@@ -955,7 +943,6 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 		rootLines.push(`### ${sampleHeading}`);
 		rootLines.push('');
 		rootLines.push(`- Source: ${sample.source.displayName} (${sample.source.relativePath})`);
-		rootLines.push(`- Base quiz summary: ${sample.summary}`);
 		rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
 		rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
 		rootLines.push(

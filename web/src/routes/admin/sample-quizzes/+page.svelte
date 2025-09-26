@@ -189,15 +189,6 @@
 							</div>
 						</div>
 					</section>
-
-					<section>
-						<h3 class="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-							Summary
-						</h3>
-						<p class="mt-2 text-sm leading-relaxed whitespace-pre-wrap">
-							{activeEntry.detail.quiz.summary}
-						</p>
-					</section>
 				</Card.Content>
 			</Card.Root>
 
@@ -229,12 +220,6 @@
 							</Card.Title>
 							<span class="text-xs tracking-wide text-muted-foreground uppercase">
 								{question.type.replace(/_/g, ' ')}
-								{#if question.difficulty}
-									• Difficulty: {question.difficulty}
-								{/if}
-								{#if question.topic}
-									• Topic: {question.topic}
-								{/if}
 							</span>
 						</Card.Header>
 						<Card.Content class="space-y-4">
@@ -264,17 +249,14 @@
 									</ul>
 								</div>
 							{/if}
-							<div class="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-								{#if question.skillFocus}
-									<p><span class="font-semibold">Skill focus:</span> {question.skillFocus}</p>
-								{/if}
-								{#if question.sourceReference}
+							{#if question.sourceReference}
+								<div class="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
 									<p>
 										<span class="font-semibold">Source reference:</span>
 										{question.sourceReference}
 									</p>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						</Card.Content>
 					</Card.Root>
 				{/each}

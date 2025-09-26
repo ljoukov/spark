@@ -227,68 +227,72 @@
 					</div>
 					<MoreVerticalIcon class="ml-auto h-4 w-4 opacity-70" />
 				</div>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content
-					class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-					align="end"
-					side={sidebar.isMobile ? 'bottom' : 'right'}
-					sideOffset={4}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content
+				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
+				align="end"
+				side={sidebar.isMobile ? 'bottom' : 'right'}
+				sideOffset={4}
+			>
+				<DropdownMenu.Label class="text-xs text-muted-foreground">Signed in</DropdownMenu.Label>
+				<DropdownMenu.Item class="flex flex-col items-start gap-0">
+					<span class="text-sm font-medium break-words">{getDisplayName(user)}</span>
+					<span class="text-xs break-words text-muted-foreground">{getEmailLabel(user)}</span>
+				</DropdownMenu.Item>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Label class="text-xs text-muted-foreground">User ID</DropdownMenu.Label>
+				<DropdownMenu.Item class="cursor-default">
+					<span class="font-mono text-[11px] leading-tight">{user.uid}</span>
+				</DropdownMenu.Item>
+				<DropdownMenu.Item onSelect={copyUserId} class="flex items-center gap-2">
+					<CopyIcon class="h-4 w-4" />
+					{#if copyState.status === 'copied'}
+						<span>Copied</span>
+					{:else}
+						<span>Copy user ID</span>
+					{/if}
+				</DropdownMenu.Item>
+				{#if copyState.status === 'error' && copyState.message}
+					<div class="px-2 pb-1">
+						<p class="text-[11px] text-red-500">{copyState.message}</p>
+					</div>
+				{/if}
+				<DropdownMenu.Separator />
+				<DropdownMenu.Label class="text-xs text-muted-foreground">Login URL</DropdownMenu.Label>
+				<DropdownMenu.Item class="cursor-default">
+					{#if user.loginUrl}
+						<span class="font-mono text-[11px] leading-tight break-all">{user.loginUrl}</span>
+					{:else}
+						<span class="text-[11px] text-muted-foreground">Not set</span>
+					{/if}
+				</DropdownMenu.Item>
+				<DropdownMenu.Item
+					onSelect={copyLoginUrl}
+					class="flex items-center gap-2"
+					disabled={!user.loginUrl}
 				>
-					<DropdownMenu.Label class="text-muted-foreground text-xs">Signed in</DropdownMenu.Label>
-					<DropdownMenu.Item class="flex flex-col items-start gap-0">
-						<span class="break-words text-sm font-medium">{getDisplayName(user)}</span>
-						<span class="text-muted-foreground break-words text-xs">{getEmailLabel(user)}</span>
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Label class="text-muted-foreground text-xs">User ID</DropdownMenu.Label>
-					<DropdownMenu.Item class="cursor-default">
-						<span class="font-mono text-[11px] leading-tight">{user.uid}</span>
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onSelect={copyUserId} class="flex items-center gap-2">
-						<CopyIcon class="h-4 w-4" />
-						{#if copyState.status === 'copied'}
-							<span>Copied</span>
-						{:else}
-							<span>Copy user ID</span>
-						{/if}
-					</DropdownMenu.Item>
-					{#if copyState.status === 'error' && copyState.message}
-						<div class="px-2 pb-1">
-							<p class="text-[11px] text-red-500">{copyState.message}</p>
-						</div>
+					<LinkIcon class="h-4 w-4" />
+					{#if copyLoginState.status === 'copied'}
+						<span>Copied login URL</span>
+					{:else}
+						<span>Copy login URL</span>
 					{/if}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Label class="text-muted-foreground text-xs">Login URL</DropdownMenu.Label>
-					<DropdownMenu.Item class="cursor-default">
-						{#if user.loginUrl}
-							<span class="font-mono text-[11px] leading-tight break-all">{user.loginUrl}</span>
-						{:else}
-							<span class="text-muted-foreground text-[11px]">Not set</span>
-						{/if}
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onSelect={copyLoginUrl} class="flex items-center gap-2" disabled={!user.loginUrl}>
-						<LinkIcon class="h-4 w-4" />
-						{#if copyLoginState.status === 'copied'}
-							<span>Copied login URL</span>
-						{:else}
-							<span>Copy login URL</span>
-						{/if}
-					</DropdownMenu.Item>
-					{#if copyLoginState.status === 'error' && copyLoginState.message}
-						<div class="px-2 pb-1">
-							<p class="text-[11px] text-red-500">{copyLoginState.message}</p>
-						</div>
-					{/if}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item
-						onSelect={handleUserMenuSignOut}
-						variant="destructive"
-						disabled={signingOut.active}
-					>
-						<LogOutIcon class="mr-2 h-4 w-4" />
-						{signingOut.active ? 'Signing out…' : 'Log out'}
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
+				</DropdownMenu.Item>
+				{#if copyLoginState.status === 'error' && copyLoginState.message}
+					<div class="px-2 pb-1">
+						<p class="text-[11px] text-red-500">{copyLoginState.message}</p>
+					</div>
+				{/if}
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item
+					onSelect={handleUserMenuSignOut}
+					variant="destructive"
+					disabled={signingOut.active}
+				>
+					<LogOutIcon class="mr-2 h-4 w-4" />
+					{signingOut.active ? 'Signing out…' : 'Log out'}
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 
 		{#if signingOut.error}

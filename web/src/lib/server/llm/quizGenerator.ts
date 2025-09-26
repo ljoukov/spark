@@ -1,10 +1,14 @@
 import type { Part } from '@google/genai';
 
 import { runGeminiCall, type GeminiModelId } from '../utils/gemini';
-import { QuizGenerationSchema, type InlineSourceFile, type QuizGeneration } from '$lib/llm/schemas';
+import {
+	QUIZ_RESPONSE_SCHEMA,
+	QuizGenerationSchema,
+	type InlineSourceFile,
+	type QuizGeneration
+} from '$lib/llm/schemas';
 import {
 	type GenerateQuizOptions,
-	QUIZ_RESPONSE_SCHEMA,
 	buildGenerationPrompt,
 	buildSourceParts,
 	buildExtensionPrompt,

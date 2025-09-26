@@ -1,10 +1,7 @@
 import type { Schema } from '@google/genai';
 import type { PageServerLoad } from './$types';
-import {
-	buildGenerationPrompt,
-	buildExtensionPrompt,
-	QUIZ_RESPONSE_SCHEMA
-} from '$lib/server/llm/quizPrompts';
+import { buildGenerationPrompt, buildExtensionPrompt } from '$lib/server/llm/quizPrompts';
+import { QUIZ_RESPONSE_SCHEMA } from '$lib/llm/schemas';
 import {
 	buildJudgePrompt,
 	buildAuditPrompt,
@@ -29,21 +26,17 @@ type PromptDescriptor = {
 
 const previewQuiz: QuizGeneration = {
 	quizTitle: 'Preview Quiz',
-	summary: 'Lightweight quiz shell used to document prompt context.',
 	mode: 'extraction',
 	subject: 'Physics',
-	syllabusAlignment: 'Preview only',
 	questionCount: 1,
 	questions: [
 		{
 			id: 'preview-question-1',
 			prompt: 'Example question for documenting prompts.',
 			answer: 'Preview answer',
-			explanation: 'Preview explanation',
+			explanation: 'Preview explanation grounded in the source.',
 			type: 'short_answer',
-			topic: 'Sample topic',
-			difficulty: 'foundation',
-			skillFocus: 'Prompt documentation'
+			sourceReference: 'Preview source'
 		}
 	]
 };
