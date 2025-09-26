@@ -545,7 +545,7 @@ function buildValidationErrorMessage({
 	rawText,
 	label
 }: {
-	issues: z.ZodIssue[];
+	issues: z.core.$ZodIssue[];
 	payload: unknown;
 	rawText: string;
 	label: string;
