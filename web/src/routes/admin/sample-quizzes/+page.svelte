@@ -228,7 +228,11 @@
 							</p>
 							<p class="text-sm text-foreground">
 								<span class="font-semibold">Answer:</span>
-								{question.answer}
+								{question.answer?.join(', ')}
+							</p>
+							<p class="text-sm text-muted-foreground">
+								<span class="font-semibold">Hint:</span>
+								{question.hint}
 							</p>
 							<p class="text-sm text-muted-foreground">
 								{question.explanation}
@@ -243,6 +247,7 @@
 											<li
 												class="w-full rounded border border-border/40 bg-muted/40 px-2 py-1 break-words"
 											>
+												<span class="mr-1 font-semibold">{String.fromCharCode(65 + optionIndex)}.</span>
 												{option}
 											</li>
 										{/each}
