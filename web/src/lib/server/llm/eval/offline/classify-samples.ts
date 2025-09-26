@@ -552,7 +552,7 @@ function buildValidationErrorMessage({
 }): string {
 	const issueLines = issues.map((issue) => {
 		const labelSegments = issue.path.map((segment) =>
-			typeof segment === 'symbol' ? segment.description ?? segment.toString() : String(segment)
+			typeof segment === 'symbol' ? (segment.description ?? segment.toString()) : String(segment)
 		);
 		const pathLabel = labelSegments.length > 0 ? labelSegments.join('.') : '(root)';
 		const value = formatValueForError(getValueAtPath(payload, issue.path));

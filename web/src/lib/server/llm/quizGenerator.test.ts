@@ -57,12 +57,12 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 
 	async function ensureSources(): Promise<void> {
 		if (!extractionSources) {
-			extractionSources = [await loadInlineSource(path.join('scans', 'c21-exam-question-pack.pdf'))];
+			extractionSources = [
+				await loadInlineSource(path.join('scans', 'c21-exam-question-pack.pdf'))
+			];
 		}
 		if (!synthesisSources) {
-			synthesisSources = [
-				await loadInlineSource(path.join('year8', 'health-blood-donations.pdf'))
-			];
+			synthesisSources = [await loadInlineSource(path.join('year8', 'health-blood-donations.pdf'))];
 		}
 	}
 

@@ -39,7 +39,7 @@
 			href: '/admin/gemini',
 			icon: BotIcon,
 			highlight: (path) => path.startsWith('/admin/gemini')
-		},
+		}
 	] satisfies readonly NavItem[];
 
 	let {
