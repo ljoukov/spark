@@ -14,7 +14,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint .",
+		"lint": "prettier --check . && eslint --concurrency auto --ignore-pattern '**/*.svelte' .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"all-tests": "npm run lint && npm run check && npm run test && npm run build",

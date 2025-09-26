@@ -21,16 +21,30 @@ export default defineConfig(
 	{
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node },
-			parser: ts.parser,
+			parser: ts.parser
+		},
+		rules: {
+			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
+			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
+			'no-undef': 'off'
+		}
+	},
+	{
+		files: [
+			'src/**/*.ts',
+			'src/**/*.tsx',
+			'src/**/*.js',
+			'src/**/*.jsx',
+			'src/**/*.mts',
+			'src/**/*.cts'
+		],
+		languageOptions: {
 			parserOptions: {
 				projectService: true,
 				tsconfigRootDir
 			}
 		},
 		rules: {
-			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
-			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
-			'no-undef': 'off',
 			'@typescript-eslint/no-deprecated': 'error'
 		}
 	},
