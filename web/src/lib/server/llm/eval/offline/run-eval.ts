@@ -8,12 +8,7 @@ import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
 
-import {
-	type Part,
-	type Schema,
-	type GenerateContentResponseUsageMetadata,
-	GenerateContentResponse
-} from '@google/genai';
+import { type Part, type Schema, GenerateContentResponse } from '@google/genai';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 
 import {
@@ -46,14 +41,16 @@ import {
 	QUIZ_EVAL_MODEL_ID
 } from '../judge';
 import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
+import { runJobsWithConcurrency, type JobProgressReporter } from './concurrency';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
 const REPO_ROOT = path.resolve(WEB_ROOT, '../');
-const DATA_ROOT = path.join(REPO_ROOT, 'data', 'samples');
-const OUTPUT_DIR = path.join(WEB_ROOT, 'static', 'admin', 'sample-quizzes');
+const DATA_ROOT = path.join(REPO_ROOT, 'spark-data', 'samples');
+const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
-const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'sample-quizzes');
+const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
+const MAX_CONCURRENT_ANALYSES = 32;
 
 const LOCAL_ENV_PATH = path.resolve('.env.local');
 if (existsSync(LOCAL_ENV_PATH)) {
@@ -75,8 +72,6 @@ if (proxyUrl) {
 	setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
 
-const PROGRESS_LOG_INTERVAL_MS = 500;
-
 function estimateUploadBytes(parts: Part[]): number {
 	return parts.reduce((total, part) => {
 		if (typeof part.text === 'string') {
@@ -96,16 +91,6 @@ function estimateUploadBytes(parts: Part[]): number {
 		}
 		return total;
 	}, 0);
-}
-
-function formatBytes(bytes: number): string {
-	if (bytes === 0) {
-		return '0 B';
-	}
-	const units = ['B', 'KB', 'MB', 'GB'];
-	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-	const value = bytes / Math.pow(1024, exponent);
-	return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 
 function rawPathForAttempt(basePath: string, attempt: number): string {
@@ -256,7 +241,8 @@ async function callModel<T>({
 	parts,
 	rawFilePath,
 	label,
-	normalise
+	normalise,
+	progress
 }: {
 	model: GeminiModelId;
 	responseSchema: Schema;
@@ -265,157 +251,158 @@ async function callModel<T>({
 	rawFilePath: string;
 	label: string;
 	normalise?: (value: unknown) => unknown;
+	progress: JobProgressReporter;
 }): Promise<{ text: string; modelId: string; data: T }> {
-	const logPrefix = `      [${model}]`;
 	const uploadBytes = estimateUploadBytes(parts);
 	const maxAttempts = 3;
 
-	let startMillis = 0;
-	let firstChunkMillis = 0;
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-		startMillis = Date.now();
-		const attemptLabel = `attempt ${attempt}/${maxAttempts}`;
-		console.log(`${logPrefix}: ${label}, ${attemptLabel}, upload ≈ ${formatBytes(uploadBytes)}`);
-
-		const { text } = await runGeminiCall(async (client) => {
-			const stream = await client.models.generateContentStream({
-				model,
-				contents: [
-					{
-						role: 'user',
-						parts
+		const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
+		try {
+			const { text } = await runGeminiCall(async (client) => {
+				const stream = await client.models.generateContentStream({
+					model,
+					contents: [
+						{
+							role: 'user',
+							parts
+						}
+					],
+					config: {
+						responseMimeType: 'application/json',
+						responseSchema,
+						thinkingConfig: { includeThoughts: true }
 					}
-				],
-				config: {
-					responseMimeType: 'application/json',
-					responseSchema,
-					thinkingConfig: { includeThoughts: true }
-				}
-			});
+				});
 
-			let chunkCount = 0;
-			let firstChunkLogged = false;
-			let lastProgressLog = 0;
-			let latestText = '';
-			let latestThoughts = '';
-			let latestUsage: GenerateContentResponseUsageMetadata | undefined;
-			let finalChunk: GenerateContentResponse | undefined;
-			let reposneModelVersion: string | undefined;
-			for await (const chunk of stream) {
-				if (chunk.modelVersion) {
-					reposneModelVersion = chunk.modelVersion;
-				}
-				if (chunk.candidates) {
-					for (const candidate of chunk.candidates) {
-						if (candidate.content && candidate.content.parts) {
+				let firstChunkReceived = false;
+				let latestText = '';
+				let finalChunk: GenerateContentResponse | undefined;
+				let lastPromptTokens = 0;
+				let lastInferenceTokens = 0;
+
+				for await (const chunk of stream) {
+					if (chunk.candidates) {
+						for (const candidate of chunk.candidates) {
+							if (!candidate.content || !candidate.content.parts) {
+								continue;
+							}
 							for (const part of candidate.content.parts) {
-								if (part.text) {
-									if (part.thought) {
-										latestThoughts += part.text;
-									} else {
-										latestText += part.text;
-									}
+								if (!part.text) {
+									continue;
+								}
+								const charCount = part.text.length;
+								progress.reportChars(charCount);
+								if (!part.thought) {
+									latestText += part.text;
 								}
 							}
 						}
 					}
+					if (!chunk.candidates && chunk.text) {
+						progress.reportChars(chunk.text.length);
+						latestText += chunk.text;
+					}
+					finalChunk = chunk;
+					const usage = chunk.usageMetadata;
+					if (usage) {
+						const promptTokens = usage.promptTokenCount ?? 0;
+						const inferenceTokens =
+							(usage.thoughtsTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0);
+						const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
+						const inferenceDelta = Math.max(0, inferenceTokens - lastInferenceTokens);
+						if (promptDelta > 0 || inferenceDelta > 0) {
+							progress.recordModelUsage(callHandle, {
+								promptTokensDelta: promptDelta,
+								inferenceTokensDelta: inferenceDelta,
+								timestamp: Date.now()
+							});
+						}
+						lastPromptTokens = promptTokens;
+						lastInferenceTokens = inferenceTokens;
+					}
+					if (!firstChunkReceived) {
+						firstChunkReceived = true;
+					}
 				}
-				chunkCount += 1;
-				finalChunk = chunk;
-				if (chunk.usageMetadata) {
-					latestUsage = chunk.usageMetadata;
+
+				if (!firstChunkReceived) {
+					throw new Error(`[${model}] ${label}: stream produced no chunks`);
 				}
-				if (!firstChunkLogged) {
-					firstChunkLogged = true;
-					lastProgressLog = firstChunkMillis = Date.now();
-					console.log(
-						`${logPrefix}: received first chunk: ${latestThoughts.length} thoughts and ${latestText.length} text in ${Math.round((firstChunkMillis - startMillis) / 1_000)}s`
+
+				if (latestText.length === 0 && finalChunk?.text) {
+					progress.reportChars(finalChunk.text.length);
+				}
+				const finalText = latestText || finalChunk?.text || '';
+				if (!finalText) {
+					throw new Error(`[${model}] ${label}: empty response`);
+				}
+
+				return { text: finalText };
+			});
+
+			await writeFile(rawFilePath, text, 'utf8');
+			const attemptPath = rawPathForAttempt(rawFilePath, attempt);
+			await writeFile(attemptPath, text, 'utf8');
+
+			const trimmed = text.trimStart();
+			if (!trimmed.startsWith('{')) {
+				progress.log(
+					`[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
+				);
+				continue;
+			}
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(text);
+			} catch (error) {
+				progress.log(
+					`[${model}] ${label}: WARN failed to parse JSON on attempt ${attempt}: ${error}`
+				);
+				continue;
+			}
+			let candidate = parsed;
+			if (normalise) {
+				try {
+					candidate = normalise(parsed);
+				} catch (error) {
+					progress.log(
+						`[${model}] ${label}: WARN failed to normalise response on attempt ${attempt}: ${error}`
 					);
 					continue;
 				}
-				if (firstChunkLogged && Date.now() - lastProgressLog >= PROGRESS_LOG_INTERVAL_MS) {
-					console.log(
-						`${logPrefix}: streaming… ${chunkCount} chunk${chunkCount === 1 ? '' : 's'} (tohughts=${latestThoughts.length}, text=${latestText.length} chars)`
-					);
-					lastProgressLog = Date.now();
-				}
 			}
-
-			if (!firstChunkLogged) {
-				throw new Error(`${logPrefix}: stream produced no chunks`);
-			}
-
-			const finalText = latestText || finalChunk?.text || '';
-			if (!finalText) {
-				throw new Error(`${logPrefix}: empty response`);
-			}
-
-			const usage =
-				latestUsage ??
-				(finalChunk as { usageMetadata?: GenerateContentResponseUsageMetadata })?.usageMetadata;
-			const elapesMillis = Date.now() - startMillis;
-			const speed =
-				((usage?.thoughtsTokenCount ?? 0) + (usage?.candidatesTokenCount ?? 0)) / elapesMillis;
-			console.log(
-				`${logPrefix}: done in ${Math.round(elapesMillis) / 1000}s, prompt tokens: ${usage?.promptTokenCount ?? 0}, thinking tokens: ${usage?.thoughtsTokenCount ?? 0}, response tokens: ${usage?.candidatesTokenCount ?? 0}, ${Math.round(speed * 1000)} t/s`
-			);
-
-			return { text: finalText, usage };
-		});
-
-		await writeFile(rawFilePath, text, 'utf8');
-		const attemptPath = rawPathForAttempt(rawFilePath, attempt);
-		await writeFile(attemptPath, text, 'utf8');
-		console.log(`${logPrefix}: wrote ${attemptPath}.`);
-
-		const trimmed = text.trimStart();
-		if (!trimmed.startsWith('{')) {
-			console.warn(
-				`${logPrefix}: non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
-			);
-			continue;
-		}
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(text);
-		} catch (error) {
-			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}: ${error}`);
-			continue;
-		}
-		let candidate = parsed;
-		if (normalise) {
-			try {
-				candidate = normalise(parsed);
-			} catch (error) {
-				console.error(`${logPrefix}: failed to normalise response on attempt ${attempt}:`, error);
+			const validation = schema.safeParse(candidate);
+			if (!validation.success) {
+				const issueMessages = validation.error.issues
+					.map((issue) => {
+						const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+						return `- ${path}: ${issue.message}`;
+					})
+					.join('\n');
+				progress.log(
+					`[${model}] ${label}: WARN schema validation failed on attempt ${attempt}:\n${issueMessages}`
+				);
 				continue;
 			}
-		}
-		const validation = schema.safeParse(candidate);
-		if (!validation.success) {
-			const issueMessages = validation.error.issues
-				.map((issue) => {
-					const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
-					return `- ${path}: ${issue.message}`;
-				})
-				.join('\n');
-			console.error(
-				`${logPrefix}: schema validation failed on attempt ${attempt}:\n${issueMessages}`
-			);
-			continue;
-		}
 
-		return { text, modelId: model, data: validation.data };
+			return { text, modelId: model, data: validation.data };
+		} finally {
+			progress.finishModelCall(callHandle);
+		}
 	}
 
-	throw new Error(`${logPrefix}: failed to produce a valid response after ${maxAttempts} attempts`);
+	throw new Error(
+		`[${model}] ${label}: failed to produce a valid response after ${maxAttempts} attempts`
+	);
 }
 
 async function generateQuizPayload(
 	job: SampleJob,
 	source: InlineSourceFile,
 	rawFilePath: string,
-	label: string
+	label: string,
+	progress: JobProgressReporter
 ): Promise<QuizFilePayload> {
 	const options: GenerateQuizOptions = {
 		questionCount: job.questionCount,
@@ -431,7 +418,8 @@ async function generateQuizPayload(
 		normalise: normaliseQuizPayload,
 		parts,
 		rawFilePath,
-		label
+		label,
+		progress
 	});
 	const generatedAt = new Date().toISOString();
 	return {
@@ -461,7 +449,8 @@ async function generateExtensionPayload(
 	source: InlineSourceFile,
 	baseQuiz: QuizGeneration,
 	rawFilePath: string,
-	label: string
+	label: string,
+	progress: JobProgressReporter
 ): Promise<QuizFilePayload> {
 	const prompt = buildExtensionPrompt({
 		additionalQuestionCount: DEFAULT_EXTENSION_QUESTION_COUNT,
@@ -483,12 +472,13 @@ async function generateExtensionPayload(
 		normalise: normaliseQuizPayload,
 		parts,
 		rawFilePath,
-		label
+		label,
+		progress
 	});
 	let quiz = generated;
 	if (quiz.questionCount !== DEFAULT_EXTENSION_QUESTION_COUNT) {
-		console.warn(
-			`[sample-quizzes] Extension for ${job.id} returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
+		progress.log(
+			`[sample-quizzes] WARN extension returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
 		);
 		const trimmedQuestions = quiz.questions.slice(0, DEFAULT_EXTENSION_QUESTION_COUNT);
 		quiz = {
@@ -525,7 +515,8 @@ async function judgeQuizPayload(
 	source: InlineSourceFile,
 	quiz: QuizGeneration,
 	rawFilePath: string,
-	label: string
+	label: string,
+	progress: JobProgressReporter
 ): Promise<JudgeFilePayload> {
 	const prompt = buildJudgePrompt({
 		sourceFiles: [source],
@@ -542,7 +533,8 @@ async function judgeQuizPayload(
 		schema: JudgeVerdictSchema,
 		parts,
 		rawFilePath,
-		label
+		label,
+		progress
 	});
 	const evaluatedAt = new Date().toISOString();
 	return {
@@ -569,7 +561,8 @@ async function auditJudgeDecisionPayload(
 	quiz: QuizGeneration,
 	judgeVerdict: JudgeVerdict,
 	rawFilePath: string,
-	label: string
+	label: string,
+	progress: JobProgressReporter
 ): Promise<JudgeFilePayload['audit']> {
 	const prompt = buildAuditPrompt();
 	const parts: Part[] = [
@@ -589,7 +582,8 @@ async function auditJudgeDecisionPayload(
 		schema: JudgeAuditSchema,
 		parts,
 		rawFilePath,
-		label
+		label,
+		progress
 	});
 	return {
 		model: {
@@ -599,7 +593,11 @@ async function auditJudgeDecisionPayload(
 	};
 }
 
-async function runSampleGeneration(job: SampleJob, rawDir: string): Promise<GenerationResult> {
+async function runSampleGeneration(
+	job: SampleJob,
+	rawDir: string,
+	progress: JobProgressReporter
+): Promise<GenerationResult> {
 	const source = await loadInlineSource(job.sourcePath);
 	const baseRawPath = path.join(rawDir, 'quiz.txt');
 	const baseJudgeRawPath = path.join(rawDir, 'judge.txt');
@@ -608,15 +606,14 @@ async function runSampleGeneration(job: SampleJob, rawDir: string): Promise<Gene
 	const extensionJudgeRawPath = path.join(rawDir, 'extension-judge.txt');
 	const extensionJudgeAuditRawPath = path.join(rawDir, 'extension-judge-audit.txt');
 
-	console.log(`   ↳ generating base quiz (${job.id})`);
-	const quiz = await generateQuizPayload(job, source, baseRawPath, `base quiz ${job.id}`);
-	console.log(`   ↳ judging base quiz (${job.id})`);
+	const quiz = await generateQuizPayload(job, source, baseRawPath, `base quiz ${job.id}`, progress);
 	const judge = await judgeQuizPayload(
 		job,
 		source,
 		quiz.quiz,
 		baseJudgeRawPath,
-		`base judgement ${job.id}`
+		`base judgement ${job.id}`,
+		progress
 	);
 	const audit = await auditJudgeDecisionPayload(
 		job,
@@ -624,23 +621,24 @@ async function runSampleGeneration(job: SampleJob, rawDir: string): Promise<Gene
 		quiz.quiz,
 		judge.judge.verdict,
 		baseJudgeAuditRawPath,
-		`base audit ${job.id}`
+		`base audit ${job.id}`,
+		progress
 	);
-	console.log(`   ↳ generating extension (${job.id})`);
 	const extension = await generateExtensionPayload(
 		job,
 		source,
 		quiz.quiz,
 		extensionRawPath,
-		`extension quiz ${job.id}`
+		`extension quiz ${job.id}`,
+		progress
 	);
-	console.log(`   ↳ judging extension (${job.id})`);
 	const extensionJudge = await judgeQuizPayload(
 		job,
 		source,
 		extension.quiz,
 		extensionJudgeRawPath,
-		`extension judgement ${job.id}`
+		`extension judgement ${job.id}`,
+		progress
 	);
 	const extensionAudit = await auditJudgeDecisionPayload(
 		job,
@@ -648,7 +646,8 @@ async function runSampleGeneration(job: SampleJob, rawDir: string): Promise<Gene
 		extension.quiz,
 		extensionJudge.judge.verdict,
 		extensionJudgeAuditRawPath,
-		`extension audit ${job.id}`
+		`extension audit ${job.id}`,
+		progress
 	);
 	return {
 		job,
@@ -731,30 +730,38 @@ async function runGenerationStage(
 	await rm(OUTPUT_DIR, { recursive: true, force: true });
 	await mkdir(OUTPUT_DIR, { recursive: true });
 
-	const results: GenerationResult[] = [];
-	for (const job of jobs) {
-		console.log(`[sample-quizzes] Generating ${job.id} from ${job.relativeSourcePath}...`);
-		const sampleDir = path.join(OUTPUT_DIR, job.id);
-		const rawDir = path.join(sampleDir, 'raw');
-		await mkdir(sampleDir, { recursive: true });
-		await mkdir(rawDir, { recursive: true });
-		try {
-			const result = await runSampleGeneration(job, rawDir);
-			await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
-			await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
-			await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
-			await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
-			await writeJson(path.join(sampleDir, 'quiz-extension-judgement.json'), result.extensionJudge);
-			results.push(result);
-			console.log(`[sample-quizzes] Saved outputs for ${job.id}`);
-		} catch (error) {
-			console.error(
-				`[sample-quizzes] Failed to generate quiz for ${job.id}:`,
-				error instanceof Error ? error.message : error
-			);
-			throw error;
+	const concurrency = Math.min(MAX_CONCURRENT_ANALYSES, jobs.length);
+	console.log(
+		`[sample-quizzes] Generating ${jobs.length} samples with concurrency ${concurrency}.`
+	);
+	const results = await runJobsWithConcurrency<SampleJob, GenerationResult>({
+		items: jobs,
+		concurrency,
+		getId: (job) => job.id,
+		label: '[sample-quizzes] offline eval',
+		handler: async (job, { progress }) => {
+			const sampleDir = path.join(OUTPUT_DIR, job.id);
+			const rawDir = path.join(sampleDir, 'raw');
+			await mkdir(sampleDir, { recursive: true });
+			await mkdir(rawDir, { recursive: true });
+			try {
+				const result = await runSampleGeneration(job, rawDir, progress);
+				await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
+				await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
+				await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
+				await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
+				await writeJson(
+					path.join(sampleDir, 'quiz-extension-judgement.json'),
+					result.extensionJudge
+				);
+				return result;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				progress.log(`ERROR ${message}`);
+				throw error;
+			}
 		}
-	}
+	});
 
 	const indexGeneratedAt = new Date().toISOString();
 	const index: SampleIndex = {
