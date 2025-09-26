@@ -7,6 +7,12 @@
 - SvelteKit has had many recent updates (eg ropes), docs are in `web/docs/sveltekit-docs.md`
 - /app and /admin UIs are built shadcn-svelte, docs are in `web/docs/shadcn-svelte.md`
 
+## Repository Setup
+
+- After cloning, sync submodule URLs with `git submodule sync --recursive`.
+- Initialize and update all submodules with `git submodule update --init --recursive`.
+- Re-run the update command if new submodules are added or refs change.
+
 For details, read `docs/SPEC.md`.
 
 IMPORTANT: maintain (i.e. make changes if contradicting changes are made or critical details are missing):
