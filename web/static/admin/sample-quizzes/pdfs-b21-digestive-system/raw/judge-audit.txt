@@ -1,5 +1,0 @@
-{
-  "explanation": "The judge's assessment is entirely correct and well-justified. The candidate quiz is of exceptional quality, accurately reflecting the provided lesson slides. The questions demonstrate excellent coverage of the learning objectives, ranging from the levels of biological organisation to the specific functions of digestive organs and processes like emulsification. The difficulty is appropriately scaled for a GCSE-level audience, incorporating both recall questions (e.g., Q7) and higher-order application questions (e.g., Q9 on concentration gradients). All answers and explanations are factually precise and directly supported by the source material. The judge's scoring across all rubric criteria is sound, and the final 'approve' verdict is fully warranted.",
-  "verdictAgreement": "agree",
-  "confidence": "high"
-}
