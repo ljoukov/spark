@@ -18,7 +18,8 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"all-tests": "npm run lint && npm run check && npm run test && npm run build",
-		"eval:offline": "tsx src/lib/server/llm/eval/offline/run-eval.ts"
+		"eval:offline": "tsx src/lib/server/llm/eval/offline/run-eval.ts",
+		"eval:classify-samples": "tsx src/lib/server/llm/eval/offline/classify-samples.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
