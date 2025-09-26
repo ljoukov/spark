@@ -111,11 +111,20 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 			expect(extractionQuiz.questions).toHaveLength(6);
 			for (const question of extractionQuiz.questions) {
 				expect(question.prompt.length).toBeGreaterThan(10);
+				expect(Array.isArray(question.answer)).toBe(true);
 				expect(question.answer.length).toBeGreaterThan(0);
+				for (const entry of question.answer) {
+					expect(entry.length).toBeGreaterThan(0);
+				}
+				expect(question.hint.length).toBeGreaterThan(0);
 				expect(question.explanation.length).toBeGreaterThan(5);
 				if (question.type === 'multiple_choice') {
 					expect(question.options).toBeDefined();
 					expect(question.options!.length).toBeGreaterThanOrEqual(2);
+					expect(question.options!.length).toBeLessThanOrEqual(4);
+					for (const entry of question.answer) {
+						expect(['A', 'B', 'C', 'D']).toContain(entry);
+					}
 				}
 			}
 		}

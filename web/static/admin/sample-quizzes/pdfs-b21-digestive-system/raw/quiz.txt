@@ -1,0 +1,152 @@
+{
+  "mode": "extraction",
+  "subject": "Biology",
+  "questionCount": 10,
+  "questions": [
+    {
+      "id": "Q1",
+      "type": "short_answer",
+      "prompt": "Place the following structural levels of biological organisation in order of increasing size (smallest to largest): organ, cell, organ system, tissue.",
+      "options": [],
+      "answer": [
+        "cell",
+        "tissue",
+        "organ",
+        "organ system"
+      ],
+      "explanation": "The hierarchy of organisation in the human body, from the most fundamental unit upwards, is cell, tissue (group of cells), organ (group of tissues), and finally, organ system (group of organs).",
+      "hint": "Start with the smallest unit of life mentioned in the keywords.",
+      "sourceReference": "Page 12, Figure 1"
+    },
+    {
+      "id": "Q2",
+      "type": "multiple_choice",
+      "prompt": "Which description correctly defines an organ system?",
+      "options": [
+        "The smallest functional unit of life.",
+        "A group of organs working together to perform a specific function.",
+        "A group of tissues working together to form a structure with a particular function.",
+        "A series of organ systems which together form a living organism."
+      ],
+      "answer": [
+        "B"
+      ],
+      "explanation": "An organ system is defined as a group of organs working together to perform a specific function, such as the circulatory system or the digestive system.",
+      "hint": "This level of organisation comes directly before the complete organism.",
+      "sourceReference": "Page 10, Organisation definitions"
+    },
+    {
+      "id": "Q3",
+      "type": "short_answer",
+      "prompt": "State the primary function of the digestive system. (List the two key processes involved with nutrients).",
+      "options": [],
+      "answer": [
+        "Break down nutrients from food",
+        "Absorb nutrients from food"
+      ],
+      "explanation": "The main function of the digestive system is to break down complex food into absorbable nutrients and then absorb those nutrients into the body.",
+      "hint": "The goal of the system is to process food so that the body can use it for function.",
+      "sourceReference": "Page 14, Q1; Page 17"
+    },
+    {
+      "id": "Q4",
+      "type": "multiple_choice",
+      "prompt": "The churning action of the stomach muscles, which physically mixes and breaks down food, is an example of which type of digestion?",
+      "options": [
+        "Chemical digestion",
+        "Catalytic digestion",
+        "Enzymatic digestion",
+        "Mechanical digestion"
+      ],
+      "answer": [
+        "D"
+      ],
+      "explanation": "Mechanical digestion is the physical breakdown of food, such as chewing in the mouth or the churning performed by the stomach muscles.",
+      "hint": "The other type of digestion involves enzymes and acids.",
+      "sourceReference": "Page 19, Mechanical Digestion"
+    },
+    {
+      "id": "Q5",
+      "type": "true_false",
+      "prompt": "Chemical digestion uses acids and enzymes to break food down into smaller molecules.",
+      "options": [],
+      "answer": [
+        "true"
+      ],
+      "explanation": "Chemical digestion involves catalysts (enzymes) and chemical substances (acids, like stomach acid) to break down complex food molecules into smaller molecules.",
+      "hint": "Chemical processes change the actual structure of the substance being digested.",
+      "sourceReference": "Page 19, Chemical Digestion"
+    },
+    {
+      "id": "Q6",
+      "type": "multiple_choice",
+      "prompt": "What are the two most significant functions performed by the small intestine?",
+      "options": [
+        "Storage of waste and final water absorption.",
+        "Mechanical breakdown and acid secretion.",
+        "Completion of digestion and absorption of nutrients.",
+        "Production of bile and neutralisation of stomach acid."
+      ],
+      "answer": [
+        "C"
+      ],
+      "explanation": "The small intestine is the site where digestion is completed and where the absorption of nutrients (such as digested carbohydrates, proteins, and fats) into the bloodstream occurs.",
+      "hint": "The large intestine performs the primary absorption of water.",
+      "sourceReference": "Page 26, Small intestine description"
+    },
+    {
+      "id": "Q7",
+      "type": "short_answer",
+      "prompt": "Name the organ responsible for the production of bile.",
+      "options": [],
+      "answer": [
+        "Liver"
+      ],
+      "explanation": "Bile is produced by the liver before being stored in the gallbladder, and its primary role is to aid fat digestion.",
+      "hint": "This organ is often linked to detoxification processes in the body.",
+      "sourceReference": "Page 36; Page 44, Q1"
+    },
+    {
+      "id": "Q8",
+      "type": "multiple_choice",
+      "prompt": "Bile acts as an emulsifier in the small intestine. What is the effect of emulsification?",
+      "options": [
+        "It chemically breaks down protein molecules into amino acids.",
+        "It neutralises the acids entering the small intestine from the stomach.",
+        "It breaks large fat globules into smaller droplets, increasing surface area.",
+        "It transports nutrients directly into the body's main circulatory system."
+      ],
+      "answer": [
+        "C"
+      ],
+      "explanation": "Emulsification breaks down large fat globules into smaller droplets, increasing the surface area for lipase enzymes to digest the fat more efficiently.",
+      "hint": "The key challenge with fats is their small surface area relative to their volume and their inability to mix with water.",
+      "sourceReference": "Page 36, Point 1; Page 37"
+    },
+    {
+      "id": "Q9",
+      "type": "short_answer",
+      "prompt": "In terms of maintaining a concentration gradient, why is a good blood supply crucial for the efficient absorption of nutrients by the villi?",
+      "options": [],
+      "answer": [
+        "Transports absorbed food molecules away from the small intestine"
+      ],
+      "explanation": "The rich blood supply transports nutrients away rapidly, maintaining a low concentration of nutrients in the blood supply, which in turn maintains a steep diffusion gradient from the small intestine lumen into the blood.",
+      "hint": "Diffusion requires a difference in concentration.",
+      "sourceReference": "Page 31, Indicative content (good blood supply)"
+    },
+    {
+      "id": "Q10",
+      "type": "true_false",
+      "prompt": "The thin walls of the villi, which are only one cell thick, increase the distance over which nutrients must diffuse to enter the blood.",
+      "options": [],
+      "answer": [
+        "false"
+      ],
+      "explanation": "The walls of the villi are thin (just one cell thick) to ensure a short diffusion distance, which maximises the rate at which nutrients can be absorbed quickly into the blood.",
+      "hint": "A short pathway means diffusion happens faster.",
+      "sourceReference": "Page 29, Point 2; Page 31, Indicative content (wall thickness/short pathway)"
+    }
+  ],
+  "quizTitle": "GCSE Biology B2.1: Organisation and the Digestive System"
+}

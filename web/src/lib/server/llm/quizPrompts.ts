@@ -28,6 +28,16 @@ export function normaliseQuizPayload(payload: unknown): unknown {
 			if (typeValue !== 'multiple_choice' && Array.isArray(questionRecord.options)) {
 				delete questionRecord.options;
 			}
+			const answerValue = questionRecord.answer;
+			if (typeof answerValue === 'string') {
+				questionRecord.answer = [answerValue];
+			} else if (Array.isArray(answerValue)) {
+				questionRecord.answer = answerValue.filter(
+					(entry): entry is string => typeof entry === 'string'
+				);
+			} else if (answerValue !== undefined) {
+				delete questionRecord.answer;
+			}
 		}
 	}
 	return quizRecord;
@@ -70,10 +80,12 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'Each question object must include:',
 		'- id: Match the original question identifier when present (e.g., "Q1a"). Otherwise use sequential IDs ("Q1", "Q2", ...).',
 		'- prompt: Clean exam-ready wording that still mirrors the source task.',
-		'- answer: Correct, concise answer text. For multiple_choice include the matching option label (e.g., "A) Car").',
-		'- explanation: One to two sentences justifying the answer with source evidence.',
 		'- type: One of multiple_choice, short_answer, true_false, or numeric.',
-		'- options: Only for multiple_choice. Provide exactly four answer texts prefixed with "A) ", "B) ", "C) ", and "D) " in that order.',
+		'- options: Only for multiple_choice. Provide 2–4 plain-text option bodies with no leading labels (UI adds A/B/C/D). Aim for ~40% three-option items, ~30% with four, and ~20% with two. Only use two options when the concept truly demands a binary choice instead of a true_false item.',
+		'- For multi-answer multiple_choice keep 3 or 4 options, include "None of the above", and flag every correct choice via the answer array.',
+		'- answer: Return an array of correct responses. For multiple_choice, each entry must be a single letter (A–D) aligned to the option positions; otherwise return one concise textual answer inside the array.',
+		'- explanation: One to two sentences justifying the answer with source evidence.',
+		'- hint: A sharp cue or strategy that helps the learner progress without revealing the answer.',
 		'- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.',
 		'- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling "phosphorus" even if the source writes "phosphorous").',
 		'- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.',
@@ -108,7 +120,8 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
 		'- Avoid duplicating any prompt ideas, answer wording, or explanation themes that appear in <PAST_QUIZES>.',
 		'- Continue to ground every item strictly in the supplied material.',
 		'- Highlight fresh angles or subtopics that were underrepresented previously.',
-		'- Multiple choice responses must include four options prefixed with "A) ", "B) ", "C) ", and "D) " in that order. Write the correct answer using the matching label.',
+		'- Multiple choice questions follow the same options guidance as the base quiz: supply 2-4 unlabeled option bodies, let the UI add letters, include "None of the above" if necessary (expect the user to select at least one option to register the answer), and report the correct letters in the answer array.',
+		'- Provide a concise hint for each question that nudges the learner without giving away the answer.',
 		'- Keep prompts and answers aligned with requested counts or enumerations from the material.',
 		'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly.',
 		'Do not restate the previous questions in the response. Only include the new items.'

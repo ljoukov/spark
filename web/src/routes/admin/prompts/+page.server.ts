@@ -33,8 +33,9 @@ const previewQuiz: QuizGeneration = {
 		{
 			id: 'preview-question-1',
 			prompt: 'Example question for documenting prompts.',
-			answer: 'Preview answer',
+			answer: ['Preview answer'],
 			explanation: 'Preview explanation grounded in the source.',
+			hint: 'Preview hint without the solution.',
 			type: 'short_answer',
 			sourceReference: 'Preview source'
 		}
