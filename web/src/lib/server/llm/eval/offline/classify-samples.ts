@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, extname, basename, relative } from 'node:path';
+import { dirname, join, resolve, extname, relative } from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, stat, mkdir, copyFile, rm, symlink, writeFile } from 'node:fs/promises';
 
@@ -29,9 +29,10 @@ if (existsSync(LOCAL_ENV_PATH)) {
 }
 
 const GEMINI_MODEL_ID = 'gemini-flash-lite-latest';
-const MAX_CONCURRENCY = 64;
+const MAX_CONCURRENCY = 256;
 const CACHE_FILE_NAME = 'classification-cache.json';
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.svg']);
+const GRADE_BUCKETS = ['foundation', 'intermediate', 'higher', 'mixed'] as const;
 
 const PAGE_BUCKETS = [
 	'1page',
@@ -64,6 +65,7 @@ const CLASSIFICATION_SCHEMA: Schema = {
 		pageBucket: { type: Type.STRING, enum: [...PAGE_BUCKETS] },
 		pageCountEstimate: { type: Type.INTEGER, minimum: 1 },
 		examBoard: { type: Type.STRING, enum: [...EXAM_BOARDS] },
+		gradeBucket: { type: Type.STRING, enum: [...GRADE_BUCKETS] },
 		materialType: { type: Type.STRING, enum: [...MATERIAL_TYPES] },
 		summary: { type: Type.STRING },
 		rationale: { type: Type.STRING },
@@ -72,18 +74,34 @@ const CLASSIFICATION_SCHEMA: Schema = {
 			type: Type.ARRAY,
 			items: { type: Type.STRING },
 			description: 'Optional short keywords that describe the material.'
+		},
+		shortName: {
+			type: Type.STRING,
+			description:
+				'Lowercase slug beginning with subject, then topic keywords separated by hyphens.'
 		}
 	},
-	required: ['pageBucket', 'examBoard', 'materialType', 'summary', 'rationale', 'confidence'],
+	required: [
+		'pageBucket',
+		'examBoard',
+		'summary',
+		'rationale',
+		'gradeBucket',
+		'materialType',
+		'confidence',
+		'shortName'
+	],
 	propertyOrdering: [
 		'pageBucket',
 		'pageCountEstimate',
 		'examBoard',
-		'materialType',
 		'summary',
 		'rationale',
+		'gradeBucket',
+		'materialType',
 		'confidence',
-		'tags'
+		'tags',
+		'shortName'
 	]
 };
 
@@ -91,11 +109,19 @@ const ClassificationSchema = z.object({
 	pageBucket: z.enum(PAGE_BUCKETS),
 	pageCountEstimate: z.number().int().positive().optional(),
 	examBoard: z.enum(EXAM_BOARDS),
+	gradeBucket: z.enum(GRADE_BUCKETS),
 	materialType: z.enum(MATERIAL_TYPES),
 	summary: z.string().min(1),
 	rationale: z.string().min(1),
 	confidence: z.enum(CONFIDENCE_LEVELS),
-	tags: z.array(z.string().min(1)).optional()
+	tags: z.array(z.string().min(1)).optional(),
+	shortName: z
+		.string()
+		.min(3)
+		.transform((value) => value.trim().toLowerCase())
+		.refine((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value), {
+			message: 'shortName must be lowercase slug with letters/numbers separated by hyphens'
+		})
 });
 
 type Classification = z.infer<typeof ClassificationSchema>;
@@ -247,6 +273,7 @@ function buildPrompt(file: SampleFile): string {
 		'Detected page count: unknown — inspect the attached file and estimate when needed.',
 		'Page bucket options: 1page | up-to-4pages | up-to-10pages | up-to-20pages | up-to-50pages | 50plus',
 		'Exam board options: AQA | OCR | Edexcel | Pearson | Cambridge | WJEC | Eduqas | CCEA | general',
+		'Grade bucket options (choose one, no "unknown"): foundation | intermediate | higher | mixed',
 		'Material type options: study | revision | test | other',
 		'',
 		'Guidance:',
@@ -258,8 +285,10 @@ function buildPrompt(file: SampleFile): string {
 		'- Estimate the page count by inspecting the attachment so you can choose the correct bucket.',
 		'- Provide a concise summary (1-2 sentences) focusing on subject coverage.',
 		'- Explain your reasoning in the rationale field.',
+		'- Always return your best-guess gradeBucket even if evidence is sparse—choose the closest match.',
+		'- Produce shortName as a lowercase slug that begins with the subject and then key topic words (e.g., "physics-electricity-circuits"). Use hyphens only, no spaces or file extensions.',
 		'',
-		'The original document is attached to this prompt. Inspect it directly to make classification decisions.',
+		'The original document is attached to this prompt. Inspect it directly when deciding the board, grade intensity, and naming.',
 		'Return JSON that matches the schema exactly.'
 	];
 	return lines.join('\n');
@@ -499,8 +528,10 @@ function normaliseClassification(value: Classification): Classification {
 	return {
 		...value,
 		examBoard: value.examBoard,
+		gradeBucket: value.gradeBucket,
 		materialType: value.materialType,
-		pageBucket: value.pageBucket
+		pageBucket: value.pageBucket,
+		shortName: value.shortName
 	};
 }
 
@@ -512,8 +543,17 @@ function boardToPath(board: Classification['examBoard']): string {
 	return board;
 }
 
+function gradeToPath(grade: Classification['gradeBucket']): string {
+	return grade;
+}
+
 function typeToPath(materialType: Classification['materialType']): string {
 	return materialType;
+}
+
+function buildTargetFileName(shortName: string, ext: string): string {
+	const extension = ext && ext.startsWith('.') ? ext : ext ? `.${ext}` : '';
+	return `${shortName}${extension}`;
 }
 
 async function placeFile({
@@ -527,12 +567,13 @@ async function placeFile({
 }): Promise<{ placedPath: string } | undefined> {
 	const bucketDir = bucketToPath(classification.pageBucket);
 	const boardDir = boardToPath(classification.examBoard);
+	const gradeDir = gradeToPath(classification.gradeBucket);
 	const typeDir = typeToPath(classification.materialType);
-	const targetDir = join(options.dst, bucketDir, boardDir, typeDir);
-	const baseName = basename(file.name);
+	const targetDir = join(options.dst, bucketDir, boardDir, gradeDir, typeDir);
+	const desiredName = buildTargetFileName(classification.shortName, file.ext);
 	const destination = await ensureUniquePath(
 		targetDir,
-		baseName,
+		desiredName,
 		file.relativePath,
 		!options.dryRun
 	);
@@ -620,10 +661,12 @@ async function writeIndex(classified: ClassifiedSample[], outputDir: string): Pr
 		'rel',
 		'pageBucket',
 		'examBoard',
+		'gradeBucket',
 		'materialType',
 		'summary',
 		'confidence',
-		'pageCountEstimate'
+		'pageCountEstimate',
+		'shortName'
 	];
 	const rows = classified.map((entry) => {
 		const { file, classification } = entry;
@@ -632,6 +675,7 @@ async function writeIndex(classified: ClassifiedSample[], outputDir: string): Pr
 			csvEscape(file.relativePath),
 			csvEscape(classification.pageBucket),
 			csvEscape(classification.examBoard),
+			csvEscape(classification.gradeBucket),
 			csvEscape(classification.materialType),
 			csvEscape(classification.summary),
 			csvEscape(classification.confidence),
@@ -639,7 +683,8 @@ async function writeIndex(classified: ClassifiedSample[], outputDir: string): Pr
 				classification.pageCountEstimate !== undefined
 					? String(classification.pageCountEstimate)
 					: ''
-			)
+			),
+			csvEscape(classification.shortName)
 		].join(',');
 	});
 	const content = `${header.join(',')}\n${rows.join('\n')}\n`;
@@ -650,6 +695,20 @@ async function writeIndex(classified: ClassifiedSample[], outputDir: string): Pr
 function csvEscape(value: string): string {
 	const safe = value.replace(/"/g, '""');
 	return `"${safe}"`;
+}
+
+function incrementCount(map: Map<string, number>, key: string): void {
+	map.set(key, (map.get(key) ?? 0) + 1);
+}
+
+function formatCountMap(map: Map<string, number>): string {
+	if (map.size === 0) {
+		return 'none';
+	}
+	return Array.from(map.entries())
+		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+		.map(([key, count]) => `${key}: ${count}`)
+		.join(', ');
 }
 
 async function main(): Promise<void> {
@@ -716,16 +775,14 @@ async function main(): Promise<void> {
 		cacheData,
 		scheduleCacheWrite
 	});
-	const initialSuccessCount = initialResults.filter((result) => result.classification).length;
 	accumulate(initialResults);
 
 	let retriedCount = 0;
+	let retrySuccessCount = 0;
 	if (options.retryFailed && failures.length > 0) {
 		const retryTargets = failures.map((result) => result.file);
 		retriedCount = retryTargets.length;
-		console.log(
-			`Retrying ${retriedCount} failed file${retriedCount === 1 ? '' : 's'}...`
-		);
+		console.log(`Retrying ${retriedCount} failed file${retriedCount === 1 ? '' : 's'}...`);
 		failures.length = 0;
 		const retryResults = await classifyBatch({
 			files: retryTargets,
@@ -733,6 +790,7 @@ async function main(): Promise<void> {
 			cacheData,
 			scheduleCacheWrite
 		});
+		retrySuccessCount = retryResults.filter((result) => result.classification).length;
 		accumulate(retryResults);
 	}
 
@@ -741,6 +799,24 @@ async function main(): Promise<void> {
 	}
 
 	const allClassified = [...alreadyClassified, ...newlyClassified];
+
+	const boardCounts = new Map<string, number>();
+	const gradeCounts = new Map<string, number>();
+	const boardGradeCounts = new Map<string, number>();
+	const materialCounts = new Map<string, number>();
+	const pageBucketCounts = new Map<string, number>();
+
+	for (const entry of allClassified) {
+		const { classification } = entry;
+		incrementCount(boardCounts, boardToPath(classification.examBoard));
+		incrementCount(gradeCounts, gradeToPath(classification.gradeBucket));
+		incrementCount(
+			boardGradeCounts,
+			`${boardToPath(classification.examBoard)}/${gradeToPath(classification.gradeBucket)}`
+		);
+		incrementCount(materialCounts, typeToPath(classification.materialType));
+		incrementCount(pageBucketCounts, bucketToPath(classification.pageBucket));
+	}
 
 	const placed: ClassifiedSample[] = [];
 	for (const entry of allClassified) {
@@ -770,10 +846,17 @@ async function main(): Promise<void> {
 	if (options.dryRun) {
 		console.log('Dry run mode: no filesystem changes were made and cache was not updated.');
 	}
+	if (allClassified.length > 0) {
+		console.log(`Category breakdown (${allClassified.length} classified files):`);
+		console.log(`  - Boards: ${formatCountMap(boardCounts)}`);
+		console.log(`  - Grade buckets: ${formatCountMap(gradeCounts)}`);
+		console.log(`  - Board/grade: ${formatCountMap(boardGradeCounts)}`);
+		console.log(`  - Material types: ${formatCountMap(materialCounts)}`);
+		console.log(`  - Page buckets: ${formatCountMap(pageBucketCounts)}`);
+	}
 	if (retriedCount > 0) {
-		const successAfterRetry = Math.max(0, newlyClassified.length - initialSuccessCount);
 		console.log(
-			`Retry completed: ${retriedCount} attempted, ${successAfterRetry} succeeded on retry.`
+			`Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`
 		);
 	}
 	if (failures.length > 0) {
