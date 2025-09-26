@@ -176,12 +176,6 @@
 								</p>
 							</div>
 							<div>
-								<p class="font-medium">Board</p>
-								<p class="text-muted-foreground">
-									{activeEntry.detail.board ?? 'Not provided'}
-								</p>
-							</div>
-							<div>
 								<p class="font-medium">Model</p>
 								<p class="text-muted-foreground">{activeEntry.detail.request.model}</p>
 							</div>

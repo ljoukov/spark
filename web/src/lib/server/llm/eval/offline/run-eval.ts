@@ -31,7 +31,11 @@ import {
 	parseQuizFromText,
 	type GenerateQuizOptions
 } from '../../quizPrompts';
-import { DEFAULT_EXTENSION_QUESTION_COUNT, QUIZ_GENERATION_MODEL_ID } from '../../quizGenerator';
+import {
+    DEFAULT_EXTENSION_QUESTION_COUNT,
+    DEFAULT_GENERATION_QUESTION_COUNT,
+    QUIZ_GENERATION_MODEL_ID
+} from '../../quizGenerator';
 import {
 	AUDIT_RESPONSE_SCHEMA,
 	JUDGE_RESPONSE_SCHEMA,
@@ -66,17 +70,8 @@ const proxyUrl =
 	process.env.npm_config_http_proxy;
 
 if (proxyUrl) {
-	setGlobalDispatcher(new ProxyAgent(proxyUrl));
+    setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
-
-const DEFAULT_SAMPLE_QUESTION_COUNT = (() => {
-	const raw = process.env.SAMPLE_QUESTION_COUNT?.trim();
-	if (!raw) {
-		return 10;
-	}
-	const parsed = Number.parseInt(raw, 10);
-	return Number.isNaN(parsed) || parsed <= 0 ? 10 : parsed;
-})();
 
 const PROGRESS_LOG_INTERVAL_MS = 500;
 
@@ -127,7 +122,6 @@ type SampleJob = {
 	readonly relativeSourcePath: string;
 	readonly questionCount: number;
 	readonly subject?: string;
-	readonly board?: string;
 };
 
 type QuizModelRun = {
@@ -138,7 +132,6 @@ type QuizFilePayload = {
 	readonly id: string;
 	readonly mode: QuizGeneration['mode'];
 	readonly subject?: string;
-	readonly board?: string;
 	readonly generatedAt: string;
 	readonly request: {
 		readonly model: string;
@@ -238,16 +231,16 @@ async function collectJobs(): Promise<SampleJob[]> {
 			const count = slugCounts.get(baseSlug) ?? 0;
 			slugCounts.set(baseSlug, count + 1);
 			const id = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
-			const relativeSourcePath = path.relative(REPO_ROOT, sourcePath).split(path.sep).join('/');
-			const questionCount = DEFAULT_SAMPLE_QUESTION_COUNT;
-			jobs.push({
-				id,
-				category,
-				displayName,
-				sourcePath,
-				relativeSourcePath,
-				questionCount
-			});
+				const relativeSourcePath = path.relative(REPO_ROOT, sourcePath).split(path.sep).join('/');
+				const questionCount = DEFAULT_GENERATION_QUESTION_COUNT;
+				jobs.push({
+					id,
+					category,
+					displayName,
+					sourcePath,
+					relativeSourcePath,
+					questionCount
+				});
 		}
 	}
 	jobs.sort((a, b) => a.id.localeCompare(b.id));
@@ -387,7 +380,6 @@ async function generateQuizPayload(
 	const options: GenerateQuizOptions = {
 		questionCount: job.questionCount,
 		subject: job.subject,
-		board: job.board,
 		sourceFiles: [source]
 	};
 	const prompt = buildGenerationPrompt(options);
@@ -405,7 +397,6 @@ async function generateQuizPayload(
 		id: job.id,
 		mode: quiz.mode,
 		subject: quiz.subject,
-		board: quiz.board,
 		generatedAt,
 		request: {
 			model: QUIZ_GENERATION_MODEL_ID,
@@ -434,7 +425,6 @@ async function generateExtensionPayload(
 	const prompt = buildExtensionPrompt({
 		additionalQuestionCount: DEFAULT_EXTENSION_QUESTION_COUNT,
 		subject: baseQuiz.subject ?? job.subject,
-		board: baseQuiz.board ?? job.board
 	});
 	const pastQuizLines = baseQuiz.questions.map(
 		(question, index) => `${index + 1}. ${question.prompt}`
@@ -469,7 +459,6 @@ async function generateExtensionPayload(
 		id: job.id,
 		mode: quiz.mode,
 		subject: quiz.subject,
-		board: quiz.board,
 		generatedAt,
 		request: {
 			model: QUIZ_GENERATION_MODEL_ID,
@@ -663,7 +652,6 @@ type SampleIndexEntry = {
 	readonly label: string;
 	readonly mode: QuizGeneration['mode'];
 	readonly subject?: string;
-	readonly board?: string;
 	readonly questionCount: number;
 	readonly request: QuizFilePayload['request'];
 	readonly source: QuizFilePayload['source'];
@@ -736,7 +724,6 @@ async function runGenerationStage(
 			label: `Sample ${indexPosition + 1}: ${result.job.displayName}`,
 			mode: result.quiz.quiz.mode,
 			subject: result.quiz.quiz.subject,
-			board: result.quiz.quiz.board,
 			questionCount: result.quiz.quiz.questionCount,
 			request: result.quiz.request,
 			source: result.quiz.source,
@@ -795,9 +782,6 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 	lines.push(`- Mode: ${payload.mode}`);
 	if (payload.subject) {
 		lines.push(`- Subject: ${payload.subject}`);
-	}
-	if (payload.board) {
-		lines.push(`- Exam board: ${payload.board}`);
 	}
 	lines.push(`- Question count: ${payload.quiz.questionCount}`);
 	lines.push(`- Generated at: ${payload.generatedAt}`);

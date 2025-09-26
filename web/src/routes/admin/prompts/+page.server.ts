@@ -32,7 +32,6 @@ const previewQuiz: QuizGeneration = {
 	summary: 'Lightweight quiz shell used to document prompt context.',
 	mode: 'extraction',
 	subject: 'Physics',
-	board: 'AQA',
 	syllabusAlignment: 'Preview only',
 	questionCount: 1,
 	questions: [
@@ -78,7 +77,6 @@ export const load: PageServerLoad = async () => {
 				'Inline source files from the request are attached as additional parts and are not shown here.'
 			],
 			example: buildGenerationPrompt({
-				mode: 'extraction',
 				questionCount: 10,
 				subject: '{{subject}}',
 				board: '{{board}}',
@@ -111,7 +109,6 @@ export const load: PageServerLoad = async () => {
 				'Inline source files from the request are attached as additional parts and are not shown here.'
 			],
 			example: buildGenerationPrompt({
-				mode: 'synthesis',
 				questionCount: 10,
 				subject: '{{subject}}',
 				board: '{{board}}',
@@ -139,7 +136,7 @@ export const load: PageServerLoad = async () => {
 			example: buildExtensionPrompt({
 				additionalQuestionCount: 4,
 				subject: previewQuiz.subject,
-				board: previewQuiz.board
+				board: '{{board}}'
 			}),
 			schema: { title: 'Quiz response schema', definition: QUIZ_RESPONSE_SCHEMA }
 		},
