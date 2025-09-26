@@ -288,7 +288,8 @@ async function callModel<T>({
 				],
 				config: {
 					responseMimeType: 'application/json',
-					responseSchema
+					responseSchema,
+					thinkingConfig: { includeThoughts: true }
 				}
 			});
 
@@ -296,39 +297,47 @@ async function callModel<T>({
 			let firstChunkLogged = false;
 			let lastProgressLog = 0;
 			let latestText = '';
-			let lastLength = 0;
+			let latestThoughts = '';
 			let latestUsage: GenerateContentResponseUsageMetadata | undefined;
 			let finalChunk: GenerateContentResponse | undefined;
-
+			let reposneModelVersion: string | undefined;
 			for await (const chunk of stream) {
+				if (chunk.modelVersion) {
+					reposneModelVersion = chunk.modelVersion;
+				}
+				if (chunk.candidates) {
+					for (const candidate of chunk.candidates) {
+						if (candidate.content && candidate.content.parts) {
+							for (const part of candidate.content.parts) {
+								if (part.text) {
+									if (part.thought) {
+										latestThoughts += part.text;
+									} else {
+										latestText += part.text;
+									}
+								}
+							}
+						}
+					}
+				}
 				chunkCount += 1;
 				finalChunk = chunk;
-				const { text } = chunk;
-				if (text !== undefined) {
-					latestText += text;
-				}
 				if (chunk.usageMetadata) {
 					latestUsage = chunk.usageMetadata;
 				}
-				if (!firstChunkLogged && latestText.length > 0) {
+				if (!firstChunkLogged) {
 					firstChunkLogged = true;
 					lastProgressLog = firstChunkMillis = Date.now();
-					lastLength = latestText.length;
 					console.log(
-						`${logPrefix}: received first chunk of ${latestText.length} chars in ${Math.round((firstChunkMillis - startMillis) / 1_000)}s`
+						`${logPrefix}: received first chunk: ${latestThoughts.length} thoughts and ${latestText.length} text in ${Math.round((firstChunkMillis - startMillis) / 1_000)}s`
 					);
 					continue;
 				}
-				if (
-					firstChunkLogged &&
-					Date.now() - lastProgressLog >= PROGRESS_LOG_INTERVAL_MS &&
-					latestText.length !== lastLength
-				) {
+				if (firstChunkLogged && Date.now() - lastProgressLog >= PROGRESS_LOG_INTERVAL_MS) {
 					console.log(
-						`${logPrefix}: streaming… ${chunkCount} chunk${chunkCount === 1 ? '' : 's'} (~${latestText.length} chars)`
+						`${logPrefix}: streaming… ${chunkCount} chunk${chunkCount === 1 ? '' : 's'} (tohughts=${latestThoughts.length}, text=${latestText.length} chars)`
 					);
 					lastProgressLog = Date.now();
-					lastLength = latestText.length;
 				}
 			}
 
@@ -390,7 +399,9 @@ async function callModel<T>({
 					return `- ${path}: ${issue.message}`;
 				})
 				.join('\n');
-			console.error(`${logPrefix}: schema validation failed on attempt ${attempt}:\n${issueMessages}`);
+			console.error(
+				`${logPrefix}: schema validation failed on attempt ${attempt}:\n${issueMessages}`
+			);
 			continue;
 		}
 
@@ -824,7 +835,9 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 		if (question.sourceReference) {
 			lines.push(`- Source reference: ${question.sourceReference}`);
 		}
-		lines.push(`- Answer: ${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}`);
+		lines.push(
+			`- Answer: ${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}`
+		);
 		lines.push(`- Hint: ${question.hint}`);
 		if (question.options && question.options.length > 0) {
 			lines.push('- Options:');
