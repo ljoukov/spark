@@ -2,6 +2,13 @@
 
 Spark turns GCSE Triple Science study materials into calm, deliberate practice. Students snap a photo or upload a PDF, Spark understands the content, and delivers a short run of tailored questions with confident guidance on what to do next. The goal is to avoid a "slot machine" feel while still making it efficient and effective to work through the material. Both the SwiftUI app and the SvelteKit web surface share the same real-time backend so progress, summaries, and feedback stay in sync across devices.
 
+## App
+
+[Spark (web)](https://spark.eviworld.com)
+
+<img width="1139" height="667" alt="image" src="https://github.com/user-attachments/assets/9273d7ee-a8a5-4b17-810f-94c6cdf3e28c" />
+
+
 ## User experience at a glance
 - **One-button start:** The home screen revolves around a single “Scan or Upload” button so students can jump directly into practice.
 - **Smart capture pipeline:** Photos and PDFs are cropped, classified, and tagged with subject/board metadata automatically, with quick edits available when needed.
