@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -46,11 +46,26 @@ import { runJobsWithConcurrency, type JobProgressReporter } from './concurrency'
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
 const REPO_ROOT = path.resolve(WEB_ROOT, '../');
-const DATA_ROOT = path.join(REPO_ROOT, 'spark-data', 'samples');
+const DATA_ROOT_CANDIDATES = [
+	process.env.SPARK_EVAL_SAMPLE_ROOT,
+	'/spark-data/samples-organized',
+	path.join(REPO_ROOT, 'spark-data', 'samples-organized'),
+	path.join(REPO_ROOT, 'spark-data', 'samples')
+].filter((candidate): candidate is string => Boolean(candidate));
+
+const DATA_ROOT = (() => {
+	for (const candidate of DATA_ROOT_CANDIDATES) {
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+	}
+	return path.join(REPO_ROOT, 'spark-data', 'samples');
+})();
 const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
 const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
-const MAX_CONCURRENT_ANALYSES = 32;
+const MAX_CONCURRENT_ANALYSES = 128;
+const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 
 const LOCAL_ENV_PATH = path.resolve('.env.local');
 if (existsSync(LOCAL_ENV_PATH)) {
@@ -198,23 +213,63 @@ async function loadInlineSource(filePath: string): Promise<InlineSourceFile> {
 }
 
 async function collectJobs(): Promise<SampleJob[]> {
-	const entries = await readdir(DATA_ROOT, { withFileTypes: true });
+	console.log(`[eval] Scanning for samples in ${DATA_ROOT}`);
 	const slugCounts = new Map<string, number>();
 	const jobs: SampleJob[] = [];
-	for (const entry of entries) {
-		if (!entry.isDirectory()) {
+	const stack: Array<{ absolutePath: string; relativePath: string }> = [
+		{ absolutePath: DATA_ROOT, relativePath: '' }
+	];
+	const visitedDirs = new Set<string>();
+	const seenFiles = new Set<string>();
+	while (stack.length > 0) {
+		const next = stack.pop();
+		if (!next) {
 			continue;
 		}
-		const category = entry.name;
-		const categoryPath = path.join(DATA_ROOT, category);
-		const files = await readdir(categoryPath, { withFileTypes: true });
-		for (const file of files) {
-			if (!file.isFile()) {
+		const { absolutePath, relativePath } = next;
+		const resolvedDirPath = path.resolve(absolutePath);
+		if (visitedDirs.has(resolvedDirPath)) {
+			continue;
+		}
+		visitedDirs.add(resolvedDirPath);
+		const entries = await readdir(absolutePath, { withFileTypes: true });
+		for (const entry of entries) {
+			const entryAbsolute = path.join(absolutePath, entry.name);
+			const entryRelative = relativePath ? path.join(relativePath, entry.name) : entry.name;
+			let isDir = entry.isDirectory();
+			let isFile = entry.isFile();
+			if (!isDir && !isFile && entry.isSymbolicLink()) {
+				try {
+					const stats = await stat(entryAbsolute);
+					isDir = stats.isDirectory();
+					isFile = stats.isFile();
+				} catch (error) {
+					const reason = error instanceof Error ? error.message : String(error);
+					console.warn(`[eval] WARN unable to stat symlink at ${entryAbsolute}: ${reason}`);
+					continue;
+				}
+			}
+			if (isDir) {
+				stack.push({ absolutePath: entryAbsolute, relativePath: entryRelative });
 				continue;
 			}
-			const sourcePath = path.join(categoryPath, file.name);
-			const displayName = file.name;
-			const baseSlug = `${category}-${slugify(path.parse(displayName).name)}`;
+			if (!isFile) {
+				continue;
+			}
+			const ext = path.extname(entry.name).toLowerCase();
+			if (!ALLOWED_SAMPLE_EXTENSIONS.has(ext)) {
+				continue;
+			}
+			const sourcePath = entryAbsolute;
+			const resolvedFilePath = path.resolve(sourcePath);
+			if (seenFiles.has(resolvedFilePath)) {
+				continue;
+			}
+			seenFiles.add(resolvedFilePath);
+			const displayName = entry.name;
+			const relativeSegments = entryRelative.split(path.sep);
+			const category = relativeSegments.length > 1 ? relativeSegments[0] : 'root';
+			const baseSlug = `${slugify(category)}-${slugify(path.parse(displayName).name)}`;
 			const count = slugCounts.get(baseSlug) ?? 0;
 			slugCounts.set(baseSlug, count + 1);
 			const id = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
@@ -231,6 +286,7 @@ async function collectJobs(): Promise<SampleJob[]> {
 		}
 	}
 	jobs.sort((a, b) => a.id.localeCompare(b.id));
+	console.log(`[eval] Found ${jobs.length} sample files.`);
 	return jobs;
 }
 
@@ -478,7 +534,7 @@ async function generateExtensionPayload(
 	let quiz = generated;
 	if (quiz.questionCount !== DEFAULT_EXTENSION_QUESTION_COUNT) {
 		progress.log(
-			`[sample-quizzes] WARN extension returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
+			`[eval] WARN extension returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
 		);
 		const trimmedQuestions = quiz.questions.slice(0, DEFAULT_EXTENSION_QUESTION_COUNT);
 		quiz = {
@@ -731,14 +787,12 @@ async function runGenerationStage(
 	await mkdir(OUTPUT_DIR, { recursive: true });
 
 	const concurrency = Math.min(MAX_CONCURRENT_ANALYSES, jobs.length);
-	console.log(
-		`[sample-quizzes] Generating ${jobs.length} samples with concurrency ${concurrency}.`
-	);
+	console.log(`[eval] Generating ${jobs.length} samples with concurrency ${concurrency}.`);
 	const results = await runJobsWithConcurrency<SampleJob, GenerationResult>({
 		items: jobs,
 		concurrency,
 		getId: (job) => job.id,
-		label: '[sample-quizzes] offline eval',
+		label: '[eval] offline eval',
 		handler: async (job, { progress }) => {
 			const sampleDir = path.join(OUTPUT_DIR, job.id);
 			const rawDir = path.join(sampleDir, 'raw');
@@ -800,7 +854,7 @@ async function runGenerationStage(
 	};
 
 	await writeJson(path.join(OUTPUT_DIR, 'index.json'), index);
-	console.log(`[sample-quizzes] Wrote index.json with ${results.length} entries.`);
+	console.log(`[eval] Wrote index.json with ${results.length} entries.`);
 
 	return { results, index };
 }
@@ -1021,7 +1075,7 @@ async function main(): Promise<void> {
 	if (stage !== 'render') {
 		const jobs = await collectJobs();
 		if (jobs.length === 0) {
-			console.warn('[sample-quizzes] No sample files found.');
+			console.warn('[eval] No sample files found.');
 			return;
 		}
 		const { index } = await runGenerationStage(jobs);
@@ -1036,6 +1090,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-	console.error('[sample-quizzes] Unhandled error:', error);
+	console.error('[eval] Unhandled error:', error);
 	process.exitCode = 1;
 });
