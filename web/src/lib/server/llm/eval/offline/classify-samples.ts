@@ -551,15 +551,19 @@ function buildValidationErrorMessage({
 	label: string;
 }): string {
 	const issueLines = issues.map((issue) => {
-		const pathLabel = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+		const labelSegments = issue.path.map((segment) =>
+			typeof segment === 'symbol' ? segment.description ?? segment.toString() : String(segment)
+		);
+		const pathLabel = labelSegments.length > 0 ? labelSegments.join('.') : '(root)';
 		const value = formatValueForError(getValueAtPath(payload, issue.path));
 		const received = value === undefined ? '' : ` (received ${value})`;
 		return `${pathLabel}: ${issue.message}${received}`;
 	});
 	const payloadJson = safeStringify(payload, 2);
-	const rawTextSection = rawText && rawText.trim() && rawText.trim() !== payloadJson.trim()
-		? `\nRaw response text:\n${rawText}`
-		: '';
+	const rawTextSection =
+		rawText && rawText.trim() && rawText.trim() !== payloadJson.trim()
+			? `\nRaw response text:\n${rawText}`
+			: '';
 	return `Validation failed for ${label}:\n${issueLines.join('\n')}\nPayload:\n${payloadJson}${rawTextSection}`;
 }
 
@@ -571,7 +575,7 @@ function safeStringify(value: unknown, spacing = 2): string {
 	}
 }
 
-function getValueAtPath(payload: unknown, path: (string | number)[]): unknown {
+function getValueAtPath(payload: unknown, path: readonly PropertyKey[]): unknown {
 	let current: unknown = payload;
 	for (const segment of path) {
 		if (current === null || typeof current !== 'object') {
@@ -585,11 +589,11 @@ function getValueAtPath(payload: unknown, path: (string | number)[]): unknown {
 			current = current[index];
 			continue;
 		}
-		const key = String(segment);
-		if (!(key in (current as Record<string, unknown>))) {
+		const container = current as Record<PropertyKey, unknown>;
+		if (!(segment in container)) {
 			return undefined;
 		}
-		current = (current as Record<string, unknown>)[key];
+		current = container[segment];
 	}
 	return current;
 }
@@ -1027,7 +1031,7 @@ async function main(): Promise<void> {
 					`[${new Date().toISOString()}] ${failure.file.relativePath}: ${formatError(
 						failure.error
 					)}`
-				)
+			)
 			.join('\n');
 		if (!options.dryRun) {
 			await writeFile(errorLogPath, `${logLines}\n`, 'utf8');
