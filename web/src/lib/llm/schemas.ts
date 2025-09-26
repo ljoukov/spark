@@ -1,3 +1,4 @@
+import { Type, type Schema } from '@google/genai';
 import { z } from 'zod';
 
 export interface InlineSourceFile {
@@ -13,45 +14,28 @@ export const QUIZ_MODES = ['extraction', 'synthesis', 'extension'] as const;
 
 export const QUESTION_TYPES = ['multiple_choice', 'short_answer', 'true_false', 'numeric'] as const;
 
-export const CANONICAL_DIFFICULTY = ['foundation', 'intermediate', 'higher'] as const;
-const DIFFICULTY_ALIASES = ['easy', 'medium', 'hard'] as const;
-const DIFFICULTY_NORMALISER = z
-	.enum([...CANONICAL_DIFFICULTY, ...DIFFICULTY_ALIASES] as const)
-	.transform((value) => {
-		switch (value) {
-			case 'easy':
-				return 'foundation';
-			case 'medium':
-				return 'intermediate';
-			case 'hard':
-				return 'higher';
-			default:
-				return value;
-		}
-	});
-
-export const QuizQuestionSchema = z
+const QuizQuestionSchema = z
 	.object({
-		id: z.string().min(1, 'id is required'),
-		prompt: z.string().min(1, 'prompt is required'),
-		answer: z.string().min(1, 'answer is required'),
-		explanation: z.string().min(1, 'explanation is required'),
+		id: z.string().min(1),
 		type: z.enum(QUESTION_TYPES),
+		prompt: z.string().min(1),
 		options: z.array(z.string().min(1)).optional(),
-		topic: z.string().min(1).optional(),
-		difficulty: DIFFICULTY_NORMALISER.optional(),
-		skillFocus: z.string().min(1).optional(),
+		answer: z.string().min(1),
+		explanation: z.string().min(1),
 		sourceReference: z.string().min(1).optional()
 	})
 	.superRefine((value, ctx) => {
-		if (value.type === 'multiple_choice' && (!value.options || value.options.length !== 4)) {
-			ctx.addIssue({
-				code: 'custom',
-				message: 'multiple_choice questions must include exactly four options',
-				path: ['options']
-			});
+		if (value.type === 'multiple_choice') {
+			if (!value.options || value.options.length !== 4) {
+				ctx.addIssue({
+					code: 'custom',
+					message: 'multiple_choice questions must include exactly four options',
+					path: ['options']
+				});
+			}
+			return;
 		}
-		if (value.type !== 'multiple_choice' && value.options && value.options.length > 0) {
+		if (value.options && value.options.length > 0) {
 			ctx.addIssue({
 				code: 'custom',
 				message: 'options are only allowed for multiple_choice questions',
@@ -60,15 +44,14 @@ export const QuizQuestionSchema = z
 		}
 	});
 
+// QuizGenerationSchema schema needs to be in strict sync with QUIZ_RESPONSE_SCHEMA
 export const QuizGenerationSchema = z
 	.object({
-		quizTitle: z.string().min(1, 'quizTitle is required'),
-		summary: z.string().min(1, 'summary is required'),
 		mode: z.enum(QUIZ_MODES),
-		subject: z.string().optional(),
-		syllabusAlignment: z.string().min(1).optional(),
-		questionCount: z.number().int().positive(),
-		questions: z.array(QuizQuestionSchema).min(1)
+		subject: z.string().min(1),
+		questionCount: z.number().int().min(1),
+		questions: z.array(QuizQuestionSchema).min(1),
+		quizTitle: z.string().min(1)
 	})
 	.superRefine((value, ctx) => {
 		if (value.questions.length !== value.questionCount) {
@@ -79,6 +62,52 @@ export const QuizGenerationSchema = z
 			});
 		}
 	});
+
+// QUIZ_RESPONSE_SCHEMA schema needs to be in strict sync with QuizGenerationSchema
+// This schema could be potentially generated programmatically from QuizGenerationSchema,
+// but we want to take advantage from "propertyOrdering" which is essential for LLMs.
+export const QUIZ_RESPONSE_SCHEMA: Schema = {
+	type: Type.OBJECT,
+	properties: {
+		mode: { type: Type.STRING, enum: ['extraction', 'synthesis', 'extension'] },
+		subject: { type: Type.STRING },
+		questionCount: { type: Type.INTEGER, minimum: 1 },
+		questions: {
+			type: Type.ARRAY,
+			items: {
+				type: Type.OBJECT,
+				properties: {
+					id: { type: Type.STRING },
+					type: {
+						type: Type.STRING,
+						enum: ['multiple_choice', 'short_answer', 'true_false', 'numeric']
+					},
+					prompt: { type: Type.STRING },
+					options: {
+						type: Type.ARRAY,
+						items: { type: Type.STRING }
+					},
+					answer: { type: Type.STRING },
+					explanation: { type: Type.STRING },
+					sourceReference: { type: Type.STRING }
+				},
+				required: ['id', 'type', 'prompt', 'answer', 'explanation'],
+				propertyOrdering: [
+					'id',
+					'type',
+					'prompt',
+					'options',
+					'answer',
+					'explanation',
+					'sourceReference'
+				]
+			}
+		},
+		quizTitle: { type: Type.STRING }
+	},
+	required: ['mode', 'subject', 'questionCount', 'questions', 'quizTitle'],
+	propertyOrdering: ['mode', 'subject', 'questionCount', 'questions', 'quizTitle']
+};
 
 export const JudgeRubricItemSchema = z.object({
 	criterion: z.string().min(1),
