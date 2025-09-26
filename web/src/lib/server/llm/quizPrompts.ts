@@ -19,7 +19,6 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 		summary: { type: Type.STRING },
 		mode: { type: Type.STRING, enum: ['extraction', 'synthesis', 'extension'] },
 		subject: { type: Type.STRING },
-		// board: { type: Type.STRING },
 		syllabusAlignment: { type: Type.STRING },
 		questionCount: { type: Type.INTEGER, minimum: 1 },
 		questions: {
@@ -66,7 +65,6 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 		'summary',
 		'mode',
 		'subject',
-		//'board',
 		'syllabusAlignment',
 		'questionCount',
 		'questions'
@@ -126,7 +124,6 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with "Coverage gaps:" and either say "none – full coverage achieved." or list the specific missing topics/processes.',
 		'- mode: Return "extraction" if you primarily refined existing questions from the material, otherwise "synthesis" when you authored new items.',
 		'- subject: Copy the provided subject exactly.',
-		//'- board: Copy the provided exam board exactly.',
 		'- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.',
 		'- questionCount: Must equal the number of questions returned.',
 		'- questions: Array of question objects defined below.'

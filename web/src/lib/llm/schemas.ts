@@ -66,7 +66,6 @@ export const QuizGenerationSchema = z
 		summary: z.string().min(1, 'summary is required'),
 		mode: z.enum(QUIZ_MODES),
 		subject: z.string().optional(),
-		board: z.string().optional(),
 		syllabusAlignment: z.string().min(1).optional(),
 		questionCount: z.number().int().positive(),
 		questions: z.array(QuizQuestionSchema).min(1)

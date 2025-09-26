@@ -162,7 +162,9 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 			const extensionQuiz = await extendQuizWithMoreQuestions({
 				sourceFiles: synthesisSources,
 				baseQuiz: synthesisQuiz,
-				additionalQuestionCount: 10
+				additionalQuestionCount: 10,
+				subject: 'biology',
+				board: 'OCR'
 			});
 
 			expect(extensionQuiz.mode).toBe('extension');
