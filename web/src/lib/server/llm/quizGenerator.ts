@@ -12,6 +12,7 @@ import {
 } from './quizPrompts';
 
 export const QUIZ_GENERATION_MODEL_ID: GeminiModelId = 'gemini-flash-latest';
+export const DEFAULT_GENERATION_QUESTION_COUNT = 10;
 export const DEFAULT_EXTENSION_QUESTION_COUNT = 10;
 
 export type { GenerateQuizOptions } from './quizPrompts';
@@ -20,6 +21,8 @@ export interface ExtendQuizOptions {
 	readonly sourceFiles: InlineSourceFile[];
 	readonly baseQuiz: QuizGeneration;
 	readonly additionalQuestionCount?: number;
+	readonly subject?: string;
+	readonly board?: string;
 }
 
 export async function generateQuizFromSource(
@@ -61,8 +64,8 @@ export async function extendQuizWithMoreQuestions(
 		options.additionalQuestionCount ?? DEFAULT_EXTENSION_QUESTION_COUNT;
 	const prompt = buildExtensionPrompt({
 		additionalQuestionCount,
-		subject: options.baseQuiz.subject,
-		board: options.baseQuiz.board
+		subject: options.subject ?? options.baseQuiz.subject,
+		board: options.board
 	});
 	const pastQuizLines = options.baseQuiz.questions.map(
 		(question, index) => `${index + 1}. ${question.prompt}`
