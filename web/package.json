@@ -39,6 +39,7 @@
 		"@vitest/browser": "^3.2.3",
 		"bits-ui": "^2.11.0",
 		"clsx": "^2.1.1",
+		"dotenv": "^16.6.1",
 		"eslint": "^9.22.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
@@ -55,16 +56,15 @@
 		"tailwind-merge": "^3.3.1",
 		"tailwind-variants": "^1.0.0",
 		"tailwindcss": "^4.0.0",
+		"tsx": "^4.19.2",
 		"tw-animate-css": "^1.3.8",
 		"typescript": "^5.0.0",
 		"typescript-eslint": "^8.20.0",
-		"tsx": "^4.19.2",
 		"vite": "^7.0.4",
 		"vite-plugin-devtools-json": "^1.0.0",
 		"vitest": "^3.2.3",
 		"vitest-browser-svelte": "^0.1.0",
 		"wrangler": "^4.38.0",
-		"zod": "^4.1.11",
-		"dotenv": "^16.4.5"
+		"zod": "^4.1.11"
 	}
 }
