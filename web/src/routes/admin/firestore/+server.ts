@@ -6,6 +6,7 @@ import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
 const DocSchema = z.object({}).loose();
 
 export const GET: RequestHandler = async () => {
+	console.log('GET: testing firestore admin SDK setup');
 	try {
 		const db = getFirebaseAdminFirestore();
 		const ref = db
@@ -28,6 +29,7 @@ export const GET: RequestHandler = async () => {
 		const parsed = DocSchema.parse(snap.data());
 		return json(parsed);
 	} catch (err) {
+		console.log('GET: failed:', err);
 		if (err instanceof ZodError) {
 			return json({ error: 'invalid_data', issues: err.issues }, { status: 400 });
 		}
