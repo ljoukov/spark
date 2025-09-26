@@ -36,6 +36,7 @@ Dive deeper in the [Product & Architecture Specification](docs/SPEC.md).
 - [`proto/`](proto): Source for protobuf contracts (`npm run generate` produces TypeScript and Swift bindings).
 - [`data/`](data): Fixtures used during prototyping and testing.
 - [`docs/`](docs): Living documentation, including [SPEC](docs/SPEC.md) and [FLOW](docs/FLOW.md).
+- [`spark-data/`](spark-data): Private submodule that stores licensed study materials. The contents remain empty in fresh clones unless you have credentials to access the private repository.
 
 ## Agent-guided development
 Spark is actively maintained with a coding-agent workflow. The repository’s [agent playbook](AGENTS.md) captures expectations around specs, flows, validation, and commit discipline. Contributors should review it alongside the [SPEC](docs/SPEC.md) and [FLOW](docs/FLOW.md) documents before shipping changes to keep human and agent collaborators aligned.
