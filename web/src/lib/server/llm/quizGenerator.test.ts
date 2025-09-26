@@ -109,7 +109,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 
 			expect(extractionQuiz.mode).toBe('extraction');
 			expect(extractionQuiz.questions).toHaveLength(6);
-			expect(extractionQuiz.summary.length).toBeGreaterThan(25);
 			for (const question of extractionQuiz.questions) {
 				expect(question.prompt.length).toBeGreaterThan(10);
 				expect(question.answer.length).toBeGreaterThan(0);
@@ -136,7 +135,6 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 
 			expect(synthesisQuiz.mode).toBe('synthesis');
 			expect(synthesisQuiz.questions).toHaveLength(6);
-			expect(synthesisQuiz.summary.length).toBeGreaterThan(25);
 			const typeSet = new Set(synthesisQuiz.questions.map((question) => question.type));
 			expect(typeSet.size).toBeGreaterThanOrEqual(3);
 		}
@@ -202,13 +200,13 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		{ timeout: LONG_TIMEOUT },
 		async () => {
 			await ensureSources();
-		if (!extractionQuiz) {
-			extractionQuiz = await generateQuizFromSource({
-				questionCount: 6,
-				sourceFiles: extractionSources,
-				subject: 'chemistry',
-				board: 'AQA'
-			});
+			if (!extractionQuiz) {
+				extractionQuiz = await generateQuizFromSource({
+					questionCount: 6,
+					sourceFiles: extractionSources,
+					subject: 'chemistry',
+					board: 'AQA'
+				});
 			}
 			if (!extractionVerdict) {
 				extractionVerdict = await judgeQuiz({

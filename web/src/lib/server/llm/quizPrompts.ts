@@ -1,4 +1,3 @@
-import { Type, type Schema } from '@google/genai';
 import type { Part } from '@google/genai';
 
 import { QuizGenerationSchema, type InlineSourceFile, type QuizGeneration } from '$lib/llm/schemas';
@@ -11,65 +10,6 @@ export interface GenerateQuizOptions {
 }
 
 export const BASE_PROMPT_HEADER = `You are Spark's GCSE Triple Science quiz builder. Work strictly from the supplied study material.`;
-
-export const QUIZ_RESPONSE_SCHEMA: Schema = {
-	type: Type.OBJECT,
-	properties: {
-		quizTitle: { type: Type.STRING },
-		summary: { type: Type.STRING },
-		mode: { type: Type.STRING, enum: ['extraction', 'synthesis', 'extension'] },
-		subject: { type: Type.STRING },
-		syllabusAlignment: { type: Type.STRING },
-		questionCount: { type: Type.INTEGER, minimum: 1 },
-		questions: {
-			type: Type.ARRAY,
-			items: {
-				type: Type.OBJECT,
-				properties: {
-					id: { type: Type.STRING },
-					prompt: { type: Type.STRING },
-					answer: { type: Type.STRING },
-					explanation: { type: Type.STRING },
-					type: {
-						type: Type.STRING,
-						enum: ['multiple_choice', 'short_answer', 'true_false', 'numeric']
-					},
-					options: {
-						type: Type.ARRAY,
-						items: { type: Type.STRING }
-					},
-					topic: { type: Type.STRING },
-					difficulty: { type: Type.STRING },
-					skillFocus: { type: Type.STRING },
-					sourceReference: { type: Type.STRING }
-				},
-				required: ['id', 'prompt', 'answer', 'explanation', 'type'],
-				propertyOrdering: [
-					'id',
-					'prompt',
-					'type',
-					'answer',
-					'explanation',
-					'options',
-					'topic',
-					'difficulty',
-					'skillFocus',
-					'sourceReference'
-				]
-			}
-		}
-	},
-	required: ['quizTitle', 'summary', 'mode', 'questionCount', 'questions'],
-	propertyOrdering: [
-		'quizTitle',
-		'summary',
-		'mode',
-		'subject',
-		'syllabusAlignment',
-		'questionCount',
-		'questions'
-	]
-};
 
 export function normaliseQuizPayload(payload: unknown): unknown {
 	if (!payload || typeof payload !== 'object') {
@@ -116,15 +56,13 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'Always write in UK English and reference the specification where relevant.',
 		`You must return exactly ${options.questionCount} questions.`,
 		'Prioritise coverage breadth over repetition. If the source has more material than fits, select items so every key theme is still assessed.',
-		'Summaries and field values must never claim coverage that the questions do not provide; explicitly note any unavoidable omissions.'
+		'If the material lacks enough detail for an idea, adjust the question scope so the prompt, answer, and explanation stay fully grounded.'
 	);
 	base.push(
 		'Return JSON that matches the provided schema. Field guidance:',
 		'- quizTitle: Concise, exam-style title for the quiz.',
-		'- summary: Two sentences. Sentence one states the scope, question types, and syllabus link. Sentence two must begin with "Coverage gaps:" and either say "none – full coverage achieved." or list the specific missing topics/processes.',
 		'- mode: Return "extraction" if you primarily refined existing questions from the material, otherwise "synthesis" when you authored new items.',
 		'- subject: Copy the provided subject exactly.',
-		'- syllabusAlignment: Brief note (<120 chars) naming the GCSE Triple Science topic or module.',
 		'- questionCount: Must equal the number of questions returned.',
 		'- questions: Array of question objects defined below.'
 	);
@@ -136,9 +74,6 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 		'- explanation: One to two sentences justifying the answer with source evidence.',
 		'- type: One of multiple_choice, short_answer, true_false, or numeric.',
 		'- options: Only for multiple_choice. Provide exactly four answer texts prefixed with "A) ", "B) ", "C) ", and "D) " in that order.',
-		'- topic: Short topic label (e.g., "Atomic structure").',
-		'- difficulty: Use foundation, intermediate, or higher.',
-		'- skillFocus: Action-oriented description of the assessed skill (e.g., "Interpret data", "Explain process").',
 		'- sourceReference: Precise citation (page, question number, or caption) so humans can trace the origin. Do not fabricate references.',
 		'- Always correct typographical or scientific errors from the source (e.g., prefer the standard UK spelling "phosphorus" even if the source writes "phosphorous").',
 		'- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many in the answer after choosing the most representative examples, or adjust the prompt text so the count and answer match.',
@@ -152,7 +87,6 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
 	}
 	base.push(
 		'Include concise sourceReference entries when you can identify page numbers, prompts or captions.',
-		'If the material lacks enough detail for a requirement, explain the limitation in the summary.',
 		'Verify that ids and sourceReference values align with the original numbering before returning the JSON.'
 	);
 	return base.join('\n');
@@ -175,7 +109,6 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
 		'- Continue to ground every item strictly in the supplied material.',
 		'- Highlight fresh angles or subtopics that were underrepresented previously.',
 		'- Multiple choice responses must include four options prefixed with "A) ", "B) ", "C) ", and "D) " in that order. Write the correct answer using the matching label.',
-		'- Difficulty must be mapped to foundation, intermediate, or higher for every question.',
 		'- Keep prompts and answers aligned with requested counts or enumerations from the material.',
 		'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly.',
 		'Do not restate the previous questions in the response. Only include the new items.'

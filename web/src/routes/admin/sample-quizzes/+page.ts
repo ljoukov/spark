@@ -23,7 +23,6 @@ const SampleIndexEntrySchema = z.object({
 	request: RequestSchema,
 	source: SourceSchema,
 	quizTitle: z.string().min(1),
-	summary: z.string().min(1),
 	outputPath: z.string().min(1),
 	generatedAt: z.string().datetime({ offset: true })
 });

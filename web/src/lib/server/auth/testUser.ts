@@ -9,18 +9,17 @@ const testUserSchema = z.union([z.undefined(), z.string().regex(testUserIdRegex)
 const testUser = testUserSchema.parse(env['TEST_USER']);
 
 export function isTestUserAdmin(): boolean {
-    return testUser !== undefined && testUser.startsWith('test-admin-');
+	return testUser !== undefined && testUser.startsWith('test-admin-');
 }
 
 export function isTestUser(): boolean {
-    return testUser !== undefined;
+	return testUser !== undefined;
 }
 
 export function getTestUserId(): string {
-    if (testUser === undefined) {
-        console.error('No test user ID set');
-        throw new Error('No test user ID set');
-    }
-    return testUser;
+	if (testUser === undefined) {
+		console.error('No test user ID set');
+		throw new Error('No test user ID set');
+	}
+	return testUser;
 }
-
