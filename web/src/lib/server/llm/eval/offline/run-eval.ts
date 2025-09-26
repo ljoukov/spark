@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
+import { z } from 'zod';
 
 import {
 	type Part,
@@ -22,13 +23,14 @@ import {
 	type JudgeAudit,
 	type JudgeVerdict,
 	type QuizGeneration,
+	QuizGenerationSchema,
 	QUIZ_RESPONSE_SCHEMA
 } from '../../../../llm/schemas';
 import {
 	buildExtensionPrompt,
 	buildGenerationPrompt,
 	buildSourceParts,
-	parseQuizFromText,
+	normaliseQuizPayload,
 	type GenerateQuizOptions
 } from '../../quizPrompts';
 import {
@@ -247,19 +249,23 @@ async function collectJobs(): Promise<SampleJob[]> {
 	return jobs;
 }
 
-async function callModel({
+async function callModel<T>({
 	model,
+	responseSchema,
 	schema,
 	parts,
 	rawFilePath,
-	label
+	label,
+	normalise
 }: {
 	model: GeminiModelId;
-	schema: Schema;
+	responseSchema: Schema;
+	schema: z.ZodType<T>;
 	parts: Part[];
 	rawFilePath: string;
 	label: string;
-}): Promise<{ text: string; modelId: string }> {
+	normalise?: (value: unknown) => unknown;
+}): Promise<{ text: string; modelId: string; data: T }> {
 	const logPrefix = `      [${model}]`;
 	const uploadBytes = estimateUploadBytes(parts);
 	const maxAttempts = 3;
@@ -282,7 +288,7 @@ async function callModel({
 				],
 				config: {
 					responseMimeType: 'application/json',
-					responseSchema: schema
+					responseSchema
 				}
 			});
 
@@ -358,17 +364,40 @@ async function callModel({
 			console.warn(
 				`${logPrefix}: non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
 			);
-			throw Error('non-JSON LLM response');
+			continue;
 		}
+		let parsed: unknown;
 		try {
-			JSON.parse(text);
-			return { text, modelId: model };
-		} catch (e) {
-			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}: ${e}`);
+			parsed = JSON.parse(text);
+		} catch (error) {
+			console.warn(`${logPrefix}: failed to parse JSON on attempt ${attempt}: ${error}`);
+			continue;
 		}
+		let candidate = parsed;
+		if (normalise) {
+			try {
+				candidate = normalise(parsed);
+			} catch (error) {
+				console.error(`${logPrefix}: failed to normalise response on attempt ${attempt}:`, error);
+				continue;
+			}
+		}
+		const validation = schema.safeParse(candidate);
+		if (!validation.success) {
+			const issueMessages = validation.error.issues
+				.map((issue) => {
+					const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+					return `- ${path}: ${issue.message}`;
+				})
+				.join('\n');
+			console.error(`${logPrefix}: schema validation failed on attempt ${attempt}:\n${issueMessages}`);
+			continue;
+		}
+
+		return { text, modelId: model, data: validation.data };
 	}
 
-	throw new Error(`${logPrefix}: failed to produce JSON after ${maxAttempts} attempts`);
+	throw new Error(`${logPrefix}: failed to produce a valid response after ${maxAttempts} attempts`);
 }
 
 async function generateQuizPayload(
@@ -384,14 +413,15 @@ async function generateQuizPayload(
 	};
 	const prompt = buildGenerationPrompt(options);
 	const parts = [{ text: prompt }, ...buildSourceParts(options.sourceFiles)];
-	const { text } = await callModel({
+	const { data: quiz } = await callModel<QuizGeneration>({
 		model: QUIZ_GENERATION_MODEL_ID,
-		schema: QUIZ_RESPONSE_SCHEMA,
+		responseSchema: QUIZ_RESPONSE_SCHEMA,
+		schema: QuizGenerationSchema,
+		normalise: normaliseQuizPayload,
 		parts,
 		rawFilePath,
 		label
 	});
-	const quiz = parseQuizFromText(text);
 	const generatedAt = new Date().toISOString();
 	return {
 		id: job.id,
@@ -435,14 +465,16 @@ async function generateExtensionPayload(
 		...buildSourceParts([source]),
 		{ text: `Previous quiz prompts:\n${pastQuizBlock}` }
 	];
-	const { text } = await callModel({
+	const { data: generated } = await callModel<QuizGeneration>({
 		model: QUIZ_GENERATION_MODEL_ID,
-		schema: QUIZ_RESPONSE_SCHEMA,
+		responseSchema: QUIZ_RESPONSE_SCHEMA,
+		schema: QuizGenerationSchema,
+		normalise: normaliseQuizPayload,
 		parts,
 		rawFilePath,
 		label
 	});
-	let quiz = parseQuizFromText(text);
+	let quiz = generated;
 	if (quiz.questionCount !== DEFAULT_EXTENSION_QUESTION_COUNT) {
 		console.warn(
 			`[sample-quizzes] Extension for ${job.id} returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
@@ -493,15 +525,14 @@ async function judgeQuizPayload(
 		...buildSourceParts([source]),
 		{ text: `Candidate quiz JSON:\n${JSON.stringify(quiz, null, 2)}` }
 	];
-	const { text, modelId } = await callModel({
+	const { data: parsedVerdict, modelId } = await callModel<JudgeVerdict>({
 		model: QUIZ_EVAL_MODEL_ID,
-		schema: JUDGE_RESPONSE_SCHEMA,
+		responseSchema: JUDGE_RESPONSE_SCHEMA,
+		schema: JudgeVerdictSchema,
 		parts,
 		rawFilePath,
 		label
 	});
-	const verdict = JSON.parse(text) as unknown;
-	const parsedVerdict = JudgeVerdictSchema.parse(verdict);
 	const evaluatedAt = new Date().toISOString();
 	return {
 		id: job.id,
@@ -541,15 +572,14 @@ async function auditJudgeDecisionPayload(
 			)}`
 		}
 	];
-	const { text, modelId } = await callModel({
+	const { data: result, modelId } = await callModel<JudgeAudit>({
 		model: QUIZ_EVAL_MODEL_ID,
-		schema: AUDIT_RESPONSE_SCHEMA,
+		responseSchema: AUDIT_RESPONSE_SCHEMA,
+		schema: JudgeAuditSchema,
 		parts,
 		rawFilePath,
 		label
 	});
-	const parsed = JSON.parse(text) as unknown;
-	const result = JudgeAuditSchema.parse(parsed);
 	return {
 		model: {
 			modelId
@@ -794,7 +824,8 @@ function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
 		if (question.sourceReference) {
 			lines.push(`- Source reference: ${question.sourceReference}`);
 		}
-		lines.push(`- Answer: ${question.answer}`);
+		lines.push(`- Answer: ${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}`);
+		lines.push(`- Hint: ${question.hint}`);
 		if (question.options && question.options.length > 0) {
 			lines.push('- Options:');
 			question.options.forEach((option, optionIndex) => {

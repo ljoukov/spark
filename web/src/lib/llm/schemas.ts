@@ -14,24 +14,89 @@ export const QUIZ_MODES = ['extraction', 'synthesis', 'extension'] as const;
 
 export const QUESTION_TYPES = ['multiple_choice', 'short_answer', 'true_false', 'numeric'] as const;
 
+const MULTIPLE_CHOICE_OPTION_LIMITS = new Map<number, Set<string>>([
+	[2, new Set(['A', 'B'])],
+	[3, new Set(['A', 'B', 'C'])],
+	[4, new Set(['A', 'B', 'C', 'D'])]
+]);
+
 const QuizQuestionSchema = z
 	.object({
 		id: z.string().min(1),
 		type: z.enum(QUESTION_TYPES),
 		prompt: z.string().min(1),
 		options: z.array(z.string().min(1)).optional(),
-		answer: z.string().min(1),
+		answer: z
+			.array(z.string().min(1, 'answer entries must not be empty'))
+			.min(1, 'answer must include at least one entry'),
 		explanation: z.string().min(1),
+		hint: z.string().min(1, 'hint must not be empty'),
 		sourceReference: z.string().min(1).optional()
 	})
 	.superRefine((value, ctx) => {
 		if (value.type === 'multiple_choice') {
-			if (!value.options || value.options.length !== 4) {
+			if (!value.options || value.options.length === 0) {
 				ctx.addIssue({
 					code: 'custom',
-					message: 'multiple_choice questions must include exactly four options',
+					message: 'multiple_choice questions must include options',
 					path: ['options']
 				});
+				return;
+			}
+			if (!MULTIPLE_CHOICE_OPTION_LIMITS.has(value.options.length)) {
+				ctx.addIssue({
+					code: 'custom',
+					message: 'multiple_choice questions must include 2, 3, or 4 options',
+					path: ['options']
+				});
+			}
+			const labelledOption = value.options.find((option) =>
+				/^[A-D]\)\. /i.test(option.trimStart())
+			);
+			if (labelledOption) {
+				ctx.addIssue({
+					code: 'custom',
+					message: `option text must not start with leading choice labels, found "${labelledOption.substring(0, 10)}"`,
+					path: ['options']
+				});
+			}
+			const allowedLetters = MULTIPLE_CHOICE_OPTION_LIMITS.get(value.options.length);
+			if (allowedLetters) {
+				for (const entry of value.answer) {
+					if (!/^[A-D]$/.test(entry)) {
+						ctx.addIssue({
+							code: 'custom',
+							message: 'multiple_choice answer entries must be single letters (A-D)',
+							path: ['answer']
+						});
+						break;
+					}
+					if (!allowedLetters.has(entry)) {
+						ctx.addIssue({
+							code: 'custom',
+							message: `multiple_choice answers must match available options (${Array.from(allowedLetters).join(', ')})`,
+							path: ['answer']
+						});
+						break;
+					}
+				}
+			}
+			if (value.answer.length > 1) {
+				const hasNoneOfAbove = value.options.some((option) => /none of the above/i.test(option));
+				if (!hasNoneOfAbove) {
+					ctx.addIssue({
+						code: 'custom',
+						message: 'multiple_answer questions must include "None of the above" as one option',
+						path: ['options']
+					});
+				}
+				if (value.options.length < 3) {
+					ctx.addIssue({
+						code: 'custom',
+						message: 'multiple_answer questions must offer at least 3 options',
+						path: ['options']
+					});
+				}
 			}
 			return;
 		}
@@ -85,13 +150,24 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 					prompt: { type: Type.STRING },
 					options: {
 						type: Type.ARRAY,
-						items: { type: Type.STRING }
+						items: { type: Type.STRING },
+						description:
+							'Provide 2-4 plain-text option bodies without leading labels; leave empty when type is not multiple_choice.'
 					},
-					answer: { type: Type.STRING },
+					answer: {
+						type: Type.ARRAY,
+						items: { type: Type.STRING },
+						description:
+							'List correct choices. For multiple_choice use single letters (A-D) matching the UI labels; include one entry per correct choice.'
+					},
 					explanation: { type: Type.STRING },
+					hint: {
+						type: Type.STRING,
+						description: 'Short insight that guides a learner without giving away the exact answer.'
+					},
 					sourceReference: { type: Type.STRING }
 				},
-				required: ['id', 'type', 'prompt', 'answer', 'explanation'],
+				required: ['id', 'type', 'prompt', 'answer', 'explanation', 'hint'],
 				propertyOrdering: [
 					'id',
 					'type',
@@ -99,6 +175,7 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 					'options',
 					'answer',
 					'explanation',
+					'hint',
 					'sourceReference'
 				]
 			}
