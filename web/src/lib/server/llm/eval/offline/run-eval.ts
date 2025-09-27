@@ -40,7 +40,7 @@ import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
 import { runJobsWithConcurrency, type JobProgressReporter, type StatusMode } from './concurrency';
 import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 
-import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from './payload';
+import type { JudgeFilePayload, QuizFilePayload, SampleJob } from './payload';
 
 ensureOfflineEnv();
 
@@ -533,7 +533,6 @@ async function callModel<T>({
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
 		try {
-			const requestStartedAt = Date.now();
 			let finalPromptTokens = 0;
 			let finalInferenceTokens = 0;
 			const { text } = await runGeminiCall(async (client) => {
