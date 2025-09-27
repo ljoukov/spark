@@ -8,8 +8,8 @@ if [ -z "${REPO_ROOT}" ]; then
 fi
 cd "${REPO_ROOT}"
 
-if [ ! -d spark-data/.git ]; then
-  echo "error: expected submodule directory spark-data/.git to exist" >&2
+if [ ! -f spark-data/.git ] && [ ! -d spark-data/.git ]; then
+  echo "error: expected spark-data/.git to exist; initialize the submodule first" >&2
   exit 1
 fi
 
