@@ -2,10 +2,8 @@ import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
 
 import { type Part, type Schema, GenerateContentResponse } from '@google/genai';
@@ -42,12 +40,14 @@ import {
 } from '../judge';
 import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
 import { runJobsWithConcurrency, type JobProgressReporter, type StatusMode } from './concurrency';
+import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 
 import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from './payload';
 
-const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
-const REPO_ROOT = path.resolve(WEB_ROOT, '../');
+ensureOfflineEnv();
+
+const { repoRoot: REPO_ROOT, webRoot: WEB_ROOT, outputDir: OUTPUT_DIR, reportRoot: REPORT_ROOT } = OFFLINE_PATHS;
+const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
 const DATA_ROOT_CANDIDATES = [
 	process.env.SPARK_EVAL_SAMPLE_ROOT,
 	'/spark-data/samples-organized',
@@ -63,20 +63,12 @@ const DATA_ROOT = (() => {
 	}
 	return path.join(REPO_ROOT, 'spark-data', 'samples');
 })();
-const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
-const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
-const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
 const MAX_CONCURRENT_ANALYSES = 4;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const CHECKPOINT_DIR = path.join(OUTPUT_DIR, 'checkpoints');
 const CHECKPOINT_INTERVAL_MS = 10_000;
 const CHECKPOINT_HISTORY_LIMIT = 3;
 const CHECKPOINT_VERSION = 1;
-
-const LOCAL_ENV_PATH = path.resolve('.env.local');
-if (existsSync(LOCAL_ENV_PATH)) {
-	loadEnv({ path: LOCAL_ENV_PATH });
-}
 
 const execFileAsync = promisify(execFile);
 

@@ -1,7 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
 	JudgeAuditFilePayloadSchema,
@@ -9,11 +8,9 @@ import {
 	type JudgeAuditFilePayload,
 	type JudgeFilePayload
 } from './payload';
+import { OFFLINE_PATHS } from './env';
 
-const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
-const REPO_ROOT = path.resolve(WEB_ROOT, '../');
-const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
+const { outputDir: OUTPUT_DIR } = OFFLINE_PATHS;
 const FULL_SCORE_EPSILON = 1e-6;
 
 type LoadedEvaluation = {
