@@ -64,8 +64,12 @@ const DATA_ROOT = (() => {
 const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
 const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
-const MAX_CONCURRENT_ANALYSES = 128;
+const MAX_CONCURRENT_ANALYSES = 32;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const CHECKPOINT_DIR = path.join(OUTPUT_DIR, 'checkpoints');
+const CHECKPOINT_INTERVAL_MS = 10_000;
+const CHECKPOINT_HISTORY_LIMIT = 3;
+const CHECKPOINT_VERSION = 1;
 
 const LOCAL_ENV_PATH = path.resolve('.env.local');
 if (existsSync(LOCAL_ENV_PATH)) {
@@ -175,6 +179,193 @@ type GenerationResult = {
 	readonly extension: QuizFilePayload;
 	readonly extensionJudge: JudgeFilePayload;
 };
+
+type CheckpointJobEntry = {
+	readonly completedAt: string;
+};
+
+type CheckpointState = {
+	readonly version: number;
+	readonly updatedAt: string;
+	readonly completedJobs: Record<string, CheckpointJobEntry>;
+};
+
+class CheckpointManager {
+	private readonly directory: string;
+	private state: CheckpointState;
+	private dirty = false;
+	private timer: NodeJS.Timeout | null = null;
+	private lastWriteTimestamp = 0;
+
+	private constructor(directory: string, state: CheckpointState) {
+		this.directory = directory;
+		this.state = state;
+	}
+
+	static async load(directory: string): Promise<CheckpointManager> {
+		const state = await loadLatestCheckpointState(directory);
+		if (!state) {
+			console.log('[eval] No checkpoint state found; starting fresh.');
+			return new CheckpointManager(directory, createEmptyCheckpointState());
+		}
+		if (state.version !== CHECKPOINT_VERSION) {
+			console.warn(
+				`[eval] WARN checkpoint version mismatch (found ${state.version}); starting fresh.`
+			);
+			return new CheckpointManager(directory, createEmptyCheckpointState());
+		}
+		return new CheckpointManager(directory, state);
+	}
+
+	start(): void {
+		if (this.timer) {
+			return;
+		}
+		this.timer = setInterval(() => {
+			void this.writeIfDirty();
+		}, CHECKPOINT_INTERVAL_MS);
+		this.timer.unref?.();
+	}
+
+	isCompleted(jobId: string): boolean {
+		return Boolean(this.state.completedJobs[jobId]);
+	}
+
+	markCompleted(jobId: string): void {
+		if (this.state.completedJobs[jobId]) {
+			return;
+		}
+		this.state = {
+			...this.state,
+			completedJobs: {
+				...this.state.completedJobs,
+				[jobId]: { completedAt: new Date().toISOString() }
+			},
+			updatedAt: new Date().toISOString()
+		};
+		this.dirty = true;
+	}
+
+	async pruneTo(jobIds: Set<string>): Promise<void> {
+		let changed = false;
+		const nextEntries: Record<string, CheckpointJobEntry> = {};
+		for (const [jobId, entry] of Object.entries(this.state.completedJobs)) {
+			if (jobIds.has(jobId)) {
+				nextEntries[jobId] = entry;
+			} else {
+				changed = true;
+			}
+		}
+		if (changed) {
+			this.state = {
+				...this.state,
+				completedJobs: nextEntries,
+				updatedAt: new Date().toISOString()
+			};
+			this.dirty = true;
+			await this.writeIfDirty(true);
+		}
+	}
+
+	async flush(): Promise<void> {
+		if (this.timer) {
+			clearInterval(this.timer);
+			this.timer = null;
+		}
+		await this.writeIfDirty(true);
+	}
+
+	private async writeIfDirty(force = false): Promise<void> {
+		if (!force && !this.dirty) {
+			return;
+		}
+		const now = Date.now();
+		if (!force && now - this.lastWriteTimestamp < CHECKPOINT_INTERVAL_MS) {
+			return;
+		}
+		try {
+			await this.writeSnapshot();
+			this.lastWriteTimestamp = Date.now();
+			this.dirty = false;
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			console.warn(`[eval] WARN failed to write checkpoint: ${reason}`);
+		}
+	}
+
+	private async writeSnapshot(): Promise<void> {
+		await mkdir(this.directory, { recursive: true });
+		const isoTimestamp = new Date().toISOString();
+		const safeTimestamp = isoTimestamp.replace(/[:.]/g, '-');
+		const fileName = `checkpoint-${safeTimestamp}.json`;
+		const filePath = path.join(this.directory, fileName);
+		const payload: CheckpointState = {
+			version: CHECKPOINT_VERSION,
+			updatedAt: isoTimestamp,
+			completedJobs: this.state.completedJobs
+		};
+		await writeJson(filePath, payload);
+		await this.cleanupOldSnapshots();
+	}
+
+	private async cleanupOldSnapshots(): Promise<void> {
+		let entries: string[] = [];
+		try {
+			entries = (await readdir(this.directory))
+				.filter((name) => name.startsWith('checkpoint-') && name.endsWith('.json'))
+				.sort();
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return;
+			}
+			throw error;
+		}
+		const excess = entries.length - CHECKPOINT_HISTORY_LIMIT;
+		if (excess <= 0) {
+			return;
+		}
+		for (let index = 0; index < excess; index += 1) {
+			const name = entries[index];
+			await rm(path.join(this.directory, name), { force: true });
+		}
+	}
+}
+
+function createEmptyCheckpointState(): CheckpointState {
+	return {
+		version: CHECKPOINT_VERSION,
+		updatedAt: new Date().toISOString(),
+		completedJobs: {}
+	};
+}
+
+async function loadLatestCheckpointState(directory: string): Promise<CheckpointState | undefined> {
+	let entries;
+	try {
+		entries = await readdir(directory, { withFileTypes: true });
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException;
+		if (err.code === 'ENOENT') {
+			return undefined;
+		}
+		throw error;
+	}
+	const checkpointFiles = entries
+		.filter((entry) => entry.isFile() && entry.name.startsWith('checkpoint-') && entry.name.endsWith('.json'))
+		.map((entry) => entry.name)
+		.sort();
+	for (let index = checkpointFiles.length - 1; index >= 0; index -= 1) {
+		const name = checkpointFiles[index];
+		const filePath = path.join(directory, name);
+		try {
+			return await readJson<CheckpointState>(filePath);
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			console.warn(`[eval] WARN failed to read checkpoint ${name}: ${reason}`);
+		}
+	}
+	return undefined;
+}
 
 function slugify(value: string): string {
 	return (
@@ -315,6 +506,11 @@ async function callModel<T>({
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
 		try {
+			const requestStartedAt = Date.now();
+			let promptDurationMs = 0;
+			let inferenceDurationMs = 0;
+			let finalPromptTokens = 0;
+			let finalInferenceTokens = 0;
 			const { text } = await runGeminiCall(async (client) => {
 				const stream = await client.models.generateContentStream({
 					model,
@@ -334,8 +530,10 @@ async function callModel<T>({
 				let firstChunkReceived = false;
 				let latestText = '';
 				let finalChunk: GenerateContentResponse | undefined;
-				let lastPromptTokens = 0;
-				let lastInferenceTokens = 0;
+					let lastPromptTokens = 0;
+					let lastInferenceTokens = 0;
+				let firstChunkTimestamp: number | undefined;
+				let finalChunkTimestamp: number | undefined;
 
 				for await (const chunk of stream) {
 					if (chunk.candidates) {
@@ -379,18 +577,25 @@ async function callModel<T>({
 					}
 					if (!firstChunkReceived) {
 						firstChunkReceived = true;
+						firstChunkTimestamp = Date.now();
 					}
 				}
 
 				if (!firstChunkReceived) {
 					throw new Error(`[${model}] ${label}: stream produced no chunks`);
 				}
+				finalChunkTimestamp = Date.now();
+				const effectiveFirstChunkTimestamp = firstChunkTimestamp ?? finalChunkTimestamp;
+				promptDurationMs = Math.max(0, effectiveFirstChunkTimestamp - requestStartedAt);
+				inferenceDurationMs = Math.max(0, finalChunkTimestamp - effectiveFirstChunkTimestamp);
 
 				if (latestText.length === 0 && finalChunk?.text) {
 					progress.reportChars(finalChunk.text.length);
 				}
-				const finalText = latestText || finalChunk?.text || '';
-				if (!finalText) {
+					finalPromptTokens = lastPromptTokens;
+					finalInferenceTokens = lastInferenceTokens;
+					const finalText = latestText || finalChunk?.text || '';
+					if (!finalText) {
 					throw new Error(`[${model}] ${label}: empty response`);
 				}
 
@@ -402,6 +607,25 @@ async function callModel<T>({
 			await writeFile(attemptPath, text, 'utf8');
 
 			const trimmed = text.trimStart();
+			const promptSeconds = Math.max(0, promptDurationMs) / 1000;
+			const inferenceSeconds = Math.max(0, inferenceDurationMs) / 1000;
+			const promptTokensTotal = finalPromptTokens;
+			const inferenceTokensTotal = finalInferenceTokens;
+			if (promptTokensTotal === 0 && inferenceTokensTotal > 0) {
+				progress.log(
+					`[eval] ${label} (attempt ${attempt}) WARN prompt token count zero; usage metadata may be missing promptTokenCount.`
+				);
+			}
+			const promptSpeed = promptSeconds > 0 ? promptTokensTotal / promptSeconds : undefined;
+			const inferenceSpeed =
+				inferenceSeconds > 0 ? inferenceTokensTotal / inferenceSeconds : undefined;
+			const promptSpeedDisplay =
+				promptSpeed !== undefined ? `${Math.round(promptSpeed)}/s` : 'n/a';
+			const inferenceSpeedDisplay =
+				inferenceSpeed !== undefined ? `${Math.round(inferenceSpeed)}/s` : 'n/a';
+			progress.log(
+				`[eval] ${label} (attempt ${attempt}) prompt ${promptSeconds.toFixed(2)}s · inference ${inferenceSeconds.toFixed(2)}s · speed: P ${promptSpeedDisplay} I ${inferenceSpeedDisplay}`
+			);
 			if (!trimmed.startsWith('{')) {
 				progress.log(
 					`[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
@@ -720,6 +944,30 @@ async function runSampleGeneration(
 	};
 }
 
+async function loadExistingGenerationResult(job: SampleJob): Promise<GenerationResult | undefined> {
+	const sampleDir = path.join(OUTPUT_DIR, job.id);
+	const quizPath = path.join(sampleDir, 'quiz.json');
+	const judgePath = path.join(sampleDir, 'quiz-judgement.json');
+	const extensionPath = path.join(sampleDir, 'quiz-extension.json');
+	const extensionJudgePath = path.join(sampleDir, 'quiz-extension-judgement.json');
+	if (!existsSync(quizPath) || !existsSync(judgePath) || !existsSync(extensionPath) || !existsSync(extensionJudgePath)) {
+		return undefined;
+	}
+	try {
+		const [quiz, judge, extension, extensionJudge] = await Promise.all([
+			readJson<QuizFilePayload>(quizPath),
+			readJson<JudgeFilePayload>(judgePath),
+			readJson<QuizFilePayload>(extensionPath),
+			readJson<JudgeFilePayload>(extensionJudgePath)
+		]);
+		return { job, quiz, judge, extension, extensionJudge };
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		console.warn(`[eval] WARN failed to load existing outputs for ${job.id}: ${reason}`);
+		return undefined;
+	}
+}
+
 type StageSelection = 'all' | 'generate' | 'render';
 
 function parseStageSelection(): StageSelection {
@@ -797,46 +1045,86 @@ type SampleIndex = {
 };
 
 async function runGenerationStage(
-	jobs: SampleJob[]
+	jobs: SampleJob[],
+	{ checkpoint }: { checkpoint: CheckpointManager }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
-	await rm(OUTPUT_DIR, { recursive: true, force: true });
 	await mkdir(OUTPUT_DIR, { recursive: true });
 
-	const concurrency = Math.min(MAX_CONCURRENT_ANALYSES, jobs.length);
-	console.log(`[eval] Generating ${jobs.length} samples with concurrency ${concurrency}.`);
-	const results = await runJobsWithConcurrency<SampleJob, GenerationResult>({
-		items: jobs,
-		concurrency,
-		getId: (job) => job.id,
-		label: '[eval] offline eval',
-		handler: async (job, { progress }) => {
-			const sampleDir = path.join(OUTPUT_DIR, job.id);
-			const rawDir = path.join(sampleDir, 'raw');
-			await mkdir(sampleDir, { recursive: true });
-			await mkdir(rawDir, { recursive: true });
-			try {
-				const result = await runSampleGeneration(job, rawDir, progress);
-				await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
-				await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
-				await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
-				await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
-				await writeJson(
-					path.join(sampleDir, 'quiz-extension-judgement.json'),
-					result.extensionJudge
-				);
-				return result;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				progress.log(`ERROR ${message}`);
-				throw error;
+	const resultMap = new Map<string, GenerationResult>();
+	const pendingJobs: SampleJob[] = [];
+	let reusedCount = 0;
+
+	for (const job of jobs) {
+		if (checkpoint.isCompleted(job.id)) {
+			const existing = await loadExistingGenerationResult(job);
+			if (existing) {
+				resultMap.set(job.id, existing);
+				reusedCount += 1;
+				continue;
 			}
+			console.warn(`[eval] WARN checkpoint marked ${job.id} complete but outputs are missing; regenerating.`);
 		}
+		pendingJobs.push(job);
+	}
+
+	if (reusedCount > 0) {
+		console.log(`[eval] Reusing ${reusedCount} samples from checkpoint.`);
+	}
+
+	if (pendingJobs.length > 0) {
+		const concurrency = Math.min(MAX_CONCURRENT_ANALYSES, pendingJobs.length);
+		console.log(
+			`[eval] Generating ${pendingJobs.length} of ${jobs.length} samples with concurrency ${concurrency}.`
+		);
+		const generated = await runJobsWithConcurrency<SampleJob, GenerationResult>({
+			items: pendingJobs,
+			concurrency,
+			getId: (job) => job.id,
+			label: '[eval] offline eval',
+			handler: async (job, { progress }) => {
+				const sampleDir = path.join(OUTPUT_DIR, job.id);
+				const rawDir = path.join(sampleDir, 'raw');
+				await rm(sampleDir, { recursive: true, force: true });
+				await mkdir(sampleDir, { recursive: true });
+				await mkdir(rawDir, { recursive: true });
+				try {
+					const result = await runSampleGeneration(job, rawDir, progress);
+					await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
+					await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
+					await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
+					await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
+					await writeJson(
+						path.join(sampleDir, 'quiz-extension-judgement.json'),
+						result.extensionJudge
+					);
+					checkpoint.markCompleted(job.id);
+					return result;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					progress.log(`ERROR ${message}`);
+					throw error;
+				}
+			}
+		});
+		for (const result of generated) {
+			resultMap.set(result.job.id, result);
+		}
+	} else if (jobs.length > 0) {
+		console.log(`[eval] No pending samples to generate; using checkpoint outputs for all ${jobs.length} samples.`);
+	}
+
+	const orderedResults = jobs.map((job) => {
+		const result = resultMap.get(job.id);
+		if (!result) {
+			throw new Error(`Missing generation result for job ${job.id}`);
+		}
+		return result;
 	});
 
 	const indexGeneratedAt = new Date().toISOString();
 	const index: SampleIndex = {
 		generatedAt: indexGeneratedAt,
-		samples: results.map((result, indexPosition) => ({
+		samples: orderedResults.map((result, indexPosition) => ({
 			id: result.job.id,
 			label: `Sample ${indexPosition + 1}: ${result.job.displayName}`,
 			mode: result.quiz.quiz.mode,
@@ -870,9 +1158,9 @@ async function runGenerationStage(
 	};
 
 	await writeJson(path.join(OUTPUT_DIR, 'index.json'), index);
-	console.log(`[eval] Wrote index.json with ${results.length} entries.`);
+	console.log(`[eval] Wrote index.json with ${orderedResults.length} entries.`);
 
-	return { results, index };
+	return { results: orderedResults, index };
 }
 
 function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
@@ -1090,9 +1378,12 @@ async function main(): Promise<void> {
 	const jobLimit = parseJobLimit();
 
 	if (stage !== 'render') {
+		const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
 		const jobs = await collectJobs();
+		await checkpoint.pruneTo(new Set(jobs.map((job) => job.id)));
 		if (jobs.length === 0) {
 			console.warn('[eval] No sample files found.');
+			await checkpoint.flush();
 			return;
 		}
 		const effectiveJobs =
@@ -1102,12 +1393,17 @@ async function main(): Promise<void> {
 				`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
 			);
 		}
-		const { index } = await runGenerationStage(effectiveJobs);
-		if (stage === 'generate') {
+		checkpoint.start();
+		try {
+			const { index } = await runGenerationStage(effectiveJobs, { checkpoint });
+			if (stage === 'generate') {
+				return;
+			}
+			await renderReports(index);
 			return;
+		} finally {
+			await checkpoint.flush();
 		}
-		await renderReports(index);
-		return;
 	}
 
 	await renderReports();
