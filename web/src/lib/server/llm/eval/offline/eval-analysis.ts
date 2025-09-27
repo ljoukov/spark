@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -10,8 +10,27 @@ import {
 } from './payload';
 import { OFFLINE_PATHS } from './env';
 
-const { outputDir: OUTPUT_DIR } = OFFLINE_PATHS;
+const { outputDir: OUTPUT_DIR, repoRoot: REPO_ROOT } = OFFLINE_PATHS;
+const ANALYSIS_OUTPUT_PATH = path.join(REPO_ROOT, 'spark-data', 'report', 'stats.txt');
+const analysisLines: string[] = [];
 const FULL_SCORE_EPSILON = 1e-6;
+
+function recordLine(level: 'log' | 'warn' | 'error', message: string): void {
+	analysisLines.push(message);
+	console[level](message);
+}
+
+function logLine(message: string): void {
+	recordLine('log', message);
+}
+
+function warnLine(message: string): void {
+	recordLine('warn', message);
+}
+
+function errorLine(message: string): void {
+	recordLine('error', message);
+}
 
 type LoadedEvaluation = {
 	readonly judgement: JudgeFilePayload;
@@ -27,7 +46,7 @@ function isFullScore(score: number): boolean {
 
 async function loadEvaluations(): Promise<LoadedEvaluation[]> {
 	if (!existsSync(OUTPUT_DIR)) {
-		console.warn(`[analysis] WARN output directory not found at ${OUTPUT_DIR}`);
+		warnLine(`[analysis] WARN output directory not found at ${OUTPUT_DIR}`);
 		return [];
 	}
 	const entries = await readdir(OUTPUT_DIR, { withFileTypes: true });
@@ -81,7 +100,7 @@ async function loadEvaluations(): Promise<LoadedEvaluation[]> {
 				});
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				console.warn(`[analysis] WARN unable to read ${filePath}: ${message}`);
+				warnLine(`[analysis] WARN unable to read ${filePath}: ${message}`);
 			}
 		}
 	}
@@ -100,22 +119,22 @@ function formatPercentage(value: number): string {
 
 function summariseEvaluations(evaluations: LoadedEvaluation[]): void {
 	if (evaluations.length === 0) {
-		console.log('[analysis] No judgement files found.');
+		logLine('[analysis] No judgement files found.');
 		return;
 	}
 
-	console.log(
+	logLine(
 		`[analysis] Processed ${evaluations.length} judgement file${evaluations.length === 1 ? '' : 's'}.`
 	);
 
 	const evaluationsWithAudit = evaluations.filter((evaluation) => Boolean(evaluation.audit));
 	const missingAuditCount = evaluations.length - evaluationsWithAudit.length;
 	if (evaluationsWithAudit.length === 0) {
-		console.log('[analysis] No audit data available; skipping combined metrics.');
+		logLine('[analysis] No audit data available; skipping combined metrics.');
 		return;
 	}
 	if (missingAuditCount > 0) {
-		console.log(
+		logLine(
 			`[analysis] Missing audit files for ${missingAuditCount} judgement${missingAuditCount === 1 ? '' : 's'}.`
 		);
 	}
@@ -135,7 +154,7 @@ function summariseEvaluations(evaluations: LoadedEvaluation[]): void {
 		evaluationsWithAudit.length === 0
 			? 0
 			: (perfectEvaluations.length / evaluationsWithAudit.length) * 100;
-	console.log(
+	logLine(
 		`[analysis] Perfect (approve + agree + high confidence): ${perfectEvaluations.length}/${evaluationsWithAudit.length} (${formatPercentage(perfectPercentage)}).`
 	);
 
@@ -158,9 +177,9 @@ function summariseEvaluations(evaluations: LoadedEvaluation[]): void {
 
 function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): void {
 	const total = evaluations.length;
-	console.log(`[analysis] ${label}: ${total} evaluation${total === 1 ? '' : 's'}.`);
+	logLine(`[analysis] ${label}: ${total} evaluation${total === 1 ? '' : 's'}.`);
 	if (total === 0) {
-		console.log('  - None');
+		logLine('  - None');
 		return;
 	}
 
@@ -185,15 +204,15 @@ function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): 
 	}
 
 	const issuePercentage = total === 0 ? 0 : (issueCount / total) * 100;
-	console.log(
+	logLine(
 		`  - Quizzes with judge issues: ${issueCount} (${formatPercentage(issuePercentage)}).`
 	);
 
 	if (nonFullScoreCount === 0) {
-		console.log('  - Non-1.0 rubric scores: none');
+		logLine('  - Non-1.0 rubric scores: none');
 		return;
 	}
-	console.log('  - Non-1.0 rubric scores (rounded to 0.1 increments):');
+	logLine('  - Non-1.0 rubric scores (rounded to 0.1 increments):');
 	const distribution: ScoreDistributionEntry[] = Array.from(nonFullScoreBuckets.entries())
 		.map(([bucket, count]) => ({
 			bucket,
@@ -203,18 +222,18 @@ function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): 
 		.sort((a, b) => Number.parseFloat(b.bucket) - Number.parseFloat(a.bucket));
 
 	for (const entry of distribution) {
-		console.log(
+		logLine(
 			`    - ${entry.bucket}: ${formatPercentage(entry.percentage)} (${entry.count}/${nonFullScoreCount})`
 		);
 	}
 }
 
 function printHighConfidenceBreakdown(evaluations: LoadedEvaluation[]): void {
-	console.log(
+	logLine(
 		`[analysis] High-confidence agreements: ${evaluations.length} evaluation${evaluations.length === 1 ? '' : 's'}.`
 	);
 	if (evaluations.length === 0) {
-		console.log('  - None');
+		logLine('  - None');
 		return;
 	}
 	const breakdown = new Map<
@@ -242,28 +261,50 @@ function printHighConfidenceBreakdown(evaluations: LoadedEvaluation[]): void {
 	}
 	const criteria = Array.from(breakdown.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 	if (criteria.length === 0) {
-		console.log('  - All rubric scores are 1.0');
+		logLine('  - All rubric scores are 1.0');
 		return;
 	}
 	for (const [criterion, data] of criteria) {
-		console.log(`  - ${criterion}:`);
+		logLine(`  - ${criterion}:`);
 		const buckets = Array.from(data.buckets.entries()).sort(
 			(a, b) => Number.parseFloat(b[0]) - Number.parseFloat(a[0])
 		);
 		for (const [bucket, count] of buckets) {
 			const percentage = data.total === 0 ? 0 : (count / data.total) * 100;
-			console.log(`    - ${bucket}: ${formatPercentage(percentage)} (${count}/${data.total})`);
+			logLine(`    - ${bucket}: ${formatPercentage(percentage)} (${count}/${data.total})`);
 		}
 	}
 }
 
-async function main(): Promise<void> {
+async function writeAnalysisOutput(): Promise<void> {
+	await mkdir(path.dirname(ANALYSIS_OUTPUT_PATH), { recursive: true });
+	const content = analysisLines.length > 0 ? `${analysisLines.join('\n')}\n` : '';
+	await writeFile(ANALYSIS_OUTPUT_PATH, content, 'utf8');
+}
+
+async function runAnalysis(): Promise<void> {
 	const evaluations = await loadEvaluations();
 	summariseEvaluations(evaluations);
 }
 
-main().catch((error) => {
-	const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-	console.error(`[analysis] ERROR ${message}`);
-	process.exitCode = 1;
-});
+async function main(): Promise<void> {
+	try {
+		await runAnalysis();
+	} catch (error) {
+		const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+		errorLine(`[analysis] ERROR ${message}`);
+		process.exitCode = 1;
+	} finally {
+		try {
+			await writeAnalysisOutput();
+		} catch (writeError) {
+			const message = writeError instanceof Error ? writeError.message : String(writeError);
+			console.error(
+				`[analysis] ERROR failed to write stats to ${ANALYSIS_OUTPUT_PATH}: ${message}`
+			);
+			process.exitCode = 1;
+		}
+	}
+}
+
+void main();
