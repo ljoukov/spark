@@ -70,11 +70,31 @@ export const JudgeFilePayloadSchema = z.object({
 	audit: z
 		.object({
 			model: QuizModelRunSchema,
-			result: JudgeAuditSchema
+			result: JudgeAuditSchema,
+			auditedAt: z.string().min(1).optional()
 		})
 		.optional()
 });
 
 export type JudgeFilePayload = z.infer<typeof JudgeFilePayloadSchema>;
+
+export const JudgeAuditFilePayloadSchema = z.object({
+	id: z.string().min(1),
+	evaluationType: z.enum(['quiz', 'extension']),
+	evaluatedAt: z.string().min(1),
+	auditedAt: z.string().min(1),
+	source: QuizFileSourceSchema,
+	job: SampleJobSchema,
+	judge: z.object({
+		model: QuizModelRunSchema,
+		verdict: JudgeVerdictSchema
+	}),
+	audit: z.object({
+		model: QuizModelRunSchema,
+		result: JudgeAuditSchema
+	})
+});
+
+export type JudgeAuditFilePayload = z.infer<typeof JudgeAuditFilePayloadSchema>;
 
 export type { JudgeAudit, JudgeVerdict, QuizGeneration };
