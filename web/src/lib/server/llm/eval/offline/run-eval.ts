@@ -1,8 +1,6 @@
 import { Buffer } from 'node:buffer';
-import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
 
@@ -49,10 +47,8 @@ ensureOfflineEnv();
 const {
 	repoRoot: REPO_ROOT,
 	webRoot: WEB_ROOT,
-	outputDir: OUTPUT_DIR,
-	reportRoot: REPORT_ROOT
+	outputDir: OUTPUT_DIR
 } = OFFLINE_PATHS;
-const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
 const DATA_ROOT_CANDIDATES = [
 	process.env.SPARK_EVAL_SAMPLE_ROOT,
 	'/spark-data/samples-organized',
@@ -74,8 +70,6 @@ const CHECKPOINT_DIR = path.join(OUTPUT_DIR, 'checkpoints');
 const CHECKPOINT_INTERVAL_MS = 10_000;
 const CHECKPOINT_HISTORY_LIMIT = 3;
 const CHECKPOINT_VERSION = 1;
-
-const execFileAsync = promisify(execFile);
 
 const proxyUrl =
 	process.env.HTTPS_PROXY ??
@@ -903,20 +897,6 @@ async function loadExistingGenerationResult(job: SampleJob): Promise<GenerationR
 	}
 }
 
-type StageSelection = 'all' | 'generate' | 'render';
-
-function parseStageSelection(): StageSelection {
-	const stageArg = process.argv.find((value) => value.startsWith('--stage='));
-	if (!stageArg) {
-		return 'all';
-	}
-	const value = stageArg.split('=')[1]?.toLowerCase();
-	if (value === 'generate' || value === 'render' || value === 'all') {
-		return value;
-	}
-	throw new Error(`Unknown stage selection: ${value}`);
-}
-
 function parseJobLimit(): number | undefined {
 	const limitArg = process.argv.find((value) => value.startsWith('--limit='));
 	if (!limitArg) {
@@ -1116,250 +1096,31 @@ async function runGenerationStage(
 	return { results: orderedResults, index };
 }
 
-function buildRepoFileUrl(relativeRepoPath: string, commitHash: string): string {
-	const repoSlug = process.env.GITHUB_REPOSITORY ?? 'spark-ai/spark';
-	const posixPath = relativeRepoPath.split(path.sep).join('/');
-	return `https://github.com/${repoSlug}/blob/${commitHash}/${posixPath}`;
-}
-
-function isImageAsset(relativeRepoPath: string): boolean {
-	const ext = path.extname(relativeRepoPath).toLowerCase();
-	return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
-}
-
-function formatQuizMarkdown(payload: QuizFilePayload, heading: string): string {
-	const lines: string[] = [];
-	lines.push(`# ${heading}`);
-	lines.push('');
-	lines.push(`**Quiz title:** ${payload.quiz.quizTitle}`);
-	lines.push('');
-	lines.push('## Metadata');
-	lines.push('');
-	lines.push(`- Mode: ${payload.mode}`);
-	if (payload.subject) {
-		lines.push(`- Subject: ${payload.subject}`);
-	}
-	lines.push(`- Question count: ${payload.quiz.questionCount}`);
-	lines.push(`- Generated at: ${payload.generatedAt}`);
-	lines.push(`- Model: ${payload.model.modelId}`);
-	lines.push(`- Source: ${payload.source.displayName} (${payload.source.relativePath})`);
-	lines.push('');
-	lines.push('## Questions');
-	lines.push('');
-	payload.quiz.questions.forEach((question, index) => {
-		lines.push(`### ${index + 1}. ${question.prompt}`);
-		lines.push('');
-		lines.push(`- Type: ${question.type}`);
-		if (question.sourceReference) {
-			lines.push(`- Source reference: ${question.sourceReference}`);
-		}
-		lines.push(
-			`- Answer: ${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}`
-		);
-		lines.push(`- Hint: ${question.hint}`);
-		if (question.options && question.options.length > 0) {
-			lines.push('- Options:');
-			question.options.forEach((option, optionIndex) => {
-				const optionLabel = String.fromCharCode(65 + optionIndex);
-				lines.push(`  - ${optionLabel}. ${option}`);
-			});
-		}
-		lines.push('');
-		lines.push(`> ${question.explanation}`);
-		lines.push('');
-	});
-	lines.push('## Prompt');
-	lines.push('');
-	lines.push('```');
-	lines.push(payload.prompt);
-	lines.push('```');
-	lines.push('');
-	return lines.join('\n');
-}
-
-function formatJudgeMarkdown(payload: JudgeFilePayload, heading: string): string {
-	const lines: string[] = [];
-	lines.push(`# ${heading}`);
-	lines.push('');
-	lines.push(`**Verdict:** ${payload.judge.verdict.verdict}`);
-	lines.push('');
-	lines.push('## Summary');
-	lines.push('');
-	lines.push(payload.judge.verdict.explanation);
-	lines.push('');
-	lines.push('## Rubric findings');
-	lines.push('');
-	payload.judge.verdict.rubricFindings.forEach((finding) => {
-		lines.push(`- **${finding.criterion}** — score ${finding.score.toFixed(2)}`);
-		lines.push(`  - ${finding.justification}`);
-	});
-	lines.push('');
-	lines.push('## Model metadata');
-	lines.push('');
-	lines.push(`- Model: ${payload.judge.model.modelId}`);
-	lines.push(`- Evaluated at: ${payload.evaluatedAt}`);
-	lines.push(`- Source: ${payload.source.displayName} (${payload.source.relativePath})`);
-	if (payload.audit) {
-		lines.push('');
-		lines.push('## Audit');
-		lines.push('');
-		lines.push(`- Model: ${payload.audit.model.modelId}`);
-		lines.push(`- Verdict agreement: ${payload.audit.result.verdictAgreement}`);
-		lines.push(`- Confidence: ${payload.audit.result.confidence}`);
-		lines.push('');
-		lines.push(payload.audit.result.explanation);
-	}
-	lines.push('');
-	lines.push('## Prompt');
-	lines.push('');
-	lines.push('```');
-	lines.push(payload.prompt);
-	lines.push('```');
-	lines.push('');
-	return lines.join('\n');
-}
-
-async function getCommitHash(): Promise<string> {
-	const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT });
-	return stdout.trim();
-}
-
-function buildSampleHeading(sample: SampleIndexEntry): string {
-	return `${sample.label} (${sample.mode})`;
-}
-
-function relativeStaticPath(...segments: string[]): string {
-	return ['../../web/static/admin/sample-quizzes', ...segments].join('/');
-}
-
-async function renderReports(index?: SampleIndex): Promise<void> {
-	const effectiveIndex =
-		index ?? (await readJson<SampleIndex>(path.join(OUTPUT_DIR, 'index.json')));
-	await mkdir(REPORT_ROOT, { recursive: true });
-	await rm(SAMPLE_REPORT_ROOT, { recursive: true, force: true });
-	await mkdir(SAMPLE_REPORT_ROOT, { recursive: true });
-
-	const commitHash = await getCommitHash();
-	const rootLines: string[] = [];
-	rootLines.push('# Sample Quiz Generation Report');
-	rootLines.push('');
-	rootLines.push(`- Generated at: ${effectiveIndex.generatedAt}`);
-	rootLines.push(`- Commit: ${commitHash}`);
-	rootLines.push('- Prompts: pulled from production prompt builders at the commit above.');
-	rootLines.push('');
-	rootLines.push('## Samples');
-	rootLines.push('');
-
-	for (const sample of effectiveIndex.samples) {
-		const sampleDir = path.join(OUTPUT_DIR, sample.id);
-		const quiz = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz.json'));
-		const judge = await readJson<JudgeFilePayload>(path.join(sampleDir, 'quiz-judgement.json'));
-		const extension = await readJson<QuizFilePayload>(path.join(sampleDir, 'quiz-extension.json'));
-		const extensionJudge = await readJson<JudgeFilePayload>(
-			path.join(sampleDir, 'quiz-extension-judgement.json')
-		);
-
-		const reportSampleDir = path.join(SAMPLE_REPORT_ROOT, sample.id);
-		await mkdir(reportSampleDir, { recursive: true });
-
-		const sampleHeading = buildSampleHeading(sample);
-		const baseQuizMd = formatQuizMarkdown(quiz, `${sampleHeading} — Base Quiz`);
-		const baseJudgeMd = formatJudgeMarkdown(judge, `${sampleHeading} — Base Quiz Judge`);
-		const extensionQuizMd = formatQuizMarkdown(extension, `${sampleHeading} — Extension Quiz`);
-		const extensionJudgeMd = formatJudgeMarkdown(
-			extensionJudge,
-			`${sampleHeading} — Extension Judge`
-		);
-
-		await writeFile(path.join(reportSampleDir, 'quiz.md'), baseQuizMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-judgement.md'), baseJudgeMd, 'utf8');
-		await writeFile(path.join(reportSampleDir, 'quiz-extension.md'), extensionQuizMd, 'utf8');
-		await writeFile(
-			path.join(reportSampleDir, 'quiz-extension-judgement.md'),
-			extensionJudgeMd,
-			'utf8'
-		);
-
-		// Write source.md with embedded image and GitHub link
-		const sourceGithubUrl = buildRepoFileUrl(sample.source.relativePath, commitHash);
-		const sourceImgRelative = path.posix.relative(
-			`docs/reports/sample-quizzes/${sample.id}`,
-			sample.source.relativePath
-		);
-		const sourceMdLines: string[] = [];
-		sourceMdLines.push(`# ${sampleHeading} — Source`);
-		sourceMdLines.push('');
-		sourceMdLines.push(`File: ${sample.source.displayName}`);
-		sourceMdLines.push(`GitHub: ${sourceGithubUrl}`);
-		sourceMdLines.push('');
-		if (isImageAsset(sample.source.relativePath)) {
-			sourceMdLines.push(
-				`<img src="${sourceImgRelative}" alt="${sample.source.displayName}" width="1024">`
-			);
-		} else {
-			sourceMdLines.push(`Local: [${sample.source.displayName}](${sourceImgRelative})`);
-		}
-		sourceMdLines.push('');
-		await writeFile(path.join(reportSampleDir, 'source.md'), sourceMdLines.join('\n'), 'utf8');
-
-		rootLines.push(`### ${sampleHeading}`);
-		rootLines.push('');
-		rootLines.push(`- Source: ${sample.source.displayName} (${sample.source.relativePath})`);
-		rootLines.push(`- Base verdict: ${sample.judge.verdict}`);
-		rootLines.push(`- Extension verdict: ${sample.extensionJudge.verdict}`);
-		rootLines.push(
-			`- Reports: [Quiz](sample-quizzes/${sample.id}/quiz.md) · [Judge](sample-quizzes/${sample.id}/quiz-judgement.md) · [10 more](sample-quizzes/${sample.id}/quiz-extension.md) · [10 more judge](sample-quizzes/${sample.id}/quiz-extension-judgement.md)`
-		);
-		rootLines.push(
-			`- JSON: [Quiz](${relativeStaticPath(sample.id, 'quiz.json')}) · [Judge](${relativeStaticPath(
-				sample.id,
-				'quiz-judgement.json'
-			)}) · [10 more](${relativeStaticPath(
-				sample.id,
-				'quiz-extension.json'
-			)}) · [10 more judge](${relativeStaticPath(sample.id, 'quiz-extension-judgement.json')})`
-		);
-		rootLines.push(`- Image: [${sample.source.displayName}](${sourceGithubUrl})`);
-		rootLines.push('');
-	}
-
-	await writeFile(path.join(REPORT_ROOT, 'sample-quizzes.md'), rootLines.join('\n'), 'utf8');
-}
-
 async function main(): Promise<void> {
-	const stage = parseStageSelection();
 	const jobLimit = parseJobLimit();
 	const statusMode = parseStatusMode();
 
-	if (stage !== 'render') {
-		const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
-		const jobs = await collectJobs();
-		await checkpoint.pruneTo(new Set(jobs.map((job) => job.id)));
-		if (jobs.length === 0) {
-			console.warn('[eval] No sample files found.');
-			await checkpoint.flush();
-			return;
-		}
-		const effectiveJobs = jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
-		if (jobLimit !== undefined) {
-			console.log(
-				`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
-			);
-		}
-		checkpoint.start();
-		try {
-			const { index } = await runGenerationStage(effectiveJobs, { checkpoint, statusMode });
-			if (stage === 'generate') {
-				return;
-			}
-			await renderReports(index);
-			return;
-		} finally {
-			await checkpoint.flush();
-		}
+	const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
+	const jobs = await collectJobs();
+	await checkpoint.pruneTo(new Set(jobs.map((job) => job.id)));
+	if (jobs.length === 0) {
+		console.warn('[eval] No sample files found.');
+		await checkpoint.flush();
+		return;
 	}
-
-	await renderReports();
+	const effectiveJobs = jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
+	if (jobLimit !== undefined) {
+		console.log(
+			`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
+		);
+	}
+	checkpoint.start();
+	try {
+		await runGenerationStage(effectiveJobs, { checkpoint, statusMode });
+		return;
+	} finally {
+		await checkpoint.flush();
+	}
 }
 
 main().catch((error) => {
