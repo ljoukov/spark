@@ -1,6 +1,9 @@
 import { clearInterval, setInterval } from 'node:timers';
 
 const SPEED_WINDOW_MS = 10_000;
+const ANSI_RESET = '\u001b[0m';
+const ANSI_GRAY = '\u001b[90m';
+const ANSI_RED = '\u001b[31m';
 
 export type StatusMode = 'interactive' | 'plain' | 'off';
 
@@ -277,14 +280,22 @@ class ProgressDisplay {
 			console.log(message);
 			return;
 		}
+		const formattedLines = this.formatLogLines(message);
+		if (formattedLines.length === 0) {
+			return;
+		}
 		if (this.mode === 'interactive') {
 			this.clearLine();
-			console.log(message);
+			for (const line of formattedLines) {
+				this.output.write(`${line}\n`);
+			}
 			this.dirty = true;
 			this.render(true);
 			return;
 		}
-		console.log(message);
+		for (const line of formattedLines) {
+			this.output.write(`${line}\n`);
+		}
 		this.dirty = true;
 	}
 
@@ -346,6 +357,50 @@ class ProgressDisplay {
 			` | ${formatPerModel(metrics.perModel)}`;
 		this.writeLine(line);
 		this.lastRenderTime = now;
+	}
+
+	private formatLogLines(message: string): string[] {
+		const lines = message.replace(/\r\n?/g, '\n').split('\n');
+		if (lines.length === 0) {
+			return [];
+		}
+		const timestamp = this.formatTimestamp(new Date());
+		const [firstLine, ...rest] = lines;
+		const formatted: string[] = [];
+		formatted.push(this.formatPrimaryLogLine(firstLine ?? '', timestamp));
+		for (const line of rest) {
+			formatted.push(this.formatContinuationLine(line ?? '', timestamp));
+		}
+		return formatted;
+	}
+
+	private formatPrimaryLogLine(line: string, timestamp: string): string {
+		const errorMarker = 'ERROR ';
+		const markerIndex = line.indexOf(errorMarker);
+		const hasError =
+			markerIndex >= 0 &&
+			(markerIndex === 0 || line[markerIndex - 1] === ' ' || line[markerIndex - 1] === ']');
+		const basePrefix = this.useColor ? `${ANSI_GRAY}[${timestamp}]${ANSI_RESET}` : `[${timestamp}]`;
+		if (hasError) {
+			const context = line.slice(0, markerIndex).trim();
+			const errorText = line.slice(markerIndex + errorMarker.length).trimStart();
+			const contextDisplay = context.length > 0 ? `${context} ` : '';
+			const errorLabel = this.useColor ? `${ANSI_RED}Error:${ANSI_RESET}` : 'Error:';
+			return `${basePrefix} ${errorLabel} ${contextDisplay}${errorText}`;
+		}
+		return `${basePrefix} ${line}`;
+	}
+
+	private formatContinuationLine(line: string, timestamp: string): string {
+		const basePrefix = this.useColor ? `${ANSI_GRAY}[${timestamp}]${ANSI_RESET}` : `[${timestamp}]`;
+		const continuation = line.length > 0 ? line : '';
+		return `${basePrefix}   ${continuation}`;
+	}
+
+	private formatTimestamp(date: Date): string {
+		const hours = date.getHours().toString().padStart(2, '0');
+		const minutes = date.getMinutes().toString().padStart(2, '0');
+		return `${hours}:${minutes}`;
 	}
 
 	private writeLine(line: string): void {
@@ -462,17 +517,12 @@ function formatNumber(value: number): string {
 
 function formatPerModel(perModel: MetricsSnapshot['perModel']): string {
 	if (perModel.length === 0) {
-		return 'model: n/a';
+		return 'models: n/a';
 	}
-	const [first, ...rest] = perModel;
-	const formatEntry = (entry: MetricsSnapshot['perModel'][number]) => {
+	const entries = perModel.map((entry) => {
 		const prompt = formatNumber(entry.promptTokens);
 		const inference = formatNumber(entry.inferenceTokens);
 		return `${entry.modelId.replace('gemini-', '')}: P ${prompt} / I ${inference}`;
-	};
-	let output = formatEntry(first);
-	if (rest.length > 0) {
-		output += ` (+${rest.length} more)`;
-	}
-	return output;
+	});
+	return `models: ${entries.join(', ')}`;
 }

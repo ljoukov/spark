@@ -47,7 +47,13 @@ import {
 	type StatusMode
 } from './concurrency';
 
-import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from './payload';
+import type {
+	JudgeAuditFilePayload,
+	JudgeFilePayload,
+	QuizFilePayload,
+	QuizModelRun,
+	SampleJob
+} from './payload';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
@@ -133,6 +139,32 @@ type GenerationResult = {
 	readonly extension: QuizFilePayload;
 	readonly extensionJudge: JudgeFilePayload;
 };
+
+function buildJudgeAuditFilePayload({
+	evaluationType,
+	judgement
+}: {
+	evaluationType: 'quiz' | 'extension';
+	judgement: JudgeFilePayload;
+}): JudgeAuditFilePayload | undefined {
+	const audit = judgement.audit;
+	if (!audit || !audit.auditedAt) {
+		return undefined;
+	}
+	return {
+		id: judgement.id,
+		evaluationType,
+		evaluatedAt: judgement.evaluatedAt,
+		auditedAt: audit.auditedAt,
+		source: judgement.source,
+		job: judgement.job,
+		judge: judgement.judge,
+		audit: {
+			model: audit.model,
+			result: audit.result
+		}
+	};
+}
 
 type CheckpointJobEntry = {
 	readonly completedAt: string;
@@ -461,8 +493,6 @@ async function callModel<T>({
 		const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
 		try {
 			const requestStartedAt = Date.now();
-			let promptDurationMs = 0;
-			let inferenceDurationMs = 0;
 			let finalPromptTokens = 0;
 			let finalInferenceTokens = 0;
 			const { text } = await runGeminiCall(async (client) => {
@@ -486,8 +516,6 @@ async function callModel<T>({
 				let finalChunk: GenerateContentResponse | undefined;
 					let lastPromptTokens = 0;
 					let lastInferenceTokens = 0;
-				let firstChunkTimestamp: number | undefined;
-				let finalChunkTimestamp: number | undefined;
 
 				for await (const chunk of stream) {
 					if (chunk.candidates) {
@@ -531,17 +559,12 @@ async function callModel<T>({
 					}
 					if (!firstChunkReceived) {
 						firstChunkReceived = true;
-						firstChunkTimestamp = Date.now();
 					}
 				}
 
 				if (!firstChunkReceived) {
 					throw new Error(`[${model}] ${label}: stream produced no chunks`);
 				}
-				finalChunkTimestamp = Date.now();
-				const effectiveFirstChunkTimestamp = firstChunkTimestamp ?? finalChunkTimestamp;
-				promptDurationMs = Math.max(0, effectiveFirstChunkTimestamp - requestStartedAt);
-				inferenceDurationMs = Math.max(0, finalChunkTimestamp - effectiveFirstChunkTimestamp);
 
 				if (latestText.length === 0 && finalChunk?.text) {
 					progress.reportChars(finalChunk.text.length);
@@ -561,8 +584,6 @@ async function callModel<T>({
 			await writeFile(attemptPath, text, 'utf8');
 
 			const trimmed = text.trimStart();
-			const promptSeconds = Math.max(0, promptDurationMs) / 1000;
-			const inferenceSeconds = Math.max(0, inferenceDurationMs) / 1000;
 			const promptTokensTotal = finalPromptTokens;
 			const inferenceTokensTotal = finalInferenceTokens;
 			if (promptTokensTotal === 0 && inferenceTokensTotal > 0) {
@@ -570,16 +591,6 @@ async function callModel<T>({
 					`[eval] ${label} (attempt ${attempt}) WARN prompt token count zero; usage metadata may be missing promptTokenCount.`
 				);
 			}
-			const promptSpeed = promptSeconds > 0 ? promptTokensTotal / promptSeconds : undefined;
-			const inferenceSpeed =
-				inferenceSeconds > 0 ? inferenceTokensTotal / inferenceSeconds : undefined;
-			const promptSpeedDisplay =
-				promptSpeed !== undefined ? `${Math.round(promptSpeed)}/s` : 'n/a';
-			const inferenceSpeedDisplay =
-				inferenceSpeed !== undefined ? `${Math.round(inferenceSpeed)}/s` : 'n/a';
-			progress.log(
-				`[eval] ${label} (attempt ${attempt}) prompt ${promptSeconds.toFixed(2)}s · inference ${inferenceSeconds.toFixed(2)}s · speed: P ${promptSpeedDisplay} I ${inferenceSpeedDisplay}`
-			);
 			if (!trimmed.startsWith('{')) {
 				progress.log(
 					`[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || '∅'})`
@@ -823,7 +834,8 @@ async function auditJudgeDecisionPayload(
 		model: {
 			modelId
 		},
-		result
+		result,
+		auditedAt: new Date().toISOString()
 	};
 }
 
@@ -1060,11 +1072,28 @@ async function runGenerationStage(
 					await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
 					await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
 					await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
+					const baseAuditPayload = buildJudgeAuditFilePayload({
+						evaluationType: 'quiz',
+						judgement: result.judge
+					});
+					if (baseAuditPayload) {
+						await writeJson(path.join(sampleDir, 'quiz-judgement-audit.json'), baseAuditPayload);
+					}
 					await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
 					await writeJson(
 						path.join(sampleDir, 'quiz-extension-judgement.json'),
 						result.extensionJudge
 					);
+					const extensionAuditPayload = buildJudgeAuditFilePayload({
+						evaluationType: 'extension',
+						judgement: result.extensionJudge
+					});
+					if (extensionAuditPayload) {
+						await writeJson(
+							path.join(sampleDir, 'quiz-extension-judgement-audit.json'),
+							extensionAuditPayload
+						);
+					}
 					checkpoint.markCompleted(job.id);
 					return result;
 				} catch (error) {
