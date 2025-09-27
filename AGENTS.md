@@ -31,13 +31,12 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 ## Offline LLM Eval
 
 - Script: `web/src/lib/server/llm/eval/offline/run-eval.ts`
-- NPM script: from repo root run `npm --prefix web run eval:offline` (or `cd web && npm run eval:offline`).
-- Stages: pass `--stage=all` (default), `--stage=generate` (LLM calls + JSON), or `--stage=render` (re-render markdown reports only).
+- NPM script: from repo root run `npm --prefix web run eval:run` (or `cd web && npm run eval:run`).
 - Inputs: reads sample files in `data/samples/**` (grouped by category directories).
-- Outputs: JSON under `web/static/admin/sample-quizzes/**` and markdown reports under `docs/reports/sample-quizzes/**`.
+- Outputs: JSON written under `spark-data/output/**` (index + per-sample artifacts consumed by the Admin UI).
 - Env: requires `GEMINI_API_KEY` (in environment or `.env.local` at repo root). Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
-- Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts used by the Admin UI and reports.
+- Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts consumed by the Admin UI.
 
 # Commit Message Guidelines
 
