@@ -734,6 +734,22 @@ function parseStageSelection(): StageSelection {
 	throw new Error(`Unknown stage selection: ${value}`);
 }
 
+function parseJobLimit(): number | undefined {
+	const limitArg = process.argv.find((value) => value.startsWith('--limit='));
+	if (!limitArg) {
+		return undefined;
+	}
+	const rawValue = limitArg.split('=')[1];
+	if (!rawValue) {
+		throw new Error('Missing value for --limit');
+	}
+	const limit = Number.parseInt(rawValue, 10);
+	if (!Number.isFinite(limit) || Number.isNaN(limit) || limit <= 0) {
+		throw new Error(`Invalid --limit value: ${rawValue}`);
+	}
+	return limit;
+}
+
 async function writeJson(filePath: string, data: unknown): Promise<void> {
 	await writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
@@ -1071,6 +1087,7 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 
 async function main(): Promise<void> {
 	const stage = parseStageSelection();
+	const jobLimit = parseJobLimit();
 
 	if (stage !== 'render') {
 		const jobs = await collectJobs();
@@ -1078,7 +1095,14 @@ async function main(): Promise<void> {
 			console.warn('[eval] No sample files found.');
 			return;
 		}
-		const { index } = await runGenerationStage(jobs);
+		const effectiveJobs =
+			jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
+		if (jobLimit !== undefined) {
+			console.log(
+				`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
+			);
+		}
+		const { index } = await runGenerationStage(effectiveJobs);
 		if (stage === 'generate') {
 			return;
 		}
