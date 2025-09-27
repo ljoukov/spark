@@ -443,8 +443,8 @@ export async function runJobsWithConcurrency<I, O>({
 	const effectiveStatusMode: StatusMode = stream.isTTY
 		? statusMode
 		: statusMode === 'interactive'
-		? 'plain'
-		: statusMode;
+			? 'plain'
+			: statusMode;
 	const effectiveUpdateInterval =
 		updateIntervalMs ?? (effectiveStatusMode === 'plain' ? 10_000 : 1_000);
 	const progressDisplay = new ProgressDisplay(total, label, effectiveUpdateInterval, {
