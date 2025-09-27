@@ -47,6 +47,8 @@ import {
 	type StatusMode
 } from './concurrency';
 
+import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from './payload';
+
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
 const REPO_ROOT = path.resolve(WEB_ROOT, '../');
@@ -123,58 +125,6 @@ function rawPathForAttempt(basePath: string, attempt: number): string {
 	const suffix = `.attempt${attempt}`;
 	return path.join(directory, `${baseName}${suffix}${ext}`);
 }
-
-type SampleJob = {
-	readonly id: string;
-	readonly category: string;
-	readonly displayName: string;
-	readonly sourcePath: string;
-	readonly relativeSourcePath: string;
-	readonly questionCount: number;
-	readonly subject?: string;
-};
-
-type QuizModelRun = {
-	readonly modelId: string;
-};
-
-type QuizFilePayload = {
-	readonly id: string;
-	readonly mode: QuizGeneration['mode'];
-	readonly subject?: string;
-	readonly generatedAt: string;
-	readonly request: {
-		readonly model: string;
-		readonly questionCount: number;
-	};
-	readonly source: {
-		readonly relativePath: string;
-		readonly displayName: string;
-	};
-	readonly prompt: string;
-	readonly quiz: QuizGeneration;
-	readonly model: QuizModelRun;
-	readonly job: SampleJob;
-};
-
-type JudgeFilePayload = {
-	readonly id: string;
-	readonly evaluatedAt: string;
-	readonly prompt: string;
-	readonly source: {
-		readonly relativePath: string;
-		readonly displayName: string;
-	};
-	readonly job: SampleJob;
-	readonly judge: {
-		readonly model: QuizModelRun;
-		readonly verdict: JudgeVerdict;
-	};
-	readonly audit?: {
-		readonly model: QuizModelRun;
-		readonly result: JudgeAudit;
-	};
-};
 
 type GenerationResult = {
 	readonly job: SampleJob;
