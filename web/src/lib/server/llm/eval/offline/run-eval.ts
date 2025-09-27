@@ -41,19 +41,9 @@ import {
 	QUIZ_EVAL_MODEL_ID
 } from '../judge';
 import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
-import {
-	runJobsWithConcurrency,
-	type JobProgressReporter,
-	type StatusMode
-} from './concurrency';
+import { runJobsWithConcurrency, type JobProgressReporter, type StatusMode } from './concurrency';
 
-import type {
-	JudgeAuditFilePayload,
-	JudgeFilePayload,
-	QuizFilePayload,
-	QuizModelRun,
-	SampleJob
-} from './payload';
+import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from './payload';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
@@ -76,7 +66,7 @@ const DATA_ROOT = (() => {
 const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
 const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
 const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
-const MAX_CONCURRENT_ANALYSES = 32;
+const MAX_CONCURRENT_ANALYSES = 4;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const CHECKPOINT_DIR = path.join(OUTPUT_DIR, 'checkpoints');
 const CHECKPOINT_INTERVAL_MS = 10_000;
@@ -139,32 +129,6 @@ type GenerationResult = {
 	readonly extension: QuizFilePayload;
 	readonly extensionJudge: JudgeFilePayload;
 };
-
-function buildJudgeAuditFilePayload({
-	evaluationType,
-	judgement
-}: {
-	evaluationType: 'quiz' | 'extension';
-	judgement: JudgeFilePayload;
-}): JudgeAuditFilePayload | undefined {
-	const audit = judgement.audit;
-	if (!audit || !audit.auditedAt) {
-		return undefined;
-	}
-	return {
-		id: judgement.id,
-		evaluationType,
-		evaluatedAt: judgement.evaluatedAt,
-		auditedAt: audit.auditedAt,
-		source: judgement.source,
-		job: judgement.job,
-		judge: judgement.judge,
-		audit: {
-			model: audit.model,
-			result: audit.result
-		}
-	};
-}
 
 type CheckpointJobEntry = {
 	readonly completedAt: string;
@@ -337,7 +301,10 @@ async function loadLatestCheckpointState(directory: string): Promise<CheckpointS
 		throw error;
 	}
 	const checkpointFiles = entries
-		.filter((entry) => entry.isFile() && entry.name.startsWith('checkpoint-') && entry.name.endsWith('.json'))
+		.filter(
+			(entry) =>
+				entry.isFile() && entry.name.startsWith('checkpoint-') && entry.name.endsWith('.json')
+		)
 		.map((entry) => entry.name)
 		.sort();
 	for (let index = checkpointFiles.length - 1; index >= 0; index -= 1) {
@@ -514,8 +481,8 @@ async function callModel<T>({
 				let firstChunkReceived = false;
 				let latestText = '';
 				let finalChunk: GenerateContentResponse | undefined;
-					let lastPromptTokens = 0;
-					let lastInferenceTokens = 0;
+				let lastPromptTokens = 0;
+				let lastInferenceTokens = 0;
 
 				for await (const chunk of stream) {
 					if (chunk.candidates) {
@@ -569,10 +536,10 @@ async function callModel<T>({
 				if (latestText.length === 0 && finalChunk?.text) {
 					progress.reportChars(finalChunk.text.length);
 				}
-					finalPromptTokens = lastPromptTokens;
-					finalInferenceTokens = lastInferenceTokens;
-					const finalText = latestText || finalChunk?.text || '';
-					if (!finalText) {
+				finalPromptTokens = lastPromptTokens;
+				finalInferenceTokens = lastInferenceTokens;
+				const finalText = latestText || finalChunk?.text || '';
+				if (!finalText) {
 					throw new Error(`[${model}] ${label}: empty response`);
 				}
 
@@ -916,7 +883,12 @@ async function loadExistingGenerationResult(job: SampleJob): Promise<GenerationR
 	const judgePath = path.join(sampleDir, 'quiz-judgement.json');
 	const extensionPath = path.join(sampleDir, 'quiz-extension.json');
 	const extensionJudgePath = path.join(sampleDir, 'quiz-extension-judgement.json');
-	if (!existsSync(quizPath) || !existsSync(judgePath) || !existsSync(extensionPath) || !existsSync(extensionJudgePath)) {
+	if (
+		!existsSync(quizPath) ||
+		!existsSync(judgePath) ||
+		!existsSync(extensionPath) ||
+		!existsSync(extensionJudgePath)
+	) {
 		return undefined;
 	}
 	try {
@@ -1040,7 +1012,9 @@ async function runGenerationStage(
 				reusedCount += 1;
 				continue;
 			}
-			console.warn(`[eval] WARN checkpoint marked ${job.id} complete but outputs are missing; regenerating.`);
+			console.warn(
+				`[eval] WARN checkpoint marked ${job.id} complete but outputs are missing; regenerating.`
+			);
 		}
 		pendingJobs.push(job);
 	}
@@ -1072,28 +1046,11 @@ async function runGenerationStage(
 					await writeJson(path.join(sampleDir, 'quiz.json'), result.quiz);
 					await writeJson(path.join(sampleDir, 'detail.json'), result.quiz);
 					await writeJson(path.join(sampleDir, 'quiz-judgement.json'), result.judge);
-					const baseAuditPayload = buildJudgeAuditFilePayload({
-						evaluationType: 'quiz',
-						judgement: result.judge
-					});
-					if (baseAuditPayload) {
-						await writeJson(path.join(sampleDir, 'quiz-judgement-audit.json'), baseAuditPayload);
-					}
 					await writeJson(path.join(sampleDir, 'quiz-extension.json'), result.extension);
 					await writeJson(
 						path.join(sampleDir, 'quiz-extension-judgement.json'),
 						result.extensionJudge
 					);
-					const extensionAuditPayload = buildJudgeAuditFilePayload({
-						evaluationType: 'extension',
-						judgement: result.extensionJudge
-					});
-					if (extensionAuditPayload) {
-						await writeJson(
-							path.join(sampleDir, 'quiz-extension-judgement-audit.json'),
-							extensionAuditPayload
-						);
-					}
 					checkpoint.markCompleted(job.id);
 					return result;
 				} catch (error) {
@@ -1107,7 +1064,9 @@ async function runGenerationStage(
 			resultMap.set(result.job.id, result);
 		}
 	} else if (jobs.length > 0) {
-		console.log(`[eval] No pending samples to generate; using checkpoint outputs for all ${jobs.length} samples.`);
+		console.log(
+			`[eval] No pending samples to generate; using checkpoint outputs for all ${jobs.length} samples.`
+		);
 	}
 
 	const orderedResults = jobs.map((job) => {
@@ -1384,8 +1343,7 @@ async function main(): Promise<void> {
 			await checkpoint.flush();
 			return;
 		}
-		const effectiveJobs =
-			jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
+		const effectiveJobs = jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
 		if (jobLimit !== undefined) {
 			console.log(
 				`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
