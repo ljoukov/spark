@@ -148,9 +148,15 @@ function summariseEvaluations(evaluations: LoadedEvaluation[]): void {
 	const flaggedEvaluations = evaluationsWithAudit.filter(
 		(evaluation) => evaluation.audit?.audit.result.verdictAgreement !== 'agree'
 	);
+	const highConfidenceAgreed = evaluationsWithAudit.filter(
+		(evaluation) =>
+			evaluation.audit?.audit.result.verdictAgreement === 'agree' &&
+			evaluation.audit?.audit.result.confidence === 'high'
+	);
 
 	printJudgementMetrics('Auditor agreed', agreedEvaluations);
 	printJudgementMetrics('Auditor flagged follow-up', flaggedEvaluations);
+	printHighConfidenceBreakdown(highConfidenceAgreed);
 }
 
 function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): void {
@@ -205,6 +211,55 @@ function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): 
 		console.log(
 			`    - ${entry.bucket}: ${formatPercentage(entry.percentage)} (${entry.count}/${nonFullScoreCount})`
 		);
+	}
+}
+
+function printHighConfidenceBreakdown(evaluations: LoadedEvaluation[]): void {
+	console.log(
+		`[analysis] High-confidence agreements: ${evaluations.length} evaluation${evaluations.length === 1 ? '' : 's'}.`
+	);
+	if (evaluations.length === 0) {
+		console.log('  - None');
+		return;
+	}
+	const breakdown = new Map<
+		string,
+		{
+			total: number;
+			buckets: Map<string, number>;
+		}
+	>();
+	for (const evaluation of evaluations) {
+		for (const finding of evaluation.judgement.judge.verdict.rubricFindings) {
+			if (isFullScore(finding.score)) {
+				continue;
+			}
+			const entry = breakdown.get(finding.criterion) ?? {
+				total: 0,
+				buckets: new Map<string, number>()
+			};
+			entry.total += 1;
+			const bucketValue = Math.floor(finding.score * 10) / 10;
+			const bucket = bucketValue.toFixed(1);
+			entry.buckets.set(bucket, (entry.buckets.get(bucket) ?? 0) + 1);
+			breakdown.set(finding.criterion, entry);
+		}
+	}
+	const criteria = Array.from(breakdown.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+	if (criteria.length === 0) {
+		console.log('  - All rubric scores are 1.0');
+		return;
+	}
+	for (const [criterion, data] of criteria) {
+		console.log(`  - ${criterion}:`);
+		const buckets = Array.from(data.buckets.entries())
+			.sort((a, b) => Number.parseFloat(b[0]) - Number.parseFloat(a[0]));
+		for (const [bucket, count] of buckets) {
+			const percentage = data.total === 0 ? 0 : (count / data.total) * 100;
+			console.log(
+				`    - ${bucket}: ${formatPercentage(percentage)} (${count}/${data.total})`
+			);
+		}
 	}
 }
 
