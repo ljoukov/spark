@@ -1,12 +1,10 @@
 #!/usr/bin/env tsx
 
-import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, extname, relative } from 'node:path';
+import { join, resolve, extname, relative, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, stat, mkdir, copyFile, rm, symlink, writeFile } from 'node:fs/promises';
 
 import { Type, type Schema, type Part, type GenerateContentResponse } from '@google/genai';
-import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
 
 import { runGeminiCall } from '../../../utils/gemini';
@@ -15,16 +13,11 @@ import {
 	type JobProgressReporter,
 	type ModelCallHandle
 } from './concurrency';
-import { ensureOfflineEnv } from './env';
-
-const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = resolve(CURRENT_DIR, '../../../../../../');
-const REPO_ROOT = resolve(WEB_ROOT, '../');
-
-const DEFAULT_SRC_DIR = join(REPO_ROOT, 'spark-data', 'downloads');
-const DEFAULT_DST_DIR = join(REPO_ROOT, 'spark-data', 'samples-organized');
+import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 
 ensureOfflineEnv();
+
+const { downloadsDir: DEFAULT_SRC_DIR, evalInputDir: DEFAULT_DST_DIR } = OFFLINE_PATHS;
 
 const GEMINI_MODEL_ID = 'gemini-flash-lite-latest';
 const MAX_CONCURRENCY = 256;
@@ -35,12 +28,12 @@ const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const GRADE_BUCKETS = ['foundation', 'intermediate', 'higher', 'mixed'] as const;
 
 const PAGE_BUCKETS = [
-	'1page',
-	'up-to-4pages',
-	'up-to-10pages',
-	'up-to-20pages',
-	'up-to-50pages',
-	'50plus'
+	'01_page',
+	'02-to-04_pages',
+	'05-to-09_pages',
+	'10-to-19_pages',
+	'20-to-49_pages',
+	'50plus_pages'
 ] as const;
 
 const EXAM_BOARDS = [
@@ -343,7 +336,7 @@ function buildPrompt(file: SampleFile): string {
 		`File extension: ${file.ext || 'unknown'}`,
 		`File size: ${(file.sizeBytes / (1024 * 1024)).toFixed(2)} MB`,
 		'Detected page count: unknown — inspect the attached file and estimate when needed.',
-		'Page bucket options: 1page | up-to-4pages | up-to-10pages | up-to-20pages | up-to-50pages | 50plus',
+		'Page bucket options: 01_page | 02-to-04_pages | 05-to-09_pages | 10-to-19_pages | 20-to-49_pages | 50plus_pages',
 		'Exam board options: AQA | OCR | Edexcel | Pearson | Cambridge | WJEC | Eduqas | CCEA | general',
 		'Grade bucket options (choose one, no "unknown"): foundation | intermediate | higher | mixed',
 		'Material type options: study | revision | test | other',

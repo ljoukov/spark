@@ -15,9 +15,9 @@
 
 ## spark-data Submodule
 
-- Install Git LFS once (`brew install git-lfs && git lfs install`). The `spark-data/output/` directory is packaged into `output.tar.gz` and tracked via LFS to keep the repository responsive.
-- To align your workspace with `origin/main`, run `scripts/git-sync-spark-data.sh`. It fast-forwards the submodule checkout to the commit referenced by `origin/main` and restores `spark-data/output/` from the tarball when available.
-- When you change files inside `spark-data/`, keep generated artifacts under `spark-data/output/`, then run `scripts/git-publish-spark-data.sh "spark-data commit message" "[optional super repo commit message]"`. The script repackages `output/`, commits and pushes the submodule, and updates the super-repo pointer (default commit message `[chore] update spark-data to <sha>`).
+- Install Git LFS once (`brew install git-lfs && git lfs install`). The `spark-data/eval-output/` directory is packaged into `eval-output.tar.gz` and tracked via LFS to keep the repository responsive.
+- To align your workspace with `origin/main`, run `scripts/git-sync-spark-data.sh`. It fast-forwards the submodule checkout to the commit referenced by `origin/main` and restores `spark-data/eval-output/` from the tarball when available.
+- When you change files inside `spark-data/`, keep generated artifacts under `spark-data/eval-output/`, then run `scripts/git-publish-spark-data.sh "spark-data commit message" "[optional super repo commit message]"`. The script repackages `eval-output/`, commits and pushes the submodule, and updates the super-repo pointer (default commit message `[chore] update spark-data to <sha>`).
 - Both scripts abort if the working trees are dirty; commit or stash unrelated changes first.
 - The legacy helper scripts (`spark-data/output-pack.sh`, `spark-data/output-unpack.sh`, and `spark-data/AGENTS.md`) were removed in favour of the repo-level tooling above; do not recreate them.
 
@@ -30,10 +30,10 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 
 ## Offline LLM Eval
 
-- Script: `web/src/lib/server/llm/eval/offline/run-eval.ts`
-- NPM script: from repo root run `npm --prefix web run eval:run` (or `cd web && npm run eval:run`).
-- Inputs: reads sample files in `data/samples/**` (grouped by category directories).
-- Outputs: JSON written under `spark-data/output/**` (index + per-sample artifacts consumed by the Admin UI).
+- Prepare input: `web/src/lib/server/llm/eval/offline/prepare-input.ts` (`npm --prefix web run eval:prepare-input`). Reads raw assets from `spark-data/downloads/**`, classifies them, and writes curated bundles to `spark-data/eval-input/**`.
+- Generate quizzes: `web/src/lib/server/llm/eval/offline/run-eval.ts` (`npm --prefix web run eval:run`). Consumes `spark-data/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/eval-output/**`.
+- `eval:run` flags: `--seed=<int>` reproducibly shuffles input ordering, `--maxPrefix=<int>` filters page buckets by their numeric prefix (e.g. `--maxPrefix=20` keeps `01_page`–`20-to-49_pages`), and `--limit=<n>` caps the remaining queue after filters.
+- Audit summaries: `web/src/lib/server/llm/eval/offline/audit-eval.ts` (`npm --prefix web run eval:audit`). Consumes `spark-data/eval-output/**` and emits stats plus Markdown reports under `spark-data/eval-audit/**`.
 - Env: requires `GEMINI_API_KEY` (in environment or `.env.local` at repo root). Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
 - Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts consumed by the Admin UI.

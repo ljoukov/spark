@@ -44,13 +44,11 @@ import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from 
 
 ensureOfflineEnv();
 
-const {
-	repoRoot: REPO_ROOT,
-	webRoot: WEB_ROOT,
-	outputDir: OUTPUT_DIR
-} = OFFLINE_PATHS;
+const { repoRoot: REPO_ROOT, evalInputDir: EVAL_INPUT_DIR, evalOutputDir: EVAL_OUTPUT_DIR } = OFFLINE_PATHS;
 const DATA_ROOT_CANDIDATES = [
 	process.env.SPARK_EVAL_SAMPLE_ROOT,
+	EVAL_INPUT_DIR,
+	'/spark-data/eval-input',
 	'/spark-data/samples-organized',
 	path.join(REPO_ROOT, 'spark-data', 'samples-organized'),
 	path.join(REPO_ROOT, 'spark-data', 'samples')
@@ -66,7 +64,7 @@ const DATA_ROOT = (() => {
 })();
 const MAX_CONCURRENT_ANALYSES = 4;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
-const CHECKPOINT_DIR = path.join(OUTPUT_DIR, 'checkpoints');
+const CHECKPOINT_DIR = path.join(EVAL_OUTPUT_DIR, 'checkpoints');
 const CHECKPOINT_INTERVAL_MS = 10_000;
 const CHECKPOINT_HISTORY_LIMIT = 3;
 const CHECKPOINT_VERSION = 1;
@@ -113,6 +111,60 @@ function rawPathForAttempt(basePath: string, attempt: number): string {
 	return path.join(directory, `${baseName}${suffix}${ext}`);
 }
 
+function createSeededRng(seed: number): () => number {
+	let state = seed >>> 0;
+	return () => {
+		state = (state + 0x6d2b79f5) >>> 0;
+		let t = state;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+function shuffleWithSeed<T>(items: readonly T[], seed: number): T[] {
+	const rng = createSeededRng(seed);
+	const copy = [...items];
+	for (let index = copy.length - 1; index > 0; index -= 1) {
+		const swapIndex = Math.floor(rng() * (index + 1));
+		const temp = copy[index];
+		copy[index] = copy[swapIndex];
+		copy[swapIndex] = temp;
+	}
+	return copy;
+}
+
+function extractPageBucketSegment(job: SampleJob): string | undefined {
+	const relativeToRoot = path.relative(DATA_ROOT, job.sourcePath);
+	if (relativeToRoot.startsWith('..')) {
+		return undefined;
+	}
+	const [firstSegment] = relativeToRoot.split(path.sep);
+	return firstSegment ?? undefined;
+}
+
+function extractNumericPrefix(bucket: string): number | undefined {
+	const match = /^(\d{1,})/u.exec(bucket);
+	if (!match) {
+		return undefined;
+	}
+	return Number.parseInt(match[1] ?? '', 10);
+}
+
+function filterJobsByMaxPrefix(jobs: SampleJob[], maxPrefix: number): SampleJob[] {
+	return jobs.filter((job) => {
+		const bucketSegment = extractPageBucketSegment(job);
+		if (!bucketSegment) {
+			return true;
+		}
+		const prefix = extractNumericPrefix(bucketSegment);
+		if (prefix === undefined) {
+			return true;
+		}
+		return prefix <= maxPrefix;
+	});
+}
+
 type GenerationResult = {
 	readonly job: SampleJob;
 	readonly quiz: QuizFilePayload;
@@ -128,6 +180,7 @@ type CheckpointJobEntry = {
 type CheckpointState = {
 	readonly version: number;
 	readonly updatedAt: string;
+	readonly seed?: number | null;
 	readonly completedJobs: Record<string, CheckpointJobEntry>;
 };
 
@@ -155,7 +208,11 @@ class CheckpointManager {
 			);
 			return new CheckpointManager(directory, createEmptyCheckpointState());
 		}
-		return new CheckpointManager(directory, state);
+		const normalisedState: CheckpointState = {
+			...state,
+			seed: state.seed ?? null
+		};
+		return new CheckpointManager(directory, normalisedState);
 	}
 
 	start(): void {
@@ -185,6 +242,48 @@ class CheckpointManager {
 			updatedAt: new Date().toISOString()
 		};
 		this.dirty = true;
+	}
+
+	ensureSeed(seed: number | undefined): void {
+		const normalisedSeed = seed ?? null;
+		const currentSeed = this.state.seed ?? null;
+		if (currentSeed === normalisedSeed) {
+			return;
+		}
+		if (currentSeed === null && normalisedSeed !== null) {
+			const completedCount = Object.keys(this.state.completedJobs).length;
+			if (completedCount > 0) {
+				this.throwSeedMismatch(currentSeed, normalisedSeed);
+			}
+			this.state = {
+				...this.state,
+				seed: normalisedSeed,
+				updatedAt: new Date().toISOString()
+			};
+			this.dirty = true;
+			return;
+		}
+		if (currentSeed !== null && normalisedSeed === null) {
+			this.throwSeedMismatch(currentSeed, normalisedSeed);
+		}
+		if (currentSeed !== null && normalisedSeed !== null && currentSeed !== normalisedSeed) {
+			this.throwSeedMismatch(currentSeed, normalisedSeed);
+		}
+	}
+
+	private throwSeedMismatch(expected: number | null, received: number | null): never {
+		const expectedLabel =
+			expected === null
+				? 'no --seed flag'
+				: `--seed=${expected}`;
+		const receivedLabel =
+			received === null
+				? 'no --seed flag'
+				: `--seed=${received}`;
+		throw new Error(
+			`[eval] Seed mismatch: checkpoint was created with ${expectedLabel}, but the run is using ${receivedLabel}. ` +
+			`Re-run with ${expectedLabel} or delete ${this.directory} to start fresh.`
+		);
 	}
 
 	async pruneTo(jobIds: Set<string>): Promise<void> {
@@ -243,6 +342,7 @@ class CheckpointManager {
 		const payload: CheckpointState = {
 			version: CHECKPOINT_VERSION,
 			updatedAt: isoTimestamp,
+			seed: this.state.seed ?? null,
 			completedJobs: this.state.completedJobs
 		};
 		await writeJson(filePath, payload);
@@ -276,6 +376,7 @@ function createEmptyCheckpointState(): CheckpointState {
 	return {
 		version: CHECKPOINT_VERSION,
 		updatedAt: new Date().toISOString(),
+		seed: null,
 		completedJobs: {}
 	};
 }
@@ -869,7 +970,7 @@ async function runSampleGeneration(
 }
 
 async function loadExistingGenerationResult(job: SampleJob): Promise<GenerationResult | undefined> {
-	const sampleDir = path.join(OUTPUT_DIR, job.id);
+	const sampleDir = path.join(EVAL_OUTPUT_DIR, job.id);
 	const quizPath = path.join(sampleDir, 'quiz.json');
 	const judgePath = path.join(sampleDir, 'quiz-judgement.json');
 	const extensionPath = path.join(sampleDir, 'quiz-extension.json');
@@ -895,6 +996,38 @@ async function loadExistingGenerationResult(job: SampleJob): Promise<GenerationR
 		console.warn(`[eval] WARN failed to load existing outputs for ${job.id}: ${reason}`);
 		return undefined;
 	}
+}
+
+function parseSeed(): number | undefined {
+	const seedArg = process.argv.find((value) => value.startsWith('--seed='));
+	if (!seedArg) {
+		return undefined;
+	}
+	const rawValue = seedArg.split('=')[1];
+	if (!rawValue) {
+		throw new Error('Missing value for --seed');
+	}
+	const seed = Number.parseInt(rawValue, 10);
+	if (!Number.isSafeInteger(seed) || seed < 0) {
+		throw new Error(`Invalid --seed value: ${rawValue}`);
+	}
+	return seed;
+}
+
+function parseMaxPrefix(): number | undefined {
+	const prefixArg = process.argv.find((value) => value.startsWith('--maxPrefix='));
+	if (!prefixArg) {
+		return undefined;
+	}
+	const rawValue = prefixArg.split('=')[1];
+	if (!rawValue) {
+		throw new Error('Missing value for --maxPrefix');
+	}
+	const prefix = Number.parseInt(rawValue, 10);
+	if (!Number.isFinite(prefix) || Number.isNaN(prefix) || prefix < 0) {
+		throw new Error(`Invalid --maxPrefix value: ${rawValue}`);
+	}
+	return prefix;
 }
 
 function parseJobLimit(): number | undefined {
@@ -975,7 +1108,7 @@ async function runGenerationStage(
 	jobs: SampleJob[],
 	{ checkpoint, statusMode }: { checkpoint: CheckpointManager; statusMode: StatusMode }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
-	await mkdir(OUTPUT_DIR, { recursive: true });
+	await mkdir(EVAL_OUTPUT_DIR, { recursive: true });
 
 	const resultMap = new Map<string, GenerationResult>();
 	const pendingJobs: SampleJob[] = [];
@@ -1013,7 +1146,7 @@ async function runGenerationStage(
 			statusMode,
 			updateIntervalMs: statusMode === 'plain' ? 10_000 : undefined,
 			handler: async (job, { progress }) => {
-				const sampleDir = path.join(OUTPUT_DIR, job.id);
+				const sampleDir = path.join(EVAL_OUTPUT_DIR, job.id);
 				const rawDir = path.join(sampleDir, 'raw');
 				await rm(sampleDir, { recursive: true, force: true });
 				await mkdir(sampleDir, { recursive: true });
@@ -1090,17 +1223,21 @@ async function runGenerationStage(
 		}))
 	};
 
-	await writeJson(path.join(OUTPUT_DIR, 'index.json'), index);
+	await writeJson(path.join(EVAL_OUTPUT_DIR, 'index.json'), index);
 	console.log(`[eval] Wrote index.json with ${orderedResults.length} entries.`);
 
 	return { results: orderedResults, index };
 }
 
 async function main(): Promise<void> {
+	const seed = parseSeed();
+	const maxPrefix = parseMaxPrefix();
 	const jobLimit = parseJobLimit();
 	const statusMode = parseStatusMode();
 
 	const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
+	checkpoint.ensureSeed(seed);
+
 	const jobs = await collectJobs();
 	await checkpoint.pruneTo(new Set(jobs.map((job) => job.id)));
 	if (jobs.length === 0) {
@@ -1108,10 +1245,31 @@ async function main(): Promise<void> {
 		await checkpoint.flush();
 		return;
 	}
-	const effectiveJobs = jobLimit !== undefined ? jobs.slice(0, Math.max(0, jobLimit)) : jobs;
+
+	let workingJobs = seed !== undefined ? shuffleWithSeed(jobs, seed) : [...jobs];
+	if (seed !== undefined) {
+		console.log(`[eval] Shuffling ${workingJobs.length} samples with --seed=${seed}.`);
+	}
+
+	if (maxPrefix !== undefined) {
+		const beforeCount = workingJobs.length;
+		workingJobs = filterJobsByMaxPrefix(workingJobs, maxPrefix);
+		console.log(
+			`[eval] Applying --maxPrefix=${maxPrefix}; ${workingJobs.length} of ${beforeCount} samples match.`
+		);
+	}
+
+	if (workingJobs.length === 0) {
+		console.warn('[eval] No sample files remain after applying filters.');
+		await checkpoint.flush();
+		return;
+	}
+
+	const effectiveJobs =
+		jobLimit !== undefined ? workingJobs.slice(0, Math.max(0, jobLimit)) : workingJobs;
 	if (jobLimit !== undefined) {
 		console.log(
-			`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${jobs.length} samples.`
+			`[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${workingJobs.length} samples.`
 		);
 	}
 	checkpoint.start();
