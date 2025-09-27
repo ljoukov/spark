@@ -17,9 +17,16 @@ export function ensureOfflineEnv(): void {
 	if (envLoaded) {
 		return;
 	}
-	const localEnvPath = path.join(REPO_ROOT, '.env.local');
-	if (existsSync(localEnvPath)) {
-		loadEnv({ path: localEnvPath });
+	const candidates = [
+		path.join(REPO_ROOT, '.env.local'),
+		path.join(WEB_ROOT, '.env.local'),
+		path.resolve('.env.local')
+	];
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) {
+			loadEnv({ path: candidate });
+			break;
+		}
 	}
 	envLoaded = true;
 }
