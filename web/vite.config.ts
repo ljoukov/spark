@@ -17,13 +17,16 @@ const httpsOption = hasCustomCert
 			cert: fs.readFileSync(customCertPath, 'utf8')
 		}
 	: undefined; // plugin will provide cert and enable https when undefined
+const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
+const httpsServerOption = isHttpsDev ? httpsOption ?? true : false;
+const plugins = [tailwindcss(), sveltekit(), devtoolsJson(), ...(isHttpsDev ? [basicSsl()] : [])];
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), devtoolsJson(), basicSsl()],
+	plugins,
 	server: {
 		host: 'localhost',
 		port: 8080,
-		https: httpsOption
+		https: httpsServerOption
 	},
 	test: {
 		expect: { requireAssertions: true },

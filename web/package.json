@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 8080",
+		"dev": "vite dev --port 3000",
 		"dev:https": "vite dev --port 8080",
 		"build": "vite build",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
