@@ -43,7 +43,8 @@ type MetricsSnapshot = {
 	readonly activeCalls: number;
 	readonly totalPromptTokens: number;
 	readonly totalInferenceTokens: number;
-	readonly speedTokensPerSecond: number;
+	readonly promptTokensPerSecond: number;
+	readonly inferenceTokensPerSecond: number;
 	readonly perModel: Array<{
 		readonly modelId: string;
 		readonly promptTokens: number;
@@ -59,7 +60,11 @@ class MetricsTracker {
 	private totalInferenceTokens = 0;
 	private readonly perModel = new Map<string, PerModelMetrics>();
 	private readonly callInfo = new Map<ModelCallHandle, { readonly modelId: string }>();
-	private readonly usageWindow: Array<{ timestamp: number; tokens: number }> = [];
+	private readonly usageWindow: Array<{
+		timestamp: number;
+		promptTokens: number;
+		inferenceTokens: number;
+	}> = [];
 
 	reportChars(delta: number): void {
 		if (delta <= 0) {
@@ -83,6 +88,8 @@ class MetricsTracker {
 		if (!info) {
 			return;
 		}
+		let promptDelta = 0;
+		let inferenceDelta = 0;
 		if (delta.promptTokensDelta > 0) {
 			this.totalPromptTokens += delta.promptTokensDelta;
 			const metrics = this.perModel.get(info.modelId) ?? {
@@ -91,6 +98,7 @@ class MetricsTracker {
 			};
 			metrics.promptTokens += delta.promptTokensDelta;
 			this.perModel.set(info.modelId, metrics);
+			promptDelta = delta.promptTokensDelta;
 		}
 		if (delta.inferenceTokensDelta > 0) {
 			this.totalInferenceTokens += delta.inferenceTokensDelta;
@@ -100,7 +108,14 @@ class MetricsTracker {
 			};
 			metrics.inferenceTokens += delta.inferenceTokensDelta;
 			this.perModel.set(info.modelId, metrics);
-			this.usageWindow.push({ timestamp: delta.timestamp, tokens: delta.inferenceTokensDelta });
+			inferenceDelta = delta.inferenceTokensDelta;
+		}
+		if (promptDelta > 0 || inferenceDelta > 0) {
+			this.usageWindow.push({
+				timestamp: delta.timestamp,
+				promptTokens: promptDelta,
+				inferenceTokens: inferenceDelta
+			});
 		}
 	}
 
@@ -115,10 +130,16 @@ class MetricsTracker {
 		while (this.usageWindow.length > 0 && this.usageWindow[0].timestamp <= now - SPEED_WINDOW_MS) {
 			this.usageWindow.shift();
 		}
-		const windowTokens = this.usageWindow.reduce((sum, entry) => sum + entry.tokens, 0);
+		let promptWindowTokens = 0;
+		let inferenceWindowTokens = 0;
+		for (const entry of this.usageWindow) {
+			promptWindowTokens += entry.promptTokens;
+			inferenceWindowTokens += entry.inferenceTokens;
+		}
 		const windowStart = this.usageWindow.length > 0 ? this.usageWindow[0].timestamp : now;
 		const elapsedSeconds = Math.max((now - windowStart) / 1000, 1);
-		const speed = windowTokens / elapsedSeconds;
+		const promptSpeed = promptWindowTokens / elapsedSeconds;
+		const inferenceSpeed = inferenceWindowTokens / elapsedSeconds;
 		const perModel = Array.from(this.perModel.entries())
 			.sort((a, b) => a[0].localeCompare(b[0]))
 			.map(([modelId, metrics]) => ({
@@ -132,7 +153,8 @@ class MetricsTracker {
 			activeCalls: this.activeCalls,
 			totalPromptTokens: this.totalPromptTokens,
 			totalInferenceTokens: this.totalInferenceTokens,
-			speedTokensPerSecond: speed,
+			promptTokensPerSecond: promptSpeed,
+			inferenceTokensPerSecond: inferenceSpeed,
 			perModel
 		};
 	}
@@ -248,13 +270,14 @@ class ProgressDisplay {
 			this.completedJobs >= this.totalJobs ? 100 : (this.completedJobs / this.totalJobs) * 100;
 		const waitingJobs = Math.max(this.totalJobs - this.completedJobs - this.runningJobs, 0);
 		const metrics = this.metrics.getSnapshot();
+		const promptSpeedDisplay = formatNumber(Math.round(metrics.promptTokensPerSecond));
+		const inferenceSpeedDisplay = formatNumber(Math.round(metrics.inferenceTokensPerSecond));
 		const line =
-			`${this.label} ${percent.toFixed(1).padStart(5, ' ')}% | jobs ${this.completedJobs}/${this.totalJobs}` +
-			` | waiting ${waitingJobs}` +
+			`${this.label} ${percent.toFixed(1).padStart(5, ' ')}% ${this.completedJobs} / ${this.totalJobs}` +
+			` waiting ${waitingJobs}` +
 			` | up ${formatBytes(metrics.totalUploadBytes)}` +
-			` | tok ${formatNumber(metrics.totalInferenceTokens)}` +
-			` | speed ${formatNumber(Math.round(metrics.speedTokensPerSecond))}/s` +
-			` | models ${formatPerModel(metrics.perModel)}`;
+			` | speed P ${promptSpeedDisplay}/s I ${inferenceSpeedDisplay}/s` +
+			` | ${formatPerModel(metrics.perModel)}`;
 		this.writeLine(line);
 	}
 
@@ -356,11 +379,18 @@ function formatPerModel(perModel: MetricsSnapshot['perModel']): string {
 	if (perModel.length === 0) {
 		return '—';
 	}
-	return perModel
-		.map((entry) => {
-			const prompt = formatNumber(entry.promptTokens);
-			const inference = formatNumber(entry.inferenceTokens);
-			return `${entry.modelId.replace('gemini-', '')} P:${prompt} I:${inference}`;
-		})
-		.join(' · ');
+	if (perModel.length === 0) {
+		return '—';
+	}
+	const [first, ...rest] = perModel;
+	const formatEntry = (entry: MetricsSnapshot['perModel'][number]) => {
+		const prompt = formatNumber(entry.promptTokens);
+		const inference = formatNumber(entry.inferenceTokens);
+		return `${entry.modelId.replace('gemini-', '')}: P ${prompt} / I ${inference}`;
+	};
+	let output = formatEntry(first);
+	if (rest.length > 0) {
+		output += ` (+${rest.length} more)`;
+	}
+	return output;
 }
