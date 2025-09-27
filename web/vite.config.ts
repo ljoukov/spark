@@ -21,7 +21,7 @@ const httpsOption: HttpsServerOptions | undefined = hasCustomCert
 const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
 const fallbackHttpsOption: HttpsServerOptions = {};
 const httpsServerOption: HttpsServerOptions | undefined = isHttpsDev
-	? httpsOption ?? fallbackHttpsOption
+	? (httpsOption ?? fallbackHttpsOption)
 	: undefined;
 const plugins = [tailwindcss(), sveltekit(), devtoolsJson(), ...(isHttpsDev ? [basicSsl()] : [])];
 

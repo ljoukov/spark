@@ -44,7 +44,11 @@ import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from 
 
 ensureOfflineEnv();
 
-const { repoRoot: REPO_ROOT, evalInputDir: EVAL_INPUT_DIR, evalOutputDir: EVAL_OUTPUT_DIR } = OFFLINE_PATHS;
+const {
+	repoRoot: REPO_ROOT,
+	evalInputDir: EVAL_INPUT_DIR,
+	evalOutputDir: EVAL_OUTPUT_DIR
+} = OFFLINE_PATHS;
 const DATA_ROOT = EVAL_INPUT_DIR;
 const MAX_CONCURRENT_ANALYSES = 4;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
@@ -256,17 +260,11 @@ class CheckpointManager {
 	}
 
 	private throwSeedMismatch(expected: number | null, received: number | null): never {
-		const expectedLabel =
-			expected === null
-				? 'no --seed flag'
-				: `--seed=${expected}`;
-		const receivedLabel =
-			received === null
-				? 'no --seed flag'
-				: `--seed=${received}`;
+		const expectedLabel = expected === null ? 'no --seed flag' : `--seed=${expected}`;
+		const receivedLabel = received === null ? 'no --seed flag' : `--seed=${received}`;
 		throw new Error(
 			`[eval] Seed mismatch: checkpoint was created with ${expectedLabel}, but the run is using ${receivedLabel}. ` +
-			`Re-run with ${expectedLabel} or delete ${this.directory} to start fresh.`
+				`Re-run with ${expectedLabel} or delete ${this.directory} to start fresh.`
 		);
 	}
 
