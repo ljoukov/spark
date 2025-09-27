@@ -2,6 +2,8 @@ import { clearInterval, setInterval } from 'node:timers';
 
 const SPEED_WINDOW_MS = 10_000;
 
+export type StatusMode = 'interactive' | 'plain' | 'off';
+
 export type ModelCallHandle = symbol;
 
 export type ModelUsageDelta = {
@@ -30,6 +32,8 @@ export type JobRunnerOptions<I, O> = {
 	readonly handler: (item: I, context: JobContext) => Promise<O>;
 	readonly updateIntervalMs?: number;
 	readonly label?: string;
+	readonly statusMode?: StatusMode;
+	readonly output?: NodeJS.WriteStream;
 };
 
 type PerModelMetrics = {
@@ -170,15 +174,29 @@ class ProgressDisplay {
 	private runningJobs = 0;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private dirty = false;
+	private readonly mode: StatusMode;
+	private readonly output: NodeJS.WriteStream;
+	private readonly useColor: boolean;
+	private readonly labelDisplay: string;
+	private lastRenderTime = 0;
 
-	constructor(totalJobs: number, label: string, updateIntervalMs: number) {
+	constructor(
+		totalJobs: number,
+		label: string,
+		updateIntervalMs: number,
+		{ mode, output }: { mode: StatusMode; output: NodeJS.WriteStream }
+	) {
 		this.totalJobs = totalJobs;
 		this.label = label;
 		this.updateIntervalMs = updateIntervalMs;
+		this.mode = mode;
+		this.output = output;
+		this.useColor = Boolean(output.isTTY) && mode === 'interactive';
+		this.labelDisplay = this.useColor ? `\u001b[36m${label}\u001b[0m` : label;
 	}
 
 	start(): void {
-		if (this.totalJobs === 0) {
+		if (this.mode === 'off' || this.totalJobs === 0) {
 			return;
 		}
 		this.render(true);
@@ -192,55 +210,96 @@ class ProgressDisplay {
 			clearInterval(this.timer);
 			this.timer = undefined;
 		}
+		if (this.mode === 'off') {
+			return;
+		}
 		this.render(true);
-		if (this.totalJobs > 0) {
-			process.stdout.write('\n');
+		if (this.totalJobs > 0 && this.mode === 'interactive') {
+			this.output.write('\n');
 		}
 	}
 
 	jobStarted(): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		this.runningJobs += 1;
 		this.dirty = true;
-		this.render(true);
+		this.render(this.mode === 'interactive');
 	}
 
 	jobCompleted(): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		if (this.runningJobs > 0) {
 			this.runningJobs -= 1;
 		}
 		this.completedJobs += 1;
 		this.dirty = true;
-		this.render(true);
+		this.render(this.mode === 'interactive');
 	}
 
 	reportChars(delta: number): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		this.metrics.reportChars(delta);
 		this.dirty = true;
 	}
 
 	startModelCall(modelId: string, uploadBytes: number): ModelCallHandle {
+		if (this.mode === 'off') {
+			return Symbol('model-call');
+		}
 		this.dirty = true;
 		return this.metrics.startCall(modelId, uploadBytes);
 	}
 
 	recordModelUsage(handle: ModelCallHandle, delta: ModelUsageDelta): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		this.metrics.recordUsage(handle, delta);
 		this.dirty = true;
 	}
 
 	finishModelCall(handle: ModelCallHandle): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		this.metrics.finishCall(handle);
 		this.dirty = true;
 	}
 
 	log(message: string): void {
-		this.clearLine();
+		if (this.mode === 'off') {
+			console.log(message);
+			return;
+		}
+		if (this.mode === 'interactive') {
+			this.clearLine();
+			console.log(message);
+			this.dirty = true;
+			this.render(true);
+			return;
+		}
 		console.log(message);
 		this.dirty = true;
-		this.render(true);
 	}
 
 	createReporter(): JobProgressReporter {
+		if (this.mode === 'off') {
+			return {
+				reportChars: () => {},
+				log: (message) => {
+					console.log(message);
+				},
+				startModelCall: () => Symbol('model-call'),
+				recordModelUsage: () => {},
+				finishModelCall: () => {}
+			};
+		}
 		return {
 			reportChars: (delta) => {
 				this.reportChars(delta);
@@ -259,11 +318,18 @@ class ProgressDisplay {
 	}
 
 	private render(force = false): void {
+		if (this.mode === 'off') {
+			return;
+		}
 		if (!force && !this.dirty) {
 			return;
 		}
 		this.dirty = false;
 		if (this.totalJobs === 0) {
+			return;
+		}
+		const now = Date.now();
+		if (this.mode === 'plain' && !force && now - this.lastRenderTime < this.updateIntervalMs) {
 			return;
 		}
 		const percent =
@@ -273,25 +339,31 @@ class ProgressDisplay {
 		const promptSpeedDisplay = formatNumber(Math.round(metrics.promptTokensPerSecond));
 		const inferenceSpeedDisplay = formatNumber(Math.round(metrics.inferenceTokensPerSecond));
 		const line =
-			`${this.label} ${percent.toFixed(1).padStart(5, ' ')}% ${this.completedJobs} / ${this.totalJobs}` +
+			`${this.labelDisplay} ${percent.toFixed(1).padStart(5, ' ')}% ${this.completedJobs} / ${this.totalJobs}` +
 			` waiting ${waitingJobs}` +
 			` | up ${formatBytes(metrics.totalUploadBytes)}` +
 			` | speed P ${promptSpeedDisplay}/s I ${inferenceSpeedDisplay}/s` +
 			` | ${formatPerModel(metrics.perModel)}`;
 		this.writeLine(line);
+		this.lastRenderTime = now;
 	}
 
 	private writeLine(line: string): void {
-		const padded = line.padEnd(this.lastRenderedLength, ' ');
-		process.stdout.write(`\r${padded}`);
-		this.lastRenderedLength = Math.max(this.lastRenderedLength, line.length);
+		if (this.mode === 'interactive') {
+			const padded = line.padEnd(this.lastRenderedLength, ' ');
+			this.output.write(`\r${padded}`);
+			this.lastRenderedLength = Math.max(this.lastRenderedLength, line.length);
+			return;
+		}
+		this.output.write(`${line}\n`);
+		this.lastRenderedLength = 0;
 	}
 
 	private clearLine(): void {
-		if (this.lastRenderedLength === 0) {
+		if (this.mode !== 'interactive' || this.lastRenderedLength === 0) {
 			return;
 		}
-		process.stdout.write(`\r${' '.repeat(this.lastRenderedLength)}\r`);
+		this.output.write(`\r${' '.repeat(this.lastRenderedLength)}\r`);
 		this.lastRenderedLength = 0;
 	}
 }
@@ -301,8 +373,10 @@ export async function runJobsWithConcurrency<I, O>({
 	concurrency,
 	getId,
 	handler,
-	updateIntervalMs = 1000,
-	label = 'Progress'
+	updateIntervalMs,
+	label = 'Progress',
+	statusMode = 'interactive',
+	output = process.stderr
 }: JobRunnerOptions<I, O>): Promise<O[]> {
 	const total = items.length;
 	if (total === 0) {
@@ -310,7 +384,18 @@ export async function runJobsWithConcurrency<I, O>({
 	}
 	const effectiveConcurrency = Math.max(1, Math.min(concurrency, total));
 	const results: O[] = new Array(total);
-	const progressDisplay = new ProgressDisplay(total, label, updateIntervalMs);
+	const stream = output ?? process.stderr;
+	const effectiveStatusMode: StatusMode = stream.isTTY
+		? statusMode
+		: statusMode === 'interactive'
+		? 'plain'
+		: statusMode;
+	const effectiveUpdateInterval =
+		updateIntervalMs ?? (effectiveStatusMode === 'plain' ? 10_000 : 1_000);
+	const progressDisplay = new ProgressDisplay(total, label, effectiveUpdateInterval, {
+		mode: effectiveStatusMode,
+		output: stream
+	});
 	progressDisplay.start();
 	let nextIndex = 0;
 
@@ -377,10 +462,7 @@ function formatNumber(value: number): string {
 
 function formatPerModel(perModel: MetricsSnapshot['perModel']): string {
 	if (perModel.length === 0) {
-		return '—';
-	}
-	if (perModel.length === 0) {
-		return '—';
+		return 'model: n/a';
 	}
 	const [first, ...rest] = perModel;
 	const formatEntry = (entry: MetricsSnapshot['perModel'][number]) => {

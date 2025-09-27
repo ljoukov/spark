@@ -41,7 +41,11 @@ import {
 	QUIZ_EVAL_MODEL_ID
 } from '../judge';
 import { runGeminiCall, type GeminiModelId } from '../../../utils/gemini';
-import { runJobsWithConcurrency, type JobProgressReporter } from './concurrency';
+import {
+	runJobsWithConcurrency,
+	type JobProgressReporter,
+	type StatusMode
+} from './concurrency';
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
@@ -998,6 +1002,18 @@ function parseJobLimit(): number | undefined {
 	return limit;
 }
 
+function parseStatusMode(): StatusMode {
+	const statusArg = process.argv.find((value) => value.startsWith('--status='));
+	if (!statusArg) {
+		return 'interactive';
+	}
+	const value = statusArg.split('=')[1]?.toLowerCase();
+	if (value === 'interactive' || value === 'plain' || value === 'off') {
+		return value;
+	}
+	throw new Error(`Unknown status mode: ${value}`);
+}
+
 async function writeJson(filePath: string, data: unknown): Promise<void> {
 	await writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
@@ -1046,7 +1062,7 @@ type SampleIndex = {
 
 async function runGenerationStage(
 	jobs: SampleJob[],
-	{ checkpoint }: { checkpoint: CheckpointManager }
+	{ checkpoint, statusMode }: { checkpoint: CheckpointManager; statusMode: StatusMode }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
 	await mkdir(OUTPUT_DIR, { recursive: true });
 
@@ -1080,7 +1096,9 @@ async function runGenerationStage(
 			items: pendingJobs,
 			concurrency,
 			getId: (job) => job.id,
-			label: '[eval] offline eval',
+			label: '[eval]',
+			statusMode,
+			updateIntervalMs: statusMode === 'plain' ? 10_000 : undefined,
 			handler: async (job, { progress }) => {
 				const sampleDir = path.join(OUTPUT_DIR, job.id);
 				const rawDir = path.join(sampleDir, 'raw');
@@ -1376,6 +1394,7 @@ async function renderReports(index?: SampleIndex): Promise<void> {
 async function main(): Promise<void> {
 	const stage = parseStageSelection();
 	const jobLimit = parseJobLimit();
+	const statusMode = parseStatusMode();
 
 	if (stage !== 'render') {
 		const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
@@ -1395,7 +1414,7 @@ async function main(): Promise<void> {
 		}
 		checkpoint.start();
 		try {
-			const { index } = await runGenerationStage(effectiveJobs, { checkpoint });
+			const { index } = await runGenerationStage(effectiveJobs, { checkpoint, statusMode });
 			if (stage === 'generate') {
 				return;
 			}
