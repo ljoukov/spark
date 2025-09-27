@@ -51,22 +51,22 @@ if [ -z "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-if [ -d output ]; then
+if [ -d eval-output ]; then
   if git lfs version >/dev/null 2>&1; then
-    echo "info: packaging output/ into output.tar.gz" >&2
-    rm -f output.tar.gz
-    tar -czf output.tar.gz output
+    echo "info: packaging eval-output/ into eval-output.tar.gz" >&2
+    rm -f eval-output.tar.gz
+    tar -czf eval-output.tar.gz eval-output
   else
-    echo "error: git-lfs is required to package output/" >&2
+    echo "error: git-lfs is required to package eval-output/" >&2
     popd >/dev/null
     exit 1
   fi
 fi
 
-if [ -f output.tar.gz ]; then
-  git add output.tar.gz
+if [ -f eval-output.tar.gz ]; then
+  git add eval-output.tar.gz
 else
-  echo "warn: output.tar.gz not found; nothing to add" >&2
+  echo "warn: eval-output.tar.gz not found; nothing to add" >&2
 fi
 
 SUBMODULE_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)

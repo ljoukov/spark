@@ -18,10 +18,9 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"all-tests": "npm run lint && npm run check && npm run test && npm run build",
+		"eval:prepare-input": "tsx src/lib/server/llm/eval/offline/prepare-input.ts",
 		"eval:run": "tsx src/lib/server/llm/eval/offline/run-eval.ts",
-		"eval:analysis": "tsx src/lib/server/llm/eval/offline/eval-analysis.ts",
-		"eval:audit-report": "tsx src/lib/server/llm/eval/offline/audit-report.ts",
-		"eval:classify-samples": "tsx src/lib/server/llm/eval/offline/classify-samples.ts"
+		"eval:audit": "tsx src/lib/server/llm/eval/offline/audit-eval.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",

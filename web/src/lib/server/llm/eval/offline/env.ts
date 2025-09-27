@@ -7,9 +7,10 @@ import { config as loadEnv } from 'dotenv';
 const OFFLINE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(OFFLINE_DIR, '../../../../../../');
 const REPO_ROOT = path.resolve(WEB_ROOT, '../');
-const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
-const REPORT_ROOT = path.join(REPO_ROOT, 'docs', 'reports');
-const AUDIT_REPORT_DIR = path.join(REPO_ROOT, 'spark-data', 'report-audit');
+const DOWNLOADS_DIR = path.join(REPO_ROOT, 'spark-data', 'downloads');
+const EVAL_INPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'eval-input');
+const EVAL_OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'eval-output');
+const AUDIT_REPORT_DIR = path.join(REPO_ROOT, 'spark-data', 'eval-audit');
 
 let envLoaded = false;
 
@@ -35,7 +36,8 @@ export const OFFLINE_PATHS = {
 	offlineDir: OFFLINE_DIR,
 	webRoot: WEB_ROOT,
 	repoRoot: REPO_ROOT,
-	outputDir: OUTPUT_DIR,
-	reportRoot: REPORT_ROOT,
+	downloadsDir: DOWNLOADS_DIR,
+	evalInputDir: EVAL_INPUT_DIR,
+	evalOutputDir: EVAL_OUTPUT_DIR,
 	auditReportDir: AUDIT_REPORT_DIR
 } as const;
