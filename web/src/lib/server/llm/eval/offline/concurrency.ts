@@ -332,15 +332,15 @@ class ProgressDisplay {
 		if (this.mode === 'plain' && !force && now - this.lastRenderTime < this.updateIntervalMs) {
 			return;
 		}
-		const percent =
-			this.completedJobs >= this.totalJobs ? 100 : (this.completedJobs / this.totalJobs) * 100;
+		const rawPercent = (this.completedJobs / this.totalJobs) * 100;
+		const percent = this.completedJobs >= this.totalJobs ? 100 : Math.round(rawPercent);
 		const waitingJobs = Math.max(this.totalJobs - this.completedJobs - this.runningJobs, 0);
 		const metrics = this.metrics.getSnapshot();
 		const promptSpeedDisplay = formatNumber(Math.round(metrics.promptTokensPerSecond));
 		const inferenceSpeedDisplay = formatNumber(Math.round(metrics.inferenceTokensPerSecond));
 		const line =
-			`${this.labelDisplay} ${percent.toFixed(1).padStart(5, ' ')}% ${this.completedJobs} / ${this.totalJobs}` +
-			` waiting ${waitingJobs}` +
+			`${this.labelDisplay} ${percent}% | ${this.completedJobs} / ${this.totalJobs}` +
+			` | ${waitingJobs} waiting` +
 			` | up ${formatBytes(metrics.totalUploadBytes)}` +
 			` | speed P ${promptSpeedDisplay}/s I ${inferenceSpeedDisplay}/s` +
 			` | ${formatPerModel(metrics.perModel)}`;
