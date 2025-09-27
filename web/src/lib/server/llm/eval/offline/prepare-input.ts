@@ -124,10 +124,9 @@ function normaliseConfidenceInput(value: unknown): unknown {
 
 const ConfidenceSchema = z.preprocess(normaliseConfidenceInput, z.enum(CONFIDENCE_LEVELS));
 
-const CLASSIFICATION_SCHEMA: Schema = {
+const RAW_CLASSIFICATION_SCHEMA: Schema = {
 	type: Type.OBJECT,
 	properties: {
-		pageBucket: { type: Type.STRING, enum: [...PAGE_BUCKETS] },
 		pageCountEstimate: { type: Type.INTEGER, minimum: 1 },
 		examBoard: { type: Type.STRING, enum: [...EXAM_BOARDS] },
 		gradeBucket: { type: Type.STRING, enum: [...GRADE_BUCKETS] },
@@ -146,18 +145,8 @@ const CLASSIFICATION_SCHEMA: Schema = {
 				'Lowercase slug beginning with subject, then topic keywords separated by hyphens.'
 		}
 	},
-	required: [
-		'pageBucket',
-		'examBoard',
-		'summary',
-		'rationale',
-		'gradeBucket',
-		'materialType',
-		'confidence',
-		'shortName'
-	],
+	required: ['examBoard', 'summary', 'rationale', 'gradeBucket', 'materialType', 'confidence', 'shortName'],
 	propertyOrdering: [
-		'pageBucket',
 		'pageCountEstimate',
 		'examBoard',
 		'summary',
@@ -170,8 +159,7 @@ const CLASSIFICATION_SCHEMA: Schema = {
 	]
 };
 
-const ClassificationSchema = z.object({
-	pageBucket: z.enum(PAGE_BUCKETS),
+const RawClassificationSchema = z.object({
 	pageCountEstimate: z.number().int().positive().optional(),
 	examBoard: z.enum(EXAM_BOARDS),
 	gradeBucket: z.enum(GRADE_BUCKETS),
@@ -187,6 +175,12 @@ const ClassificationSchema = z.object({
 		.refine((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value), {
 			message: 'shortName must be lowercase slug with letters/numbers separated by hyphens'
 		})
+});
+
+type RawClassification = z.infer<typeof RawClassificationSchema>;
+
+const ClassificationSchema = RawClassificationSchema.extend({
+	pageBucket: z.enum(PAGE_BUCKETS)
 });
 
 type Classification = z.infer<typeof ClassificationSchema>;
@@ -336,7 +330,6 @@ function buildPrompt(file: SampleFile): string {
 		`File extension: ${file.ext || 'unknown'}`,
 		`File size: ${(file.sizeBytes / (1024 * 1024)).toFixed(2)} MB`,
 		'Detected page count: unknown — inspect the attached file and estimate when needed.',
-		'Page bucket options: 01_page | 02-to-04_pages | 05-to-09_pages | 10-to-19_pages | 20-to-49_pages | 50plus_pages',
 		'Exam board options: AQA | OCR | Edexcel | Pearson | Cambridge | WJEC | Eduqas | CCEA | general',
 		'Grade bucket options (choose one, no "unknown"): foundation | intermediate | higher | mixed',
 		'Material type options: study | revision | test | other',
@@ -426,7 +419,7 @@ async function callGeminiJson({
 				],
 				config: {
 					responseMimeType: 'application/json',
-					responseSchema: CLASSIFICATION_SCHEMA
+					responseSchema: RAW_CLASSIFICATION_SCHEMA
 				}
 			});
 			let latestText = '';
@@ -644,7 +637,7 @@ async function classifyBatch({
 						`Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`
 					);
 				}
-				const validation = ClassificationSchema.safeParse(parsed);
+				const validation = RawClassificationSchema.safeParse(parsed);
 				if (!validation.success) {
 					throw new Error(
 						buildValidationErrorMessage({
@@ -676,14 +669,39 @@ async function classifyBatch({
 	});
 }
 
-function normaliseClassification(value: Classification): Classification {
+function derivePageBucket(pageCountEstimate?: number): (typeof PAGE_BUCKETS)[number] {
+	if (!Number.isFinite(pageCountEstimate) || pageCountEstimate === undefined || pageCountEstimate === null) {
+		return '50plus_pages';
+	}
+	const value = Math.max(1, Math.floor(pageCountEstimate));
+	if (value <= 1) {
+		return '01_page';
+	}
+	if (value <= 4) {
+		return '02-to-04_pages';
+	}
+	if (value <= 9) {
+		return '05-to-09_pages';
+	}
+	if (value <= 19) {
+		return '10-to-19_pages';
+	}
+	if (value <= 49) {
+		return '20-to-49_pages';
+	}
+	return '50plus_pages';
+}
+
+function normaliseClassification(value: RawClassification): Classification {
+	const pageBucket = derivePageBucket(value.pageCountEstimate);
 	return {
 		...value,
+		pageCountEstimate: value.pageCountEstimate,
 		examBoard: value.examBoard,
 		gradeBucket: value.gradeBucket,
 		materialType: value.materialType,
-		pageBucket: value.pageBucket,
-		shortName: value.shortName
+		shortName: value.shortName,
+		pageBucket
 	};
 }
 

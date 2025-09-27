@@ -45,23 +45,7 @@ import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from 
 ensureOfflineEnv();
 
 const { repoRoot: REPO_ROOT, evalInputDir: EVAL_INPUT_DIR, evalOutputDir: EVAL_OUTPUT_DIR } = OFFLINE_PATHS;
-const DATA_ROOT_CANDIDATES = [
-	process.env.SPARK_EVAL_SAMPLE_ROOT,
-	EVAL_INPUT_DIR,
-	'/spark-data/eval-input',
-	'/spark-data/samples-organized',
-	path.join(REPO_ROOT, 'spark-data', 'samples-organized'),
-	path.join(REPO_ROOT, 'spark-data', 'samples')
-].filter((candidate): candidate is string => Boolean(candidate));
-
-const DATA_ROOT = (() => {
-	for (const candidate of DATA_ROOT_CANDIDATES) {
-		if (existsSync(candidate)) {
-			return candidate;
-		}
-	}
-	return path.join(REPO_ROOT, 'spark-data', 'samples');
-})();
+const DATA_ROOT = EVAL_INPUT_DIR;
 const MAX_CONCURRENT_ANALYSES = 4;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const CHECKPOINT_DIR = path.join(EVAL_OUTPUT_DIR, 'checkpoints');
