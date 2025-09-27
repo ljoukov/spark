@@ -21,11 +21,11 @@ export const JUDGE_RESPONSE_SCHEMA: Schema = {
 				type: Type.OBJECT,
 				properties: {
 					criterion: { type: Type.STRING },
-					score: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-					justification: { type: Type.STRING }
+					justification: { type: Type.STRING },
+					score: { type: Type.NUMBER, minimum: 0, maximum: 1 }
 				},
-				required: ['criterion', 'score', 'justification'],
-				propertyOrdering: ['criterion', 'score', 'justification']
+				required: ['criterion', 'justification', 'score'],
+				propertyOrdering: ['criterion', 'justification', 'score']
 			}
 		},
 		verdict: { type: Type.STRING, enum: ['approve', 'revise'] }

@@ -180,8 +180,8 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
 
 export const JudgeRubricItemSchema = z.object({
 	criterion: z.string().min(1),
-	score: z.number().min(0).max(1),
-	justification: z.string().min(1)
+	justification: z.string().min(1),
+	score: z.number().min(0).max(1)
 });
 
 export const JudgeVerdictSchema = z.object({
