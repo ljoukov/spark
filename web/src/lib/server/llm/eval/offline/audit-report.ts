@@ -1,7 +1,6 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { runGeminiCall } from '../../../utils/gemini';
 import { QUIZ_EVAL_MODEL_ID } from '../judge';
@@ -9,12 +8,16 @@ import { runJobsWithConcurrency } from './concurrency';
 import type { JobProgressReporter } from './concurrency';
 import { JudgeFilePayloadSchema } from './payload';
 import type { JudgeFilePayload } from './payload';
+import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 
-const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = path.resolve(CURRENT_DIR, '../../../../../../');
-const REPO_ROOT = path.resolve(WEB_ROOT, '../');
-const OUTPUT_DIR = path.join(REPO_ROOT, 'spark-data', 'output');
-const REPORT_DIR = path.join(REPO_ROOT, 'spark-data', 'report-audit');
+ensureOfflineEnv();
+
+const { repoRoot: REPO_ROOT, outputDir: OUTPUT_DIR, auditReportDir: REPORT_DIR } = OFFLINE_PATHS;
+const LOCAL_ENV_PATH = path.join(REPO_ROOT, '.env.local');
+
+if (existsSync(LOCAL_ENV_PATH)) {
+	loadEnv({ path: LOCAL_ENV_PATH });
+}
 
 type EvaluationType = 'quiz' | 'extension';
 
