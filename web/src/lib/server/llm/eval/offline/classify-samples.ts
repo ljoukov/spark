@@ -15,6 +15,7 @@ import {
 	type JobProgressReporter,
 	type ModelCallHandle
 } from './concurrency';
+import { ensureOfflineEnv } from './env';
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(CURRENT_DIR, '../../../../../../');
@@ -23,10 +24,7 @@ const REPO_ROOT = resolve(WEB_ROOT, '../');
 const DEFAULT_SRC_DIR = join(REPO_ROOT, 'spark-data', 'downloads');
 const DEFAULT_DST_DIR = join(REPO_ROOT, 'spark-data', 'samples-organized');
 
-const LOCAL_ENV_PATH = resolve('.env.local');
-if (existsSync(LOCAL_ENV_PATH)) {
-	loadEnv({ path: LOCAL_ENV_PATH });
-}
+ensureOfflineEnv();
 
 const GEMINI_MODEL_ID = 'gemini-flash-lite-latest';
 const MAX_CONCURRENCY = 256;
