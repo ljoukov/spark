@@ -158,9 +158,7 @@ function summariseEvaluations(evaluations: LoadedEvaluation[]): void {
 
 function printJudgementMetrics(label: string, evaluations: LoadedEvaluation[]): void {
 	const total = evaluations.length;
-	console.log(
-		`[analysis] ${label}: ${total} evaluation${total === 1 ? '' : 's'}.`
-	);
+	console.log(`[analysis] ${label}: ${total} evaluation${total === 1 ? '' : 's'}.`);
 	if (total === 0) {
 		console.log('  - None');
 		return;
@@ -249,13 +247,12 @@ function printHighConfidenceBreakdown(evaluations: LoadedEvaluation[]): void {
 	}
 	for (const [criterion, data] of criteria) {
 		console.log(`  - ${criterion}:`);
-		const buckets = Array.from(data.buckets.entries())
-			.sort((a, b) => Number.parseFloat(b[0]) - Number.parseFloat(a[0]));
+		const buckets = Array.from(data.buckets.entries()).sort(
+			(a, b) => Number.parseFloat(b[0]) - Number.parseFloat(a[0])
+		);
 		for (const [bucket, count] of buckets) {
 			const percentage = data.total === 0 ? 0 : (count / data.total) * 100;
-			console.log(
-				`    - ${bucket}: ${formatPercentage(percentage)} (${count}/${data.total})`
-			);
+			console.log(`    - ${bucket}: ${formatPercentage(percentage)} (${count}/${data.total})`);
 		}
 	}
 }
@@ -266,7 +263,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-	const message = error instanceof Error ? error.stack ?? error.message : String(error);
+	const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
 	console.error(`[analysis] ERROR ${message}`);
 	process.exitCode = 1;
 });
