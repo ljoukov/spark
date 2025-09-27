@@ -18,7 +18,7 @@ const httpsOption = hasCustomCert
 		}
 	: undefined; // plugin will provide cert and enable https when undefined
 const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
-const httpsServerOption = isHttpsDev ? httpsOption ?? true : false;
+const httpsServerOption = isHttpsDev ? (httpsOption ?? true) : false;
 const plugins = [tailwindcss(), sveltekit(), devtoolsJson(), ...(isHttpsDev ? [basicSsl()] : [])];
 
 export default defineConfig({

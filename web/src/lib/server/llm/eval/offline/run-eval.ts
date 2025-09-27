@@ -46,7 +46,12 @@ import type { JudgeFilePayload, QuizFilePayload, QuizModelRun, SampleJob } from 
 
 ensureOfflineEnv();
 
-const { repoRoot: REPO_ROOT, webRoot: WEB_ROOT, outputDir: OUTPUT_DIR, reportRoot: REPORT_ROOT } = OFFLINE_PATHS;
+const {
+	repoRoot: REPO_ROOT,
+	webRoot: WEB_ROOT,
+	outputDir: OUTPUT_DIR,
+	reportRoot: REPORT_ROOT
+} = OFFLINE_PATHS;
 const SAMPLE_REPORT_ROOT = path.join(REPORT_ROOT, 'eval');
 const DATA_ROOT_CANDIDATES = [
 	process.env.SPARK_EVAL_SAMPLE_ROOT,
