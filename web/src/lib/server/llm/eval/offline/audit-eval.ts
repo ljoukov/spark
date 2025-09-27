@@ -19,7 +19,11 @@ import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 
 ensureOfflineEnv();
 
-const { repoRoot: REPO_ROOT, evalOutputDir: EVAL_OUTPUT_DIR, auditReportDir: REPORT_DIR } = OFFLINE_PATHS;
+const {
+	repoRoot: REPO_ROOT,
+	evalOutputDir: EVAL_OUTPUT_DIR,
+	auditReportDir: REPORT_DIR
+} = OFFLINE_PATHS;
 const STATS_OUTPUT_PATH = path.join(REPORT_DIR, 'stats.txt');
 const FULL_SCORE_EPSILON = 1e-6;
 
@@ -82,7 +86,9 @@ function parseStages(argv: readonly string[]): Stage[] {
 		rawValue = flag.slice('--stage='.length);
 	}
 	if (!rawValue) {
-		throw new Error('[audit-eval] Missing value for --stage. Expected comma-separated list or "all".');
+		throw new Error(
+			'[audit-eval] Missing value for --stage. Expected comma-separated list or "all".'
+		);
 	}
 	const normalised = rawValue.trim().toLowerCase();
 	if (normalised === 'all') {
@@ -134,7 +140,9 @@ async function loadEvaluations(): Promise<LoadResult> {
 			try {
 				const raw = await readFile(filePath, 'utf8');
 				const parsed = JudgeFilePayloadSchema.parse(JSON.parse(raw));
-				const evaluationType: EvaluationType = fileEntry.name.includes('extension') ? 'extension' : 'quiz';
+				const evaluationType: EvaluationType = fileEntry.name.includes('extension')
+					? 'extension'
+					: 'quiz';
 				const auditFilePath = filePath.replace(/\.json$/u, '-audit.json');
 				let auditPayload: JudgeAuditFilePayload | undefined;
 				if (existsSync(auditFilePath)) {
@@ -159,7 +167,7 @@ async function loadEvaluations(): Promise<LoadResult> {
 					judgement: parsed,
 					audit: auditPayload,
 					absolutePath: filePath,
-				relativePath: path.relative(EVAL_OUTPUT_DIR, filePath).split(path.sep).join('/'),
+					relativePath: path.relative(EVAL_OUTPUT_DIR, filePath).split(path.sep).join('/'),
 					evaluationType
 				});
 			} catch (error) {
@@ -510,7 +518,7 @@ async function runStats(loadResult: LoadResult): Promise<void> {
 		summariseEvaluations(loadResult.evaluations, { log: logLine });
 	} catch (error) {
 		summariseError = error;
-		const message = error instanceof Error ? error.stack ?? error.message : String(error);
+		const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
 		errorLine(`[analysis] ERROR ${message}`);
 	}
 

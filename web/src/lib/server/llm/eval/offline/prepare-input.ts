@@ -145,7 +145,15 @@ const RAW_CLASSIFICATION_SCHEMA: Schema = {
 				'Lowercase slug beginning with subject, then topic keywords separated by hyphens.'
 		}
 	},
-	required: ['examBoard', 'summary', 'rationale', 'gradeBucket', 'materialType', 'confidence', 'shortName'],
+	required: [
+		'examBoard',
+		'summary',
+		'rationale',
+		'gradeBucket',
+		'materialType',
+		'confidence',
+		'shortName'
+	],
 	propertyOrdering: [
 		'pageCountEstimate',
 		'examBoard',
@@ -670,7 +678,11 @@ async function classifyBatch({
 }
 
 function derivePageBucket(pageCountEstimate?: number): (typeof PAGE_BUCKETS)[number] {
-	if (!Number.isFinite(pageCountEstimate) || pageCountEstimate === undefined || pageCountEstimate === null) {
+	if (
+		!Number.isFinite(pageCountEstimate) ||
+		pageCountEstimate === undefined ||
+		pageCountEstimate === null
+	) {
 		return '50plus_pages';
 	}
 	const value = Math.max(1, Math.floor(pageCountEstimate));
