@@ -16,7 +16,7 @@ if [ -z "${REPO_ROOT}" ]; then
 fi
 cd "${REPO_ROOT}"
 
-if [ ! -d spark-data/.git ]; then
+if [ ! -f spark-data/.git ] && [ ! -d spark-data/.git ]; then
   echo "error: expected spark-data submodule to be present" >&2
   exit 1
 fi
