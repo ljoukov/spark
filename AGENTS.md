@@ -13,6 +13,14 @@
 - Initialize and update all submodules with `git submodule update --init --recursive`.
 - Re-run the update command if new submodules are added or refs change.
 
+## spark-data Submodule
+
+- Install Git LFS once (`brew install git-lfs && git lfs install`). The `spark-data/output/` directory is packaged into `output.tar.gz` and tracked via LFS to keep the repository responsive.
+- To align your workspace with `origin/main`, run `scripts/git-sync-spark-data.sh`. It fast-forwards the submodule checkout to the commit referenced by `origin/main` and restores `spark-data/output/` from the tarball when available.
+- When you change files inside `spark-data/`, keep generated artifacts under `spark-data/output/`, then run `scripts/git-publish-spark-data.sh "spark-data commit message" "[optional super repo commit message]"`. The script repackages `output/`, commits and pushes the submodule, and updates the super-repo pointer (default commit message `[chore] update spark-data to <sha>`).
+- Both scripts abort if the working trees are dirty; commit or stash unrelated changes first.
+- The legacy helper scripts (`spark-data/output-pack.sh`, `spark-data/output-unpack.sh`, and `spark-data/AGENTS.md`) were removed in favour of the repo-level tooling above; do not recreate them.
+
 For details, read `docs/SPEC.md`.
 
 IMPORTANT: maintain (i.e. make changes if contradicting changes are made or critical details are missing):
