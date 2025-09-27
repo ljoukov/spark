@@ -13,11 +13,6 @@ import { ensureOfflineEnv, OFFLINE_PATHS } from './env';
 ensureOfflineEnv();
 
 const { repoRoot: REPO_ROOT, outputDir: OUTPUT_DIR, auditReportDir: REPORT_DIR } = OFFLINE_PATHS;
-const LOCAL_ENV_PATH = path.join(REPO_ROOT, '.env.local');
-
-if (existsSync(LOCAL_ENV_PATH)) {
-	loadEnv({ path: LOCAL_ENV_PATH });
-}
 
 type EvaluationType = 'quiz' | 'extension';
 
@@ -112,11 +107,12 @@ async function loadFailureCases(): Promise<Map<string, FailureCase[]>> {
 }
 
 function slugifyCriterion(criterion: string): string {
-	return criterion
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/gu, '-')
-		.replace(/^-+|-+$/gu, '')
-		|| 'criterion';
+	return (
+		criterion
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/gu, '-')
+			.replace(/^-+|-+$/gu, '') || 'criterion'
+	);
 }
 
 function formatScore(score: number): string {
@@ -164,7 +160,7 @@ async function callModel(prompt: string, progress: JobProgressReporter): Promise
 					}
 				],
 				config: {
-					responseMimeType: 'text/markdown',
+					responseMimeType: 'text/plain',
 					temperature: 0.35
 				}
 			})
@@ -239,7 +235,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-	const message = error instanceof Error ? error.stack ?? error.message : String(error);
+	const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
 	console.error(`[audit] ERROR ${message}`);
 	process.exitCode = 1;
 });
