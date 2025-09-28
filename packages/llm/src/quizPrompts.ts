@@ -63,67 +63,65 @@ export function buildSourceParts(files: InlineSourceFile[]): Part[] {
 }
 
 export function buildGenerationPrompt(options: GenerateQuizOptions): string {
+  const questionCount = options.questionCount;
+  const quantitativeTarget = Math.max(4, Math.ceil(questionCount * 0.4));
+  const interpretiveTarget = Math.max(2, Math.ceil(questionCount * 0.2));
   const base = [
     BASE_PROMPT_HEADER,
     'Write in UK English. Match the audience/tier and exam board that the source supports. Never "level up" beyond the source.',
     "",
-    "Scope alignment (safety, tone, and difficulty):",
-    '- Determine the definitive scope from the provided metadata (programme, subject, board, tier) and from explicit source cues such as "Higher tier only", "Separate Physics only", or board headers.',
-    "- If the provided subject/tier is more advanced than the source (e.g., request says Triple Science, source is Combined), align the quiz to the source. Do not add content that is not in the source.",
-    '- In that case, set quizTitle to clearly reflect the true scope (e.g., "GCSE Combined Science — Equations Review") and ensure difficulty matches the source-supported level.',
-    "- Set subject to the best-fit subject/tier inferred from the source and metadata. Prefer source-specific accuracy over blindly copying a requested higher tier.",
+    "SILENT PRE-FLIGHT (do not include this section in your output):",
+    "1) Scope freeze:",
+    "   - Derive the definitive scope from metadata and in-document cues (for example, \"Higher tier only\" or \"Separate Physics only\").",
+    "   - If the requested tier exceeds the source, align down to the source and reflect the true scope in quizTitle and subject.",
+    "   - Run a curriculum gate: if terms are off-spec for GCSE, rewrite the assessment wording to GCSE language while keeping the concept.",
     "",
-    "Before you begin, examine the supplied material and choose a mode:",
-    "- Extraction: the source already contains questions/tasks. Refine wording only when needed for clarity, preserve intent and numbering, and fill in answers directly from the source.",
-    "- Synthesis: the source contains notes/tables/diagrams. Author new rigorous assessment items grounded strictly in the content.",
-    "When extracting, use original identifiers (e.g., Q1, Q1a, Q2). When synthesising, ensure coverage breadth and vary question types.",
+    "2) Source map and coverage plan:",
+    "   - List headings, sections, tables, and figures; tag any Higher Tier or Separate-only content.",
+    `   - Allocate the ${questionCount} questions across sections in proportion to importance. Avoid over-indexing on a single section.`,
+    "   - Difficulty mix target:",
+    `     * If quantitative formulae are present -> include at least ${quantitativeTarget}/${questionCount} application, rearrange, or calculation items.`,
+    `     * Otherwise -> include at least ${interpretiveTarget}/${questionCount} interpret or analyse items (not just recall).`,
+    "   - If Higher Tier content exists, include 2-3 questions that use it; never invent Higher Tier content.",
     "",
-    "Coverage and balance:",
-    '- Systematically scan headings/labels/sections (e.g., "Equations to learn", "Equations given", "Separate Physics only").',
-    "- Ensure representative coverage from all relevant sections. Avoid over-indexing on a single section.",
-    "- Distribute questions roughly in proportion to section importance/size. If the target tier includes special sections (e.g., Separate Physics), include them when present in the source; never invent them when absent.",
+    "3) Mode decision:",
+    "   - Extraction: source already holds questions or tasks. Preserve intent and numbering; adjust wording only for clarity and UK terminology.",
+    "   - Synthesis: source provides notes, diagrams, or tables. Author new items strictly grounded in the content.",
     "",
-    "Difficulty alignment and cognitive demand:",
-    "- Match difficulty to the source-supported tier. Do not exceed the source scope.",
-    "- Include a healthy mix: recall/identify, apply/rearrange, interpret/analyse. Prefer multi-step application over pure lookup when the source enables it.",
+    "ITEM-WRITING RULES:",
+    `- Return exactly ${questionCount} questions. Use ids Q1... or reuse original identifiers when extracting.`,
+    "- Types: multiple_choice, short_answer, true_false, numeric.",
+    "- Use source terminology and conventions exactly (for example, group labels, symbols, units).",
+    "- Keep prompts self-contained. Do not reference assets that are absent from the quiz context.",
+    "- Ambiguity guard:",
+    "  * Prefer official labels (for example, \"Group 7\") over vague descriptors (for example, \"column 7\").",
+    "  * Avoid \"closest to\" comparisons when ties are possible; ask for an exact property or reframe the item.",
+    "- Free-text fairness:",
+    "  * If multiple valid answers exist, either ask for \"one\" valid example or convert to multiple_choice so only one option is correct.",
+    "- Multiple_choice quality:",
+    "  * Provide 3-4 unlabeled options; exactly one must be clearly correct. Decoys must be plausible and non-overlapping.",
+    "  * Never encode two correct answers unless the prompt explicitly says \"Select all that apply\" and you mark every correct letter.",
+    "- Numeric quality:",
+    "  * Include units in answers when appropriate and respect significant figures implied by the source.",
+    "  * Assume sensible marking tolerance (for example, plus or minus 2-3 percent). Keep precise values in the explanation.",
     "",
-    "Question quality and terminology:",
-    "- Use the exact conventions and terminology from the source (e.g., group numbering, symbols, units).",
-    "- Do not conflate distinct scientific terms (e.g., mass number vs relative atomic mass).",
-    "- Keep prompts self-contained using only information present in the source. Hints may point where to look (e.g., a table or caption) but must not add external facts.",
+    "VALIDATION PASS (silent; rewrite any item that fails a check):",
+    "- Prompt-answer alignment: if the prompt asks for N items, return exactly N. If the source only supports one, change the prompt to one.",
+    "- Premise check: every factual claim in the prompt must match the source.",
+    "- Explanation-answer coherency: explanations must support the chosen answers with no contradictions.",
+    "- Option uniqueness: only one option may be correct in each multiple choice question.",
+    "- Coverage balance: compare the final set to your plan and rebalance if skewed.",
+    "- SourceReference: cite the precise origin (page, question number, figure, caption). Do not fabricate references.",
     "",
-    "Numeric items:",
-    "- Include units in answers where appropriate. Respect significant figures implied by the source.",
-    "- Where applicable, assume sensible tolerance for marking; keep the canonical answer precise in the explanation.",
+    "OUTPUT REQUIREMENTS:",
+    "- Return JSON matching the existing schema:",
+    "  * quizTitle (accurate, exam-style, true scope).",
+    "  * mode (\"extraction\" or \"synthesis\").",
+    "  * subject (best-fit subject/tier).",
+    `  * questionCount (must be ${questionCount}).`,
+    "  * questions[] with id, prompt, type, options (multiple_choice only), answer (string array), explanation, hint, sourceReference.",
+    "- Keep UK spelling throughout.",
   ];
-  base.push(
-    `You must return exactly ${options.questionCount} questions.`,
-    "Prioritise coverage breadth over repetition. If the source has more than fits, select items so every key theme is still assessed.",
-    "If any idea lacks enough detail, narrow the scope so prompt, answer, and explanation stay fully grounded.",
-  );
-  base.push(
-    "Return JSON that matches the provided schema. Field guidance:",
-    "- quizTitle: Concise, exam-style title reflecting the true scope (board/tier) recognised in the source.",
-    '- mode: Return "extraction" if you primarily refined existing questions from the material, otherwise "synthesis" when you authored new items.',
-    '- subject: Use the best-fit subject/tier derived from the source and metadata (e.g., "GCSE Combined Science", "GCSE Triple Science", plus subject if known).',
-    "- questionCount: Must equal the number of questions returned.",
-    "- questions: Array of question objects defined below.",
-  );
-  base.push(
-    "Each question object must include:",
-    '- id: Match the original question identifier when present (e.g., "Q1a"). Otherwise use sequential IDs ("Q1", "Q2", ...).',
-    "- prompt: Clean exam-ready wording that still mirrors the source task.",
-    "- type: One of multiple_choice, short_answer, true_false, or numeric.",
-    "- options: Only for multiple_choice. Provide 2-4 plain-text option bodies with no leading labels (UI adds A/B/C/D). Prefer 3-4 options; only use 2 options when the concept is inherently binary (otherwise use true_false).",
-    '- For multi-answer multiple_choice keep 3 or 4 options; include "None of the above" only if it is genuinely plausible. Flag every correct choice via the answer array.',
-    "- answer: Return an array of correct responses. For multiple_choice, each entry must be a single letter (A-D) aligned to the option positions; otherwise return one concise textual answer inside the array.",
-    "- explanation: One to two sentences justifying the answer strictly with source evidence.",
-    '- hint: A short, precise cue that nudges the learner without adding external facts (e.g., "Check the caption under the velocity-time graph").',
-    "- sourceReference: Precise citation (page, question number, figure/caption) so humans can trace the origin. Do not fabricate references.",
-    '- Correct typographical errors from the source (e.g., UK "phosphorus" not "phosphorous") without changing the scientific content.',
-    "- Keep prompts, requested counts, and answers aligned. If a question asks for a specific number of items, return exactly that many, or adjust the prompt to match the grounded answer.",
-    "- Use the source’s conventions exactly (e.g., AQA periodic table groups as shown; do not switch to 1-18 numbering if the source does not use it).",
-  );
   if (options.subject) {
     base.push(
       `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`,
@@ -134,14 +132,6 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
       `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`,
     );
   }
-  base.push(
-    "",
-    "Examples (follow patterns, do not copy text):",
-    '- Scope alignment: If requested = "GCSE Triple Science (Physics)", but the source is an AQA Combined Science equations sheet, set subject to "GCSE Combined Science — Physics" and title "GCSE Combined Science — Physics Equations Review". Do not include Separate Physics-only formulae.',
-    '- Terminology: On an AQA periodic table insert that does not number transition metals, do not ask for "Group 12". Ask via features the table shows (e.g., "transition metal with symbol Zn").',
-    "",
-    "Verify that ids and sourceReference values align with the original numbering before returning the JSON.",
-  );
   return base.join("\n");
 }
 
@@ -152,22 +142,37 @@ export interface ExtendQuizPromptOptions {
 }
 
 export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
+  const questionCount = options.additionalQuestionCount;
+  const quantitativeTarget = Math.max(4, Math.ceil(questionCount * 0.4));
+  const interpretiveTarget = Math.max(2, Math.ceil(questionCount * 0.2));
   const lines = [
     BASE_PROMPT_HEADER,
     "The learner already received an initial quiz and now needs additional questions drawn from the same study material.",
-    "Maintain strict scope alignment with the source: do not level up difficulty or add content absent from the source.",
-    "You will receive the previous quiz prompts inside <PAST_QUIZES> ... </PAST_QUIZES>. Treat these markers as plain text delimiters and do not repeat the block in your response.",
-    "Requirements:",
-    `- Produce exactly ${options.additionalQuestionCount} new questions.`,
-    "- Avoid duplicating any prompt ideas, answer wording, or explanation themes that appear in <PAST_QUIZES>.",
-    "- Continue to ground every item strictly in the supplied material.",
-    '- Prioritise coverage balance: focus on headings/sections underrepresented in the past quiz (e.g., "Separate Physics only" or "Equations given").',
-    "- Maintain a healthy spread of cognitive demand: include some apply/rearrange/interpret questions when the source allows.",
-    '- Multiple choice questions follow the same options guidance as the base quiz: supply 2-4 unlabeled option bodies, let the UI add letters; include "None of the above" only when plausible; report correct letters in the answer array.',
-    "- Provide a concise hint for each question that nudges the learner without giving away the answer.",
-    "- Keep prompts and answers aligned with requested counts or enumerations from the material.",
-    'Return JSON following the schema. Set mode to "extension" and update questionCount accordingly. Subject should continue to reflect the true source-supported tier/board.',
-    "Do not restate the previous questions in the response. Only include the new items.",
+    "Write in UK English. Maintain the same scope, tier, and board as supported by the source.",
+    "You will receive the previous quiz prompts inside <PAST_QUIZES>...</PAST_QUIZES>. Treat these markers as plain text delimiters and do not repeat the block in your response.",
+    "",
+    "SILENT PRE-FLIGHT (do not include this section in your output):",
+    "1) Parse <PAST_QUIZES> to list covered sections, skills, and item types. Identify under-represented headings or skills.",
+    `2) Build a ${questionCount}-item coverage plan that prioritises under-covered sections (for example, "Separate Physics only" or "Equations given").`,
+    "3) Difficulty mix target:",
+    `   - If formulae are present -> include at least ${quantitativeTarget}/${questionCount} application, rearrange, or calculation items across the set.`,
+    `   - Otherwise -> include at least ${interpretiveTarget}/${questionCount} interpret or analyse items.`,
+    "4) Duplication guard: track concepts and wording patterns used in <PAST_QUIZES> and do not reuse them.",
+    "",
+    "ITEM-WRITING RULES (inherit Initial V2 rules) with these additions:",
+    `- Produce exactly ${questionCount} new questions and set mode to \"extension\".`,
+    "- Do not duplicate prompt ideas, answer wording, or explanation themes from <PAST_QUIZES>.",
+    "- If a concept allows multiple valid answers, either ask for \"one\" valid example or convert to multiple_choice for unambiguous marking.",
+    "",
+    "VALIDATION PASS (silent; rewrite any item that fails a check):",
+    "- Confirm there is no duplication against <PAST_QUIZES>.",
+    "- Check prompt-answer alignment and premise accuracy.",
+    "- Ensure explanation-answer coherency and option uniqueness for multiple choice items.",
+    "- Confirm coverage balance versus your extension plan and include Higher Tier items only if present in the source.",
+    "",
+    "OUTPUT REQUIREMENTS:",
+    "- Return JSON matching the existing schema with subject reflecting the true source-supported tier or board.",
+    "- Only include the new items in your response; do not restate previous questions.",
   ];
   if (options.subject) {
     lines.push(
