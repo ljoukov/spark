@@ -21,7 +21,7 @@ import {
 } from "@google/genai";
 import { z } from "zod";
 
-import { runGeminiCall } from "@spark/llm/utils/gemini";
+import { GeminiModelId, runGeminiCall } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,
   type JobProgressReporter,
@@ -32,7 +32,7 @@ import { OFFLINE_PATHS } from "./env";
 const { downloadsDir: DEFAULT_SRC_DIR, evalInputDir: DEFAULT_DST_DIR } =
   OFFLINE_PATHS;
 
-const GEMINI_MODEL_ID = "gemini-flash-latest";
+const GEMINI_MODEL_ID: GeminiModelId = "gemini-flash-lite-latest";
 const MAX_CONCURRENCY = 16;
 const CACHE_FILE_NAME = "classification-cache.json";
 const ERROR_LOG_FILE_NAME = "classification-errors.log";
@@ -148,14 +148,22 @@ function normaliseConfidenceInput(value: unknown): unknown {
 
 const ConfidenceSchema = z.preprocess(
   normaliseConfidenceInput,
-  z.enum(CONFIDENCE_LEVELS),
+  z.enum(CONFIDENCE_LEVELS)
 );
 
 const RAW_CLASSIFICATION_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
-    pageCountEstimate: { type: Type.INTEGER, minimum: 1 },
-    examBoard: { type: Type.STRING, enum: [...EXAM_BOARDS] },
+    numberOfPages: {
+      type: Type.INTEGER,
+      minimum: 1,
+      description: "Count the number of pages in the uploaded document",
+    },
+    examBoard: {
+      type: Type.STRING,
+      enum: [...EXAM_BOARDS],
+      description: `Exam board, if explicitly labeled in the document. Otherwise or if several boards are mentioned '${"general" satisfies (typeof EXAM_BOARDS)[number]}'`,
+    },
     gradeBucket: { type: Type.STRING, enum: [...GRADE_BUCKETS] },
     materialType: { type: Type.STRING, enum: [...MATERIAL_TYPES] },
     summary: { type: Type.STRING },
@@ -182,7 +190,7 @@ const RAW_CLASSIFICATION_SCHEMA: Schema = {
     "shortName",
   ],
   propertyOrdering: [
-    "pageCountEstimate",
+    "numberOfPages",
     "examBoard",
     "summary",
     "rationale",
@@ -195,7 +203,7 @@ const RAW_CLASSIFICATION_SCHEMA: Schema = {
 };
 
 const RawClassificationSchema = z.object({
-  pageCountEstimate: z.number().int().positive().optional(),
+  numberOfPages: z.number().int().positive().optional(),
   examBoard: z.enum(EXAM_BOARDS),
   gradeBucket: z.enum(GRADE_BUCKETS),
   materialType: z.enum(MATERIAL_TYPES),
@@ -247,7 +255,7 @@ type ClassifiedSample = {
 
 type CacheEntry = {
   classification: Classification;
-  modelId?: string;
+  modelVersion?: string;
   updatedAt?: string;
 };
 
@@ -256,13 +264,13 @@ type CacheData = Record<string, CacheEntry>;
 type JobResult = {
   file: SampleFile;
   classification?: Classification;
-  modelId?: string;
+  modelVersion?: string;
   error?: unknown;
 };
 
 const CacheEntrySchema = z.object({
   classification: ClassificationSchema,
-  modelId: z.string().optional(),
+  modelVersion: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 
@@ -341,7 +349,7 @@ async function collectSampleFiles(root: string): Promise<SampleFile[]> {
       const ext = extname(entry.name).toLowerCase();
       if (!SUPPORTED_EXTENSIONS.has(ext)) {
         console.warn(
-          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`,
+          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`
         );
         continue;
       }
@@ -358,15 +366,11 @@ async function collectSampleFiles(root: string): Promise<SampleFile[]> {
   return entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
-function buildPrompt(file: SampleFile): string {
+function buildPrompt(): string {
   const lines = [
     "You are cataloguing Spark's GCSE science study materials for evaluation coverage.",
     "Review the metadata below plus the attached file, then classify the resource using the schema.",
     "",
-    `File name: ${file.name}`,
-    `Relative path: ${file.relativePath}`,
-    `File extension: ${file.ext || "unknown"}`,
-    `File size: ${(file.sizeBytes / (1024 * 1024)).toFixed(2)} MB`,
     "Detected page count: unknown — inspect the attached file and estimate when needed.",
     "Exam board options: AQA | OCR | Edexcel | Pearson | Cambridge | WJEC | Eduqas | CCEA | general",
     'Grade bucket options (choose one, no "unknown"): foundation | intermediate | higher | mixed',
@@ -439,7 +443,7 @@ async function callGeminiJson({
   parts: Part[];
   label: string;
   progress: JobProgressReporter;
-}): Promise<{ text: string; modelId: string }> {
+}): Promise<{ text: string; modelVersion: string }> {
   const uploadBytes = estimateUploadBytes(parts);
   return runGeminiCall(async (client) => {
     const callHandle: ModelCallHandle = progress.startModelCall({
@@ -462,12 +466,13 @@ async function callGeminiJson({
       });
       let latestText = "";
       let lastPromptTokens = 0;
+      let lastCachedTokens = 0;
       let lastInferenceTokens = 0;
-      let modelId = GEMINI_MODEL_ID;
+      let modelVersion: string = GEMINI_MODEL_ID;
       let finalChunk: GenerateContentResponse | undefined;
       for await (const chunk of stream) {
         if (chunk.modelVersion) {
-          modelId = chunk.modelVersion;
+          modelVersion = chunk.modelVersion;
         }
         if (chunk.candidates) {
           for (const candidate of chunk.candidates) {
@@ -488,21 +493,25 @@ async function callGeminiJson({
         const usage = chunk.usageMetadata;
         if (usage) {
           const promptTokens = usage.promptTokenCount ?? 0;
+          const cachedTokens = usage.cachedContentTokenCount ?? 0;
           const inferenceTokens =
             (usage.thoughtsTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0);
           const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
+          const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
           const inferenceDelta = Math.max(
             0,
-            inferenceTokens - lastInferenceTokens,
+            inferenceTokens - lastInferenceTokens
           );
-          if (promptDelta > 0 || inferenceDelta > 0) {
+          if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
             progress.recordModelUsage(callHandle, {
               promptTokensDelta: promptDelta,
+              cachedTokensDelta: cachedDelta,
               inferenceTokensDelta: inferenceDelta,
               timestamp: Date.now(),
             });
           }
           lastPromptTokens = promptTokens;
+          lastCachedTokens = cachedTokens;
           lastInferenceTokens = inferenceTokens;
         }
       }
@@ -511,7 +520,7 @@ async function callGeminiJson({
       if (!finalText) {
         throw new Error(`[${label}] Empty response from Gemini`);
       }
-      return { text: finalText, modelId };
+      return { text: finalText, modelVersion };
     } finally {
       progress.finishModelCall(callHandle);
     }
@@ -530,7 +539,7 @@ async function loadCache(cachePath: string): Promise<CacheData> {
     for (const [rel, entry] of Object.entries(validated)) {
       result[rel] = {
         classification: normaliseClassification(entry.classification),
-        modelId: entry.modelId,
+        modelVersion: entry.modelVersion,
         updatedAt: entry.updatedAt,
       };
     }
@@ -579,7 +588,7 @@ function buildValidationErrorMessage({
     const labelSegments = issue.path.map((segment) =>
       typeof segment === "symbol"
         ? (segment.description ?? segment.toString())
-        : String(segment),
+        : String(segment)
     );
     const pathLabel =
       labelSegments.length > 0 ? labelSegments.join(".") : "(root)";
@@ -605,7 +614,7 @@ function safeStringify(value: unknown, spacing = 2): string {
 
 function getValueAtPath(
   payload: unknown,
-  path: readonly PropertyKey[],
+  path: readonly PropertyKey[]
 ): unknown {
   let current: unknown = payload;
   for (const segment of path) {
@@ -671,12 +680,11 @@ async function classifyBatch({
     concurrency: Math.min(options.concurrency, MAX_CONCURRENCY),
     getId: (item) => item.relativePath,
     handler: async (file, context) => {
-      const prompt = buildPrompt(file);
+      const prompt = buildPrompt();
       try {
         const buffer = await readFile(file.sourcePath);
-        console.log("----------------\n" + prompt + "\n----------------");
-        const parts: Part[] = [{ text: prompt }, buildFilePart(file, buffer)];
-        const { text, modelId } = await callGeminiJson({
+        const parts: Part[] = [buildFilePart(file, buffer), { text: prompt }];
+        const { text, modelVersion } = await callGeminiJson({
           parts,
           label: file.relativePath,
           progress: context.progress,
@@ -686,7 +694,7 @@ async function classifyBatch({
           parsed = JSON.parse(text);
         } catch (error) {
           throw new Error(
-            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`,
+            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`
           );
         }
         const validation = RawClassificationSchema.safeParse(parsed);
@@ -697,19 +705,19 @@ async function classifyBatch({
               payload: parsed,
               rawText: text,
               label: file.relativePath,
-            }),
+            })
           );
         }
         const classification = normaliseClassification(validation.data);
         if (!options.dryRun) {
           cacheData[file.relativePath] = {
             classification,
-            modelId,
+            modelVersion,
             updatedAt: new Date().toISOString(),
           };
           scheduleCacheWrite();
         }
-        return { file, classification, modelId } satisfies JobResult;
+        return { file, classification, modelVersion } satisfies JobResult;
       } catch (error) {
         const message = formatError(error);
         context.progress.log(`Failed ${file.relativePath}: ${message}`);
@@ -722,16 +730,16 @@ async function classifyBatch({
 }
 
 function derivePageBucket(
-  pageCountEstimate?: number,
+  numberOfPages?: number
 ): (typeof PAGE_BUCKETS)[number] {
   if (
-    !Number.isFinite(pageCountEstimate) ||
-    pageCountEstimate === undefined ||
-    pageCountEstimate === null
+    !Number.isFinite(numberOfPages) ||
+    numberOfPages === undefined ||
+    numberOfPages === null
   ) {
     return "50plus_pages";
   }
-  const value = Math.max(1, Math.floor(pageCountEstimate));
+  const value = Math.max(1, Math.floor(numberOfPages));
   if (value <= 1) {
     return "01_page";
   }
@@ -751,10 +759,10 @@ function derivePageBucket(
 }
 
 function normaliseClassification(value: RawClassification): Classification {
-  const pageBucket = derivePageBucket(value.pageCountEstimate);
+  const pageBucket = derivePageBucket(value.numberOfPages);
   return {
     ...value,
-    pageCountEstimate: value.pageCountEstimate,
+    numberOfPages: value.numberOfPages,
     examBoard: value.examBoard,
     gradeBucket: value.gradeBucket,
     materialType: value.materialType,
@@ -803,7 +811,7 @@ async function placeFile({
     targetDir,
     desiredName,
     file.relativePath,
-    !options.dryRun,
+    !options.dryRun
   );
   if (options.dryRun) {
     return { placedPath: destination };
@@ -844,7 +852,7 @@ async function ensureUniquePath(
   dir: string,
   baseName: string,
   rel: string,
-  createDirs: boolean,
+  createDirs: boolean
 ): Promise<string> {
   if (createDirs) {
     await mkdir(dir, { recursive: true });
@@ -885,7 +893,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 async function writeIndex(
   classified: ClassifiedSample[],
-  outputDir: string,
+  outputDir: string
 ): Promise<void> {
   const header = [
     "original",
@@ -896,7 +904,7 @@ async function writeIndex(
     "materialType",
     "summary",
     "confidence",
-    "pageCountEstimate",
+    "numberOfPages",
     "shortName",
   ];
   const rows = classified.map((entry) => {
@@ -911,9 +919,9 @@ async function writeIndex(
       csvEscape(classification.summary),
       csvEscape(classification.confidence),
       csvEscape(
-        classification.pageCountEstimate !== undefined
-          ? String(classification.pageCountEstimate)
-          : "",
+        classification.numberOfPages !== undefined
+          ? String(classification.numberOfPages)
+          : ""
       ),
       csvEscape(classification.shortName),
     ].join(",");
@@ -932,8 +940,15 @@ function incrementCount(map: Map<string, number>, key: string): void {
   map.set(key, (map.get(key) ?? 0) + 1);
 }
 
-function formatCountEntries(map: Map<string, number>): [string, number][] {
-  return Array.from(map.entries()).sort((a, b) => {
+function formatCountEntries(
+  map: Map<string, number>,
+  { sortByKey = false }: { sortByKey?: boolean } = {}
+): [string, number][] {
+  const entries = Array.from(map.entries());
+  if (sortByKey) {
+    return entries.sort((a, b) => a[0].localeCompare(b[0]));
+  }
+  return entries.sort((a, b) => {
     const diff = b[1] - a[1];
     return diff !== 0 ? diff : a[0].localeCompare(b[0]);
   });
@@ -942,17 +957,21 @@ function formatCountEntries(map: Map<string, number>): [string, number][] {
 function printCountSection({
   label,
   map,
+  sortByKey = false,
 }: {
   label: string;
   map: Map<string, number>;
+  sortByKey?: boolean;
 }): void {
   if (map.size === 0) {
     console.log(`  - ${label}: none`);
     return;
   }
   console.log(`  - ${label}:`);
-  for (const [key, count] of formatCountEntries(map)) {
-    console.log(`    ${key}: ${count}`);
+  const total = Array.from(map.values()).reduce((sum, value) => sum + value, 0);
+  for (const [key, count] of formatCountEntries(map, { sortByKey })) {
+    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+    console.log(`    ${key}: ${count} (${percentage}%)`);
   }
 }
 
@@ -985,7 +1004,7 @@ async function main(): Promise<void> {
     } catch (error) {
       console.warn(
         `[cache] Discarding invalid cache entry for ${file.relativePath}:`,
-        error,
+        error
       );
       delete cacheData[file.relativePath];
       pending.push(file);
@@ -1032,7 +1051,7 @@ async function main(): Promise<void> {
     const retryTargets = failures.map((result) => result.file);
     retriedCount = retryTargets.length;
     console.log(
-      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`,
+      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`
     );
     failures.length = 0;
     const retryResults = await classifyBatch({
@@ -1042,7 +1061,7 @@ async function main(): Promise<void> {
       scheduleCacheWrite,
     });
     retrySuccessCount = retryResults.filter(
-      (result) => result.classification,
+      (result) => result.classification
     ).length;
     accumulate(retryResults);
   }
@@ -1086,28 +1105,32 @@ async function main(): Promise<void> {
   const cachedCount = alreadyClassified.length;
   const newCount = newlyClassified.length;
   console.log(
-    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`,
+    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`
   );
   if (!options.dryRun && (cachedCount > 0 || newCount > 0)) {
     console.log(`Cache file: ${cachePath}`);
   }
   if (options.dryRun) {
     console.log(
-      "Dry run mode: no filesystem changes were made and cache was not updated.",
+      "Dry run mode: no filesystem changes were made and cache was not updated."
     );
   }
   if (allClassified.length > 0) {
     console.log(
-      `Category breakdown (${allClassified.length} classified files):`,
+      `Category breakdown (${allClassified.length} classified files):`
     );
     printCountSection({ label: "Boards", map: boardCounts });
     printCountSection({ label: "Grade buckets", map: gradeCounts });
     printCountSection({ label: "Material types", map: materialCounts });
-    printCountSection({ label: "Page buckets", map: pageBucketCounts });
+    printCountSection({
+      label: "Page buckets",
+      map: pageBucketCounts,
+      sortByKey: true,
+    });
   }
   if (retriedCount > 0) {
     console.log(
-      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`,
+      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`
     );
   }
   if (failures.length > 0) {
@@ -1116,8 +1139,8 @@ async function main(): Promise<void> {
       .map(
         (failure) =>
           `[${new Date().toISOString()}] ${failure.file.relativePath}: ${formatError(
-            failure.error,
-          )}`,
+            failure.error
+          )}`
       )
       .join("\n");
     if (!options.dryRun) {
@@ -1128,7 +1151,7 @@ async function main(): Promise<void> {
       ? `Details written to ${errorLogPath}.`
       : `Details would be written to ${errorLogPath} (dry run).`;
     console.warn(
-      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`,
+      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`
     );
   }
 }

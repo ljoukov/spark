@@ -448,11 +448,13 @@ async function callModel(
     const usage = response.usageMetadata;
     if (usage) {
       const promptTokens = usage.promptTokenCount ?? 0;
+      const cachedTokens = usage.cachedContentTokenCount ?? 0;
       const inferenceTokens =
         (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
-      if (promptTokens > 0 || inferenceTokens > 0) {
+      if (promptTokens > 0 || cachedTokens > 0 || inferenceTokens > 0) {
         progress.recordModelUsage(handle, {
           promptTokensDelta: promptTokens,
+          cachedTokensDelta: cachedTokens,
           inferenceTokensDelta: inferenceTokens,
           timestamp: Date.now(),
         });
