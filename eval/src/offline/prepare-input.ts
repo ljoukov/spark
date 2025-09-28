@@ -148,7 +148,7 @@ function normaliseConfidenceInput(value: unknown): unknown {
 
 const ConfidenceSchema = z.preprocess(
   normaliseConfidenceInput,
-  z.enum(CONFIDENCE_LEVELS)
+  z.enum(CONFIDENCE_LEVELS),
 );
 
 const RAW_CLASSIFICATION_SCHEMA: Schema = {
@@ -341,7 +341,7 @@ async function collectSampleFiles(root: string): Promise<SampleFile[]> {
       const ext = extname(entry.name).toLowerCase();
       if (!SUPPORTED_EXTENSIONS.has(ext)) {
         console.warn(
-          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`
+          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`,
         );
         continue;
       }
@@ -493,7 +493,7 @@ async function callGeminiJson({
           const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
           const inferenceDelta = Math.max(
             0,
-            inferenceTokens - lastInferenceTokens
+            inferenceTokens - lastInferenceTokens,
           );
           if (promptDelta > 0 || inferenceDelta > 0) {
             progress.recordModelUsage(callHandle, {
@@ -579,7 +579,7 @@ function buildValidationErrorMessage({
     const labelSegments = issue.path.map((segment) =>
       typeof segment === "symbol"
         ? (segment.description ?? segment.toString())
-        : String(segment)
+        : String(segment),
     );
     const pathLabel =
       labelSegments.length > 0 ? labelSegments.join(".") : "(root)";
@@ -605,7 +605,7 @@ function safeStringify(value: unknown, spacing = 2): string {
 
 function getValueAtPath(
   payload: unknown,
-  path: readonly PropertyKey[]
+  path: readonly PropertyKey[],
 ): unknown {
   let current: unknown = payload;
   for (const segment of path) {
@@ -686,7 +686,7 @@ async function classifyBatch({
           parsed = JSON.parse(text);
         } catch (error) {
           throw new Error(
-            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`
+            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`,
           );
         }
         const validation = RawClassificationSchema.safeParse(parsed);
@@ -697,7 +697,7 @@ async function classifyBatch({
               payload: parsed,
               rawText: text,
               label: file.relativePath,
-            })
+            }),
           );
         }
         const classification = normaliseClassification(validation.data);
@@ -722,7 +722,7 @@ async function classifyBatch({
 }
 
 function derivePageBucket(
-  pageCountEstimate?: number
+  pageCountEstimate?: number,
 ): (typeof PAGE_BUCKETS)[number] {
   if (
     !Number.isFinite(pageCountEstimate) ||
@@ -803,7 +803,7 @@ async function placeFile({
     targetDir,
     desiredName,
     file.relativePath,
-    !options.dryRun
+    !options.dryRun,
   );
   if (options.dryRun) {
     return { placedPath: destination };
@@ -844,7 +844,7 @@ async function ensureUniquePath(
   dir: string,
   baseName: string,
   rel: string,
-  createDirs: boolean
+  createDirs: boolean,
 ): Promise<string> {
   if (createDirs) {
     await mkdir(dir, { recursive: true });
@@ -885,7 +885,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 async function writeIndex(
   classified: ClassifiedSample[],
-  outputDir: string
+  outputDir: string,
 ): Promise<void> {
   const header = [
     "original",
@@ -913,7 +913,7 @@ async function writeIndex(
       csvEscape(
         classification.pageCountEstimate !== undefined
           ? String(classification.pageCountEstimate)
-          : ""
+          : "",
       ),
       csvEscape(classification.shortName),
     ].join(",");
@@ -985,7 +985,7 @@ async function main(): Promise<void> {
     } catch (error) {
       console.warn(
         `[cache] Discarding invalid cache entry for ${file.relativePath}:`,
-        error
+        error,
       );
       delete cacheData[file.relativePath];
       pending.push(file);
@@ -1032,7 +1032,7 @@ async function main(): Promise<void> {
     const retryTargets = failures.map((result) => result.file);
     retriedCount = retryTargets.length;
     console.log(
-      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`
+      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`,
     );
     failures.length = 0;
     const retryResults = await classifyBatch({
@@ -1042,7 +1042,7 @@ async function main(): Promise<void> {
       scheduleCacheWrite,
     });
     retrySuccessCount = retryResults.filter(
-      (result) => result.classification
+      (result) => result.classification,
     ).length;
     accumulate(retryResults);
   }
@@ -1086,19 +1086,19 @@ async function main(): Promise<void> {
   const cachedCount = alreadyClassified.length;
   const newCount = newlyClassified.length;
   console.log(
-    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`
+    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`,
   );
   if (!options.dryRun && (cachedCount > 0 || newCount > 0)) {
     console.log(`Cache file: ${cachePath}`);
   }
   if (options.dryRun) {
     console.log(
-      "Dry run mode: no filesystem changes were made and cache was not updated."
+      "Dry run mode: no filesystem changes were made and cache was not updated.",
     );
   }
   if (allClassified.length > 0) {
     console.log(
-      `Category breakdown (${allClassified.length} classified files):`
+      `Category breakdown (${allClassified.length} classified files):`,
     );
     printCountSection({ label: "Boards", map: boardCounts });
     printCountSection({ label: "Grade buckets", map: gradeCounts });
@@ -1107,7 +1107,7 @@ async function main(): Promise<void> {
   }
   if (retriedCount > 0) {
     console.log(
-      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`
+      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`,
     );
   }
   if (failures.length > 0) {
@@ -1116,8 +1116,8 @@ async function main(): Promise<void> {
       .map(
         (failure) =>
           `[${new Date().toISOString()}] ${failure.file.relativePath}: ${formatError(
-            failure.error
-          )}`
+            failure.error,
+          )}`,
       )
       .join("\n");
     if (!options.dryRun) {
@@ -1128,7 +1128,7 @@ async function main(): Promise<void> {
       ? `Details written to ${errorLogPath}.`
       : `Details would be written to ${errorLogPath} (dry run).`;
     console.warn(
-      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`
+      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`,
     );
   }
 }
