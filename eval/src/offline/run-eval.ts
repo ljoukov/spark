@@ -59,7 +59,7 @@ const {
   evalOutputDir: EVAL_OUTPUT_DIR,
 } = OFFLINE_PATHS;
 const DATA_ROOT = EVAL_INPUT_DIR;
-const MAX_CONCURRENT_ANALYSES = 4;
+const MAX_CONCURRENT_ANALYSES = 8;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
 const CHECKPOINT_DIR = path.join(EVAL_OUTPUT_DIR, "checkpoints");
 const CHECKPOINT_INTERVAL_MS = 10_000;
@@ -150,7 +150,7 @@ function extractNumericPrefix(bucket: string): number | undefined {
 
 function filterJobsByMaxPrefix(
   jobs: SampleJob[],
-  maxPrefix: number,
+  maxPrefix: number
 ): SampleJob[] {
   return jobs.filter((job) => {
     const bucketSegment = extractPageBucketSegment(job);
@@ -204,7 +204,7 @@ class CheckpointManager {
     }
     if (state.version !== CHECKPOINT_VERSION) {
       console.warn(
-        `[eval] WARN checkpoint version mismatch (found ${state.version}); starting fresh.`,
+        `[eval] WARN checkpoint version mismatch (found ${state.version}); starting fresh.`
       );
       return new CheckpointManager(directory, createEmptyCheckpointState());
     }
@@ -277,7 +277,7 @@ class CheckpointManager {
 
   private throwSeedMismatch(
     expected: number | null,
-    received: number | null,
+    received: number | null
   ): never {
     const expectedLabel =
       expected === null ? "no --seed flag" : `--seed=${expected}`;
@@ -285,7 +285,7 @@ class CheckpointManager {
       received === null ? "no --seed flag" : `--seed=${received}`;
     throw new Error(
       `[eval] Seed mismatch: checkpoint was created with ${expectedLabel}, but the run is using ${receivedLabel}. ` +
-        `Re-run with ${expectedLabel} or delete ${this.directory} to start fresh.`,
+        `Re-run with ${expectedLabel} or delete ${this.directory} to start fresh.`
     );
   }
 
@@ -357,7 +357,7 @@ class CheckpointManager {
     try {
       entries = (await readdir(this.directory))
         .filter(
-          (name) => name.startsWith("checkpoint-") && name.endsWith(".json"),
+          (name) => name.startsWith("checkpoint-") && name.endsWith(".json")
         )
         .sort();
     } catch (error) {
@@ -387,7 +387,7 @@ function createEmptyCheckpointState(): CheckpointState {
 }
 
 async function loadLatestCheckpointState(
-  directory: string,
+  directory: string
 ): Promise<CheckpointState | undefined> {
   let entries;
   try {
@@ -404,7 +404,7 @@ async function loadLatestCheckpointState(
       (entry) =>
         entry.isFile() &&
         entry.name.startsWith("checkpoint-") &&
-        entry.name.endsWith(".json"),
+        entry.name.endsWith(".json")
     )
     .map((entry) => entry.name)
     .sort();
@@ -493,7 +493,7 @@ async function collectJobs(): Promise<SampleJob[]> {
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
           console.warn(
-            `[eval] WARN unable to stat symlink at ${entryAbsolute}: ${reason}`,
+            `[eval] WARN unable to stat symlink at ${entryAbsolute}: ${reason}`
           );
           continue;
         }
@@ -630,7 +630,7 @@ async function callModel<T>({
             const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
             const inferenceDelta = Math.max(
               0,
-              inferenceTokens - lastInferenceTokens,
+              inferenceTokens - lastInferenceTokens
             );
             if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
               progress.recordModelUsage(callHandle, {
@@ -675,12 +675,12 @@ async function callModel<T>({
       const inferenceTokensTotal = finalInferenceTokens;
       if (promptTokensTotal === 0 && inferenceTokensTotal > 0) {
         progress.log(
-          `[eval] ${label} (attempt ${attempt}) WARN prompt token count zero; usage metadata may be missing promptTokenCount.`,
+          `[eval] ${label} (attempt ${attempt}) WARN prompt token count zero; usage metadata may be missing promptTokenCount.`
         );
       }
       if (!trimmed.startsWith("{")) {
         progress.log(
-          `[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || "∅"})`,
+          `[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || "∅"})`
         );
         continue;
       }
@@ -689,7 +689,7 @@ async function callModel<T>({
         parsed = JSON.parse(text);
       } catch (error) {
         progress.log(
-          `[${model}] ${label}: WARN failed to parse JSON on attempt ${attempt}: ${error}`,
+          `[${model}] ${label}: WARN failed to parse JSON on attempt ${attempt}: ${error}`
         );
         continue;
       }
@@ -699,7 +699,7 @@ async function callModel<T>({
           candidate = normalise(parsed);
         } catch (error) {
           progress.log(
-            `[${model}] ${label}: WARN failed to normalise response on attempt ${attempt}: ${error}`,
+            `[${model}] ${label}: WARN failed to normalise response on attempt ${attempt}: ${error}`
           );
           continue;
         }
@@ -714,7 +714,7 @@ async function callModel<T>({
           })
           .join("\n");
         progress.log(
-          `[${model}] ${label}: WARN schema validation failed on attempt ${attempt}:\n${issueMessages}`,
+          `[${model}] ${label}: WARN schema validation failed on attempt ${attempt}:\n${issueMessages}`
         );
         continue;
       }
@@ -726,7 +726,7 @@ async function callModel<T>({
   }
 
   throw new Error(
-    `[${model}] ${label}: failed to produce a valid response after ${maxAttempts} attempts`,
+    `[${model}] ${label}: failed to produce a valid response after ${maxAttempts} attempts`
   );
 }
 
@@ -735,7 +735,7 @@ async function generateQuizPayload(
   source: InlineSourceFile,
   rawFilePath: string,
   label: string,
-  progress: JobProgressReporter,
+  progress: JobProgressReporter
 ): Promise<QuizFilePayload> {
   const options: GenerateQuizOptions = {
     questionCount: job.questionCount,
@@ -783,14 +783,14 @@ async function generateExtensionPayload(
   baseQuiz: QuizGeneration,
   rawFilePath: string,
   label: string,
-  progress: JobProgressReporter,
+  progress: JobProgressReporter
 ): Promise<QuizFilePayload> {
   const prompt = buildExtensionPrompt({
     additionalQuestionCount: DEFAULT_EXTENSION_QUESTION_COUNT,
     subject: baseQuiz.subject ?? job.subject,
   });
   const pastQuizLines = baseQuiz.questions.map(
-    (question, index) => `${index + 1}. ${question.prompt}`,
+    (question, index) => `${index + 1}. ${question.prompt}`
   );
   const pastQuizBlock = `<PAST_QUIZES>\n${pastQuizLines.join("\n")}\n</PAST_QUIZES>`;
   const parts: Part[] = [
@@ -811,11 +811,11 @@ async function generateExtensionPayload(
   let quiz = generated;
   if (quiz.questionCount !== DEFAULT_EXTENSION_QUESTION_COUNT) {
     progress.log(
-      `[eval] WARN extension returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`,
+      `[eval] WARN extension returned ${quiz.questionCount} questions; trimming to ${DEFAULT_EXTENSION_QUESTION_COUNT}.`
     );
     const trimmedQuestions = quiz.questions.slice(
       0,
-      DEFAULT_EXTENSION_QUESTION_COUNT,
+      DEFAULT_EXTENSION_QUESTION_COUNT
     );
     quiz = {
       ...quiz,
@@ -852,7 +852,7 @@ async function judgeQuizPayload(
   quiz: QuizGeneration,
   rawFilePath: string,
   label: string,
-  progress: JobProgressReporter,
+  progress: JobProgressReporter
 ): Promise<JudgeFilePayload> {
   const prompt = buildJudgePrompt({
     sourceFiles: [source],
@@ -898,7 +898,7 @@ async function auditJudgeDecisionPayload(
   judgeVerdict: JudgeVerdict,
   rawFilePath: string,
   label: string,
-  progress: JobProgressReporter,
+  progress: JobProgressReporter
 ): Promise<JudgeFilePayload["audit"]> {
   const prompt = buildAuditPrompt();
   const parts: Part[] = [
@@ -908,7 +908,7 @@ async function auditJudgeDecisionPayload(
       text: `Judge verdict JSON:\n${JSON.stringify(judgeVerdict, null, 2)}\n\nCandidate quiz JSON:\n${JSON.stringify(
         quiz,
         null,
-        2,
+        2
       )}`,
     },
   ];
@@ -933,7 +933,7 @@ async function auditJudgeDecisionPayload(
 async function runSampleGeneration(
   job: SampleJob,
   rawDir: string,
-  progress: JobProgressReporter,
+  progress: JobProgressReporter
 ): Promise<GenerationResult> {
   const source = await loadInlineSource(job.sourcePath);
   const baseRawPath = path.join(rawDir, "quiz.txt");
@@ -943,7 +943,7 @@ async function runSampleGeneration(
   const extensionJudgeRawPath = path.join(rawDir, "extension-judge.txt");
   const extensionJudgeAuditRawPath = path.join(
     rawDir,
-    "extension-judge-audit.txt",
+    "extension-judge-audit.txt"
   );
 
   const quiz = await generateQuizPayload(
@@ -951,7 +951,7 @@ async function runSampleGeneration(
     source,
     baseRawPath,
     `base quiz ${job.id}`,
-    progress,
+    progress
   );
   const judge = await judgeQuizPayload(
     job,
@@ -959,7 +959,7 @@ async function runSampleGeneration(
     quiz.quiz,
     baseJudgeRawPath,
     `base judgement ${job.id}`,
-    progress,
+    progress
   );
   const audit = await auditJudgeDecisionPayload(
     job,
@@ -968,7 +968,7 @@ async function runSampleGeneration(
     judge.judge.verdict,
     baseJudgeAuditRawPath,
     `base audit ${job.id}`,
-    progress,
+    progress
   );
   const extension = await generateExtensionPayload(
     job,
@@ -976,7 +976,7 @@ async function runSampleGeneration(
     quiz.quiz,
     extensionRawPath,
     `extension quiz ${job.id}`,
-    progress,
+    progress
   );
   const extensionJudge = await judgeQuizPayload(
     job,
@@ -984,7 +984,7 @@ async function runSampleGeneration(
     extension.quiz,
     extensionJudgeRawPath,
     `extension judgement ${job.id}`,
-    progress,
+    progress
   );
   const extensionAudit = await auditJudgeDecisionPayload(
     job,
@@ -993,7 +993,7 @@ async function runSampleGeneration(
     extensionJudge.judge.verdict,
     extensionJudgeAuditRawPath,
     `extension audit ${job.id}`,
-    progress,
+    progress
   );
   return {
     job,
@@ -1011,7 +1011,7 @@ async function runSampleGeneration(
 }
 
 async function loadExistingGenerationResult(
-  job: SampleJob,
+  job: SampleJob
 ): Promise<GenerationResult | undefined> {
   const sampleDir = path.join(EVAL_OUTPUT_DIR, job.id);
   const quizPath = path.join(sampleDir, "quiz.json");
@@ -1019,7 +1019,7 @@ async function loadExistingGenerationResult(
   const extensionPath = path.join(sampleDir, "quiz-extension.json");
   const extensionJudgePath = path.join(
     sampleDir,
-    "quiz-extension-judgement.json",
+    "quiz-extension-judgement.json"
   );
   if (
     !existsSync(quizPath) ||
@@ -1040,7 +1040,7 @@ async function loadExistingGenerationResult(
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.warn(
-      `[eval] WARN failed to load existing outputs for ${job.id}: ${reason}`,
+      `[eval] WARN failed to load existing outputs for ${job.id}: ${reason}`
     );
     return undefined;
   }
@@ -1064,7 +1064,7 @@ function parseSeed(): number | undefined {
 
 function parseMaxPrefix(): number | undefined {
   const prefixArg = process.argv.find((value) =>
-    value.startsWith("--maxPrefix="),
+    value.startsWith("--maxPrefix=")
   );
   if (!prefixArg) {
     return undefined;
@@ -1159,7 +1159,7 @@ async function runGenerationStage(
   {
     checkpoint,
     statusMode,
-  }: { checkpoint: CheckpointManager; statusMode: StatusMode },
+  }: { checkpoint: CheckpointManager; statusMode: StatusMode }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
   await mkdir(EVAL_OUTPUT_DIR, { recursive: true });
 
@@ -1176,7 +1176,7 @@ async function runGenerationStage(
         continue;
       }
       console.warn(
-        `[eval] WARN checkpoint marked ${job.id} complete but outputs are missing; regenerating.`,
+        `[eval] WARN checkpoint marked ${job.id} complete but outputs are missing; regenerating.`
       );
     }
     pendingJobs.push(job);
@@ -1189,7 +1189,7 @@ async function runGenerationStage(
   if (pendingJobs.length > 0) {
     const concurrency = Math.min(MAX_CONCURRENT_ANALYSES, pendingJobs.length);
     console.log(
-      `[eval] Generating ${pendingJobs.length} of ${jobs.length} samples with concurrency ${concurrency}.`,
+      `[eval] Generating ${pendingJobs.length} of ${jobs.length} samples with concurrency ${concurrency}.`
     );
     const generated = await runJobsWithConcurrency<SampleJob, GenerationResult>(
       {
@@ -1211,15 +1211,15 @@ async function runGenerationStage(
             await writeJson(path.join(sampleDir, "detail.json"), result.quiz);
             await writeJson(
               path.join(sampleDir, "quiz-judgement.json"),
-              result.judge,
+              result.judge
             );
             await writeJson(
               path.join(sampleDir, "quiz-extension.json"),
-              result.extension,
+              result.extension
             );
             await writeJson(
               path.join(sampleDir, "quiz-extension-judgement.json"),
-              result.extensionJudge,
+              result.extensionJudge
             );
             checkpoint.markCompleted(job.id);
             return result;
@@ -1230,14 +1230,14 @@ async function runGenerationStage(
             throw error;
           }
         },
-      },
+      }
     );
     for (const result of generated) {
       resultMap.set(result.job.id, result);
     }
   } else if (jobs.length > 0) {
     console.log(
-      `[eval] No pending samples to generate; using checkpoint outputs for all ${jobs.length} samples.`,
+      `[eval] No pending samples to generate; using checkpoint outputs for all ${jobs.length} samples.`
     );
   }
 
@@ -1312,7 +1312,7 @@ async function main(): Promise<void> {
     seed !== undefined ? shuffleWithSeed(jobs, seed) : [...jobs];
   if (seed !== undefined) {
     console.log(
-      `[eval] Shuffling ${workingJobs.length} samples with --seed=${seed}.`,
+      `[eval] Shuffling ${workingJobs.length} samples with --seed=${seed}.`
     );
   }
 
@@ -1320,7 +1320,7 @@ async function main(): Promise<void> {
     const beforeCount = workingJobs.length;
     workingJobs = filterJobsByMaxPrefix(workingJobs, maxPrefix);
     console.log(
-      `[eval] Applying --maxPrefix=${maxPrefix}; ${workingJobs.length} of ${beforeCount} samples match.`,
+      `[eval] Applying --maxPrefix=${maxPrefix}; ${workingJobs.length} of ${beforeCount} samples match.`
     );
   }
 
@@ -1336,7 +1336,7 @@ async function main(): Promise<void> {
       : workingJobs;
   if (jobLimit !== undefined) {
     console.log(
-      `[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${workingJobs.length} samples.`,
+      `[eval] Applying --limit=${jobLimit}; processing ${effectiveJobs.length} of ${workingJobs.length} samples.`
     );
   }
   checkpoint.start();
