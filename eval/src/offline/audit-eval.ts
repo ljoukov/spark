@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -18,16 +18,18 @@ import {
 import { runJobsWithConcurrency } from "./concurrency";
 import type { JobProgressReporter } from "./concurrency";
 import {
-  JudgeAuditFilePayloadSchema,
-  JudgeFilePayloadSchema,
-  type JudgeAuditFilePayload,
-  type JudgeFilePayload,
-} from "./payload";
+  AUDIT_CHECKPOINT_PATH,
+  deriveAuditFailures,
+  loadAuditEvaluations,
+  writeAuditCheckpoint,
+  type EvaluationType,
+  type LoadAuditEvaluationsResult,
+  type LoadedEvaluation,
+} from "./auditArtifacts";
 import { OFFLINE_PATHS } from "./env";
 
 const {
   repoRoot: REPO_ROOT,
-  evalOutputDir: EVAL_OUTPUT_DIR,
   auditReportDir: REPORT_DIR,
 } = OFFLINE_PATHS;
 const STATS_OUTPUT_PATH = path.join(REPORT_DIR, "stats.txt");
@@ -65,19 +67,6 @@ type ImprovementStatsSummary = {
   readonly highConfidenceFindingCounts: Map<string, number>;
 };
 
-type LoadedEvaluation = {
-  readonly judgement: JudgeFilePayload;
-  readonly audit?: JudgeAuditFilePayload;
-  readonly absolutePath: string;
-  readonly relativePath: string;
-  readonly evaluationType: "quiz" | "extension";
-};
-
-type LoadResult = {
-  readonly evaluations: LoadedEvaluation[];
-  readonly warnings: string[];
-};
-
 type StatsLogger = {
   readonly log: (message: string) => void;
 };
@@ -87,8 +76,6 @@ type ScoreDistributionEntry = {
   readonly count: number;
   readonly percentage: number;
 };
-
-type EvaluationType = "quiz" | "extension";
 
 type FailureCase = {
   readonly id: string;
@@ -151,77 +138,6 @@ function parseStages(argv: readonly string[]): Stage[] {
 
 function isFullScore(score: number): boolean {
   return Math.abs(score - 1) <= FULL_SCORE_EPSILON;
-}
-
-async function loadEvaluations(): Promise<LoadResult> {
-  const results: LoadedEvaluation[] = [];
-  const warnings: string[] = [];
-  if (!existsSync(EVAL_OUTPUT_DIR)) {
-    warnings.push(`output directory not found at ${EVAL_OUTPUT_DIR}`);
-    return { evaluations: results, warnings };
-  }
-  const entries = await readdir(EVAL_OUTPUT_DIR, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const sampleDir = path.join(EVAL_OUTPUT_DIR, entry.name);
-    const sampleEntries = await readdir(sampleDir, { withFileTypes: true });
-    for (const fileEntry of sampleEntries) {
-      if (!fileEntry.isFile()) {
-        continue;
-      }
-      if (!fileEntry.name.endsWith("-judgement.json")) {
-        continue;
-      }
-      const filePath = path.join(sampleDir, fileEntry.name);
-      try {
-        const raw = await readFile(filePath, "utf8");
-        const parsed = JudgeFilePayloadSchema.parse(JSON.parse(raw));
-        const evaluationType: EvaluationType = fileEntry.name.includes(
-          "extension",
-        )
-          ? "extension"
-          : "quiz";
-        const auditFilePath = filePath.replace(/\.json$/u, "-audit.json");
-        let auditPayload: JudgeAuditFilePayload | undefined;
-        if (existsSync(auditFilePath)) {
-          const auditRaw = await readFile(auditFilePath, "utf8");
-          auditPayload = JudgeAuditFilePayloadSchema.parse(
-            JSON.parse(auditRaw),
-          );
-        } else if (parsed.audit?.auditedAt) {
-          auditPayload = {
-            id: parsed.id,
-            evaluationType,
-            evaluatedAt: parsed.evaluatedAt,
-            auditedAt: parsed.audit.auditedAt,
-            source: parsed.source,
-            job: parsed.job,
-            judge: parsed.judge,
-            audit: {
-              model: parsed.audit.model,
-              result: parsed.audit.result,
-            },
-          };
-        }
-        results.push({
-          judgement: parsed,
-          audit: auditPayload,
-          absolutePath: filePath,
-          relativePath: path
-            .relative(EVAL_OUTPUT_DIR, filePath)
-            .split(path.sep)
-            .join("/"),
-          evaluationType,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        warnings.push(`unable to read ${filePath}: ${message}`);
-      }
-    }
-  }
-  return { evaluations: results, warnings };
 }
 
 function formatPercentage(value: number): string {
@@ -450,6 +366,7 @@ function buildPrompt(criterion: string, cases: FailureCase[]): string {
   return [
     `<task>You are Spark's curriculum QA lead. Analyse the failing cases for the rubric "${criterion}". Produce a concise Markdown report that summarises recurring issues, highlights specific examples, and recommends concrete fixes for quiz authors.</task>`,
     "<output_format>Return Markdown with sections for summary, illustrative examples, and recommended improvements that map back to the rubric dimension.</output_format>",
+    "<style>Do not include address blocks, email headers, or salutation lines (e.g. no To/From/Date/Subject). Start directly with section headings.</style>",
     "<cases>",
     sections,
     "</cases>",
@@ -668,7 +585,7 @@ async function loadAuditSummaries(): Promise<
 }
 
 async function loadStatsContent(
-  loadResult: LoadResult,
+  loadResult: LoadAuditEvaluationsResult,
 ): Promise<{ raw: string; source: "file" | "computed" }> {
   if (existsSync(STATS_OUTPUT_PATH)) {
     try {
@@ -925,7 +842,9 @@ function buildInsightsFromStatsText(
 
   return insights;
 }
-async function runImprovementTask(loadResult: LoadResult): Promise<void> {
+async function runImprovementTask(
+  loadResult: LoadAuditEvaluationsResult,
+): Promise<void> {
   const [{ raw: statsRaw, source: statsSource }, auditSummaries] =
     await Promise.all([loadStatsContent(loadResult), loadAuditSummaries()]);
   const insights =
@@ -1004,7 +923,9 @@ async function runImprovementTask(loadResult: LoadResult): Promise<void> {
   );
 }
 
-async function runStats(loadResult: LoadResult): Promise<void> {
+async function runStats(
+  loadResult: LoadAuditEvaluationsResult,
+): Promise<void> {
   const lines: string[] = [];
   const logLine = (message: string): void => {
     lines.push(message);
@@ -1077,7 +998,16 @@ async function main(): Promise<void> {
   const includeStats = stages.includes("stats");
   const includeReports = stages.includes("reports");
   const includeImprovementTask = stages.includes("improvement-task");
-  const loadResult = await loadEvaluations();
+  const loadResult = await loadAuditEvaluations();
+  const failures = deriveAuditFailures(loadResult.evaluations);
+  const checkpoint = await writeAuditCheckpoint(failures);
+  const checkpointRelativePath = path.relative(
+    REPO_ROOT,
+    AUDIT_CHECKPOINT_PATH,
+  );
+  console.log(
+    `[audit] Wrote checkpoint to ${checkpointRelativePath} with ${checkpoint.failures.length} failing job${checkpoint.failures.length === 1 ? "" : "s"}.`,
+  );
   if (includeStats) {
     await runStats(loadResult);
   } else if (loadResult.warnings.length > 0) {
