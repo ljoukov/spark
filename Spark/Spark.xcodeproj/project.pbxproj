@@ -24,9 +24,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		C270CFBC2E7F86AD00993232 /* GcseSpark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GcseSpark.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C270CFC92E7F86AE00993232 /* GcseSparkTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GcseSparkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C270CFD32E7F86AE00993232 /* GcseSparkUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GcseSparkUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C270CFBC2E7F86AD00993232 /* Spark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Spark.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C270CFC92E7F86AE00993232 /* SparkTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SparkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C270CFD32E7F86AE00993232 /* SparkUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SparkUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,9 +85,9 @@
 		C270CFBD2E7F86AD00993232 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C270CFBC2E7F86AD00993232 /* GcseSpark.app */,
-				C270CFC92E7F86AE00993232 /* GcseSparkTests.xctest */,
-				C270CFD32E7F86AE00993232 /* GcseSparkUITests.xctest */,
+				C270CFBC2E7F86AD00993232 /* Spark.app */,
+				C270CFC92E7F86AE00993232 /* SparkTests.xctest */,
+				C270CFD32E7F86AE00993232 /* SparkUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,9 +95,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C270CFBB2E7F86AD00993232 /* GcseSpark */ = {
+		C270CFBB2E7F86AD00993232 /* Spark */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C270CFDD2E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSpark" */;
+			buildConfigurationList = C270CFDD2E7F86AE00993232 /* Build configuration list for PBXNativeTarget "Spark" */;
 			buildPhases = (
 				C270CFB82E7F86AD00993232 /* Sources */,
 				C270CFB92E7F86AD00993232 /* Frameworks */,
@@ -110,16 +110,16 @@
 			fileSystemSynchronizedGroups = (
 				C270CFBE2E7F86AD00993232 /* Spark */,
 			);
-			name = GcseSpark;
+			name = Spark;
 			packageProductDependencies = (
 			);
 			productName = Spark;
-			productReference = C270CFBC2E7F86AD00993232 /* GcseSpark.app */;
+			productReference = C270CFBC2E7F86AD00993232 /* Spark.app */;
 			productType = "com.apple.product-type.application";
 		};
-		C270CFC82E7F86AE00993232 /* GcseSparkTests */ = {
+		C270CFC82E7F86AE00993232 /* SparkTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C270CFE02E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSparkTests" */;
+			buildConfigurationList = C270CFE02E7F86AE00993232 /* Build configuration list for PBXNativeTarget "SparkTests" */;
 			buildPhases = (
 				C270CFC52E7F86AE00993232 /* Sources */,
 				C270CFC62E7F86AE00993232 /* Frameworks */,
@@ -133,16 +133,16 @@
 			fileSystemSynchronizedGroups = (
 				C270CFCC2E7F86AE00993232 /* SparkTests */,
 			);
-			name = GcseSparkTests;
+			name = SparkTests;
 			packageProductDependencies = (
 			);
 			productName = SparkTests;
-			productReference = C270CFC92E7F86AE00993232 /* GcseSparkTests.xctest */;
+			productReference = C270CFC92E7F86AE00993232 /* SparkTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		C270CFD22E7F86AE00993232 /* GcseSparkUITests */ = {
+		C270CFD22E7F86AE00993232 /* SparkUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C270CFE32E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSparkUITests" */;
+			buildConfigurationList = C270CFE32E7F86AE00993232 /* Build configuration list for PBXNativeTarget "SparkUITests" */;
 			buildPhases = (
 				C270CFCF2E7F86AE00993232 /* Sources */,
 				C270CFD02E7F86AE00993232 /* Frameworks */,
@@ -156,11 +156,11 @@
 			fileSystemSynchronizedGroups = (
 				C270CFD62E7F86AE00993232 /* SparkUITests */,
 			);
-			name = GcseSparkUITests;
+			name = SparkUITests;
 			packageProductDependencies = (
 			);
 			productName = SparkUITests;
-			productReference = C270CFD32E7F86AE00993232 /* GcseSparkUITests.xctest */;
+			productReference = C270CFD32E7F86AE00993232 /* SparkUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = C270CFB72E7F86AD00993232 /* Build configuration list for PBXProject "GcseSpark" */;
+			buildConfigurationList = C270CFB72E7F86AD00993232 /* Build configuration list for PBXProject "Spark" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -200,9 +200,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C270CFBB2E7F86AD00993232 /* GcseSpark */,
-				C270CFC82E7F86AE00993232 /* GcseSparkTests */,
-				C270CFD22E7F86AE00993232 /* GcseSparkUITests */,
+				C270CFBB2E7F86AD00993232 /* Spark */,
+				C270CFC82E7F86AE00993232 /* SparkTests */,
+				C270CFD22E7F86AE00993232 /* SparkUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -258,12 +258,12 @@
 /* Begin PBXTargetDependency section */
 		C270CFCB2E7F86AE00993232 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = C270CFBB2E7F86AD00993232 /* GcseSpark */;
+			target = C270CFBB2E7F86AD00993232 /* Spark */;
 			targetProxy = C270CFCA2E7F86AE00993232 /* PBXContainerItemProxy */;
 		};
 		C270CFD52E7F86AE00993232 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = C270CFBB2E7F86AD00993232 /* GcseSpark */;
+			target = C270CFBB2E7F86AD00993232 /* Spark */;
 			targetProxy = C270CFD42E7F86AE00993232 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -547,7 +547,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C270CFB72E7F86AD00993232 /* Build configuration list for PBXProject "GcseSpark" */ = {
+		C270CFB72E7F86AD00993232 /* Build configuration list for PBXProject "Spark" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C270CFDB2E7F86AE00993232 /* Debug */,
@@ -556,7 +556,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C270CFDD2E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSpark" */ = {
+		C270CFDD2E7F86AE00993232 /* Build configuration list for PBXNativeTarget "Spark" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C270CFDE2E7F86AE00993232 /* Debug */,
@@ -565,7 +565,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C270CFE02E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSparkTests" */ = {
+		C270CFE02E7F86AE00993232 /* Build configuration list for PBXNativeTarget "SparkTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C270CFE12E7F86AE00993232 /* Debug */,
@@ -574,7 +574,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C270CFE32E7F86AE00993232 /* Build configuration list for PBXNativeTarget "GcseSparkUITests" */ = {
+		C270CFE32E7F86AE00993232 /* Build configuration list for PBXNativeTarget "SparkUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C270CFE42E7F86AE00993232 /* Debug */,
