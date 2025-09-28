@@ -49,6 +49,13 @@ import {
   type JobProgressReporter,
   type StatusMode,
 } from "./concurrency";
+import {
+  AUDIT_CHECKPOINT_PATH,
+  AUDIT_CHECKPOINT_VERSION,
+  getFailedJobIdSet,
+  readAuditCheckpoint,
+  type AuditCheckpoint,
+} from "./auditArtifacts";
 import { OFFLINE_PATHS } from "./env";
 
 import type { JudgeFilePayload, QuizFilePayload, SampleJob } from "./payload";
@@ -1096,6 +1103,50 @@ function parseJobLimit(): number | undefined {
   return limit;
 }
 
+function parseAuditFailuresOnly(): boolean {
+  const flag = process.argv.find((value) =>
+    value === "--auditFailuresOnly" ||
+    value.startsWith("--auditFailuresOnly=")
+  );
+  if (!flag) {
+    return false;
+  }
+  if (flag === "--auditFailuresOnly") {
+    return true;
+  }
+  const [, rawValue] = flag.split("=");
+  if (!rawValue) {
+    throw new Error("Missing value for --auditFailuresOnly");
+  }
+  const normalised = rawValue.trim().toLowerCase();
+  if (normalised === "true" || normalised === "1" || normalised === "yes") {
+    return true;
+  }
+  if (normalised === "false" || normalised === "0" || normalised === "no") {
+    return false;
+  }
+  throw new Error(`Invalid --auditFailuresOnly value: ${rawValue}`);
+}
+
+async function resolveAuditFailureFilter(): Promise<{
+  checkpoint: AuditCheckpoint;
+  failingJobIds: Set<string>;
+}> {
+  const checkpoint = await readAuditCheckpoint();
+  if (!checkpoint) {
+    throw new Error(
+      `[eval] Audit checkpoint not found at ${AUDIT_CHECKPOINT_PATH}; run audit-eval before using --auditFailuresOnly.`,
+    );
+  }
+  if (checkpoint.version !== AUDIT_CHECKPOINT_VERSION) {
+    throw new Error(
+      `[eval] Audit checkpoint version mismatch: expected ${AUDIT_CHECKPOINT_VERSION}, found ${checkpoint.version}. Run audit-eval to refresh the checkpoint.`,
+    );
+  }
+  const failingJobIds = getFailedJobIdSet(checkpoint);
+  return { checkpoint, failingJobIds };
+}
+
 function parseStatusMode(): StatusMode {
   const statusArg = process.argv.find((value) => value.startsWith("--status="));
   if (!statusArg) {
@@ -1159,7 +1210,12 @@ async function runGenerationStage(
   {
     checkpoint,
     statusMode,
-  }: { checkpoint: CheckpointManager; statusMode: StatusMode }
+    forceRegenerate = false,
+  }: {
+    checkpoint: CheckpointManager;
+    statusMode: StatusMode;
+    forceRegenerate?: boolean;
+  }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
   await mkdir(EVAL_OUTPUT_DIR, { recursive: true });
 
@@ -1168,7 +1224,7 @@ async function runGenerationStage(
   let reusedCount = 0;
 
   for (const job of jobs) {
-    if (checkpoint.isCompleted(job.id)) {
+    if (!forceRegenerate && checkpoint.isCompleted(job.id)) {
       const existing = await loadExistingGenerationResult(job);
       if (existing) {
         resultMap.set(job.id, existing);
@@ -1296,6 +1352,8 @@ async function main(): Promise<void> {
   const maxPrefix = parseMaxPrefix();
   const jobLimit = parseJobLimit();
   const statusMode = parseStatusMode();
+  const auditFailuresOnly = parseAuditFailuresOnly();
+  let auditFilterApplied = false;
 
   const checkpoint = await CheckpointManager.load(CHECKPOINT_DIR);
   checkpoint.ensureSeed(seed);
@@ -1324,8 +1382,50 @@ async function main(): Promise<void> {
     );
   }
 
+  if (auditFailuresOnly) {
+    const { checkpoint: auditCheckpoint, failingJobIds } =
+      await resolveAuditFailureFilter();
+    if (failingJobIds.size === 0) {
+      const checkpointRelativePath = path.relative(
+        REPO_ROOT,
+        AUDIT_CHECKPOINT_PATH
+      );
+      console.warn(
+        `[eval] Audit checkpoint at ${checkpointRelativePath} lists no flagged quizzes; nothing to regenerate.`,
+      );
+      await checkpoint.flush();
+      return;
+    }
+    const beforeCount = workingJobs.length;
+    const availableJobIds = new Set(workingJobs.map((job) => job.id));
+    const missingJobIds = Array.from(failingJobIds).filter(
+      (id) => !availableJobIds.has(id)
+    );
+    if (missingJobIds.length > 0) {
+      const preview = missingJobIds.slice(0, 5).join(", ");
+      console.warn(
+        `[eval] WARN audit checkpoint references ${missingJobIds.length} job${missingJobIds.length === 1 ? "" : "s"} not present in inputs: ${preview}${missingJobIds.length > 5 ? ", ..." : ""}.`
+      );
+    }
+    workingJobs = workingJobs.filter((job) => failingJobIds.has(job.id));
+    auditFilterApplied = true;
+    const checkpointRelativePath = path.relative(
+      REPO_ROOT,
+      AUDIT_CHECKPOINT_PATH
+    );
+    console.log(
+      `[eval] Applying --auditFailuresOnly using ${checkpointRelativePath}; ${workingJobs.length} of ${beforeCount} samples match ${failingJobIds.size} flagged sample${failingJobIds.size === 1 ? "" : "s"} (checkpoint entries: ${auditCheckpoint.failures.length}).`
+    );
+  }
+
   if (workingJobs.length === 0) {
-    console.warn("[eval] No sample files remain after applying filters.");
+    if (auditFailuresOnly && auditFilterApplied) {
+      console.warn(
+        "[eval] No failing samples remain after applying --auditFailuresOnly."
+      );
+    } else {
+      console.warn("[eval] No sample files remain after applying filters.");
+    }
     await checkpoint.flush();
     return;
   }
@@ -1341,7 +1441,11 @@ async function main(): Promise<void> {
   }
   checkpoint.start();
   try {
-    await runGenerationStage(effectiveJobs, { checkpoint, statusMode });
+    await runGenerationStage(effectiveJobs, {
+      checkpoint,
+      statusMode,
+      forceRegenerate: auditFailuresOnly,
+    });
     return;
   } finally {
     await checkpoint.flush();
