@@ -1,6 +1,6 @@
 import Testing
 
-@testable import GcseSpark
+@testable import Spark
 
 struct SparkTests {
 
