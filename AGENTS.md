@@ -30,10 +30,10 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 
 ## Offline LLM Eval
 
-- Prepare input: `web/src/lib/server/llm/eval/offline/prepare-input.ts` (`npm --prefix web run eval:prepare-input`). Reads raw assets from `spark-data/downloads/**`, classifies them, and writes curated bundles to `spark-data/eval-input/**`.
-- Generate quizzes: `web/src/lib/server/llm/eval/offline/run-eval.ts` (`npm --prefix web run eval:run`). Consumes `spark-data/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/eval-output/**`.
+- Prepare input: `eval/src/offline/prepare-input.ts` (`npm --prefix eval run prepare-input`). Reads raw assets from `spark-data/downloads/**`, classifies them, and writes curated bundles to `spark-data/eval-input/**`.
+- Generate quizzes: `eval/src/offline/run-eval.ts` (`npm --prefix eval run run`). Consumes `spark-data/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/eval-output/**`.
 - `eval:run` flags: `--seed=<int>` reproducibly shuffles input ordering, `--maxPrefix=<int>` filters page buckets by their numeric prefix (e.g. `--maxPrefix=20` keeps `01_page`–`20-to-49_pages`), and `--limit=<n>` caps the remaining queue after filters.
-- Audit summaries: `web/src/lib/server/llm/eval/offline/audit-eval.ts` (`npm --prefix web run eval:audit`). Consumes `spark-data/eval-output/**` and emits stats plus Markdown reports under `spark-data/eval-audit/**`.
+- Audit summaries: `eval/src/offline/audit-eval.ts` (`npm --prefix eval run audit`). Consumes `spark-data/eval-output/**` and emits stats plus Markdown reports under `spark-data/eval-audit/**`.
 - Env: requires `GEMINI_API_KEY` (in environment or `.env.local` at repo root). Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
 - Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts consumed by the Admin UI.

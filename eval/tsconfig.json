@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true,
+		"types": ["node"],
+		"baseUrl": ".",
+		"paths": {
+			"@spark/llm": ["../packages/llm/src/index"],
+			"@spark/llm/*": ["../packages/llm/src/*"],
+			"@google/genai": ["./node_modules/@google/genai"],
+			"@google/genai/*": ["./node_modules/@google/genai/*"],
+			"zod": ["./node_modules/zod"],
+			"zod/*": ["./node_modules/zod/*"]
+		}
+	},
+	"include": ["src/**/*", "tests/**/*"]
+}
