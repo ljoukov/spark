@@ -593,6 +593,7 @@ async function callModel<T>({
         let latestText = "";
         let finalChunk: GenerateContentResponse | undefined;
         let lastPromptTokens = 0;
+        let lastCachedTokens = 0;
         let lastInferenceTokens = 0;
 
         for await (const chunk of stream) {
@@ -621,22 +622,26 @@ async function callModel<T>({
           const usage = chunk.usageMetadata;
           if (usage) {
             const promptTokens = usage.promptTokenCount ?? 0;
+            const cachedTokens = usage.cachedContentTokenCount ?? 0;
             const inferenceTokens =
               (usage.thoughtsTokenCount ?? 0) +
               (usage.candidatesTokenCount ?? 0);
             const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
+            const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
             const inferenceDelta = Math.max(
               0,
               inferenceTokens - lastInferenceTokens,
             );
-            if (promptDelta > 0 || inferenceDelta > 0) {
+            if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
               progress.recordModelUsage(callHandle, {
                 promptTokensDelta: promptDelta,
+                cachedTokensDelta: cachedDelta,
                 inferenceTokensDelta: inferenceDelta,
                 timestamp: Date.now(),
               });
             }
             lastPromptTokens = promptTokens;
+            lastCachedTokens = cachedTokens;
             lastInferenceTokens = inferenceTokens;
           }
           if (!firstChunkReceived) {

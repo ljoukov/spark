@@ -1,3 +1,4 @@
+import { GeminiModelId } from "@spark/llm/utils/gemini";
 import { clearInterval, setInterval } from "node:timers";
 
 const SPEED_WINDOW_MS = 10_000;
@@ -12,6 +13,7 @@ export type ModelCallHandle = symbol;
 export type ModelUsageDelta = {
   readonly promptTokensDelta: number;
   readonly inferenceTokensDelta: number;
+  readonly cachedTokensDelta?: number;
   readonly timestamp: number;
 };
 
@@ -19,7 +21,7 @@ export type JobProgressReporter = {
   reportChars(delta: number): void;
   log(message: string): void;
   startModelCall(details: {
-    modelId: string;
+    modelId: GeminiModelId;
     uploadBytes: number;
   }): ModelCallHandle;
   recordModelUsage(handle: ModelCallHandle, delta: ModelUsageDelta): void;
@@ -44,6 +46,7 @@ export type JobRunnerOptions<I, O> = {
 
 type PerModelMetrics = {
   promptTokens: number;
+  cachedTokens: number;
   inferenceTokens: number;
 };
 
@@ -52,12 +55,14 @@ type MetricsSnapshot = {
   readonly totalUploadBytes: number;
   readonly activeCalls: number;
   readonly totalPromptTokens: number;
+  readonly totalCachedTokens: number;
   readonly totalInferenceTokens: number;
   readonly promptTokensPerSecond: number;
   readonly inferenceTokensPerSecond: number;
   readonly perModel: Array<{
     readonly modelId: string;
     readonly promptTokens: number;
+    readonly cachedTokens: number;
     readonly inferenceTokens: number;
   }>;
 };
@@ -67,6 +72,7 @@ class MetricsTracker {
   private totalUploadBytes = 0;
   private activeCalls = 0;
   private totalPromptTokens = 0;
+  private totalCachedTokens = 0;
   private totalInferenceTokens = 0;
   private readonly perModel = new Map<string, PerModelMetrics>();
   private readonly callInfo = new Map<
@@ -76,6 +82,7 @@ class MetricsTracker {
   private readonly usageWindow: Array<{
     timestamp: number;
     promptTokens: number;
+    cachedTokens: number;
     inferenceTokens: number;
   }> = [];
 
@@ -102,31 +109,46 @@ class MetricsTracker {
       return;
     }
     let promptDelta = 0;
+    let cachedDelta = 0;
     let inferenceDelta = 0;
     if (delta.promptTokensDelta > 0) {
       this.totalPromptTokens += delta.promptTokensDelta;
       const metrics = this.perModel.get(info.modelId) ?? {
         promptTokens: 0,
+        cachedTokens: 0,
         inferenceTokens: 0,
       };
       metrics.promptTokens += delta.promptTokensDelta;
       this.perModel.set(info.modelId, metrics);
       promptDelta = delta.promptTokensDelta;
     }
+    if (delta.cachedTokensDelta && delta.cachedTokensDelta > 0) {
+      this.totalCachedTokens += delta.cachedTokensDelta;
+      const metrics = this.perModel.get(info.modelId) ?? {
+        promptTokens: 0,
+        cachedTokens: 0,
+        inferenceTokens: 0,
+      };
+      metrics.cachedTokens += delta.cachedTokensDelta;
+      this.perModel.set(info.modelId, metrics);
+      cachedDelta = delta.cachedTokensDelta;
+    }
     if (delta.inferenceTokensDelta > 0) {
       this.totalInferenceTokens += delta.inferenceTokensDelta;
       const metrics = this.perModel.get(info.modelId) ?? {
         promptTokens: 0,
+        cachedTokens: 0,
         inferenceTokens: 0,
       };
       metrics.inferenceTokens += delta.inferenceTokensDelta;
       this.perModel.set(info.modelId, metrics);
       inferenceDelta = delta.inferenceTokensDelta;
     }
-    if (promptDelta > 0 || inferenceDelta > 0) {
+    if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
       this.usageWindow.push({
         timestamp: delta.timestamp,
         promptTokens: promptDelta,
+        cachedTokens: cachedDelta,
         inferenceTokens: inferenceDelta,
       });
     }
@@ -162,6 +184,7 @@ class MetricsTracker {
       .map(([modelId, metrics]) => ({
         modelId,
         promptTokens: metrics.promptTokens,
+        cachedTokens: metrics.cachedTokens,
         inferenceTokens: metrics.inferenceTokens,
       }));
     return {
@@ -169,6 +192,7 @@ class MetricsTracker {
       totalUploadBytes: this.totalUploadBytes,
       activeCalls: this.activeCalls,
       totalPromptTokens: this.totalPromptTokens,
+      totalCachedTokens: this.totalCachedTokens,
       totalInferenceTokens: this.totalInferenceTokens,
       promptTokensPerSecond: promptSpeed,
       inferenceTokensPerSecond: inferenceSpeed,
@@ -197,7 +221,7 @@ class ProgressDisplay {
     totalJobs: number,
     label: string,
     updateIntervalMs: number,
-    { mode, output }: { mode: StatusMode; output: NodeJS.WriteStream },
+    { mode, output }: { mode: StatusMode; output: NodeJS.WriteStream }
   ) {
     this.totalJobs = totalJobs;
     this.label = label;
@@ -363,14 +387,14 @@ class ProgressDisplay {
       this.completedJobs >= this.totalJobs ? 100 : Math.round(rawPercent);
     const waitingJobs = Math.max(
       this.totalJobs - this.completedJobs - this.runningJobs,
-      0,
+      0
     );
     const metrics = this.metrics.getSnapshot();
     const promptSpeedDisplay = formatNumber(
-      Math.round(metrics.promptTokensPerSecond),
+      Math.round(metrics.promptTokensPerSecond)
     );
     const inferenceSpeedDisplay = formatNumber(
-      Math.round(metrics.inferenceTokensPerSecond),
+      Math.round(metrics.inferenceTokensPerSecond)
     );
     const line =
       `${this.labelDisplay} ${percent}% | ${this.completedJobs} / ${this.totalJobs}` +
@@ -487,7 +511,7 @@ export async function runJobsWithConcurrency<I, O>({
     {
       mode: effectiveStatusMode,
       output: stream,
-    },
+    }
   );
   progressDisplay.start();
   let nextIndex = 0;
@@ -525,7 +549,7 @@ export async function runJobsWithConcurrency<I, O>({
 
   try {
     await Promise.all(
-      Array.from({ length: effectiveConcurrency }, () => runWorker()),
+      Array.from({ length: effectiveConcurrency }, () => runWorker())
     );
   } finally {
     progressDisplay.stop();
@@ -551,7 +575,7 @@ function formatBytes(bytes: number): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    Math.max(0, Math.floor(value)),
+    Math.max(0, Math.floor(value))
   );
 }
 
@@ -561,8 +585,9 @@ function formatPerModel(perModel: MetricsSnapshot["perModel"]): string {
   }
   const entries = perModel.map((entry) => {
     const prompt = formatNumber(entry.promptTokens);
+    const cached = formatNumber(entry.cachedTokens);
     const inference = formatNumber(entry.inferenceTokens);
-    return `${entry.modelId.replace("gemini-", "")}: P ${prompt} / I ${inference}`;
+    return `${entry.modelId.replace("gemini-", "")}: P ${prompt} / C ${cached} / I ${inference}`;
   });
   return `models: ${entries.join(", ")}`;
 }
