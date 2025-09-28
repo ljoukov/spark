@@ -13,7 +13,7 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 - use zod to validate JSON and data coming from storage, LLMs or network
 - we use shadcn-svelte components library docs are in web/docs/shadcn-svelte.md
 - Use absolute imports (unless current directory)
-- Use $lib/ and $proto/ aliases, e.g. `import { runGeminiCall } from '$lib/server/utils/gemini';`
+- Use $lib/ and $proto/ aliases, e.g. `import { runGeminiCall } from '@spark/llm/utils/gemini';`
 - Prefer static imports. Do **not** use dynamic `import()` in the web app unless specifically asked—mixing modes prevents Vite
   from emitting separate chunks and surfaces warnings during build.
 

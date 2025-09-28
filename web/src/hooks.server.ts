@@ -4,6 +4,10 @@ import { getTestUserId, isTestUser, isTestUserAdmin } from '$lib/server/auth/tes
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { z } from 'zod';
 import { type Handle, redirect } from '@sveltejs/kit';
+import { configureGemini } from '@spark/llm/utils/gemini';
+import { GEMINI_API_KEY } from '$env/static/private';
+
+configureGemini({ apiKey: GEMINI_API_KEY });
 
 if (typeof global !== 'undefined') {
 	global.process.on('unhandledRejection', (reason, promise) => {

@@ -1,0 +1,30 @@
+{
+	"name": "spark-eval",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"prepare-input": "tsx src/offline/prepare-input.ts",
+		"run": "tsx src/offline/run-eval.ts",
+		"audit": "tsx src/offline/audit-eval.ts",
+		"typecheck": "tsc --noEmit",
+		"eslint": "eslint \"src/**/*.{ts,tsx}\"",
+		"lint": "npm run typecheck && npm run eslint",
+		"format": "prettier --write \"src/**/*.{ts,js,json}\"",
+		"test": "vitest --run"
+	},
+	"devDependencies": {
+		"@google/genai": "^1.21.0",
+		"@types/node": "^24.5.2",
+		"dotenv": "^17.2.2",
+		"prettier": "^3.4.2",
+		"tsx": "^4.20.6",
+		"undici": "^7.16.0",
+		"zod": "^4.1.11",
+		"@eslint/js": "^9.22.0",
+		"eslint": "^9.22.0",
+		"typescript": "^5.7.3",
+		"typescript-eslint": "^8.22.0",
+		"vitest": "^3.2.4"
+	}
+}

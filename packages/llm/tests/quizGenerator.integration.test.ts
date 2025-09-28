@@ -1,23 +1,27 @@
+import type { GoogleGenAI } from '@google/genai';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-import { auditJudgeDecision, judgeQuiz } from './eval/judge';
+import { auditJudgeDecision, judgeQuiz } from '../src/judge';
 import {
 	type InlineSourceFile,
 	type JudgeAudit,
 	type JudgeVerdict,
 	type QuizGeneration
-} from '$lib/llm/schemas';
-import { extendQuizWithMoreQuestions, generateQuizFromSource } from './quizGenerator';
-import { runGeminiCall } from '../utils/gemini';
+} from '../src/schemas';
+import { extendQuizWithMoreQuestions, generateQuizFromSource } from '../src/quizGenerator';
+import { runGeminiCall } from '../src/utils/gemini';
+import { loadLocalEnv } from '../src/utils/env';
 
 const LONG_TIMEOUT = 240_000;
 const CURRENT_DIR = fileURLToPath(new URL('.', import.meta.url));
-const REPO_ROOT = path.resolve(CURRENT_DIR, '../../../../../');
-const DATA_ROOT = path.join(REPO_ROOT, 'data', 'samples');
+const REPO_ROOT = path.resolve(CURRENT_DIR, '../../..');
+const DATA_ROOT = path.join(REPO_ROOT, 'spark-data', 'unit-tests');
+
+loadLocalEnv();
 
 async function loadInlineSource(relativePath: string): Promise<InlineSourceFile> {
 	const absolutePath = path.join(DATA_ROOT, relativePath);
@@ -57,12 +61,10 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 
 	async function ensureSources(): Promise<void> {
 		if (!extractionSources) {
-			extractionSources = [
-				await loadInlineSource(path.join('scans', 'c21-exam-question-pack.pdf'))
-			];
+			extractionSources = [await loadInlineSource('physics-test.pdf')];
 		}
 		if (!synthesisSources) {
-			synthesisSources = [await loadInlineSource(path.join('year8', 'health-blood-donations.pdf'))];
+			synthesisSources = [await loadInlineSource('biology-fact-sheet.pdf')];
 		}
 	}
 
@@ -70,7 +72,7 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 		'gemini smoke test responds to a deterministic command',
 		{ timeout: LONG_TIMEOUT },
 		async () => {
-			const response = await runGeminiCall((client) =>
+			const response = await runGeminiCall((client: GoogleGenAI) =>
 				client.models.generateContent({
 					model: 'gemini-2.5-flash',
 					contents: [
@@ -103,7 +105,7 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 			extractionQuiz = await generateQuizFromSource({
 				questionCount: 6,
 				sourceFiles: extractionSources,
-				subject: 'chemistry',
+				subject: 'physics',
 				board: 'AQA'
 			});
 
@@ -144,7 +146,9 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 
 			expect(synthesisQuiz.mode).toBe('synthesis');
 			expect(synthesisQuiz.questions).toHaveLength(6);
-			const typeSet = new Set(synthesisQuiz.questions.map((question) => question.type));
+			const typeSet = new Set(
+				synthesisQuiz.questions.map((question: QuizGeneration['questions'][number]) => question.type)
+			);
 			expect(typeSet.size).toBeGreaterThanOrEqual(3);
 		}
 	);
@@ -163,7 +167,9 @@ describe.sequential('Gemini quiz generation pipeline', () => {
 				});
 			}
 			const basePrompts = new Set(
-				synthesisQuiz.questions.map((question) => question.prompt.trim().toLowerCase())
+				synthesisQuiz.questions.map((question: QuizGeneration['questions'][number]) =>
+					question.prompt.trim().toLowerCase()
+				)
 			);
 
 			const extensionQuiz = await extendQuizWithMoreQuestions({
