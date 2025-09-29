@@ -125,30 +125,6 @@ fi
 
 pushd spark-data >/dev/null
 
-if [ -z "$(git status --porcelain)" ]; then
-  echo "error: no changes detected in spark-data" >&2
-  popd >/dev/null
-  exit 1
-fi
-
-if [ -d eval-output ]; then
-  if git lfs version >/dev/null 2>&1; then
-    echo "info: packaging eval-output/ into eval-output.tar.gz" >&2
-    rm -f eval-output.tar.gz
-    tar -czf eval-output.tar.gz eval-output
-  else
-    echo "error: git-lfs is required to package eval-output/" >&2
-    popd >/dev/null
-    exit 1
-  fi
-fi
-
-if [ -f eval-output.tar.gz ]; then
-  git add eval-output.tar.gz
-else
-  echo "warn: eval-output.tar.gz not found; nothing to add" >&2
-fi
-
 SUBMODULE_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
 if [ -z "${SUBMODULE_BRANCH}" ]; then
   echo "error: spark-data is in detached HEAD; checkout a branch before publishing" >&2
@@ -172,9 +148,33 @@ else
   fi
 fi
 
-echo "info: committing spark-data changes on ${SUBMODULE_BRANCH}" >&2
-git add -A
-git commit -m "${SUBMODULE_COMMIT_MSG}"
+SUBMODULE_STATUS=$(git status --porcelain)
+
+if [ -n "${SUBMODULE_STATUS}" ]; then
+  if [ -d eval-output ]; then
+    if git lfs version >/dev/null 2>&1; then
+      echo "info: packaging eval-output/ into eval-output.tar.gz" >&2
+      rm -f eval-output.tar.gz
+      tar -czf eval-output.tar.gz eval-output
+    else
+      echo "error: git-lfs is required to package eval-output/" >&2
+      popd >/dev/null
+      exit 1
+    fi
+  fi
+
+  if [ -f eval-output.tar.gz ]; then
+    git add eval-output.tar.gz
+  else
+    echo "warn: eval-output.tar.gz not found; nothing to add" >&2
+  fi
+
+  echo "info: committing spark-data changes on ${SUBMODULE_BRANCH}" >&2
+  git add -A
+  git commit -m "${SUBMODULE_COMMIT_MSG}"
+else
+  echo "info: spark-data working tree clean; using existing commits" >&2
+fi
 
 if ! auto_rebase_with_local_priority "${SUBMODULE_UPSTREAM}"; then
   echo "error: failed to rebase spark-data with local preference" >&2
@@ -185,26 +185,45 @@ fi
 NEW_SUBMODULE_SHA=$(git rev-parse HEAD)
 NEW_SUBMODULE_SHORT=$(git rev-parse --short HEAD)
 
-echo "info: pushing spark-data/${SUBMODULE_BRANCH} to ${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}" >&2
-if ! git push "${SUBMODULE_REMOTE}" "HEAD:${SUBMODULE_REMOTE_BRANCH}"; then
-  echo "warn: push rejected; re-syncing upstream and retrying" >&2
-  if ! auto_rebase_with_local_priority "${SUBMODULE_UPSTREAM}"; then
-    echo "error: unable to reconcile spark-data branch with upstream" >&2
-    popd >/dev/null
-    exit 1
+NEED_SUBMODULE_PUSH=1
+if git rev-parse --verify "${SUBMODULE_UPSTREAM}" >/dev/null 2>&1; then
+  UPSTREAM_SHA=$(git rev-parse "${SUBMODULE_UPSTREAM}")
+  if [ "${NEW_SUBMODULE_SHA}" = "${UPSTREAM_SHA}" ]; then
+    NEED_SUBMODULE_PUSH=0
   fi
-  NEW_SUBMODULE_SHA=$(git rev-parse HEAD)
-  NEW_SUBMODULE_SHORT=$(git rev-parse --short HEAD)
+else
+  NEED_SUBMODULE_PUSH=1
+fi
+
+if [ "${NEED_SUBMODULE_PUSH}" -eq 1 ]; then
+  echo "info: pushing spark-data/${SUBMODULE_BRANCH} to ${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}" >&2
   if ! git push "${SUBMODULE_REMOTE}" "HEAD:${SUBMODULE_REMOTE_BRANCH}"; then
-    echo "error: push still rejected; resolve conflicts manually" >&2
-    popd >/dev/null
-    exit 1
+    echo "warn: push rejected; re-syncing upstream and retrying" >&2
+    if ! auto_rebase_with_local_priority "${SUBMODULE_UPSTREAM}"; then
+      echo "error: unable to reconcile spark-data branch with upstream" >&2
+      popd >/dev/null
+      exit 1
+    fi
+    NEW_SUBMODULE_SHA=$(git rev-parse HEAD)
+    NEW_SUBMODULE_SHORT=$(git rev-parse --short HEAD)
+    if ! git push "${SUBMODULE_REMOTE}" "HEAD:${SUBMODULE_REMOTE_BRANCH}"; then
+      echo "error: push still rejected; resolve conflicts manually" >&2
+      popd >/dev/null
+      exit 1
+    fi
   fi
+else
+  echo "info: spark-data branch already in sync with ${SUBMODULE_UPSTREAM}; skipping push" >&2
 fi
 
 popd >/dev/null
 
 git add spark-data
+
+if git diff --cached --quiet -- spark-data; then
+  echo "info: no super repo changes detected; skipping commit" >&2
+  exit 0
+fi
 
 if [ -z "${SUPER_COMMIT_MSG_INPUT}" ]; then
   SUPER_COMMIT_MSG="[chore] update spark-data to ${NEW_SUBMODULE_SHORT}"
