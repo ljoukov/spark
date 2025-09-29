@@ -60,7 +60,7 @@ export async function generateQuizFromSource(
   }
 
   const parsed: unknown = JSON.parse(text);
-  const normalised = normaliseQuizPayload(parsed);
+  const normalised = normaliseQuizPayload(parsed, options.questionCount);
   return QuizGenerationSchema.parse(normalised);
 }
 
@@ -107,6 +107,6 @@ export async function extendQuizWithMoreQuestions(
     throw new Error("Gemini did not return any text for quiz extension");
   }
   const parsed: unknown = JSON.parse(text);
-  const normalised = normaliseQuizPayload(parsed);
+  const normalised = normaliseQuizPayload(parsed, additionalQuestionCount);
   return QuizGenerationSchema.parse(normalised);
 }
