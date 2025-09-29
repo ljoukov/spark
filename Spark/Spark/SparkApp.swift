@@ -4,7 +4,7 @@ import SwiftUI
 struct SparkApp: App {
   var body: some Scene {
     WindowGroup {
-      ContentView()
+      HomeView()
     }
   }
 }
