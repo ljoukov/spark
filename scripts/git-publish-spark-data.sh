@@ -112,15 +112,9 @@ if [ "${CURRENT_BRANCH}" != "main" ]; then
   exit 1
 fi
 
-DIRTY_SUPER=$(git status --porcelain | grep -v ' spark-data$' || true)
+DIRTY_SUPER=$(git status --porcelain | grep -v ' spark-data$' | sed '/scripts\/git-publish-spark-data.sh$/d' || true)
 if [ -n "${DIRTY_SUPER}" ]; then
-  # Allow running when the only other change is this publish script itself.
-  FILTERED_DIRTY=$(echo "${DIRTY_SUPER}" | sed '/scripts\/git-publish-spark-data.sh$/d')
-  if [ -n "${FILTERED_DIRTY}" ]; then
-    echo "error: super repo has other changes; commit or stash them first" >&2
-    echo "details:\n${FILTERED_DIRTY}" >&2
-    exit 1
-  fi
+  echo "info: super repo has additional changes; they will remain unstaged" >&2
 fi
 
 pushd spark-data >/dev/null
