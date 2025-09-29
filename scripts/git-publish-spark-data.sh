@@ -120,19 +120,11 @@ fi
 pushd spark-data >/dev/null
 
 SUBMODULE_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
-if [ -z "${SUBMODULE_BRANCH}" ]; then
-  echo "error: spark-data is in detached HEAD; checkout a branch before publishing" >&2
-  popd >/dev/null
-  exit 1
-fi
-
 SUBMODULE_UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
-if [ -z "${SUBMODULE_UPSTREAM}" ]; then
-  SUBMODULE_REMOTE="origin"
-  SUBMODULE_REMOTE_BRANCH="${SUBMODULE_BRANCH}"
-  SUBMODULE_UPSTREAM="${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}"
-  echo "info: no upstream configured; defaulting to ${SUBMODULE_UPSTREAM}" >&2
-else
+SUBMODULE_REMOTE="origin"
+SUBMODULE_REMOTE_BRANCH=""
+
+if [ -n "${SUBMODULE_UPSTREAM}" ]; then
   SUBMODULE_REMOTE=${SUBMODULE_UPSTREAM%%/*}
   SUBMODULE_REMOTE_BRANCH=${SUBMODULE_UPSTREAM#*/}
   if [ -z "${SUBMODULE_REMOTE}" ] || [ "${SUBMODULE_REMOTE}" = "${SUBMODULE_UPSTREAM}" ]; then
@@ -141,6 +133,31 @@ else
     exit 1
   fi
 fi
+
+if [ -z "${SUBMODULE_BRANCH}" ]; then
+  if [ -z "${SUBMODULE_REMOTE_BRANCH}" ]; then
+    DEFAULT_REMOTE_HEAD=$(git symbolic-ref --short "refs/remotes/${SUBMODULE_REMOTE}/HEAD" 2>/dev/null || true)
+    if [ -n "${DEFAULT_REMOTE_HEAD}" ]; then
+      SUBMODULE_REMOTE_BRANCH=${DEFAULT_REMOTE_HEAD#*/}
+    fi
+  fi
+
+  if [ -z "${SUBMODULE_REMOTE_BRANCH}" ]; then
+    SUBMODULE_REMOTE_BRANCH="main"
+  fi
+
+  SUBMODULE_BRANCH=${SUBMODULE_REMOTE_BRANCH}
+  echo "info: spark-data HEAD detached; operating against ${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}" >&2
+fi
+
+if [ -z "${SUBMODULE_REMOTE_BRANCH}" ]; then
+  SUBMODULE_REMOTE_BRANCH=${SUBMODULE_BRANCH}
+  echo "info: no upstream configured; defaulting to ${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}" >&2
+elif [ -z "${SUBMODULE_UPSTREAM}" ]; then
+  echo "info: no upstream configured; defaulting to ${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}" >&2
+fi
+
+SUBMODULE_UPSTREAM="${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}"
 
 SUBMODULE_STATUS=$(git status --porcelain)
 
