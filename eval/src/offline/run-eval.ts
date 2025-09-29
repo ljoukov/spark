@@ -115,6 +115,59 @@ function rawPathForAttempt(basePath: string, attempt: number): string {
   return path.join(directory, `${baseName}${suffix}${ext}`);
 }
 
+function requestPathForRaw(rawFilePath: string): string {
+  const directory = path.dirname(rawFilePath);
+  const ext = path.extname(rawFilePath);
+  const baseName = path.basename(rawFilePath, ext);
+  return path.join(directory, `${baseName}-request.json`);
+}
+
+function promptPathForRaw(rawFilePath: string): string {
+  const directory = path.dirname(rawFilePath);
+  const ext = path.extname(rawFilePath);
+  const baseName = path.basename(rawFilePath, ext);
+  return path.join(directory, `${baseName}-prompt.txt`);
+}
+
+function sanitisePartForLogging(part: Part): unknown {
+  if (!part || typeof part !== "object") {
+    return part;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(part)) {
+    if (key === "inlineData" && value && typeof value === "object") {
+      const inlineRecord = value as Record<string, unknown>;
+      const mimeType = inlineRecord.mimeType;
+      const displayName = inlineRecord.displayName;
+      const rawData = inlineRecord.data;
+      let omittedBytes: number | undefined;
+      if (typeof rawData === "string") {
+        try {
+          omittedBytes = Buffer.from(rawData, "base64").byteLength;
+        } catch {
+          omittedBytes = rawData.length;
+        }
+      }
+      const sanitisedInline: Record<string, unknown> = {
+        data: omittedBytes !== undefined ? `[omitted:${omittedBytes}b]` : "[omitted]",
+      };
+      if (typeof mimeType === "string") {
+        sanitisedInline.mimeType = mimeType;
+      }
+      if (typeof displayName === "string") {
+        sanitisedInline.displayName = displayName;
+      }
+      if (omittedBytes !== undefined) {
+        sanitisedInline.omittedBytes = omittedBytes;
+      }
+      result[key] = sanitisedInline;
+      continue;
+    }
+    result[key] = value as unknown;
+  }
+  return result;
+}
+
 function createSeededRng(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -574,6 +627,37 @@ async function callModel<T>({
 }): Promise<{ text: string; modelId: string; data: T }> {
   const uploadBytes = estimateUploadBytes(parts);
   const maxAttempts = 3;
+  const requestFilePath = requestPathForRaw(rawFilePath);
+  const promptFilePath = promptPathForRaw(rawFilePath);
+  const sanitisedParts = parts.map((part) => sanitisePartForLogging(part));
+  const requestRecord = {
+    model,
+    label,
+    contents: [
+      {
+        role: "user" as const,
+        parts: sanitisedParts,
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: JSON.parse(JSON.stringify(responseSchema)),
+      thinkingConfig: { includeThoughts: true },
+    },
+  };
+  const promptSegments = parts
+    .map((part) => (typeof part.text === "string" ? part.text : undefined))
+    .filter((segment): segment is string => Boolean(segment && segment.length > 0));
+  if (promptSegments.length > 0) {
+    let promptContent = promptSegments.join("\n\n---\n\n");
+    if (!promptContent.endsWith("\n")) {
+      promptContent = `${promptContent}\n`;
+    }
+    await writeFile(promptFilePath, promptContent, "utf8");
+  } else {
+    await writeFile(promptFilePath, "", "utf8");
+  }
+  await writeFile(requestFilePath, JSON.stringify(requestRecord, null, 2), "utf8");
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
@@ -755,7 +839,7 @@ async function generateQuizPayload(
     model: QUIZ_GENERATION_MODEL_ID,
     responseSchema: QUIZ_RESPONSE_SCHEMA,
     schema: QuizGenerationSchema,
-    normalise: normaliseQuizPayload,
+    normalise: (value) => normaliseQuizPayload(value, job.questionCount),
     parts,
     rawFilePath,
     label,
@@ -809,7 +893,8 @@ async function generateExtensionPayload(
     model: QUIZ_GENERATION_MODEL_ID,
     responseSchema: QUIZ_RESPONSE_SCHEMA,
     schema: QuizGenerationSchema,
-    normalise: normaliseQuizPayload,
+    normalise: (value) =>
+      normaliseQuizPayload(value, DEFAULT_EXTENSION_QUESTION_COUNT),
     parts,
     rawFilePath,
     label,
@@ -1218,7 +1303,6 @@ async function runGenerationStage(
   }
 ): Promise<{ results: GenerationResult[]; index: SampleIndex }> {
   await mkdir(EVAL_OUTPUT_DIR, { recursive: true });
-
   const resultMap = new Map<string, GenerationResult>();
   const pendingJobs: SampleJob[] = [];
   let reusedCount = 0;

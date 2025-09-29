@@ -19,6 +19,16 @@ export const QUESTION_TYPES = [
   "numeric",
 ] as const;
 
+export const QUESTION_REVIEW_STATUSES = [
+  "approved",
+  "unapproved",
+] as const;
+
+const QuestionReviewSchema = z.object({
+  status: z.enum(QUESTION_REVIEW_STATUSES),
+  notes: z.string().min(1),
+});
+
 const MULTIPLE_CHOICE_OPTION_LIMITS = new Map<number, Set<string>>([
   [2, new Set(["A", "B"])],
   [3, new Set(["A", "B", "C"])],
@@ -37,6 +47,7 @@ const QuizQuestionSchema = z
     explanation: z.string().min(1),
     hint: z.string().min(1, "hint must not be empty"),
     sourceReference: z.string().min(1).optional(),
+    review: QuestionReviewSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type === "multiple_choice") {
@@ -167,6 +178,22 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
               "Short insight that guides a learner without giving away the exact answer.",
           },
           sourceReference: { type: Type.STRING },
+          review: {
+            type: Type.OBJECT,
+            properties: {
+              status: {
+                type: Type.STRING,
+                enum: ["approved", "unapproved"],
+              },
+              notes: {
+                type: Type.STRING,
+                description:
+                  "Short self-check note describing why the item passed or failed.",
+              },
+            },
+            required: ["status", "notes"],
+            propertyOrdering: ["status", "notes"],
+          },
         },
         required: ["id", "type", "prompt", "answer", "explanation", "hint"],
         propertyOrdering: [
@@ -178,6 +205,7 @@ export const QUIZ_RESPONSE_SCHEMA: Schema = {
           "explanation",
           "hint",
           "sourceReference",
+          "review",
         ],
       },
     },

@@ -51,8 +51,75 @@ describe("quizPrompts helpers", () => {
     const [first, second] = normalised.questions;
     expect(first.answer).toEqual(["A"]);
     expect(second.options).toBeUndefined();
+    expect(first.review).toEqual({ status: "approved", notes: "Self-check passed." });
+    expect(second.review).toEqual({ status: "approved", notes: "Self-check passed." });
 
     expect(() => QuizGenerationSchema.parse(normalised)).not.toThrow();
+  });
+
+  it("drops unapproved items and trims to the requested count", () => {
+    const payload = {
+      mode: "synthesis",
+      subject: "mathematics",
+      questionCount: 5,
+      quizTitle: "Maths Check",
+      questions: [
+        {
+          id: "q1",
+          type: "short_answer",
+          prompt: "State the gradient.",
+          answer: ["2"],
+          explanation: "Gradient is 2.",
+          hint: "Differentiate.",
+          review: { status: "approved", notes: "All checks pass." },
+        },
+        {
+          id: "q2",
+          type: "short_answer",
+          prompt: "Name the shape.",
+          answer: ["triangle"],
+          explanation: "It is a triangle.",
+          hint: "Count the sides.",
+          review: { status: "unapproved", notes: "Scope mismatch." },
+        },
+        {
+          id: "q3",
+          type: "short_answer",
+          prompt: "State the value of pi.",
+          answer: ["3.14"],
+          explanation: "Pi is approximately 3.14.",
+          hint: "Circle ratio.",
+          review: { status: "approved", notes: "All checks pass." },
+        },
+        {
+          id: "q4",
+          type: "short_answer",
+          prompt: "Give one factor of 12.",
+          answer: ["3"],
+          explanation: "3 × 4 = 12.",
+          hint: "Think multiples.",
+          review: { status: "approved", notes: "All checks pass." },
+        },
+        {
+          id: "q5",
+          type: "short_answer",
+          prompt: "Solve x + 1 = 2.",
+          answer: ["1"],
+          explanation: "Subtract 1 from both sides.",
+          hint: "Inverse operations.",
+          review: { status: "approved", notes: "All checks pass." },
+        },
+      ],
+    };
+
+    const result = normaliseQuizPayload(structuredClone(payload), 3);
+    const normalised = QuizGenerationSchema.parse(result);
+
+    expect(normalised.questionCount).toBe(3);
+    expect(normalised.questions).toHaveLength(3);
+    for (const question of normalised.questions) {
+      expect(question.review?.status).toBe("approved");
+    }
   });
 
   it("rejects mismatched question counts via schema", () => {
@@ -97,7 +164,8 @@ describe("quizPrompts helpers", () => {
     });
 
     expect(prompt).toContain(BASE_PROMPT_HEADER);
-    expect(prompt).toContain("You must return exactly 3 questions.");
+    expect(prompt).toContain("draft 5 candidates (target 3 + 2)");
+    expect(prompt).toContain('review.status ("approved" or "unapproved")');
     expect(prompt).toContain("Write in UK English");
   });
 
@@ -108,7 +176,8 @@ describe("quizPrompts helpers", () => {
       board: "AQA",
     });
 
-    expect(prompt).toContain("Produce exactly 4 new questions.");
+    expect(prompt).toContain("Draft 6 candidates");
+    expect(prompt).toContain('review.status ("approved" or "unapproved")');
     expect(prompt).toContain("Exam board context (for context): AQA");
   });
 });
