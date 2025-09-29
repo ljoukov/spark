@@ -43,7 +43,7 @@ export function normaliseQuizPayload(payload: unknown): unknown {
         questionRecord.answer = [answerValue];
       } else if (Array.isArray(answerValue)) {
         questionRecord.answer = answerValue.filter(
-          (entry): entry is string => typeof entry === "string",
+          (entry): entry is string => typeof entry === "string"
         );
       } else if (answerValue !== undefined) {
         delete questionRecord.answer;
@@ -70,7 +70,7 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     "",
     "SILENT PRE-FLIGHT (do not include this section in your output):",
     "1) Scope freeze:",
-    "   - Derive the definitive scope from metadata and in-document cues (for example, \"Higher tier only\" or \"Separate Physics only\").",
+    '   - Derive the definitive scope from metadata and in-document cues (for example, "Higher tier only" or "Separate Physics only").',
     "   - If the requested tier exceeds the source, align down to the source and reflect the true scope in quizTitle and subject.",
     "   - Run a curriculum gate: if terms are off-spec for GCSE, rewrite the assessment wording to GCSE language while keeping the concept.",
     "",
@@ -84,7 +84,7 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     "     * If the source includes equations or quantitative methods -> target approx. 35% application/rearrange/calculation items.",
     "     * Otherwise -> target approx. 20% application/interpretation items.",
     "     * Clamp targets to 0...questionCount. If quantitative and questionCount >= 1, include at least 1 application item.",
-    "     * Count an item as \"application\" only if it requires a calculation, a rearrangement, or interpretation of given data (not mere recall).",
+    '     * Count an item as "application" only if it requires a calculation, a rearrangement, or interpretation of given data (not mere recall).',
     "     * When formulae exist, include at least one rearrangement-based item to meet the application quota.",
     "   - Question type balance:",
     "     * Use at least two different question types in every set.",
@@ -104,26 +104,26 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     "  * Process/equation completeness: include essential conditions explicitly shown in the source (for example, light, catalyst, heat) either in the prompt or the explanation.",
     "  * Typo normalisation: correct obvious source typos to standard UK exam usage without changing the scientific meaning.",
     "- Ambiguity guard:",
-    "  * Prefer official labels (for example, \"Group 7\") over vague descriptors (for example, \"column 7\").",
-    "  * Avoid \"closest to\" comparisons when ties are possible; ask for an exact property or reframe the item.",
+    '  * Prefer official labels (for example, "Group 7") over vague descriptors (for example, "column 7").',
+    '  * Avoid "closest to" comparisons when ties are possible; ask for an exact property or reframe the item.',
     "  * Never rely on colours or relative positions alone; reference labels or unique features in the source.",
     "  * If the source shows dual conventions (for example, Group 0 and Group 18), state which convention you are using inside the prompt.",
     "  * If a figure lacks clear labels and multiple interpretations are possible, narrow the prompt so only one answer is valid from the provided context.",
     "- Free-text fairness:",
-    "  * If multiple valid answers exist, either ask for \"one\" valid example or convert to multiple_choice so only one option is correct.",
+    '  * If multiple valid answers exist, either ask for "one" valid example or convert to multiple_choice so only one option is correct.',
     "  * For short_answer items with multiple valid responses, list all correct options and common GCSE-level synonyms in the answer array.",
     "  * If the valid list is long, change the prompt to request one example to keep marking fair.",
     "- Multiple_choice quality:",
     "  * Provide 3-4 unlabeled options; exactly one must be clearly correct.",
     "  * Build distractors from plausible misconceptions (for example, wrong unit, swapped symbols, order-of-magnitude slips, or incorrect rearrangements).",
-    "  * Avoid \"All of the above\". Use \"None of the above\" only if it is genuinely plausible and the other options are mutually exclusive.",
-    "  * Ensure only one option is correct unless the stem explicitly says \"Select all that apply\" (then mark every correct letter).",
+    '  * Avoid "All of the above". Use "None of the above" only if it is genuinely plausible and the other options are mutually exclusive.',
+    '  * Ensure only one option is correct unless the stem explicitly says "Select all that apply" (then mark every correct letter).',
     "- Numeric quality:",
-    "  * The answer array for type \"numeric\" must contain a pure number only (no units, symbols, commas, or text). Put units in the prompt.",
-    "  * Round according to the data precision or significant figures from the source and state an accepted tolerance in the explanation (for example, \"Accept 3.30-3.50 N\").",
+    '  * The answer array for type "numeric" must contain a pure number only (no units, symbols, commas, or text). Put units in the prompt.',
+    '  * Round according to the data precision or significant figures from the source and state an accepted tolerance in the explanation (for example, "Accept 3.30-3.50 N").',
     "  * If rounding changes a boundary case, ensure the tolerance still captures the precise value.",
     "- Hint guidance:",
-    "  * When a question uses Higher Tier content that appears in the source, mention \"HT\" in the hint to signal scope.",
+    '  * When a question uses Higher Tier content that appears in the source, mention "HT" in the hint to signal scope.',
     "",
     "VALIDATION PASS (silent; rewrite any item that fails a check):",
     "- Prompt-answer alignment: if the prompt asks for N items, return exactly N. If the source only supports one, change the prompt to one.",
@@ -136,12 +136,12 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     "  * Difficulty targets are satisfied after clamping; lower counts if needed to stay feasible.",
     "  * Respect the section cap (>40% only when the source is dominated by one section) and confirm the type balance rule is met.",
     "  * Prompt counts match what the source supports; revise prompts instead of stretching the answer key.",
-    "  * For any \"closest to\" construct, verify uniqueness or reframe the question.",
+    '  * For any "closest to" construct, verify uniqueness or reframe the question.',
     "",
     "OUTPUT REQUIREMENTS:",
     "- Return JSON matching the existing schema:",
     "  * quizTitle (accurate, exam-style, true scope).",
-    "  * mode (\"extraction\" or \"synthesis\").",
+    '  * mode ("extraction" or "synthesis").',
     "  * subject (best-fit subject/tier).",
     `  * questionCount (must be ${questionCount}).`,
     "  * questions[] with id, prompt, type, options (multiple_choice only), answer (string array), explanation, hint, sourceReference.",
@@ -153,12 +153,12 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
   ];
   if (options.subject) {
     base.push(
-      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`,
+      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`
     );
   }
   if (options.board) {
     base.push(
-      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`,
+      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`
     );
   }
   return base.join("\n");
@@ -191,14 +191,14 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
     "   - If the source includes equations or quantitative methods -> target approx. 35% application/rearrange/calculation items.",
     "   - Otherwise -> target approx. 20% application/interpretation items.",
     "   - Clamp targets to 0...questionCount. If quantitative and questionCount >= 1, include at least 1 application item.",
-    "   - Count an item as \"application\" only if it requires a calculation, rearrangement, or interpretation of given data (not mere recall).",
+    '   - Count an item as "application" only if it requires a calculation, rearrangement, or interpretation of given data (not mere recall).',
     "   - When formulae exist, include at least one rearrangement-based item to meet the application quota.",
     "4) Duplication guard: track concepts and wording patterns used in <PAST_QUIZES>, maintain a hidden list of concept bigrams, and reject near-duplicate stems.",
     "",
     "ITEM-WRITING RULES (inherit Initial V2 rules) with these additions:",
     `- Produce exactly ${questionCount} new questions and set mode to \"extension\".`,
     "- Do not duplicate prompt ideas, answer wording, or explanation themes from <PAST_QUIZES>.",
-    "- If a concept allows multiple valid answers, either ask for \"one\" valid example or convert to multiple_choice for unambiguous marking.",
+    '- If a concept allows multiple valid answers, either ask for "one" valid example or convert to multiple_choice for unambiguous marking.',
     "",
     "VALIDATION PASS (silent; rewrite any item that fails a check):",
     "- Confirm there is no duplication against <PAST_QUIZES>.",
@@ -209,7 +209,7 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
     "  * Difficulty targets are satisfied after clamping; lower counts if needed to stay feasible.",
     "  * Respect the section cap (>40% only when the source is dominated by one section) and confirm the type balance rule is met.",
     "  * Prompt counts match what the source supports; revise prompts instead of stretching the answer key.",
-    "  * For any \"closest to\" construct, verify uniqueness or reframe the question.",
+    '  * For any "closest to" construct, verify uniqueness or reframe the question.',
     "",
     "OUTPUT REQUIREMENTS:",
     "- Return JSON matching the existing schema with subject reflecting the true source-supported tier or board.",
@@ -221,12 +221,12 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
   ];
   if (options.subject) {
     lines.push(
-      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`,
+      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`
     );
   }
   if (options.board) {
     lines.push(
-      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`,
+      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`
     );
   }
   return lines.join("\n");
@@ -237,5 +237,3 @@ export function parseQuizFromText(text: string): QuizGeneration {
   const normalised = normaliseQuizPayload(parsed);
   return QuizGenerationSchema.parse(normalised);
 }
-
-export type QuizPromptPart = Part;
