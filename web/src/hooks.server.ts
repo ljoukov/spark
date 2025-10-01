@@ -18,6 +18,45 @@ if (typeof global !== 'undefined') {
 export const handle = (async ({ event, resolve }) => {
 	// Initialize app user locals to a known state
 	event.locals.appUser = null;
+	const pathname = event.url.pathname;
+
+	const shouldHydrateAppUser = (target: string) =>
+		target.startsWith('/app') ||
+		target.startsWith('/code') ||
+		target.startsWith('/welcome') ||
+		target.startsWith('/logout');
+
+	type VerifiedAuthResult = {
+		payload: Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
+		appUser: NonNullable<App.Locals['appUser']>;
+	};
+
+	const verifyCookie = async (label: string): Promise<VerifiedAuthResult | null> => {
+		const raw = event.cookies.get(AUTH_TOKEN_COOKIE_NAME);
+		const parsed = z.string().min(1).safeParse(raw);
+		if (!parsed.success) {
+			return null;
+		}
+		try {
+			const payload = await verifyFirebaseIdToken(parsed.data);
+			const firebaseInfo = (payload as { firebase?: { sign_in_provider?: string } }).firebase;
+			const signInProvider = firebaseInfo?.sign_in_provider ?? null;
+			return {
+				payload,
+				appUser: {
+					uid: payload.sub,
+					email: payload.email ?? null,
+					name: payload.name ?? null,
+					photoUrl: payload.picture ?? null,
+					isAnonymous: signInProvider === 'anonymous'
+				}
+			};
+		} catch (err) {
+			console.log(`[${label}] token verification failed`, err);
+			return null;
+		}
+	};
+
 	// In test mode, short-circuit all authentication and force test user
 	if (isTestUser()) {
 		const uid = getTestUserId();
@@ -25,68 +64,42 @@ export const handle = (async ({ event, resolve }) => {
 			uid,
 			email: null,
 			name: null,
-			photoUrl: null
+			photoUrl: null,
+			isAnonymous: false
 		};
 		// For admin routes, enforce admin access based on test user admin flag
-		if (event.url.pathname.startsWith('/admin')) {
+		if (pathname.startsWith('/admin')) {
 			const isAdmin = isTestUserAdmin();
-			const p = event.url.pathname;
-			const isAdminRoot = p === '/admin' || p === '/admin/';
-			if (!isAdminRoot) {
-				if (!isAdmin) {
-					throw redirect(303, '/admin');
-				}
+			const isAdminRoot = pathname === '/admin' || pathname === '/admin/';
+			if (!isAdminRoot && !isAdmin) {
+				throw redirect(303, '/admin');
 			}
 		}
 		return await resolve(event);
 	}
-	// Lightweight auth context for `/app` — verify Firebase ID token cookie if present
-	if (event.url.pathname.startsWith('/app')) {
-		const raw = event.cookies.get(AUTH_TOKEN_COOKIE_NAME);
-		const parsed = z.string().min(1).safeParse(raw);
-		if (parsed.success) {
-			try {
-				const payload = await verifyFirebaseIdToken(parsed.data);
-				event.locals.appUser = {
-					uid: payload.sub,
-					email: payload.email ?? null,
-					name: payload.name ?? null,
-					photoUrl: payload.picture ?? null
-				};
-			} catch (err) {
-				console.log('[app-auth] token verification failed', err);
-			}
+
+	if (shouldHydrateAppUser(pathname)) {
+		const verified = await verifyCookie('app-auth');
+		if (verified) {
+			event.locals.appUser = verified.appUser;
 		}
 	}
 
-	if (event.url.pathname.startsWith('/admin')) {
-		const raw = event.cookies.get(AUTH_TOKEN_COOKIE_NAME);
-		const parsed = z.string().min(1).safeParse(raw);
+	if (pathname.startsWith('/admin')) {
+		const verified = await verifyCookie('admin-auth');
 		let hasValidToken = false;
 		let isAdmin = false;
-		if (parsed.success) {
-			try {
-				const payload = await verifyFirebaseIdToken(parsed.data);
-				event.locals.appUser = {
-					uid: payload.sub,
-					email: payload.email ?? null,
-					name: payload.name ?? null,
-					photoUrl: payload.picture ?? null
-				};
-				hasValidToken = true;
-				isAdmin = isUserAdmin({ userId: payload.sub } as { userId: string });
-			} catch (err) {
-				console.log('[admin-auth] token verification failed', err);
-			}
+		if (verified) {
+			event.locals.appUser = verified.appUser;
+			hasValidToken = true;
+			isAdmin = isUserAdmin({ userId: verified.payload.sub } as { userId: string });
 		}
 
-		const p = event.url.pathname;
-		const isAdminRoot = p === '/admin' || p === '/admin/';
-		if (!isAdminRoot) {
-			if (!hasValidToken || !isAdmin) {
-				throw redirect(303, '/admin');
-			}
+		const isAdminRoot = pathname === '/admin' || pathname === '/admin/';
+		if (!isAdminRoot && (!hasValidToken || !isAdmin)) {
+			throw redirect(303, '/admin');
 		}
 	}
+
 	return await resolve(event);
 }) satisfies Handle;
