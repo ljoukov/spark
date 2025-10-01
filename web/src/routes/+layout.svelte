@@ -1,14 +1,28 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { startAutomaticThemeSync } from '$lib/utils/theme';
+	import { applyDocumentTheme, startAutomaticThemeSync } from '$lib/utils/theme';
+	import { themePreference, type ThemePreference } from '$lib/stores/themePreference';
 
 	let { children } = $props();
 
 	onMount(() => {
-		const stopThemeSync = startAutomaticThemeSync();
+		let stopAutoSync: (() => void) | null = null;
+		const unsubscribe = themePreference.subscribe((preference: ThemePreference) => {
+			if (stopAutoSync) {
+				stopAutoSync();
+				stopAutoSync = null;
+			}
+			if (preference === 'auto') {
+				stopAutoSync = startAutomaticThemeSync();
+				return;
+			}
+			applyDocumentTheme(preference);
+		});
+
 		return () => {
-			stopThemeSync();
+			unsubscribe();
+			stopAutoSync?.();
 		};
 	});
 </script>

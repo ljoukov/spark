@@ -7,7 +7,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
-	import { applyDocumentTheme, startAutomaticThemeSync } from '$lib/utils/theme';
+	// Theme preference is now controlled at the root layout level.
 	import { invalidateAll, afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 
@@ -93,11 +93,6 @@
 		}
 	}
 
-	if (typeof window !== 'undefined') {
-		const systemPreference = window.matchMedia('(prefers-color-scheme: dark)');
-		applyDocumentTheme(systemPreference.matches ? 'dark' : 'light');
-	}
-
 	onMount(() => {
 		// initial
 		currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -111,8 +106,6 @@
 			currentPath = next;
 			recomputeBreadcrumbs(next);
 		});
-
-		const stopThemeSync = startAutomaticThemeSync();
 
 		// Subscribe to Firestore user profile for name/email/photo/loginUrl
 		let stopProfile = () => {};
@@ -178,7 +171,6 @@
 			});
 		}
 		return () => {
-			stopThemeSync();
 			stopProfile();
 			stopCookieSync();
 			stopAuth();

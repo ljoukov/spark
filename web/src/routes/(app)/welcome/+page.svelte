@@ -1,42 +1,21 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import type { Snippet } from 'svelte';
-	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
-	import { getFirebaseApp, startGoogleSignInRedirect } from '$lib/utils/firebaseClient';
 	import { cn } from '$lib/utils.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+	import { getFirebaseApp, startGoogleSignInRedirect } from '$lib/utils/firebaseClient';
+	import { clearIdTokenCookie, setIdTokenCookie } from '$lib/auth/tokenCookie';
 	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
-	import type { LayoutData } from './$types';
+	import type { PageData } from './$types';
 
-	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+	let { data }: { data: PageData } = $props();
 
-	type ClientUser = {
-		uid: string;
-		email: string | null;
-		name: string | null;
-		photoUrl: string | null;
-		isAnonymous: boolean;
-	};
-
-	function fromServerUser(user: LayoutData['user'] | null): ClientUser | null {
-		if (!user) {
-			return null;
-		}
-		return {
-			uid: user.uid,
-			email: user.email,
-			name: user.name ?? null,
-			photoUrl: user.photoUrl ?? null,
-			isAnonymous: false
-		};
-	}
-
-	let clientUser = $state<ClientUser | null>(fromServerUser(data.user));
+	let authResolved = $state(data.authDisabled);
+	let redirecting = $state(false);
+	let lastSyncedUid = $state<string | null>(null);
 
 	const ui = $state({
-		showAuth: !data.user,
+		showAuth: true,
 		showAnonConfirm: false,
 		signingInWithGoogle: false,
 		signingInAnonymously: false,
@@ -54,12 +33,30 @@
 		ui.syncingProfile && !ui.errorMessage ? 'Finishing sign-in…' : ''
 	);
 
-	let stopCookieSync: (() => void) | undefined;
-	let unsubscribeAuth: (() => void) | undefined;
-	let lastSyncedUid: string | null = data.user?.uid ?? null;
-
 	function resetError() {
 		ui.errorMessage = '';
+	}
+
+	function redirectToCode(): void {
+		if (redirecting) {
+			return;
+		}
+		redirecting = true;
+		if (typeof window !== 'undefined') {
+			window.location.href = '/code';
+		}
+	}
+
+	async function mirrorCookie(user: User): Promise<boolean> {
+		try {
+			const idToken = await user.getIdToken();
+			setIdTokenCookie(idToken);
+			return true;
+		} catch (error) {
+			const fallback = 'Unable to prepare your session. Please try again.';
+			ui.errorMessage = error instanceof Error ? error.message : fallback;
+			return false;
+		}
 	}
 
 	async function syncProfile(user: User): Promise<boolean> {
@@ -98,67 +95,6 @@
 		}
 	}
 
-	onMount(() => {
-		// In test mode, skip Firebase entirely — server provides the user
-		if (data.authDisabled) {
-			ui.showAuth = false;
-			return () => {};
-		}
-		const auth = getAuth(getFirebaseApp());
-		stopCookieSync = startIdTokenCookieSync(auth);
-
-		unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-			if (!user) {
-				clientUser = null;
-				ui.showAuth = true;
-				ui.showAnonConfirm = false;
-				lastSyncedUid = null;
-				return;
-			}
-
-			clientUser = {
-				uid: user.uid,
-				email: user.email ?? null,
-				name: user.displayName ?? null,
-				photoUrl: user.photoURL ?? null,
-				isAnonymous: user.isAnonymous
-			};
-			ui.showAuth = false;
-			ui.showAnonConfirm = false;
-
-			if (lastSyncedUid === user.uid) {
-				return;
-			}
-
-			void (async () => {
-				const synced = await syncProfile(user);
-				if (synced) {
-					await invalidateAll();
-				}
-			})();
-		});
-
-		return () => {
-			stopCookieSync?.();
-			unsubscribeAuth?.();
-		};
-	});
-
-	async function handleGoogleSignIn() {
-		if (ui.signingInWithGoogle) {
-			return;
-		}
-		resetError();
-		ui.signingInWithGoogle = true;
-		try {
-			await startGoogleSignInRedirect();
-		} catch (error) {
-			const fallback = 'Unable to start Google sign-in. Please try again.';
-			ui.errorMessage = error instanceof Error ? error.message : fallback;
-			ui.signingInWithGoogle = false;
-		}
-	}
-
 	function handleOpenAnonymousConfirm() {
 		ui.showAnonConfirm = true;
 	}
@@ -188,21 +124,92 @@
 			ui.signingInAnonymously = false;
 		}
 	}
+
+	async function handleGoogleSignIn() {
+		if (ui.signingInWithGoogle) {
+			return;
+		}
+		resetError();
+		ui.signingInWithGoogle = true;
+		try {
+			await startGoogleSignInRedirect();
+		} catch (error) {
+			const fallback = 'Unable to start Google sign-in. Please try again.';
+			ui.errorMessage = error instanceof Error ? error.message : fallback;
+			ui.signingInWithGoogle = false;
+		}
+	}
+
+	onMount(() => {
+		if (data.authDisabled) {
+			redirectToCode();
+			return () => {};
+		}
+
+		const auth = getAuth(getFirebaseApp());
+	const unsubscribe = onAuthStateChanged(auth, async (user) => {
+		authResolved = true;
+		if (!user) {
+			clearIdTokenCookie();
+			ui.showAuth = true;
+			ui.showAnonConfirm = false;
+			lastSyncedUid = null;
+			redirecting = false;
+			return;
+		}
+
+		ui.showAuth = false;
+		ui.showAnonConfirm = false;
+
+		if (lastSyncedUid === user.uid) {
+			const mirrored = await mirrorCookie(user);
+			if (mirrored) {
+				redirectToCode();
+				return;
+			}
+			ui.showAuth = true;
+			ui.showAnonConfirm = false;
+			return;
+		}
+
+		const synced = await syncProfile(user);
+		if (!synced) {
+			ui.showAuth = true;
+			ui.showAnonConfirm = false;
+			return;
+		}
+		const mirrored = await mirrorCookie(user);
+		if (!mirrored) {
+			ui.showAuth = true;
+			ui.showAnonConfirm = false;
+			return;
+		}
+		redirectToCode();
+	});
+
+		return () => {
+			unsubscribe();
+		};
+	});
 </script>
 
-{#if clientUser}
-	<div class="app-layout">
-		{@render children?.()}
+<svelte:head>
+	<title>Welcome • Spark</title>
+</svelte:head>
+
+{#if !authResolved}
+	<div class="auth-backdrop auth-backdrop--idle" aria-hidden="true">
+		<div class="auth-blob-field" aria-hidden="true"></div>
 	</div>
 {/if}
 
-{#if ui.showAuth}
-	<div class="auth-backdrop" aria-hidden={clientUser !== null}>
+{#if authResolved && ui.showAuth}
+	<div class="auth-backdrop">
 		<div class="auth-blob-field" aria-hidden="true"></div>
 		<div class="auth-card">
 			<header class="auth-header">
 				<p class="auth-eyebrow">Welcome to Spark</p>
-				<h2 class="auth-title">Scan. Learn. Spark.</h2>
+				<h2 class="auth-title">Think. Hack. Spark.</h2>
 			</header>
 
 			<Button
@@ -292,52 +299,6 @@
 </Dialog.Root>
 
 <style>
-	:global(:root) {
-		color-scheme: light dark;
-		--auth-dialog-bg: rgba(255, 255, 255, 0.96);
-		--auth-dialog-border: rgba(15, 23, 42, 0.12);
-		--auth-dialog-foreground: #0f172a;
-		--auth-dialog-subtitle: rgba(30, 41, 59, 0.78);
-		--auth-dialog-eyebrow: rgba(30, 64, 175, 0.82);
-		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
-		--auth-footer-link: #1d4ed8;
-		--auth-footer-link-hover: #0f172a;
-	}
-
-	:global([data-theme='dark']) {
-		--auth-dialog-bg: rgba(6, 11, 25, 0.78);
-		--auth-dialog-border: rgba(148, 163, 184, 0.26);
-		--auth-dialog-foreground: #e2e8f0;
-		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
-		--auth-dialog-eyebrow: rgba(148, 197, 255, 0.9);
-		--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
-		--auth-footer-link: #93c5fd;
-		--auth-footer-link-hover: #e2e8f0;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) {
-			--auth-dialog-bg: rgba(6, 11, 25, 0.78);
-			--auth-dialog-border: rgba(148, 163, 184, 0.26);
-			--auth-dialog-foreground: #e2e8f0;
-			--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
-			--auth-dialog-eyebrow: rgba(148, 197, 255, 0.9);
-			--auth-dialog-shadow: 0 40px 120px -70px rgba(2, 6, 23, 0.75);
-			--auth-footer-link: #93c5fd;
-			--auth-footer-link-hover: #e2e8f0;
-		}
-	}
-
-	:global([data-slot='dialog-overlay']) {
-		/* Darken/blur only the guest-mode confirmation for readability */
-		background: rgba(2, 6, 23, 0.68);
-		backdrop-filter: blur(4px);
-	}
-
-	.app-layout {
-		min-height: 100vh;
-	}
-
 	.auth-backdrop {
 		position: fixed;
 		inset: 0;
@@ -370,6 +331,10 @@
 		--auth-dialog-shadow: 0 40px 120px -60px rgba(15, 23, 42, 0.5);
 	}
 
+	.auth-backdrop--idle {
+		pointer-events: none;
+	}
+
 	@supports (height: 100dvh) {
 		.auth-backdrop {
 			min-height: 100dvh;
@@ -390,8 +355,6 @@
 			radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
 		opacity: var(--blob-opacity);
 	}
-
-	/* Auth card is a plain container (not a modal) */
 
 	.auth-card {
 		position: relative;
@@ -432,7 +395,7 @@
 		font-weight: 600;
 	}
 
-	.auth-header h2 {
+	.auth-title {
 		margin: 0;
 		font-size: 2.2rem;
 		font-weight: 600;
@@ -517,6 +480,23 @@
 		outline-offset: 2px;
 	}
 
+	@media (max-width: 520px) {
+		.auth-card {
+			gap: 1.25rem;
+		}
+
+		.auth-footer {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.75rem;
+		}
+	}
+
+	:global([data-slot='dialog-overlay']) {
+		background: rgba(2, 6, 23, 0.68);
+		backdrop-filter: blur(4px);
+	}
+
 	:global(.auth-dialog [data-slot='dialog-close']),
 	:global(.anon-dialog [data-slot='dialog-close']) {
 		display: none !important;
@@ -597,7 +577,17 @@
 		cursor: progress;
 	}
 
-	/* Dark theme tokens and automatic switching for auth backdrop */
+	@media (max-width: 480px) {
+		:global(.anon-footer) {
+			flex-direction: column-reverse;
+		}
+
+		:global(.anon-cancel),
+		:global(.anon-continue) {
+			width: 100%;
+		}
+	}
+
 	:global([data-theme='dark'] .auth-backdrop) {
 		--app-surface: linear-gradient(175deg, rgba(2, 6, 23, 0.98), rgba(6, 11, 25, 0.94));
 		--app-halo: rgba(129, 140, 248, 0.36);
