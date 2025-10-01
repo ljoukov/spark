@@ -7,8 +7,9 @@ declare global {
 			appUser: {
 				uid: string;
 				email: string | null;
-				name?: string | null;
-				photoUrl?: string | null;
+				name: string | null;
+				photoUrl: string | null;
+				isAnonymous: boolean;
 			} | null;
 		}
 		// interface PageData {}
