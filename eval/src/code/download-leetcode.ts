@@ -2,6 +2,7 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 interface CliOptions {
   readonly limit: number;
@@ -9,12 +10,22 @@ interface CliOptions {
   readonly skipExisting: boolean;
 }
 
+// Shape used by our saved JSON artifacts
 interface ProblemSummary {
   readonly questionFrontendId: string;
   readonly title: string;
   readonly content: string;
   readonly difficulty: string;
   readonly topicTags: readonly string[];
+}
+
+// Shape returned by LeetCode GraphQL API for a question
+interface GraphQuestion {
+  readonly questionFrontendId: string;
+  readonly title: string;
+  readonly content: string;
+  readonly difficulty: string;
+  readonly topicTags: readonly { name: string }[];
 }
 
 interface DownloadedProblem extends ProblemSummary {
@@ -26,7 +37,11 @@ interface DownloadedProblem extends ProblemSummary {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OUTPUT_DIR = path.resolve(__dirname, "../../downloads/leetcode");
+// Save into the shared spark-data workspace for code downloads
+const OUTPUT_DIR = path.resolve(
+  __dirname,
+  "../../../spark-data/code/dowloads/leetcode",
+);
 const DEFAULT_LIMIT = 5;
 const USER_AGENT =
   "Mozilla/5.0 (compatible; SparkEvalLeetDownloader/1.0; +https://github.com/nikhil-ravi/LeetScrape)";
@@ -77,7 +92,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
 }
 
 function printHelpAndExit(): never {
-  console.log(`Usage: tsx eval/code/download-leetcode.ts [options]\n\n` +
+  console.log(`Usage: tsx src/code/download-leetcode.ts [options]\n\n` +
     `Options:\n` +
     `  --limit=<n>       Number of problems to download when slugs are not specified (default: ${DEFAULT_LIMIT}).\n` +
     `  --slugs=a,b,c     Comma separated list of problem slugs to download. Overrides --limit.\n` +
@@ -85,6 +100,12 @@ function printHelpAndExit(): never {
     `  --help            Show this help message and exit.`);
   process.exit(0);
 }
+
+const AllProblemsSchema = z.object({
+  stat_status_pairs: z
+    .array(z.object({ stat: z.object({ question__title_slug: z.string() }) }))
+    .default([]),
+});
 
 async function fetchProblemSlugs(limit: number): Promise<string[]> {
   const response = await fetch("https://leetcode.com/api/problems/all/", {
@@ -98,11 +119,7 @@ async function fetchProblemSlugs(limit: number): Promise<string[]> {
     throw new Error(`Failed to fetch problem list: ${response.status} ${response.statusText}`);
   }
 
-  const data = (await response.json()) as {
-    stat_status_pairs: Array<{
-      stat: { question__title_slug: string };
-    }>;
-  };
+  const data = AllProblemsSchema.parse(await response.json());
 
   const slugs = data.stat_status_pairs
     .map((entry) => entry.stat.question__title_slug)
@@ -110,6 +127,23 @@ async function fetchProblemSlugs(limit: number): Promise<string[]> {
 
   return slugs.slice(0, limit);
 }
+
+const GraphQuestionSchema = z.object({
+  questionFrontendId: z.string(),
+  title: z.string(),
+  content: z.string().catch(""),
+  difficulty: z.string(),
+  topicTags: z.array(z.object({ name: z.string() })),
+});
+
+const GraphQLResponseSchema = z.object({
+  data: z
+    .object({
+      question: GraphQuestionSchema.nullish(),
+    })
+    .nullish(),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
 
 async function fetchProblem(slug: string): Promise<DownloadedProblem> {
   const query = `
@@ -141,10 +175,7 @@ async function fetchProblem(slug: string): Promise<DownloadedProblem> {
     throw new Error(`Failed to fetch problem ${slug}: ${response.status} ${response.statusText}`);
   }
 
-  const payload = (await response.json()) as {
-    data?: { question?: ProblemSummary };
-    errors?: Array<{ message?: string }>;
-  };
+  const payload = GraphQLResponseSchema.parse(await response.json());
 
   if (payload.errors?.length) {
     const message = payload.errors.map((error) => error.message ?? "Unknown error").join(", ");
@@ -158,7 +189,10 @@ async function fetchProblem(slug: string): Promise<DownloadedProblem> {
 
   return {
     slug,
-    ...question,
+    questionFrontendId: question.questionFrontendId,
+    title: question.title,
+    content: question.content,
+    difficulty: question.difficulty,
     topicTags: question.topicTags.map((tag) => tag.name),
     fetchedAt: new Date().toISOString(),
     link: `https://leetcode.com/problems/${slug}/`,
