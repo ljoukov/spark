@@ -331,13 +331,21 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
+		height: 100dvh;
 		min-height: 100dvh;
 		width: 100%;
-		overflow-x: hidden;
+		overflow: hidden;
 		background:
 			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
 			var(--app-surface);
 		color: var(--text-primary, var(--foreground));
+	}
+
+	@supports not (height: 100dvh) {
+		.app-page {
+			height: 100vh;
+			min-height: 100vh;
+		}
 	}
 
 	.blob-field {
@@ -362,8 +370,9 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
+		flex: 1 1 auto;
 		min-height: 0;
-		overflow: visible;
+		overflow: hidden;
 	}
 
 	.app-header {
@@ -379,6 +388,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 10;
+		flex-shrink: 0;
 	}
 
 	:global([data-theme='dark'] .app-header),
@@ -521,19 +531,20 @@
 	}
 
 	.app-main {
-		flex: 1;
+		flex: 1 1 auto;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		overflow: visible;
+		overflow-x: hidden;
+		overflow-y: auto;
+		scrollbar-gutter: stable both-edges;
 	}
 
 	.app-content {
-		flex: 1;
+		flex: 1 0 auto;
 		display: flex;
 		flex-direction: column;
 		gap: clamp(1.6rem, 3vw, 2.6rem);
 		min-height: 0;
-		overflow: visible;
 	}
 </style>
