@@ -6,7 +6,11 @@
 	import { writable } from 'svelte/store';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { themePreference, setThemePreference, type ThemePreference } from '$lib/stores/themePreference';
+	import {
+		themePreference,
+		setThemePreference,
+		type ThemePreference
+	} from '$lib/stores/themePreference';
 	import type { LayoutData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
@@ -287,22 +291,26 @@
 							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
 								Appearance
 							</DropdownMenu.SubTrigger>
-					<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
-						<DropdownMenu.RadioGroup
-							value={theme}
-							onValueChange={(value) => handleThemeSelect(value as ThemePreference)}
-						>
-							{#each themeOptions as option}
-								<DropdownMenu.RadioItem value={option.value} class="app-appearance-menu__item">
-									<CheckIcon class="theme-check" />
-									<span>{option.label}</span>
-								</DropdownMenu.RadioItem>
-							{/each}
-						</DropdownMenu.RadioGroup>
-					</DropdownMenu.SubContent>
+							<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
+								<DropdownMenu.RadioGroup
+									value={theme}
+									onValueChange={(value) => handleThemeSelect(value as ThemePreference)}
+								>
+									{#each themeOptions as option}
+										<DropdownMenu.RadioItem value={option.value} class="app-appearance-menu__item">
+											<CheckIcon class="theme-check" />
+											<span>{option.label}</span>
+										</DropdownMenu.RadioItem>
+									{/each}
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.SubContent>
 						</DropdownMenu.Sub>
 						<DropdownMenu.Separator />
-						<DropdownMenu.Item class="app-user-menu__logout" onSelect={handleLogout} variant="destructive">
+						<DropdownMenu.Item
+							class="app-user-menu__logout"
+							onSelect={handleLogout}
+							variant="destructive"
+						>
 							Log out
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
@@ -349,7 +357,6 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: clamp(1.5rem, 3vw, 2.25rem);
 		min-height: 100vh;
 		padding: 0 0 clamp(2rem, 3vw, 2.5rem);
 	}
@@ -507,7 +514,6 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		padding: clamp(1.6rem, 3vw, 2.4rem) clamp(0.4rem, 1.2vw, 0.8rem) clamp(1.6rem, 3vw, 2.4rem);
 	}
 
 	.app-content {
