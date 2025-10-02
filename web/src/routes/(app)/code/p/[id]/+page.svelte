@@ -156,20 +156,21 @@
 	}
 </script>
 
-<section class="flex h-screen flex-col gap-2 overflow-hidden p-2">
-	<header class="space-y-1">
+<section class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+	<header class="space-y-1 flex-shrink-0">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
 		<p class="text-muted-foreground text-sm">
 			Compare or edit text side by side with a draggable divider.
 		</p>
 	</header>
 
-	<Resizable.PaneGroup
-		direction="horizontal"
-		class="bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
-		bind:this={paneGroup}
-		onLayoutChange={handleLayoutChange}
-	>
+	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
+		<Resizable.PaneGroup
+			direction="horizontal"
+			class="bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
+			bind:this={paneGroup}
+			onLayoutChange={handleLayoutChange}
+		>
 		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
 			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
@@ -237,7 +238,8 @@
 				</div>
 			</div>
 		</Resizable.Pane>
-	</Resizable.PaneGroup>
+		</Resizable.PaneGroup>
+	</div>
 </section>
 
 <style lang="postcss">

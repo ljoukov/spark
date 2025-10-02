@@ -329,7 +329,10 @@
 <style>
 	.app-page {
 		position: relative;
-		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		min-height: 100dvh;
+		height: 100dvh;
 		width: 100%;
 		overflow: hidden;
 		background:
@@ -356,8 +359,10 @@
 	.app-shell {
 		position: relative;
 		display: flex;
+		flex: 1;
 		flex-direction: column;
-		min-height: 100vh;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	.app-header {
@@ -513,6 +518,8 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	.app-content {
@@ -520,5 +527,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(1.6rem, 3vw, 2.6rem);
+		min-height: 0;
+		overflow: hidden;
 	}
 </style>
