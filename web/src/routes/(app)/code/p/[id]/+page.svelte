@@ -100,7 +100,10 @@
 			mediaQuery.addEventListener('change', applyTheme);
 
 			themeObserver = new MutationObserver(() => applyTheme?.());
-			themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+			themeObserver.observe(document.documentElement, {
+				attributes: true,
+				attributeFilter: ['data-theme']
+			});
 
 			subscription = monacoEditor.onDidChangeModelContent(() => {
 				rightText = monacoEditor?.getValue() ?? '';
@@ -157,7 +160,7 @@
 </script>
 
 <section class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-	<header class="space-y-1 flex-shrink-0">
+	<header class="flex-shrink-0 space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
 		<p class="text-muted-foreground text-sm">
 			Compare or edit text side by side with a draggable divider.
@@ -171,73 +174,73 @@
 			bind:this={paneGroup}
 			onLayoutChange={handleLayoutChange}
 		>
-		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
-			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-				<div class="flex items-center justify-between gap-2">
-					<div class="flex flex-col">
-						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
-							>Problem</span
+			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
+				<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+					<div class="flex items-center justify-between gap-2">
+						<div class="flex flex-col">
+							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+								>Problem</span
+							>
+							<h2 class="text-sm font-semibold leading-tight">{problem.title}</h2>
+						</div>
+						<button
+							type="button"
+							class={iconButtonClasses}
+							on:click={() => toggleMaximize('left')}
+							aria-label={maximizedPane === 'left'
+								? 'Return left pane to normal size'
+								: 'Maximize left pane'}
 						>
-						<h2 class="text-sm font-semibold leading-tight">{problem.title}</h2>
+							{#if maximizedPane === 'left'}
+								<Minimize2 class="size-4" />
+							{:else}
+								<Maximize2 class="size-4" />
+							{/if}
+						</button>
 					</div>
-					<button
-						type="button"
-						class={iconButtonClasses}
-						on:click={() => toggleMaximize('left')}
-						aria-label={maximizedPane === 'left'
-							? 'Return left pane to normal size'
-							: 'Maximize left pane'}
-					>
-						{#if maximizedPane === 'left'}
-							<Minimize2 class="size-4" />
-						{:else}
-							<Maximize2 class="size-4" />
-						{/if}
-					</button>
-				</div>
-				<div
-					class="markdown-scroll border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
-					aria-label="Problem description"
-				>
-					<div class="markdown space-y-4">{@html markdownHtml}</div>
-				</div>
-			</div>
-		</Resizable.Pane>
-		<Resizable.Handle withHandle class="bg-border" />
-		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
-			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-				<div class="flex items-center justify-between gap-2">
-					<div class="flex flex-col">
-						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
-							>Editor</span
-						>
-						<h2 class="text-sm font-semibold leading-tight">Python workspace</h2>
-					</div>
-					<button
-						type="button"
-						class={iconButtonClasses}
-						on:click={() => toggleMaximize('right')}
-						aria-label={maximizedPane === 'right'
-							? 'Return right pane to normal size'
-							: 'Maximize right pane'}
-					>
-						{#if maximizedPane === 'right'}
-							<Minimize2 class="size-4" />
-						{:else}
-							<Maximize2 class="size-4" />
-						{/if}
-					</button>
-				</div>
-				<div class="editor-shell" data-code-length={rightText.length}>
 					<div
-						class="editor-container"
-						bind:this={editorContainer}
-						role="presentation"
-						aria-label="Python editor"
-					></div>
+						class="markdown-scroll border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
+						aria-label="Problem description"
+					>
+						<div class="markdown space-y-4">{@html markdownHtml}</div>
+					</div>
 				</div>
-			</div>
-		</Resizable.Pane>
+			</Resizable.Pane>
+			<Resizable.Handle withHandle class="bg-border" />
+			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
+				<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+					<div class="flex items-center justify-between gap-2">
+						<div class="flex flex-col">
+							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+								>Editor</span
+							>
+							<h2 class="text-sm font-semibold leading-tight">Python workspace</h2>
+						</div>
+						<button
+							type="button"
+							class={iconButtonClasses}
+							on:click={() => toggleMaximize('right')}
+							aria-label={maximizedPane === 'right'
+								? 'Return right pane to normal size'
+								: 'Maximize right pane'}
+						>
+							{#if maximizedPane === 'right'}
+								<Minimize2 class="size-4" />
+							{:else}
+								<Maximize2 class="size-4" />
+							{/if}
+						</button>
+					</div>
+					<div class="editor-shell" data-code-length={rightText.length}>
+						<div
+							class="editor-container"
+							bind:this={editorContainer}
+							role="presentation"
+							aria-label="Python editor"
+						></div>
+					</div>
+				</div>
+			</Resizable.Pane>
 		</Resizable.PaneGroup>
 	</div>
 </section>
@@ -307,5 +310,13 @@
 	.editor-container {
 		height: 100%;
 		width: 100%;
+	}
+
+	:global(.app-page),
+	:global(.app-shell),
+	:global(.app-main),
+	:global(.app-content) {
+		overflow: hidden;
+		height: 100dvh;
 	}
 </style>

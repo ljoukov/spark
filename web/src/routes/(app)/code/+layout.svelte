@@ -332,9 +332,9 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100dvh;
-		height: 100dvh;
 		width: 100%;
-		overflow: hidden;
+		overflow-x: hidden;
+		overflow-y: auto;
 		background:
 			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
 			var(--app-surface);
@@ -359,10 +359,9 @@
 	.app-shell {
 		position: relative;
 		display: flex;
-		flex: 1;
 		flex-direction: column;
 		min-height: 0;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.app-header {
@@ -521,7 +520,7 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.app-content {
@@ -530,6 +529,6 @@
 		flex-direction: column;
 		gap: clamp(1.6rem, 3vw, 2.6rem);
 		min-height: 0;
-		overflow: hidden;
+		overflow: visible;
 	}
 </style>
