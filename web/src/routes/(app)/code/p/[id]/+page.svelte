@@ -312,11 +312,4 @@
 		width: 100%;
 	}
 
-	:global(.app-page),
-	:global(.app-shell),
-	:global(.app-main),
-	:global(.app-content) {
-		overflow: hidden;
-		height: 100dvh;
-	}
 </style>
