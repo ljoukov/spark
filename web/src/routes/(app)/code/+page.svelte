@@ -265,7 +265,7 @@
 	.plan-body {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(1.35rem, 2vw, 1.8rem);
+		gap: clamp(0.6rem, 1.2vw, 0.95rem);
 	}
 
 	:global([data-theme='dark'] .plan-card),
@@ -331,7 +331,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.65rem;
-		padding: 0.6rem 0.85rem;
+		padding: 0.35rem 0.75rem;
 		border-radius: 1rem;
 		transition:
 			background 0.18s ease,
