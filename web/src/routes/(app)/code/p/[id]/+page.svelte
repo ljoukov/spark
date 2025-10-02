@@ -159,7 +159,7 @@
 	}
 </script>
 
-<section class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+<section class="workspace-page flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
 	<header class="flex-shrink-0 space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
 		<p class="text-muted-foreground text-sm">
@@ -170,12 +170,12 @@
 	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
 		<Resizable.PaneGroup
 			direction="horizontal"
-			class="bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
+			class="workspace-pane-group bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
 			bind:this={paneGroup}
 			onLayoutChange={handleLayoutChange}
 		>
 			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
-				<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 					<div class="flex items-center justify-between gap-2">
 						<div class="flex flex-col">
 							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
@@ -208,7 +208,7 @@
 			</Resizable.Pane>
 			<Resizable.Handle withHandle class="bg-border" />
 			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
-				<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 					<div class="flex items-center justify-between gap-2">
 						<div class="flex flex-col">
 							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
@@ -246,6 +246,41 @@
 </section>
 
 <style lang="postcss">
+    /* Hard lock: prevent the layout scroll container from scrolling on this route. */
+    :global(.app-main) {
+        overflow-y: hidden !important;
+        overscroll-behavior: contain;
+    }
+
+    :global(.app-content) {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+    }
+
+	.workspace-page {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+	}
+
+	.workspace {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+	}
+
+	.workspace-pane-group {
+		height: 100%;
+		min-height: 0;
+		flex: 1 1 auto;
+	}
+
+	.pane-column {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+	}
 	.markdown {
 		font-size: 0.95rem;
 		line-height: 1.6;
@@ -295,12 +330,16 @@
 
 	.markdown-scroll {
 		scrollbar-gutter: stable both-edges;
+		overscroll-behavior: contain;
+		flex: 1 1 auto;
+		min-height: 0;
 	}
 
 	.editor-shell {
-		flex: 1 0 auto;
+		flex: 1 1 auto;
 		min-height: 0;
 		overflow: hidden;
+		overscroll-behavior: contain;
 		border: 1px solid rgba(148, 163, 184, 0.26);
 		border-radius: 0.6rem;
 		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);

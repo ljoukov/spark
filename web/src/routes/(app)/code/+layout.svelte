@@ -540,6 +540,13 @@
 		scrollbar-gutter: stable both-edges;
 	}
 
+	/* CSS-only lock: when page content contains a `.workspace` (code editor).
+	   Marked global so Svelte doesn't treat it as unused in this component scope. */
+	:global(.app-main:has(.workspace)) {
+		overflow-y: hidden;
+		overscroll-behavior: contain;
+	}
+
 	.app-content {
 		flex: 1 0 auto;
 		display: flex;
