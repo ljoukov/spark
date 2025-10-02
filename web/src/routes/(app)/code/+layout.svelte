@@ -367,14 +367,14 @@
 		justify-content: space-between;
 		padding: clamp(0.5rem, 0.9vw, 0.75rem) clamp(0.75rem, 1.5vw, 1rem);
 		border-bottom: 1px solid rgba(148, 163, 184, 0.32);
-		background: color-mix(in srgb, var(--app-content-bg) 88%, transparent);
+		background: color-mix(in srgb, var(--app-content-bg) 50%, transparent);
 		box-shadow: 0 25px 60px -40px rgba(15, 23, 42, 0.25);
 		backdrop-filter: blur(18px);
 	}
 
 	:global([data-theme='dark'] .app-header),
 	:global(:root:not([data-theme='light']) .app-header) {
-		background: color-mix(in srgb, rgba(6, 11, 25, 0.82) 90%, transparent);
+		background: color-mix(in srgb, rgba(6, 11, 25, 1) 50%, transparent);
 		border-bottom-color: rgba(148, 163, 184, 0.24);
 		box-shadow: 0 35px 80px -45px rgba(2, 6, 23, 0.45);
 	}
