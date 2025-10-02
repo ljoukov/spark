@@ -55,17 +55,18 @@
 				return;
 			}
 
-			monacoEditor = monaco.editor.create(editorContainer, {
-				value: rightText,
-				language: 'python',
-				automaticLayout: true,
-				minimap: { enabled: false },
-				fontSize: 15,
-				fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
-				tabSize: 4,
-				insertSpaces: true,
-				wordWrap: 'off'
-			});
+				monacoEditor = monaco.editor.create(editorContainer, {
+					value: rightText,
+					language: 'python',
+					automaticLayout: true,
+					minimap: { enabled: false },
+					fontSize: 15,
+					fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
+					tabSize: 2,
+					insertSpaces: true,
+					detectIndentation: false,
+					wordWrap: 'off'
+				});
 
 			subscription = monacoEditor.onDidChangeModelContent(() => {
 				rightText = monacoEditor?.getValue() ?? '';
