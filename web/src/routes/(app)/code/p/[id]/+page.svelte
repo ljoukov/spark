@@ -21,7 +21,8 @@
 
 	let problem = data.problem;
 	let markdownHtml = data.problem.markdownHtml;
-	let rightText = problem.starterCode;
+	const DEFAULT_CODE = 'print("hello world :)")';
+	let rightText = DEFAULT_CODE;
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
@@ -54,7 +55,7 @@
 
 	$: if (problem.id !== currentProblemId) {
 		currentProblemId = problem.id;
-		rightText = problem.starterCode;
+		rightText = DEFAULT_CODE;
 		if (monacoEditor && monacoEditor.getValue() !== rightText) {
 			monacoEditor.setValue(rightText);
 		}
