@@ -13,6 +13,9 @@
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run"
   },
+  "dependencies": {
+    "@spark/llm": "file:../packages/llm"
+  },
   "devDependencies": {
     "@google/genai": "^1.21.0",
     "@types/node": "^24.5.2",
