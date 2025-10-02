@@ -136,22 +136,23 @@
 						<div class="timeline-point" data-done={item.done}>
 							<span class="timeline-circle" data-done={item.done}></span>
 						</div>
-						<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
-						>
-						<div class="timeline-text-block">
-							<div class="headline-row">
-								<span class="checkpoint-name">{item.title}</span>
-								{#if item.meta}
-									<span class="checkpoint-dot">·</span>
-									<span class="checkpoint-meta">{item.meta}</span>
-								{/if}
-							</div>
-							<div class="checkpoint-description">
-								<span>{item.description}</span>
+						<div class="timeline-body">
+							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span>
+							<div class="timeline-text-block">
+								<div class="headline-row">
+									<span class="checkpoint-name">{item.title}</span>
+									{#if item.meta}
+										<span class="checkpoint-dot">·</span>
+										<span class="checkpoint-meta">{item.meta}</span>
+									{/if}
+								</div>
+								<div class="checkpoint-description">
+									<span>{item.description}</span>
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
+			</div>
 			{/each}
 		</div>
 		<div class="plan-footer">
@@ -261,12 +262,13 @@
 	}
 
 	.plan-card {
+		--plan-card-bg: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
 		display: flex;
 		flex-direction: column;
 		gap: 1.6rem;
 		padding: clamp(1.4rem, 2.2vw, 2rem);
 		border-radius: clamp(1.6rem, 2.2vw, 2rem);
-		background: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
+		background: var(--plan-card-bg);
 		border: 1px solid rgba(148, 163, 184, 0.22);
 		box-shadow: 0 28px 80px -55px rgba(15, 23, 42, 0.42);
 	}
@@ -275,15 +277,36 @@
 		--timeline-gap: clamp(0.6rem, 1.2vw, 0.95rem);
 		--timeline-pad: 0.35rem;
 		--timeline-circle: 1.55rem;
+		--timeline-track: var(--timeline-circle);
+		--timeline-offset: calc(var(--timeline-pad) + var(--timeline-circle) / 2);
 		display: flex;
 		flex-direction: column;
 		gap: var(--timeline-gap);
 		position: relative;
 	}
 
+	.plan-body::before {
+		content: '';
+		position: absolute;
+		top: var(--timeline-offset);
+		bottom: var(--timeline-offset);
+		left: calc(0.75rem + var(--timeline-track) / 2);
+		width: 2px;
+		transform: translateX(-50%);
+		background: #3b82f6;
+		pointer-events: none;
+		z-index: 0;
+	}
+
+	:global([data-theme='dark'] .plan-body::before),
+	:global(:root:not([data-theme='light']) .plan-body::before) {
+		background: #60a5fa;
+	}
+
 	:global([data-theme='dark'] .plan-card),
 	:global(:root:not([data-theme='light']) .plan-card) {
-		background: rgba(6, 11, 25, 0.82);
+		--plan-card-bg: rgba(6, 11, 25, 0.82);
+		background: var(--plan-card-bg);
 		border-color: rgba(148, 163, 184, 0.28);
 	}
 
@@ -342,9 +365,12 @@
 	}
 
 	.timeline-hit {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
+		--timeline-mask-bg: var(--plan-card-bg);
+		display: grid;
+		grid-template-columns: var(--timeline-track) minmax(0, 1fr);
+		column-gap: 0.75rem;
+		row-gap: 0.45rem;
+		align-items: start;
 		padding: var(--timeline-pad) 0.75rem;
 		border-radius: 1rem;
 		border: 1px solid transparent;
@@ -363,6 +389,7 @@
 		border-color: rgba(59, 130, 246, 0.24);
 		box-shadow: 0 14px 28px -24px rgba(37, 99, 235, 0.35);
 		transform: translateY(-1px);
+		--timeline-mask-bg: rgba(59, 130, 246, 0.12);
 	}
 
 	:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
@@ -372,6 +399,7 @@
 		background: rgba(37, 99, 235, 0.2);
 		border-color: rgba(59, 130, 246, 0.32);
 		box-shadow: 0 20px 40px -32px rgba(8, 47, 73, 0.65);
+		--timeline-mask-bg: rgba(37, 99, 235, 0.2);
 	}
 
 	.timeline-point {
@@ -379,49 +407,38 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.85rem;
-		height: 1.85rem;
+		width: var(--timeline-track);
+		height: var(--timeline-track);
 		flex-shrink: 0;
+		z-index: 1;
 	}
 
-	.timeline-point::before,
-	.timeline-point::after {
+	.timeline-body {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+
+	.timeline-row[data-first='true'] .timeline-point::before,
+	.timeline-row[data-last='true'] .timeline-point::after {
 		content: '';
 		position: absolute;
 		left: 50%;
-		width: 2px;
-		background: #3b82f6;
+		width: 6px;
 		transform: translateX(-50%);
+		background: var(--timeline-mask-bg);
 		z-index: 0;
 	}
 
-	:global([data-theme='dark'] .timeline-point::before),
-	:global([data-theme='dark'] .timeline-point::after),
-	:global(:root:not([data-theme='light']) .timeline-point::before),
-	:global(:root:not([data-theme='light']) .timeline-point::after) {
-		background: #60a5fa;
-	}
-
-	.timeline-point::before {
-		top: calc(
-			-0.5 * (var(--timeline-gap) + (2 * var(--timeline-pad)) + var(--timeline-circle))
-		);
+	.timeline-row[data-first='true'] .timeline-point::before {
+		top: calc(-1 * var(--timeline-pad));
 		bottom: 50%;
 	}
 
-	.timeline-point::after {
-		top: 50%;
-		bottom: calc(
-			-0.5 * (var(--timeline-gap) + (2 * var(--timeline-pad)) + var(--timeline-circle))
-		);
-	}
-
-	.timeline-row[data-first='true'] .timeline-point::before {
-		display: none;
-	}
-
 	.timeline-row[data-last='true'] .timeline-point::after {
-		display: none;
+		top: 50%;
+		bottom: calc(-1 * var(--timeline-pad));
 	}
 
 	.timeline-circle {
@@ -495,6 +512,7 @@
 	.timeline-text-block {
 		display: flex;
 		flex-direction: column;
+		min-width: 0;
 	}
 
 	.headline-row {

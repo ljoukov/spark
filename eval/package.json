@@ -7,6 +7,7 @@
     "prepare-input": "tsx src/quiz/prepare-input.ts",
     "eval": "tsx src/quiz/run-eval.ts",
     "audit": "tsx src/quiz/audit-eval.ts",
+    "code:import": "tsx src/code/import-problems.ts",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",
@@ -14,20 +15,21 @@
     "test": "vitest --run"
   },
   "dependencies": {
-    "@spark/llm": "file:../packages/llm"
+    "@spark/llm": "file:../packages/llm",
+    "firebase-admin": "^13.5.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "@google/genai": "^1.21.0",
     "@types/node": "^24.5.2",
     "dotenv": "^17.2.2",
+    "eslint": "^9.22.0",
     "prettier": "^3.4.2",
     "tsx": "^4.20.6",
-    "undici": "^7.16.0",
-    "zod": "^4.1.11",
-    "@eslint/js": "^9.22.0",
-    "eslint": "^9.22.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
-    "vitest": "^3.2.4"
+    "undici": "^7.16.0",
+    "vitest": "^3.2.4",
+    "zod": "^4.1.11"
   }
 }
