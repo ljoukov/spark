@@ -88,7 +88,21 @@
 
 <section class="dashboard">
 	<div class="hero-card">
-		<h1 class="hero-title">Welcome back, {firstName}! 👋</h1>
+		<h1 class="hero-title">
+			Welcome back, {firstName}!
+			<picture class="hero-rocket">
+				<source
+					srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.webp"
+					type="image/webp"
+				/>
+				<img
+					src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.gif"
+					alt="🚀"
+					width="48"
+					height="48"
+				/>
+			</picture>
+		</h1>
 		<p class="hero-subtitle">Let&apos;s crush today&apos;s session.</p>
 		<div class="stat-chips">
 			{#each stats as stat}
@@ -107,17 +121,10 @@
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
 		<div class="plan-body">
-			{#each timeline as item, index}
-				<div
-					class="timeline-row"
-					data-first={index === 0}
-					data-last={index === timeline.length - 1}
-				>
+			{#each timeline as item}
+				<div class="timeline-row">
 					<div class="timeline-point">
 						<span class="timeline-circle"></span>
-						{#if index < timeline.length - 1}
-							<span class="timeline-stem"></span>
-						{/if}
 					</div>
 					<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
 					>
@@ -149,7 +156,7 @@
 		gap: clamp(1.5rem, 3vw, 2.4rem);
 		padding-top: clamp(1.5rem, 3vw, 2.4rem);
 		align-items: start;
-		max-width: min(64rem, 92vw);
+		max-width: min(80rem, 92vw);
 		margin: 0 auto clamp(2rem, 4vw, 3rem);
 	}
 
@@ -179,6 +186,17 @@
 		font-size: clamp(2rem, 3.6vw, 2.65rem);
 		line-height: 1.05;
 		font-weight: 650;
+	}
+
+	.hero-rocket {
+		display: inline-flex;
+		margin-left: 0.45rem;
+		vertical-align: middle;
+		align-items: center;
+	}
+
+	.hero-rocket img {
+		display: block;
 	}
 
 	.hero-subtitle {
@@ -304,39 +322,13 @@
 	}
 
 	.timeline-point {
-		position: relative;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		width: 2.1rem;
-	}
-
-	.timeline-point::before,
-	.timeline-point::after {
-		content: '';
-		position: absolute;
-		left: 50%;
-		width: 2px;
-		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.3), rgba(148, 163, 184, 0.08));
-		transform: translateX(-50%);
-	}
-
-	.timeline-point::before {
-		top: 0;
-		bottom: 50%;
-	}
-
-	.timeline-point::after {
-		top: 50%;
-		bottom: 0;
-	}
-
-	.timeline-row[data-first='true'] .timeline-point::before {
-		display: none;
-	}
-
-	.timeline-row[data-last='true'] .timeline-point::after {
-		display: none;
+		justify-content: center;
+		width: 1.85rem;
+		height: 1.85rem;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
 	}
 
 	.timeline-circle {
@@ -352,13 +344,6 @@
 	:global([data-theme='dark'] .timeline-circle),
 	:global(:root:not([data-theme='light']) .timeline-circle) {
 		background: rgba(10, 19, 40, 0.9);
-	}
-
-	.timeline-stem {
-		margin-top: 0.35rem;
-		flex: 1;
-		width: 2px;
-		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.3), rgba(148, 163, 184, 0.08));
 	}
 
 	.timeline-emoji {
@@ -486,10 +471,6 @@
 		.dashboard {
 			gap: 1.4rem;
 			padding-top: 1rem;
-		}
-
-		.stat-chip {
-			flex: 1 1 45%;
 		}
 
 		.timeline::before {
