@@ -47,29 +47,31 @@
 	}
 </script>
 
-<section class="flex min-h-screen flex-col gap-4 bg-background p-6">
+<section class="bg-background flex min-h-screen flex-col gap-2 p-2">
 	<header class="space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
-		<p class="text-sm text-muted-foreground">
+		<p class="text-muted-foreground text-sm">
 			Compare or edit text side by side with a draggable divider.
 		</p>
 	</header>
 
 	<Resizable.PaneGroup
 		direction="horizontal"
-		class="flex h-[60vh] w-full overflow-hidden rounded-lg border bg-card shadow"
+		class="bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
 		bind:this={paneGroup}
 		onLayoutChange={handleLayoutChange}
 	>
-		<Resizable.Pane defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
-			<div class="flex h-full w-full flex-1 flex-col gap-2 p-4">
+		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
+			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
-					<label class="text-sm font-medium text-muted-foreground" for="left-text">Left Text</label>
+					<label class="text-muted-foreground text-sm font-medium" for="left-text">Left Text</label>
 					<button
 						type="button"
 						class={iconButtonClasses}
 						on:click={() => toggleMaximize('left')}
-						aria-label={maximizedPane === 'left' ? 'Return left pane to normal size' : 'Maximize left pane'}
+						aria-label={maximizedPane === 'left'
+							? 'Return left pane to normal size'
+							: 'Maximize left pane'}
 					>
 						{#if maximizedPane === 'left'}
 							<Minimize2 class="size-4" />
@@ -82,20 +84,24 @@
 					id="left-text"
 					bind:value={leftText}
 					placeholder="Start typing..."
-					class="flex-1 resize-none rounded-md border border-input bg-background p-3 text-sm shadow-sm outline-none ring-offset-background focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
+					class="border-input bg-background ring-offset-background focus-visible:border-ring focus-visible:ring-ring/50 min-h-0 flex-1 resize-none rounded-md border p-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 				></textarea>
 			</div>
 		</Resizable.Pane>
 		<Resizable.Handle withHandle class="bg-border" />
-		<Resizable.Pane defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
-			<div class="flex h-full w-full flex-1 flex-col gap-2 p-4">
+		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
+			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
-					<label class="text-sm font-medium text-muted-foreground" for="right-text">Right Text</label>
+					<label class="text-muted-foreground text-sm font-medium" for="right-text"
+						>Right Text</label
+					>
 					<button
 						type="button"
 						class={iconButtonClasses}
 						on:click={() => toggleMaximize('right')}
-						aria-label={maximizedPane === 'right' ? 'Return right pane to normal size' : 'Maximize right pane'}
+						aria-label={maximizedPane === 'right'
+							? 'Return right pane to normal size'
+							: 'Maximize right pane'}
 					>
 						{#if maximizedPane === 'right'}
 							<Minimize2 class="size-4" />
@@ -108,7 +114,7 @@
 					id="right-text"
 					bind:value={rightText}
 					placeholder="Start typing..."
-					class="flex-1 resize-none rounded-md border border-input bg-background p-3 text-sm shadow-sm outline-none ring-offset-background focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
+					class="border-input bg-background ring-offset-background focus-visible:border-ring focus-visible:ring-ring/50 min-h-0 flex-1 resize-none rounded-md border p-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 				></textarea>
 			</div>
 		</Resizable.Pane>
