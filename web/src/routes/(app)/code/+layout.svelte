@@ -3,19 +3,24 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { readable } from 'svelte/store';
+	import { writable } from 'svelte/store';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { themePreference, setThemePreference, type ThemePreference } from '$lib/stores/themePreference';
 	import type { LayoutData } from './$types';
+	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
+	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
+	import { getFirestore, doc, onSnapshot, type Firestore } from 'firebase/firestore';
+	import { z } from 'zod';
 
 	type ClientUser = NonNullable<LayoutData['user']>;
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
 	const initialUser = data.user;
-	const userStore = readable<ClientUser | null>(initialUser);
-	setContext('spark-code:user', userStore);
+	const userStore = writable<ClientUser | null>(initialUser);
+	setContext('spark-code:user', { subscribe: userStore.subscribe });
 
 	let user = $state<ClientUser | null>(initialUser);
 	let theme = $state<ThemePreference>('auto');
@@ -26,6 +31,49 @@
 		{ label: 'Dark', value: 'dark' }
 	];
 
+	const profileSchema = z
+		.object({
+			name: z.string().trim().min(1).nullable().optional(),
+			email: z.string().email().nullable().optional(),
+			photoUrl: z.string().url().nullable().optional()
+		})
+		.partial();
+
+	function patchUser(partial: Partial<ClientUser>): void {
+		userStore.update((current) => {
+			if (!current) {
+				return current;
+			}
+			const next = { ...current };
+			if ('uid' in partial && partial.uid && partial.uid !== current.uid) {
+				next.uid = partial.uid;
+			}
+			if ('name' in partial) {
+				next.name = partial.name ?? null;
+			}
+			if ('email' in partial) {
+				next.email = partial.email ?? null;
+			}
+			if ('photoUrl' in partial) {
+				next.photoUrl = partial.photoUrl ?? null;
+			}
+			if ('isAnonymous' in partial && typeof partial.isAnonymous === 'boolean') {
+				next.isAnonymous = partial.isAnonymous;
+			}
+			return next;
+		});
+	}
+
+	function signatureFor(user: User): string {
+		return [
+			user.uid,
+			user.displayName ?? '',
+			user.email ?? '',
+			user.photoURL ?? '',
+			user.isAnonymous ? '1' : '0'
+		].join('|');
+	}
+
 	onMount(() => {
 		const unsubscribeUser = userStore.subscribe((value) => {
 			user = value;
@@ -34,9 +82,119 @@
 			theme = value;
 		});
 
+		let stopProfile: () => void = () => {};
+		let stopCookieSync: () => void = () => {};
+		let stopAuthListener: () => void = () => {};
+		let syncingProfile = false;
+		let lastSyncedSignature: string | null = null;
+
+		async function syncProfileFrom(firebaseUser: User): Promise<void> {
+			if (syncingProfile) {
+				return;
+			}
+			syncingProfile = true;
+			const signature = signatureFor(firebaseUser);
+			if (lastSyncedSignature === signature) {
+				syncingProfile = false;
+				return;
+			}
+			try {
+				const idToken = await firebaseUser.getIdToken();
+				const response = await fetch('/api/login', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${idToken}`
+					},
+					body: JSON.stringify({
+						name: firebaseUser.displayName ?? null,
+						email: firebaseUser.email ?? null,
+						photoUrl: firebaseUser.photoURL ?? null,
+						isAnonymous: firebaseUser.isAnonymous
+					})
+				});
+				if (!response.ok) {
+					const details = await response.json().catch(() => null);
+					console.warn('Failed to sync profile for Spark Code user', details);
+					return;
+				}
+				lastSyncedSignature = signature;
+			} catch (error) {
+				console.error('Unexpected error while syncing Spark Code profile', error);
+			} finally {
+				syncingProfile = false;
+			}
+		}
+
+		function updateUserFromAuth(firebaseUser: User): void {
+			const patch: Partial<ClientUser> = { isAnonymous: firebaseUser.isAnonymous };
+			if (firebaseUser.displayName) {
+				patch.name = firebaseUser.displayName;
+			}
+			if (firebaseUser.email) {
+				patch.email = firebaseUser.email;
+			}
+			if (firebaseUser.photoURL) {
+				patch.photoUrl = firebaseUser.photoURL;
+			}
+			patchUser(patch);
+		}
+
+		try {
+			if (initialUser?.uid) {
+				const app = getFirebaseApp();
+				const db: Firestore = getFirestore(app);
+				const ref = doc(db, 'spark', initialUser.uid);
+				stopProfile = onSnapshot(ref, (snapshot) => {
+					if (!snapshot.exists()) {
+						return;
+					}
+					const parsed = profileSchema.safeParse(snapshot.data());
+					if (!parsed.success) {
+						console.warn('Unable to parse Spark Code profile document', parsed.error.flatten());
+						return;
+					}
+					const profile = parsed.data;
+					const patch: Partial<ClientUser> = {};
+					if ('name' in profile) {
+						patch.name = profile.name ?? null;
+					}
+					if ('email' in profile) {
+						patch.email = profile.email ?? null;
+					}
+					if ('photoUrl' in profile) {
+						patch.photoUrl = profile.photoUrl ?? null;
+					}
+					if (Object.keys(patch).length > 0) {
+						patchUser(patch);
+					}
+				});
+			}
+		} catch (error) {
+			console.error('Failed to subscribe to Spark Code profile document', error);
+		}
+
+		try {
+			const app = getFirebaseApp();
+			const auth = getAuth(app);
+			stopCookieSync = startIdTokenCookieSync(auth);
+			stopAuthListener = onIdTokenChanged(auth, (firebaseUser) => {
+				if (!firebaseUser) {
+					return;
+				}
+				updateUserFromAuth(firebaseUser);
+				void syncProfileFrom(firebaseUser);
+			});
+		} catch (error) {
+			console.error('Failed to initialize Spark Code auth listeners', error);
+		}
+
 		return () => {
 			unsubscribeUser();
 			unsubscribeTheme();
+			stopProfile();
+			stopCookieSync();
+			stopAuthListener();
 		};
 	});
 
