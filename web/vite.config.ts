@@ -34,6 +34,9 @@ const serverOptions = {
 export default defineConfig({
 	plugins,
 	server: serverOptions,
+	resolve: {
+		preserveSymlinks: true
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

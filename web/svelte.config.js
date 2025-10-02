@@ -13,7 +13,10 @@ const config = {
 		adapter: adapter(),
 		alias: {
 			$proto: './proto',
-			'@spark/llm': '../packages/llm/src'
+			'@spark/llm': './node_modules/@spark/llm/src',
+			'@google/genai': './node_modules/@google/genai',
+			zod: './node_modules/zod',
+			dotenv: './node_modules/dotenv'
 		}
 	}
 };
