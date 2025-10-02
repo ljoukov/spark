@@ -343,10 +343,14 @@
 
 	.blob-field {
 		position: absolute;
-		inset: -55%;
+		top: 0;
+		left: 50%;
+		width: 140dvh;
+		max-width: 140vw;
+		aspect-ratio: 1;
+		transform: translate(-50%, -55%);
 		pointer-events: none;
 		filter: blur(90px);
-		transform: translateZ(0);
 		background:
 			radial-gradient(68% 68% at 12% 2%, var(--blob-gold), transparent 68%),
 			radial-gradient(58% 58% at 22% 26%, var(--blob-yellow), transparent 70%),
