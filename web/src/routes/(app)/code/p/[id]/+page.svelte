@@ -30,6 +30,20 @@
 	let monacoEditor: CodeEditor | null = null;
 	let disposeEditor: (() => void) | null = null;
 
+	function resolveMonacoTheme(): 'vs-dark' | 'vs' {
+		if (typeof document === 'undefined') {
+			return 'vs-dark';
+		}
+		const themeAttr = document.documentElement.dataset.theme;
+		if (themeAttr === 'light') {
+			return 'vs';
+		}
+		if (themeAttr === 'dark') {
+			return 'vs-dark';
+		}
+		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
+	}
+
 	$: if (problem !== data.problem) {
 		problem = data.problem;
 	}
@@ -48,12 +62,19 @@
 
 	onMount(() => {
 		let subscription: IDisposable | null = null;
+		let themeObserver: MutationObserver | null = null;
+		let mediaQuery: MediaQueryList | null = null;
+		let applyTheme: (() => void) | null = null;
 
 		void (async () => {
 			const monaco = await loadMonaco();
 			if (!monaco || !editorContainer) {
 				return;
 			}
+
+			applyTheme = () => {
+				monaco.editor.setTheme(resolveMonacoTheme());
+			};
 
 			monacoEditor = monaco.editor.create(editorContainer, {
 				value: rightText,
@@ -73,6 +94,14 @@
 				}
 			});
 
+			applyTheme();
+
+			mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+			mediaQuery.addEventListener('change', applyTheme);
+
+			themeObserver = new MutationObserver(() => applyTheme?.());
+			themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
 			subscription = monacoEditor.onDidChangeModelContent(() => {
 				rightText = monacoEditor?.getValue() ?? '';
 			});
@@ -80,9 +109,16 @@
 
 		disposeEditor = () => {
 			subscription?.dispose();
+			themeObserver?.disconnect();
+			if (mediaQuery && applyTheme) {
+				mediaQuery.removeEventListener('change', applyTheme);
+			}
 			monacoEditor?.dispose();
 			monacoEditor = null;
 			subscription = null;
+			themeObserver = null;
+			mediaQuery = null;
+			applyTheme = null;
 		};
 
 		return () => {
