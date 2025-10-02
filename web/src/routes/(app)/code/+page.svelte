@@ -26,8 +26,8 @@
 	const stats = [
 		{ label: 'XP', value: '1,420' },
 		{ label: 'Level', value: '7' },
-		{ label: 'Day streak', value: '12 🔥' },
-		{ label: 'Problems solved', value: '86' }
+		{ label: 'Days 🔥', value: '12' },
+		{ label: 'Solved', value: '86' }
 	];
 
 	const focus = {
@@ -50,38 +50,40 @@
 			title: 'Theory',
 			icon: '📚',
 			meta: 'Concept refresh',
-			description: 'Learn the 0/1 knapsack problem and optimisation techniques',
-			link: { href: 'p/1#theory', label: 'Theory notes' }
+			description: 'Learn the 0/1 knapsack problem and optimisation techniques'
 		},
 		{
 			key: 'problem-a',
 			title: 'Problem 1',
 			icon: '💻',
 			meta: '15 min',
-			description: 'Classic 0/1 Knapsack — medium difficulty',
-			link: { href: 'p/1', label: 'Classic 0/1 Knapsack' }
+			description: 'Classic 0/1 Knapsack — medium difficulty'
 		},
 		{
 			key: 'problem-b',
 			title: 'Problem 2',
 			icon: '💻',
 			meta: '20 min',
-			description: 'Subset Sum with Constraints — hard difficulty',
-			link: { href: 'p/1?variant=extension', label: 'Subset Sum with Constraints' }
+			description: 'Subset Sum with Constraints — hard difficulty'
 		},
 		{
 			key: 'quiz',
 			title: 'Quiz',
 			icon: '📝',
 			meta: '5 questions',
-			description: 'Test your understanding with a quick mastery check',
-			link: { href: 'p/1#quiz', label: 'Take the quiz' }
+			description: 'Test your understanding with a quick mastery check'
 		}
 	];
 </script>
 
 <svelte:head>
 	<title>Spark Code · Your session plan</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link
+		rel="stylesheet"
+		href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap"
+	/>
 </svelte:head>
 
 <section class="dashboard">
@@ -104,40 +106,36 @@
 			<h2>{focus.topic}</h2>
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
-		<ol class="timeline">
+		<div class="plan-body">
 			{#each timeline as item, index}
-				<li class="timeline-item">
-					<div
-						class="timeline-point"
-						data-first={index === 0}
-						data-last={index === timeline.length - 1}
-					>
+				<div
+					class="timeline-row"
+					data-first={index === 0}
+					data-last={index === timeline.length - 1}
+				>
+					<div class="timeline-point">
 						<span class="timeline-circle"></span>
+						{#if index < timeline.length - 1}
+							<span class="timeline-stem"></span>
+						{/if}
 					</div>
-					<div class="timeline-content">
-						<div class="timeline-head">
-							<span class="timeline-emoji" aria-hidden="true">{item.icon}</span>
-							<div class="headline-text">
-								<div class="headline-row">
-									<span class="checkpoint-name">{item.title}</span>
-									{#if item.meta}
-										<span class="checkpoint-dot">·</span>
-										<span class="checkpoint-meta">{item.meta}</span>
-									{/if}
-								</div>
-								<div class="checkpoint-description">
-									{#if item.link}
-										<a class="checkpoint-link" href={item.link.href}>{item.link.label}</a>
-										<span class="checkpoint-sep">—</span>
-									{/if}
-									<span>{item.description}</span>
-								</div>
-							</div>
+					<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
+					>
+					<div class="timeline-text-block">
+						<div class="headline-row">
+							<span class="checkpoint-name">{item.title}</span>
+							{#if item.meta}
+								<span class="checkpoint-dot">·</span>
+								<span class="checkpoint-meta">{item.meta}</span>
+							{/if}
+						</div>
+						<div class="checkpoint-description">
+							<span>{item.description}</span>
 						</div>
 					</div>
-				</li>
+				</div>
 			{/each}
-		</ol>
+		</div>
 		<div class="plan-footer">
 			<a class="plan-start" href="p/1">▶ Start session</a>
 		</div>
@@ -146,11 +144,12 @@
 
 <style lang="postcss">
 	.dashboard {
-		display: flex;
-		flex-direction: column;
-		gap: clamp(1.8rem, 3vw, 2.6rem);
-		padding: clamp(1.6rem, 3vw, 2.4rem);
-		max-width: min(62rem, 92vw);
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(23.5rem, 100%), 1fr));
+		gap: clamp(1.5rem, 3vw, 2.4rem);
+		padding-top: clamp(1.5rem, 3vw, 2.4rem);
+		align-items: start;
+		max-width: min(64rem, 92vw);
 		margin: 0 auto clamp(2rem, 4vw, 3rem);
 	}
 
@@ -243,6 +242,12 @@
 		box-shadow: 0 28px 80px -55px rgba(15, 23, 42, 0.42);
 	}
 
+	.plan-body {
+		display: flex;
+		flex-direction: column;
+		gap: clamp(1.35rem, 2vw, 1.8rem);
+	}
+
 	:global([data-theme='dark'] .plan-card),
 	:global(:root:not([data-theme='light']) .plan-card) {
 		background: rgba(6, 11, 25, 0.82);
@@ -287,22 +292,23 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 1.15rem;
+		gap: 1.1rem;
 		list-style: none;
 	}
 
-	.timeline-item {
-		display: flex;
+	.timeline-row {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr);
+		gap: 0.5rem;
 		align-items: center;
-		gap: 1rem;
 	}
 
 	.timeline-point {
 		position: relative;
-		width: 2.1rem;
 		display: flex;
-		justify-content: center;
+		flex-direction: column;
 		align-items: center;
+		width: 2.1rem;
 	}
 
 	.timeline-point::before,
@@ -311,37 +317,29 @@
 		position: absolute;
 		left: 50%;
 		width: 2px;
-		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.32), rgba(148, 163, 184, 0.08));
+		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.3), rgba(148, 163, 184, 0.08));
 		transform: translateX(-50%);
-	}
-
-	:global([data-theme='dark'] .timeline-point::before),
-	:global([data-theme='dark'] .timeline-point::after),
-	:global(:root:not([data-theme='light']) .timeline-point::before),
-	:global(:root:not([data-theme='light']) .timeline-point::after) {
-		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.26), rgba(148, 163, 184, 0.05));
 	}
 
 	.timeline-point::before {
 		top: 0;
-		bottom: calc(50% + 0.78rem);
+		bottom: 50%;
 	}
 
 	.timeline-point::after {
-		top: calc(50% + 0.78rem);
+		top: 50%;
 		bottom: 0;
 	}
 
-	.timeline-point[data-first='true']::before {
+	.timeline-row[data-first='true'] .timeline-point::before {
 		display: none;
 	}
 
-	.timeline-point[data-last='true']::after {
+	.timeline-row[data-last='true'] .timeline-point::after {
 		display: none;
 	}
 
 	.timeline-circle {
-		position: relative;
 		width: 1.55rem;
 		height: 1.55rem;
 		border-radius: 9999px;
@@ -356,32 +354,30 @@
 		background: rgba(10, 19, 40, 0.9);
 	}
 
-	.timeline-content {
+	.timeline-stem {
+		margin-top: 0.35rem;
 		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-	}
-
-	.timeline-head {
-		display: flex;
-		align-items: center;
-		gap: 0.8rem;
+		width: 2px;
+		background: linear-gradient(to bottom, rgba(148, 163, 184, 0.3), rgba(148, 163, 184, 0.08));
 	}
 
 	.timeline-emoji {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 1.7rem;
+		font-size: 1.65rem;
 		line-height: 1;
-		flex-shrink: 0;
 	}
 
-	.headline-text {
+	.noto-color-emoji-regular {
+		font-family: 'Noto Color Emoji', sans-serif;
+		font-weight: 400;
+		font-style: normal;
+	}
+
+	.timeline-text-block {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
 	}
 
 	.headline-row {
@@ -433,25 +429,32 @@
 		color: rgba(203, 213, 225, 0.75);
 	}
 
-	.checkpoint-link {
+	.plan-footer {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	.plan-start {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.7rem 1.6rem;
+		border-radius: 9999px;
 		font-weight: 600;
-		color: rgba(37, 99, 235, 0.95);
+		font-size: 0.95rem;
 		text-decoration: none;
+		color: #fff;
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
+		box-shadow: 0 18px 45px -26px rgba(37, 99, 235, 0.7);
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease;
 	}
 
-	.checkpoint-link:hover {
-		text-decoration: underline;
+	.plan-start:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 22px 55px -28px rgba(37, 99, 235, 0.8);
 	}
-
-	.checkpoint-sep {
-		color: rgba(71, 85, 105, 0.7);
-	}
-
-	:global([data-theme='dark'] .checkpoint-sep),
-	:global(:root:not([data-theme='light']) .checkpoint-sep) {
-		color: rgba(148, 163, 184, 0.6);
-	}
-
 	.plan-footer {
 		display: flex;
 		justify-content: flex-end;
@@ -482,7 +485,7 @@
 	@media (max-width: 720px) {
 		.dashboard {
 			gap: 1.4rem;
-			padding: 1.2rem;
+			padding-top: 1rem;
 		}
 
 		.stat-chip {

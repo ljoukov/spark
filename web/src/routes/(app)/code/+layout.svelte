@@ -334,7 +334,6 @@
 		min-height: 100dvh;
 		width: 100%;
 		overflow-x: hidden;
-		overflow-y: auto;
 		background:
 			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
 			var(--app-surface);
@@ -345,10 +344,9 @@
 		position: absolute;
 		top: 0;
 		left: 50%;
-		width: 140dvh;
-		max-width: 140vw;
-		aspect-ratio: 1;
-		transform: translate(-50%, -55%);
+		width: 100dvw;
+		height: 100dvh;
+		transform: translateX(-50%);
 		pointer-events: none;
 		filter: blur(90px);
 		background:
@@ -378,6 +376,9 @@
 		background: color-mix(in srgb, var(--app-content-bg) 50%, transparent);
 		box-shadow: 0 25px 60px -40px rgba(15, 23, 42, 0.25);
 		backdrop-filter: blur(18px);
+		position: sticky;
+		top: 0;
+		z-index: 10;
 	}
 
 	:global([data-theme='dark'] .app-header),
