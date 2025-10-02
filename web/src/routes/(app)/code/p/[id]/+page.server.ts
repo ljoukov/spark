@@ -71,7 +71,7 @@ const PROBLEM_DEFINITIONS: Record<string, ProblemDefinition> = {
 };
 
 async function loadMarkdownHtml(markdownFile: string): Promise<string> {
-	const fileUrl = new URL(`../../../lib/content/problems/${markdownFile}`, import.meta.url);
+	const fileUrl = new URL(`../../../../../lib/content/problems/${markdownFile}`, import.meta.url);
 	const markdown = await readFile(fileUrl, 'utf8');
 	const parsed = marked.parse(markdown);
 	return typeof parsed === 'string' ? parsed : '';
