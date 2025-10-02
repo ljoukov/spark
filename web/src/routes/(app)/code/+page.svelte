@@ -43,14 +43,16 @@
 			title: 'Warm-up',
 			icon: '🏃‍♂️',
 			meta: '5 min',
-			description: "Quick review of yesterday's concepts"
+			description: "Quick review of yesterday's concepts",
+			done: true
 		},
 		{
 			key: 'theory',
 			title: 'Theory',
 			icon: '📚',
 			meta: 'Concept refresh',
-			description: 'Learn the 0/1 knapsack problem and optimisation techniques'
+			description: 'Learn the 0/1 knapsack problem and optimisation techniques',
+			done: true
 		},
 		{
 			key: 'problem-a',
@@ -121,11 +123,18 @@
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
 		<div class="plan-body">
-			{#each timeline as item}
-				<div class="timeline-row" role="button" tabindex="0">
+		{#each timeline as item, index}
+			<div
+				class="timeline-row"
+				role="button"
+				tabindex="0"
+				data-first={index === 0}
+				data-last={index === timeline.length - 1}
+				data-done={item.done}
+			>
 					<div class="timeline-hit">
-						<div class="timeline-point">
-							<span class="timeline-circle"></span>
+						<div class="timeline-point" data-done={item.done}>
+							<span class="timeline-circle" data-done={item.done}></span>
 						</div>
 						<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
 						>
@@ -263,9 +272,11 @@
 	}
 
 	.plan-body {
+		--timeline-gap: clamp(0.6rem, 1.2vw, 0.95rem);
 		display: flex;
 		flex-direction: column;
-		gap: clamp(0.6rem, 1.2vw, 0.95rem);
+		gap: var(--timeline-gap);
+		position: relative;
 	}
 
 	:global([data-theme='dark'] .plan-card),
@@ -321,6 +332,7 @@
 		cursor: pointer;
 		outline: none;
 		border-radius: 1rem;
+		position: relative;
 	}
 
 	.timeline-row:focus-visible {
@@ -333,17 +345,21 @@
 		gap: 0.65rem;
 		padding: 0.35rem 0.75rem;
 		border-radius: 1rem;
+		border: 1px solid transparent;
 		transition:
 			background 0.18s ease,
 			box-shadow 0.18s ease,
 			transform 0.18s ease;
 		width: 100%;
+		position: relative;
+		z-index: 1;
 	}
 
 	.timeline-row:hover .timeline-hit,
 	.timeline-row:focus-visible .timeline-hit {
-		background: color-mix(in srgb, var(--app-content-bg) 82%, rgba(59, 130, 246, 0.22));
-		box-shadow: 0 16px 32px -26px rgba(15, 23, 42, 0.35);
+		background: rgba(59, 130, 246, 0.12);
+		border-color: rgba(59, 130, 246, 0.24);
+		box-shadow: 0 14px 28px -24px rgba(37, 99, 235, 0.35);
 		transform: translateY(-1px);
 	}
 
@@ -351,17 +367,83 @@
 	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
 	:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit),
 	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
-		background: rgba(37, 99, 235, 0.18);
+		background: rgba(37, 99, 235, 0.2);
+		border-color: rgba(59, 130, 246, 0.32);
 		box-shadow: 0 20px 40px -32px rgba(8, 47, 73, 0.65);
 	}
 
 	.timeline-point {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 1.85rem;
 		height: 1.85rem;
 		flex-shrink: 0;
+	}
+
+	.timeline-point::before,
+	.timeline-point::after {
+		content: '';
+		position: absolute;
+		left: 50%;
+		width: 2px;
+		background: linear-gradient(
+			to bottom,
+			rgba(148, 163, 184, 0.38),
+			rgba(148, 163, 184, 0.12)
+		);
+		transform: translateX(-50%);
+		z-index: 0;
+	}
+
+	.timeline-point[data-done='true']::before,
+	.timeline-point[data-done='true']::after {
+		background: linear-gradient(
+			to bottom,
+			rgba(59, 130, 246, 0.6),
+			rgba(59, 130, 246, 0.2)
+		);
+	}
+
+	:global([data-theme='dark'] .timeline-point::before),
+	:global([data-theme='dark'] .timeline-point::after),
+	:global(:root:not([data-theme='light']) .timeline-point::before),
+	:global(:root:not([data-theme='light']) .timeline-point::after) {
+		background: linear-gradient(
+			to bottom,
+			rgba(148, 163, 184, 0.55),
+			rgba(148, 163, 184, 0.2)
+		);
+	}
+
+	:global([data-theme='dark'] .timeline-point[data-done='true']::before),
+	:global([data-theme='dark'] .timeline-point[data-done='true']::after),
+	:global(:root:not([data-theme='light']) .timeline-point[data-done='true']::before),
+	:global(:root:not([data-theme='light']) .timeline-point[data-done='true']::after) {
+		background: linear-gradient(
+			to bottom,
+			rgba(96, 165, 250, 0.7),
+			rgba(59, 130, 246, 0.35)
+		);
+	}
+
+	.timeline-point::before {
+		top: calc(-1 * var(--timeline-gap) / 2);
+		bottom: 50%;
+	}
+
+	.timeline-point::after {
+		top: 50%;
+		bottom: calc(-1 * var(--timeline-gap) / 2);
+	}
+
+	.timeline-row[data-first='true'] .timeline-point::before {
+		display: none;
+	}
+
+	.timeline-row[data-last='true'] .timeline-point::after {
+		display: none;
 	}
 
 	.timeline-circle {
@@ -372,11 +454,54 @@
 		border: 3px solid rgba(59, 130, 246, 0.9);
 		box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
 		z-index: 1;
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		transition:
+			box-shadow 0.2s ease,
+			transform 0.2s ease,
+			background 0.2s ease,
+			border-color 0.2s ease;
 	}
 
 	:global([data-theme='dark'] .timeline-circle),
 	:global(:root:not([data-theme='light']) .timeline-circle) {
 		background: rgba(10, 19, 40, 0.9);
+	}
+
+	.timeline-circle::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+	}
+
+	.timeline-circle[data-done='true'] {
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9));
+		border-color: rgba(59, 130, 246, 0.9);
+		box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22);
+		color: #fff;
+	}
+
+	.timeline-circle[data-done='true']::after {
+		content: '✓';
+		font-size: 0.85rem;
+		font-weight: 700;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.timeline-row:hover .timeline-circle,
+	.timeline-row:focus-visible .timeline-circle {
+		box-shadow: 0 0 0 7px rgba(59, 130, 246, 0.22);
+		transform: scale(1.04);
+	}
+
+	.timeline-row:hover .timeline-circle[data-done='true'],
+	.timeline-row:focus-visible .timeline-circle[data-done='true'] {
+		box-shadow: 0 0 0 9px rgba(59, 130, 246, 0.28);
 	}
 
 	.timeline-emoji {
@@ -404,6 +529,24 @@
 		align-items: baseline;
 		gap: 0.45rem;
 		flex-wrap: wrap;
+	}
+
+	.timeline-row[data-done='true'] .headline-row .checkpoint-name {
+		color: rgba(37, 99, 235, 0.92);
+	}
+
+	.timeline-row[data-done='true'] .headline-row .checkpoint-meta {
+		color: rgba(37, 99, 235, 0.66);
+	}
+
+	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-name),
+	:global(:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-name) {
+		color: rgba(147, 197, 253, 0.92);
+	}
+
+	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-meta),
+	:global(:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-meta) {
+		color: rgba(147, 197, 253, 0.72);
 	}
 
 	.checkpoint-name {
