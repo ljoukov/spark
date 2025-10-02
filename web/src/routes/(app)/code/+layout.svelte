@@ -358,7 +358,6 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100vh;
-		padding: 0 0 clamp(2rem, 3vw, 2.5rem);
 	}
 
 	.app-header {
