@@ -215,17 +215,19 @@
 					<span class="chip time">{problem.estimatedTime}</span>
 				</div>
 			</header>
-			<div class="panel-body" aria-label="Problem description">
-				<div class="markdown">{@html markdownHtml}</div>
+			<div class="panel-scroll">
+				<div class="panel-body" aria-label="Problem description">
+					<div class="markdown">{@html markdownHtml}</div>
+				</div>
+				<section class="panel-hints" aria-label="Hints">
+					<h2>Hints</h2>
+					<ul>
+						{#each problem.hints as hint}
+							<li>{hint}</li>
+						{/each}
+					</ul>
+				</section>
 			</div>
-			<section class="panel-hints" aria-label="Hints">
-				<h2>Hints</h2>
-				<ul>
-					{#each problem.hints as hint}
-						<li>{hint}</li>
-					{/each}
-				</ul>
-			</section>
 		</section>
 
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -268,6 +270,10 @@
 		gap: clamp(0.2rem, 0.4vw, 0.32rem);
 		padding: clamp(0.2rem, 0.45vw, 0.4rem);
 		min-height: 100vh;
+		height: 100vh;
+		height: 100dvh;
+		max-height: 100dvh;
+		overflow: hidden;
 		background: transparent;
 		color: var(--text-primary, var(--foreground));
 	}
@@ -372,13 +378,20 @@
 		color: rgba(153, 27, 27, 0.9);
 	}
 
-	.panel-body {
+	.panel-scroll {
 		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+		scrollbar-gutter: stable;
+	}
+
+	.panel-body {
+		flex: 1 0 auto;
 		min-height: 0;
 		padding: 0 clamp(1.1rem, 1.9vw, 1.6rem);
 		padding-bottom: clamp(1rem, 1.6vw, 1.4rem);
-		overflow-y: auto;
-		scrollbar-gutter: stable;
 	}
 
 	.problem-panel .panel-body {
@@ -433,6 +446,7 @@
 	}
 
 	.panel-hints {
+		flex-shrink: 0;
 		padding: 1rem clamp(1.1rem, 1.9vw, 1.6rem) 1.25rem;
 		border-top: 1px solid rgba(148, 163, 184, 0.18);
 		background: rgba(148, 163, 184, 0.08);
@@ -575,8 +589,15 @@
 	}
 
 	@media (max-width: 960px) {
+		.code-page {
+			height: auto;
+			max-height: none;
+			overflow-y: auto;
+		}
+
 		.workspace {
 			grid-template-columns: 1fr;
+			height: auto;
 		}
 
 		.splitter {
