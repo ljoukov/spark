@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
+	import { loadMonaco } from '$lib/monaco/index.js';
+	import type { editor as MonacoEditorNS } from 'monaco-editor';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import type { PageData } from './$types';
@@ -22,6 +25,10 @@
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
+	let editorContainer: HTMLDivElement | null = null;
+	type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
+	let monacoEditor: CodeEditor | null = null;
+	let disposeEditor: (() => void) | null = null;
 
 	$: if (problem !== data.problem) {
 		problem = data.problem;
@@ -34,7 +41,49 @@
 	$: if (problem.id !== currentProblemId) {
 		currentProblemId = problem.id;
 		rightText = problem.starterCode;
+		if (monacoEditor && monacoEditor.getValue() !== rightText) {
+			monacoEditor.setValue(rightText);
+		}
 	}
+
+	onMount(() => {
+		let subscription: MonacoEditorNS.IDisposable | null = null;
+
+		void (async () => {
+			const monaco = await loadMonaco();
+			if (!monaco || !editorContainer) {
+				return;
+			}
+
+			monacoEditor = monaco.editor.create(editorContainer, {
+				value: rightText,
+				language: 'python',
+				automaticLayout: true,
+				minimap: { enabled: false },
+				fontSize: 15,
+				fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
+				tabSize: 4,
+				insertSpaces: true,
+				wordWrap: 'off'
+			});
+
+			subscription = monacoEditor.onDidChangeModelContent(() => {
+				rightText = monacoEditor?.getValue() ?? '';
+			});
+		})();
+
+		disposeEditor = () => {
+			subscription?.dispose();
+			monacoEditor?.dispose();
+			monacoEditor = null;
+			subscription = null;
+		};
+
+		return () => {
+			disposeEditor?.();
+			disposeEditor = null;
+		};
+	});
 
 	function applyLayout(layout: readonly number[]) {
 		paneGroup?.setLayout([...layout]);
@@ -113,9 +162,10 @@
 		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
 			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
-					<label class="text-muted-foreground text-sm font-medium" for="right-text"
-						>Right Text</label
-					>
+					<div class="flex flex-col">
+						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide">Editor</span>
+						<h2 class="text-sm font-semibold leading-tight">Python workspace</h2>
+					</div>
 					<button
 						type="button"
 						class={iconButtonClasses}
@@ -131,12 +181,14 @@
 						{/if}
 					</button>
 				</div>
-				<textarea
-					id="right-text"
-					bind:value={rightText}
-					placeholder="Start typing..."
-					class="border-input bg-background ring-offset-background focus-visible:border-ring focus-visible:ring-ring/50 min-h-0 flex-1 resize-none rounded-md border p-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-				></textarea>
+				<div class="editor-shell" data-code-length={rightText.length}>
+					<div
+						class="editor-container"
+						bind:this={editorContainer}
+						role="presentation"
+						aria-label="Python editor"
+					></div>
+				</div>
 			</div>
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
@@ -188,5 +240,20 @@
 		background: transparent;
 		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
 		font-size: 0.85rem;
+	}
+
+	.editor-shell {
+		flex: 1 0 auto;
+		min-height: 0;
+		overflow: hidden;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 0.6rem;
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+		background: transparent;
+	}
+
+	.editor-container {
+		height: 100%;
+		width: 100%;
 	}
 </style>
