@@ -122,22 +122,24 @@
 		</header>
 		<div class="plan-body">
 			{#each timeline as item}
-				<div class="timeline-row">
+				<div class="timeline-row" role="button" tabindex="0">
 					<div class="timeline-point">
 						<span class="timeline-circle"></span>
 					</div>
-					<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
-					>
-					<div class="timeline-text-block">
-						<div class="headline-row">
-							<span class="checkpoint-name">{item.title}</span>
-							{#if item.meta}
-								<span class="checkpoint-dot">·</span>
-								<span class="checkpoint-meta">{item.meta}</span>
-							{/if}
-						</div>
-						<div class="checkpoint-description">
-							<span>{item.description}</span>
+					<div class="timeline-content">
+						<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
+						>
+						<div class="timeline-text-block">
+							<div class="headline-row">
+								<span class="checkpoint-name">{item.title}</span>
+								{#if item.meta}
+									<span class="checkpoint-dot">·</span>
+									<span class="checkpoint-meta">{item.meta}</span>
+								{/if}
+							</div>
+							<div class="checkpoint-description">
+								<span>{item.description}</span>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -316,9 +318,44 @@
 
 	.timeline-row {
 		display: grid;
-		grid-template-columns: auto auto minmax(0, 1fr);
-		gap: 0.5rem;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.75rem;
 		align-items: center;
+		cursor: pointer;
+		outline: none;
+		border-radius: 1rem;
+	}
+
+	.timeline-row:focus-visible {
+		outline: none;
+	}
+
+	.timeline-content {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.6rem 0.85rem;
+		border-radius: 1rem;
+		transition:
+			background 0.18s ease,
+			box-shadow 0.18s ease,
+			transform 0.18s ease;
+		width: 100%;
+	}
+
+	.timeline-row:hover .timeline-content,
+	.timeline-row:focus-visible .timeline-content {
+		background: color-mix(in srgb, var(--app-content-bg) 82%, rgba(59, 130, 246, 0.22));
+		box-shadow: 0 16px 32px -26px rgba(15, 23, 42, 0.35);
+		transform: translateY(-1px);
+	}
+
+	:global([data-theme='dark'] .timeline-row:hover .timeline-content),
+	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-content),
+	:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-content),
+	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-content) {
+		background: rgba(37, 99, 235, 0.18);
+		box-shadow: 0 20px 40px -32px rgba(8, 47, 73, 0.65);
 	}
 
 	.timeline-point {
@@ -352,6 +389,7 @@
 		justify-content: center;
 		font-size: 1.65rem;
 		line-height: 1;
+		flex-shrink: 0;
 	}
 
 	.noto-color-emoji-regular {
