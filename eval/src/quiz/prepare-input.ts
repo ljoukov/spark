@@ -27,10 +27,10 @@ import {
   type JobProgressReporter,
   type ModelCallHandle,
 } from "./concurrency";
-import { OFFLINE_PATHS } from "./env";
+import { QUIZ_PATHS } from "./env";
 
 const { downloadsDir: DEFAULT_SRC_DIR, evalInputDir: DEFAULT_DST_DIR } =
-  OFFLINE_PATHS;
+  QUIZ_PATHS;
 
 const GEMINI_MODEL_ID: GeminiModelId = "gemini-flash-lite-latest";
 const MAX_CONCURRENCY = 16;

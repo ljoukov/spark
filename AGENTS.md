@@ -28,12 +28,12 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 - `docs/SPEC.md` general technical stack
 - `docs/FLOW.md` for changes to UI/UX of the app (iOS or web, this does NOT apply to /admin)
 
-## Offline LLM Eval
+## Quiz LLM Eval
 
-- Prepare input: `eval/src/offline/prepare-input.ts` (`npm --prefix eval run prepare-input`). Reads raw assets from `spark-data/downloads/**`, classifies them, and writes curated bundles to `spark-data/eval-input/**`.
-- Generate quizzes: `eval/src/offline/run-eval.ts` (`npm --prefix eval run run`). Consumes `spark-data/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/eval-output/**`.
-- `eval:run` flags: `--seed=<int>` reproducibly shuffles input ordering, `--maxPrefix=<int>` filters page buckets by their numeric prefix (e.g. `--maxPrefix=20` keeps `01_page`–`20-to-49_pages`), and `--limit=<n>` caps the remaining queue after filters.
-- Audit summaries: `eval/src/offline/audit-eval.ts` (`npm --prefix eval run audit`). Consumes `spark-data/eval-output/**` and emits stats plus Markdown reports under `spark-data/eval-audit/**`.
+- Prepare input: `eval/src/quiz/prepare-input.ts` (`npm --prefix eval run prepare-input`). Reads raw assets from `spark-data/downloads/**`, classifies them, and writes curated bundles to `spark-data/eval-input/**`.
+- Generate quizzes: `eval/src/quiz/run-eval.ts` (`npm --prefix eval run eval`). Consumes `spark-data/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/eval-output/**`.
+- Runner flags: pass via `npm --prefix eval run eval -- --seed=<int>`; `--seed=<int>` reproducibly shuffles input ordering, `--maxPrefix=<int>` filters page buckets by their numeric prefix (e.g. `--maxPrefix=20` keeps `01_page`–`20-to-49_pages`), and `--limit=<n>` caps the remaining queue after filters.
+- Audit summaries: `eval/src/quiz/audit-eval.ts` (`npm --prefix eval run audit`). Consumes `spark-data/eval-output/**` and emits stats plus Markdown reports under `spark-data/eval-audit/**`.
 - Env: requires `GEMINI_API_KEY` (in environment or `.env.local` at repo root). Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
 - Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts consumed by the Admin UI.
