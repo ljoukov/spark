@@ -65,7 +65,12 @@
 				tabSize: 2,
 				insertSpaces: true,
 				detectIndentation: false,
-				wordWrap: 'off'
+				wordWrap: 'off',
+				scrollbar: {
+					vertical: 'visible',
+					horizontal: 'auto',
+					useShadows: false
+				}
 			});
 
 			subscription = monacoEditor.onDidChangeModelContent(() => {
@@ -154,7 +159,7 @@
 					</button>
 				</div>
 				<div
-					class="border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
+					class="markdown-scroll border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
 					aria-label="Problem description"
 				>
 					<div class="markdown space-y-4">{@html markdownHtml}</div>
@@ -245,6 +250,10 @@
 		background: transparent;
 		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
 		font-size: 0.85rem;
+	}
+
+	.markdown-scroll {
+		scrollbar-gutter: stable both-edges;
 	}
 
 	.editor-shell {
