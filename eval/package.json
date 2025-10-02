@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prepare-input": "tsx src/offline/prepare-input.ts",
-    "eval": "tsx src/offline/run-eval.ts",
-    "audit": "tsx src/offline/audit-eval.ts",
+    "prepare-input": "tsx src/quiz/prepare-input.ts",
+    "eval": "tsx src/quiz/run-eval.ts",
+    "audit": "tsx src/quiz/audit-eval.ts",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",

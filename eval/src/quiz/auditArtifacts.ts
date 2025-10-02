@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { JudgeAuditSchema } from "@spark/llm/schemas";
+import { JudgeAuditSchema } from "@spark/llm/quiz/schemas";
 
 import {
   JudgeAuditFilePayloadSchema,
@@ -13,12 +13,12 @@ import {
   type JudgeAuditFilePayload,
   type JudgeFilePayload,
 } from "./payload";
-import { OFFLINE_PATHS } from "./env";
+import { QUIZ_PATHS } from "./env";
 
 const {
   evalOutputDir: EVAL_OUTPUT_DIR,
   auditReportDir: AUDIT_REPORT_DIR,
-} = OFFLINE_PATHS;
+} = QUIZ_PATHS;
 
 const EvaluationTypeSchema = z.enum(["quiz", "extension"]);
 export type EvaluationType = z.infer<typeof EvaluationTypeSchema>;
@@ -297,4 +297,3 @@ export function getFailedJobIdSet(checkpoint: AuditCheckpoint): Set<string> {
   }
   return set;
 }
-

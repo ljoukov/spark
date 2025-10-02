@@ -23,26 +23,26 @@ import {
   type QuizGeneration,
   QuizGenerationSchema,
   QUIZ_RESPONSE_SCHEMA,
-} from "@spark/llm/schemas";
+} from "@spark/llm/quiz/schemas";
 import {
   buildExtensionPrompt,
   buildGenerationPrompt,
   buildSourceParts,
   normaliseQuizPayload,
   type GenerateQuizOptions,
-} from "@spark/llm/quizPrompts";
+} from "@spark/llm/quiz/prompts";
 import {
   DEFAULT_EXTENSION_QUESTION_COUNT,
   DEFAULT_GENERATION_QUESTION_COUNT,
   QUIZ_GENERATION_MODEL_ID,
-} from "@spark/llm/quizGenerator";
+} from "@spark/llm/quiz/generator";
 import {
   AUDIT_RESPONSE_SCHEMA,
   JUDGE_RESPONSE_SCHEMA,
   buildAuditPrompt,
   buildJudgePrompt,
   QUIZ_EVAL_MODEL_ID,
-} from "@spark/llm/judge";
+} from "@spark/llm/quiz/judge";
 import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,
@@ -56,7 +56,7 @@ import {
   readAuditCheckpoint,
   type AuditCheckpoint,
 } from "./auditArtifacts";
-import { OFFLINE_PATHS } from "./env";
+import { QUIZ_PATHS } from "./env";
 
 import type { JudgeFilePayload, QuizFilePayload, SampleJob } from "./payload";
 
@@ -64,7 +64,7 @@ const {
   repoRoot: REPO_ROOT,
   evalInputDir: EVAL_INPUT_DIR,
   evalOutputDir: EVAL_OUTPUT_DIR,
-} = OFFLINE_PATHS;
+} = QUIZ_PATHS;
 const DATA_ROOT = EVAL_INPUT_DIR;
 const MAX_CONCURRENT_ANALYSES = 8;
 const ALLOWED_SAMPLE_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
