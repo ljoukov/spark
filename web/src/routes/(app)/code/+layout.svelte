@@ -262,7 +262,7 @@
 	<div class="blob-field" aria-hidden="true"></div>
 	<div class="app-shell">
 		<header class="app-header">
-			<div class="app-brand">
+			<a class="app-brand" href="/code">
 				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
 				<div class="app-brand__text">
 					<span class="app-brand__title">Spark Code</span>
@@ -369,7 +369,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: clamp(0.5rem, 0.9vw, 0.75rem) clamp(0.75rem, 1.5vw, 1rem);
+		height: 3rem;
+		padding: 0 1rem;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.32);
 		background: color-mix(in srgb, var(--app-content-bg) 50%, transparent);
 		box-shadow: 0 25px 60px -40px rgba(15, 23, 42, 0.25);
@@ -390,9 +391,9 @@
 	}
 
 	.app-brand__logo {
-		width: clamp(2.5rem, 3.4vw, 3.2rem);
-		height: clamp(2.5rem, 3.4vw, 3.2rem);
-		border-radius: 1.1rem;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 0.875rem;
 		box-shadow: 0 18px 45px -25px rgba(15, 23, 42, 0.35);
 	}
 
@@ -401,13 +402,14 @@
 		align-items: center;
 		gap: 0.65rem;
 		font-weight: 600;
-		font-size: clamp(1.2rem, 1.9vw, 1.45rem);
+		font-family: '-apple-system', 'system-ui', 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+		font-size: 0.875rem;
+		line-height: 1.25rem;
 		color: var(--app-subtitle-color);
-		font-family: 'Outfit', 'Inter', system-ui, sans-serif;
 	}
 
 	.app-brand__title {
-		font-size: clamp(1.4rem, 2.2vw, 1.7rem);
+		letter-spacing: -0.01em;
 		color: var(--foreground);
 	}
 
@@ -416,8 +418,8 @@
 	}
 
 	.app-brand__tagline {
-		font-size: clamp(0.9rem, 1.2vw, 1rem);
 		font-weight: 500;
+		letter-spacing: -0.01em;
 		color: var(--app-subtitle-color);
 	}
 
@@ -428,8 +430,8 @@
 	}
 
 	:global(.app-avatar) {
-		height: 2.6rem;
-		width: 2.6rem;
+		height: 2rem;
+		width: 2rem;
 		border-radius: 9999px;
 		border: 2px solid rgba(255, 255, 255, 0.65);
 		box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
