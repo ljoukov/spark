@@ -28,6 +28,7 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 
 - Notes
   - Follow `docs/SPEC.md` for auth and validation requirements. All external inputs must be validated with `zod` and normalized before use.
+  - Local testing already sets the `TEST_USER` environment variable to a valid test account (see `docs/SPEC.md`). When this flag is present the hooks short-circuit authentication so you can browse pages such as `/code` without signing in.
 
 **Gemini**
 
