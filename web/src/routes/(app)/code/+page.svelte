@@ -273,6 +273,8 @@
 
 	.plan-body {
 		--timeline-gap: clamp(0.6rem, 1.2vw, 0.95rem);
+		--timeline-pad: 0.35rem;
+		--timeline-circle: 1.55rem;
 		display: flex;
 		flex-direction: column;
 		gap: var(--timeline-gap);
@@ -343,7 +345,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.65rem;
-		padding: 0.35rem 0.75rem;
+		padding: var(--timeline-pad) 0.75rem;
 		border-radius: 1rem;
 		border: 1px solid transparent;
 		transition:
@@ -388,54 +390,30 @@
 		position: absolute;
 		left: 50%;
 		width: 2px;
-		background: linear-gradient(
-			to bottom,
-			rgba(148, 163, 184, 0.38),
-			rgba(148, 163, 184, 0.12)
-		);
+		background: #3b82f6;
 		transform: translateX(-50%);
 		z-index: 0;
-	}
-
-	.timeline-point[data-done='true']::before,
-	.timeline-point[data-done='true']::after {
-		background: linear-gradient(
-			to bottom,
-			rgba(59, 130, 246, 0.6),
-			rgba(59, 130, 246, 0.2)
-		);
 	}
 
 	:global([data-theme='dark'] .timeline-point::before),
 	:global([data-theme='dark'] .timeline-point::after),
 	:global(:root:not([data-theme='light']) .timeline-point::before),
 	:global(:root:not([data-theme='light']) .timeline-point::after) {
-		background: linear-gradient(
-			to bottom,
-			rgba(148, 163, 184, 0.55),
-			rgba(148, 163, 184, 0.2)
-		);
-	}
-
-	:global([data-theme='dark'] .timeline-point[data-done='true']::before),
-	:global([data-theme='dark'] .timeline-point[data-done='true']::after),
-	:global(:root:not([data-theme='light']) .timeline-point[data-done='true']::before),
-	:global(:root:not([data-theme='light']) .timeline-point[data-done='true']::after) {
-		background: linear-gradient(
-			to bottom,
-			rgba(96, 165, 250, 0.7),
-			rgba(59, 130, 246, 0.35)
-		);
+		background: #60a5fa;
 	}
 
 	.timeline-point::before {
-		top: calc(-1 * var(--timeline-gap) / 2);
+		top: calc(
+			-0.5 * (var(--timeline-gap) + (2 * var(--timeline-pad)) + var(--timeline-circle))
+		);
 		bottom: 50%;
 	}
 
 	.timeline-point::after {
 		top: 50%;
-		bottom: calc(-1 * var(--timeline-gap) / 2);
+		bottom: calc(
+			-0.5 * (var(--timeline-gap) + (2 * var(--timeline-pad)) + var(--timeline-circle))
+		);
 	}
 
 	.timeline-row[data-first='true'] .timeline-point::before {
@@ -467,7 +445,7 @@
 
 	:global([data-theme='dark'] .timeline-circle),
 	:global(:root:not([data-theme='light']) .timeline-circle) {
-		background: rgba(10, 19, 40, 0.9);
+		background: #0a1328;
 	}
 
 	.timeline-circle::after {
@@ -478,7 +456,7 @@
 	}
 
 	.timeline-circle[data-done='true'] {
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9));
+		background: linear-gradient(135deg, #3b82f6, #2563eb);
 		border-color: rgba(59, 130, 246, 0.9);
 		box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22);
 		color: #fff;
@@ -497,11 +475,6 @@
 	.timeline-row:focus-visible .timeline-circle {
 		box-shadow: 0 0 0 7px rgba(59, 130, 246, 0.22);
 		transform: scale(1.04);
-	}
-
-	.timeline-row:hover .timeline-circle[data-done='true'],
-	.timeline-row:focus-visible .timeline-circle[data-done='true'] {
-		box-shadow: 0 0 0 9px rgba(59, 130, 246, 0.28);
 	}
 
 	.timeline-emoji {
