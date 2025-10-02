@@ -4,6 +4,7 @@
 	import { cn } from '$lib/utils.js';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
+	import type { PageData } from './$types';
 
 	type PaneSide = 'left' | 'right';
 
@@ -13,10 +14,27 @@
 
 	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), 'rounded-md');
 
-	let leftText = '';
-	let rightText = '';
+	export let data: PageData;
+
+	let problem = data.problem;
+	let markdownHtml = data.problem.markdownHtml;
+	let rightText = problem.starterCode;
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
+	let currentProblemId = problem.id;
+
+	$: if (problem !== data.problem) {
+		problem = data.problem;
+	}
+
+	$: if (markdownHtml !== problem.markdownHtml) {
+		markdownHtml = problem.markdownHtml;
+	}
+
+	$: if (problem.id !== currentProblemId) {
+		currentProblemId = problem.id;
+		rightText = problem.starterCode;
+	}
 
 	function applyLayout(layout: readonly number[]) {
 		paneGroup?.setLayout([...layout]);
@@ -47,7 +65,7 @@
 	}
 </script>
 
-<section class="bg-background flex min-h-screen flex-col gap-2 p-2">
+<section class="bg-background flex h-screen flex-col gap-2 overflow-hidden p-2">
 	<header class="space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
 		<p class="text-muted-foreground text-sm">
@@ -64,7 +82,10 @@
 		<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
 			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
-					<label class="text-muted-foreground text-sm font-medium" for="left-text">Left Text</label>
+					<div class="flex flex-col">
+						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide">Problem</span>
+						<h2 class="text-sm font-semibold leading-tight">{problem.title}</h2>
+					</div>
 					<button
 						type="button"
 						class={iconButtonClasses}
@@ -80,12 +101,12 @@
 						{/if}
 					</button>
 				</div>
-				<textarea
-					id="left-text"
-					bind:value={leftText}
-					placeholder="Start typing..."
-					class="border-input bg-background ring-offset-background focus-visible:border-ring focus-visible:ring-ring/50 min-h-0 flex-1 resize-none rounded-md border p-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-				></textarea>
+				<div
+					class="border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
+					aria-label="Problem description"
+				>
+					<div class="markdown space-y-4">{@html markdownHtml}</div>
+				</div>
 			</div>
 		</Resizable.Pane>
 		<Resizable.Handle withHandle class="bg-border" />
@@ -120,3 +141,52 @@
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
 </section>
+
+<style lang="postcss">
+	.markdown {
+		font-size: 0.95rem;
+		line-height: 1.6;
+	}
+
+	:global(.markdown h2),
+	:global(.markdown h3) {
+		margin-top: 1rem;
+		margin-bottom: 0.5rem;
+		font-size: 1.05rem;
+		font-weight: 600;
+	}
+
+	:global(.markdown h2:first-child),
+	:global(.markdown h3:first-child) {
+		margin-top: 0;
+	}
+
+	:global(.markdown p) {
+		margin-block: 0.85rem;
+	}
+
+	:global(.markdown code) {
+		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+		font-size: 0.85rem;
+		padding: 0.1rem 0.28rem;
+		border-radius: 0.3rem;
+		background: color-mix(in srgb, currentColor 12%, transparent);
+	}
+
+	:global(.markdown pre) {
+		margin: 1.25rem 0;
+		padding: 1.15rem;
+		border-radius: 0.6rem;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		background: color-mix(in srgb, currentColor 14%, transparent);
+		overflow-x: auto;
+	}
+
+	:global(.markdown pre code) {
+		display: block;
+		padding: 0;
+		background: transparent;
+		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+		font-size: 0.85rem;
+	}
+</style>
