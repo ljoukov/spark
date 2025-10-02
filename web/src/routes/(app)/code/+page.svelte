@@ -123,10 +123,10 @@
 		<div class="plan-body">
 			{#each timeline as item}
 				<div class="timeline-row" role="button" tabindex="0">
-					<div class="timeline-point">
-						<span class="timeline-circle"></span>
-					</div>
-					<div class="timeline-content">
+					<div class="timeline-hit">
+						<div class="timeline-point">
+							<span class="timeline-circle"></span>
+						</div>
 						<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span
 						>
 						<div class="timeline-text-block">
@@ -317,10 +317,7 @@
 	}
 
 	.timeline-row {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 0.75rem;
-		align-items: center;
+		display: block;
 		cursor: pointer;
 		outline: none;
 		border-radius: 1rem;
@@ -330,10 +327,10 @@
 		outline: none;
 	}
 
-	.timeline-content {
+	.timeline-hit {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: 0.65rem;
 		padding: 0.6rem 0.85rem;
 		border-radius: 1rem;
 		transition:
@@ -343,17 +340,17 @@
 		width: 100%;
 	}
 
-	.timeline-row:hover .timeline-content,
-	.timeline-row:focus-visible .timeline-content {
+	.timeline-row:hover .timeline-hit,
+	.timeline-row:focus-visible .timeline-hit {
 		background: color-mix(in srgb, var(--app-content-bg) 82%, rgba(59, 130, 246, 0.22));
 		box-shadow: 0 16px 32px -26px rgba(15, 23, 42, 0.35);
 		transform: translateY(-1px);
 	}
 
-	:global([data-theme='dark'] .timeline-row:hover .timeline-content),
-	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-content),
-	:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-content),
-	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-content) {
+	:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
+	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
+	:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit),
+	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
 		background: rgba(37, 99, 235, 0.18);
 		box-shadow: 0 20px 40px -32px rgba(8, 47, 73, 0.65);
 	}
@@ -365,7 +362,6 @@
 		width: 1.85rem;
 		height: 1.85rem;
 		flex-shrink: 0;
-		margin-right: 0.5rem;
 	}
 
 	.timeline-circle {
