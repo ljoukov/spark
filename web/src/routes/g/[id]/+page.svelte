@@ -4,7 +4,7 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import { loadMonaco } from '$lib/monaco/index.js';
-	import type { editor as MonacoEditorNS } from 'monaco-editor';
+	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import type { PageData } from './$types';
@@ -46,8 +46,8 @@
 		}
 	}
 
-	onMount(() => {
-		let subscription: MonacoEditorNS.IDisposable | null = null;
+		onMount(() => {
+			let subscription: IDisposable | null = null;
 
 		void (async () => {
 			const monaco = await loadMonaco();
