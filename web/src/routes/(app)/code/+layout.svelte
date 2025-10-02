@@ -269,7 +269,7 @@
 					<span class="app-brand__separator" aria-hidden="true">•</span>
 					<span class="app-brand__tagline">Think. Hack. Spark.</span>
 				</div>
-			</div>
+			</a>
 			<div class="app-header__actions">
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger class="app-user-trigger" aria-label="Open user menu">
