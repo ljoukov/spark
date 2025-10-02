@@ -46,8 +46,8 @@
 		}
 	}
 
-		onMount(() => {
-			let subscription: IDisposable | null = null;
+	onMount(() => {
+		let subscription: IDisposable | null = null;
 
 		void (async () => {
 			const monaco = await loadMonaco();
@@ -55,18 +55,18 @@
 				return;
 			}
 
-				monacoEditor = monaco.editor.create(editorContainer, {
-					value: rightText,
-					language: 'python',
-					automaticLayout: true,
-					minimap: { enabled: false },
-					fontSize: 15,
-					fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
-					tabSize: 2,
-					insertSpaces: true,
-					detectIndentation: false,
-					wordWrap: 'off'
-				});
+			monacoEditor = monaco.editor.create(editorContainer, {
+				value: rightText,
+				language: 'python',
+				automaticLayout: true,
+				minimap: { enabled: false },
+				fontSize: 15,
+				fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
+				tabSize: 2,
+				insertSpaces: true,
+				detectIndentation: false,
+				wordWrap: 'off'
+			});
 
 			subscription = monacoEditor.onDidChangeModelContent(() => {
 				rightText = monacoEditor?.getValue() ?? '';
@@ -115,7 +115,7 @@
 	}
 </script>
 
-<section class="bg-background flex h-screen flex-col gap-2 overflow-hidden p-2">
+<section class="flex h-screen flex-col gap-2 overflow-hidden p-2">
 	<header class="space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
 		<p class="text-muted-foreground text-sm">
@@ -133,7 +133,9 @@
 			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
 					<div class="flex flex-col">
-						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide">Problem</span>
+						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+							>Problem</span
+						>
 						<h2 class="text-sm font-semibold leading-tight">{problem.title}</h2>
 					</div>
 					<button
@@ -164,7 +166,9 @@
 			<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 				<div class="flex items-center justify-between gap-2">
 					<div class="flex flex-col">
-						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide">Editor</span>
+						<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+							>Editor</span
+						>
 						<h2 class="text-sm font-semibold leading-tight">Python workspace</h2>
 					</div>
 					<button
