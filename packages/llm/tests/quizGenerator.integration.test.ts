@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-import { auditJudgeDecision, judgeQuiz } from '../src/judge';
+import { auditJudgeDecision, judgeQuiz } from '../src/quiz/judge';
 import {
 	type InlineSourceFile,
 	type JudgeAudit,
 	type JudgeVerdict,
 	type QuizGeneration
-} from '../src/schemas';
-import { extendQuizWithMoreQuestions, generateQuizFromSource } from '../src/quizGenerator';
+} from '../src/quiz/schemas';
+import { extendQuizWithMoreQuestions, generateQuizFromSource } from '../src/quiz/generator';
 import { runGeminiCall } from '../src/utils/gemini';
 import { loadLocalEnv } from '../src/utils/env';
 

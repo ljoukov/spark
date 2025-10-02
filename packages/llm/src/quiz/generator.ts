@@ -1,6 +1,6 @@
 import type { Part } from "@google/genai";
 
-import { runGeminiCall, type GeminiModelId } from "./utils/gemini";
+import { runGeminiCall, type GeminiModelId } from "../utils/gemini";
 import {
   QUIZ_RESPONSE_SCHEMA,
   QuizGenerationSchema,
@@ -13,13 +13,13 @@ import {
   buildSourceParts,
   buildExtensionPrompt,
   normaliseQuizPayload,
-} from "./quizPrompts";
+} from "./prompts";
 
 export const QUIZ_GENERATION_MODEL_ID: GeminiModelId = "gemini-2.5-pro";
 export const DEFAULT_GENERATION_QUESTION_COUNT = 10;
 export const DEFAULT_EXTENSION_QUESTION_COUNT = 10;
 
-export type { GenerateQuizOptions } from "./quizPrompts";
+export type { GenerateQuizOptions } from "./prompts";
 
 export interface ExtendQuizOptions {
   readonly sourceFiles: InlineSourceFile[];

@@ -6,8 +6,8 @@ import {
   buildGenerationPrompt,
   buildSourceParts,
   normaliseQuizPayload,
-} from "../src/quizPrompts";
-import { QuizGenerationSchema } from "../src/schemas";
+} from "../src/quiz/prompts";
+import { QuizGenerationSchema } from "../src/quiz/schemas";
 
 const INLINE_SAMPLE = {
   displayName: "sample.pdf",
@@ -15,7 +15,7 @@ const INLINE_SAMPLE = {
   data: Buffer.from("content").toString("base64"),
 };
 
-describe("quizPrompts helpers", () => {
+describe("quiz prompts helpers", () => {
   it("normalises question payloads for schema validation", () => {
     const original = {
       mode: "synthesis",

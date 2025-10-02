@@ -6,15 +6,15 @@ import path from "node:path";
 import { z } from "zod";
 
 import { runGeminiCall } from "@spark/llm/utils/gemini";
-import { QUIZ_EVAL_MODEL_ID } from "@spark/llm/judge";
+import { QUIZ_EVAL_MODEL_ID } from "@spark/llm/quiz/judge";
 import {
   DEFAULT_EXTENSION_QUESTION_COUNT,
   DEFAULT_GENERATION_QUESTION_COUNT,
-} from "@spark/llm/quizGenerator";
+} from "@spark/llm/quiz/generator";
 import {
   buildExtensionPrompt,
   buildGenerationPrompt,
-} from "@spark/llm/quizPrompts";
+} from "@spark/llm/quiz/prompts";
 import { runJobsWithConcurrency } from "./concurrency";
 import type { JobProgressReporter } from "./concurrency";
 import {
@@ -26,12 +26,12 @@ import {
   type LoadAuditEvaluationsResult,
   type LoadedEvaluation,
 } from "./auditArtifacts";
-import { OFFLINE_PATHS } from "./env";
+import { QUIZ_PATHS } from "./env";
 
 const {
   repoRoot: REPO_ROOT,
   auditReportDir: REPORT_DIR,
-} = OFFLINE_PATHS;
+} = QUIZ_PATHS;
 const STATS_OUTPUT_PATH = path.join(REPORT_DIR, "stats.txt");
 const IMPROVEMENT_TASK_OUTPUT_PATH = path.join(
   REPO_ROOT,
