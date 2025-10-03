@@ -37,6 +37,9 @@ export default defineConfig({
 	resolve: {
 		preserveSymlinks: true
 	},
+	ssr: {
+		noExternal: ['@spark/llm']
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
