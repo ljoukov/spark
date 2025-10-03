@@ -89,7 +89,7 @@
 		</div>
 	</CardHeader>
 
-	<CardContent class="space-y-6 p-0 pt-6">
+	<CardContent class="space-y-6 p-0">
 		<slot />
 
 		{#if showHint && hint}
