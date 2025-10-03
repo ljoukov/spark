@@ -144,32 +144,15 @@
 </script>
 
 <svelte:head>
-	<title>Spark Code · Your session plan</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		rel="stylesheet"
-		href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap"
-	/>
+        <title>Spark Code · Your session plan</title>
 </svelte:head>
 
 <section class="dashboard">
-	<div class="hero-card">
-		<h1 class="hero-title">
-			Welcome back, {firstName}!
-			<picture class="hero-rocket">
-				<source
-					srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.webp"
-					type="image/webp"
-				/>
-				<img
-					src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.gif"
-					alt="🚀"
-					width="48"
-					height="48"
-				/>
-			</picture>
-		</h1>
+        <div class="hero-card">
+                <h1 class="hero-title">
+                        Welcome back, {firstName}!
+                        <span class="hero-rocket" aria-hidden="true">🚀</span>
+                </h1>
 		<p class="hero-subtitle">Let&apos;s crush today&apos;s session.</p>
 		<div class="stat-chips">
 			{#each stats as stat}
@@ -187,40 +170,31 @@
 			<h2>{focus.topic}</h2>
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
-		<div class="plan-body">
-			{#each timeline as item, index}
-				<a
-					class="timeline-row"
-					href={item.href}
-					data-first={index === 0}
-					data-last={index === timeline.length - 1}
-					data-done={item.done}
-				>
-					<div class="timeline-hit">
-						<div class="timeline-point" data-done={item.done}>
-							<span class="timeline-circle" data-done={item.done}></span>
-						</div>
-						<div class="timeline-body">
-							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true"
-								>{item.icon}</span
-							>
-							<div class="timeline-text-block">
-								<div class="headline-row">
-									<span class="checkpoint-name">{item.title}</span>
-									{#if item.meta}
-										<span class="checkpoint-dot">·</span>
-										<span class="checkpoint-meta">{item.meta}</span>
-									{/if}
-								</div>
-								<div class="checkpoint-description">
-									<span>{item.description}</span>
-								</div>
-							</div>
-						</div>
-					</div>
-				</a>
-			{/each}
-		</div>
+                <div class="plan-body">
+                        <ul class="timeline" aria-label="Today's plan steps">
+                                {#each timeline as item}
+                                        <li class="timeline-item" data-done={item.done}>
+                                                <a class="timeline-link" href={item.href}>
+                                                        <span class="timeline-status" data-done={item.done}>
+                                                                {#if item.done}
+                                                                        ✓
+                                                                {:else}
+                                                                        •
+                                                                {/if}
+                                                        </span>
+                                                        <span class="timeline-emoji" aria-hidden="true">{item.icon}</span>
+                                                        <span class="timeline-content">
+                                                                <span class="timeline-title">{item.title}</span>
+                                                                {#if item.meta}
+                                                                        <span class="timeline-meta">{item.meta}</span>
+                                                                {/if}
+                                                                <span class="timeline-description">{item.description}</span>
+                                                        </span>
+                                                </a>
+                                        </li>
+                                {/each}
+                        </ul>
+                </div>
 		<div class="plan-footer">
 			<a class="plan-start" href={startHref}>
 				▶ Start with {startLabel}
@@ -230,462 +204,275 @@
 </section>
 
 <style lang="postcss">
-	.dashboard {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: clamp(1.5rem, 3vw, 2.4rem);
-		padding-top: clamp(1.5rem, 3vw, 2.4rem);
-		padding-bottom: clamp(1.5rem, 3vw, 2.4rem);
-		align-items: start;
-		max-width: min(80rem, 92vw);
-		margin: 0 auto clamp(2rem, 4vw, 3rem);
-	}
+        .dashboard {
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+                padding: 2rem 1.5rem 2.5rem;
+                max-width: 72rem;
+                margin: 0 auto;
+                width: 100%;
+        }
 
-	/* Two columns only at ≥ 1280px (80rem) */
-	@media (min-width: 80rem) {
-		.dashboard {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-	}
+        @media (min-width: 72rem) {
+                .dashboard {
+                        flex-direction: row;
+                        align-items: flex-start;
+                }
 
-	.hero-card {
-		display: flex;
-		flex-direction: column;
-		gap: clamp(0.9rem, 1.5vw, 1.3rem);
-		padding: clamp(1.6rem, 2.5vw, 2.2rem);
-		border-radius: clamp(1.6rem, 2.2vw, 2rem);
-		background:
-			linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(96, 165, 250, 0.18)),
-			color-mix(in srgb, var(--app-content-bg) 78%, transparent);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 28px 80px -50px rgba(15, 23, 42, 0.45);
-	}
+                .dashboard > * {
+                        flex: 1;
+                }
+        }
 
-	:global([data-theme='dark'] .hero-card),
-	:global(:root:not([data-theme='light']) .hero-card) {
-		background:
-			linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(37, 99, 235, 0.12)),
-			rgba(6, 11, 25, 0.8);
-		border-color: rgba(148, 163, 184, 0.28);
-	}
+        .hero-card,
+        .plan-card {
+                background: var(--app-surface, var(--app-content-bg, #fff));
+                border: 1px solid rgba(148, 163, 184, 0.35);
+                border-radius: 1rem;
+                padding: 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+        }
 
-	.hero-title {
-		margin: 0;
-		font-size: clamp(2rem, 3.6vw, 2.65rem);
-		line-height: 1.05;
-		font-weight: 650;
-	}
+        :global([data-theme='dark'] .hero-card),
+        :global(:root:not([data-theme='light']) .hero-card),
+        :global([data-theme='dark'] .plan-card),
+        :global(:root:not([data-theme='light']) .plan-card) {
+                background: rgba(15, 23, 42, 0.65);
+                border-color: rgba(148, 163, 184, 0.4);
+        }
 
-	.hero-rocket {
-		display: inline-flex;
-		margin-left: 0.45rem;
-		vertical-align: middle;
-		align-items: center;
-	}
+        .hero-title {
+                margin: 0;
+                font-size: clamp(2rem, 4vw, 2.5rem);
+                line-height: 1.1;
+                font-weight: 650;
+        }
 
-	.hero-rocket img {
-		display: block;
-	}
+        .hero-rocket {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-left: 0.5rem;
+                font-size: 2.5rem;
+        }
 
-	.hero-subtitle {
-		margin: 0;
-		font-size: clamp(1.05rem, 1.5vw, 1.2rem);
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.72));
-		font-weight: 500;
-	}
+        .hero-subtitle {
+                margin: 0;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+                color: var(--app-subtitle-color, rgba(30, 41, 59, 0.72));
+                font-weight: 500;
+        }
 
-	.stat-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-	}
+        .stat-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+        }
 
-	.stat-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 1.1rem;
-		border-radius: 9999px;
-		background: rgba(255, 255, 255, 0.85);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.35);
-		font-weight: 600;
-		font-size: 0.9rem;
-		color: rgba(30, 41, 59, 0.9);
-	}
+        .stat-chip {
+                display: inline-flex;
+                align-items: baseline;
+                gap: 0.35rem;
+                padding: 0.4rem 0.9rem;
+                border-radius: 9999px;
+                border: 1px solid rgba(148, 163, 184, 0.35);
+                background: var(--app-surface, #fff);
+                font-weight: 600;
+                font-size: 0.9rem;
+        }
 
-	:global([data-theme='dark'] .stat-chip),
-	:global(:root:not([data-theme='light']) .stat-chip) {
-		background: rgba(15, 23, 42, 0.72);
-		color: rgba(226, 232, 240, 0.9);
-		border-color: rgba(148, 163, 184, 0.3);
-	}
+        :global([data-theme='dark'] .stat-chip),
+        :global(:root:not([data-theme='light']) .stat-chip) {
+                background: rgba(30, 41, 59, 0.6);
+                color: rgba(226, 232, 240, 0.92);
+        }
 
-	:global([data-theme='dark'] .stat-chip .chip-label),
-	:global(:root:not([data-theme='light']) .stat-chip .chip-label) {
-		color: rgba(203, 213, 225, 0.8);
-	}
+        .chip-value {
+                font-size: 1rem;
+        }
 
-	.chip-value {
-		font-size: 1rem;
-		font-weight: 700;
-	}
+        .chip-label {
+                font-size: 0.75rem;
+                font-weight: 500;
+                color: rgba(71, 85, 105, 0.8);
+        }
 
-	.chip-label {
-		font-size: 0.8rem;
-		font-weight: 500;
-		color: rgba(71, 85, 105, 0.85);
-	}
+        :global([data-theme='dark'] .chip-label),
+        :global(:root:not([data-theme='light']) .chip-label) {
+                color: rgba(203, 213, 225, 0.8);
+        }
 
-	.plan-card {
-		--plan-card-bg: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
-		display: flex;
-		flex-direction: column;
-		gap: 1.6rem;
-		padding: clamp(1.4rem, 2.2vw, 2rem);
-		border-radius: clamp(1.6rem, 2.2vw, 2rem);
-		background: var(--plan-card-bg);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 28px 80px -55px rgba(15, 23, 42, 0.42);
-	}
+        .plan-card {
+                gap: 1.5rem;
+        }
 
-	.plan-body {
-		/* Move spacing from grid gap to row padding */
-		--timeline-pad-y: 0.9rem; /* vertical padding in each row */
-		--timeline-pad-x: 0.75rem; /* horizontal (left/right) padding of each row */
-		--timeline-circle: 1.55rem;
-		--timeline-circle-border: 3px;
-		--timeline-track: calc(var(--timeline-circle) + 2 * var(--timeline-circle-border));
-		--timeline-track-width: 2px;
-		--timeline-hover-fudge: 6px; /* extra length to cover hover lift */
-		--timeline-line: #3b82f6;
-		display: flex;
-		flex-direction: column;
-		gap: 0; /* no inter-row gap; spacing comes from padding */
-		position: relative;
-	}
+        .plan-header {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+        }
 
-	:global([data-theme='dark'] .plan-body),
-	:global(:root:not([data-theme='light']) .plan-body) {
-		--timeline-line: #60a5fa;
-	}
+        .plan-eyebrow {
+                margin: 0;
+                font-size: 0.8rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: rgba(37, 99, 235, 0.9);
+                font-weight: 600;
+        }
 
-	:global([data-theme='dark'] .plan-card),
-	:global(:root:not([data-theme='light']) .plan-card) {
-		--plan-card-bg: rgba(6, 11, 25, 0.82);
-		background: var(--plan-card-bg);
-		border-color: rgba(148, 163, 184, 0.28);
-	}
+        .plan-header h2 {
+                margin: 0;
+                font-size: clamp(1.4rem, 3vw, 2rem);
+                font-weight: 600;
+        }
 
-	.plan-header {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-	}
+        .plan-summary {
+                margin: 0;
+                font-size: 0.95rem;
+                line-height: 1.5;
+                color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
+        }
 
-	.plan-eyebrow {
-		margin: 0;
-		font-size: 0.8rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: rgba(59, 130, 246, 0.82);
-		font-weight: 600;
-	}
+        :global([data-theme='dark'] .plan-summary),
+        :global(:root:not([data-theme='light']) .plan-summary) {
+                color: rgba(203, 213, 225, 0.8);
+        }
 
-	.plan-header h2 {
-		margin: 0;
-		font-size: clamp(1.4rem, 2.4vw, 1.9rem);
-		font-weight: 600;
-	}
+        .timeline {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+        }
 
-	.plan-summary {
-		margin: 0;
-		font-size: 0.95rem;
-		line-height: 1.55;
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
-	}
+        .timeline-item {
+                margin: 0;
+        }
 
-	:global([data-theme='dark'] .plan-summary),
-	:global(:root:not([data-theme='light']) .plan-summary) {
-		color: rgba(203, 213, 225, 0.78);
-	}
+        .timeline-link {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.75rem;
+                text-decoration: none;
+                color: inherit;
+                border: 1px solid rgba(148, 163, 184, 0.4);
+                border-radius: 0.75rem;
+                padding: 0.8rem 1rem;
+                background: var(--app-surface, #fff);
+                transition: border-color 120ms ease, background-color 120ms ease;
+        }
 
-	.timeline-row {
-		display: block;
-		cursor: pointer;
-		outline: none;
-		border-radius: 1rem;
-		position: relative;
-		color: inherit;
-		text-decoration: none;
-	}
+        .timeline-link:hover,
+        .timeline-link:focus-visible {
+                border-color: rgba(37, 99, 235, 0.6);
+                background: rgba(37, 99, 235, 0.06);
+        }
 
-	.timeline-row:focus-visible {
-		outline: none;
-	}
+        .timeline-link:focus-visible {
+                outline: 2px solid rgba(37, 99, 235, 0.7);
+                outline-offset: 2px;
+        }
 
-	.timeline-hit {
-		display: grid;
-		grid-template-columns: var(--timeline-track) minmax(0, 1fr);
-		column-gap: 0.75rem;
-		row-gap: 0.45rem;
-		align-items: start;
-		padding: var(--timeline-pad-y) var(--timeline-pad-x);
-		border-radius: 1rem;
-		border: 1px solid transparent;
-		width: 100%;
-		position: relative;
-		z-index: 1;
-	}
+        :global([data-theme='dark'] .timeline-link),
+        :global(:root:not([data-theme='light']) .timeline-link) {
+                background: rgba(15, 23, 42, 0.55);
+        }
 
-	/* Per-row vertical segments */
-	.timeline-hit::before,
-	.timeline-hit::after {
-		content: '';
-		position: absolute;
-		left: calc(var(--timeline-pad-x) + var(--timeline-track) / 2);
-		width: var(--timeline-track-width);
-		transform: translateX(-50%);
-		background: var(--timeline-line);
-		pointer-events: none;
-		z-index: 0;
-	}
+        .timeline-status {
+                flex-shrink: 0;
+                width: 1.75rem;
+                height: 1.75rem;
+                border-radius: 9999px;
+                border: 1px solid rgba(148, 163, 184, 0.5);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                font-size: 0.85rem;
+                background: var(--app-surface, #fff);
+        }
 
-	/* Top segment: from slightly above the row to center */
-	.timeline-hit::before {
-		top: calc(-1 * var(--timeline-hover-fudge));
-		height: calc(50% + var(--timeline-hover-fudge));
-	}
+        .timeline-status[data-done='true'] {
+                border-color: rgba(37, 99, 235, 0.9);
+                background: rgba(37, 99, 235, 0.12);
+                color: rgba(37, 99, 235, 0.9);
+        }
 
-	/* Bottom segment: from center to slightly below the row */
-	.timeline-hit::after {
-		bottom: calc(-1 * var(--timeline-hover-fudge));
-		height: calc(50% + var(--timeline-hover-fudge));
-	}
+        :global([data-theme='dark'] .timeline-status),
+        :global(:root:not([data-theme='light']) .timeline-status) {
+                background: rgba(15, 23, 42, 0.7);
+        }
 
-	/* Hide segments for the boundaries */
-	.timeline-row[data-first='true'] .timeline-hit::before {
-		height: 0;
-	}
-	.timeline-row[data-last='true'] .timeline-hit::after {
-		height: 0;
-	}
+        :global([data-theme='dark'] .timeline-status[data-done='true']),
+        :global(:root:not([data-theme='light']) .timeline-status[data-done='true']) {
+                background: rgba(37, 99, 235, 0.3);
+                color: rgba(219, 234, 254, 0.95);
+        }
 
-	.timeline-row:focus-visible .timeline-hit {
-		background: rgba(59, 130, 246, 0.12);
-		border-color: rgba(59, 130, 246, 0.24);
-	}
+        .timeline-emoji {
+                font-size: 1.6rem;
+                line-height: 1;
+                flex-shrink: 0;
+        }
 
-	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
-	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
-		background: rgba(37, 99, 235, 0.2);
-		border-color: rgba(59, 130, 246, 0.32);
-	}
+        .timeline-content {
+                display: flex;
+                flex-direction: column;
+                gap: 0.2rem;
+                min-width: 0;
+        }
 
-	@media (hover: hover) {
-		.timeline-row:hover .timeline-hit {
-			background: rgba(59, 130, 246, 0.12);
-			border-color: rgba(59, 130, 246, 0.24);
-		}
+        .timeline-title {
+                font-weight: 600;
+                font-size: 1.05rem;
+        }
 
-		:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
-		:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit) {
-			background: rgba(37, 99, 235, 0.2);
-			border-color: rgba(59, 130, 246, 0.32);
-		}
-	}
+        .timeline-meta {
+                font-size: 0.8rem;
+                color: rgba(71, 85, 105, 0.8);
+        }
 
-	.timeline-point {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: var(--timeline-track);
-		height: var(--timeline-track);
-		flex-shrink: 0;
-		align-self: center;
-		z-index: 1;
-	}
+        :global([data-theme='dark'] .timeline-meta),
+        :global(:root:not([data-theme='light']) .timeline-meta) {
+                color: rgba(203, 213, 225, 0.7);
+        }
 
-	.timeline-body {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		min-width: 0;
-	}
+        .timeline-description {
+                font-size: 0.9rem;
+                color: rgba(71, 85, 105, 0.88);
+                line-height: 1.45;
+        }
 
-	.timeline-circle {
-		width: var(--timeline-circle);
-		height: var(--timeline-circle);
-		border-radius: 9999px;
-		background: var(--app-surface, #fff);
-		border: var(--timeline-circle-border) solid rgba(59, 130, 246, 0.9);
-		/* use inner outline ring via pseudo to avoid animating heavy shadows */
-		z-index: 1;
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
+        :global([data-theme='dark'] .timeline-description),
+        :global(:root:not([data-theme='light']) .timeline-description) {
+                color: rgba(226, 232, 240, 0.78);
+        }
 
-	:global([data-theme='dark'] .timeline-circle),
-	:global(:root:not([data-theme='light']) .timeline-circle) {
-		background: #0a1328;
-	}
+        .plan-footer {
+                display: flex;
+                justify-content: flex-end;
+        }
 
-	.timeline-circle::before,
-	.timeline-circle::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-	}
+        .plan-start {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.6rem 1rem;
+                border-radius: 9999px;
+                background: rgba(37, 99, 235, 0.1);
+                color: rgba(37, 99, 235, 0.95);
+                font-weight: 600;
+                text-decoration: none;
+        }
 
-	/* soft ring without animating box-shadow */
-	.timeline-circle::before {
-		box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
-	}
-
-	.timeline-circle[data-done='true'] {
-		background: linear-gradient(135deg, #3b82f6, #2563eb);
-		border-color: rgba(59, 130, 246, 0.9);
-		box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22);
-		color: #fff;
-	}
-
-	.timeline-circle[data-done='true']::after {
-		content: '✓';
-		font-size: 0.85rem;
-		font-weight: 700;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.timeline-row:hover .timeline-circle,
-	.timeline-row:focus-visible .timeline-circle {
-	}
-
-	.timeline-emoji {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 1.65rem;
-		line-height: 1;
-		flex-shrink: 0;
-	}
-
-	.noto-color-emoji-regular {
-		font-family: 'Noto Color Emoji', sans-serif;
-		font-weight: 400;
-		font-style: normal;
-	}
-
-	.timeline-text-block {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-	}
-
-	.headline-row {
-		display: flex;
-		align-items: baseline;
-		gap: 0.45rem;
-		flex-wrap: wrap;
-	}
-
-	.timeline-row[data-done='true'] .headline-row .checkpoint-name {
-		color: rgba(37, 99, 235, 0.92);
-	}
-
-	.timeline-row[data-done='true'] .headline-row .checkpoint-meta {
-		color: rgba(37, 99, 235, 0.66);
-	}
-
-	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-name),
-	:global(
-		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-name
-	) {
-		color: rgba(147, 197, 253, 0.92);
-	}
-
-	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-meta),
-	:global(
-		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-meta
-	) {
-		color: rgba(147, 197, 253, 0.72);
-	}
-
-	.checkpoint-name {
-		font-weight: 600;
-		font-size: 1.05rem;
-		color: var(--foreground);
-	}
-
-	.checkpoint-dot {
-		font-size: 1.1rem;
-		line-height: 1;
-		color: rgba(71, 85, 105, 0.6);
-	}
-
-	.checkpoint-meta {
-		font-size: 0.82rem;
-		color: rgba(71, 85, 105, 0.72);
-		font-weight: 500;
-	}
-
-	:global([data-theme='dark'] .checkpoint-dot),
-	:global(:root:not([data-theme='light']) .checkpoint-dot) {
-		color: rgba(148, 163, 184, 0.55);
-	}
-
-	:global([data-theme='dark'] .checkpoint-meta),
-	:global(:root:not([data-theme='light']) .checkpoint-meta) {
-		color: rgba(203, 213, 225, 0.7);
-	}
-
-	.checkpoint-description {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.9rem;
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.76));
-	}
-
-	:global([data-theme='dark'] .checkpoint-description),
-	:global(:root:not([data-theme='light']) .checkpoint-description) {
-		color: rgba(203, 213, 225, 0.75);
-	}
-
-	.plan-footer {
-		display: flex;
-		justify-content: flex-end;
-	}
-
-	.plan-start {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.7rem 1.6rem;
-		border-radius: 9999px;
-		font-weight: 600;
-		font-size: 0.95rem;
-		text-decoration: none;
-		color: #fff;
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
-		/* reduce costly shadow changes */
-		box-shadow: 0 18px 45px -26px rgba(37, 99, 235, 0.55);
-	}
-
-	.plan-start:hover {
-	}
-
-	@media (max-width: 720px) {
-		.dashboard {
-			gap: 1.4rem;
-			padding-top: 1rem;
-			padding-bottom: 1rem;
-		}
-	}
+        .plan-start:hover,
+        .plan-start:focus-visible {
+                background: rgba(37, 99, 235, 0.18);
+        }
 </style>
