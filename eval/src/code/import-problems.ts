@@ -2,9 +2,7 @@ import { Buffer } from "node:buffer";
 import { access, readFile, readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { config as loadEnvFile } from "dotenv";
 import {
   cert,
   getApps,
@@ -31,7 +29,14 @@ import {
   runJobsWithConcurrency,
   type JobProgressReporter,
   type StatusMode,
-} from "../quiz/concurrency";
+} from "../utils/concurrency";
+import {
+  createCliCommand,
+  createIntegerParser,
+  parseStatusModeOption,
+  splitCommaSeparated,
+} from "../utils/cli";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
 
 interface ProblemFile {
   readonly slug: string;
@@ -81,6 +86,11 @@ const cliOptionsSchema = z.object({
 
 const METADATA_VERSION = 1;
 
+ensureEvalEnvLoaded();
+
+const REPO_ROOT = WORKSPACE_PATHS.repoRoot;
+const SYNTHETIC_DIR = WORKSPACE_PATHS.codeSyntheticDir;
+
 const serviceAccountSchema = z
   .object({
     project_id: z.string().min(1),
@@ -93,108 +103,91 @@ const serviceAccountSchema = z
     privateKey: private_key.replace(/\\n/g, "\n"),
   }));
 
-function parseStatusMode(value: string): StatusMode {
-  switch (value) {
-    case "interactive":
-    case "plain":
-    case "off":
-      return value;
-    default:
-      throw new Error(
-        `Unsupported --status value "${value}" (expected interactive|plain|off)`,
-      );
-  }
-}
-
 function parseCliArgs(argv: readonly string[]): CliOptions {
-  const slugs: string[] = [];
-  let dryRun = false;
-  let concurrency: number | undefined;
-  let statusMode: StatusMode | undefined;
+  const program = createCliCommand(
+    "import-problems",
+    "Extract synthetic code problems and publish them to Firestore",
+  );
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index] ?? "";
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-    if (arg === "--slug") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--slug flag requires a value");
-      }
-      slugs.push(
-        ...value
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter((entry) => entry.length > 0),
-      );
-      index += 1;
-      continue;
-    }
-    if (arg === "--concurrency") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--concurrency flag requires a value");
-      }
-      const parsed = Number.parseInt(value, 10);
-      if (!Number.isFinite(parsed)) {
-        throw new Error(`Invalid concurrency value: ${value}`);
-      }
-      concurrency = parsed;
-      index += 1;
-      continue;
-    }
-    if (arg === "--status") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--status flag requires a value");
-      }
-      statusMode = parseStatusMode(value.trim().toLowerCase());
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith("--")) {
-      throw new Error(`Unknown flag: ${arg}`);
-    }
-    slugs.push(arg.trim());
-  }
+  program
+    .option("--dry-run", "Skip Firestore writes; print progress only")
+    .option(
+      "--slug <slug>",
+      "Import a specific problem slug (repeatable)",
+      collectSlug,
+      [] as string[],
+    )
+    .option(
+      "--slugs <list>",
+      "Comma separated list of slugs to import",
+      collectSlugList,
+      [] as string[],
+    )
+    .option(
+      "--concurrency <number>",
+      "Maximum parallel jobs (1-16)",
+      createIntegerParser({ name: "concurrency", min: 1, max: 16 }),
+    )
+    .option(
+      "--status <mode>",
+      "Progress display mode: interactive | plain | off",
+      parseStatusModeOption,
+    );
 
-  const parsed = cliOptionsSchema.parse({
-    dryRun,
-    slugs,
-    concurrency,
-    statusMode,
-  });
-  return {
-    dryRun: parsed.dryRun,
-    slugs: parsed.slugs,
+  const parsed = program.parse(argv, { from: "user" }).opts<{
+    dryRun?: boolean;
+    slug: string[];
+    slugs: string[];
+    concurrency?: number;
+    status?: StatusMode;
+  }>();
+
+  const combinedSlugs = [...(parsed.slug ?? []), ...(parsed.slugs ?? [])]
+    .map((slug) => slug.trim())
+    .filter((slug) => slug.length > 0);
+  const uniqueSlugs = Array.from(new Set(combinedSlugs));
+
+  const result = cliOptionsSchema.parse({
+    dryRun: parsed.dryRun ?? false,
+    slugs: uniqueSlugs,
     concurrency: parsed.concurrency,
-    statusMode: parsed.statusMode,
-  };
+    statusMode: parsed.status,
+  });
+
+  return {
+    dryRun: result.dryRun,
+    slugs: result.slugs,
+    concurrency: result.concurrency,
+    statusMode: result.statusMode,
+  } satisfies CliOptions;
 }
 
-function resolveRepoRoot(): string {
-  const scriptPath = fileURLToPath(import.meta.url);
-  const scriptDir = path.dirname(scriptPath);
-  return path.resolve(scriptDir, "../../..");
+function collectSlug(value: string, previous: string[]): string[] {
+  const existing = previous ?? [];
+  existing.push(value);
+  return existing;
 }
 
-async function discoverProblemFiles(root: string): Promise<ProblemFile[]> {
-  const syntheticDir = path.join(root, "spark-data", "code", "synthetic");
-  const entries = await fsReaddirSafe(syntheticDir);
+function collectSlugList(value: string, previous: string[]): string[] {
+  const existing = previous ?? [];
+  existing.push(...splitCommaSeparated(value));
+  return existing;
+}
+
+async function discoverProblemFiles(): Promise<ProblemFile[]> {
+  const entries = await fsReaddirSafe(SYNTHETIC_DIR);
   const problems: ProblemFile[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
     const slug = entry.name;
-    const problemPath = path.join(syntheticDir, slug, "problem.md");
+    const problemPath = path.join(SYNTHETIC_DIR, slug, "problem.md");
     const exists = await fileExists(problemPath);
     if (!exists) {
       continue;
     }
-    const relativePath = path.relative(root, problemPath);
+    const relativePath = path.relative(REPO_ROOT, problemPath);
     problems.push({
       slug,
       absolutePath: problemPath,
@@ -222,16 +215,6 @@ async function fileExists(filePath: string): Promise<boolean> {
       return false;
     }
     throw error;
-  }
-}
-
-function ensureEnvLoaded(repoRoot: string): void {
-  const envPaths = [
-    path.join(repoRoot, ".env.local"),
-    path.join(repoRoot, "eval", ".env.local"),
-  ];
-  for (const envPath of envPaths) {
-    loadEnvFile({ path: envPath, override: false });
   }
 }
 
@@ -404,11 +387,9 @@ async function importProblem(
 }
 
 async function main(): Promise<void> {
-  const cliOptions = parseCliArgs(process.argv.slice(2));
-  const repoRoot = resolveRepoRoot();
-  ensureEnvLoaded(repoRoot);
+  const cliOptions = parseCliArgs(process.argv);
 
-  const problems = await discoverProblemFiles(repoRoot);
+  const problems = await discoverProblemFiles();
   const selected =
     cliOptions.slugs.length > 0
       ? problems.filter((problem) => cliOptions.slugs.includes(problem.slug))
@@ -418,9 +399,7 @@ async function main(): Promise<void> {
     const available = new Set(problems.map((problem) => problem.slug));
     const missing = cliOptions.slugs.filter((slug) => !available.has(slug));
     if (missing.length > 0) {
-      console.warn(
-        `No markdown files found for slugs: ${missing.join(", ")}`,
-      );
+      console.warn(`No markdown files found for slugs: ${missing.join(", ")}`);
     }
   }
 
@@ -447,8 +426,7 @@ async function main(): Promise<void> {
       try {
         return await importProblem(firestore, problem, cliOptions, progress);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error ?? "unknown");
+        const message = formatUnknownError(error);
         progress.log(`ERROR Failed to import ${problem.slug}: ${message}`);
         throw error;
       }
@@ -464,3 +442,17 @@ void main().catch((error) => {
   console.error("Unhandled error during problem import", error);
   process.exitCode = 1;
 });
+
+function formatUnknownError(value: unknown): string {
+  if (value instanceof Error) {
+    return value.message;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "unknown error";
+  }
+}

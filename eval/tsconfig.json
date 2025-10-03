@@ -15,9 +15,7 @@
 			"@google/genai": ["./node_modules/@google/genai"],
 			"@google/genai/*": ["./node_modules/@google/genai/*"],
 			"zod": ["./node_modules/zod"],
-			"zod/*": ["./node_modules/zod/*"],
-			"dotenv": ["./node_modules/dotenv"],
-			"dotenv/*": ["./node_modules/dotenv/*"]
+			"zod/*": ["./node_modules/zod/*"]
 		}
 	},
 	"include": ["src/**/*", "tests/**/*"]

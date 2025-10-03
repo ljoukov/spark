@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prepare-input": "tsx src/quiz/prepare-input.ts",
-    "eval": "tsx src/quiz/run-eval.ts",
-    "audit": "tsx src/quiz/audit-eval.ts",
+    "quiz:prepare-input": "tsx src/quiz/prepare-input.ts",
+    "quiz:eval": "tsx src/quiz/run-eval.ts",
+    "quiz:audit": "tsx src/quiz/audit-eval.ts",
     "code:import": "tsx src/code/import-problems.ts",
     "code:download:leetcode": "tsx src/code/download-leetcode.ts",
     "typecheck": "tsc --noEmit",
@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
+    "commander": "^14.0.1",
     "firebase-admin": "^13.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@google/genai": "^1.21.0",
     "@types/node": "^24.5.2",
-    "dotenv": "^17.2.2",
     "eslint": "^9.22.0",
     "prettier": "^3.4.2",
     "tsx": "^4.20.6",

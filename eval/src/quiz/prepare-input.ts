@@ -2,6 +2,7 @@
 
 import { join, resolve, extname, relative, dirname } from "node:path";
 import { existsSync } from "node:fs";
+import process from "node:process";
 import {
   readFile,
   readdir,
@@ -26,11 +27,16 @@ import {
   runJobsWithConcurrency,
   type JobProgressReporter,
   type ModelCallHandle,
-} from "./concurrency";
-import { QUIZ_PATHS } from "./env";
+} from "../utils/concurrency";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
+import { detectMimeType } from "../utils/mime";
+import { estimateUploadBytes } from "../utils/llm";
+import { createCliCommand, createIntegerParser } from "../utils/cli";
 
-const { downloadsDir: DEFAULT_SRC_DIR, evalInputDir: DEFAULT_DST_DIR } =
-  QUIZ_PATHS;
+ensureEvalEnvLoaded();
+
+const { quizDownloadsDir: DEFAULT_SRC_DIR, quizEvalInputDir: DEFAULT_DST_DIR } =
+  WORKSPACE_PATHS;
 
 const GEMINI_MODEL_ID: GeminiModelId = "gemini-flash-lite-latest";
 const MAX_CONCURRENCY = 16;
@@ -148,7 +154,7 @@ function normaliseConfidenceInput(value: unknown): unknown {
 
 const ConfidenceSchema = z.preprocess(
   normaliseConfidenceInput,
-  z.enum(CONFIDENCE_LEVELS)
+  z.enum(CONFIDENCE_LEVELS),
 );
 
 const RAW_CLASSIFICATION_SCHEMA: Schema = {
@@ -240,6 +246,58 @@ type CliOptions = {
   retryFailed: boolean;
 };
 
+const PlacementModeSchema = z.enum(["link", "copy", "move"]);
+
+function parseCliOptions(argv: readonly string[]): CliOptions {
+  const program = createCliCommand(
+    "prepare-input",
+    "Classify raw study materials into spark-data/quiz/eval-input",
+  );
+
+  program
+    .option("--src <path>", "Source downloads directory", DEFAULT_SRC_DIR)
+    .option("--dst <path>", "Destination eval-input directory", DEFAULT_DST_DIR)
+    .option(
+      "--mode <mode>",
+      "Placement mode: link | copy | move",
+      (value: string) => PlacementModeSchema.parse(value) as PlacementMode,
+      "link",
+    )
+    .option("--dry-run", "Preview actions without writing to disk")
+    .option("--retry-failed", "Retry files that failed classification")
+    .option(
+      "--concurrency <number>",
+      "Maximum concurrent Gemini jobs",
+      createIntegerParser({ name: "concurrency", min: 1 }),
+      MAX_CONCURRENCY,
+    );
+
+  const parsed = program.parse(argv, { from: "user" }).opts<{
+    src?: string;
+    dst?: string;
+    mode: PlacementMode;
+    dryRun?: boolean;
+    retryFailed?: boolean;
+    concurrency: number;
+  }>();
+
+  const src = parsed.src ? resolve(parsed.src) : DEFAULT_SRC_DIR;
+  const dst = parsed.dst ? resolve(parsed.dst) : DEFAULT_DST_DIR;
+  const concurrency = Math.min(
+    MAX_CONCURRENCY,
+    Math.max(1, parsed.concurrency),
+  );
+
+  return {
+    src,
+    dst,
+    mode: parsed.mode,
+    dryRun: parsed.dryRun ?? false,
+    concurrency,
+    retryFailed: parsed.retryFailed ?? false,
+  } satisfies CliOptions;
+}
+
 type SampleFile = {
   sourcePath: string;
   relativePath: string;
@@ -276,58 +334,6 @@ const CacheEntrySchema = z.object({
 
 const CacheSchema = z.record(z.string(), CacheEntrySchema);
 
-function parseArgs(): CliOptions {
-  const args = process.argv.slice(2);
-  let src = DEFAULT_SRC_DIR;
-  let dst = DEFAULT_DST_DIR;
-  let mode: PlacementMode = "link";
-  let dryRun = false;
-  let concurrency = MAX_CONCURRENCY;
-  let retryFailed = false;
-
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === "--src" && args[i + 1]) {
-      src = resolve(args[i + 1]);
-      i += 1;
-      continue;
-    }
-    if (arg === "--dst" && args[i + 1]) {
-      dst = resolve(args[i + 1]);
-      i += 1;
-      continue;
-    }
-    if (arg === "--mode" && args[i + 1]) {
-      const candidate = args[i + 1] as PlacementMode;
-      if (!["link", "copy", "move"].includes(candidate)) {
-        throw new Error(`Unsupported mode: ${candidate}`);
-      }
-      mode = candidate;
-      i += 1;
-      continue;
-    }
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-    if (arg === "--retry-failed") {
-      retryFailed = true;
-      continue;
-    }
-    if (arg === "--concurrency" && args[i + 1]) {
-      const value = Number(args[i + 1]);
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error(`Invalid concurrency value: ${args[i + 1]}`);
-      }
-      concurrency = Math.min(MAX_CONCURRENCY, Math.floor(value));
-      i += 1;
-      continue;
-    }
-  }
-
-  return { src, dst, mode, dryRun, concurrency, retryFailed };
-}
-
 async function collectSampleFiles(root: string): Promise<SampleFile[]> {
   const entries: SampleFile[] = [];
   async function walk(current: string): Promise<void> {
@@ -349,7 +355,7 @@ async function collectSampleFiles(root: string): Promise<SampleFile[]> {
       const ext = extname(entry.name).toLowerCase();
       if (!SUPPORTED_EXTENSIONS.has(ext)) {
         console.warn(
-          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`
+          `[collect] Skipping unsupported extension ${ext || "(none)"}: ${rel}`,
         );
         continue;
       }
@@ -394,20 +400,6 @@ function buildPrompt(): string {
   return lines.join("\n");
 }
 
-function detectMimeType(ext: string): string {
-  switch (ext) {
-    case ".pdf":
-      return "application/pdf";
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".png":
-      return "image/png";
-    default:
-      return "application/octet-stream";
-  }
-}
-
 function buildFilePart(file: SampleFile, buffer: Buffer): Part {
   return {
     inlineData: {
@@ -415,24 +407,6 @@ function buildFilePart(file: SampleFile, buffer: Buffer): Part {
       mimeType: detectMimeType(file.ext),
     },
   };
-}
-
-function estimateUploadBytes(parts: Part[]): number {
-  return parts.reduce((total, part) => {
-    let increment = 0;
-    if (typeof part.text === "string") {
-      increment += Buffer.byteLength(part.text, "utf8");
-    }
-    const inlineData = part.inlineData?.data;
-    if (inlineData) {
-      try {
-        increment += Buffer.from(inlineData, "base64").byteLength;
-      } catch {
-        increment += inlineData.length;
-      }
-    }
-    return total + increment;
-  }, 0);
 }
 
 async function callGeminiJson({
@@ -500,7 +474,7 @@ async function callGeminiJson({
           const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
           const inferenceDelta = Math.max(
             0,
-            inferenceTokens - lastInferenceTokens
+            inferenceTokens - lastInferenceTokens,
           );
           if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
             progress.recordModelUsage(callHandle, {
@@ -588,7 +562,7 @@ function buildValidationErrorMessage({
     const labelSegments = issue.path.map((segment) =>
       typeof segment === "symbol"
         ? (segment.description ?? segment.toString())
-        : String(segment)
+        : String(segment),
     );
     const pathLabel =
       labelSegments.length > 0 ? labelSegments.join(".") : "(root)";
@@ -614,7 +588,7 @@ function safeStringify(value: unknown, spacing = 2): string {
 
 function getValueAtPath(
   payload: unknown,
-  path: readonly PropertyKey[]
+  path: readonly PropertyKey[],
 ): unknown {
   let current: unknown = payload;
   for (const segment of path) {
@@ -694,7 +668,7 @@ async function classifyBatch({
           parsed = JSON.parse(text);
         } catch (error) {
           throw new Error(
-            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`
+            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`,
           );
         }
         const validation = RawClassificationSchema.safeParse(parsed);
@@ -705,7 +679,7 @@ async function classifyBatch({
               payload: parsed,
               rawText: text,
               label: file.relativePath,
-            })
+            }),
           );
         }
         const classification = normaliseClassification(validation.data);
@@ -730,7 +704,7 @@ async function classifyBatch({
 }
 
 function derivePageBucket(
-  numberOfPages?: number
+  numberOfPages?: number,
 ): (typeof PAGE_BUCKETS)[number] {
   if (
     !Number.isFinite(numberOfPages) ||
@@ -811,7 +785,7 @@ async function placeFile({
     targetDir,
     desiredName,
     file.relativePath,
-    !options.dryRun
+    !options.dryRun,
   );
   if (options.dryRun) {
     return { placedPath: destination };
@@ -852,7 +826,7 @@ async function ensureUniquePath(
   dir: string,
   baseName: string,
   rel: string,
-  createDirs: boolean
+  createDirs: boolean,
 ): Promise<string> {
   if (createDirs) {
     await mkdir(dir, { recursive: true });
@@ -893,7 +867,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 async function writeIndex(
   classified: ClassifiedSample[],
-  outputDir: string
+  outputDir: string,
 ): Promise<void> {
   const header = [
     "original",
@@ -921,7 +895,7 @@ async function writeIndex(
       csvEscape(
         classification.numberOfPages !== undefined
           ? String(classification.numberOfPages)
-          : ""
+          : "",
       ),
       csvEscape(classification.shortName),
     ].join(",");
@@ -942,7 +916,7 @@ function incrementCount(map: Map<string, number>, key: string): void {
 
 function formatCountEntries(
   map: Map<string, number>,
-  { sortByKey = false }: { sortByKey?: boolean } = {}
+  { sortByKey = false }: { sortByKey?: boolean } = {},
 ): [string, number][] {
   const entries = Array.from(map.entries());
   if (sortByKey) {
@@ -976,7 +950,7 @@ function printCountSection({
 }
 
 async function main(): Promise<void> {
-  const options = parseArgs();
+  const options = parseCliOptions(process.argv);
   if (!existsSync(options.src)) {
     throw new Error(`Source directory not found: ${options.src}`);
   }
@@ -1004,7 +978,7 @@ async function main(): Promise<void> {
     } catch (error) {
       console.warn(
         `[cache] Discarding invalid cache entry for ${file.relativePath}:`,
-        error
+        error,
       );
       delete cacheData[file.relativePath];
       pending.push(file);
@@ -1051,7 +1025,7 @@ async function main(): Promise<void> {
     const retryTargets = failures.map((result) => result.file);
     retriedCount = retryTargets.length;
     console.log(
-      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`
+      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`,
     );
     failures.length = 0;
     const retryResults = await classifyBatch({
@@ -1061,7 +1035,7 @@ async function main(): Promise<void> {
       scheduleCacheWrite,
     });
     retrySuccessCount = retryResults.filter(
-      (result) => result.classification
+      (result) => result.classification,
     ).length;
     accumulate(retryResults);
   }
@@ -1105,19 +1079,19 @@ async function main(): Promise<void> {
   const cachedCount = alreadyClassified.length;
   const newCount = newlyClassified.length;
   console.log(
-    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`
+    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`,
   );
   if (!options.dryRun && (cachedCount > 0 || newCount > 0)) {
     console.log(`Cache file: ${cachePath}`);
   }
   if (options.dryRun) {
     console.log(
-      "Dry run mode: no filesystem changes were made and cache was not updated."
+      "Dry run mode: no filesystem changes were made and cache was not updated.",
     );
   }
   if (allClassified.length > 0) {
     console.log(
-      `Category breakdown (${allClassified.length} classified files):`
+      `Category breakdown (${allClassified.length} classified files):`,
     );
     printCountSection({ label: "Boards", map: boardCounts });
     printCountSection({ label: "Grade buckets", map: gradeCounts });
@@ -1130,7 +1104,7 @@ async function main(): Promise<void> {
   }
   if (retriedCount > 0) {
     console.log(
-      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`
+      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`,
     );
   }
   if (failures.length > 0) {
@@ -1139,8 +1113,8 @@ async function main(): Promise<void> {
       .map(
         (failure) =>
           `[${new Date().toISOString()}] ${failure.file.relativePath}: ${formatError(
-            failure.error
-          )}`
+            failure.error,
+          )}`,
       )
       .join("\n");
     if (!options.dryRun) {
@@ -1151,7 +1125,7 @@ async function main(): Promise<void> {
       ? `Details written to ${errorLogPath}.`
       : `Details would be written to ${errorLogPath} (dry run).`;
     console.warn(
-      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`
+      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`,
     );
   }
 }
