@@ -29,6 +29,7 @@
 		hintLabel?: string;
 		dontKnowLabel?: string;
 		placeholder?: string;
+		eyebrow?: string | null;
 	};
 
 	let {
@@ -40,11 +41,12 @@
 		feedback = null,
 		showExplanation: showExplanationProp = undefined,
 		showContinue = false,
-		answerLabel = 'Answer',
+		answerLabel = 'Submit',
 		continueLabel = 'Continue',
 		hintLabel = 'Show hint',
 		dontKnowLabel = "Don't know?",
-		placeholder = question.placeholder ?? 'Type your answer'
+		placeholder = question.placeholder ?? 'Type your answer',
+		eyebrow = undefined
 	}: Props = $props();
 
 	function handleInput(event: Event) {
@@ -85,7 +87,8 @@
 </script>
 
 <QuizQuestionCard
-	title={question.prompt}
+		title={question.prompt}
+		eyebrow={eyebrow}
 	status={statusProp}
 	hint={question.hint}
 	showHint={showHint}
