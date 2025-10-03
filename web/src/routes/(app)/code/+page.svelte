@@ -160,14 +160,13 @@
 		</header>
 		<div class="plan-body">
 		{#each timeline as item, index}
-			<a
-				class="timeline-row"
-				href={item.href}
-				data-sveltekit-prefetch
-				data-first={index === 0}
-				data-last={index === timeline.length - 1}
-				data-done={item.done}
-			>
+                        <a
+                                class="timeline-row"
+                                href={item.href}
+                                data-first={index === 0}
+                                data-last={index === timeline.length - 1}
+                                data-done={item.done}
+                        >
 					<div class="timeline-hit">
 						<div class="timeline-point" data-done={item.done}>
 							<span class="timeline-circle" data-done={item.done}></span>
@@ -194,7 +193,12 @@
 			{/each}
 		</div>
 		<div class="plan-footer">
-			<a class="plan-start" href={startHref} data-sveltekit-prefetch>▶ Start with {startLabel}</a>
+                        <a
+                                class="plan-start"
+                                href={startHref}
+                        >
+                                ▶ Start with {startLabel}
+                        </a>
 		</div>
 	</div>
 </section>
@@ -441,19 +445,29 @@
 		height: 0;
 	}
 
-	.timeline-row:hover .timeline-hit,
-	.timeline-row:focus-visible .timeline-hit {
-		background: rgba(59, 130, 246, 0.12);
-		border-color: rgba(59, 130, 246, 0.24);
-	}
+        .timeline-row:focus-visible .timeline-hit {
+                background: rgba(59, 130, 246, 0.12);
+                border-color: rgba(59, 130, 246, 0.24);
+        }
 
-	:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
-	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
-	:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit),
-	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
-		background: rgba(37, 99, 235, 0.2);
-		border-color: rgba(59, 130, 246, 0.32);
-	}
+        :global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
+        :global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
+                background: rgba(37, 99, 235, 0.2);
+                border-color: rgba(59, 130, 246, 0.32);
+        }
+
+        @media (hover: hover) {
+                .timeline-row:hover .timeline-hit {
+                        background: rgba(59, 130, 246, 0.12);
+                        border-color: rgba(59, 130, 246, 0.24);
+                }
+
+                :global([data-theme='dark'] .timeline-row:hover .timeline-hit),
+                :global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit) {
+                        background: rgba(37, 99, 235, 0.2);
+                        border-color: rgba(59, 130, 246, 0.32);
+                }
+        }
 
 	.timeline-point {
 		position: relative;
