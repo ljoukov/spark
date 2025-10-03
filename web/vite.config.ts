@@ -33,7 +33,13 @@ const serverOptions = {
 
 export default defineConfig({
 	plugins,
-	server: serverOptions,
+	server: {
+		...serverOptions,
+		fs: {
+			// allow symlinked packages under the monorepo root to participate in HMR
+			allow: [path.resolve(__dirname, '..')]
+		}
+	},
 	resolve: {
 		preserveSymlinks: true
 	},
