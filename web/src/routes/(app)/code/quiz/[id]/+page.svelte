@@ -1,9 +1,15 @@
 <script lang="ts">
-	import { QuizProgress, QuizMultipleChoice, QuizTypeAnswer } from '$lib/components/quiz/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
-	import type { PageData } from './$types';
+        import {
+                QuizProgress,
+                QuizMultipleChoice,
+                QuizTypeAnswer,
+                QuizInfoCard
+        } from '$lib/components/quiz/index.js';
+        import { Button } from '$lib/components/ui/button/index.js';
+        import * as Dialog from '$lib/components/ui/dialog/index.js';
+        import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
+        import type { PageData } from './$types';
+        import { goto } from '$app/navigation';
 
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect' | 'skipped';
 
@@ -44,49 +50,81 @@
 		return 'neutral';
 	}
 
-	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
-	let currentIndex = $state(0);
-	let finishDialogOpen = $state(false);
+        const STORAGE_KEY = 'spark-code-progress';
+        let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
+        let currentIndex = $state(0);
+        let finishDialogOpen = $state(false);
+        let resultDialogOpen = $state(false);
+        let progressPersisted = false;
 
-	function handleFinishDialogChange(open: boolean) {
-		finishDialogOpen = open;
-	}
+        function handleFinishDialogChange(open: boolean) {
+                finishDialogOpen = open;
+        }
+
+        function handleResultDialogChange(open: boolean) {
+                resultDialogOpen = open;
+                if (!open && isQuizComplete) {
+                        goto('/code');
+                }
+        }
 
 	function updateAttempt(index: number, updater: (value: AttemptState) => AttemptState) {
 		attempts = attempts.map((attempt, idx) => (idx === index ? updater(attempt) : attempt));
 	}
 
-	const activeQuestion = $derived(quiz.questions[currentIndex] as QuizQuestion);
-	const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
-	const progressSteps = $derived(
-		quiz.questions.map<QuizProgressStep>((_, index) => {
-			const attempt = attempts[index];
-			const label = `Question ${index + 1}`;
-			if (!attempt || attempt.status === 'pending') {
-				return {
-					status: index === currentIndex ? 'active' : attempt?.seen ? 'seen' : 'pending',
-					label
-				};
-			}
-			if (attempt.status === 'skipped') {
-				return { status: 'skipped', label };
-			}
-			return {
-				status: attempt.status === 'correct' ? 'correct' : 'incorrect',
-				label
-			};
-		})
-	);
+        const activeQuestion = $derived(quiz.questions[currentIndex] as QuizQuestion);
+        const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
+        const isLastQuestion = $derived(currentIndex === quiz.questions.length - 1);
+        const continueLabel = $derived(isLastQuestion ? 'Done' : 'Continue');
+        const progressSteps = $derived(
+                quiz.questions.map<QuizProgressStep>((question, index) => {
+                        const attempt = attempts[index];
+                        const label =
+                                question.kind === 'info-card'
+                                        ? `Step ${index + 1}`
+                                        : `Question ${index + 1}`;
+                        if (!attempt || attempt.status === 'pending') {
+                                return {
+                                        status: index === currentIndex ? 'active' : attempt?.seen ? 'seen' : 'pending',
+                                        label
+                                };
+                        }
+                        if (attempt.status === 'skipped') {
+                                return { status: 'skipped', label };
+                        }
+                        return {
+                                status: attempt.status === 'correct' ? 'correct' : 'incorrect',
+                                label
+                        };
+                })
+        );
 
-	const isQuizComplete = $derived(attempts.every((attempt) => attempt.status !== 'pending'));
-	const correctCount = $derived(attempts.filter((attempt) => attempt.status === 'correct').length);
-	const incorrectCount = $derived(
-		attempts.filter((attempt) => attempt.status === 'incorrect').length
-	);
-	const skippedCount = $derived(attempts.filter((attempt) => attempt.status === 'skipped').length);
-	const remainingCount = $derived(
-		quiz.questions.length - correctCount - incorrectCount - skippedCount
-	);
+        const scoredAttempts = $derived(
+                quiz.questions
+                        .map((question, index) => ({ question, attempt: attempts[index] }))
+                        .filter(
+                                (
+                                        entry
+                                ): entry is {
+                                        question: QuizQuestion;
+                                        attempt: AttemptState;
+                                } => entry.question.kind !== 'info-card'
+                        )
+        );
+
+        const isQuizComplete = $derived(attempts.every((attempt) => attempt.status !== 'pending'));
+        const correctCount = $derived(
+                scoredAttempts.filter((entry) => entry.attempt.status === 'correct').length
+        );
+        const incorrectCount = $derived(
+                scoredAttempts.filter((entry) => entry.attempt.status === 'incorrect').length
+        );
+        const skippedCount = $derived(
+                scoredAttempts.filter((entry) => entry.attempt.status === 'skipped').length
+        );
+        const remainingCount = $derived(
+                scoredAttempts.length - correctCount - incorrectCount - skippedCount
+        );
 
 	function goToQuestion(index: number) {
 		if (index < 0 || index >= quiz.questions.length || index === currentIndex) {
@@ -177,11 +215,11 @@
 		updateAttempt(currentIndex, (prev) => ({ ...prev, value }));
 	}
 
-	function handleTypeSubmit(value: string) {
-		const trimmed = value.trim();
-		if (!trimmed) {
-			return;
-		}
+        function handleTypeSubmit(value: string) {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                        return;
+                }
 		const question = quiz.questions[currentIndex];
 		if (question.kind !== 'type-answer') {
 			return;
@@ -192,29 +230,54 @@
 		);
 		const isCorrect = accepted.includes(trimmed.toLowerCase());
 
-		updateAttempt(currentIndex, (prev) => ({
-			...prev,
-			value: trimmed,
-			status: isCorrect ? 'correct' : 'incorrect',
-			locked: true,
-			showContinue: true,
-			feedback: isCorrect
-				? {
-						heading: 'Great answer',
-						message: 'Your reasoning lines up with the model solution.'
-					}
-				: {
-						heading: "Here's the catch",
-						message: `The answer we needed appears below—study it and move forward.`
-					}
-		}));
-	}
+                updateAttempt(currentIndex, (prev) => ({
+                        ...prev,
+                        value: trimmed,
+                        status: isCorrect ? 'correct' : 'incorrect',
+                        locked: true,
+                        showContinue: true,
+                        feedback: isCorrect
+                                ? {
+                                                heading: 'Great answer',
+                                                message: 'Your reasoning lines up with the model solution.'
+                                        }
+                                : {
+                                                heading: "Here's the catch",
+                                                message: `The answer we needed appears below—study it and move forward.`
+                                        }
+                }));
+        }
 
-	function goToNextQuestion() {
-		if (currentIndex < quiz.questions.length - 1) {
-			currentIndex += 1;
-		}
-	}
+        function handleInfoContinue() {
+                const question = quiz.questions[currentIndex];
+                if (question.kind !== 'info-card') {
+                        return;
+                }
+
+                updateAttempt(currentIndex, (prev) => ({
+                        ...prev,
+                        status: 'correct',
+                        locked: true,
+                        showContinue: false,
+                        feedback: null
+                }));
+
+                advanceFlow();
+        }
+
+        function advanceFlow() {
+                if (currentIndex < quiz.questions.length - 1) {
+                        currentIndex += 1;
+                        return;
+                }
+
+                resultDialogOpen = true;
+        }
+
+        function handleAdvanceFromAttempt() {
+                updateAttempt(currentIndex, (prev) => ({ ...prev, showContinue: false }));
+                advanceFlow();
+        }
 
 	function handleFinishEarly() {
 		attempts = attempts.map((attempt) =>
@@ -231,19 +294,45 @@
 		currentIndex = Math.min(currentIndex, quiz.questions.length - 1);
 	}
 
-	function resetQuiz() {
-		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
-		currentIndex = 0;
-		finishDialogOpen = false;
-	}
+        function resetQuiz() {
+                attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
+                currentIndex = 0;
+                finishDialogOpen = false;
+                resultDialogOpen = false;
+                progressPersisted = false;
+        }
 
 	// Mark the current question as seen whenever it becomes active
-	$effect(() => {
-		const attempt = attempts[currentIndex];
-		if (attempt && !attempt.seen) {
-			updateAttempt(currentIndex, (prev) => ({ ...prev, seen: true }));
-		}
-	});
+        $effect(() => {
+                const attempt = attempts[currentIndex];
+                if (attempt && !attempt.seen) {
+                        updateAttempt(currentIndex, (prev) => ({ ...prev, seen: true }));
+                }
+        });
+
+        $effect(() => {
+                if (!isQuizComplete) {
+                        return;
+                }
+
+                if (quiz.progressKey && !progressPersisted && typeof window !== 'undefined') {
+                        try {
+                                const raw = window.sessionStorage.getItem(STORAGE_KEY);
+                                const parsed: unknown = raw ? JSON.parse(raw) : [];
+                                const existing = Array.isArray(parsed) ? parsed : [];
+                                const next = new Set<string>(existing);
+                                next.add(quiz.progressKey);
+                                window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+                                progressPersisted = true;
+                        } catch (error) {
+                                console.error('Unable to persist quiz progress', error);
+                        }
+                }
+
+                if (!resultDialogOpen) {
+                        resultDialogOpen = true;
+                }
+        });
 </script>
 
 <svelte:head>
@@ -260,71 +349,96 @@
 	/>
 
 	<section class="flex flex-col gap-6">
-		{#if activeQuestion.kind === 'multiple-choice'}
-			<QuizMultipleChoice
-				question={activeQuestion}
-				eyebrow={quiz.topic ?? null}
-				selectedOptionId={activeAttempt.selectedOptionId}
-				status={toCardStatus(activeAttempt.status)}
-				showHint={activeAttempt.showHint}
-				locked={activeAttempt.locked}
-				feedback={activeAttempt.feedback}
-				showContinue={activeAttempt.showContinue}
-				on:select={(event) => handleOptionSelect(event.detail.optionId)}
-				on:submit={(event) => handleMultipleSubmit(event.detail.optionId)}
-				on:requestHint={handleHint}
-				on:dontKnow={handleDontKnow}
-				on:continue={goToNextQuestion}
-			/>
-		{:else if activeQuestion.kind === 'type-answer'}
-			<QuizTypeAnswer
-				question={activeQuestion}
-				eyebrow={quiz.topic ?? null}
-				value={activeAttempt.value}
-				status={toCardStatus(activeAttempt.status)}
-				showHint={activeAttempt.showHint}
-				locked={activeAttempt.locked}
-				feedback={activeAttempt.feedback}
-				showContinue={activeAttempt.showContinue}
-				on:input={(event) => handleTypeInput(event.detail.value)}
-				on:submit={(event) => handleTypeSubmit(event.detail.value)}
-				on:requestHint={handleHint}
-				on:dontKnow={handleDontKnow}
-				on:continue={goToNextQuestion}
-			/>
-		{/if}
-	</section>
-
-	{#if isQuizComplete}
-		<section
-			class="space-y-4 rounded-3xl border border-emerald-200/60 bg-emerald-50/70 p-6 text-emerald-900 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)] dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-100"
-		>
-			<h2 class="text-2xl font-semibold">Quiz complete</h2>
-			<p class="text-base leading-relaxed">
-				You answered {correctCount} of {quiz.questions.length} questions correctly.
-			</p>
-			<div class="flex flex-wrap gap-3 text-sm font-semibold">
-				<span
-					class="inline-flex items-center rounded-full bg-white/70 px-3 py-1 text-emerald-700 shadow-sm dark:bg-emerald-400/10 dark:text-emerald-100"
-				>
-					Correct · {correctCount}
-				</span>
-				<span
-					class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-amber-700 shadow-sm dark:bg-amber-500/20 dark:text-amber-100"
-				>
-					Incorrect · {incorrectCount}
-				</span>
-				{#if skippedCount > 0}
-					<span
-						class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-600 shadow-sm dark:bg-slate-500/20 dark:text-slate-200"
-					>
-						Skipped · {skippedCount}
-					</span>
-				{/if}
-			</div>
-		</section>
-	{/if}
+                {#if activeQuestion.kind === 'multiple-choice'}
+                        <QuizMultipleChoice
+                                question={activeQuestion}
+                                eyebrow={quiz.topic ?? null}
+                                selectedOptionId={activeAttempt.selectedOptionId}
+                                status={toCardStatus(activeAttempt.status)}
+                                showHint={activeAttempt.showHint}
+                                locked={activeAttempt.locked}
+                                feedback={activeAttempt.feedback}
+                                showContinue={activeAttempt.showContinue}
+                                continueLabel={continueLabel}
+                                on:select={(event) => handleOptionSelect(event.detail.optionId)}
+                                on:submit={(event) => handleMultipleSubmit(event.detail.optionId)}
+                                on:requestHint={handleHint}
+                                on:dontKnow={handleDontKnow}
+                                on:continue={handleAdvanceFromAttempt}
+                        />
+                {:else if activeQuestion.kind === 'type-answer'}
+                        <QuizTypeAnswer
+                                question={activeQuestion}
+                                eyebrow={quiz.topic ?? null}
+                                value={activeAttempt.value}
+                                status={toCardStatus(activeAttempt.status)}
+                                showHint={activeAttempt.showHint}
+                                locked={activeAttempt.locked}
+                                feedback={activeAttempt.feedback}
+                                showContinue={activeAttempt.showContinue}
+                                continueLabel={continueLabel}
+                                on:input={(event) => handleTypeInput(event.detail.value)}
+                                on:submit={(event) => handleTypeSubmit(event.detail.value)}
+                                on:requestHint={handleHint}
+                                on:dontKnow={handleDontKnow}
+                                on:continue={handleAdvanceFromAttempt}
+                        />
+                {:else if activeQuestion.kind === 'info-card'}
+                        <QuizInfoCard
+                                question={activeQuestion}
+                                status={toCardStatus(activeAttempt.status)}
+                                continueLabel={continueLabel}
+                                on:continue={handleInfoContinue}
+                        />
+                {/if}
+        </section>
 </div>
+
+<Dialog.Root open={resultDialogOpen} onOpenChange={handleResultDialogChange}>
+        <Dialog.Content
+                class="result-dialog bg-background/98 max-w-lg overflow-hidden rounded-3xl p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
+        >
+                <div class="space-y-4 border-b border-border/60 px-6 py-6">
+                        <h2 class="text-foreground text-xl font-semibold tracking-tight md:text-2xl">
+                                Quiz complete
+                        </h2>
+                        <p class="text-muted-foreground text-sm leading-relaxed">
+                                You answered {correctCount} of {scoredAttempts.length} scored questions correctly.
+                        </p>
+                        <div class="flex flex-wrap gap-3 text-sm font-semibold">
+                                <span
+                                        class="inline-flex items-center rounded-full bg-emerald-100/80 px-3 py-1 text-emerald-700 shadow-sm dark:bg-emerald-500/15 dark:text-emerald-100"
+                                >
+                                        Correct · {correctCount}
+                                </span>
+                                <span
+                                        class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-amber-700 shadow-sm dark:bg-amber-500/20 dark:text-amber-100"
+                                >
+                                        Incorrect · {incorrectCount}
+                                </span>
+                                {#if skippedCount > 0}
+                                        <span
+                                                class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-600 shadow-sm dark:bg-slate-500/20 dark:text-slate-200"
+                                        >
+                                                Skipped · {skippedCount}
+                                        </span>
+                                {/if}
+                        </div>
+                </div>
+                <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
+                        <Button
+                                variant="outline"
+                                class="w-full sm:w-auto sm:min-w-[9rem]"
+                                onclick={() => goto('/code')}
+                        >
+                                Back to plan
+                        </Button>
+                        <Button class="result-primary w-full sm:w-auto sm:min-w-[9rem]" onclick={() => goto('/code')}>
+                                Keep practicing
+                        </Button>
+                </div>
+        </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
 	<Dialog.Content
@@ -385,16 +499,27 @@
 		background: #0ea5e9 !important;
 	}
 
-	:global(.finish-continue) {
-		background: #f97316 !important;
-		color: #ffffff !important;
-		justify-content: center;
-		box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
-	}
+        :global(.finish-continue) {
+                background: #f97316 !important;
+                color: #ffffff !important;
+                justify-content: center;
+                box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
+        }
 
-	:global(.finish-continue:hover) {
-		background: #fb923c !important;
-	}
+        :global(.finish-continue:hover) {
+                background: #fb923c !important;
+        }
+
+        :global(.result-primary) {
+                background: #3b82f6 !important;
+                color: #ffffff !important;
+                justify-content: center;
+                box-shadow: 0 18px 40px rgba(59, 130, 246, 0.35);
+        }
+
+        :global(.result-primary:hover) {
+                background: #60a5fa !important;
+        }
 
 	@media (min-width: 40rem) {
 		:global(.finish-footer) {
