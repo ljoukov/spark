@@ -34,7 +34,9 @@
 		</p>
 	</div>
 
-	<div slot="footer" class="ml-auto flex items-center gap-2">
-		<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
-	</div>
+	{#snippet footer()}
+		<div class="ml-auto flex items-center gap-2">
+			<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
+		</div>
+	{/snippet}
 </QuizQuestionCard>
