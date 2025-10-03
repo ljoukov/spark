@@ -81,7 +81,7 @@
 <svelte:head>
 	<title>Spark Code · Your session plan</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link
 		rel="stylesheet"
 		href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap"
@@ -123,21 +123,23 @@
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
 		<div class="plan-body">
-		{#each timeline as item, index}
-			<div
-				class="timeline-row"
-				role="button"
-				tabindex="0"
-				data-first={index === 0}
-				data-last={index === timeline.length - 1}
-				data-done={item.done}
-			>
+			{#each timeline as item, index}
+				<div
+					class="timeline-row"
+					role="button"
+					tabindex="0"
+					data-first={index === 0}
+					data-last={index === timeline.length - 1}
+					data-done={item.done}
+				>
 					<div class="timeline-hit">
 						<div class="timeline-point" data-done={item.done}>
 							<span class="timeline-circle" data-done={item.done}></span>
 						</div>
 						<div class="timeline-body">
-							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true">{item.icon}</span>
+							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true"
+								>{item.icon}</span
+							>
 							<div class="timeline-text-block">
 								<div class="headline-row">
 									<span class="checkpoint-name">{item.title}</span>
@@ -152,7 +154,7 @@
 							</div>
 						</div>
 					</div>
-			</div>
+				</div>
 			{/each}
 		</div>
 		<div class="plan-footer">
@@ -341,8 +343,6 @@
 		color: rgba(203, 213, 225, 0.78);
 	}
 
-
-
 	.timeline-row {
 		display: block;
 		cursor: pointer;
@@ -416,8 +416,6 @@
 		border-color: rgba(59, 130, 246, 0.32);
 	}
 
-
-
 	.timeline-point {
 		position: relative;
 		display: flex;
@@ -432,7 +430,7 @@
 
 	.timeline-body {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		gap: 0.65rem;
 		min-width: 0;
 	}
@@ -449,7 +447,6 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-
 	}
 
 	:global([data-theme='dark'] .timeline-circle),
@@ -488,7 +485,6 @@
 
 	.timeline-row:hover .timeline-circle,
 	.timeline-row:focus-visible .timeline-circle {
-
 	}
 
 	.timeline-emoji {
@@ -528,12 +524,16 @@
 	}
 
 	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-name),
-	:global(:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-name) {
+	:global(
+		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-name
+	) {
 		color: rgba(147, 197, 253, 0.92);
 	}
 
 	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-meta),
-	:global(:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-meta) {
+	:global(
+		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-meta
+	) {
 		color: rgba(147, 197, 253, 0.72);
 	}
 
@@ -597,10 +597,10 @@
 		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
 		/* reduce costly shadow changes */
 		box-shadow: 0 18px 45px -26px rgba(37, 99, 235, 0.55);
-
 	}
 
-	.plan-start:hover {}
+	.plan-start:hover {
+	}
 
 	@media (max-width: 720px) {
 		.dashboard {
