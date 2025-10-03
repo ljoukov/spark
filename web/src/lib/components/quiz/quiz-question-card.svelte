@@ -8,6 +8,7 @@
 	} from '$lib/components/ui/card/index.js';
 	import { cn } from '$lib/utils.js';
 	import type { QuizFeedback } from '$lib/types/quiz';
+	import type { Snippet } from 'svelte';
 	import type { HTMLAttributes } from 'svelte/elements';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
@@ -22,6 +23,8 @@
 		explanation?: string;
 		showExplanation?: boolean;
 		displayFooter?: boolean;
+		children?: Snippet;
+		footer?: Snippet;
 	};
 
 	let {
@@ -34,6 +37,8 @@
 		explanation,
 		showExplanation = false,
 		displayFooter = true,
+		children,
+		footer,
 		class: className,
 		...restProps
 	}: Props = $props();
@@ -92,7 +97,7 @@
 	</CardHeader>
 
 	<CardContent class="space-y-6 p-0">
-		<slot />
+		{@render children?.()}
 
 		{#if showHint && hint}
 			<div
@@ -134,7 +139,7 @@
 
 	{#if displayFooter}
 		<CardFooter class="flex flex-wrap items-center justify-between gap-3 p-0 pt-6">
-			<slot name="footer" />
+			{@render footer?.()}
 		</CardFooter>
 	{/if}
 </Card>
