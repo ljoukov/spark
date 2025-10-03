@@ -82,6 +82,12 @@
 	const skippedCount = $derived(attempts.filter((attempt) => attempt.status === 'skipped').length);
 	const remainingCount = $derived(quiz.questions.length - correctCount - incorrectCount - skippedCount);
 
+	function goToQuestion(index: number) {
+		if (index >= 0 && index < currentIndex) {
+			currentIndex = index;
+		}
+	}
+
 	function handleOptionSelect(optionId: string) {
 		const attempt = attempts[currentIndex];
 		if (!attempt || attempt.locked) {
@@ -224,46 +230,21 @@
 	<title>{quiz.title} · Spark Quiz</title>
 </svelte:head>
 
-<div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-10 md:py-12">
-	<header class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-		<div class="space-y-3">
-			{#if quiz.topic}
-				<span class="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-					{quiz.topic}
-				</span>
-			{/if}
-			<h1 class="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-				{quiz.title}
-			</h1>
-			{#if quiz.description}
-				<p class="max-w-2xl text-base leading-relaxed text-muted-foreground">
-					{quiz.description}
-				</p>
-			{/if}
-		</div>
 
-		<div class="flex flex-wrap items-center gap-3">
-			<Button variant="outline" size="sm" onclick={resetQuiz}>
-				Restart
-			</Button>
-			{#if !isQuizComplete}
-				<Button variant="ghost" size="sm" onclick={() => (finishDialogOpen = true)}>
-					Finish early
-				</Button>
-			{/if}
-		</div>
-	</header>
-
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 md:py-10">
 	<QuizProgress
 		steps={progressSteps}
 		currentIndex={currentIndex}
 		total={quiz.questions.length}
+		on:navigate={(event) => goToQuestion(event.detail.index)}
+		on:finish={() => (finishDialogOpen = true)}
 	/>
 
 	<section class="flex flex-col gap-6">
 		{#if activeQuestion.kind === 'multiple-choice'}
 			<QuizMultipleChoice
 				question={activeQuestion}
+				eyebrow={quiz.topic ?? null}
 				selectedOptionId={activeAttempt.selectedOptionId}
 				status={toCardStatus(activeAttempt.status)}
 				showHint={activeAttempt.showHint}
@@ -279,6 +260,7 @@
 		{:else if activeQuestion.kind === 'type-answer'}
 			<QuizTypeAnswer
 				question={activeQuestion}
+				eyebrow={quiz.topic ?? null}
 				value={activeAttempt.value}
 				status={toCardStatus(activeAttempt.status)}
 				showHint={activeAttempt.showHint}
@@ -318,16 +300,17 @@
 </div>
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
-	<Dialog.Content class="max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Finish the quiz early?</Dialog.Title>
-			<Dialog.Description>
-				You still have {remainingCount} unanswered question(s).
-			</Dialog.Description>
-		</Dialog.Header>
-		<Dialog.Footer class="flex flex-row-reverse gap-3">
-			<Button onclick={handleFinishEarly}>Finish now</Button>
+	<Dialog.Content class="finish-dialog max-w-lg overflow-hidden rounded-3xl border border-border/60 bg-background/98 p-0 shadow-2xl">
+		<div class="space-y-3 border-b border-border/60 bg-primary/10 px-6 py-5">
+			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Wrap up this quiz?</h2>
+			<p class="text-sm leading-relaxed text-muted-foreground">
+				You still have {remainingCount} unanswered question(s). Choose what you would like to do next.
+			</p>
+		</div>
+		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:justify-end">
+			<Button variant="outline" onclick={resetQuiz}>Restart quiz</Button>
 			<Button variant="ghost" onclick={() => (finishDialogOpen = false)}>Keep practicing</Button>
-		</Dialog.Footer>
+			<Button onclick={handleFinishEarly}>Finish now</Button>
+		</div>
 	</Dialog.Content>
 </Dialog.Root>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createEventDispatcher } from 'svelte';
 	import { cn } from '$lib/utils.js';
 	import type { QuizProgressStep } from '$lib/types/quiz';
 
@@ -7,15 +8,18 @@
 		currentIndex?: number;
 		metaLabel?: string | null;
 		total?: number;
-		secondaryLabel?: string | null;
 	};
+
+	const dispatch = createEventDispatcher<{
+		navigate: { index: number };
+		finish: void;
+	}>();
 
 	let {
 		steps = [],
 		currentIndex = 0,
 		metaLabel = undefined,
-		total,
-		secondaryLabel = undefined
+		total
 	}: Props = $props();
 
 	const fallbackTotal = $derived(total ?? steps.length);
@@ -38,10 +42,6 @@
 			? null
 			: metaLabel ?? `${Math.min(safeCurrent + 1, stepCount)} / ${stepCount}`
 	);
-	const secondaryDisplay = $derived(secondaryLabel?.trim() ?? '');
-	const showMeta = $derived(
-		resolvedLabel !== null || secondaryDisplay.length > 0
-	);
 
 	function segmentClass(status: QuizProgressStep['status']) {
 		switch (status) {
@@ -57,12 +57,22 @@
 				return 'bg-muted';
 		}
 	}
+
+	function handleNavigate(index: number) {
+		if (index < safeCurrent) {
+			dispatch('navigate', { index });
+		}
+	}
+
+	function handleFinish() {
+		dispatch('finish');
+	}
 </script>
 
-<div class="flex w-full items-center gap-4 rounded-2xl border border-border bg-background/90 px-5 py-4 shadow-sm backdrop-blur">
+<div class="flex w-full items-center gap-4 rounded-3xl border border-border bg-background/95 px-5 py-4 shadow-sm backdrop-blur">
 	<div class="flex w-full items-center gap-3">
 		<div
-			class="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-primary/60 bg-primary/10 text-base font-semibold text-primary shadow-inner"
+			class="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-primary/60 bg-primary/10 text-lg font-semibold text-primary shadow-inner"
 			aria-label={`Question ${safeCurrent + 1}`}
 		>
 			{Math.min(safeCurrent + 1, derivedSteps.length)}
@@ -70,30 +80,47 @@
 
 		<div class="flex flex-1 items-center gap-2" role="list" aria-label="Quiz progress">
 			{#each derivedSteps as step, index}
-				<div
-					class={cn(
-						'h-2 flex-1 rounded-full transition-all duration-200',
-						segmentClass(step.status),
-						index === safeCurrent ? 'ring-[3px] ring-primary/25 ring-offset-2 ring-offset-background' : ''
-					)}
-					role="listitem"
-					aria-current={index === safeCurrent ? 'step' : undefined}
-					aria-label={step.label ?? `Question ${index + 1}`}
-				></div>
+				{@const isActive = index === safeCurrent}
+				{@const canNavigate = index < safeCurrent && step.status !== 'pending'}
+				{#if canNavigate}
+					<div role="listitem" class="flex-1">
+						<button
+							type="button"
+							class={cn(
+								'h-2 w-full rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30',
+								segmentClass(step.status)
+							)}
+							aria-label={step.label ?? `Question ${index + 1}`}
+							onclick={() => handleNavigate(index)}
+						></button>
+					</div>
+				{:else}
+					<div
+						class={cn(
+							'h-2 flex-1 rounded-full transition-all duration-200',
+							segmentClass(step.status),
+							isActive ? 'ring-[3px] ring-primary/25 ring-offset-2 ring-offset-background' : ''
+						)}
+						role="listitem"
+						aria-current={isActive ? 'step' : undefined}
+						aria-label={step.label ?? `Question ${index + 1}`}
+					></div>
+				{/if}
 			{/each}
 		</div>
 	</div>
 
-	{#if showMeta}
-		<div class="flex shrink-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-			{#if resolvedLabel}
-				<span>{resolvedLabel}</span>
-			{/if}
-			{#if secondaryDisplay}
-				<span class="hidden text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-muted-foreground/70 sm:inline">
-					{secondaryDisplay}
-				</span>
-			{/if}
-		</div>
-	{/if}
+	<div class="flex shrink-0 items-center gap-3 text-muted-foreground">
+		{#if resolvedLabel}
+			<span class="text-base font-semibold tracking-tight md:text-lg">{resolvedLabel}</span>
+		{/if}
+		<button
+			type="button"
+			class="flex size-12 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-destructive/20"
+			aria-label="Finish quiz"
+			onclick={handleFinish}
+		>
+			×
+		</button>
+	</div>
 </div>
