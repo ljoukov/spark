@@ -32,50 +32,86 @@
 
 	const focus = {
 		eyebrow: "Today's session",
-		topic: 'Dynamic programming · Balanced arrays',
+		topic: 'DP & graph mastery sprint',
 		summary:
-			'A quick warm-up, a theory refresh, two practice reps, and a mastery quiz to lock things in.'
+			'Review the theory, then work through six interview staples from coin change counting to BFS gene mutations.'
 	};
+
+	const sessionProblems = [
+		{
+			slug: 'coin-change-ways',
+			title: 'Coin Change Ways',
+			icon: '🪙',
+			meta: 'DP • Medium',
+			description: 'Count combinations to reach a target amount with unlimited coins.'
+		},
+		{
+			slug: 'connected-components',
+			title: 'Connected Components',
+			icon: '🕸️',
+			meta: 'Graph • Medium',
+			description: 'Traverse an undirected graph and group nodes into components.'
+		},
+		{
+			slug: 'decode-ways',
+			title: 'Decode Ways',
+			icon: '🔐',
+			meta: 'DP • Medium',
+			description: 'Dynamic programming on strings to count valid decodings.'
+		},
+		{
+			slug: 'directed-cycle-detection',
+			title: 'Directed Cycle Detection',
+			icon: '♻️',
+			meta: 'Graph • Medium',
+			description: 'Detect cycles in a directed graph with DFS ordering.'
+		},
+		{
+			slug: 'edit-distance',
+			title: 'Edit Distance',
+			icon: '✏️',
+			meta: 'DP • Medium',
+			description: 'Classic Levenshtein distance tabulation with substitutions.'
+		},
+		{
+			slug: 'equal-subset-partition',
+			title: 'Equal Subset Partition',
+			icon: '⚖️',
+			meta: 'DP • Medium',
+			description: 'Split an array into two subsets with equal sum using DP.'
+		},
+		{
+			slug: 'gene-mutations',
+			title: 'Gene Mutations',
+			icon: '🧬',
+			meta: 'Graph • Medium',
+			description: 'BFS through valid gene mutations to reach a target sequence.'
+		}
+	];
 
 	const timeline = [
 		{
-			key: 'warmup',
-			title: 'Warm-up',
-			icon: '🏃‍♂️',
-			meta: '5 min',
-			description: "Quick review of yesterday's concepts",
-			done: true
-		},
-		{
 			key: 'theory',
-			title: 'Theory',
+			title: 'Theory refresh',
 			icon: '📚',
-			meta: 'Concept refresh',
-			description: 'Learn the 0/1 knapsack problem and optimisation techniques',
-			done: true
+			meta: 'Read first',
+			description: 'Overview of DP transitions and graph traversal heuristics.',
+			done: true,
+			href: '.'
 		},
-		{
-			key: 'problem-a',
-			title: 'Problem 1',
-			icon: '💻',
-			meta: '15 min',
-			description: 'Classic 0/1 Knapsack — medium difficulty'
-		},
-		{
-			key: 'problem-b',
-			title: 'Problem 2',
-			icon: '💻',
-			meta: '20 min',
-			description: 'Subset Sum with Constraints — hard difficulty'
-		},
-		{
-			key: 'quiz',
-			title: 'Quiz',
-			icon: '📝',
-			meta: '5 questions',
-			description: 'Test your understanding with a quick mastery check'
-		}
+		...sessionProblems.map((problem) => ({
+			key: problem.slug,
+			title: problem.title,
+			icon: problem.icon,
+			meta: problem.meta,
+			description: problem.description,
+			href: `/code/p/${problem.slug}`,
+			done: false
+		}))
 	];
+
+	const startHref = `/code/p/${sessionProblems[0]!.slug}`;
+	const startLabel = sessionProblems[0]!.title;
 </script>
 
 <svelte:head>
@@ -123,15 +159,15 @@
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
 		<div class="plan-body">
-			{#each timeline as item, index}
-				<div
-					class="timeline-row"
-					role="button"
-					tabindex="0"
-					data-first={index === 0}
-					data-last={index === timeline.length - 1}
-					data-done={item.done}
-				>
+		{#each timeline as item, index}
+			<a
+				class="timeline-row"
+				href={item.href}
+				data-sveltekit-prefetch
+				data-first={index === 0}
+				data-last={index === timeline.length - 1}
+				data-done={item.done}
+			>
 					<div class="timeline-hit">
 						<div class="timeline-point" data-done={item.done}>
 							<span class="timeline-circle" data-done={item.done}></span>
@@ -154,11 +190,11 @@
 							</div>
 						</div>
 					</div>
-				</div>
+			</a>
 			{/each}
 		</div>
 		<div class="plan-footer">
-			<a class="plan-start" href="p/1">▶ Start session</a>
+			<a class="plan-start" href={startHref} data-sveltekit-prefetch>▶ Start with {startLabel}</a>
 		</div>
 	</div>
 </section>
@@ -349,6 +385,8 @@
 		outline: none;
 		border-radius: 1rem;
 		position: relative;
+		color: inherit;
+		text-decoration: none;
 	}
 
 	.timeline-row:focus-visible {
