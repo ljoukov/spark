@@ -15,8 +15,9 @@ import {
   buildExtensionPrompt,
   buildGenerationPrompt,
 } from "@spark/llm/quiz/prompts";
-import { runJobsWithConcurrency } from "./concurrency";
-import type { JobProgressReporter } from "./concurrency";
+import { runJobsWithConcurrency } from "../utils/concurrency";
+import type { JobProgressReporter } from "../utils/concurrency";
+import { createCliCommand, splitCommaSeparated } from "../utils/cli";
 import {
   AUDIT_CHECKPOINT_PATH,
   deriveAuditFailures,
@@ -26,17 +27,18 @@ import {
   type LoadAuditEvaluationsResult,
   type LoadedEvaluation,
 } from "./auditArtifacts";
-import { QUIZ_PATHS } from "./env";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
+
+ensureEvalEnvLoaded();
 
 const {
   repoRoot: REPO_ROOT,
-  auditReportDir: REPORT_DIR,
-} = QUIZ_PATHS;
+  quizAuditDir: REPORT_DIR,
+  quizTasksDir: TASKS_DIR,
+} = WORKSPACE_PATHS;
 const STATS_OUTPUT_PATH = path.join(REPORT_DIR, "stats.txt");
 const IMPROVEMENT_TASK_OUTPUT_PATH = path.join(
-  REPO_ROOT,
-  "spark-data",
-  "tasks",
+  TASKS_DIR,
   "improvement-task.md",
 );
 const FULL_SCORE_EPSILON = 1e-6;
@@ -44,6 +46,22 @@ const FULL_SCORE_EPSILON = 1e-6;
 const StageSchema = z.enum(["stats", "reports", "improvement-task"]);
 type Stage = z.infer<typeof StageSchema>;
 const ALL_STAGES: readonly Stage[] = ["stats", "reports", "improvement-task"];
+
+function parseCliStages(argv: readonly string[]): Stage[] {
+  const program = createCliCommand(
+    "audit-eval",
+    "Generate audit summaries for quiz evaluations",
+  );
+  program.option(
+    "--stage <list>",
+    'Comma separated list of stages to run ("stats", "reports", "improvement-task", or "all")',
+    "all",
+  );
+  const parsed = program.parse(argv, { from: "user" }).opts<{
+    stage: string;
+  }>();
+  return parseStagesValue(parsed.stage);
+}
 
 const AUDIT_SUMMARY_FILES = [
   "answer-precision.md",
@@ -94,33 +112,15 @@ type CriterionJob = {
   readonly cases: FailureCase[];
 };
 
-function parseStages(argv: readonly string[]): Stage[] {
-  const stageFlagIndex = argv.findIndex(
-    (arg) => arg === "--stage" || arg.startsWith("--stage="),
-  );
-  if (stageFlagIndex === -1) {
-    return [...ALL_STAGES];
-  }
-  let rawValue: string | undefined;
-  const flag = argv[stageFlagIndex];
-  if (flag === "--stage") {
-    rawValue = argv[stageFlagIndex + 1];
-  } else {
-    rawValue = flag.slice("--stage=".length);
-  }
+function parseStagesValue(rawValue: string | undefined): Stage[] {
   if (!rawValue) {
-    throw new Error(
-      '[audit-eval] Missing value for --stage. Expected comma-separated list or "all".',
-    );
+    return [...ALL_STAGES];
   }
   const normalised = rawValue.trim().toLowerCase();
-  if (normalised === "all") {
+  if (normalised.length === 0 || normalised === "all") {
     return [...ALL_STAGES];
   }
-  const parts = normalised
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const parts = splitCommaSeparated(normalised);
   if (parts.length === 0) {
     throw new Error("[audit-eval] --stage requires at least one entry.");
   }
@@ -535,7 +535,8 @@ function computeImprovementStats(
             continue;
           }
           highConfidenceFindingTotal += 1;
-          const current = highConfidenceFindingCounts.get(finding.criterion) ?? 0;
+          const current =
+            highConfidenceFindingCounts.get(finding.criterion) ?? 0;
           highConfidenceFindingCounts.set(finding.criterion, current + 1);
         }
       }
@@ -717,7 +718,9 @@ function buildInsightsFromStatsText(
     line.startsWith("[analysis] Perfect "),
   );
   if (processedMatch && perfectMatch) {
-    const processedCount = processedMatch.match(/Processed (\d+) judgement files/u);
+    const processedCount = processedMatch.match(
+      /Processed (\d+) judgement files/u,
+    );
     const perfectCounts = perfectMatch.match(/: (\d+)\/(\d+) \(([0-9.]+)%\)/u);
     if (processedCount && perfectCounts) {
       const total = Number(processedCount[1]);
@@ -822,7 +825,11 @@ function buildInsightsFromStatsText(
       }
     }
   }
-  if (inHighConfidenceBlock && currentCriterion && typeof currentCriterion.total === "number") {
+  if (
+    inHighConfidenceBlock &&
+    currentCriterion &&
+    typeof currentCriterion.total === "number"
+  ) {
     criterionTotals.push({
       criterion: currentCriterion.name,
       total: currentCriterion.total,
@@ -892,8 +899,8 @@ async function runImprovementTask(
 
   const statsSourceNote =
     statsSource === "file"
-      ? "_Stats source: spark-data/eval-audit/stats.txt._"
-      : "_Stats source: recomputed from current evaluation data; spark-data/eval-audit/stats.txt was unavailable._";
+      ? "_Stats source: spark-data/quiz/eval-audit/stats.txt._"
+      : "_Stats source: recomputed from current evaluation data; spark-data/quiz/eval-audit/stats.txt was unavailable._";
   lines.push("");
   lines.push(statsSourceNote);
   if (statsRaw.trim().length > 0) {
@@ -923,9 +930,7 @@ async function runImprovementTask(
   );
 }
 
-async function runStats(
-  loadResult: LoadAuditEvaluationsResult,
-): Promise<void> {
+async function runStats(loadResult: LoadAuditEvaluationsResult): Promise<void> {
   const lines: string[] = [];
   const logLine = (message: string): void => {
     lines.push(message);
@@ -991,7 +996,7 @@ async function runReports(
 }
 
 async function main(): Promise<void> {
-  const stages = parseStages(process.argv.slice(2));
+  const stages = parseCliStages(process.argv);
   if (stages.length === 0) {
     throw new Error("[audit-eval] No stages selected.");
   }

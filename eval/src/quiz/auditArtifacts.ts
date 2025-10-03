@@ -13,12 +13,12 @@ import {
   type JudgeAuditFilePayload,
   type JudgeFilePayload,
 } from "./payload";
-import { QUIZ_PATHS } from "./env";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
 
-const {
-  evalOutputDir: EVAL_OUTPUT_DIR,
-  auditReportDir: AUDIT_REPORT_DIR,
-} = QUIZ_PATHS;
+ensureEvalEnvLoaded();
+
+const { quizEvalOutputDir: EVAL_OUTPUT_DIR, quizAuditDir: AUDIT_REPORT_DIR } =
+  WORKSPACE_PATHS;
 
 const EvaluationTypeSchema = z.enum(["quiz", "extension"]);
 export type EvaluationType = z.infer<typeof EvaluationTypeSchema>;
@@ -223,10 +223,16 @@ export function deriveAuditFailures(
         if (candidate.evaluationType !== reason.evaluationType) {
           return false;
         }
-        if (candidate.kind === "judge-verdict" && reason.kind === "judge-verdict") {
+        if (
+          candidate.kind === "judge-verdict" &&
+          reason.kind === "judge-verdict"
+        ) {
           return true;
         }
-        if (candidate.kind === "audit-verdict" && reason.kind === "audit-verdict") {
+        if (
+          candidate.kind === "audit-verdict" &&
+          reason.kind === "audit-verdict"
+        ) {
           return candidate.verdictAgreement === reason.verdictAgreement;
         }
         return false;
@@ -279,7 +285,9 @@ export async function writeAuditCheckpoint(
   return payload;
 }
 
-export async function readAuditCheckpoint(): Promise<AuditCheckpoint | undefined> {
+export async function readAuditCheckpoint(): Promise<
+  AuditCheckpoint | undefined
+> {
   if (!existsSync(AUDIT_CHECKPOINT_PATH)) {
     return undefined;
   }

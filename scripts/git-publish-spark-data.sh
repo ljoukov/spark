@@ -161,23 +161,27 @@ SUBMODULE_UPSTREAM="${SUBMODULE_REMOTE}/${SUBMODULE_REMOTE_BRANCH}"
 
 SUBMODULE_STATUS=$(git status --porcelain)
 
+QUIZ_ROOT="quiz"
+EVAL_OUTPUT_DIR="${QUIZ_ROOT}/eval-output"
+EVAL_OUTPUT_ARCHIVE="${QUIZ_ROOT}/eval-output.tar.gz"
+
 if [ -n "${SUBMODULE_STATUS}" ]; then
-  if [ -d eval-output ]; then
+  if [ -d "${EVAL_OUTPUT_DIR}" ]; then
     if git lfs version >/dev/null 2>&1; then
-      echo "info: packaging eval-output/ into eval-output.tar.gz" >&2
-      rm -f eval-output.tar.gz
-      tar -czf eval-output.tar.gz eval-output
+      echo "info: packaging ${EVAL_OUTPUT_DIR}/ into ${EVAL_OUTPUT_ARCHIVE}" >&2
+      rm -f "${EVAL_OUTPUT_ARCHIVE}"
+      tar -czf "${EVAL_OUTPUT_ARCHIVE}" -C "${QUIZ_ROOT}" eval-output
     else
-      echo "error: git-lfs is required to package eval-output/" >&2
+      echo "error: git-lfs is required to package ${EVAL_OUTPUT_DIR}/" >&2
       popd >/dev/null
       exit 1
     fi
   fi
 
-  if [ -f eval-output.tar.gz ]; then
-    git add eval-output.tar.gz
+  if [ -f "${EVAL_OUTPUT_ARCHIVE}" ]; then
+    git add "${EVAL_OUTPUT_ARCHIVE}"
   else
-    echo "warn: eval-output.tar.gz not found; nothing to add" >&2
+    echo "warn: ${EVAL_OUTPUT_ARCHIVE} not found; nothing to add" >&2
   fi
 
   echo "info: committing spark-data changes on ${SUBMODULE_BRANCH}" >&2

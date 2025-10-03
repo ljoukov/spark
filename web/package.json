@@ -42,7 +42,6 @@
 		"@vitest/browser": "^3.2.3",
 		"bits-ui": "^2.11.0",
 		"clsx": "^2.1.1",
-		"dotenv": "^16.6.1",
 		"eslint": "^9.36.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",

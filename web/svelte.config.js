@@ -15,8 +15,7 @@ const config = {
 			$proto: './proto',
 			'@spark/llm': './node_modules/@spark/llm/src',
 			'@google/genai': './node_modules/@google/genai',
-			zod: './node_modules/zod',
-			dotenv: './node_modules/dotenv'
+			zod: './node_modules/zod'
 		}
 	}
 };
