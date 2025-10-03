@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, onDestroy } from 'svelte';
+        import { getContext, onDestroy, onMount } from 'svelte';
 
 	type UserStore = {
 		subscribe: (
@@ -9,7 +9,7 @@
 
 	const userStore = getContext<UserStore | undefined>('spark-code:user');
 
-	let firstName = 'Sparkie';
+        let firstName = $state('Sparkie');
 	let unsubscribe: (() => void) | null = null;
 
 	if (userStore) {
@@ -30,88 +30,118 @@
 		{ label: 'Solved', value: '86' }
 	];
 
-	const focus = {
-		eyebrow: "Today's session",
-		topic: 'DP & graph mastery sprint',
-		summary:
-			'Review the theory, then work through six interview staples from coin change counting to BFS gene mutations.'
-	};
+        type TimelineStep = {
+                key: string;
+                title: string;
+                icon: string;
+                meta?: string;
+                description: string;
+                href: string;
+                done?: boolean;
+        };
 
-	const sessionProblems = [
-		{
-			slug: 'coin-change-ways',
-			title: 'Coin Change Ways',
-			icon: '🪙',
-			meta: 'DP • Medium',
-			description: 'Count combinations to reach a target amount with unlimited coins.'
-		},
-		{
-			slug: 'connected-components',
-			title: 'Connected Components',
-			icon: '🕸️',
-			meta: 'Graph • Medium',
-			description: 'Traverse an undirected graph and group nodes into components.'
-		},
-		{
-			slug: 'decode-ways',
-			title: 'Decode Ways',
-			icon: '🔐',
-			meta: 'DP • Medium',
-			description: 'Dynamic programming on strings to count valid decodings.'
-		},
-		{
-			slug: 'directed-cycle-detection',
-			title: 'Directed Cycle Detection',
-			icon: '♻️',
-			meta: 'Graph • Medium',
-			description: 'Detect cycles in a directed graph with DFS ordering.'
-		},
-		{
-			slug: 'edit-distance',
-			title: 'Edit Distance',
-			icon: '✏️',
-			meta: 'DP • Medium',
-			description: 'Classic Levenshtein distance tabulation with substitutions.'
-		},
-		{
-			slug: 'equal-subset-partition',
-			title: 'Equal Subset Partition',
-			icon: '⚖️',
-			meta: 'DP • Medium',
-			description: 'Split an array into two subsets with equal sum using DP.'
-		},
-		{
-			slug: 'gene-mutations',
-			title: 'Gene Mutations',
-			icon: '🧬',
-			meta: 'Graph • Medium',
-			description: 'BFS through valid gene mutations to reach a target sequence.'
-		}
-	];
+        const STORAGE_KEY = 'spark-code-progress';
 
-	const timeline = [
-		{
-			key: 'theory',
-			title: 'Theory refresh',
-			icon: '📚',
-			meta: 'Read first',
-			description: 'Overview of DP transitions and graph traversal heuristics.',
-			done: true,
-			href: '.'
-		},
-		...sessionProblems.map((problem) => ({
-			key: problem.slug,
-			title: problem.title,
-			icon: problem.icon,
-			meta: problem.meta,
-			description: problem.description,
-			href: `/code/p/${problem.slug}`,
-			done: false
-		}))
-	];
+        const focus = {
+                eyebrow: "Today's plan",
+                topic: 'DP easy win sprint',
+                summary:
+                        'Warm up, explore the coin change transition, solve two easy DP problems, then seal it with a review quiz.'
+        };
 
-	const startHref = `/code/p/${sessionProblems[0]!.slug}`;
-	const startLabel = sessionProblems[0]!.title;
+        const problems = [
+                {
+                        key: 'problem-coin-change-ways',
+                        slug: 'coin-change-ways',
+                        title: 'Coin Change Ways',
+                        icon: '🪙',
+                        meta: 'DP • Easy',
+                        description: 'Count combinations to reach a target amount with unlimited coins.'
+                },
+                {
+                        key: 'problem-decode-ways',
+                        slug: 'decode-ways',
+                        title: 'Decode Ways',
+                        icon: '🔐',
+                        meta: 'DP • Easy',
+                        description: 'Turn digit strings into letter counts with memoized recursion.'
+                }
+        ] as const;
+
+        const baseTimeline: TimelineStep[] = [
+                {
+                        key: 'warmup',
+                        title: 'Warm-up quiz',
+                        icon: '🔥',
+                        meta: '3 quick checks',
+                        description: 'Get the DP basics firing before you code.',
+                        href: '/code/quiz/dp-warmup-quiz'
+                },
+                {
+                        key: 'topic',
+                        title: 'Topic deck',
+                        icon: '🧠',
+                        meta: '5 guided steps',
+                        description: 'Two info cards and three micro-quizzes on the coin change pattern.',
+                        href: '/code/quiz/dp-topic-deck'
+                },
+                ...problems.map((problem, index) => ({
+                        key: problem.key,
+                        title: `${index === 0 ? 'Practice' : 'Challenge'} · ${problem.title}`,
+                        icon: problem.icon,
+                        meta: problem.meta,
+                        description: problem.description,
+                        href: `/code/p/${problem.slug}`
+                })),
+                {
+                        key: 'review',
+                        title: 'Final review quiz',
+                        icon: '✅',
+                        meta: '3 questions',
+                        description: 'Confirm the pattern sticks before tackling harder sets.',
+                        href: '/code/quiz/dp-review-quiz'
+                }
+        ];
+
+        const validKeys = new Set(baseTimeline.map((step) => step.key));
+
+        let completedKeys = $state<string[]>([]);
+
+        onMount(() => {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                try {
+                        const raw = window.sessionStorage.getItem(STORAGE_KEY);
+                        if (!raw) {
+                                return;
+                        }
+                        const parsed: unknown = JSON.parse(raw);
+                        if (Array.isArray(parsed)) {
+                                completedKeys = parsed.filter(
+                                        (entry): entry is string =>
+                                                typeof entry === 'string' && validKeys.has(entry)
+                                );
+                        }
+                } catch (error) {
+                        console.error('Unable to load stored progress', error);
+                        completedKeys = [];
+                }
+        });
+
+        const completedSet = $derived(new Set(completedKeys));
+        const timeline = $derived(
+                baseTimeline.map((step) => ({
+                        ...step,
+                        done: completedSet.has(step.key)
+                }))
+        );
+        const firstIncomplete = $derived(
+                timeline.find((step) => !step.done) ?? timeline[timeline.length - 1]!
+        );
+        const startHref = $derived(firstIncomplete.href);
+        const startLabel = $derived(firstIncomplete.title);
 </script>
 
 <svelte:head>
