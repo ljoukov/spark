@@ -87,7 +87,7 @@
 						<button
 							type="button"
 							class={cn(
-								'h-2 w-full rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30',
+								'h-2 w-full rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 cursor-pointer',
 								segmentClass(step.status)
 							)}
 							aria-label={step.label ?? `Question ${index + 1}`}
