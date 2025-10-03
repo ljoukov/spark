@@ -1,9 +1,12 @@
+import type { SessionStepId } from '$lib/progress/session';
+
 export type QuizQuestionBase = {
-	id: string;
-	prompt: string;
-	hint?: string;
-	explanation?: string;
-	audioLabel?: string;
+        id: string;
+        prompt: string;
+        hint?: string;
+        explanation?: string;
+        audioLabel?: string;
+        progressLabel?: string;
 };
 
 export type QuizChoiceOption = {
@@ -25,7 +28,16 @@ export type QuizTypeAnswerQuestion = QuizQuestionBase & {
 	placeholder?: string;
 };
 
-export type QuizQuestion = QuizMultipleChoiceQuestion | QuizTypeAnswerQuestion;
+export type QuizInfoCardQuestion = QuizQuestionBase & {
+        kind: 'info-card';
+        body: string | readonly string[];
+        actionLabel?: string;
+};
+
+export type QuizQuestion =
+        | QuizMultipleChoiceQuestion
+        | QuizTypeAnswerQuestion
+        | QuizInfoCardQuestion;
 
 export type QuizFeedbackTone = 'info' | 'success' | 'warning';
 
@@ -44,10 +56,12 @@ export type QuizProgressStep = {
 };
 
 export type QuizDefinition = {
-	id: string;
-	title: string;
-	description?: string;
-	topic?: string;
-	estimatedMinutes?: number;
-	questions: readonly QuizQuestion[];
+        id: string;
+        title: string;
+        description?: string;
+        topic?: string;
+        estimatedMinutes?: number;
+        stepId?: SessionStepId;
+        completionCtaLabel?: string;
+        questions: readonly QuizQuestion[];
 };

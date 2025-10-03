@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import * as Resizable from '$lib/components/ui/resizable/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import { cn } from '$lib/utils.js';
-	import { loadMonaco } from '$lib/monaco/index.js';
-	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
-	import Maximize2 from '@lucide/svelte/icons/maximize-2';
-	import Minimize2 from '@lucide/svelte/icons/minimize-2';
-	import type { PageData } from './$types';
+        import * as Resizable from '$lib/components/ui/resizable/index.js';
+        import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+        import { cn } from '$lib/utils.js';
+        import { loadMonaco } from '$lib/monaco/index.js';
+        import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
+        import Maximize2 from '@lucide/svelte/icons/maximize-2';
+        import Minimize2 from '@lucide/svelte/icons/minimize-2';
+        import type { PageData } from './$types';
+        import { markStepComplete, getStepIdForProblem } from '$lib/progress/session';
+        import { goto } from '$app/navigation';
 
 	type PaneSide = 'left' | 'right';
 
@@ -20,16 +22,17 @@
 	export let data: PageData;
 
 	let problem = data.problem;
-	let markdownHtml = data.problem.markdownHtml;
-	const DEFAULT_CODE = 'print("hello world :)")';
+        let markdownHtml = data.problem.markdownHtml;
+        const DEFAULT_CODE = 'print("hello world :)")';
 	let rightText = DEFAULT_CODE;
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
 	let editorContainer: HTMLDivElement | null = null;
-	type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
-	let monacoEditor: CodeEditor | null = null;
-	let disposeEditor: (() => void) | null = null;
+        type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
+        let monacoEditor: CodeEditor | null = null;
+        let disposeEditor: (() => void) | null = null;
+        const stepId = $derived(getStepIdForProblem(problem.id));
 
 	function resolveMonacoTheme(): 'vs-dark' | 'vs' {
 		if (typeof document === 'undefined') {
@@ -146,27 +149,40 @@
 		maximizedPane = side;
 	}
 
-	function handleLayoutChange(layout: number[]) {
-		const [left, right] = layout;
-		const almostEqual = (a: number, b: number, epsilon = 0.5) => Math.abs(a - b) <= epsilon;
+        function handleLayoutChange(layout: number[]) {
+                const [left, right] = layout;
+                const almostEqual = (a: number, b: number, epsilon = 0.5) => Math.abs(a - b) <= epsilon;
 
-		if (almostEqual(left, 100) && almostEqual(right, 0)) {
-			maximizedPane = 'left';
-		} else if (almostEqual(left, 0) && almostEqual(right, 100)) {
-			maximizedPane = 'right';
-		} else {
-			maximizedPane = null;
-		}
-	}
+                if (almostEqual(left, 100) && almostEqual(right, 0)) {
+                        maximizedPane = 'left';
+                } else if (almostEqual(left, 0) && almostEqual(right, 100)) {
+                        maximizedPane = 'right';
+                } else {
+                        maximizedPane = null;
+                }
+        }
+
+        function handleReturnToPlan() {
+                if (stepId) {
+                        markStepComplete(stepId);
+                }
+                void goto('/code');
+        }
 </script>
 
 <section class="workspace-page flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-	<header class="flex-shrink-0 space-y-1">
-		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
-		<p class="text-muted-foreground text-sm">
-			Compare or edit text side by side with a draggable divider.
-		</p>
-	</header>
+        <header class="flex flex-wrap items-start justify-between gap-4">
+                <div class="space-y-1">
+                        <p class="text-primary/80 text-xs font-semibold uppercase tracking-[0.28em]">
+                                Daily DP practice
+                        </p>
+                        <h1 class="text-2xl font-semibold tracking-tight">{problem.title}</h1>
+                        <p class="text-muted-foreground max-w-2xl text-sm leading-relaxed">{problem.summary}</p>
+                </div>
+                <Button class="shrink-0" on:click={handleReturnToPlan}>
+                        Done — back to plan
+                </Button>
+        </header>
 
 	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
 		<Resizable.PaneGroup

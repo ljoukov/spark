@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { getContext, onDestroy } from 'svelte';
+        import { getContext, onDestroy, onMount } from 'svelte';
+        import {
+                readCompletedSteps,
+                PROGRESS_STORAGE_KEY,
+                type SessionStepId
+        } from '$lib/progress/session';
 
 	type UserStore = {
 		subscribe: (
@@ -23,95 +28,112 @@
 		unsubscribe?.();
 	});
 
-	const stats = [
-		{ label: 'XP', value: '1,420' },
-		{ label: 'Level', value: '7' },
-		{ label: 'Days 🔥', value: '12' },
-		{ label: 'Solved', value: '86' }
-	];
+        const stats = [
+                { label: 'XP', value: '1,420' },
+                { label: 'Level', value: '7' },
+                { label: 'Days 🔥', value: '12' },
+                { label: 'Solved', value: '86' }
+        ];
 
-	const focus = {
-		eyebrow: "Today's session",
-		topic: 'DP & graph mastery sprint',
-		summary:
-			'Review the theory, then work through six interview staples from coin change counting to BFS gene mutations.'
-	};
+        const focus = {
+                eyebrow: "Today's focus",
+                topic: 'Dynamic programming fundamentals',
+                summary:
+                        'Warm up, walk through the grid-path recurrence, then solve two friendly DP problems before a short review quiz.'
+        };
 
-	const sessionProblems = [
-		{
-			slug: 'coin-change-ways',
-			title: 'Coin Change Ways',
-			icon: '🪙',
-			meta: 'DP • Medium',
-			description: 'Count combinations to reach a target amount with unlimited coins.'
-		},
-		{
-			slug: 'connected-components',
-			title: 'Connected Components',
-			icon: '🕸️',
-			meta: 'Graph • Medium',
-			description: 'Traverse an undirected graph and group nodes into components.'
-		},
-		{
-			slug: 'decode-ways',
-			title: 'Decode Ways',
-			icon: '🔐',
-			meta: 'DP • Medium',
-			description: 'Dynamic programming on strings to count valid decodings.'
-		},
-		{
-			slug: 'directed-cycle-detection',
-			title: 'Directed Cycle Detection',
-			icon: '♻️',
-			meta: 'Graph • Medium',
-			description: 'Detect cycles in a directed graph with DFS ordering.'
-		},
-		{
-			slug: 'edit-distance',
-			title: 'Edit Distance',
-			icon: '✏️',
-			meta: 'DP • Medium',
-			description: 'Classic Levenshtein distance tabulation with substitutions.'
-		},
-		{
-			slug: 'equal-subset-partition',
-			title: 'Equal Subset Partition',
-			icon: '⚖️',
-			meta: 'DP • Medium',
-			description: 'Split an array into two subsets with equal sum using DP.'
-		},
-		{
-			slug: 'gene-mutations',
-			title: 'Gene Mutations',
-			icon: '🧬',
-			meta: 'Graph • Medium',
-			description: 'BFS through valid gene mutations to reach a target sequence.'
-		}
-	];
+        type PlanStep = {
+                id: SessionStepId;
+                title: string;
+                icon: string;
+                meta: string;
+                description: string;
+                href: string;
+        };
 
-	const timeline = [
-		{
-			key: 'theory',
-			title: 'Theory refresh',
-			icon: '📚',
-			meta: 'Read first',
-			description: 'Overview of DP transitions and graph traversal heuristics.',
-			done: true,
-			href: '.'
-		},
-		...sessionProblems.map((problem) => ({
-			key: problem.slug,
-			title: problem.title,
-			icon: problem.icon,
-			meta: problem.meta,
-			description: problem.description,
-			href: `/code/p/${problem.slug}`,
-			done: false
-		}))
-	];
+        const planSteps: readonly PlanStep[] = [
+                {
+                        id: 'warmup-quiz',
+                        title: 'Warmup quiz',
+                        icon: '⚡️',
+                        meta: 'Quiz · 3 questions',
+                        description: 'Shake off the rust with overlapping subproblems and base cases.',
+                        href: '/code/quiz/dp-warmup-basics'
+                },
+                {
+                        id: 'topic-deck',
+                        title: 'Topic deck',
+                        icon: '🧠',
+                        meta: 'Topic · 5 mini steps',
+                        description: 'Walk through the grid-path recurrence with quick knowledge checks.',
+                        href: '/code/quiz/dp-topic-deck'
+                },
+                {
+                        id: 'dp-coin-change',
+                        title: 'Coin Change Ways',
+                        icon: '🪙',
+                        meta: 'DP • Easy',
+                        description: 'Count combinations to reach an amount with unlimited coins.',
+                        href: '/code/p/coin-change-ways'
+                },
+                {
+                        id: 'dp-decode-ways',
+                        title: 'Decode Ways',
+                        icon: '🔐',
+                        meta: 'DP • Easy+',
+                        description: 'Translate digit strings into letters with a 1D DP pass.',
+                        href: '/code/p/decode-ways'
+                },
+                {
+                        id: 'final-review-quiz',
+                        title: 'Final review quiz',
+                        icon: '🎯',
+                        meta: 'Quiz · 3 questions',
+                        description: 'Lock in tabulation and memoization takeaways before you wrap.',
+                        href: '/code/quiz/dp-final-review'
+                }
+        ];
 
-	const startHref = `/code/p/${sessionProblems[0]!.slug}`;
-	const startLabel = sessionProblems[0]!.title;
+        let completed = $state<Set<SessionStepId>>(new Set());
+
+        function refreshProgress() {
+                completed = new Set(readCompletedSteps());
+        }
+
+        onMount(() => {
+                refreshProgress();
+                const handleStorage = (event: StorageEvent) => {
+                        if (event.key === PROGRESS_STORAGE_KEY) {
+                                refreshProgress();
+                        }
+                };
+                const handleVisibility = () => {
+                        if (document.visibilityState === 'visible') {
+                                refreshProgress();
+                        }
+                };
+                window.addEventListener('storage', handleStorage);
+                document.addEventListener('visibilitychange', handleVisibility);
+
+                return () => {
+                        window.removeEventListener('storage', handleStorage);
+                        document.removeEventListener('visibilitychange', handleVisibility);
+                };
+        });
+
+        const timeline = $derived(
+                planSteps.map((step) => ({
+                        ...step,
+                        done: completed.has(step.id)
+                }))
+        );
+
+        const nextStep = $derived(timeline.find((step) => !step.done));
+        const allStepsDone = $derived(!nextStep);
+        const startHref = $derived(nextStep?.href ?? timeline[timeline.length - 1]?.href ?? '/code');
+        const startButtonText = $derived(
+                nextStep ? `▶ Resume ${nextStep.title}` : 'Review the plan'
+        );
 </script>
 
 <svelte:head>
@@ -153,13 +175,19 @@
 	</div>
 
 	<div class="plan-card">
-		<header class="plan-header">
-			<p class="plan-eyebrow">{focus.eyebrow}</p>
-			<h2>{focus.topic}</h2>
-			<p class="plan-summary">{focus.summary}</p>
-		</header>
-		<div class="plan-body">
-		{#each timeline as item, index}
+                <header class="plan-header">
+                        <p class="plan-eyebrow">{focus.eyebrow}</p>
+                        <h2>{focus.topic}</h2>
+                        <p class="plan-summary">
+                                {#if allStepsDone}
+                                        All five steps complete — feel free to revisit any checkpoint below.
+                                {:else}
+                                        {focus.summary}
+                                {/if}
+                        </p>
+                </header>
+                <div class="plan-body">
+                {#each timeline as item, index}
                         <a
                                 class="timeline-row"
                                 href={item.href}
@@ -191,16 +219,16 @@
 					</div>
 			</a>
 			{/each}
-		</div>
-		<div class="plan-footer">
+                </div>
+                <div class="plan-footer">
                         <a
                                 class="plan-start"
                                 href={startHref}
                         >
-                                ▶ Start with {startLabel}
+                                {startButtonText}
                         </a>
-		</div>
-	</div>
+                </div>
+        </div>
 </section>
 
 <style lang="postcss">
