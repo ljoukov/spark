@@ -205,6 +205,7 @@
 		grid-template-columns: 1fr;
 		gap: clamp(1.5rem, 3vw, 2.4rem);
 		padding-top: clamp(1.5rem, 3vw, 2.4rem);
+		padding-bottom: clamp(1.5rem, 3vw, 2.4rem);
 		align-items: start;
 		max-width: min(80rem, 92vw);
 		margin: 0 auto clamp(2rem, 4vw, 3rem);
@@ -644,6 +645,7 @@
 		.dashboard {
 			gap: 1.4rem;
 			padding-top: 1rem;
+			padding-bottom: 1rem;
 		}
 	}
 </style>
