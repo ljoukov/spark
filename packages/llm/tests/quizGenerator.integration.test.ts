@@ -19,7 +19,7 @@ import { loadLocalEnv } from '../src/utils/env';
 const LONG_TIMEOUT = 240_000;
 const CURRENT_DIR = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = path.resolve(CURRENT_DIR, '../../..');
-const DATA_ROOT = path.join(REPO_ROOT, 'spark-data', 'unit-tests');
+const DATA_ROOT = path.join(REPO_ROOT, 'spark-data', 'quiz', 'unit-tests');
 
 loadLocalEnv();
 

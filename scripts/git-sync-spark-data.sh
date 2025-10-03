@@ -40,20 +40,25 @@ else
   git -C spark-data checkout "${TARGET_SHA}" >/dev/null
 fi
 
-if [ -d spark-data/eval-output ]; then
-  echo "info: spark-data/eval-output already exists; leaving as-is" >&2
+QUIZ_ROOT="spark-data/quiz"
+EVAL_OUTPUT_DIR="${QUIZ_ROOT}/eval-output"
+EVAL_OUTPUT_ARCHIVE="${QUIZ_ROOT}/eval-output.tar.gz"
+
+if [ -d "${EVAL_OUTPUT_DIR}" ]; then
+  echo "info: ${EVAL_OUTPUT_DIR} already exists; leaving as-is" >&2
 else
   if ! git -C spark-data lfs version >/dev/null 2>&1; then
     echo "warn: git-lfs not installed; skipping eval-output unpack" >&2
   else
-    echo "info: ensuring spark-data/eval-output.tar.gz is available via git-lfs" >&2
-    git -C spark-data lfs pull --include="eval-output.tar.gz" --exclude="" >/dev/null
+    echo "info: ensuring ${EVAL_OUTPUT_ARCHIVE} is available via git-lfs" >&2
+    git -C spark-data lfs pull --include="quiz/eval-output.tar.gz" --exclude="" >/dev/null
 
-    if [ -f spark-data/eval-output.tar.gz ]; then
-      echo "info: unpacking spark-data/eval-output.tar.gz" >&2
-      tar -xzf spark-data/eval-output.tar.gz -C spark-data
+    if [ -f "${EVAL_OUTPUT_ARCHIVE}" ]; then
+      echo "info: unpacking ${EVAL_OUTPUT_ARCHIVE}" >&2
+      mkdir -p "${QUIZ_ROOT}"
+      tar -xzf "${EVAL_OUTPUT_ARCHIVE}" -C "${QUIZ_ROOT%/}" >/dev/null
     else
-      echo "warn: spark-data/eval-output.tar.gz missing after lfs pull; skipping unpack" >&2
+      echo "warn: ${EVAL_OUTPUT_ARCHIVE} missing after lfs pull; skipping unpack" >&2
     fi
   fi
 fi

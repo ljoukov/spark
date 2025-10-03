@@ -221,7 +221,7 @@ class ProgressDisplay {
     totalJobs: number,
     label: string,
     updateIntervalMs: number,
-    { mode, output }: { mode: StatusMode; output: NodeJS.WriteStream }
+    { mode, output }: { mode: StatusMode; output: NodeJS.WriteStream },
   ) {
     this.totalJobs = totalJobs;
     this.label = label;
@@ -387,14 +387,14 @@ class ProgressDisplay {
       this.completedJobs >= this.totalJobs ? 100 : Math.round(rawPercent);
     const waitingJobs = Math.max(
       this.totalJobs - this.completedJobs - this.runningJobs,
-      0
+      0,
     );
     const metrics = this.metrics.getSnapshot();
     const promptSpeedDisplay = formatNumber(
-      Math.round(metrics.promptTokensPerSecond)
+      Math.round(metrics.promptTokensPerSecond),
     );
     const inferenceSpeedDisplay = formatNumber(
-      Math.round(metrics.inferenceTokensPerSecond)
+      Math.round(metrics.inferenceTokensPerSecond),
     );
     const line =
       `${this.labelDisplay} ${percent}% | ${this.completedJobs} / ${this.totalJobs}` +
@@ -511,7 +511,7 @@ export async function runJobsWithConcurrency<I, O>({
     {
       mode: effectiveStatusMode,
       output: stream,
-    }
+    },
   );
   progressDisplay.start();
   let nextIndex = 0;
@@ -549,7 +549,7 @@ export async function runJobsWithConcurrency<I, O>({
 
   try {
     await Promise.all(
-      Array.from({ length: effectiveConcurrency }, () => runWorker())
+      Array.from({ length: effectiveConcurrency }, () => runWorker()),
     );
   } finally {
     progressDisplay.stop();
@@ -575,7 +575,7 @@ function formatBytes(bytes: number): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    Math.max(0, Math.floor(value))
+    Math.max(0, Math.floor(value)),
   );
 }
 
