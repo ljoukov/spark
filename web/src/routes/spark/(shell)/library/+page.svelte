@@ -17,11 +17,7 @@
 			<h1>Library</h1>
 			<p>Organise every upload and jump straight into a tailored session.</p>
 		</div>
-		<button
-			type="button"
-			class={cn(buttonVariants({ size: 'lg' }))}
-			onclick={openCreate}
-		>
+		<button type="button" class={cn(buttonVariants({ size: 'lg' }))} onclick={openCreate}>
 			New
 		</button>
 	</header>
@@ -45,7 +41,10 @@
 						</div>
 					</a>
 					<DropdownMenu.Root>
-						<DropdownMenu.Trigger class="spark-library__actions" aria-label={`Manage ${upload.title}`}>
+						<DropdownMenu.Trigger
+							class="spark-library__actions"
+							aria-label={`Manage ${upload.title}`}
+						>
 							<MoreVerticalIcon class="size-4" />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="end" sideOffset={6} class="spark-library__menu">
@@ -62,9 +61,7 @@
 		<div class="spark-library__empty">
 			<h2>No uploads yet</h2>
 			<p>Bring your notes in via Create to craft instant practice sets.</p>
-			<button type="button" class={cn(buttonVariants({}))} onclick={openCreate}>
-				Start now
-			</button>
+			<button type="button" class={cn(buttonVariants({}))} onclick={openCreate}> Start now </button>
 		</div>
 	{/if}
 </section>
@@ -167,7 +164,9 @@
 		height: 2.25rem;
 		border-radius: 0.9rem;
 		background: color-mix(in srgb, var(--surface-color) 90%, transparent 10%);
-		transition: background 160ms ease, transform 160ms ease;
+		transition:
+			background 160ms ease,
+			transform 160ms ease;
 	}
 
 	:global(.spark-library__actions:hover) {

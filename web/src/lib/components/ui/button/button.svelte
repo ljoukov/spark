@@ -52,7 +52,6 @@
 	// Ensure in-app links are base-path aware and satisfy lint rule
 	import { resolve } from '$app/paths';
 	import type { ResolvedPathname } from '$app/types';
-
 </script>
 
 {#if hrefProp}

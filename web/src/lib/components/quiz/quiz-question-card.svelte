@@ -52,8 +52,7 @@
 			'border-emerald-200/70 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-100',
 		warning:
 			'border-amber-200/70 bg-amber-50 text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100',
-		info:
-			'border-primary/30 bg-primary/5 text-primary dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100'
+		info: 'border-primary/30 bg-primary/5 text-primary dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100'
 	} as const;
 
 	const cardClass = $derived(
@@ -67,7 +66,8 @@
 	const feedbackClass = $derived(
 		feedback
 			? feedbackToneStyles[
-					feedback.tone ?? (statusProp === 'correct' ? 'success' : statusProp === 'incorrect' ? 'warning' : 'info')
+					feedback.tone ??
+						(statusProp === 'correct' ? 'success' : statusProp === 'incorrect' ? 'warning' : 'info')
 				]
 			: undefined
 	);
@@ -77,12 +77,14 @@
 	<CardHeader class="p-0">
 		<div class="space-y-3">
 			{#if eyebrow !== null}
-				<span class="inline-flex items-center rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.32em] text-primary/80 shadow-sm">
+				<span
+					class="inline-flex items-center rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold tracking-[0.32em] text-primary/80 uppercase shadow-sm"
+				>
 					{eyebrow}
 				</span>
 			{/if}
 			{#if title}
-				<CardTitle class="text-xl font-semibold leading-snug text-foreground md:text-2xl">
+				<CardTitle class="text-xl leading-snug font-semibold text-foreground md:text-2xl">
 					{title}
 				</CardTitle>
 			{/if}
@@ -93,8 +95,12 @@
 		<slot />
 
 		{#if showHint && hint}
-			<div class="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm dark:border-primary/40 dark:bg-primary/15 dark:text-primary-100">
-				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-primary/70 dark:text-primary-100/70">
+			<div
+				class="dark:text-primary-100 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm dark:border-primary/40 dark:bg-primary/15"
+			>
+				<p
+					class="dark:text-primary-100/70 text-xs font-semibold tracking-[0.22em] text-primary/70 uppercase"
+				>
 					Hint
 				</p>
 				<p class="mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
@@ -104,8 +110,10 @@
 		{/if}
 
 		{#if showExplanation && explanation}
-			<div class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground dark:bg-muted/20">
-				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/80">
+			<div
+				class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground dark:bg-muted/20"
+			>
+				<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
 					Explanation
 				</p>
 				<p class="mt-1 text-base leading-relaxed text-muted-foreground/90">

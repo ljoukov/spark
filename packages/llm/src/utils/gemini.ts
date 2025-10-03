@@ -39,19 +39,19 @@ type GeminiKeyResolver = () => Promise<string | undefined> | string | undefined;
 let customKeyResolver: GeminiKeyResolver | undefined;
 
 export function configureGemini(options: {
-	readonly apiKey?: string;
-	readonly resolver?: GeminiKeyResolver;
+  readonly apiKey?: string;
+  readonly resolver?: GeminiKeyResolver;
 }): void {
-	if (options.apiKey !== undefined) {
-		const trimmed = options.apiKey?.trim();
-		customKeyResolver = () => (trimmed ? trimmed : undefined);
-		return;
-	}
-	if (options.resolver) {
-		customKeyResolver = options.resolver;
-		return;
-	}
-	customKeyResolver = undefined;
+  if (options.apiKey !== undefined) {
+    const trimmed = options.apiKey?.trim();
+    customKeyResolver = () => (trimmed ? trimmed : undefined);
+    return;
+  }
+  if (options.resolver) {
+    customKeyResolver = options.resolver;
+    return;
+  }
+  customKeyResolver = undefined;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -61,22 +61,22 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function resolveGeminiApiKey(): Promise<string> {
-	if (customKeyResolver) {
-		const resolved = await customKeyResolver();
-		const trimmed = typeof resolved === "string" ? resolved.trim() : "";
-		if (trimmed) {
-			return trimmed;
-		}
-	}
+  if (customKeyResolver) {
+    const resolved = await customKeyResolver();
+    const trimmed = typeof resolved === "string" ? resolved.trim() : "";
+    if (trimmed) {
+      return trimmed;
+    }
+  }
 
-	const fromProcess = process.env.GEMINI_API_KEY?.trim();
-	if (fromProcess) {
-		return fromProcess;
-	}
+  const fromProcess = process.env.GEMINI_API_KEY?.trim();
+  if (fromProcess) {
+    return fromProcess;
+  }
 
-	throw new Error(
-		"GEMINI_API_KEY is not set. Provide it in environment variables.",
-	);
+  throw new Error(
+    "GEMINI_API_KEY is not set. Provide it in environment variables.",
+  );
 }
 
 let clientPromise: Promise<GoogleGenAI> | undefined;

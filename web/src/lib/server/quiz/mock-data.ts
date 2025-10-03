@@ -1,191 +1,201 @@
 import type { QuizDefinition } from '$lib/types/quiz';
 
 export const dynamicProgrammingWarmupQuiz: QuizDefinition = {
-        id: 'dp-warmup-quiz',
-        title: 'DP Warm-up: Core Ideas',
-        topic: 'Dynamic Programming',
-        estimatedMinutes: 4,
-        progressKey: 'warmup',
-        description: 'Three quick checks on overlapping subproblems, base cases, and tabulation flow.',
-        questions: [
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-warmup-overlap',
-                        prompt: 'When do overlapping subproblems appear?',
-                        hint: 'Look for recursion that revisits the same state.',
-                        explanation:
-                                'Overlapping subproblems happen when different recursion branches compute the same state, such as dp(amount) for the same amount in coin change.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'When each recursive call produces a unique state' },
-                                { id: 'B', label: 'B', text: 'When the same subproblem is needed in multiple branches' },
-                                { id: 'C', label: 'C', text: 'Only when a problem uses graphs' },
-                                { id: 'D', label: 'D', text: 'Whenever a greedy choice is possible' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-warmup-base-case',
-                        prompt: 'In a counting DP (ways to form a sum), what does the base case dp[0] usually equal?',
-                        hint: 'Consider how many ways exist to pick nothing.',
-                        explanation:
-                                'Setting dp[0] = 1 encodes the single way to make zero — pick no elements. It seeds the recurrence for positive amounts.',
-                        options: [
-                                { id: 'A', label: 'A', text: '0, because no work is needed' },
-                                { id: 'B', label: 'B', text: '1, representing the empty choice' },
-                                { id: 'C', label: 'C', text: 'The smallest coin value' },
-                                { id: 'D', label: 'D', text: 'Undefined until we process input' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-warmup-order',
-                        prompt: 'Why do tabulation solutions fill states in a specific order?',
-                        hint: 'Think about dependencies between states.',
-                        explanation:
-                                'Tabulation evaluates states so that every dependency is ready. The order respects the recurrence graph, similar to a topological order.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'To match the call stack order of recursion exactly' },
-                                { id: 'B', label: 'B', text: 'So each state reads values that were already computed' },
-                                { id: 'C', label: 'C', text: 'Because arrays must be filled from left to right' },
-                                { id: 'D', label: 'D', text: 'To minimise memory usage with memoization' }
-                        ],
-                        correctOptionId: 'B'
-                }
-        ]
+	id: 'dp-warmup-quiz',
+	title: 'DP Warm‑up: Basics',
+	topic: 'Dynamic Programming',
+	estimatedMinutes: 3,
+	progressKey: 'warmup',
+	description: 'Three very short questions to build intuition—no formulas needed.',
+	questions: [
+		{
+			kind: 'multiple-choice',
+			id: 'dp-warmup-overlap',
+			prompt: 'What is the big idea behind dynamic programming (DP)?',
+			hint: 'Think “break, solve small, remember, reuse”.',
+			explanation:
+				'DP means breaking a problem into smaller pieces, solving those small pieces once, saving the answers, and reusing them so you do not repeat work.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Try everything randomly and hope for the best' },
+				{ id: 'B', label: 'B', text: 'Break problems into smaller parts and reuse saved answers' },
+				{ id: 'C', label: 'C', text: 'Sort the input to make it faster' },
+				{ id: 'D', label: 'D', text: 'Draw a graph and do BFS every time' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-warmup-base-case',
+			prompt: 'What is a “base case” in DP?',
+			hint: 'Start from something you already know.',
+			explanation:
+				'A base case is a tiny version of the problem with an answer you already know. It anchors everything else you build.',
+			options: [
+				{ id: 'A', label: 'A', text: 'A fancy optimization that makes code faster' },
+				{ id: 'B', label: 'B', text: 'A simple starting situation with a known answer' },
+				{ id: 'C', label: 'C', text: 'The biggest input you plan to test' },
+				{ id: 'D', label: 'D', text: 'A sign that the problem has no solution' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-warmup-order',
+			prompt: 'Why do DP solutions keep a table/array/map of results?',
+			hint: 'Think about not solving the same thing twice.',
+			explanation:
+				'The table stores answers you have already computed so later steps can reuse them instead of recomputing.',
+			options: [
+				{ id: 'A', label: 'A', text: 'To print the results in a nice grid' },
+				{
+					id: 'B',
+					label: 'B',
+					text: 'To store answers we have already computed so we can reuse them'
+				},
+				{ id: 'C', label: 'C', text: 'To make the code longer and more complex' },
+				{ id: 'D', label: 'D', text: 'To use more memory because memory is cheap' }
+			],
+			correctOptionId: 'B'
+		}
+	]
 };
 
 export const dynamicProgrammingTopicDeck: QuizDefinition = {
-        id: 'dp-topic-deck',
-        title: 'Topic Deep Dive: Coin Change Transitions',
-        topic: 'Dynamic Programming',
-        estimatedMinutes: 6,
-        progressKey: 'topic',
-        description: 'Two quick concept cards and three guided questions to lock in bottom-up coin change intuition.',
-        questions: [
-                {
-                        kind: 'info-card',
-                        id: 'dp-topic-card-1',
-                        prompt: 'Snapshot the state',
-                        eyebrow: 'Concept spotlight',
-                        body: 'For coin change we define dp[amount] as the number of ways to reach “amount”. The base case dp[0] = 1 means the empty selection is valid. Every other state will build on this anchor.',
-                        continueLabel: 'Next concept'
-                },
-                {
-                        kind: 'info-card',
-                        id: 'dp-topic-card-2',
-                        prompt: 'Build transitions carefully',
-                        eyebrow: 'Concept spotlight',
-                        body: 'When iterating coins outside the amount loop, each coin contributes combinations without caring about order. The recurrence becomes dp[amount] += dp[amount - coin] whenever amount ≥ coin.',
-                        continueLabel: "Let's quiz it"
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-topic-question-1',
-                        prompt: 'Why does iterating coins outermost avoid double counting order?',
-                        hint: 'Consider how often each coin is revisited for a given amount.',
-                        explanation:
-                                'Processing coins in the outer loop ensures each combination of coins is built once. Amounts only expand forward using the coins we have already considered.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'It forces the algorithm to use each coin at most once.' },
-                                { id: 'B', label: 'B', text: 'Amounts never see a coin that has not been fully processed before.' },
-                                { id: 'C', label: 'C', text: 'It sorts the coins so permutations collapse naturally.' },
-                                { id: 'D', label: 'D', text: 'It lets us skip the base case entirely.' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-topic-question-2',
-                        prompt: 'If dp[amount] counts combinations, what does dp[amount - coin] contribute in the recurrence?',
-                        hint: 'Relate the subproblem to a smaller target.',
-                        explanation:
-                                'dp[amount - coin] counts all combinations that form the smaller amount; adding the current coin extends each of those to reach the larger amount.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'Only the combination that uses the largest coin.' },
-                                { id: 'B', label: 'B', text: 'All ways to form the reduced amount so we can append the current coin.' },
-                                { id: 'C', label: 'C', text: 'A placeholder zero until the outer loop ends.' },
-                                { id: 'D', label: 'D', text: 'The minimum number of coins required.' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-topic-question-3',
-                        prompt: 'What happens if we flip the loops and iterate amounts outside coins?',
-                        hint: 'Watch what happens to ordering.',
-                        explanation:
-                                'Iterating amounts first counts permutations because each amount can revisit every coin in every order, inflating the total compared with combinations.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'We still count combinations because subtraction is commutative.' },
-                                { id: 'B', label: 'B', text: 'We start counting ordered permutations of coins instead of combinations.' },
-                                { id: 'C', label: 'C', text: 'The algorithm fails for larger coin values.' },
-                                { id: 'D', label: 'D', text: 'dp[0] must be set to 0 to stay correct.' }
-                        ],
-                        correctOptionId: 'B'
-                }
-        ]
+	id: 'dp-topic-deck',
+	title: 'DP Basics: Break · Store · Reuse',
+	topic: 'Dynamic Programming',
+	estimatedMinutes: 5,
+	progressKey: 'topic',
+	description: 'Two simple idea cards, then three easy checks to confirm understanding.',
+	questions: [
+		{
+			kind: 'info-card',
+			id: 'dp-topic-card-1',
+			prompt: 'What DP tries to do',
+			eyebrow: 'Idea card',
+			body: 'Solve a problem by building from small, easy cases. Save answers as you go so you can reuse them later instead of redoing work.',
+			continueLabel: 'Next idea'
+		},
+		{
+			kind: 'info-card',
+			id: 'dp-topic-card-2',
+			prompt: 'Two friendly styles',
+			eyebrow: 'Idea card',
+			body: 'Memoization (top‑down): write a recursive function and remember results. Tabulation (bottom‑up): fill a small table from simple to harder cases. Both do the same thing: reuse answers.',
+			continueLabel: "Let's practice"
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-topic-question-1',
+			prompt: 'Which sentence best describes memoization?',
+			hint: 'Think “remember answers to function calls”.',
+			explanation:
+				'Memoization means caching the result for a given input so future calls with that input can return immediately.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Run your code twice to be extra sure' },
+				{ id: 'B', label: 'B', text: 'Remember results of function calls so you can reuse them' },
+				{ id: 'C', label: 'C', text: 'Sort the input before any computation' },
+				{ id: 'D', label: 'D', text: 'Avoid loops and only use recursion' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-topic-question-2',
+			prompt: 'What is a good first step when starting a DP problem?',
+			hint: 'Describe the state and start tiny.',
+			explanation:
+				'Define the “state” in plain words (what a subproblem means) and set a tiny base case. That gives you a solid, simple starting point.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Write the final formula before doing examples' },
+				{ id: 'B', label: 'B', text: 'Define the state in words and set a small base case' },
+				{ id: 'C', label: 'C', text: 'Code 100 lines and refactor later' },
+				{ id: 'D', label: 'D', text: 'Guess an answer and move on' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-topic-question-3',
+			prompt: 'If you notice the same small question being asked many times, what should you do?',
+			hint: 'Reuse beats redo.',
+			explanation:
+				'Save that small answer (cache/table) and reuse it whenever you need it again. That is the whole point of DP.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Ignore duplicates and recompute to be safe' },
+				{ id: 'B', label: 'B', text: 'Store the answer once and reuse it later' },
+				{ id: 'C', label: 'C', text: 'Increase recursion depth to explore more' },
+				{ id: 'D', label: 'D', text: 'Switch to a completely different algorithm immediately' }
+			],
+			correctOptionId: 'B'
+		}
+	]
 };
 
 export const dynamicProgrammingReviewQuiz: QuizDefinition = {
-        id: 'dp-review-quiz',
-        title: 'DP Review: Ready for Easy Interviews',
-        topic: 'Dynamic Programming',
-        estimatedMinutes: 5,
-        progressKey: 'review',
-        description: 'Wrap up with scenario-based questions that mirror easy LeetCode DP prompts.',
-        questions: [
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-review-stairs',
-                        prompt: 'You are counting ways to climb n stairs taking 1 or 2 steps. Which recurrence fits?',
-                        hint: 'Each state depends on the previous two.',
-                        explanation:
-                                'dp[i] = dp[i - 1] + dp[i - 2] adds the paths that end with a 1-step and a 2-step, mirroring the Fibonacci pattern.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'dp[i] = dp[i - 1] + 1' },
-                                { id: 'B', label: 'B', text: 'dp[i] = dp[i - 1] + dp[i - 2]' },
-                                { id: 'C', label: 'C', text: 'dp[i] = 2 * dp[i - 1]' },
-                                { id: 'D', label: 'D', text: 'dp[i] = dp[i - 1] - dp[i - 2]' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-review-grid',
-                        prompt: 'For unique paths in an m×n grid moving only right or down, which base cases initialise the DP table?',
-                        hint: 'Think about the top row and left column.',
-                        explanation:
-                                'Cells in the top row and left column each have exactly one path leading to them, so setting them to 1 lets the rest of the table build off their values.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'Set the diagonal to 1 and everything else to 0.' },
-                                { id: 'B', label: 'B', text: 'Set the top row and left column to 1.' },
-                                { id: 'C', label: 'C', text: 'Set only dp[0][0] = 1 and leave the rest empty.' },
-                                { id: 'D', label: 'D', text: 'Set every cell to 0 to start.' }
-                        ],
-                        correctOptionId: 'B'
-                },
-                {
-                        kind: 'multiple-choice',
-                        id: 'dp-review-memo',
-                        prompt: 'In a memoized recursion for house robber, when do we store results in the cache?',
-                        hint: 'We avoid recomputing overlapping states.',
-                        explanation:
-                                'After computing the best loot from a given index, we store it before returning so future calls reuse the cached result.',
-                        options: [
-                                { id: 'A', label: 'A', text: 'Before recursing so we can skip work entirely.' },
-                                { id: 'B', label: 'B', text: 'Right after solving a subproblem so repeated calls can reuse it.' },
-                                { id: 'C', label: 'C', text: 'Only when the answer is zero.' },
-                                { id: 'D', label: 'D', text: 'Never—we recompute each branch for clarity.' }
-                        ],
-                        correctOptionId: 'B'
-                }
-        ]
+	id: 'dp-review-quiz',
+	title: 'DP Review: Ready to Start',
+	topic: 'Dynamic Programming',
+	estimatedMinutes: 4,
+	progressKey: 'review',
+	description: 'Three friendly checkups using everyday DP thinking.',
+	questions: [
+		{
+			kind: 'multiple-choice',
+			id: 'dp-review-stairs',
+			prompt:
+				'You can climb stairs by taking 1 or 2 steps at a time. How can you think about the ways to reach a step n?',
+			hint: 'Consider how you could arrive at step n.',
+			explanation:
+				'To stand on step n you either came from n−1 with a 1‑step or from n−2 with a 2‑step, so you add those counts together.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Double the number of ways to reach step n−1' },
+				{ id: 'B', label: 'B', text: 'Add the ways to reach steps n−1 and n−2' },
+				{ id: 'C', label: 'C', text: 'Subtract the ways to reach step n−2 from n−1' },
+				{ id: 'D', label: 'D', text: 'Multiply the ways to reach steps n−1 and n−2' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-review-grid',
+			prompt:
+				'In a grid where you can move only right or down, what is true about the top row and the left column?',
+			hint: 'Think about how many choices you have along an edge.',
+			explanation:
+				'Along the top row and left column there is only one way forward, so each of those cells has exactly one path to it.',
+			options: [
+				{ id: 'A', label: 'A', text: 'There are zero ways to move along them.' },
+				{ id: 'B', label: 'B', text: 'Each cell on those edges has exactly one way to reach it.' },
+				{ id: 'C', label: 'C', text: 'You must always start from the bottom‑right corner.' },
+				{ id: 'D', label: 'D', text: 'They require a special formula for every cell.' }
+			],
+			correctOptionId: 'B'
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'dp-review-memo',
+			prompt: 'When should you save an answer in a memoized (remembering) solution?',
+			hint: 'Save it once; reuse many times.',
+			explanation:
+				'Right after you compute a subproblem’s answer, store it so the next time you see the same input you can return it immediately.',
+			options: [
+				{ id: 'A', label: 'A', text: 'Before recursing, even if you have no answer yet' },
+				{
+					id: 'B',
+					label: 'B',
+					text: 'After computing a subproblem so repeated calls can reuse it'
+				},
+				{ id: 'C', label: 'C', text: 'Only if the answer happens to be zero' },
+				{ id: 'D', label: 'D', text: 'Never—just recompute every time for clarity' }
+			],
+			correctOptionId: 'B'
+		}
+	]
 };
 
 export const dynamicProgrammingQuizzes = [
-        dynamicProgrammingWarmupQuiz,
-        dynamicProgrammingTopicDeck,
-        dynamicProgrammingReviewQuiz
+	dynamicProgrammingWarmupQuiz,
+	dynamicProgrammingTopicDeck,
+	dynamicProgrammingReviewQuiz
 ] satisfies readonly QuizDefinition[];

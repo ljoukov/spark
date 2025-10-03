@@ -161,17 +161,10 @@
 </script>
 
 <section class="workspace-page flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-	<header class="flex-shrink-0 space-y-1">
-		<h1 class="text-2xl font-semibold tracking-tight">Split Text Workspace</h1>
-		<p class="text-muted-foreground text-sm">
-			Compare or edit text side by side with a draggable divider.
-		</p>
-	</header>
-
 	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
 		<Resizable.PaneGroup
 			direction="horizontal"
-			class="workspace-pane-group bg-card flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border shadow"
+			class="workspace-pane-group flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border bg-card shadow"
 			bind:this={paneGroup}
 			onLayoutChange={handleLayoutChange}
 		>
@@ -179,10 +172,10 @@
 				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 					<div class="flex items-center justify-between gap-2">
 						<div class="flex flex-col">
-							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
 								>Problem</span
 							>
-							<h2 class="text-sm font-semibold leading-tight">{problem.title}</h2>
+							<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
 						</div>
 						<button
 							type="button"
@@ -200,7 +193,7 @@
 						</button>
 					</div>
 					<div
-						class="markdown-scroll border-input bg-background min-h-0 flex-1 overflow-y-auto rounded-md border p-3 text-sm shadow-sm"
+						class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
 						aria-label="Problem description"
 					>
 						<div class="markdown space-y-4">{@html markdownHtml}</div>
@@ -212,10 +205,10 @@
 				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 					<div class="flex items-center justify-between gap-2">
 						<div class="flex flex-col">
-							<span class="text-muted-foreground text-xs font-medium uppercase tracking-wide"
+							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
 								>Editor</span
 							>
-							<h2 class="text-sm font-semibold leading-tight">Python workspace</h2>
+							<h2 class="text-sm leading-tight font-semibold">Python workspace</h2>
 						</div>
 						<button
 							type="button"
@@ -247,7 +240,7 @@
 </section>
 
 <style lang="postcss">
-    /*
+	/*
      * Scrolling behavior note:
      * The layout already applies a conditional scroll lock via
      * `.app-main:has(.workspace) { overflow-y: hidden; }`.
@@ -256,11 +249,11 @@
      * scrolling on other pages.
      */
 
-    :global(.app-content) {
-        flex: 1 1 auto;
-        min-height: 0;
-        height: 100%;
-    }
+	:global(.app-content) {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+	}
 
 	.workspace-page {
 		flex: 1 1 auto;
@@ -354,5 +347,4 @@
 		height: 100%;
 		width: 100%;
 	}
-
 </style>

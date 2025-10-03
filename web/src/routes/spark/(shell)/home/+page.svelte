@@ -8,9 +8,18 @@
 	} from '$lib/mock/spark-data';
 
 	const subjectStyles: Record<string, { accent: string; track: string }> = {
-		Biology: { accent: 'linear-gradient(90deg, rgba(16, 185, 129, 0.9), rgba(34, 197, 94, 0.9))', track: 'rgba(16, 185, 129, 0.16)' },
-		Chemistry: { accent: 'linear-gradient(90deg, rgba(14, 165, 233, 0.9), rgba(56, 189, 248, 0.9))', track: 'rgba(14, 165, 233, 0.16)' },
-		Physics: { accent: 'linear-gradient(90deg, rgba(129, 140, 248, 0.9), rgba(99, 102, 241, 0.9))', track: 'rgba(99, 102, 241, 0.16)' }
+		Biology: {
+			accent: 'linear-gradient(90deg, rgba(16, 185, 129, 0.9), rgba(34, 197, 94, 0.9))',
+			track: 'rgba(16, 185, 129, 0.16)'
+		},
+		Chemistry: {
+			accent: 'linear-gradient(90deg, rgba(14, 165, 233, 0.9), rgba(56, 189, 248, 0.9))',
+			track: 'rgba(14, 165, 233, 0.16)'
+		},
+		Physics: {
+			accent: 'linear-gradient(90deg, rgba(129, 140, 248, 0.9), rgba(99, 102, 241, 0.9))',
+			track: 'rgba(99, 102, 241, 0.16)'
+		}
 	};
 </script>
 
@@ -25,11 +34,15 @@
 				<span class="spark-chip">{$sparkProgressStore.trendLabel}</span>
 			</header>
 			<div class="spark-progress-overview">
-				<div class="spark-progress-overview__score">{$sparkProgressStore.overall}<span>% ready</span></div>
+				<div class="spark-progress-overview__score">
+					{$sparkProgressStore.overall}<span>% ready</span>
+				</div>
 				<div class="spark-progress-overview__meter">
 					<span style={`width: ${$sparkProgressStore.overall}%`}></span>
 				</div>
-				<p class="spark-progress-overview__foot">{$sparkProgressStore.weeklyMinutes} min this week</p>
+				<p class="spark-progress-overview__foot">
+					{$sparkProgressStore.weeklyMinutes} min this week
+				</p>
 			</div>
 			<ul class="spark-progress-list">
 				{#each $sparkProgressStore.progressRows as row}
@@ -58,25 +71,25 @@
 		<article class="spark-card spark-card--session">
 			<header class="spark-card__header">
 				<div>
-					<h2>{($sparkSessionStore.status === 'resume' ? 'Resume session' : 'Next session')}</h2>
-					<p>{
-						$sparkSessionStore.status === 'resume'
+					<h2>{$sparkSessionStore.status === 'resume' ? 'Resume session' : 'Next session'}</h2>
+					<p>
+						{$sparkSessionStore.status === 'resume'
 							? `${$sparkSessionStore.subject} • ${$sparkSessionStore.remaining} left`
-							: `Based on ${$sparkSessionStore.sourceTitle}`
-					}</p>
+							: `Based on ${$sparkSessionStore.sourceTitle}`}
+					</p>
 				</div>
 				<a href="/spark/setup" class="spark-card__more" aria-label="Adjust session">Change size</a>
 			</header>
 			<div class="spark-session-body">
 				<div class="spark-session-body__title">{$sparkSessionStore.sourceTitle}</div>
 				<div class="spark-session-body__meta">
-					<span>{
-						$sparkSessionStore.status === 'resume'
+					<span
+						>{$sparkSessionStore.status === 'resume'
 							? `${$sparkSessionStore.total - ($sparkSessionStore.remaining ?? 0)} of ${$sparkSessionStore.total} done`
-							: `${$sparkSessionStore.total} questions`
-					}</span>
+							: `${$sparkSessionStore.total} questions`}</span
+					>
 					<span>{$sparkSessionStore.scope}</span>
-					<span>{ $sparkSessionStore.timer ? 'Timer on' : 'Timer off' }</span>
+					<span>{$sparkSessionStore.timer ? 'Timer on' : 'Timer off'}</span>
 				</div>
 			</div>
 			<div class="spark-session-actions">
@@ -244,7 +257,11 @@
 		border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent 30%);
 		text-decoration: none;
 		color: inherit;
-		transition: transform 160ms ease, box-shadow 200ms ease, border 160ms ease, background 160ms ease;
+		transition:
+			transform 160ms ease,
+			box-shadow 200ms ease,
+			border 160ms ease,
+			background 160ms ease;
 	}
 
 	.spark-progress-list a:hover {
@@ -338,7 +355,9 @@
 		color: white;
 		display: grid;
 		gap: 1.25rem;
-		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 32px 60px -48px rgba(15, 23, 42, 0.75);
+		box-shadow:
+			inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+			0 32px 60px -48px rgba(15, 23, 42, 0.75);
 	}
 
 	.spark-library-highlight__badge {
@@ -414,7 +433,10 @@
 		text-decoration: none;
 		color: inherit;
 		border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent 30%);
-		transition: transform 160ms ease, border 160ms ease, box-shadow 200ms ease;
+		transition:
+			transform 160ms ease,
+			border 160ms ease,
+			box-shadow 200ms ease;
 	}
 
 	.spark-focus__card:hover {

@@ -26,16 +26,16 @@ export type QuizTypeAnswerQuestion = QuizQuestionBase & {
 };
 
 export type QuizInfoCardQuestion = QuizQuestionBase & {
-        kind: 'info-card';
-        body: string;
-        continueLabel?: string;
-        eyebrow?: string | null;
+	kind: 'info-card';
+	body: string;
+	continueLabel?: string;
+	eyebrow?: string | null;
 };
 
 export type QuizQuestion =
-        | QuizMultipleChoiceQuestion
-        | QuizTypeAnswerQuestion
-        | QuizInfoCardQuestion;
+	| QuizMultipleChoiceQuestion
+	| QuizTypeAnswerQuestion
+	| QuizInfoCardQuestion;
 
 export type QuizFeedbackTone = 'info' | 'success' | 'warning';
 
@@ -54,11 +54,11 @@ export type QuizProgressStep = {
 };
 
 export type QuizDefinition = {
-        id: string;
-        title: string;
-        description?: string;
-        topic?: string;
-        estimatedMinutes?: number;
-        progressKey?: string;
-        questions: readonly QuizQuestion[];
+	id: string;
+	title: string;
+	description?: string;
+	topic?: string;
+	estimatedMinutes?: number;
+	progressKey?: string;
+	questions: readonly QuizQuestion[];
 };

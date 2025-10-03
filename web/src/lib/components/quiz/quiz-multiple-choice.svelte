@@ -49,7 +49,11 @@
 
 	function optionState(optionId: string) {
 		if (statusProp === 'correct') {
-			return optionId === question.correctOptionId ? 'correct' : optionId === selectedOptionId ? 'selected' : 'idle';
+			return optionId === question.correctOptionId
+				? 'correct'
+				: optionId === selectedOptionId
+					? 'selected'
+					: 'idle';
 		}
 
 		if (statusProp === 'incorrect') {
@@ -75,7 +79,9 @@
 			state === 'incorrect'
 				? 'border-amber-300 bg-amber-50/80 text-amber-900 shadow-[0_18px_45px_-30px_rgba(217,119,6,0.5)] dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-100'
 				: '',
-			state === 'idle' && statusProp === 'neutral' ? 'border-border bg-background hover:border-primary/30 hover:bg-primary/5' : '',
+			state === 'idle' && statusProp === 'neutral'
+				? 'border-border bg-background hover:border-primary/30 hover:bg-primary/5'
+				: '',
 			locked && statusProp === 'neutral' ? 'opacity-90' : ''
 		);
 	}
@@ -126,17 +132,17 @@
 </script>
 
 <QuizQuestionCard
-		title={question.prompt}
-		eyebrow={eyebrow}
+	title={question.prompt}
+	{eyebrow}
 	status={statusProp}
 	hint={question.hint}
-	showHint={showHint}
-	feedback={feedback}
+	{showHint}
+	{feedback}
 	explanation={question.explanation}
 	showExplanation={revealExplanation}
 >
 	<div class="space-y-4">
-		<p class="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground/80">
+		<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
 			Choose an answer
 		</p>
 		<div class="grid gap-3 sm:grid-cols-2">
@@ -149,7 +155,7 @@
 					aria-pressed={option.id === selectedOptionId}
 				>
 					<span class={bulletClasses(option.id)}>{option.label}</span>
-					<span class="text-base font-medium leading-relaxed text-foreground">
+					<span class="text-base leading-relaxed font-medium text-foreground">
 						{option.text}
 					</span>
 				</button>
@@ -160,12 +166,7 @@
 	<div slot="footer" class="flex w-full flex-wrap items-center gap-3">
 		<div class="flex items-center gap-2">
 			{#if question.hint}
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={handleHint}
-					disabled={showHint}
-				>
+				<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint}>
 					{hintLabel}
 				</Button>
 			{/if}
@@ -183,11 +184,7 @@
 			{#if showContinue}
 				<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
 			{:else}
-				<Button
-					size="lg"
-					onclick={handleSubmit}
-					disabled={submitDisabled}
-				>
+				<Button size="lg" onclick={handleSubmit} disabled={submitDisabled}>
 					{answerLabel}
 				</Button>
 			{/if}
