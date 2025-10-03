@@ -300,17 +300,19 @@
 </div>
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
-	<Dialog.Content class="finish-dialog max-w-lg overflow-hidden rounded-3xl border border-border/60 bg-background/98 p-0 shadow-2xl">
-		<div class="space-y-3 border-b border-border/60 bg-primary/10 px-6 py-5">
+	<Dialog.Content class="finish-dialog max-w-lg overflow-hidden rounded-3xl border border-border/60 bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]">
+		<div class="space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12">
 			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Wrap up this quiz?</h2>
 			<p class="text-sm leading-relaxed text-muted-foreground">
 				You still have {remainingCount} unanswered question(s). Choose what you would like to do next.
 			</p>
 		</div>
-		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:justify-end">
-			<Button variant="outline" onclick={resetQuiz}>Restart quiz</Button>
-			<Button variant="ghost" onclick={() => (finishDialogOpen = false)}>Keep practicing</Button>
-			<Button onclick={handleFinishEarly}>Finish now</Button>
+		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
+			<Button variant="outline" class="sm:min-w-[9rem]" onclick={resetQuiz}>Restart quiz</Button>
+			<Button variant="ghost" class="sm:min-w-[9rem] text-muted-foreground hover:text-foreground" onclick={() => (finishDialogOpen = false)}>
+				Keep practicing
+			</Button>
+			<Button class="sm:min-w-[9rem]" onclick={handleFinishEarly}>Finish now</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
