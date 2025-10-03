@@ -247,11 +247,14 @@
 </section>
 
 <style lang="postcss">
-    /* Hard lock: prevent the layout scroll container from scrolling on this route. */
-    :global(.app-main) {
-        overflow-y: hidden !important;
-        overscroll-behavior: contain;
-    }
+    /*
+     * Scrolling behavior note:
+     * The layout already applies a conditional scroll lock via
+     * `.app-main:has(.workspace) { overflow-y: hidden; }`.
+     * We intentionally avoid any global `.app-main` overrides here,
+     * because those can linger across client navigations and disable
+     * scrolling on other pages.
+     */
 
     :global(.app-content) {
         flex: 1 1 auto;
