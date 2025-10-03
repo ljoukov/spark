@@ -1,27 +1,41 @@
 <script lang="ts">
-	import { getContext, onDestroy } from 'svelte';
+        import { getContext, onDestroy, onMount } from 'svelte';
+        import { dynamicProgrammingPlan } from '$lib/config/code-plan';
+        import { codeProgress } from '$lib/stores/codeProgress';
+        import type { CodeProgressState } from '$lib/types/code-progress';
 
-	type UserStore = {
-		subscribe: (
-			run: (value: { name?: string | null; email?: string | null } | null) => void
-		) => () => void;
-	};
+        type UserStore = {
+                subscribe: (
+                        run: (value: { name?: string | null; email?: string | null } | null) => void
+                ) => () => void;
+        };
 
-	const userStore = getContext<UserStore | undefined>('spark-code:user');
+        const userStore = getContext<UserStore | undefined>('spark-code:user');
 
-	let firstName = 'Sparkie';
-	let unsubscribe: (() => void) | null = null;
+        let firstName = 'Sparkie';
+        let userUnsubscribe: (() => void) | null = null;
 
-	if (userStore) {
-		unsubscribe = userStore.subscribe((value) => {
-			const resolved = value?.name?.trim() || value?.email?.split('@')[0] || 'Spark guest';
-			firstName = resolved.split(/\s+/)[0] ?? resolved;
-		});
-	}
+        if (userStore) {
+                userUnsubscribe = userStore.subscribe((value) => {
+                        const resolved = value?.name?.trim() || value?.email?.split('@')[0] || 'Spark guest';
+                        firstName = resolved.split(/\s+/)[0] ?? resolved;
+                });
+        }
 
-	onDestroy(() => {
-		unsubscribe?.();
-	});
+        onDestroy(() => {
+                userUnsubscribe?.();
+                progressUnsubscribe?.();
+        });
+
+        let progress = $state<CodeProgressState>({ ...codeProgress.defaultState });
+        let progressUnsubscribe: (() => void) | null = null;
+
+        onMount(() => {
+                codeProgress.sync();
+                progressUnsubscribe = codeProgress.subscribe((value) => {
+                        progress = value;
+                });
+        });
 
 	const stats = [
 		{ label: 'XP', value: '1,420' },
@@ -30,88 +44,26 @@
 		{ label: 'Solved', value: '86' }
 	];
 
-	const focus = {
-		eyebrow: "Today's session",
-		topic: 'DP & graph mastery sprint',
-		summary:
-			'Review the theory, then work through six interview staples from coin change counting to BFS gene mutations.'
-	};
+        const focus = {
+                eyebrow: "Today's focus",
+                topic: 'DP easy-day sprint',
+                summary:
+                        'Warm up, walk through the DP playbook, solve two interview-easy classics, then lock it in with a short review quiz.'
+        };
 
-	const sessionProblems = [
-		{
-			slug: 'coin-change-ways',
-			title: 'Coin Change Ways',
-			icon: '🪙',
-			meta: 'DP • Medium',
-			description: 'Count combinations to reach a target amount with unlimited coins.'
-		},
-		{
-			slug: 'connected-components',
-			title: 'Connected Components',
-			icon: '🕸️',
-			meta: 'Graph • Medium',
-			description: 'Traverse an undirected graph and group nodes into components.'
-		},
-		{
-			slug: 'decode-ways',
-			title: 'Decode Ways',
-			icon: '🔐',
-			meta: 'DP • Medium',
-			description: 'Dynamic programming on strings to count valid decodings.'
-		},
-		{
-			slug: 'directed-cycle-detection',
-			title: 'Directed Cycle Detection',
-			icon: '♻️',
-			meta: 'Graph • Medium',
-			description: 'Detect cycles in a directed graph with DFS ordering.'
-		},
-		{
-			slug: 'edit-distance',
-			title: 'Edit Distance',
-			icon: '✏️',
-			meta: 'DP • Medium',
-			description: 'Classic Levenshtein distance tabulation with substitutions.'
-		},
-		{
-			slug: 'equal-subset-partition',
-			title: 'Equal Subset Partition',
-			icon: '⚖️',
-			meta: 'DP • Medium',
-			description: 'Split an array into two subsets with equal sum using DP.'
-		},
-		{
-			slug: 'gene-mutations',
-			title: 'Gene Mutations',
-			icon: '🧬',
-			meta: 'Graph • Medium',
-			description: 'BFS through valid gene mutations to reach a target sequence.'
-		}
-	];
+        const timeline = $derived(
+                dynamicProgrammingPlan.map((step) => ({
+                        ...step,
+                        done: progress[step.key] ?? false
+                }))
+        );
 
-	const timeline = [
-		{
-			key: 'theory',
-			title: 'Theory refresh',
-			icon: '📚',
-			meta: 'Read first',
-			description: 'Overview of DP transitions and graph traversal heuristics.',
-			done: true,
-			href: '.'
-		},
-		...sessionProblems.map((problem) => ({
-			key: problem.slug,
-			title: problem.title,
-			icon: problem.icon,
-			meta: problem.meta,
-			description: problem.description,
-			href: `/code/p/${problem.slug}`,
-			done: false
-		}))
-	];
-
-	const startHref = `/code/p/${sessionProblems[0]!.slug}`;
-	const startLabel = sessionProblems[0]!.title;
+        const firstIncomplete = $derived(timeline.find((step) => !step.done));
+        const startHref = $derived(firstIncomplete?.href ?? timeline[0]?.href ?? '/code/quiz/dp-warmup');
+        const startLabel = $derived(firstIncomplete?.title ?? timeline[0]?.title ?? 'Warm-up quiz');
+        const startButtonText = $derived(
+                `${firstIncomplete ? 'Continue with' : 'Replay'} ${startLabel}`
+        );
 </script>
 
 <svelte:head>
@@ -192,15 +144,15 @@
 			</a>
 			{/each}
 		</div>
-		<div class="plan-footer">
+                <div class="plan-footer">
                         <a
                                 class="plan-start"
                                 href={startHref}
                         >
-                                ▶ Start with {startLabel}
+                                ▶ {startButtonText}
                         </a>
-		</div>
-	</div>
+                </div>
+        </div>
 </section>
 
 <style lang="postcss">
@@ -520,21 +472,35 @@
 		box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
 	}
 
-	.timeline-circle[data-done='true'] {
-		background: linear-gradient(135deg, #3b82f6, #2563eb);
-		border-color: rgba(59, 130, 246, 0.9);
-		box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22);
-		color: #fff;
-	}
+        .timeline-circle[data-done='true'] {
+                background: linear-gradient(135deg, rgba(34, 197, 94, 0.98), rgba(16, 185, 129, 0.92));
+                border-color: rgba(16, 185, 129, 0.9);
+                box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.22);
+                color: #fff;
+        }
 
-	.timeline-circle[data-done='true']::after {
-		content: '✓';
-		font-size: 0.85rem;
-		font-weight: 700;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
+        .timeline-circle[data-done='true']::before {
+                box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+        }
+
+        .timeline-circle[data-done='true']::after {
+                content: '✓';
+                font-size: 0.85rem;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+        }
+
+        .timeline-circle[data-done='false']::after {
+                content: '';
+                display: block;
+                width: 0.45rem;
+                height: 0.45rem;
+                border-radius: 9999px;
+                background: rgba(59, 130, 246, 0.7);
+                box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+        }
 
 	.timeline-row:hover .timeline-circle,
 	.timeline-row:focus-visible .timeline-circle {

@@ -1,13 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import * as Resizable from '$lib/components/ui/resizable/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import { cn } from '$lib/utils.js';
-	import { loadMonaco } from '$lib/monaco/index.js';
-	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
-	import Maximize2 from '@lucide/svelte/icons/maximize-2';
-	import Minimize2 from '@lucide/svelte/icons/minimize-2';
-	import type { PageData } from './$types';
+        import { onMount } from 'svelte';
+        import * as Resizable from '$lib/components/ui/resizable/index.js';
+        import { buttonVariants } from '$lib/components/ui/button/index.js';
+        import { cn } from '$lib/utils.js';
+        import { loadMonaco } from '$lib/monaco/index.js';
+        import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
+        import Maximize2 from '@lucide/svelte/icons/maximize-2';
+        import Minimize2 from '@lucide/svelte/icons/minimize-2';
+        import type { PageData } from './$types';
+        import { problemStepBySlug } from '$lib/config/code-plan';
+        import { codeProgress } from '$lib/stores/codeProgress';
 
 	type PaneSide = 'left' | 'right';
 
@@ -61,11 +63,11 @@
 		}
 	}
 
-	onMount(() => {
-		let subscription: IDisposable | null = null;
-		let themeObserver: MutationObserver | null = null;
-		let mediaQuery: MediaQueryList | null = null;
-		let applyTheme: (() => void) | null = null;
+        onMount(() => {
+                let subscription: IDisposable | null = null;
+                let themeObserver: MutationObserver | null = null;
+                let mediaQuery: MediaQueryList | null = null;
+                let applyTheme: (() => void) | null = null;
 
 		void (async () => {
 			const monaco = await loadMonaco();
@@ -125,11 +127,18 @@
 			applyTheme = null;
 		};
 
-		return () => {
-			disposeEditor?.();
-			disposeEditor = null;
-		};
-	});
+                return () => {
+                        disposeEditor?.();
+                        disposeEditor = null;
+                };
+        });
+
+        onMount(() => {
+                const step = problemStepBySlug[problem.id];
+                if (step) {
+                        codeProgress.markComplete(step);
+                }
+        });
 
 	function applyLayout(layout: readonly number[]) {
 		paneGroup?.setLayout([...layout]);
