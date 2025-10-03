@@ -2,7 +2,11 @@
 	import { page } from '$app/stores';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
-	import { sparkDetectionPreview, sparkUploadsStore, sparkUser as sparkUserStore } from '$lib/mock/spark-data';
+	import {
+		sparkDetectionPreview,
+		sparkUploadsStore,
+		sparkUser as sparkUserStore
+	} from '$lib/mock/spark-data';
 	import { sparkCreateDialogOpen } from '$lib/stores/spark-ui';
 	import { derived } from 'svelte/store';
 	import { onDestroy } from 'svelte';
@@ -56,7 +60,12 @@
 		{ id: 'paste', label: 'Paste text', description: 'Copy quick facts straight into practice.' }
 	];
 
-	const hiddenFabRoutes = new Set(['/spark/setup', '/spark/quiz', '/spark/results', '/spark/settings']);
+	const hiddenFabRoutes = new Set([
+		'/spark/setup',
+		'/spark/quiz',
+		'/spark/results',
+		'/spark/settings'
+	]);
 
 	const pathname = derived(page, ($page) => $page.url.pathname);
 	const showCreateFab = derived(pathname, ($pathname) => !hiddenFabRoutes.has($pathname));
@@ -79,10 +88,7 @@
 			<nav class="spark-nav__links" aria-label="Primary">
 				{#each navLinks as link}
 					{@const active = $pathname.startsWith(link.href)}
-					<a
-						href={link.href}
-						class={`spark-nav__link ${active ? 'spark-nav__link--active' : ''}`}
-					>
+					<a href={link.href} class={`spark-nav__link ${active ? 'spark-nav__link--active' : ''}`}>
 						{link.label}
 					</a>
 				{/each}
@@ -105,7 +111,12 @@
 	</main>
 
 	{#if $showCreateFab}
-		<button class="spark-create-fab" type="button" onclick={() => (createOpen = true)} aria-label="Create">
+		<button
+			class="spark-create-fab"
+			type="button"
+			onclick={() => (createOpen = true)}
+			aria-label="Create"
+		>
 			<span>Create</span>
 		</button>
 	{/if}
@@ -113,7 +124,12 @@
 	{#if createOpen}
 		<div class="spark-create-overlay" role="dialog" aria-modal="true">
 			<div class="spark-create-dialog">
-				<button class="spark-create-dialog__close" type="button" onclick={() => (createOpen = false)} aria-label="Close create dialog">
+				<button
+					class="spark-create-dialog__close"
+					type="button"
+					onclick={() => (createOpen = false)}
+					aria-label="Close create dialog"
+				>
 					×
 				</button>
 				<header class="spark-create-dialog__header">
@@ -138,7 +154,8 @@
 				<div class="spark-create-dialog__summary">
 					<h3>Detection summary</h3>
 					<p>
-						{$sparkDetectionPreview.source} • {$sparkDetectionPreview.pages} pages • ~{$sparkDetectionPreview.estimatedItems} items
+						{$sparkDetectionPreview.source} • {$sparkDetectionPreview.pages} pages • ~{$sparkDetectionPreview.estimatedItems}
+						items
 					</p>
 					<ul>
 						{#each $sparkDetectionPreview.preview as line}
@@ -233,7 +250,10 @@
 		padding: 0.5rem 0.75rem;
 		border-radius: 999px;
 		text-decoration: none;
-		transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+		transition:
+			background 150ms ease,
+			color 150ms ease,
+			box-shadow 150ms ease;
 	}
 
 	.spark-nav__link:hover {
@@ -282,7 +302,9 @@
 		box-shadow: 0 12px 28px -16px rgba(15, 23, 42, 0.38);
 		outline: 2px solid transparent;
 		outline-offset: 2px;
-		transition: outline-color 200ms ease, transform 200ms ease;
+		transition:
+			outline-color 200ms ease,
+			transform 200ms ease;
 	}
 
 	.spark-avatar:hover {
@@ -391,7 +413,10 @@
 		align-items: flex-start;
 		color: inherit;
 		text-align: left;
-		transition: transform 160ms ease, box-shadow 180ms ease, border 160ms ease;
+		transition:
+			transform 160ms ease,
+			box-shadow 180ms ease,
+			border 160ms ease;
 	}
 
 	.spark-create-dialog__option:hover {

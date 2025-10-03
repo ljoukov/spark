@@ -22,16 +22,16 @@ const SELF_CHECK_SUFFIX_LINES = [
   '1) Scope: No off-spec terms for the target tier; any "HT/Separate" label is explicitly marked in the source.',
   "2) Symbols: Use exact scientific symbols from the source (e.g., ρ, Δ). Do not spell symbol names in answers.",
   '3) Numerics: For type "numeric", the answer array contains a pure number; units/precision live in the prompt; tolerance stated in the explanation.',
-  '4) Stem–answer consistency: If the stem asks for a name/function/value/count, the options/answers match that demand.',
+  "4) Stem–answer consistency: If the stem asks for a name/function/value/count, the options/answers match that demand.",
   '5) Coverage touch: Sample each source category present (e.g., "Equations to learn" vs "Given in exam"); avoid over-focusing a single section.',
-  '6) True/False safety: Only single-fact claims with one explicit source cue; otherwise convert to MCQ or reword.',
-  '7) One application: If formulae exist, include at least one genuine rearrangement/application item.',
+  "6) True/False safety: Only single-fact claims with one explicit source cue; otherwise convert to MCQ or reword.",
+  "7) One application: If formulae exist, include at least one genuine rearrangement/application item.",
   "Action: Fix only the items that fail; keep everything else unchanged. Then output JSON only.",
 ];
 
 export function normaliseQuizPayload(
   payload: unknown,
-  targetQuestionCount?: number
+  targetQuestionCount?: number,
 ): unknown {
   if (!payload || typeof payload !== "object") {
     return payload;
@@ -68,7 +68,7 @@ export function normaliseQuizPayload(
         questionRecord.answer = [answerValue];
       } else if (Array.isArray(answerValue)) {
         questionRecord.answer = answerValue.filter(
-          (entry): entry is string => typeof entry === "string"
+          (entry): entry is string => typeof entry === "string",
         );
       } else if (answerValue !== undefined) {
         delete questionRecord.answer;
@@ -168,7 +168,7 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     `- When synthesising new questions, draft ${candidateDraftCount} candidates (target ${questionCount} + 2) so downstream filters can drop weak items without gaps.`,
     "- For extraction mode, work with the supplied questions; prefer editing to preserve intent and keep the original count.",
     '- After your self-check, add review.status ("approved" or "unapproved") and review.notes to every question.',
-    '- Leave UNAPPROVED questions in the JSON so downstream tooling can inspect and trim them; do not silently drop them.',
+    "- Leave UNAPPROVED questions in the JSON so downstream tooling can inspect and trim them; do not silently drop them.",
     `- Set questionCount to the total number of questions you return (typically ${candidateDraftCount} for synthesis, ${questionCount} when extracting). Use ids Q1... or reuse original identifiers when extracting.`,
     "- Types: multiple_choice, short_answer, true_false, numeric.",
     "- Use source terminology and conventions exactly (for example, group labels, symbols, units).",
@@ -220,7 +220,7 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
     "  * subject (best-fit subject/tier).",
     "  * questionCount (must equal the number of questions you return).",
     "  * questions[] with id, prompt, type, options (multiple_choice only), answer (string array), explanation, hint, sourceReference, review.",
-    "  * review.status is \"approved\" or \"unapproved\"; review.notes cites the governing rule or confirms the pass.",
+    '  * review.status is "approved" or "unapproved"; review.notes cites the governing rule or confirms the pass.',
     "- Formatting and balance constraints:",
     "  * Numeric answers: pure numbers only; put units in the prompt and state tolerance in the explanation.",
     "  * Use at least two question types; no single type may exceed 60% unless questionCount <= 3 and the source leaves no alternative.",
@@ -229,12 +229,12 @@ export function buildGenerationPrompt(options: GenerateQuizOptions): string {
   ];
   if (options.subject) {
     base.push(
-      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`
+      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`,
     );
   }
   if (options.board) {
     base.push(
-      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`
+      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`,
     );
   }
   base.push(...SELF_CHECK_SUFFIX_LINES);
@@ -275,7 +275,7 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
     "",
     "ITEM-WRITING RULES (inherit Initial V2 rules) with these additions:",
     `- Draft ${candidateDraftCount} candidates (target ${questionCount} + 2) so downstream filters can drop weak items without gaps.`,
-    "- After your self-check, add review.status (\"approved\" or \"unapproved\") and review.notes to every candidate.",
+    '- After your self-check, add review.status ("approved" or "unapproved") and review.notes to every candidate.',
     "- Leave UNAPPROVED questions in the JSON; downstream tooling will remove them.",
     `- Set mode to "extension" and set questionCount to the number of questions you return (typically ${candidateDraftCount}).`,
     "- Do not duplicate prompt ideas, answer wording, or explanation themes from <PAST_QUIZES>.",
@@ -291,13 +291,13 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
     "  * Respect the section cap (>40% only when the source is dominated by one section) and confirm the type balance rule is met.",
     "  * Prompt counts match what the source supports; revise prompts instead of stretching the answer key.",
     '  * For any "closest to" construct, verify uniqueness or reframe the question.',
-    "- For any failure, set review.status to \"unapproved\" and explain the violated rule in review.notes.",
-    "- For compliant items, leave review.status \"approved\" with a concise confirmation note.",
+    '- For any failure, set review.status to "unapproved" and explain the violated rule in review.notes.',
+    '- For compliant items, leave review.status "approved" with a concise confirmation note.',
     "",
     "OUTPUT REQUIREMENTS:",
     "- Return JSON matching the existing schema with subject reflecting the true source-supported tier or board.",
     "- Only include the new items in your response; do not restate previous questions.",
-    "- questions[] must include review.status (\"approved\" or \"unapproved\") and review.notes summarising the self-check.",
+    '- questions[] must include review.status ("approved" or "unapproved") and review.notes summarising the self-check.',
     "- Formatting and balance constraints:",
     "  * Numeric answers: pure numbers only; put units in the prompt and state tolerance in the explanation.",
     "  * Use at least two question types; no single type may exceed 60% unless questionCount <= 3 and the source leaves no alternative.",
@@ -305,12 +305,12 @@ export function buildExtensionPrompt(options: ExtendQuizPromptOptions): string {
   ];
   if (options.subject) {
     lines.push(
-      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`
+      `Requested subject (for context): ${options.subject}. Honour the source-supported scope if it differs.`,
     );
   }
   if (options.board) {
     lines.push(
-      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`
+      `Exam board context (for context): ${options.board}. Use the board conventions present in the source.`,
     );
   }
   lines.push(...SELF_CHECK_SUFFIX_LINES);

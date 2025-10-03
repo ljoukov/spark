@@ -72,11 +72,11 @@
 </script>
 
 <div
-	class="border-border bg-background/95 flex w-full items-center gap-4 rounded-3xl border px-4 py-2 shadow-sm backdrop-blur"
+	class="flex w-full items-center gap-4 rounded-3xl border border-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur"
 >
 	<div class="flex w-full items-center gap-3">
 		<div
-			class="border-primary/40 bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-full border text-lg font-semibold shadow-inner"
+			class="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-lg font-semibold text-primary shadow-inner"
 			aria-label={`Question ${safeCurrent + 1}`}
 		>
 			{Math.min(safeCurrent + 1, derivedSteps.length)}
@@ -91,7 +91,7 @@
 						<button
 							type="button"
 							class={cn(
-								'focus-visible:ring-primary/30 block h-2 w-full cursor-pointer rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4',
+								'block h-2 w-full cursor-pointer rounded-full transition-all duration-200 focus-visible:ring-4 focus-visible:ring-primary/30 focus-visible:outline-none',
 								segmentClass(step.status)
 							)}
 							aria-label={step.label ?? `Question ${index + 1}`}
@@ -103,7 +103,7 @@
 						class={cn(
 							'h-2 flex-1 rounded-full transition-all duration-200',
 							segmentClass(step.status),
-							isActive ? 'ring-primary/25 ring-offset-background ring-[3px] ring-offset-2' : ''
+							isActive ? 'ring-[3px] ring-primary/25 ring-offset-2 ring-offset-background' : ''
 						)}
 						role="listitem"
 						aria-current={isActive ? 'step' : undefined}
@@ -114,13 +114,13 @@
 		</div>
 	</div>
 
-	<div class="text-muted-foreground flex shrink-0 items-center gap-3">
+	<div class="flex shrink-0 items-center gap-3 text-muted-foreground">
 		{#if resolvedLabel}
 			<span class="text-base font-semibold tracking-tight md:text-lg">{resolvedLabel}</span>
 		{/if}
 		<button
 			type="button"
-			class="border-border text-muted-foreground hover:border-destructive/60 hover:text-destructive focus-visible:ring-destructive/20 flex size-8 items-center justify-center rounded-full border-2 text-lg font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4"
+			class="flex size-8 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:ring-4 focus-visible:ring-destructive/20 focus-visible:outline-none"
 			aria-label="Finish quiz"
 			onclick={handleFinish}
 		>

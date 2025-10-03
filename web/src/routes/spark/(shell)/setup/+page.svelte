@@ -23,7 +23,8 @@
 	}
 
 	$: selectedUpload =
-		$sparkUploadsStore.find((upload) => upload.id === searchParams.get('upload')) ?? $sparkUploadsStore[0];
+		$sparkUploadsStore.find((upload) => upload.id === searchParams.get('upload')) ??
+		$sparkUploadsStore[0];
 	$: selectedSubject = searchParams.get('subject') ?? selectedUpload?.subject ?? 'Chemistry';
 </script>
 
@@ -66,18 +67,18 @@
 			<fieldset>
 				<legend>Timer</legend>
 				<div class="spark-setup__choices spark-setup__choices--toggle">
-				<button
-					type="button"
-					class={`spark-setup__chip ${timerEnabled ? 'is-active' : ''}`}
-					onclick={() => (timerEnabled = true)}
-				>
+					<button
+						type="button"
+						class={`spark-setup__chip ${timerEnabled ? 'is-active' : ''}`}
+						onclick={() => (timerEnabled = true)}
+					>
 						On
 					</button>
-				<button
-					type="button"
-					class={`spark-setup__chip ${!timerEnabled ? 'is-active' : ''}`}
-					onclick={() => (timerEnabled = false)}
-				>
+					<button
+						type="button"
+						class={`spark-setup__chip ${!timerEnabled ? 'is-active' : ''}`}
+						onclick={() => (timerEnabled = false)}
+					>
 						Off
 					</button>
 				</div>
@@ -87,18 +88,18 @@
 			<fieldset>
 				<legend>Scope</legend>
 				<div class="spark-setup__choices">
-				<button
-					type="button"
-					class={`spark-setup__chip ${scope === 'This upload' ? 'is-active' : ''}`}
-					onclick={() => (scope = 'This upload')}
-				>
+					<button
+						type="button"
+						class={`spark-setup__chip ${scope === 'This upload' ? 'is-active' : ''}`}
+						onclick={() => (scope = 'This upload')}
+					>
 						This upload
 					</button>
-				<button
-					type="button"
-					class={`spark-setup__chip ${scope === 'Cross-doc' ? 'is-active' : ''}`}
-					onclick={() => (scope = 'Cross-doc')}
-				>
+					<button
+						type="button"
+						class={`spark-setup__chip ${scope === 'Cross-doc' ? 'is-active' : ''}`}
+						onclick={() => (scope = 'Cross-doc')}
+					>
 						Cross-doc
 					</button>
 				</div>
@@ -150,7 +151,9 @@
 		color: white;
 		display: grid;
 		gap: 0.75rem;
-		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 34px 64px -48px rgba(15, 23, 42, 0.8);
+		box-shadow:
+			inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+			0 34px 64px -48px rgba(15, 23, 42, 0.8);
 	}
 
 	.spark-setup__upload span {
@@ -229,7 +232,10 @@
 		font-weight: 600;
 		font-size: 0.95rem;
 		cursor: pointer;
-		transition: background 160ms ease, border 160ms ease, transform 160ms ease;
+		transition:
+			background 160ms ease,
+			border 160ms ease,
+			transform 160ms ease;
 	}
 
 	.spark-setup__chip.is-active {
@@ -298,8 +304,8 @@
 			align-items: stretch;
 		}
 
-	:global(.spark-setup__summary [data-slot='button']) {
-		width: 100%;
-	}
+		:global(.spark-setup__summary [data-slot='button']) {
+			width: 100%;
+		}
 	}
 </style>

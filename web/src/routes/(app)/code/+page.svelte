@@ -1,5 +1,5 @@
 <script lang="ts">
-        import { getContext, onDestroy, onMount } from 'svelte';
+	import { getContext, onDestroy, onMount } from 'svelte';
 
 	type UserStore = {
 		subscribe: (
@@ -9,7 +9,7 @@
 
 	const userStore = getContext<UserStore | undefined>('spark-code:user');
 
-        let firstName = $state('Sparkie');
+	let firstName = $state('Sparkie');
 	let unsubscribe: (() => void) | null = null;
 
 	if (userStore) {
@@ -30,118 +30,117 @@
 		{ label: 'Solved', value: '86' }
 	];
 
-        type TimelineStep = {
-                key: string;
-                title: string;
-                icon: string;
-                meta?: string;
-                description: string;
-                href: string;
-                done?: boolean;
-        };
+	type TimelineStep = {
+		key: string;
+		title: string;
+		icon: string;
+		meta?: string;
+		description: string;
+		href: string;
+		done?: boolean;
+	};
 
-        const STORAGE_KEY = 'spark-code-progress';
+	const STORAGE_KEY = 'spark-code-progress';
 
-        const focus = {
-                eyebrow: "Today's plan",
-                topic: 'DP easy win sprint',
-                summary:
-                        'Warm up, explore the coin change transition, solve two easy DP problems, then seal it with a review quiz.'
-        };
+	const focus = {
+		eyebrow: "Today's plan",
+		topic: 'DP easy win sprint',
+		summary:
+			'Warm up, explore the coin change transition, solve two easy DP problems, then seal it with a review quiz.'
+	};
 
-        const problems = [
-                {
-                        key: 'problem-coin-change-ways',
-                        slug: 'coin-change-ways',
-                        title: 'Coin Change Ways',
-                        icon: '🪙',
-                        meta: 'DP • Easy',
-                        description: 'Count combinations to reach a target amount with unlimited coins.'
-                },
-                {
-                        key: 'problem-decode-ways',
-                        slug: 'decode-ways',
-                        title: 'Decode Ways',
-                        icon: '🔐',
-                        meta: 'DP • Easy',
-                        description: 'Turn digit strings into letter counts with memoized recursion.'
-                }
-        ] as const;
+	const problems = [
+		{
+			key: 'problem-coin-change-ways',
+			slug: 'coin-change-ways',
+			title: 'Coin Change Ways',
+			icon: '🪙',
+			meta: 'DP • Easy',
+			description: 'Count combinations to reach a target amount with unlimited coins.'
+		},
+		{
+			key: 'problem-decode-ways',
+			slug: 'decode-ways',
+			title: 'Decode Ways',
+			icon: '🔐',
+			meta: 'DP • Easy',
+			description: 'Turn digit strings into letter counts with memoized recursion.'
+		}
+	] as const;
 
-        const baseTimeline: TimelineStep[] = [
-                {
-                        key: 'warmup',
-                        title: 'Warm-up quiz',
-                        icon: '🔥',
-                        meta: '3 quick checks',
-                        description: 'Get the DP basics firing before you code.',
-                        href: '/code/quiz/dp-warmup-quiz'
-                },
-                {
-                        key: 'topic',
-                        title: 'Topic deck',
-                        icon: '🧠',
-                        meta: '5 guided steps',
-                        description: 'Two info cards and three micro-quizzes on the coin change pattern.',
-                        href: '/code/quiz/dp-topic-deck'
-                },
-                ...problems.map((problem, index) => ({
-                        key: problem.key,
-                        title: `${index === 0 ? 'Practice' : 'Challenge'} · ${problem.title}`,
-                        icon: problem.icon,
-                        meta: problem.meta,
-                        description: problem.description,
-                        href: `/code/p/${problem.slug}`
-                })),
-                {
-                        key: 'review',
-                        title: 'Final review quiz',
-                        icon: '✅',
-                        meta: '3 questions',
-                        description: 'Confirm the pattern sticks before tackling harder sets.',
-                        href: '/code/quiz/dp-review-quiz'
-                }
-        ];
+	const baseTimeline: TimelineStep[] = [
+		{
+			key: 'warmup',
+			title: 'Warm-up quiz',
+			icon: '🔥',
+			meta: '3 quick checks',
+			description: 'Get the DP basics firing before you code.',
+			href: '/code/quiz/dp-warmup-quiz'
+		},
+		{
+			key: 'topic',
+			title: 'Topic deck',
+			icon: '🧠',
+			meta: '5 guided steps',
+			description: 'Two info cards and three micro-quizzes on the coin change pattern.',
+			href: '/code/quiz/dp-topic-deck'
+		},
+		...problems.map((problem, index) => ({
+			key: problem.key,
+			title: `${index === 0 ? 'Practice' : 'Challenge'} · ${problem.title}`,
+			icon: problem.icon,
+			meta: problem.meta,
+			description: problem.description,
+			href: `/code/p/${problem.slug}`
+		})),
+		{
+			key: 'review',
+			title: 'Final review quiz',
+			icon: '✅',
+			meta: '3 questions',
+			description: 'Confirm the pattern sticks before tackling harder sets.',
+			href: '/code/quiz/dp-review-quiz'
+		}
+	];
 
-        const validKeys = new Set(baseTimeline.map((step) => step.key));
+	const validKeys = new Set(baseTimeline.map((step) => step.key));
 
-        let completedKeys = $state<string[]>([]);
+	let completedKeys = $state<string[]>([]);
 
-        onMount(() => {
-                if (typeof window === 'undefined') {
-                        return;
-                }
+	onMount(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
 
-                try {
-                        const raw = window.sessionStorage.getItem(STORAGE_KEY);
-                        if (!raw) {
-                                return;
-                        }
-                        const parsed: unknown = JSON.parse(raw);
-                        if (Array.isArray(parsed)) {
-                                completedKeys = parsed.filter(
-                                        (entry): entry is string =>
-                                                typeof entry === 'string' && validKeys.has(entry)
-                                );
-                        }
-                } catch (error) {
-                        console.error('Unable to load stored progress', error);
-                        completedKeys = [];
-                }
-        });
+		try {
+			const raw = window.sessionStorage.getItem(STORAGE_KEY);
+			if (!raw) {
+				return;
+			}
+			const parsed: unknown = JSON.parse(raw);
+			if (Array.isArray(parsed)) {
+				completedKeys = parsed.filter(
+					(entry): entry is string => typeof entry === 'string' && validKeys.has(entry)
+				);
+			}
+		} catch (error) {
+			console.error('Unable to load stored progress', error);
+			completedKeys = [];
+		}
+	});
 
-        const completedSet = $derived(new Set(completedKeys));
-        const timeline = $derived(
-                baseTimeline.map((step) => ({
-                        ...step,
-                        done: completedSet.has(step.key)
-                }))
-        );
-        const firstIncomplete = $derived(
-                timeline.find((step) => !step.done) ?? timeline[timeline.length - 1]!
-        );
-        const startHref = $derived(firstIncomplete.href);
-        const startLabel = $derived(firstIncomplete.title);
+	const completedSet = $derived(new Set(completedKeys));
+	const timeline = $derived(
+		baseTimeline.map((step) => ({
+			...step,
+			done: completedSet.has(step.key)
+		}))
+	);
+	const firstIncomplete = $derived(
+		timeline.find((step) => !step.done) ?? timeline[timeline.length - 1]!
+	);
+	const startHref = $derived(firstIncomplete.href);
+	const startLabel = $derived(firstIncomplete.title);
 </script>
 
 <svelte:head>
@@ -189,14 +188,14 @@
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
 		<div class="plan-body">
-		{#each timeline as item, index}
-                        <a
-                                class="timeline-row"
-                                href={item.href}
-                                data-first={index === 0}
-                                data-last={index === timeline.length - 1}
-                                data-done={item.done}
-                        >
+			{#each timeline as item, index}
+				<a
+					class="timeline-row"
+					href={item.href}
+					data-first={index === 0}
+					data-last={index === timeline.length - 1}
+					data-done={item.done}
+				>
 					<div class="timeline-hit">
 						<div class="timeline-point" data-done={item.done}>
 							<span class="timeline-circle" data-done={item.done}></span>
@@ -219,16 +218,13 @@
 							</div>
 						</div>
 					</div>
-			</a>
+				</a>
 			{/each}
 		</div>
 		<div class="plan-footer">
-                        <a
-                                class="plan-start"
-                                href={startHref}
-                        >
-                                ▶ Start with {startLabel}
-                        </a>
+			<a class="plan-start" href={startHref}>
+				▶ Start with {startLabel}
+			</a>
 		</div>
 	</div>
 </section>
@@ -475,29 +471,29 @@
 		height: 0;
 	}
 
-        .timeline-row:focus-visible .timeline-hit {
-                background: rgba(59, 130, 246, 0.12);
-                border-color: rgba(59, 130, 246, 0.24);
-        }
+	.timeline-row:focus-visible .timeline-hit {
+		background: rgba(59, 130, 246, 0.12);
+		border-color: rgba(59, 130, 246, 0.24);
+	}
 
-        :global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
-        :global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
-                background: rgba(37, 99, 235, 0.2);
-                border-color: rgba(59, 130, 246, 0.32);
-        }
+	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
+	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
+		background: rgba(37, 99, 235, 0.2);
+		border-color: rgba(59, 130, 246, 0.32);
+	}
 
-        @media (hover: hover) {
-                .timeline-row:hover .timeline-hit {
-                        background: rgba(59, 130, 246, 0.12);
-                        border-color: rgba(59, 130, 246, 0.24);
-                }
+	@media (hover: hover) {
+		.timeline-row:hover .timeline-hit {
+			background: rgba(59, 130, 246, 0.12);
+			border-color: rgba(59, 130, 246, 0.24);
+		}
 
-                :global([data-theme='dark'] .timeline-row:hover .timeline-hit),
-                :global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit) {
-                        background: rgba(37, 99, 235, 0.2);
-                        border-color: rgba(59, 130, 246, 0.32);
-                }
-        }
+		:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
+		:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit) {
+			background: rgba(37, 99, 235, 0.2);
+			border-color: rgba(59, 130, 246, 0.32);
+		}
+	}
 
 	.timeline-point {
 		position: relative;

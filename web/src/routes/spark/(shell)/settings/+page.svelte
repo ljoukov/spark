@@ -26,7 +26,9 @@
 			<li><button type="button">Boards &amp; subjects</button></li>
 			<li><button type="button">Notifications</button></li>
 			<li><button type="button">App info</button></li>
-			<li><a href="https://spark.study/legal" target="_blank" rel="noreferrer">Privacy &amp; Terms</a></li>
+			<li>
+				<a href="https://spark.study/legal" target="_blank" rel="noreferrer">Privacy &amp; Terms</a>
+			</li>
 			<li><a href="mailto:hello@spark.study">Help &amp; feedback</a></li>
 			<li><button type="button">Logout</button></li>
 		</ul>
@@ -146,7 +148,9 @@
 		border: none;
 		border-radius: inherit;
 		cursor: pointer;
-		transition: background 160ms ease, transform 160ms ease;
+		transition:
+			background 160ms ease,
+			transform 160ms ease;
 	}
 
 	.spark-settings-list a:hover,

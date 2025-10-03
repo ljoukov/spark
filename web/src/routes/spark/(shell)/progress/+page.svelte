@@ -34,9 +34,19 @@
 	let subjectFocusCount = 0;
 
 	const timeline = [
-		{ title: 'Electrolysis, redox & cells', result: 'Score 82%', date: 'Monday', type: 'Full session' },
+		{
+			title: 'Electrolysis, redox & cells',
+			result: 'Score 82%',
+			date: 'Monday',
+			type: 'Full session'
+		},
 		{ title: 'Required practicals mix', result: 'Score 76%', date: 'Saturday', type: 'Focus 10' },
-		{ title: 'Energy changes quick check', result: 'Score 88%', date: 'Last week', type: 'Timed sprint' }
+		{
+			title: 'Energy changes quick check',
+			result: 'Score 88%',
+			date: 'Last week',
+			type: 'Timed sprint'
+		}
 	];
 
 	$: subject = $page.url.searchParams.get('subject') ?? subject;
@@ -54,13 +64,17 @@
 	$: relatedFocus = $sparkFocusStore.filter((focus) => focus.subject === subject).slice(0, 2);
 </script>
 
-<section class="spark-progress-detail" style={`--spark-progress-glow: ${subjectTheme.glow}; --spark-progress-accent: ${subjectTheme.accent}; --spark-progress-muted: ${subjectTheme.muted};`}>
+<section
+	class="spark-progress-detail"
+	style={`--spark-progress-glow: ${subjectTheme.glow}; --spark-progress-accent: ${subjectTheme.accent}; --spark-progress-muted: ${subjectTheme.muted};`}
+>
 	<header class="spark-progress-detail__hero">
 		<div>
 			<p class="spark-progress-detail__eyebrow">{subject} mastery</p>
 			<h1>{subjectPercent}% on spec</h1>
 			<p class="spark-progress-detail__tagline">
-				You're up {subjectDelta >= 0 ? `+${subjectDelta}` : subjectDelta} points this week. Keep it going with a fresh session to cement the wins.
+				You're up {subjectDelta >= 0 ? `+${subjectDelta}` : subjectDelta} points this week. Keep it going
+				with a fresh session to cement the wins.
 			</p>
 		</div>
 		<div class="spark-progress-detail__cta">
@@ -144,7 +158,11 @@
 		background: color-mix(in srgb, var(--surface-color) 96%, transparent 4%);
 		border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent 30%);
 		box-shadow: 0 32px 52px -44px var(--shadow-color);
-		background-image: radial-gradient(circle at top right, var(--spark-progress-glow), transparent 45%);
+		background-image: radial-gradient(
+			circle at top right,
+			var(--spark-progress-glow),
+			transparent 45%
+		);
 	}
 
 	.spark-progress-detail__eyebrow {
@@ -240,7 +258,10 @@
 		color: inherit;
 		background: color-mix(in srgb, var(--spark-progress-muted) 60%, transparent 40%);
 		border: 1px solid color-mix(in srgb, var(--spark-progress-muted) 50%, transparent 50%);
-		transition: transform 160ms ease, box-shadow 200ms ease, border 160ms ease;
+		transition:
+			transform 160ms ease,
+			box-shadow 200ms ease,
+			border 160ms ease;
 	}
 
 	.spark-progress-detail__focus:hover {

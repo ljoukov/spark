@@ -87,35 +87,37 @@
 </script>
 
 <QuizQuestionCard
-		title={question.prompt}
-		eyebrow={eyebrow}
+	title={question.prompt}
+	{eyebrow}
 	status={statusProp}
 	hint={question.hint}
-	showHint={showHint}
-	feedback={feedback}
+	{showHint}
+	{feedback}
 	explanation={question.explanation}
 	showExplanation={revealExplanation}
 >
 	<div class="space-y-4">
-		<p class="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground/80">
+		<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
 			Your answer
 		</p>
 		<Input
 			class="h-12 w-full rounded-2xl border-2 border-input bg-background px-4 text-base shadow-sm transition-colors focus-visible:border-ring"
 			type="text"
-			bind:value={value}
+			bind:value
 			oninput={handleInput}
 			onkeydown={handleKeyDown}
 			disabled={locked}
 			autocomplete="off"
 			spellcheck="false"
-			placeholder={placeholder}
+			{placeholder}
 		/>
 	</div>
 
 	{#if showAnswerPanel}
-		<div class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-			<p class="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/80">
+		<div
+			class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+		>
+			<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
 				Correct answer
 			</p>
 			<p class="mt-1 text-base leading-relaxed text-foreground/90">
@@ -132,12 +134,7 @@
 	<div slot="footer" class="flex w-full flex-wrap items-center gap-3">
 		<div class="flex items-center gap-2">
 			{#if question.hint}
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={handleHint}
-					disabled={showHint}
-				>
+				<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint}>
 					{hintLabel}
 				</Button>
 			{/if}
