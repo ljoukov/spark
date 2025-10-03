@@ -75,19 +75,17 @@
 
 <Card class={cardClass} {...restProps}>
 	<CardHeader class="p-0">
-		<div class="flex items-start justify-between gap-6">
-			<div class="space-y-3">
-				{#if eyebrow !== null}
-					<p class="text-xs font-semibold uppercase tracking-[0.32em] text-muted-foreground/70">
-						{eyebrow}
-					</p>
-				{/if}
-				{#if title}
-					<CardTitle class="text-xl font-semibold leading-snug text-foreground md:text-2xl">
-						{title}
-					</CardTitle>
-				{/if}
-			</div>
+		<div class="space-y-3">
+			{#if eyebrow !== null}
+				<span class="inline-flex items-center rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.32em] text-primary/80 shadow-sm">
+					{eyebrow}
+				</span>
+			{/if}
+			{#if title}
+				<CardTitle class="text-xl font-semibold leading-snug text-foreground md:text-2xl">
+					{title}
+				</CardTitle>
+			{/if}
 		</div>
 	</CardHeader>
 
