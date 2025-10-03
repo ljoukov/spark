@@ -183,12 +183,7 @@ export const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
           items: { type: Type.STRING },
         },
       },
-      required: [
-        "title",
-        "overview",
-        "timeComplexity",
-        "spaceComplexity",
-      ],
+      required: ["title", "overview", "timeComplexity", "spaceComplexity"],
       propertyOrdering: [
         "title",
         "overview",
@@ -216,12 +211,7 @@ export const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
             items: { type: Type.STRING },
           },
         },
-        required: [
-          "title",
-          "overview",
-          "timeComplexity",
-          "spaceComplexity",
-        ],
+        required: ["title", "overview", "timeComplexity", "spaceComplexity"],
         propertyOrdering: [
           "title",
           "overview",

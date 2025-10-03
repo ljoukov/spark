@@ -63,7 +63,7 @@ export async function extractCodeProblemFromMarkdown(
         responseMimeType: "application/json",
         responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
       },
-    })
+    }),
   );
 
   const text = response.text;

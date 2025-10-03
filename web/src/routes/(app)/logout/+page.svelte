@@ -20,7 +20,7 @@
 				return 'You are not logged into Spark';
 			case 'error':
 			default:
-				return 'We couldn\'t finish signing you out';
+				return "We couldn't finish signing you out";
 		}
 	}
 
@@ -29,14 +29,14 @@
 			case 'checking':
 				return 'Checking your session details.';
 			case 'signing_out':
-				return 'We\'re clearing your Spark session securely.';
+				return "We're clearing your Spark session securely.";
 			case 'signed_out':
 				return 'You can now close this tab or head back to the Spark login page.';
 			case 'not_signed_in':
 				return 'Use the button below to sign in and pick up where you left off.';
 			case 'error':
 			default:
-				return 'Something didn\'t go to plan. Please try again in a moment.';
+				return "Something didn't go to plan. Please try again in a moment.";
 		}
 	}
 
@@ -132,12 +132,10 @@
 				<span class="logout-spinner" aria-hidden="true"></span>
 				<span class="logout-progress__label">{busyLabel}</span>
 			</div>
-		{:else}
-			{#if ui.status === 'error' && ui.errorMessage}
-				<p class="auth-alert error" role="alert">{ui.errorMessage}</p>
-			{:else if hint}
-				<p class="auth-alert info">{hint}</p>
-			{/if}
+		{:else if ui.status === 'error' && ui.errorMessage}
+			<p class="auth-alert error" role="alert">{ui.errorMessage}</p>
+		{:else if hint}
+			<p class="auth-alert info">{hint}</p>
 		{/if}
 
 		{#if !isBusy && (showLoginLink || showRetry)}

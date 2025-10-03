@@ -51,8 +51,14 @@ describe("quiz prompts helpers", () => {
     const [first, second] = normalised.questions;
     expect(first.answer).toEqual(["A"]);
     expect(second.options).toBeUndefined();
-    expect(first.review).toEqual({ status: "approved", notes: "Self-check passed." });
-    expect(second.review).toEqual({ status: "approved", notes: "Self-check passed." });
+    expect(first.review).toEqual({
+      status: "approved",
+      notes: "Self-check passed.",
+    });
+    expect(second.review).toEqual({
+      status: "approved",
+      notes: "Self-check passed.",
+    });
 
     expect(() => QuizGenerationSchema.parse(normalised)).not.toThrow();
   });

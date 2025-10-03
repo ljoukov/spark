@@ -30,7 +30,7 @@ export interface ExtendQuizOptions {
 }
 
 export async function generateQuizFromSource(
-  options: GenerateQuizOptions
+  options: GenerateQuizOptions,
 ): Promise<QuizGeneration> {
   const prompt = buildGenerationPrompt(options);
   const parts: Part[] = [
@@ -51,7 +51,7 @@ export async function generateQuizFromSource(
         responseMimeType: "application/json",
         responseSchema: QUIZ_RESPONSE_SCHEMA,
       },
-    })
+    }),
   );
 
   const text = response.text;
@@ -65,7 +65,7 @@ export async function generateQuizFromSource(
 }
 
 export async function extendQuizWithMoreQuestions(
-  options: ExtendQuizOptions
+  options: ExtendQuizOptions,
 ): Promise<QuizGeneration> {
   const additionalQuestionCount =
     options.additionalQuestionCount ?? DEFAULT_EXTENSION_QUESTION_COUNT;
@@ -75,7 +75,7 @@ export async function extendQuizWithMoreQuestions(
     board: options.board,
   });
   const pastQuizLines = options.baseQuiz.questions.map(
-    (question, index) => `${index + 1}. ${question.prompt}`
+    (question, index) => `${index + 1}. ${question.prompt}`,
   );
   const pastQuizBlock = `<PAST_QUIZES>\n${pastQuizLines.join("\n")}\n</PAST_QUIZES>`;
   const parts: Part[] = [
@@ -99,7 +99,7 @@ export async function extendQuizWithMoreQuestions(
         responseMimeType: "application/json",
         responseSchema: QUIZ_RESPONSE_SCHEMA,
       },
-    })
+    }),
   );
 
   const text = response.text;

@@ -416,7 +416,9 @@
 		align-items: center;
 		gap: 0.65rem;
 		font-weight: 600;
-		font-family: '-apple-system', 'system-ui', 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+		font-family:
+			'-apple-system', 'system-ui', 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+			'Segoe UI Emoji';
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--app-subtitle-color);

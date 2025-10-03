@@ -147,45 +147,45 @@
 		}
 
 		const auth = getAuth(getFirebaseApp());
-	const unsubscribe = onAuthStateChanged(auth, async (user) => {
-		authResolved = true;
-		if (!user) {
-			clearIdTokenCookie();
-			ui.showAuth = true;
-			ui.showAnonConfirm = false;
-			lastSyncedUid = null;
-			redirecting = false;
-			return;
-		}
-
-		ui.showAuth = false;
-		ui.showAnonConfirm = false;
-
-		if (lastSyncedUid === user.uid) {
-			const mirrored = await mirrorCookie(user);
-			if (mirrored) {
-				redirectToCode();
+		const unsubscribe = onAuthStateChanged(auth, async (user) => {
+			authResolved = true;
+			if (!user) {
+				clearIdTokenCookie();
+				ui.showAuth = true;
+				ui.showAnonConfirm = false;
+				lastSyncedUid = null;
+				redirecting = false;
 				return;
 			}
-			ui.showAuth = true;
-			ui.showAnonConfirm = false;
-			return;
-		}
 
-		const synced = await syncProfile(user);
-		if (!synced) {
-			ui.showAuth = true;
+			ui.showAuth = false;
 			ui.showAnonConfirm = false;
-			return;
-		}
-		const mirrored = await mirrorCookie(user);
-		if (!mirrored) {
-			ui.showAuth = true;
-			ui.showAnonConfirm = false;
-			return;
-		}
-		redirectToCode();
-	});
+
+			if (lastSyncedUid === user.uid) {
+				const mirrored = await mirrorCookie(user);
+				if (mirrored) {
+					redirectToCode();
+					return;
+				}
+				ui.showAuth = true;
+				ui.showAnonConfirm = false;
+				return;
+			}
+
+			const synced = await syncProfile(user);
+			if (!synced) {
+				ui.showAuth = true;
+				ui.showAnonConfirm = false;
+				return;
+			}
+			const mirrored = await mirrorCookie(user);
+			if (!mirrored) {
+				ui.showAuth = true;
+				ui.showAnonConfirm = false;
+				return;
+			}
+			redirectToCode();
+		});
 
 		return () => {
 			unsubscribe();

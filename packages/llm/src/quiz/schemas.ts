@@ -19,10 +19,7 @@ export const QUESTION_TYPES = [
   "numeric",
 ] as const;
 
-export const QUESTION_REVIEW_STATUSES = [
-  "approved",
-  "unapproved",
-] as const;
+export const QUESTION_REVIEW_STATUSES = ["approved", "unapproved"] as const;
 
 const QuestionReviewSchema = z.object({
   status: z.enum(QUESTION_REVIEW_STATUSES),

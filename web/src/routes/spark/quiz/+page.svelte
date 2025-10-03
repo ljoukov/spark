@@ -70,7 +70,12 @@
 			<span>{session.subject}</span>
 			<span>{quiz.datasetTitle}</span>
 		</div>
-		<button class="spark-quiz__close" type="button" onclick={() => (showExit = true)} aria-label="Exit session">
+		<button
+			class="spark-quiz__close"
+			type="button"
+			onclick={() => (showExit = true)}
+			aria-label="Exit session"
+		>
 			<XIcon class="size-5" />
 		</button>
 	</header>
@@ -81,7 +86,7 @@
 			<h1>{currentQuestion.stem}</h1>
 		</section>
 
-	<div class="spark-quiz__choices" role="radiogroup" aria-label="Answer choices">
+		<div class="spark-quiz__choices" role="radiogroup" aria-label="Answer choices">
 			{#each currentQuestion.choices as choice, index}
 				<button
 					type="button"
@@ -90,8 +95,8 @@
 							? index === currentQuestion.answer
 								? 'is-correct'
 								: selectedChoice === index
-								? 'is-wrong'
-								: ''
+									? 'is-wrong'
+									: ''
 							: ''
 					}`}
 					onclick={() => toggleChoice(index)}
@@ -124,11 +129,7 @@
 			>
 				{stage === 'answering' ? 'Check' : isLastQuestion ? 'Finish' : 'Next'}
 			</button>
-			<button
-				type="button"
-				class={cn(buttonVariants({ variant: 'ghost' }))}
-				onclick={finishNow}
-			>
+			<button type="button" class={cn(buttonVariants({ variant: 'ghost' }))} onclick={finishNow}>
 				Finish now
 			</button>
 		</div>
@@ -172,7 +173,8 @@
 <style>
 	.spark-quiz {
 		min-height: 100vh;
-		background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 45%),
+		background:
+			radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 45%),
 			radial-gradient(circle at bottom right, rgba(236, 72, 153, 0.12), transparent 50%),
 			color-mix(in srgb, var(--background) 94%, transparent 6%);
 		display: grid;
@@ -230,7 +232,9 @@
 		display: grid;
 		place-items: center;
 		border: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent 30%);
-		transition: transform 160ms ease, background 160ms ease;
+		transition:
+			transform 160ms ease,
+			background 160ms ease;
 	}
 
 	.spark-quiz__close:hover {
@@ -280,7 +284,10 @@
 		text-align: left;
 		font-size: 0.95rem;
 		font-weight: 500;
-		transition: transform 140ms ease, border 160ms ease, box-shadow 200ms ease;
+		transition:
+			transform 140ms ease,
+			border 160ms ease,
+			box-shadow 200ms ease;
 	}
 
 	.spark-quiz__choice:hover:not(.is-selected):not(.is-correct):not(.is-wrong) {

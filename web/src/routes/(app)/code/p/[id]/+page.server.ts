@@ -12,7 +12,10 @@ const paramsSchema = z.object({
 
 const trimmed = z.string().transform((value) => value.trim());
 const nonEmpty = trimmed.pipe(z.string().min(1));
-const optional = z.string().optional().transform((value) => value?.trim() ?? '');
+const optional = z
+	.string()
+	.optional()
+	.transform((value) => value?.trim() ?? '');
 
 const listOfStrings = z
 	.array(trimmed)
@@ -61,7 +64,8 @@ const firestoreProblemSchema = z
 		}),
 		metadataVersion: z.number().int().nonnegative(),
 		starterCode: z.string().optional().nullable()
-        }).loose();
+	})
+	.loose();
 
 type FirestoreProblem = z.infer<typeof firestoreProblemSchema>;
 
