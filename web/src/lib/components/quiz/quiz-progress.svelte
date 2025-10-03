@@ -49,6 +49,9 @@
 				return 'bg-amber-500 shadow-[0_4px_12px_-6px_rgba(217,119,6,0.5)]';
 			case 'skipped':
 				return 'bg-slate-300 dark:bg-slate-600';
+			case 'seen':
+				// Subtle clue for seen-but-unanswered: tint only (no shadow/ring)
+				return 'bg-primary/15';
 			case 'active':
 				return 'bg-primary shadow-[0_0_0_2px_rgba(59,130,246,0.18)]';
 			default:
@@ -57,7 +60,8 @@
 	}
 
 	function handleNavigate(index: number) {
-		if (index < safeCurrent) {
+		const step = derivedSteps[index];
+		if (step && step.status !== 'pending' && index !== safeCurrent) {
 			dispatch('navigate', { index });
 		}
 	}
@@ -81,13 +85,13 @@
 		<div class="flex flex-1 items-center gap-2" role="list" aria-label="Quiz progress">
 			{#each derivedSteps as step, index}
 				{@const isActive = index === safeCurrent}
-				{@const canNavigate = index < safeCurrent && step.status !== 'pending'}
+				{@const canNavigate = step.status !== 'pending' && index !== safeCurrent}
 				{#if canNavigate}
-					<div role="listitem" class="flex-1">
+					<div role="listitem" class="flex flex-1 items-center">
 						<button
 							type="button"
 							class={cn(
-								'focus-visible:ring-primary/30 h-2 w-full cursor-pointer rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4',
+								'focus-visible:ring-primary/30 block h-2 w-full cursor-pointer rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-4',
 								segmentClass(step.status)
 							)}
 							aria-label={step.label ?? `Question ${index + 1}`}
