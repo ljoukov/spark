@@ -322,6 +322,8 @@
 		--blob-blue: hsla(184 95% 91% / 0.82);
 		--blob-opacity: 0.6;
 		--app-content-bg: rgba(255, 255, 255, 0.96);
+		/* Ensure dialog background follows theme (light/dark) */
+		--auth-dialog-bg: var(--app-content-bg);
 		--app-content-border: rgba(15, 23, 42, 0.12);
 		--app-subtitle-color: var(--text-secondary, rgba(30, 41, 59, 0.78));
 		--auth-dialog-border: rgba(15, 23, 42, 0.12);

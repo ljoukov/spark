@@ -314,7 +314,7 @@
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
 	<Dialog.Content
-		class="finish-dialog border-border/60 bg-background/98 max-w-lg overflow-hidden rounded-3xl border p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
+		class="finish-dialog bg-background/98 max-w-lg overflow-hidden rounded-3xl p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
 	>
 		<div
 			class="border-border/60 from-primary/15 via-background to-background dark:from-primary/12 space-y-3 border-b bg-gradient-to-br px-6 py-6"
@@ -326,16 +326,66 @@
 				You still have {remainingCount} unanswered question(s). Choose what you would like to do next.
 			</p>
 		</div>
-		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
-			<Button variant="outline" class="sm:min-w-[9rem]" onclick={resetQuiz}>Restart quiz</Button>
-			<Button
-				variant="ghost"
-				class="text-muted-foreground hover:text-foreground sm:min-w-[9rem]"
-				onclick={() => (finishDialogOpen = false)}
+		<div class="finish-footer flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
+			<Button variant="outline" class="w-full sm:w-auto sm:min-w-[9rem]" onclick={resetQuiz}
+				>Restart quiz</Button
 			>
+			<Button class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]" onclick={() => (finishDialogOpen = false)}>
 				Keep practicing
 			</Button>
-			<Button class="sm:min-w-[9rem]" onclick={handleFinishEarly}>Finish now</Button>
+			<Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleFinishEarly}
+				>Finish now</Button
+			>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+<style>
+/* Dialog container: strong, theme-aware border for clarity */
+:global(.finish-dialog) {
+    --finish-border: rgba(15, 23, 42, 0.18);
+    border-radius: 1.5rem;
+    background: color-mix(in srgb, hsl(var(--background)) 98%, transparent 2%);
+    /* crisp outer ring + soft elevation */
+    box-shadow:
+        0 0 0 1px var(--finish-border),
+        0 35px 90px -40px rgba(15, 23, 42, 0.45);
+}
+
+/* Dark theme border contrast */
+:global([data-theme='dark'] .finish-dialog) {
+    --finish-border: rgba(148, 163, 184, 0.38);
+    box-shadow:
+        0 0 0 1px var(--finish-border),
+        0 35px 90px -40px rgba(2, 6, 23, 0.75);
+}
+
+	:global(.finish-cancel) {
+		background: #0284c7 !important;
+		color: #ffffff !important;
+		justify-content: center;
+		box-shadow: 0 18px 40px rgba(14, 165, 233, 0.35);
+	}
+
+	:global(.finish-cancel:hover) {
+		background: #0ea5e9 !important;
+	}
+
+	:global(.finish-continue) {
+		background: #f97316 !important;
+		color: #ffffff !important;
+		justify-content: center;
+		box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
+	}
+
+	:global(.finish-continue:hover) {
+		background: #fb923c !important;
+	}
+
+	@media (min-width: 40rem) {
+		:global(.finish-footer) {
+			flex-direction: row;
+			align-items: center;
+		}
+	}
+</style>
