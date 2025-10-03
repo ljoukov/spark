@@ -72,7 +72,7 @@
 >
 	<div class="flex w-full items-center gap-3">
 		<div
-			class="border-primary/60 bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-lg font-semibold shadow-inner"
+			class="border-primary/40 bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-full border text-lg font-semibold shadow-inner"
 			aria-label={`Question ${safeCurrent + 1}`}
 		>
 			{Math.min(safeCurrent + 1, derivedSteps.length)}
