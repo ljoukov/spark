@@ -6,18 +6,23 @@ const config = {
 	// Consult https://svelte.dev/docs/kit/integrations
 	// for more information about preprocessors
 	preprocess: vitePreprocess(),
-	kit: {
-		// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-		adapter: adapter(),
-		alias: {
-			$proto: './proto',
-			'@spark/llm': './node_modules/@spark/llm/src',
-			'@google/genai': './node_modules/@google/genai',
-			zod: './node_modules/zod'
+		kit: {
+			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
+			// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
+			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
+			adapter: adapter(),
+			alias: {
+				$proto: './proto'
+			},
+			typescript: {
+				config(config) {
+					const references = config.references ?? [];
+					references.push({ path: '../packages/llm' });
+					config.references = references;
+					return config;
+				}
+			}
 		}
-	}
 };
 
 export default config;
