@@ -258,7 +258,6 @@
 		steps={progressSteps}
 		currentIndex={currentIndex}
 		total={quiz.questions.length}
-		secondaryLabel={`${correctCount} correct`}
 	/>
 
 	<section class="flex flex-col gap-6">
