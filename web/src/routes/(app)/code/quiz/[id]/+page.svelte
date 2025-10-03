@@ -54,18 +54,10 @@
 	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
-	let resultDialogOpen = $state(false);
 	let progressPersisted = false;
 
 	function handleFinishDialogChange(open: boolean) {
 		finishDialogOpen = open;
-	}
-
-	function handleResultDialogChange(open: boolean) {
-		resultDialogOpen = open;
-		if (!open && isQuizComplete) {
-			goto('/code');
-		}
 	}
 
 	function updateAttempt(index: number, updater: (value: AttemptState) => AttemptState) {
@@ -110,17 +102,8 @@
 	);
 
 	const isQuizComplete = $derived(attempts.every((attempt) => attempt.status !== 'pending'));
-	const correctCount = $derived(
-		scoredAttempts.filter((entry) => entry.attempt.status === 'correct').length
-	);
-	const incorrectCount = $derived(
-		scoredAttempts.filter((entry) => entry.attempt.status === 'incorrect').length
-	);
-	const skippedCount = $derived(
-		scoredAttempts.filter((entry) => entry.attempt.status === 'skipped').length
-	);
 	const remainingCount = $derived(
-		scoredAttempts.length - correctCount - incorrectCount - skippedCount
+		scoredAttempts.filter((entry) => entry.attempt.status === 'pending').length
 	);
 
 	function goToQuestion(index: number) {
@@ -268,7 +251,9 @@
 			return;
 		}
 
-		resultDialogOpen = true;
+		if (typeof window !== 'undefined') {
+			goto('/code');
+		}
 	}
 
 	function handleAdvanceFromAttempt() {
@@ -289,13 +274,15 @@
 		);
 		finishDialogOpen = false;
 		currentIndex = Math.min(currentIndex, quiz.questions.length - 1);
+		if (typeof window !== 'undefined') {
+			goto('/code');
+		}
 	}
 
 	function resetQuiz() {
 		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
 		currentIndex = 0;
 		finishDialogOpen = false;
-		resultDialogOpen = false;
 		progressPersisted = false;
 	}
 
@@ -326,9 +313,6 @@
 			}
 		}
 
-		if (!resultDialogOpen) {
-			resultDialogOpen = true;
-		}
 	});
 </script>
 
@@ -390,52 +374,6 @@
 		{/if}
 	</section>
 </div>
-
-<Dialog.Root open={resultDialogOpen} onOpenChange={handleResultDialogChange}>
-	<Dialog.Content
-		class="result-dialog max-w-lg overflow-hidden rounded-3xl bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
-	>
-		<div class="space-y-4 border-b border-border/60 px-6 py-6">
-			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-				Quiz complete
-			</h2>
-			<p class="text-sm leading-relaxed text-muted-foreground">
-				You answered {correctCount} of {scoredAttempts.length} scored questions correctly.
-			</p>
-			<div class="flex flex-wrap gap-3 text-sm font-semibold">
-				<span
-					class="inline-flex items-center rounded-full bg-emerald-100/80 px-3 py-1 text-emerald-700 shadow-sm dark:bg-emerald-500/15 dark:text-emerald-100"
-				>
-					Correct · {correctCount}
-				</span>
-				<span
-					class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-amber-700 shadow-sm dark:bg-amber-500/20 dark:text-amber-100"
-				>
-					Incorrect · {incorrectCount}
-				</span>
-				{#if skippedCount > 0}
-					<span
-						class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-600 shadow-sm dark:bg-slate-500/20 dark:text-slate-200"
-					>
-						Skipped · {skippedCount}
-					</span>
-				{/if}
-			</div>
-		</div>
-		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
-			<Button
-				variant="outline"
-				class="w-full sm:w-auto sm:min-w-[9rem]"
-				onclick={() => goto('/code')}
-			>
-				Back to plan
-			</Button>
-			<Button class="result-primary w-full sm:w-auto sm:min-w-[9rem]" onclick={() => goto('/code')}>
-				Keep practicing
-			</Button>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
 	<Dialog.Content
@@ -510,17 +448,6 @@
 
 	:global(.finish-continue:hover) {
 		background: #fb923c !important;
-	}
-
-	:global(.result-primary) {
-		background: #3b82f6 !important;
-		color: #ffffff !important;
-		justify-content: center;
-		box-shadow: 0 18px 40px rgba(59, 130, 246, 0.35);
-	}
-
-	:global(.result-primary:hover) {
-		background: #60a5fa !important;
 	}
 
 	@media (min-width: 40rem) {
