@@ -163,31 +163,33 @@
 		</div>
 	</div>
 
-	<div slot="footer" class="flex w-full flex-wrap items-center gap-3">
-		<div class="flex items-center gap-2">
-			{#if question.hint}
-				<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint}>
-					{hintLabel}
+	{#snippet footer()}
+		<div class="flex w-full flex-wrap items-center gap-3">
+			<div class="flex items-center gap-2">
+				{#if question.hint}
+					<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint}>
+						{hintLabel}
+					</Button>
+				{/if}
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={handleDontKnow}
+					disabled={locked && statusProp !== 'neutral'}
+				>
+					{dontKnowLabel}
 				</Button>
-			{/if}
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={handleDontKnow}
-				disabled={locked && statusProp !== 'neutral'}
-			>
-				{dontKnowLabel}
-			</Button>
-		</div>
+			</div>
 
-		<div class="ml-auto flex items-center gap-2">
-			{#if showContinue}
-				<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
-			{:else}
-				<Button size="lg" onclick={handleSubmit} disabled={submitDisabled}>
-					{answerLabel}
-				</Button>
-			{/if}
+			<div class="ml-auto flex items-center gap-2">
+				{#if showContinue}
+					<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
+				{:else}
+					<Button size="lg" onclick={handleSubmit} disabled={submitDisabled}>
+						{answerLabel}
+					</Button>
+				{/if}
+			</div>
 		</div>
-	</div>
+	{/snippet}
 </QuizQuestionCard>
