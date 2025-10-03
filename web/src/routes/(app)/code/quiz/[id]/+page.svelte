@@ -78,9 +78,13 @@
 
 	const isQuizComplete = $derived(attempts.every((attempt) => attempt.status !== 'pending'));
 	const correctCount = $derived(attempts.filter((attempt) => attempt.status === 'correct').length);
-	const incorrectCount = $derived(attempts.filter((attempt) => attempt.status === 'incorrect').length);
+	const incorrectCount = $derived(
+		attempts.filter((attempt) => attempt.status === 'incorrect').length
+	);
 	const skippedCount = $derived(attempts.filter((attempt) => attempt.status === 'skipped').length);
-	const remainingCount = $derived(quiz.questions.length - correctCount - incorrectCount - skippedCount);
+	const remainingCount = $derived(
+		quiz.questions.length - correctCount - incorrectCount - skippedCount
+	);
 
 	function goToQuestion(index: number) {
 		if (index >= 0 && index < currentIndex) {
@@ -113,13 +117,13 @@
 			showContinue: true,
 			feedback: isCorrect
 				? {
-					heading: 'Nice work',
-					message: 'That matches the DP condition we rely on here.'
-				}
+						heading: 'Nice work',
+						message: 'That matches the DP condition we rely on here.'
+					}
 				: {
-					heading: "Let's review",
-					message: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation below and try the next one.`
-				}
+						heading: "Let's review",
+						message: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation below and try the next one.`
+					}
 		}));
 	}
 
@@ -131,7 +135,9 @@
 		const question = quiz.questions[currentIndex];
 
 		if (question.kind === 'multiple-choice') {
-			const correctOption = question.options.find((option) => option.id === question.correctOptionId);
+			const correctOption = question.options.find(
+				(option) => option.id === question.correctOptionId
+			);
 			updateAttempt(currentIndex, (prev) => ({
 				...prev,
 				status: 'incorrect',
@@ -188,13 +194,13 @@
 			showContinue: true,
 			feedback: isCorrect
 				? {
-					heading: 'Great answer',
-					message: 'Your reasoning lines up with the model solution.'
-				}
+						heading: 'Great answer',
+						message: 'Your reasoning lines up with the model solution.'
+					}
 				: {
-					heading: "Here's the catch",
-					message: `The answer we needed appears below—study it and move forward.`
-				}
+						heading: "Here's the catch",
+						message: `The answer we needed appears below—study it and move forward.`
+					}
 		}));
 	}
 
@@ -208,11 +214,11 @@
 		attempts = attempts.map((attempt) =>
 			attempt.status === 'pending'
 				? {
-					...attempt,
-					status: 'skipped',
-					locked: true,
-					showContinue: false
-				}
+						...attempt,
+						status: 'skipped',
+						locked: true,
+						showContinue: false
+					}
 				: attempt
 		);
 		finishDialogOpen = false;
@@ -230,11 +236,10 @@
 	<title>{quiz.title} · Spark Quiz</title>
 </svelte:head>
 
-
-<div class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 md:py-10">
+<div class="mx-auto flex w-full max-w-4xl flex-col gap-3 px-4 py-4 md:py-4">
 	<QuizProgress
 		steps={progressSteps}
-		currentIndex={currentIndex}
+		{currentIndex}
 		total={quiz.questions.length}
 		on:navigate={(event) => goToQuestion(event.detail.index)}
 		on:finish={() => (finishDialogOpen = true)}
@@ -277,20 +282,28 @@
 	</section>
 
 	{#if isQuizComplete}
-		<section class="space-y-4 rounded-3xl border border-emerald-200/60 bg-emerald-50/70 p-6 text-emerald-900 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)] dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+		<section
+			class="space-y-4 rounded-3xl border border-emerald-200/60 bg-emerald-50/70 p-6 text-emerald-900 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)] dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-100"
+		>
 			<h2 class="text-2xl font-semibold">Quiz complete</h2>
 			<p class="text-base leading-relaxed">
 				You answered {correctCount} of {quiz.questions.length} questions correctly.
 			</p>
 			<div class="flex flex-wrap gap-3 text-sm font-semibold">
-				<span class="inline-flex items-center rounded-full bg-white/70 px-3 py-1 text-emerald-700 shadow-sm dark:bg-emerald-400/10 dark:text-emerald-100">
+				<span
+					class="inline-flex items-center rounded-full bg-white/70 px-3 py-1 text-emerald-700 shadow-sm dark:bg-emerald-400/10 dark:text-emerald-100"
+				>
 					Correct · {correctCount}
 				</span>
-				<span class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-amber-700 shadow-sm dark:bg-amber-500/20 dark:text-amber-100">
+				<span
+					class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-amber-700 shadow-sm dark:bg-amber-500/20 dark:text-amber-100"
+				>
 					Incorrect · {incorrectCount}
 				</span>
 				{#if skippedCount > 0}
-					<span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-600 shadow-sm dark:bg-slate-500/20 dark:text-slate-200">
+					<span
+						class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-600 shadow-sm dark:bg-slate-500/20 dark:text-slate-200"
+					>
 						Skipped · {skippedCount}
 					</span>
 				{/if}
@@ -300,16 +313,26 @@
 </div>
 
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
-	<Dialog.Content class="finish-dialog max-w-lg overflow-hidden rounded-3xl border border-border/60 bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]">
-		<div class="space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12">
-			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Wrap up this quiz?</h2>
-			<p class="text-sm leading-relaxed text-muted-foreground">
+	<Dialog.Content
+		class="finish-dialog border-border/60 bg-background/98 max-w-lg overflow-hidden rounded-3xl border p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
+	>
+		<div
+			class="border-border/60 from-primary/15 via-background to-background dark:from-primary/12 space-y-3 border-b bg-gradient-to-br px-6 py-6"
+		>
+			<h2 class="text-foreground text-xl font-semibold tracking-tight md:text-2xl">
+				Wrap up this quiz?
+			</h2>
+			<p class="text-muted-foreground text-sm leading-relaxed">
 				You still have {remainingCount} unanswered question(s). Choose what you would like to do next.
 			</p>
 		</div>
 		<div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end">
 			<Button variant="outline" class="sm:min-w-[9rem]" onclick={resetQuiz}>Restart quiz</Button>
-			<Button variant="ghost" class="sm:min-w-[9rem] text-muted-foreground hover:text-foreground" onclick={() => (finishDialogOpen = false)}>
+			<Button
+				variant="ghost"
+				class="text-muted-foreground hover:text-foreground sm:min-w-[9rem]"
+				onclick={() => (finishDialogOpen = false)}
+			>
 				Keep practicing
 			</Button>
 			<Button class="sm:min-w-[9rem]" onclick={handleFinishEarly}>Finish now</Button>
