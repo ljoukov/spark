@@ -8,15 +8,11 @@
 		"forceConsistentCasingInFileNames": true,
 		"skipLibCheck": true,
 		"types": ["node"],
-		"baseUrl": ".",
-		"paths": {
-			"@spark/llm": ["./node_modules/@spark/llm/src/index"],
-			"@spark/llm/*": ["./node_modules/@spark/llm/src/*"],
-			"@google/genai": ["./node_modules/@google/genai"],
-			"@google/genai/*": ["./node_modules/@google/genai/*"],
-			"zod": ["./node_modules/zod"],
-			"zod/*": ["./node_modules/zod/*"]
-		}
-	},
+			"baseUrl": ".",
+			"paths": {
+				"@spark/llm": ["../packages/llm/src/index.ts"],
+				"@spark/llm/*": ["../packages/llm/src/*"]
+			}
+		},
 	"include": ["src/**/*", "tests/**/*"]
 }

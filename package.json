@@ -1,0 +1,12 @@
+{
+  "name": "spark-monorepo",
+  "private": true,
+  "workspaces": [
+    "web",
+    "packages/*",
+    "eval"
+  ],
+  "scripts": {
+    "postinstall": "npm -w web run prepare || true"
+  }
+}
