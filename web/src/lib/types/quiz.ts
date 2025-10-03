@@ -35,7 +35,8 @@ export type QuizFeedback = {
 	heading?: string;
 };
 
-export type QuizStepStatus = 'pending' | 'active' | 'correct' | 'incorrect' | 'skipped';
+// Adds 'seen' to represent a question the user opened but hasn't answered yet.
+export type QuizStepStatus = 'pending' | 'active' | 'seen' | 'correct' | 'incorrect' | 'skipped';
 
 export type QuizProgressStep = {
 	status: QuizStepStatus;

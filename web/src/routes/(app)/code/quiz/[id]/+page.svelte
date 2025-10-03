@@ -15,12 +15,13 @@
 		value: string;
 		showContinue: boolean;
 		feedback: QuizFeedback | null;
+		seen: boolean;
 	};
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
 
-	function createInitialAttempt(): AttemptState {
+	function createInitialAttempt(seen = false): AttemptState {
 		return {
 			status: 'pending',
 			showHint: false,
@@ -28,7 +29,8 @@
 			selectedOptionId: null,
 			value: '',
 			showContinue: false,
-			feedback: null
+			feedback: null,
+			seen
 		};
 	}
 
@@ -42,7 +44,7 @@
 		return 'neutral';
 	}
 
-	let attempts = $state(quiz.questions.map(createInitialAttempt));
+	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
 
@@ -62,7 +64,7 @@
 			const label = `Question ${index + 1}`;
 			if (!attempt || attempt.status === 'pending') {
 				return {
-					status: index === currentIndex ? 'active' : 'pending',
+					status: index === currentIndex ? 'active' : attempt?.seen ? 'seen' : 'pending',
 					label
 				};
 			}
@@ -87,7 +89,11 @@
 	);
 
 	function goToQuestion(index: number) {
-		if (index >= 0 && index < currentIndex) {
+		if (index < 0 || index >= quiz.questions.length || index === currentIndex) {
+			return;
+		}
+		const target = attempts[index];
+		if (target && (target.status !== 'pending' || target.seen)) {
 			currentIndex = index;
 		}
 	}
@@ -226,10 +232,18 @@
 	}
 
 	function resetQuiz() {
-		attempts = quiz.questions.map(createInitialAttempt);
+		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
 		currentIndex = 0;
 		finishDialogOpen = false;
 	}
+
+	// Mark the current question as seen whenever it becomes active
+	$effect(() => {
+		const attempt = attempts[currentIndex];
+		if (attempt && !attempt.seen) {
+			updateAttempt(currentIndex, (prev) => ({ ...prev, seen: true }));
+		}
+	});
 </script>
 
 <svelte:head>
