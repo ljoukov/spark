@@ -61,8 +61,7 @@ const firestoreProblemSchema = z
 		}),
 		metadataVersion: z.number().int().nonnegative(),
 		starterCode: z.string().optional().nullable()
-	})
-	.passthrough();
+        }).loose();
 
 type FirestoreProblem = z.infer<typeof firestoreProblemSchema>;
 
