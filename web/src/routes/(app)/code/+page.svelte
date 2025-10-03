@@ -155,21 +155,10 @@
 
 <section class="dashboard">
 	<div class="hero-card">
-		<h1 class="hero-title">
-			Welcome back, {firstName}!
-			<picture class="hero-rocket">
-				<source
-					srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.webp"
-					type="image/webp"
-				/>
-				<img
-					src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.gif"
-					alt="🚀"
-					width="48"
-					height="48"
-				/>
-			</picture>
-		</h1>
+        <h1 class="hero-title">
+                Welcome back, {firstName}!
+                <span class="hero-rocket" aria-hidden="true">🚀</span>
+        </h1>
 		<p class="hero-subtitle">Let&apos;s crush today&apos;s session.</p>
 		<div class="stat-chips">
 			{#each stats as stat}
@@ -187,40 +176,27 @@
 			<h2>{focus.topic}</h2>
 			<p class="plan-summary">{focus.summary}</p>
 		</header>
-		<div class="plan-body">
-			{#each timeline as item, index}
-				<a
-					class="timeline-row"
-					href={item.href}
-					data-first={index === 0}
-					data-last={index === timeline.length - 1}
-					data-done={item.done}
-				>
-					<div class="timeline-hit">
-						<div class="timeline-point" data-done={item.done}>
-							<span class="timeline-circle" data-done={item.done}></span>
-						</div>
-						<div class="timeline-body">
-							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true"
-								>{item.icon}</span
-							>
-							<div class="timeline-text-block">
-								<div class="headline-row">
-									<span class="checkpoint-name">{item.title}</span>
-									{#if item.meta}
-										<span class="checkpoint-dot">·</span>
-										<span class="checkpoint-meta">{item.meta}</span>
-									{/if}
-								</div>
-								<div class="checkpoint-description">
-									<span>{item.description}</span>
-								</div>
-							</div>
-						</div>
-					</div>
-				</a>
-			{/each}
-		</div>
+                <div class="plan-body">
+                        {#each timeline as item}
+                                <a class="timeline-row" href={item.href} data-done={item.done}>
+                                        <span class="timeline-emoji" aria-hidden="true">{item.icon}</span>
+                                        <div class="timeline-text">
+                                                <div class="timeline-title">
+                                                        <span class="checkpoint-name">{item.title}</span>
+                                                        {#if item.meta}
+                                                                <span class="checkpoint-meta">{item.meta}</span>
+                                                        {/if}
+                                                </div>
+                                                <p class="checkpoint-description">{item.description}</p>
+                                        </div>
+                                        {#if item.done}
+                                                <span class="timeline-status" aria-label="Completed">✓</span>
+                                        {:else}
+                                                <span class="timeline-status" aria-hidden="true">•</span>
+                                        {/if}
+                                </a>
+                        {/each}
+                </div>
 		<div class="plan-footer">
 			<a class="plan-start" href={startHref}>
 				▶ Start with {startLabel}
@@ -230,462 +206,179 @@
 </section>
 
 <style lang="postcss">
-	.dashboard {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: clamp(1.5rem, 3vw, 2.4rem);
-		padding-top: clamp(1.5rem, 3vw, 2.4rem);
-		padding-bottom: clamp(1.5rem, 3vw, 2.4rem);
-		align-items: start;
-		max-width: min(80rem, 92vw);
-		margin: 0 auto clamp(2rem, 4vw, 3rem);
-	}
+        .dashboard {
+                display: grid;
+                gap: 1.5rem;
+                padding: 1.5rem 0 2rem;
+                max-width: 70rem;
+                margin: 0 auto;
+        }
 
-	/* Two columns only at ≥ 1280px (80rem) */
-	@media (min-width: 80rem) {
-		.dashboard {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-	}
+        @media (min-width: 70rem) {
+                .dashboard {
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                        align-items: start;
+                }
+        }
 
-	.hero-card {
-		display: flex;
-		flex-direction: column;
-		gap: clamp(0.9rem, 1.5vw, 1.3rem);
-		padding: clamp(1.6rem, 2.5vw, 2.2rem);
-		border-radius: clamp(1.6rem, 2.2vw, 2rem);
-		background:
-			linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(96, 165, 250, 0.18)),
-			color-mix(in srgb, var(--app-content-bg) 78%, transparent);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 28px 80px -50px rgba(15, 23, 42, 0.45);
-	}
+        .hero-card,
+        .plan-card {
+                border-radius: 1rem;
+                background: var(--app-content-bg, #fff);
+                border: 1px solid rgba(148, 163, 184, 0.2);
+                padding: 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+        }
 
-	:global([data-theme='dark'] .hero-card),
-	:global(:root:not([data-theme='light']) .hero-card) {
-		background:
-			linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(37, 99, 235, 0.12)),
-			rgba(6, 11, 25, 0.8);
-		border-color: rgba(148, 163, 184, 0.28);
-	}
+        .hero-title {
+                margin: 0;
+                font-size: 2.2rem;
+                line-height: 1.1;
+        }
 
-	.hero-title {
-		margin: 0;
-		font-size: clamp(2rem, 3.6vw, 2.65rem);
-		line-height: 1.05;
-		font-weight: 650;
-	}
+        .hero-rocket {
+                margin-left: 0.4rem;
+                font-size: 2.2rem;
+        }
 
-	.hero-rocket {
-		display: inline-flex;
-		margin-left: 0.45rem;
-		vertical-align: middle;
-		align-items: center;
-	}
+        .hero-subtitle {
+                margin: 0;
+                font-size: 1rem;
+                color: var(--app-subtitle-color, rgba(30, 41, 59, 0.7));
+        }
 
-	.hero-rocket img {
-		display: block;
-	}
+        .stat-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+        }
 
-	.hero-subtitle {
-		margin: 0;
-		font-size: clamp(1.05rem, 1.5vw, 1.2rem);
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.72));
-		font-weight: 500;
-	}
+        .stat-chip {
+                padding: 0.45rem 0.9rem;
+                border-radius: 9999px;
+                background: rgba(226, 232, 240, 0.4);
+                font-size: 0.9rem;
+                display: flex;
+                gap: 0.35rem;
+        }
 
-	.stat-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-	}
+        .chip-value {
+                font-weight: 600;
+        }
 
-	.stat-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 1.1rem;
-		border-radius: 9999px;
-		background: rgba(255, 255, 255, 0.85);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.35);
-		font-weight: 600;
-		font-size: 0.9rem;
-		color: rgba(30, 41, 59, 0.9);
-	}
+        .chip-label {
+                color: rgba(71, 85, 105, 0.8);
+        }
 
-	:global([data-theme='dark'] .stat-chip),
-	:global(:root:not([data-theme='light']) .stat-chip) {
-		background: rgba(15, 23, 42, 0.72);
-		color: rgba(226, 232, 240, 0.9);
-		border-color: rgba(148, 163, 184, 0.3);
-	}
+        .plan-header h2 {
+                margin: 0;
+                font-size: 1.5rem;
+        }
 
-	:global([data-theme='dark'] .stat-chip .chip-label),
-	:global(:root:not([data-theme='light']) .stat-chip .chip-label) {
-		color: rgba(203, 213, 225, 0.8);
-	}
+        .plan-eyebrow {
+                text-transform: uppercase;
+                font-size: 0.75rem;
+                letter-spacing: 0.08em;
+                color: rgba(59, 130, 246, 0.8);
+                margin: 0;
+        }
 
-	.chip-value {
-		font-size: 1rem;
-		font-weight: 700;
-	}
+        .plan-summary {
+                margin: 0;
+                color: var(--app-subtitle-color, rgba(30, 41, 59, 0.7));
+                font-size: 0.95rem;
+        }
 
-	.chip-label {
-		font-size: 0.8rem;
-		font-weight: 500;
-		color: rgba(71, 85, 105, 0.85);
-	}
+        .plan-body {
+                display: flex;
+                flex-direction: column;
+        }
 
-	.plan-card {
-		--plan-card-bg: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
-		display: flex;
-		flex-direction: column;
-		gap: 1.6rem;
-		padding: clamp(1.4rem, 2.2vw, 2rem);
-		border-radius: clamp(1.6rem, 2.2vw, 2rem);
-		background: var(--plan-card-bg);
-		border: 1px solid rgba(148, 163, 184, 0.22);
-		box-shadow: 0 28px 80px -55px rgba(15, 23, 42, 0.42);
-	}
+        .timeline-row {
+                display: grid;
+                grid-template-columns: auto 1fr auto;
+                gap: 0.75rem;
+                padding: 0.85rem 0;
+                text-decoration: none;
+                color: inherit;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
 
-	.plan-body {
-		/* Move spacing from grid gap to row padding */
-		--timeline-pad-y: 0.9rem; /* vertical padding in each row */
-		--timeline-pad-x: 0.75rem; /* horizontal (left/right) padding of each row */
-		--timeline-circle: 1.55rem;
-		--timeline-circle-border: 3px;
-		--timeline-track: calc(var(--timeline-circle) + 2 * var(--timeline-circle-border));
-		--timeline-track-width: 2px;
-		--timeline-hover-fudge: 6px; /* extra length to cover hover lift */
-		--timeline-line: #3b82f6;
-		display: flex;
-		flex-direction: column;
-		gap: 0; /* no inter-row gap; spacing comes from padding */
-		position: relative;
-	}
+        .timeline-row:last-child {
+                border-bottom: none;
+        }
 
-	:global([data-theme='dark'] .plan-body),
-	:global(:root:not([data-theme='light']) .plan-body) {
-		--timeline-line: #60a5fa;
-	}
+        .timeline-row[data-done='true'] .checkpoint-name {
+                color: rgba(37, 99, 235, 0.9);
+        }
 
-	:global([data-theme='dark'] .plan-card),
-	:global(:root:not([data-theme='light']) .plan-card) {
-		--plan-card-bg: rgba(6, 11, 25, 0.82);
-		background: var(--plan-card-bg);
-		border-color: rgba(148, 163, 184, 0.28);
-	}
+        .timeline-emoji {
+                font-size: 1.5rem;
+                line-height: 1;
+        }
 
-	.plan-header {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-	}
+        .timeline-text {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+        }
 
-	.plan-eyebrow {
-		margin: 0;
-		font-size: 0.8rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: rgba(59, 130, 246, 0.82);
-		font-weight: 600;
-	}
+        .timeline-title {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.35rem;
+                font-weight: 600;
+        }
 
-	.plan-header h2 {
-		margin: 0;
-		font-size: clamp(1.4rem, 2.4vw, 1.9rem);
-		font-weight: 600;
-	}
+        .checkpoint-name {
+                font-size: 1rem;
+        }
 
-	.plan-summary {
-		margin: 0;
-		font-size: 0.95rem;
-		line-height: 1.55;
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
-	}
+        .checkpoint-meta {
+                font-size: 0.85rem;
+                color: rgba(71, 85, 105, 0.75);
+        }
 
-	:global([data-theme='dark'] .plan-summary),
-	:global(:root:not([data-theme='light']) .plan-summary) {
-		color: rgba(203, 213, 225, 0.78);
-	}
+        .checkpoint-description {
+                margin: 0;
+                font-size: 0.9rem;
+                color: var(--app-subtitle-color, rgba(30, 41, 59, 0.7));
+        }
 
-	.timeline-row {
-		display: block;
-		cursor: pointer;
-		outline: none;
-		border-radius: 1rem;
-		position: relative;
-		color: inherit;
-		text-decoration: none;
-	}
+        .timeline-status {
+                font-size: 1rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 1.5rem;
+        }
 
-	.timeline-row:focus-visible {
-		outline: none;
-	}
+        .plan-footer {
+                display: flex;
+                justify-content: flex-end;
+        }
 
-	.timeline-hit {
-		display: grid;
-		grid-template-columns: var(--timeline-track) minmax(0, 1fr);
-		column-gap: 0.75rem;
-		row-gap: 0.45rem;
-		align-items: start;
-		padding: var(--timeline-pad-y) var(--timeline-pad-x);
-		border-radius: 1rem;
-		border: 1px solid transparent;
-		width: 100%;
-		position: relative;
-		z-index: 1;
-	}
+        .plan-start {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.6rem 1.2rem;
+                border-radius: 9999px;
+                background: rgba(37, 99, 235, 0.9);
+                color: #fff;
+                text-decoration: none;
+                font-weight: 600;
+        }
 
-	/* Per-row vertical segments */
-	.timeline-hit::before,
-	.timeline-hit::after {
-		content: '';
-		position: absolute;
-		left: calc(var(--timeline-pad-x) + var(--timeline-track) / 2);
-		width: var(--timeline-track-width);
-		transform: translateX(-50%);
-		background: var(--timeline-line);
-		pointer-events: none;
-		z-index: 0;
-	}
+        @media (max-width: 48rem) {
+                .hero-title {
+                        font-size: 1.8rem;
+                }
 
-	/* Top segment: from slightly above the row to center */
-	.timeline-hit::before {
-		top: calc(-1 * var(--timeline-hover-fudge));
-		height: calc(50% + var(--timeline-hover-fudge));
-	}
-
-	/* Bottom segment: from center to slightly below the row */
-	.timeline-hit::after {
-		bottom: calc(-1 * var(--timeline-hover-fudge));
-		height: calc(50% + var(--timeline-hover-fudge));
-	}
-
-	/* Hide segments for the boundaries */
-	.timeline-row[data-first='true'] .timeline-hit::before {
-		height: 0;
-	}
-	.timeline-row[data-last='true'] .timeline-hit::after {
-		height: 0;
-	}
-
-	.timeline-row:focus-visible .timeline-hit {
-		background: rgba(59, 130, 246, 0.12);
-		border-color: rgba(59, 130, 246, 0.24);
-	}
-
-	:global([data-theme='dark'] .timeline-row:focus-visible .timeline-hit),
-	:global(:root:not([data-theme='light']) .timeline-row:focus-visible .timeline-hit) {
-		background: rgba(37, 99, 235, 0.2);
-		border-color: rgba(59, 130, 246, 0.32);
-	}
-
-	@media (hover: hover) {
-		.timeline-row:hover .timeline-hit {
-			background: rgba(59, 130, 246, 0.12);
-			border-color: rgba(59, 130, 246, 0.24);
-		}
-
-		:global([data-theme='dark'] .timeline-row:hover .timeline-hit),
-		:global(:root:not([data-theme='light']) .timeline-row:hover .timeline-hit) {
-			background: rgba(37, 99, 235, 0.2);
-			border-color: rgba(59, 130, 246, 0.32);
-		}
-	}
-
-	.timeline-point {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: var(--timeline-track);
-		height: var(--timeline-track);
-		flex-shrink: 0;
-		align-self: center;
-		z-index: 1;
-	}
-
-	.timeline-body {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		min-width: 0;
-	}
-
-	.timeline-circle {
-		width: var(--timeline-circle);
-		height: var(--timeline-circle);
-		border-radius: 9999px;
-		background: var(--app-surface, #fff);
-		border: var(--timeline-circle-border) solid rgba(59, 130, 246, 0.9);
-		/* use inner outline ring via pseudo to avoid animating heavy shadows */
-		z-index: 1;
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	:global([data-theme='dark'] .timeline-circle),
-	:global(:root:not([data-theme='light']) .timeline-circle) {
-		background: #0a1328;
-	}
-
-	.timeline-circle::before,
-	.timeline-circle::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-	}
-
-	/* soft ring without animating box-shadow */
-	.timeline-circle::before {
-		box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
-	}
-
-	.timeline-circle[data-done='true'] {
-		background: linear-gradient(135deg, #3b82f6, #2563eb);
-		border-color: rgba(59, 130, 246, 0.9);
-		box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22);
-		color: #fff;
-	}
-
-	.timeline-circle[data-done='true']::after {
-		content: '✓';
-		font-size: 0.85rem;
-		font-weight: 700;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.timeline-row:hover .timeline-circle,
-	.timeline-row:focus-visible .timeline-circle {
-	}
-
-	.timeline-emoji {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 1.65rem;
-		line-height: 1;
-		flex-shrink: 0;
-	}
-
-	.noto-color-emoji-regular {
-		font-family: 'Noto Color Emoji', sans-serif;
-		font-weight: 400;
-		font-style: normal;
-	}
-
-	.timeline-text-block {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-	}
-
-	.headline-row {
-		display: flex;
-		align-items: baseline;
-		gap: 0.45rem;
-		flex-wrap: wrap;
-	}
-
-	.timeline-row[data-done='true'] .headline-row .checkpoint-name {
-		color: rgba(37, 99, 235, 0.92);
-	}
-
-	.timeline-row[data-done='true'] .headline-row .checkpoint-meta {
-		color: rgba(37, 99, 235, 0.66);
-	}
-
-	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-name),
-	:global(
-		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-name
-	) {
-		color: rgba(147, 197, 253, 0.92);
-	}
-
-	:global([data-theme='dark'] .timeline-row[data-done='true'] .headline-row .checkpoint-meta),
-	:global(
-		:root:not([data-theme='light']) .timeline-row[data-done='true'] .headline-row .checkpoint-meta
-	) {
-		color: rgba(147, 197, 253, 0.72);
-	}
-
-	.checkpoint-name {
-		font-weight: 600;
-		font-size: 1.05rem;
-		color: var(--foreground);
-	}
-
-	.checkpoint-dot {
-		font-size: 1.1rem;
-		line-height: 1;
-		color: rgba(71, 85, 105, 0.6);
-	}
-
-	.checkpoint-meta {
-		font-size: 0.82rem;
-		color: rgba(71, 85, 105, 0.72);
-		font-weight: 500;
-	}
-
-	:global([data-theme='dark'] .checkpoint-dot),
-	:global(:root:not([data-theme='light']) .checkpoint-dot) {
-		color: rgba(148, 163, 184, 0.55);
-	}
-
-	:global([data-theme='dark'] .checkpoint-meta),
-	:global(:root:not([data-theme='light']) .checkpoint-meta) {
-		color: rgba(203, 213, 225, 0.7);
-	}
-
-	.checkpoint-description {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.9rem;
-		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.76));
-	}
-
-	:global([data-theme='dark'] .checkpoint-description),
-	:global(:root:not([data-theme='light']) .checkpoint-description) {
-		color: rgba(203, 213, 225, 0.75);
-	}
-
-	.plan-footer {
-		display: flex;
-		justify-content: flex-end;
-	}
-
-	.plan-start {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.7rem 1.6rem;
-		border-radius: 9999px;
-		font-weight: 600;
-		font-size: 0.95rem;
-		text-decoration: none;
-		color: #fff;
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
-		/* reduce costly shadow changes */
-		box-shadow: 0 18px 45px -26px rgba(37, 99, 235, 0.55);
-	}
-
-	.plan-start:hover {
-	}
-
-	@media (max-width: 720px) {
-		.dashboard {
-			gap: 1.4rem;
-			padding-top: 1rem;
-			padding-bottom: 1rem;
-		}
-	}
+                .dashboard {
+                        padding: 1rem 0 1.5rem;
+                }
+        }
 </style>
