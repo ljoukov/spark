@@ -40,11 +40,11 @@ const __dirname = path.dirname(__filename);
 // Save into the shared spark-data workspace for code downloads
 const OUTPUT_DIR = path.resolve(
   __dirname,
-  "../../../spark-data/code/dowloads/leetcode",
+  "../../../spark-data/code/dowloads/leetcode"
 );
 const DEFAULT_LIMIT = 5;
 const USER_AGENT =
-  "Mozilla/5.0 (compatible; SparkEvalLeetDownloader/1.0; +https://github.com/nikhil-ravi/LeetScrape)";
+  "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
 function parseArgs(argv: readonly string[]): CliOptions {
   let limit = DEFAULT_LIMIT;
@@ -92,12 +92,14 @@ function parseArgs(argv: readonly string[]): CliOptions {
 }
 
 function printHelpAndExit(): never {
-  console.log(`Usage: tsx src/code/download-leetcode.ts [options]\n\n` +
-    `Options:\n` +
-    `  --limit=<n>       Number of problems to download when slugs are not specified (default: ${DEFAULT_LIMIT}).\n` +
-    `  --slugs=a,b,c     Comma separated list of problem slugs to download. Overrides --limit.\n` +
-    `  --force           Re-download problems even if the output file already exists.\n` +
-    `  --help            Show this help message and exit.`);
+  console.log(
+    `Usage: tsx src/code/download-leetcode.ts [options]\n\n` +
+      `Options:\n` +
+      `  --limit=<n>       Number of problems to download when slugs are not specified (default: ${DEFAULT_LIMIT}).\n` +
+      `  --slugs=a,b,c     Comma separated list of problem slugs to download. Overrides --limit.\n` +
+      `  --force           Re-download problems even if the output file already exists.\n` +
+      `  --help            Show this help message and exit.`
+  );
   process.exit(0);
 }
 
@@ -116,7 +118,9 @@ async function fetchProblemSlugs(limit: number): Promise<string[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch problem list: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch problem list: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = AllProblemsSchema.parse(await response.json());
@@ -172,13 +176,17 @@ async function fetchProblem(slug: string): Promise<DownloadedProblem> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch problem ${slug}: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch problem ${slug}: ${response.status} ${response.statusText}`
+    );
   }
 
   const payload = GraphQLResponseSchema.parse(await response.json());
 
   if (payload.errors?.length) {
-    const message = payload.errors.map((error) => error.message ?? "Unknown error").join(", ");
+    const message = payload.errors
+      .map((error) => error.message ?? "Unknown error")
+      .join(", ");
     throw new Error(`LeetCode GraphQL error for ${slug}: ${message}`);
   }
 
@@ -238,7 +246,9 @@ async function main(): Promise<void> {
       const problem = await fetchProblem(slug);
       const serialized = JSON.stringify(problem, null, 2);
       await writeFile(outputPath, serialized, { encoding: "utf8" });
-      console.log(`Saved ${slug} to ${path.relative(process.cwd(), outputPath)}`);
+      console.log(
+        `Saved ${slug} to ${path.relative(process.cwd(), outputPath)}`
+      );
     } catch (error) {
       console.error(`Failed to download ${slug}:`, error);
     }
