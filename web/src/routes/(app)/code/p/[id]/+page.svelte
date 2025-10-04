@@ -114,6 +114,7 @@
 <svelte:window on:pointermove={handlePointerMove} on:pointerup={handlePointerUp} on:pointercancel={handlePointerUp} />
 
 <section class="page-frame">
+	<div class="mesh-field" aria-hidden="true"></div>
 	<header class="app-header">
 		<span class="app-header__title">App header</span>
 	</header>
@@ -191,22 +192,63 @@
 	}
 
 	.page-frame {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		width: 100dvw;
 		height: 100dvh;
+		min-height: 100dvh;
 		overflow: hidden;
-		background: radial-gradient(circle at top, rgba(15, 23, 42, 0.08), transparent 65%);
+		color: var(--text-primary, var(--foreground));
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+	}
+
+	@supports not (height: 100dvh) {
+		.page-frame {
+			height: 100vh;
+			min-height: 100vh;
+		}
+	}
+
+	.mesh-field {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		width: 100dvw;
+		height: 100dvh;
+		transform: translateX(-50%);
+		pointer-events: none;
+		filter: blur(90px);
+		background:
+			radial-gradient(68% 68% at 12% 2%, var(--blob-gold), transparent 68%),
+			radial-gradient(58% 58% at 22% 26%, var(--blob-yellow), transparent 70%),
+			radial-gradient(54% 54% at 72% 18%, var(--blob-pink), transparent 72%),
+			radial-gradient(60% 60% at 24% 80%, var(--blob-blue), transparent 74%),
+			radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
+		opacity: var(--blob-opacity);
+		z-index: 0;
 	}
 
 	.app-header {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1rem;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.26);
-		background: rgba(15, 23, 42, 0.78);
+		background: color-mix(in srgb, rgba(15, 23, 42, 0.78) 70%, transparent);
+		backdrop-filter: blur(18px);
 		color: #e2e8f0;
+	}
+
+	:global([data-theme='dark'] .page-frame .app-header),
+	:global(:root:not([data-theme='light']) .page-frame .app-header) {
+		background: color-mix(in srgb, rgba(6, 11, 25, 0.92) 72%, transparent);
+		border-bottom-color: rgba(148, 163, 184, 0.24);
+		color: rgba(226, 232, 240, 0.92);
 	}
 
 	.app-header__title {
@@ -217,6 +259,8 @@
 	}
 
 	.workspace-page {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		flex: 1 1 auto;
 		min-height: 0;
