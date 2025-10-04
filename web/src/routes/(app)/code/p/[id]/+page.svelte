@@ -1,350 +1,324 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import * as Resizable from '$lib/components/ui/resizable/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import { cn } from '$lib/utils.js';
-	import { loadMonaco } from '$lib/monaco/index.js';
-	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
-	import Maximize2 from '@lucide/svelte/icons/maximize-2';
-	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import type { PageData } from './$types';
 
-	type PaneSide = 'left' | 'right';
-
-	const DEFAULT_LAYOUT = [50, 50] as const;
-	const LEFT_MAX_LAYOUT = [100, 0] as const;
-	const RIGHT_MAX_LAYOUT = [0, 100] as const;
-
-	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), 'rounded-md');
-
 	export let data: PageData;
+	void data;
 
-	let problem = data.problem;
-	let markdownHtml = data.problem.markdownHtml;
-	const DEFAULT_CODE = 'print("hello world :)")';
-	let rightText = DEFAULT_CODE;
-	let maximizedPane: PaneSide | null = null;
-	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
-	let currentProblemId = problem.id;
-	let editorContainer: HTMLDivElement | null = null;
-	type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
-	let monacoEditor: CodeEditor | null = null;
-	let disposeEditor: (() => void) | null = null;
+	const MIN_HORIZONTAL_PERCENT = 15;
+	const MIN_VERTICAL_PERCENT = 20;
 
-	function resolveMonacoTheme(): 'vs-dark' | 'vs' {
-		if (typeof document === 'undefined') {
-			return 'vs-dark';
-		}
-		const themeAttr = document.documentElement.dataset.theme;
-		if (themeAttr === 'light') {
-			return 'vs';
-		}
-		if (themeAttr === 'dark') {
-			return 'vs-dark';
-		}
-		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
-	}
+	let workspaceEl: HTMLDivElement | null = null;
+	let rightStackEl: HTMLDivElement | null = null;
 
-	$: if (problem !== data.problem) {
-		problem = data.problem;
-	}
+	let horizontalSplit = 50;
+	let verticalSplit = 67;
 
-	$: if (markdownHtml !== problem.markdownHtml) {
-		markdownHtml = problem.markdownHtml;
-	}
+	type DragKind = 'horizontal' | 'vertical';
+	type DragState = {
+		kind: DragKind;
+		pointerId: number;
+		handle: HTMLElement;
+	};
 
-	$: if (problem.id !== currentProblemId) {
-		currentProblemId = problem.id;
-		rightText = DEFAULT_CODE;
-		if (monacoEditor && monacoEditor.getValue() !== rightText) {
-			monacoEditor.setValue(rightText);
-		}
-	}
+	let dragState: DragState | null = null;
 
-	onMount(() => {
-		let subscription: IDisposable | null = null;
-		let themeObserver: MutationObserver | null = null;
-		let mediaQuery: MediaQueryList | null = null;
-		let applyTheme: (() => void) | null = null;
+	const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-		void (async () => {
-			const monaco = await loadMonaco();
-			if (!monaco || !editorContainer) {
-				return;
-			}
-
-			applyTheme = () => {
-				monaco.editor.setTheme(resolveMonacoTheme());
-			};
-
-			monacoEditor = monaco.editor.create(editorContainer, {
-				value: rightText,
-				language: 'python',
-				automaticLayout: true,
-				minimap: { enabled: false },
-				fontSize: 15,
-				fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
-				tabSize: 2,
-				insertSpaces: true,
-				detectIndentation: false,
-				wordWrap: 'off',
-				scrollbar: {
-					vertical: 'visible',
-					horizontal: 'auto',
-					useShadows: false
-				}
-			});
-
-			applyTheme();
-
-			mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-			mediaQuery.addEventListener('change', applyTheme);
-
-			themeObserver = new MutationObserver(() => applyTheme?.());
-			themeObserver.observe(document.documentElement, {
-				attributes: true,
-				attributeFilter: ['data-theme']
-			});
-
-			subscription = monacoEditor.onDidChangeModelContent(() => {
-				rightText = monacoEditor?.getValue() ?? '';
-			});
-		})();
-
-		disposeEditor = () => {
-			subscription?.dispose();
-			themeObserver?.disconnect();
-			if (mediaQuery && applyTheme) {
-				mediaQuery.removeEventListener('change', applyTheme);
-			}
-			monacoEditor?.dispose();
-			monacoEditor = null;
-			subscription = null;
-			themeObserver = null;
-			mediaQuery = null;
-			applyTheme = null;
-		};
-
-		return () => {
-			disposeEditor?.();
-			disposeEditor = null;
-		};
-	});
-
-	function applyLayout(layout: readonly number[]) {
-		paneGroup?.setLayout([...layout]);
-	}
-
-	function toggleMaximize(side: PaneSide) {
-		if (side === maximizedPane) {
-			maximizedPane = null;
-			applyLayout(DEFAULT_LAYOUT);
+	function startDrag(kind: DragKind, event: PointerEvent) {
+		const handle = event.currentTarget as HTMLElement | null;
+		if (!handle) {
 			return;
 		}
-
-		applyLayout(side === 'left' ? LEFT_MAX_LAYOUT : RIGHT_MAX_LAYOUT);
-		maximizedPane = side;
+		event.preventDefault();
+		dragState = { kind, pointerId: event.pointerId, handle };
+		handle.setPointerCapture?.(event.pointerId);
 	}
 
-	function handleLayoutChange(layout: number[]) {
-		const [left, right] = layout;
-		const almostEqual = (a: number, b: number, epsilon = 0.5) => Math.abs(a - b) <= epsilon;
+	function finishDrag(event: PointerEvent) {
+		if (!dragState) {
+			return;
+		}
+		if (event.pointerId !== dragState.pointerId) {
+			return;
+		}
+		dragState.handle.releasePointerCapture?.(dragState.pointerId);
+		dragState = null;
+	}
 
-		if (almostEqual(left, 100) && almostEqual(right, 0)) {
-			maximizedPane = 'left';
-		} else if (almostEqual(left, 0) && almostEqual(right, 100)) {
-			maximizedPane = 'right';
-		} else {
-			maximizedPane = null;
+	function handlePointerMove(event: PointerEvent) {
+		if (!dragState) {
+			return;
+		}
+		if (dragState.kind === 'horizontal' && workspaceEl) {
+			const rect = workspaceEl.getBoundingClientRect();
+			if (rect.width === 0) {
+				return;
+			}
+			const percent = ((event.clientX - rect.left) / rect.width) * 100;
+			horizontalSplit = clamp(percent, MIN_HORIZONTAL_PERCENT, 100 - MIN_HORIZONTAL_PERCENT);
+			return;
+		}
+		if (dragState.kind === 'vertical' && rightStackEl) {
+			const rect = rightStackEl.getBoundingClientRect();
+			if (rect.height === 0) {
+				return;
+			}
+			const percent = ((event.clientY - rect.top) / rect.height) * 100;
+			verticalSplit = clamp(percent, MIN_VERTICAL_PERCENT, 100 - MIN_VERTICAL_PERCENT);
+		}
+	}
+
+	function handlePointerUp(event: PointerEvent) {
+		finishDrag(event);
+	}
+
+	function adjustSplit(kind: DragKind, delta: number) {
+		if (kind === 'horizontal') {
+			horizontalSplit = clamp(
+				horizontalSplit + delta,
+				MIN_HORIZONTAL_PERCENT,
+				100 - MIN_HORIZONTAL_PERCENT
+			);
+			return;
+		}
+		verticalSplit = clamp(verticalSplit + delta, MIN_VERTICAL_PERCENT, 100 - MIN_VERTICAL_PERCENT);
+	}
+
+	function handleHandleKey(kind: DragKind, event: KeyboardEvent) {
+		const step = event.shiftKey ? 5 : 2;
+		if (kind === 'horizontal') {
+			if (event.key === 'ArrowLeft') {
+				event.preventDefault();
+				adjustSplit('horizontal', -step);
+				return;
+			}
+			if (event.key === 'ArrowRight') {
+				event.preventDefault();
+				adjustSplit('horizontal', step);
+				return;
+			}
+			return;
+		}
+		if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			adjustSplit('vertical', -step);
+			return;
+		}
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			adjustSplit('vertical', step);
 		}
 	}
 </script>
 
-<section class="workspace-page flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
-		<Resizable.PaneGroup
-			direction="horizontal"
-			class="workspace-pane-group flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border bg-card shadow"
-			bind:this={paneGroup}
-			onLayoutChange={handleLayoutChange}
-		>
-			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
-				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex flex-col">
-							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-								>Problem</span
-							>
-							<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
-						</div>
-						<button
-							type="button"
-							class={iconButtonClasses}
-							on:click={() => toggleMaximize('left')}
-							aria-label={maximizedPane === 'left'
-								? 'Return left pane to normal size'
-								: 'Maximize left pane'}
-						>
-							{#if maximizedPane === 'left'}
-								<Minimize2 class="size-4" />
-							{:else}
-								<Maximize2 class="size-4" />
-							{/if}
-						</button>
+<svelte:window on:pointermove={handlePointerMove} on:pointerup={handlePointerUp} on:pointercancel={handlePointerUp} />
+
+<section class="page-frame">
+	<header class="app-header">
+		<span class="app-header__title">App header</span>
+	</header>
+	<div class="workspace-page">
+		<div class="workspace" bind:this={workspaceEl}>
+			<div
+				class="pane pane--left"
+				style:width={`${horizontalSplit}%`}
+				style:flex-basis={`${horizontalSplit}%`}
+			>
+				<h1 class="pane-title">Hello world</h1>
+				<p class="pane-copy">Drag the separators to adjust the layout.</p>
+			</div>
+			<div
+				class="handle handle--vertical"
+				role="separator"
+				aria-label="Resize workspace panes"
+				aria-orientation="vertical"
+				aria-valuemin={MIN_HORIZONTAL_PERCENT}
+				aria-valuemax={100 - MIN_HORIZONTAL_PERCENT}
+				aria-valuenow={Math.round(horizontalSplit)}
+				tabindex="0"
+				on:pointerdown={(event) => startDrag('horizontal', event)}
+				on:pointerup={handlePointerUp}
+				on:lostpointercapture={handlePointerUp}
+				on:keydown={(event) => handleHandleKey('horizontal', event)}
+			></div>
+			<div
+				class="pane pane--right"
+				style:width={`${100 - horizontalSplit}%`}
+				style:flex-basis={`${100 - horizontalSplit}%`}
+			>
+				<div class="right-stack" bind:this={rightStackEl}>
+					<div
+						class="pane-section pane-section--editor"
+						style:height={`${verticalSplit}%`}
+						style:flex-basis={`${verticalSplit}%`}
+					>
+						<h2 class="pane-title">Editor Pane</h2>
+						<p class="pane-copy">This area mimics the editor content.</p>
 					</div>
 					<div
-						class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
-						aria-label="Problem description"
+						class="handle handle--horizontal"
+						role="separator"
+						aria-label="Resize editor and output panes"
+						aria-orientation="horizontal"
+						aria-valuemin={MIN_VERTICAL_PERCENT}
+						aria-valuemax={100 - MIN_VERTICAL_PERCENT}
+						aria-valuenow={Math.round(verticalSplit)}
+						tabindex="0"
+						on:pointerdown={(event) => startDrag('vertical', event)}
+						on:pointerup={handlePointerUp}
+						on:lostpointercapture={handlePointerUp}
+						on:keydown={(event) => handleHandleKey('vertical', event)}
+					></div>
+					<div
+						class="pane-section pane-section--output"
+						style:height={`${100 - verticalSplit}%`}
+						style:flex-basis={`${100 - verticalSplit}%`}
 					>
-						<div class="markdown space-y-4">{@html markdownHtml}</div>
+						<h2 class="pane-title">Output Pane</h2>
+						<p class="pane-copy">Output placeholder.</p>
 					</div>
 				</div>
-			</Resizable.Pane>
-			<Resizable.Handle withHandle class="bg-border" />
-			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
-				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex flex-col">
-							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-								>Editor</span
-							>
-							<h2 class="text-sm leading-tight font-semibold">Python workspace</h2>
-						</div>
-						<button
-							type="button"
-							class={iconButtonClasses}
-							on:click={() => toggleMaximize('right')}
-							aria-label={maximizedPane === 'right'
-								? 'Return right pane to normal size'
-								: 'Maximize right pane'}
-						>
-							{#if maximizedPane === 'right'}
-								<Minimize2 class="size-4" />
-							{:else}
-								<Maximize2 class="size-4" />
-							{/if}
-						</button>
-					</div>
-					<div class="editor-shell" data-code-length={rightText.length}>
-						<div
-							class="editor-container"
-							bind:this={editorContainer}
-							role="presentation"
-							aria-label="Python editor"
-						></div>
-					</div>
-				</div>
-			</Resizable.Pane>
-		</Resizable.PaneGroup>
+			</div>
+		</div>
 	</div>
 </section>
 
 <style lang="postcss">
-	/*
-     * Scrolling behavior note:
-     * The layout already applies a conditional scroll lock via
-     * `.app-main:has(.workspace) { overflow-y: hidden; }`.
-     * We intentionally avoid any global `.app-main` overrides here,
-     * because those can linger across client navigations and disable
-     * scrolling on other pages.
-     */
-
 	:global(.app-content) {
 		flex: 1 1 auto;
 		min-height: 0;
 		height: 100%;
 	}
 
+	.page-frame {
+		display: flex;
+		flex-direction: column;
+		width: 100dvw;
+		height: 100dvh;
+		overflow: hidden;
+		background: radial-gradient(circle at top, rgba(15, 23, 42, 0.08), transparent 65%);
+	}
+
+	.app-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.26);
+		background: rgba(15, 23, 42, 0.78);
+		color: #e2e8f0;
+	}
+
+	.app-header__title {
+		font-size: 0.95rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+
 	.workspace-page {
+		display: flex;
 		flex: 1 1 auto;
 		min-height: 0;
 		height: 100%;
+		width: 100%;
+		padding: 1rem;
 	}
 
 	.workspace {
+		position: relative;
+		display: flex;
 		flex: 1 1 auto;
 		min-height: 0;
-		height: 100%;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 0.75rem;
+		background: rgba(15, 23, 42, 0.04);
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+		overflow: hidden;
 	}
 
-	.workspace-pane-group {
-		height: 100%;
+	.pane {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		flex: 0 0 auto;
+		min-width: 0;
 		min-height: 0;
+		padding: 1.25rem;
+	}
+
+	.pane--left {
+		background: rgba(255, 255, 255, 0.78);
+	}
+
+	.pane--right {
 		flex: 1 1 auto;
 	}
 
-	.pane-column {
+	.right-stack {
+		display: flex;
 		flex: 1 1 auto;
 		min-height: 0;
-		height: 100%;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
-	.markdown {
+
+	.pane-section {
+		flex: 0 0 auto;
+		min-height: 0;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 0.6rem;
+		padding: 1rem;
+		background: #fff;
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		overflow: hidden;
+	}
+
+	.pane-section--output {
+		background: rgba(241, 245, 249, 0.75);
+	}
+
+	.pane-title {
 		font-size: 0.95rem;
-		line-height: 1.6;
-	}
-
-	:global(.markdown h2),
-	:global(.markdown h3) {
-		margin-top: 1rem;
-		margin-bottom: 0.5rem;
-		font-size: 1.05rem;
 		font-weight: 600;
 	}
 
-	:global(.markdown h2:first-child),
-	:global(.markdown h3:first-child) {
-		margin-top: 0;
+	.pane-copy {
+		font-size: 0.83rem;
+		line-height: 1.5;
+		color: #64748b;
 	}
 
-	:global(.markdown p) {
-		margin-block: 0.85rem;
+	.handle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(148, 163, 184, 0.18);
+		flex: 0 0 auto;
+		transition: background 0.2s ease;
 	}
 
-	:global(.markdown code) {
-		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
-		font-size: 0.85rem;
-		padding: 0.1rem 0.28rem;
-		border-radius: 0.3rem;
-		background: color-mix(in srgb, currentColor 12%, transparent);
+	.handle--vertical {
+		width: 0.65rem;
+		cursor: col-resize;
 	}
 
-	:global(.markdown pre) {
-		margin: 1.25rem 0;
-		padding: 1.15rem;
-		border-radius: 0.6rem;
-		border: 1px solid rgba(148, 163, 184, 0.26);
-		background: color-mix(in srgb, currentColor 14%, transparent);
-		overflow-x: auto;
+	.handle--horizontal {
+		height: 0.65rem;
+		cursor: row-resize;
 	}
 
-	:global(.markdown pre code) {
-		display: block;
-		padding: 0;
-		background: transparent;
-		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
-		font-size: 0.85rem;
+	.handle:hover,
+	.handle:focus-visible,
+	.handle:active {
+		background: rgba(148, 163, 184, 0.32);
 	}
 
-	.markdown-scroll {
-		scrollbar-gutter: stable both-edges;
-		overscroll-behavior: contain;
-		flex: 1 1 auto;
-		min-height: 0;
-	}
-
-	.editor-shell {
-		flex: 1 1 auto;
-		min-height: 0;
-		overflow: hidden;
-		overscroll-behavior: contain;
-		border: 1px solid rgba(148, 163, 184, 0.26);
-		border-radius: 0.6rem;
-		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
-		background: transparent;
-	}
-
-	.editor-container {
-		height: 100%;
-		width: 100%;
+	.handle:focus-visible {
+		outline: 2px solid rgba(59, 130, 246, 0.8);
+		outline-offset: 2px;
 	}
 </style>
