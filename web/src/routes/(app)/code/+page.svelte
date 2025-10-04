@@ -201,9 +201,9 @@
 							<span class="timeline-circle" data-done={item.done}></span>
 						</div>
 						<div class="timeline-body">
-							<span class="timeline-emoji noto-color-emoji-regular" aria-hidden="true"
-								>{item.icon}</span
-							>
+							<span class="timeline-emoji" aria-hidden="true">
+								{item.icon}
+							</span>
 							<div class="timeline-text-block">
 								<div class="headline-row">
 									<span class="checkpoint-name">{item.title}</span>
@@ -542,9 +542,9 @@
 	}
 
 	/* soft ring without animating box-shadow */
-	.timeline-circle::before {
+	/* .timeline-circle::before {
 		box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
-	}
+	} */
 
 	.timeline-circle[data-done='true'] {
 		background: linear-gradient(135deg, #3b82f6, #2563eb);
@@ -573,12 +573,6 @@
 		font-size: 1.65rem;
 		line-height: 1;
 		flex-shrink: 0;
-	}
-
-	.noto-color-emoji-regular {
-		font-family: 'Noto Color Emoji', sans-serif;
-		font-weight: 400;
-		font-style: normal;
 	}
 
 	.timeline-text-block {
