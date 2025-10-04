@@ -114,7 +114,6 @@
 <svelte:window on:pointermove={handlePointerMove} on:pointerup={handlePointerUp} on:pointercancel={handlePointerUp} />
 
 <section class="page-frame">
-	<div class="mesh-field" aria-hidden="true"></div>
 	<header class="app-header">
 		<span class="app-header__title">App header</span>
 	</header>
@@ -212,23 +211,25 @@
 		}
 	}
 
-	.mesh-field {
+	.page-frame::before {
+		content: '';
 		position: absolute;
-		top: 0;
+		top: -20%;
 		left: 50%;
-		width: 100dvw;
-		height: 100dvh;
+		width: 120dvw;
+		height: 140dvh;
 		transform: translateX(-50%);
 		pointer-events: none;
-		filter: blur(90px);
-		background:
-			radial-gradient(68% 68% at 12% 2%, var(--blob-gold), transparent 68%),
-			radial-gradient(58% 58% at 22% 26%, var(--blob-yellow), transparent 70%),
-			radial-gradient(54% 54% at 72% 18%, var(--blob-pink), transparent 72%),
-			radial-gradient(60% 60% at 24% 80%, var(--blob-blue), transparent 74%),
-			radial-gradient(50% 50% at 86% 86%, var(--blob-yellow-soft), transparent 76%);
-		opacity: var(--blob-opacity);
+		background-repeat: no-repeat;
+		background-image:
+			radial-gradient(closest-side at 12% 20%, color-mix(in srgb, var(--blob-gold) 75%, transparent) 0%, transparent 72%),
+			radial-gradient(closest-side at 78% 18%, color-mix(in srgb, var(--blob-pink) 70%, transparent) 0%, transparent 74%),
+			radial-gradient(closest-side at 30% 74%, color-mix(in srgb, var(--blob-blue) 70%, transparent) 0%, transparent 76%),
+			radial-gradient(closest-side at 82% 70%, color-mix(in srgb, var(--blob-yellow-soft) 65%, transparent) 0%, transparent 80%),
+			radial-gradient(closest-side at 46% 48%, color-mix(in srgb, var(--blob-yellow) 60%, transparent) 0%, transparent 78%);
+		opacity: min(0.85, var(--blob-opacity, 0.65));
 		z-index: 0;
+		transition: opacity 0.3s ease;
 	}
 
 	.app-header {
