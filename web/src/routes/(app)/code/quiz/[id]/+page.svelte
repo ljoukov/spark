@@ -312,7 +312,6 @@
 				console.error('Unable to persist quiz progress', error);
 			}
 		}
-
 	});
 </script>
 
