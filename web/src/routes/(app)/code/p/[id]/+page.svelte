@@ -378,17 +378,18 @@
 
 		try {
 			const hash = await computeHashHex(FORMAT_HASH_ALGORITHM, currentSource);
-			const response = await fetch(FORMAT_ENDPOINT, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					content: currentSource,
-					hash,
-					algorithm: FORMAT_HASH_ALGORITHM
-				})
-			});
+                        const response = await fetch(FORMAT_ENDPOINT, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                        'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                        content: currentSource,
+                                        hash,
+                                        algorithm: FORMAT_HASH_ALGORITHM
+                                })
+                        });
 
 			if (!response.ok) {
 				let message = 'Unable to format code';
