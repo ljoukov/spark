@@ -46,7 +46,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const nowIso = new Date().toISOString();
 	type FirebaseSignInClaim = { sign_in_provider?: string };
-	const firebaseClaim = (user.decodedToken as { firebase?: FirebaseSignInClaim } | null)?.firebase ?? null;
+	const firebaseClaim =
+		(user.decodedToken as { firebase?: FirebaseSignInClaim } | null)?.firebase ?? null;
 	const signInProvider = firebaseClaim?.sign_in_provider ?? null;
 
 	const data: Record<string, unknown> = {

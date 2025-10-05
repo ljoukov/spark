@@ -358,11 +358,31 @@
 		pointer-events: none;
 		background-repeat: no-repeat;
 		background-image:
-			radial-gradient(closest-side at 12% 20%, color-mix(in srgb, var(--blob-gold) 75%, transparent) 0%, transparent 72%),
-			radial-gradient(closest-side at 78% 18%, color-mix(in srgb, var(--blob-pink) 70%, transparent) 0%, transparent 74%),
-			radial-gradient(closest-side at 30% 74%, color-mix(in srgb, var(--blob-blue) 70%, transparent) 0%, transparent 76%),
-			radial-gradient(closest-side at 82% 70%, color-mix(in srgb, var(--blob-yellow-soft) 65%, transparent) 0%, transparent 80%),
-			radial-gradient(closest-side at 46% 48%, color-mix(in srgb, var(--blob-yellow) 60%, transparent) 0%, transparent 78%);
+			radial-gradient(
+				closest-side at 12% 20%,
+				color-mix(in srgb, var(--blob-gold) 75%, transparent) 0%,
+				transparent 72%
+			),
+			radial-gradient(
+				closest-side at 78% 18%,
+				color-mix(in srgb, var(--blob-pink) 70%, transparent) 0%,
+				transparent 74%
+			),
+			radial-gradient(
+				closest-side at 30% 74%,
+				color-mix(in srgb, var(--blob-blue) 70%, transparent) 0%,
+				transparent 76%
+			),
+			radial-gradient(
+				closest-side at 82% 70%,
+				color-mix(in srgb, var(--blob-yellow-soft) 65%, transparent) 0%,
+				transparent 80%
+			),
+			radial-gradient(
+				closest-side at 46% 48%,
+				color-mix(in srgb, var(--blob-yellow) 60%, transparent) 0%,
+				transparent 78%
+			);
 		opacity: min(0.85, var(--blob-opacity, 0.65));
 		transition: opacity 0.3s ease;
 		z-index: 0;
