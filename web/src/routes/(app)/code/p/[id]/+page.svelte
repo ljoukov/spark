@@ -36,7 +36,7 @@
 	type PaneSide = 'left' | 'right';
 
 	const DEFAULT_LAYOUT = [50, 50] as const;
-	const CODE_PANE_DEFAULT_LAYOUT = [90, 10] as const;
+	const CODE_PANE_DEFAULT_LAYOUT = [70, 30] as const;
 	const LEFT_MAX_LAYOUT = [100, 0] as const;
 	const RIGHT_MAX_LAYOUT = [0, 100] as const;
 
@@ -830,12 +830,8 @@
 							</Resizable.Pane>
 							<Resizable.Handle withHandle class="code-pane-handle" />
 							<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
-								<div class="code-output-pane pt-2">
-									<div
-										class="code-output-shell"
-										aria-label="Output panel"
-										data-empty={runStatus === 'idle'}
-									>
+								<div class="code-output-pane overflow-scroll pt-2">
+									<div class="code-output-shell" aria-label="Output panel">
 										<div class="output-sections">
 											<div class="flex gap-2 pl-2">
 												<span class="uppercase">Status:</span>
@@ -851,7 +847,7 @@
 												<span class="output-section-label">STDOUT</span>
 												<pre class="output-section-body">{stdoutText || '—'}</pre>
 											</div>
-											<div class="output-section">
+											<div class="output-section pb-4">
 												<span class="output-section-label">STDERR</span>
 												<pre class="output-section-body">{stderrText || '—'}</pre>
 											</div>
@@ -1015,19 +1011,6 @@
 		color: inherit;
 		align-items: stretch;
 		overflow: auto;
-	}
-
-	.code-output-shell[data-empty] {
-		align-items: center;
-		justify-content: center;
-		overflow: hidden;
-		color: hsl(var(--muted-foreground));
-		text-align: center;
-		font-style: italic;
-	}
-
-	.code-output-shell[data-empty] span {
-		opacity: 0.8;
 	}
 
 	.output-meta {
