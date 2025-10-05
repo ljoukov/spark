@@ -15,7 +15,10 @@
 	import Square from '@lucide/svelte/icons/square';
 	import Send from '@lucide/svelte/icons/send';
 	import TextAlignStart from '@lucide/svelte/icons/text-align-start';
-	import type { PythonRunnerRequest, PythonRunnerWorkerMessage } from '$lib/workers/python-runner.types';
+	import type {
+		PythonRunnerRequest,
+		PythonRunnerWorkerMessage
+	} from '$lib/workers/python-runner.types';
 	import type { PageData } from './$types';
 
 	type HashAlgorithm = 'sha256' | 'sha512';
@@ -38,9 +41,15 @@
 	const RIGHT_MAX_LAYOUT = [0, 100] as const;
 
 	const buttonShapeClass = 'rounded-md cursor-pointer';
-	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), buttonShapeClass);
+	const iconButtonClasses = cn(
+		buttonVariants({ variant: 'outline', size: 'icon' }),
+		buttonShapeClass
+	);
 	const formatButtonClasses = (failed: boolean) =>
-		cn(buttonVariants({ variant: failed ? 'destructive' : 'outline', size: 'sm' }), buttonShapeClass);
+		cn(
+			buttonVariants({ variant: failed ? 'destructive' : 'outline', size: 'sm' }),
+			buttonShapeClass
+		);
 	const runButtonClasses = (isStop = false, isBusy = false) =>
 		cn(
 			buttonVariants({ variant: isStop ? 'destructive' : 'outline', size: 'sm' }),
@@ -93,8 +102,8 @@
 	$: runTooltipLabel = isRunning
 		? STOP_TOOLTIP_LABEL
 		: isPyodideLoading
-		? LOADING_TOOLTIP_LABEL
-		: RUN_TOOLTIP_LABEL;
+			? LOADING_TOOLTIP_LABEL
+			: RUN_TOOLTIP_LABEL;
 	$: runtimeLabel = formatRuntime(runtimeMs);
 	$: runStatusLabel = (() => {
 		switch (runStatus) {
@@ -122,6 +131,10 @@
 	}
 
 	const PRESET_STDIN_TEXT = PRESET_STDIN_LINES.join('\n');
+
+	function normalizeOutputChunk(text: string): string {
+		return text.replace(/\r\n?/g, '\n');
+	}
 
 	function generateWorkerRequestId(): string {
 		return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -180,12 +193,12 @@
 					isPyodideLoading = false;
 					cleanupPreloadWorker();
 					break;
-			case 'error':
-				isPyodideLoading = false;
-				isPyodideReady = false;
-				console.error('Python runtime preload failed', data.error);
-				cleanupPreloadWorker();
-				break;
+				case 'error':
+					isPyodideLoading = false;
+					isPyodideReady = false;
+					console.error('Python runtime preload failed', data.error);
+					cleanupPreloadWorker();
+					break;
 				default:
 					break;
 			}
@@ -295,13 +308,14 @@
 		}
 		switch (message.type) {
 			case 'stdout':
-				stdoutChunks = [...stdoutChunks, message.text];
+				stdoutChunks = [...stdoutChunks, normalizeOutputChunk(message.text)];
 				break;
 			case 'stderr':
-				stderrChunks = [...stderrChunks, message.text];
+				stderrChunks = [...stderrChunks, normalizeOutputChunk(message.text)];
 				break;
 			case 'error': {
-				const errorText = message.error.endsWith('\n') ? message.error : `${message.error}\n`;
+				const normalizedError = normalizeOutputChunk(message.error);
+				const errorText = normalizedError.endsWith('\n') ? normalizedError : `${normalizedError}\n`;
 				stderrChunks = [...stderrChunks, errorText];
 				finalizeRun('error');
 				break;
@@ -403,13 +417,17 @@
 					const fullRange = model.getFullModelRange();
 					const currentSelections = monacoEditor.getSelections();
 					monacoEditor.pushUndoStop();
-					monacoEditor.executeEdits('format', [
-						{
-							range: fullRange,
-							text: payload.formatted,
-							forceMoveMarkers: true
-						}
-					], currentSelections ?? undefined);
+					monacoEditor.executeEdits(
+						'format',
+						[
+							{
+								range: fullRange,
+								text: payload.formatted,
+								forceMoveMarkers: true
+							}
+						],
+						currentSelections ?? undefined
+					);
 					monacoEditor.pushUndoStop();
 				} else {
 					monacoEditor.setValue(payload.formatted);
@@ -564,23 +582,23 @@
 			});
 		})();
 
-			disposeEditor = () => {
-				subscription?.dispose();
-				themeObserver?.disconnect();
-				if (mediaQuery && applyTheme) {
-					mediaQuery.removeEventListener('change', applyTheme);
-				}
-				monacoEditor?.dispose();
-				monacoEditor = null;
-				keybindingDisposables.forEach((disposable) => {
-					disposable.dispose();
-				});
-				keybindingDisposables = [];
-				subscription = null;
-				themeObserver = null;
-				mediaQuery = null;
-				applyTheme = null;
-			};
+		disposeEditor = () => {
+			subscription?.dispose();
+			themeObserver?.disconnect();
+			if (mediaQuery && applyTheme) {
+				mediaQuery.removeEventListener('change', applyTheme);
+			}
+			monacoEditor?.dispose();
+			monacoEditor = null;
+			keybindingDisposables.forEach((disposable) => {
+				disposable.dispose();
+			});
+			keybindingDisposables = [];
+			subscription = null;
+			themeObserver = null;
+			mediaQuery = null;
+			applyTheme = null;
+		};
 
 		return () => {
 			disposeEditor?.();
@@ -718,30 +736,35 @@
 									<Tooltip.Root>
 										<Tooltip.Trigger>
 											{#snippet child({ props })}
-											{@const runButtonDisabled = isPyodideLoading && !isRunning}
-											{@const runButtonVisualBusy = isPyodideLoading && !isRunning}
-											{@const mergedProps = mergeProps(props ?? {}, {
-												type: 'button' as const,
-												class: runButtonClasses(isRunning, runButtonVisualBusy),
-												'aria-label': runTooltipLabel,
-												onclick: isRunning ? handleStopClick : handleRunClick,
-												disabled: runButtonDisabled,
-												'aria-disabled': runButtonDisabled ? true : undefined,
-												'aria-busy': isPyodideLoading ? true : undefined,
-												'aria-pressed': isRunning ? true : undefined
-											})}
-											<button {...mergedProps}>
-												<span class="flex-1 text-left">{isPyodideLoading ? 'Loading…' : isRunning ? 'Stop' : 'Run'}</span>
-												{#if !isPyodideLoading}
-													<span class="inline-flex shrink-0 items-center text-muted-foreground">
-														{#if isRunning}
-															<Square class="size-4" />
-														{:else}
-															<Play class="size-4" />
-														{/if}
-													</span>
-												{/if}
-											</button>
+												{@const runButtonDisabled = isPyodideLoading && !isRunning}
+												{@const runButtonVisualBusy = isPyodideLoading && !isRunning}
+												{@const mergedProps = mergeProps(props ?? {}, {
+													type: 'button' as const,
+													class: runButtonClasses(isRunning, runButtonVisualBusy),
+													'aria-label': runTooltipLabel,
+													onclick: isRunning ? handleStopClick : handleRunClick,
+													disabled: runButtonDisabled,
+													'aria-disabled': runButtonDisabled ? true : undefined,
+													'aria-busy': isPyodideLoading ? true : undefined,
+													'aria-pressed': isRunning ? true : undefined
+												})}
+												<button {...mergedProps}>
+													<span
+														class={cn(
+															'flex-1 items-center text-left',
+															isPyodideLoading ? 'flex' : 'hidden sm:flex'
+														)}>{isPyodideLoading ? 'Loading…' : isRunning ? 'Stop' : 'Run'}</span
+													>
+													{#if !isPyodideLoading}
+														<span class="inline-flex shrink-0 items-center text-muted-foreground">
+															{#if isRunning}
+																<Square class="size-4" />
+															{:else}
+																<Play class="size-4" />
+															{/if}
+														</span>
+													{/if}
+												</button>
 											{/snippet}
 										</Tooltip.Trigger>
 										<Tooltip.Content>{runTooltipLabel}</Tooltip.Content>
@@ -812,34 +835,26 @@
 										aria-label="Output panel"
 										data-empty={runStatus === 'idle'}
 									>
-										{#if runStatus === 'idle'}
-											<span>Output panel</span>
-										{:else}
-											<div class="output-meta">
-												<div class="output-meta-item">
-													<span class="output-meta-label">Status</span>
-													<span>{runStatusLabel}</span>
-												</div>
-												<div class="output-meta-item">
-													<span class="output-meta-label">Runtime</span>
-													<span>{runtimeLabel}</span>
-												</div>
+										<div class="output-sections">
+											<div class="flex gap-2 pl-2">
+												<span class="uppercase">Status:</span>
+												<span class="font-mono not-italic">{runStatusLabel}</span>
+												<span class="ml-2 uppercase">Runtime:</span>
+												<span class="font-mono not-italic">{runtimeLabel}</span>
 											</div>
-											<div class="output-sections">
-												<div class="output-section">
-													<span class="output-section-label">STDIN</span>
-													<pre class="output-section-body">{PRESET_STDIN_TEXT}</pre>
-												</div>
-												<div class="output-section">
-													<span class="output-section-label">STDOUT</span>
-													<pre class="output-section-body">{stdoutText || '—'}</pre>
-												</div>
-												<div class="output-section">
-													<span class="output-section-label">STDERR</span>
-													<pre class="output-section-body">{stderrText || '—'}</pre>
-												</div>
+											<div class="output-section">
+												<span class="output-section-label">STDIN</span>
+												<pre class="output-section-body">{PRESET_STDIN_TEXT}</pre>
 											</div>
-										{/if}
+											<div class="output-section">
+												<span class="output-section-label">STDOUT</span>
+												<pre class="output-section-body">{stdoutText || '—'}</pre>
+											</div>
+											<div class="output-section">
+												<span class="output-section-label">STDERR</span>
+												<pre class="output-section-body">{stderrText || '—'}</pre>
+											</div>
+										</div>
 									</div>
 								</div>
 							</Resizable.Pane>
@@ -997,11 +1012,14 @@
 		background: color-mix(in srgb, currentColor 6%, transparent);
 		font-size: 0.85rem;
 		color: inherit;
+		align-items: stretch;
+		overflow: auto;
 	}
 
 	.code-output-shell[data-empty] {
 		align-items: center;
 		justify-content: center;
+		overflow: hidden;
 		color: hsl(var(--muted-foreground));
 		text-align: center;
 		font-style: italic;
@@ -1017,12 +1035,17 @@
 		gap: 1.25rem;
 		font-size: 0.78rem;
 		color: hsl(var(--muted-foreground));
+		justify-content: flex-start;
+		align-items: center;
+		text-align: left;
+		padding-inline-start: 0.5rem;
 	}
 
 	.output-meta-item {
 		display: flex;
-		align-items: baseline;
+		align-items: flex-start;
 		gap: 0.4rem;
+		text-align: left;
 	}
 
 	.output-meta-label {
@@ -1039,12 +1062,20 @@
 		gap: 0.75rem;
 		flex: 1 1 auto;
 		min-height: 0;
+		width: 100%;
 	}
 
 	.output-section {
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
+		width: 100%;
+	}
+
+	.output-meta-item span {
+		display: inline-flex;
+		text-align: left;
+		justify-content: flex-start;
 	}
 
 	.output-section-label {
@@ -1053,6 +1084,9 @@
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		color: hsl(var(--muted-foreground));
+		align-self: flex-start;
+		text-align: left;
+		padding-inline-start: 0.5rem;
 	}
 
 	.output-section-body {
@@ -1068,6 +1102,9 @@
 		overflow-y: auto;
 		max-height: 12rem;
 		scrollbar-gutter: stable both-edges;
+		width: 100%;
+		min-width: 100%;
+		text-align: left;
 	}
 
 	.code-output-pane {
