@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import type { PythonRunnerRequest, PythonRunnerWorkerMessage } from './python-runner.types';
 
-type LoadPyodideFn = typeof import('pyodide')['loadPyodide'];
+type LoadPyodideFn = (typeof import('pyodide'))['loadPyodide'];
 type PyodideInterface = Awaited<ReturnType<LoadPyodideFn>>;
 
 const ctx = self as DedicatedWorkerGlobalScope & {
@@ -17,9 +17,9 @@ let pyodidePromise: Promise<PyodideInterface> | null = null;
 
 const ensureLoadPyodideFn = async (): Promise<LoadPyodideFn> => {
 	if (!loadPyodideFnPromise) {
-		loadPyodideFnPromise = import(
-			/* @vite-ignore */ `${INDEX_URL}pyodide.mjs`
-		).then((module) => module.loadPyodide as LoadPyodideFn);
+		loadPyodideFnPromise = import(/* @vite-ignore */ `${INDEX_URL}pyodide.mjs`).then(
+			(module) => module.loadPyodide as LoadPyodideFn
+		);
 	}
 	return loadPyodideFnPromise;
 };
