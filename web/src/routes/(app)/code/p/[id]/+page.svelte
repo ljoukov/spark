@@ -14,6 +14,18 @@
 	import TextAlignStart from '@lucide/svelte/icons/text-align-start';
 	import type { PageData } from './$types';
 
+	type HashAlgorithm = 'sha256' | 'sha512';
+
+	type FormatResponse = {
+		formatted: string;
+		unchanged: boolean;
+		hashes: {
+			algorithm: HashAlgorithm;
+			original: string;
+			formatted: string;
+		};
+	};
+
 	type PaneSide = 'left' | 'right';
 
 	const DEFAULT_LAYOUT = [50, 50] as const;
@@ -21,10 +33,12 @@
 	const LEFT_MAX_LAYOUT = [100, 0] as const;
 	const RIGHT_MAX_LAYOUT = [0, 100] as const;
 
-	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), 'rounded-md cursor-pointer');
-	const formatButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-md cursor-pointer');
-	const runButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-md cursor-pointer');
-	const submitButtonClasses = cn(buttonVariants({ size: 'sm' }), 'rounded-md cursor-pointer');
+	const buttonShapeClass = 'rounded-md cursor-pointer';
+	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), buttonShapeClass);
+	const formatButtonClasses = (failed: boolean) =>
+		cn(buttonVariants({ variant: failed ? 'destructive' : 'outline', size: 'sm' }), buttonShapeClass);
+	const runButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), buttonShapeClass);
+	const submitButtonClasses = cn(buttonVariants({ size: 'sm' }), buttonShapeClass);
 	const formatTooltipLabel = 'Format code';
 	const runTooltipLabel = 'Run code';
 	const submitTooltipLabel = 'Submit code';
@@ -42,6 +56,78 @@
 	type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
 	let monacoEditor: CodeEditor | null = null;
 	let disposeEditor: (() => void) | null = null;
+	let isFormatting = false;
+	let formatFailed = false;
+
+	const FORMAT_ENDPOINT = '/api/format';
+	const FORMAT_HASH_ALGORITHM: HashAlgorithm = 'sha256';
+
+	async function computeHashHex(algorithm: HashAlgorithm, content: string): Promise<string> {
+		if (typeof crypto === 'undefined' || !crypto.subtle) {
+			throw new Error('Secure hashing is unavailable in this environment');
+		}
+		const subtleAlgorithm = algorithm === 'sha256' ? 'SHA-256' : 'SHA-512';
+		const digest = await crypto.subtle.digest(subtleAlgorithm, new TextEncoder().encode(content));
+		return Array.from(new Uint8Array(digest))
+			.map((value) => value.toString(16).padStart(2, '0'))
+			.join('');
+	}
+
+	async function handleFormatClick() {
+		if (isFormatting) {
+			return;
+		}
+		isFormatting = true;
+
+		const currentSource = monacoEditor?.getValue() ?? rightText ?? '';
+
+		try {
+			const hash = await computeHashHex(FORMAT_HASH_ALGORITHM, currentSource);
+			const response = await fetch(FORMAT_ENDPOINT, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					content: currentSource,
+					hash,
+					algorithm: FORMAT_HASH_ALGORITHM
+				})
+			});
+
+			if (!response.ok) {
+				let message = 'Unable to format code';
+				try {
+					const errorPayload = (await response.json()) as { message?: string };
+					if (errorPayload?.message) {
+						message = errorPayload.message;
+					}
+				} catch (error) {
+					console.error('Failed to parse format error response', error);
+				}
+				throw new Error(message);
+			}
+
+			const payload = (await response.json()) as FormatResponse;
+			if (payload.hashes.algorithm !== FORMAT_HASH_ALGORITHM) {
+				throw new Error('Formatter returned unexpected hash algorithm');
+			}
+			const formattedHash = await computeHashHex(FORMAT_HASH_ALGORITHM, payload.formatted);
+			if (formattedHash !== payload.hashes.formatted) {
+				throw new Error('Formatter response failed integrity check');
+			}
+			if (monacoEditor && monacoEditor.getValue() !== payload.formatted) {
+				monacoEditor.setValue(payload.formatted);
+			}
+			formatFailed = false;
+			rightText = payload.formatted;
+		} catch (error) {
+			formatFailed = true;
+			console.error('Format request failed', error);
+		} finally {
+			isFormatting = false;
+		}
+	}
 
 	function resolveMonacoTheme(): 'vs-dark' | 'vs' {
 		if (typeof document === 'undefined') {
@@ -239,8 +325,16 @@
 									{#snippet child({ props })}
 										{@const mergedProps = mergeProps(props ?? {}, {
 											type: 'button' as const,
-											class: formatButtonClasses,
-											'aria-label': formatTooltipLabel
+											class: cn(
+												formatButtonClasses(formatFailed),
+												isFormatting ? 'pointer-events-none opacity-60' : ''
+											),
+											disabled: isFormatting,
+											'aria-disabled': isFormatting ? true : undefined,
+											'aria-busy': isFormatting ? true : undefined,
+											'aria-invalid': formatFailed ? true : undefined,
+											'aria-label': formatTooltipLabel,
+											onclick: handleFormatClick
 										})}
 										<button {...mergedProps}>
 											<TextAlignStart class="size-4" />
@@ -250,7 +344,7 @@
 								</Tooltip.Trigger>
 								<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
 							</Tooltip.Root>
-							<div class="ml-4 flex items-center gap-2">
+						<div class="ml-4 flex items-center gap-2">
 								<Tooltip.Root>
 									<Tooltip.Trigger>
 										{#snippet child({ props })}
@@ -309,7 +403,7 @@
 					<Resizable.PaneGroup direction="vertical" class="code-pane-group min-h-0 flex-1">
 						<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[0]} minSize={0}>
 							<div class="code-editor-pane pb-2">
-								<div class="editor-shell" data-code-length={rightText.length}>
+								<div class="editor-shell" class:formatting={isFormatting} data-code-length={rightText.length}>
 									<div
 										class="editor-container"
 										bind:this={editorContainer}
@@ -438,6 +532,11 @@
 		border-radius: 0.6rem;
 		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
 		background: transparent;
+	}
+
+	.editor-shell.formatting {
+		opacity: 0.6;
+		transition: opacity 0.15s ease;
 	}
 
 	.editor-container {

@@ -1,7 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
-import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
-import { getTestUserId, isTestUser } from '$lib/server/auth/testUser';
+import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
 
 const bodySchema = z
@@ -18,33 +17,12 @@ const bodySchema = z
 		isAnonymous: isAnonymous ?? false
 	}));
 
-function extractBearerToken(header: string | null): string | null {
-	if (!header) {
-		return null;
-	}
-	const match = /^Bearer\s+(.+)$/i.exec(header);
-	return match?.[1]?.trim() ?? null;
-}
-
 export const POST: RequestHandler = async ({ request }) => {
-	let decoded: { sub: string; firebase?: { sign_in_provider?: string } };
-	if (isTestUser()) {
-		decoded = { sub: getTestUserId() };
-	} else {
-		const token = extractBearerToken(request.headers.get('authorization'));
-		if (!token) {
-			return json(
-				{ error: 'unauthorized', message: 'Missing or invalid Authorization header' },
-				{ status: 401 }
-			);
-		}
-		try {
-			decoded = await verifyFirebaseIdToken(token);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Invalid Firebase ID token';
-			return json({ error: 'unauthorized', message }, { status: 401 });
-		}
+	const authResult = await authenticateApiRequest(request);
+	if (!authResult.ok) {
+		return authResult.response;
 	}
+	const { user } = authResult;
 
 	let parsedBody;
 	try {
@@ -63,15 +41,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { name, email, photoUrl, isAnonymous } = parsedBody;
 
 	const db = getFirebaseAdminFirestore();
-	const docRef = db.collection('spark').doc(decoded.sub);
+	const docRef = db.collection('spark').doc(user.uid);
 	const snapshot = await docRef.get();
 
 	const nowIso = new Date().toISOString();
-	const firebaseClaim = (decoded as { firebase?: { sign_in_provider?: string } }).firebase;
+	type FirebaseSignInClaim = { sign_in_provider?: string };
+	const firebaseClaim = (user.decodedToken as { firebase?: FirebaseSignInClaim } | null)?.firebase ?? null;
 	const signInProvider = firebaseClaim?.sign_in_provider ?? null;
 
 	const data: Record<string, unknown> = {
-		uid: decoded.sub,
+		uid: user.uid,
 		name,
 		email,
 		photoUrl,
