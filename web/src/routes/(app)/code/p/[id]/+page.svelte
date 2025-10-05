@@ -97,8 +97,8 @@
 	let runStartedAt = 0;
 	let runTooltipLabel = RUN_TOOLTIP_LABEL;
 
-	$: stdoutText = stdoutChunks.join('');
-	$: stderrText = stderrChunks.join('');
+	$: stdoutText = stdoutChunks.join('\n');
+	$: stderrText = stderrChunks.join('\n');
 	$: runTooltipLabel = isRunning
 		? STOP_TOOLTIP_LABEL
 		: isPyodideLoading
