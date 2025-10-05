@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { getTestUserId, isTestUser } from '$lib/server/auth/testUser';
+import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 
 export type VerifiedFirebaseToken = Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
 
@@ -23,10 +24,38 @@ export function extractBearerToken(header: string | null): string | null {
 	return match?.[1]?.trim() ?? null;
 }
 
+function extractCookieToken(header: string | null): string | null {
+        if (!header) {
+                return null;
+        }
+        const parts = header.split(';');
+        for (const part of parts) {
+                const [name, ...valueParts] = part.split('=');
+                if (!name || valueParts.length === 0) {
+                        continue;
+                }
+                if (name.trim() !== AUTH_TOKEN_COOKIE_NAME) {
+                        continue;
+                }
+                const rawValue = valueParts.join('=');
+                const trimmedValue = rawValue.trim();
+                if (!trimmedValue) {
+                        return null;
+                }
+                try {
+                        return decodeURIComponent(trimmedValue);
+                } catch (error) {
+                        console.warn('Failed to decode auth token cookie', error);
+                        return null;
+                }
+        }
+        return null;
+}
+
 export async function authenticateApiRequest(request: Request): Promise<ApiAuthResult> {
-	if (isTestUser()) {
-		return {
-			ok: true,
+        if (isTestUser()) {
+                return {
+                        ok: true,
 			user: {
 				uid: getTestUserId(),
 				token: null,
@@ -36,15 +65,16 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
 		};
 	}
 
-	const token = extractBearerToken(request.headers.get('authorization'));
-	if (!token) {
-		return {
-			ok: false,
-			response: json(
-				{ error: 'unauthorized', message: 'Missing or invalid Authorization header' },
-				{ status: 401 }
-			)
-		};
+        const tokenFromCookie = extractCookieToken(request.headers.get('cookie'));
+        const token = tokenFromCookie ?? extractBearerToken(request.headers.get('authorization'));
+        if (!token) {
+                return {
+                        ok: false,
+                        response: json(
+                                { error: 'unauthorized', message: 'Missing or invalid authentication token' },
+                                { status: 401 }
+                        )
+                };
 	}
 
 	try {
