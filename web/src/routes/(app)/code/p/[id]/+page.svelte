@@ -4,6 +4,7 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import { loadMonaco } from '$lib/monaco/index.js';
+	import type { Monaco } from '$lib/monaco/index.js';
 	import { mergeProps } from 'bits-ui';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
@@ -117,7 +118,22 @@
 				throw new Error('Formatter response failed integrity check');
 			}
 			if (monacoEditor && monacoEditor.getValue() !== payload.formatted) {
-				monacoEditor.setValue(payload.formatted);
+				const model = monacoEditor.getModel();
+				if (model) {
+					const fullRange = model.getFullModelRange();
+					const currentSelections = monacoEditor.getSelections();
+					monacoEditor.pushUndoStop();
+					monacoEditor.executeEdits('format', [
+						{
+							range: fullRange,
+							text: payload.formatted,
+							forceMoveMarkers: true
+						}
+					], currentSelections ?? undefined);
+					monacoEditor.pushUndoStop();
+				} else {
+					monacoEditor.setValue(payload.formatted);
+				}
 			}
 			formatFailed = false;
 			rightText = payload.formatted;
@@ -164,6 +180,50 @@
 		let themeObserver: MutationObserver | null = null;
 		let mediaQuery: MediaQueryList | null = null;
 		let applyTheme: (() => void) | null = null;
+		let keybindingDisposables: IDisposable[] = [];
+
+		const subscribeUndoRedoShortcuts = (monaco: Monaco, editor: CodeEditor | null) => {
+			if (!editor) {
+				return;
+			}
+
+			keybindingDisposables.forEach((disposable) => {
+				disposable.dispose();
+			});
+			keybindingDisposables = [];
+
+			const handleKeyDown = editor.onKeyDown((event) => {
+				const usesModifier = event.metaKey || event.ctrlKey;
+				if (!usesModifier) {
+					return;
+				}
+
+				const isUndo = event.keyCode === monaco.KeyCode.KeyZ && !event.shiftKey;
+				const isRedoWithZ = event.keyCode === monaco.KeyCode.KeyZ && event.shiftKey;
+				const isRedoWithY = event.keyCode === monaco.KeyCode.KeyY && !event.shiftKey;
+
+				if (!isUndo && !isRedoWithZ && !isRedoWithY) {
+					return;
+				}
+
+				event.preventDefault();
+				event.stopPropagation();
+
+				const model = editor.getModel();
+				if (!model) {
+					return;
+				}
+
+				if (isUndo) {
+					model.undo();
+					return;
+				}
+
+				model.redo();
+			});
+
+			keybindingDisposables.push(handleKeyDown);
+		};
 
 		void (async () => {
 			const monaco = await loadMonaco();
@@ -193,6 +253,8 @@
 				}
 			});
 
+			subscribeUndoRedoShortcuts(monaco, monacoEditor);
+
 			applyTheme();
 
 			mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -209,19 +271,23 @@
 			});
 		})();
 
-		disposeEditor = () => {
-			subscription?.dispose();
-			themeObserver?.disconnect();
-			if (mediaQuery && applyTheme) {
-				mediaQuery.removeEventListener('change', applyTheme);
-			}
-			monacoEditor?.dispose();
-			monacoEditor = null;
-			subscription = null;
-			themeObserver = null;
-			mediaQuery = null;
-			applyTheme = null;
-		};
+			disposeEditor = () => {
+				subscription?.dispose();
+				themeObserver?.disconnect();
+				if (mediaQuery && applyTheme) {
+					mediaQuery.removeEventListener('change', applyTheme);
+				}
+				monacoEditor?.dispose();
+				monacoEditor = null;
+				keybindingDisposables.forEach((disposable) => {
+					disposable.dispose();
+				});
+				keybindingDisposables = [];
+				subscription = null;
+				themeObserver = null;
+				mediaQuery = null;
+				applyTheme = null;
+			};
 
 		return () => {
 			disposeEditor?.();
