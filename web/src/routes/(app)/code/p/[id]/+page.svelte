@@ -54,7 +54,7 @@
 		cn(
 			buttonVariants({ variant: isStop ? 'destructive' : 'outline', size: 'sm' }),
 			buttonShapeClass,
-			'min-w-20 flex items-center gap-2',
+			'flex items-center gap-2 min-w-0 sm:min-w-20',
 			isBusy ? 'cursor-wait opacity-60' : ''
 		);
 	const submitButtonClasses = cn(buttonVariants({ size: 'sm' }), buttonShapeClass);
@@ -707,8 +707,8 @@
 				<Resizable.Handle withHandle class="bg-border" />
 				<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
 					<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-						<div class="flex items-center justify-between gap-2">
-							<div class="flex items-center pl-2">
+						<div class="flex items-center justify-between gap-2 pl-2">
+						<div class="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
 								<Tooltip.Root>
 									<Tooltip.Trigger>
 										{#snippet child({ props })}
@@ -733,7 +733,7 @@
 									</Tooltip.Trigger>
 									<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
 								</Tooltip.Root>
-								<div class="ml-4 flex items-center gap-2">
+								<div class="flex items-center gap-2 ml-2 sm:ml-4">
 									<Tooltip.Root>
 										<Tooltip.Trigger>
 											{#snippet child({ props })}
@@ -830,7 +830,7 @@
 							</Resizable.Pane>
 							<Resizable.Handle withHandle class="code-pane-handle" />
 							<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
-								<div class="code-output-pane overflow-scroll pt-2">
+								<div class="code-output-pane pt-2">
 									<div class="code-output-shell" aria-label="Output panel">
 										<div class="output-sections">
 											<div class="flex gap-2 pl-2">
@@ -1083,8 +1083,6 @@
 		line-height: 1.45;
 		white-space: pre;
 		overflow-x: auto;
-		overflow-y: auto;
-		max-height: 12rem;
 		scrollbar-gutter: stable both-edges;
 		width: 100%;
 		min-width: 100%;
