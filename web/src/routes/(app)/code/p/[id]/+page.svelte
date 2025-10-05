@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	import { onDestroy, onMount } from 'svelte';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
@@ -11,8 +12,10 @@
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import Play from '@lucide/svelte/icons/play';
+	import Square from '@lucide/svelte/icons/square';
 	import Send from '@lucide/svelte/icons/send';
 	import TextAlignStart from '@lucide/svelte/icons/text-align-start';
+	import type { PythonRunnerRequest, PythonRunnerWorkerMessage } from '$lib/workers/python-runner.types';
 	import type { PageData } from './$types';
 
 	type HashAlgorithm = 'sha256' | 'sha512';
@@ -38,10 +41,18 @@
 	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), buttonShapeClass);
 	const formatButtonClasses = (failed: boolean) =>
 		cn(buttonVariants({ variant: failed ? 'destructive' : 'outline', size: 'sm' }), buttonShapeClass);
-	const runButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), buttonShapeClass);
+	const runButtonClasses = (isStop = false, isBusy = false) =>
+		cn(
+			buttonVariants({ variant: isStop ? 'destructive' : 'outline', size: 'sm' }),
+			buttonShapeClass,
+			'min-w-20 flex items-center gap-2',
+			isBusy ? 'cursor-wait opacity-60' : ''
+		);
 	const submitButtonClasses = cn(buttonVariants({ size: 'sm' }), buttonShapeClass);
 	const formatTooltipLabel = 'Format code';
-	const runTooltipLabel = 'Run code';
+	const RUN_TOOLTIP_LABEL = 'Run code';
+	const STOP_TOOLTIP_LABEL = 'Stop code execution';
+	const LOADING_TOOLTIP_LABEL = 'Python runtime is loading';
 	const submitTooltipLabel = 'Submit code';
 
 	export let data: PageData;
@@ -59,6 +70,275 @@
 	let disposeEditor: (() => void) | null = null;
 	let isFormatting = false;
 	let formatFailed = false;
+
+	const PRESET_STDIN_LINES = ['3', '5'];
+	let isPyodideLoading = false;
+	let isPyodideReady = false;
+	let preloadWorker: Worker | null = null;
+	let preloadRequestId: string | null = null;
+	let isRunning = false;
+	let runStatus: 'idle' | 'running' | 'completed' | 'error' | 'stopped' = 'idle';
+	let stdoutChunks: string[] = [];
+	let stderrChunks: string[] = [];
+	let stdoutText = '';
+	let stderrText = '';
+	let runtimeMs: number | null = null;
+	let activeWorker: Worker | null = null;
+	let activeRunId: string | null = null;
+	let runStartedAt = 0;
+	let runTooltipLabel = RUN_TOOLTIP_LABEL;
+
+	$: stdoutText = stdoutChunks.join('');
+	$: stderrText = stderrChunks.join('');
+	$: runTooltipLabel = isRunning
+		? STOP_TOOLTIP_LABEL
+		: isPyodideLoading
+		? LOADING_TOOLTIP_LABEL
+		: RUN_TOOLTIP_LABEL;
+	$: runtimeLabel = formatRuntime(runtimeMs);
+	$: runStatusLabel = (() => {
+		switch (runStatus) {
+			case 'running':
+				return 'Running';
+			case 'completed':
+				return 'Completed';
+			case 'error':
+				return 'Error';
+			case 'stopped':
+				return 'Stopped';
+			default:
+				return 'Idle';
+		}
+	})();
+
+	function formatRuntime(value: number | null): string {
+		if (typeof value !== 'number') {
+			return isRunning ? 'Running…' : '—';
+		}
+		if (value < 1000) {
+			return `${value.toFixed(0)} ms`;
+		}
+		return `${(value / 1000).toFixed(2)} s`;
+	}
+
+	const PRESET_STDIN_TEXT = PRESET_STDIN_LINES.join('\n');
+
+	function generateWorkerRequestId(): string {
+		return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+			? crypto.randomUUID()
+			: Math.random().toString(36).slice(2);
+	}
+
+	function createPythonWorker(): Worker {
+		return new Worker(new URL('$lib/workers/python-runner.worker.ts', import.meta.url), {
+			type: 'module'
+		});
+	}
+
+	function cleanupPreloadWorker() {
+		preloadWorker?.terminate();
+		preloadWorker = null;
+		preloadRequestId = null;
+	}
+
+	function startPyodidePreload() {
+		if (!browser || preloadWorker || isPyodideReady) {
+			return;
+		}
+
+		let worker: Worker;
+		const requestId = generateWorkerRequestId();
+
+		try {
+			worker = createPythonWorker();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			isPyodideLoading = false;
+			isPyodideReady = false;
+			console.error('Failed to create Python worker for preload', message);
+			return;
+		}
+
+		preloadWorker = worker;
+		preloadRequestId = requestId;
+		isPyodideLoading = true;
+
+		worker.onmessage = (event: MessageEvent<PythonRunnerWorkerMessage>) => {
+			const data = event.data;
+			if (!data || data.requestId !== preloadRequestId) {
+				return;
+			}
+
+			switch (data.type) {
+				case 'status':
+					if (data.status === 'running') {
+						isPyodideReady = true;
+					}
+					break;
+				case 'ready':
+					isPyodideReady = true;
+					isPyodideLoading = false;
+					cleanupPreloadWorker();
+					break;
+			case 'error':
+				isPyodideLoading = false;
+				isPyodideReady = false;
+				console.error('Python runtime preload failed', data.error);
+				cleanupPreloadWorker();
+				break;
+				default:
+					break;
+			}
+		};
+
+		worker.onerror = (event) => {
+			isPyodideLoading = false;
+			isPyodideReady = false;
+			console.error('Python worker failed while preloading.', event?.message);
+			cleanupPreloadWorker();
+		};
+
+		const message: PythonRunnerRequest = { type: 'preload', requestId };
+		worker.postMessage(message);
+	}
+
+	function getCurrentSource(): string {
+		return monacoEditor?.getValue() ?? rightText ?? '';
+	}
+
+	function resetOutputState() {
+		stdoutChunks = [];
+		stderrChunks = [];
+		runtimeMs = null;
+	}
+
+	function handleRunClick() {
+		if (isRunning) {
+			return;
+		}
+		if (!browser) {
+			console.warn('Code execution is only available in the browser runtime.');
+			return;
+		}
+		const source = getCurrentSource();
+		resetOutputState();
+		if (preloadWorker) {
+			cleanupPreloadWorker();
+			isPyodideLoading = false;
+		}
+		runStatus = 'running';
+		isRunning = true;
+		const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+		runStartedAt = now;
+		const runId = generateWorkerRequestId();
+
+		let worker: Worker;
+		try {
+			worker = createPythonWorker();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			stderrChunks = [...stderrChunks, `${message}\n`];
+			isRunning = false;
+			runStatus = 'error';
+			isPyodideLoading = false;
+			return;
+		}
+
+		activeWorker = worker;
+		activeRunId = runId;
+
+		worker.onmessage = (event: MessageEvent<PythonRunnerWorkerMessage>) => {
+			if (!event?.data) {
+				return;
+			}
+			handleWorkerMessage(event.data);
+		};
+
+		worker.onerror = (event) => {
+			const message = event?.message ?? 'Python worker failed with an unknown error.';
+			stderrChunks = [...stderrChunks, `${message}\n`];
+			finalizeRun('error');
+		};
+
+		const message: PythonRunnerRequest = {
+			type: 'run',
+			requestId: runId,
+			code: source,
+			stdin: PRESET_STDIN_LINES
+		};
+
+		worker.postMessage(message);
+	}
+
+	function handleStopClick() {
+		if (!isRunning) {
+			return;
+		}
+		if (activeWorker) {
+			activeWorker.terminate();
+			activeWorker = null;
+		}
+		isRunning = false;
+		runStatus = 'stopped';
+		const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+		if (runStartedAt) {
+			runtimeMs = now - runStartedAt;
+		}
+		runStartedAt = 0;
+		activeRunId = null;
+		stderrChunks = [...stderrChunks, 'Execution stopped by user.\n'];
+	}
+
+	function handleWorkerMessage(message: PythonRunnerWorkerMessage) {
+		if (!activeRunId || message.requestId !== activeRunId) {
+			return;
+		}
+		switch (message.type) {
+			case 'stdout':
+				stdoutChunks = [...stdoutChunks, message.text];
+				break;
+			case 'stderr':
+				stderrChunks = [...stderrChunks, message.text];
+				break;
+			case 'error': {
+				const errorText = message.error.endsWith('\n') ? message.error : `${message.error}\n`;
+				stderrChunks = [...stderrChunks, errorText];
+				finalizeRun('error');
+				break;
+			}
+			case 'done':
+				finalizeRun('completed');
+				break;
+			case 'status':
+				if (message.status === 'running') {
+					isPyodideReady = true;
+					isPyodideLoading = false;
+				}
+				break;
+			case 'ready':
+				isPyodideReady = true;
+				isPyodideLoading = false;
+				break;
+			default:
+				break;
+		}
+	}
+
+	function finalizeRun(outcome: 'completed' | 'error') {
+		if (activeWorker) {
+			activeWorker.terminate();
+			activeWorker = null;
+		}
+		isRunning = false;
+		isPyodideLoading = false;
+		if (runStartedAt) {
+			const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+			runtimeMs = now - runStartedAt;
+		}
+		runStartedAt = 0;
+		activeRunId = null;
+		runStatus = outcome;
+	}
 
 	const FORMAT_ENDPOINT = '/api/format';
 	const FORMAT_HASH_ALGORITHM: HashAlgorithm = 'sha256';
@@ -173,6 +453,17 @@
 		if (monacoEditor && monacoEditor.getValue() !== rightText) {
 			monacoEditor.setValue(rightText);
 		}
+		if (activeWorker) {
+			activeWorker.terminate();
+			activeWorker = null;
+		}
+		isRunning = false;
+		runStatus = 'idle';
+		stdoutChunks = [];
+		stderrChunks = [];
+		runtimeMs = null;
+		activeRunId = null;
+		runStartedAt = 0;
 	}
 
 	onMount(() => {
@@ -181,6 +472,8 @@
 		let mediaQuery: MediaQueryList | null = null;
 		let applyTheme: (() => void) | null = null;
 		let keybindingDisposables: IDisposable[] = [];
+
+		startPyodidePreload();
 
 		const subscribeUndoRedoShortcuts = (monaco: Monaco, editor: CodeEditor | null) => {
 			if (!editor) {
@@ -295,6 +588,17 @@
 		};
 	});
 
+	onDestroy(() => {
+		if (activeWorker) {
+			activeWorker.terminate();
+			activeWorker = null;
+		}
+		if (preloadWorker) {
+			cleanupPreloadWorker();
+		}
+		isPyodideLoading = false;
+	});
+
 	function applyLayout(layout: readonly number[]) {
 		paneGroup?.setLayout([...layout]);
 	}
@@ -336,163 +640,215 @@
 
 <Tooltip.Provider>
 	<section class="workspace-page overflow-hidden p-2">
-	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
-		<Resizable.PaneGroup
-			direction="horizontal"
-			class="workspace-pane-group flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border bg-card shadow"
-			bind:this={paneGroup}
-			onLayoutChange={handleLayoutChange}
-		>
-			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
-				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex flex-col">
-							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-								>Problem</span
-							>
-							<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
-						</div>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								{@const mergedProps = mergeProps(props ?? {}, {
-									type: 'button' as const,
-									class: iconButtonClasses,
-									'aria-label': leftPaneControlLabel,
-									onclick: () => toggleMaximize('left')
-								})}
-								<button {...mergedProps}>
-									{#if maximizedPane === 'left'}
-										<Minimize2 class="size-4" />
-									{:else}
-										<Maximize2 class="size-4" />
-									{/if}
-								</button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>{leftPaneControlLabel}</Tooltip.Content>
-					</Tooltip.Root>
-					</div>
-					<div
-						class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
-						aria-label="Problem description"
-					>
-						<div class="markdown space-y-4">{@html markdownHtml}</div>
-					</div>
-				</div>
-			</Resizable.Pane>
-			<Resizable.Handle withHandle class="bg-border" />
-			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
-				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex items-center pl-2">
+		<div class="workspace flex min-h-0 flex-1 overflow-hidden">
+			<Resizable.PaneGroup
+				direction="horizontal"
+				class="workspace-pane-group flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border bg-card shadow"
+				bind:this={paneGroup}
+				onLayoutChange={handleLayoutChange}
+			>
+				<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
+					<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+						<div class="flex items-center justify-between gap-2">
+							<div class="flex flex-col">
+								<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+									>Problem</span
+								>
+								<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
+							</div>
 							<Tooltip.Root>
 								<Tooltip.Trigger>
 									{#snippet child({ props })}
 										{@const mergedProps = mergeProps(props ?? {}, {
 											type: 'button' as const,
-											class: cn(
-												formatButtonClasses(formatFailed),
-												isFormatting ? 'pointer-events-none opacity-60' : ''
-											),
-											disabled: isFormatting,
-											'aria-disabled': isFormatting ? true : undefined,
-											'aria-busy': isFormatting ? true : undefined,
-											'aria-invalid': formatFailed ? true : undefined,
-											'aria-label': formatTooltipLabel,
-											onclick: handleFormatClick
+											class: iconButtonClasses,
+											'aria-label': leftPaneControlLabel,
+											onclick: () => toggleMaximize('left')
 										})}
 										<button {...mergedProps}>
-											<TextAlignStart class="size-4" />
-											<span class="hidden sm:inline">Format Code</span>
+											{#if maximizedPane === 'left'}
+												<Minimize2 class="size-4" />
+											{:else}
+												<Maximize2 class="size-4" />
+											{/if}
 										</button>
 									{/snippet}
 								</Tooltip.Trigger>
-								<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
+								<Tooltip.Content>{leftPaneControlLabel}</Tooltip.Content>
 							</Tooltip.Root>
-						<div class="ml-4 flex items-center gap-2">
-								<Tooltip.Root>
-									<Tooltip.Trigger>
-										{#snippet child({ props })}
-											{@const mergedProps = mergeProps(props ?? {}, {
-												type: 'button' as const,
-												class: runButtonClasses,
-												'aria-label': runTooltipLabel
-											})}
-											<button {...mergedProps}>
-												<span class="hidden sm:inline">Run</span>
-												<Play class="size-4" />
-											</button>
-										{/snippet}
-									</Tooltip.Trigger>
-									<Tooltip.Content>{runTooltipLabel}</Tooltip.Content>
-								</Tooltip.Root>
-								<Tooltip.Root>
-									<Tooltip.Trigger>
-										{#snippet child({ props })}
-											{@const mergedProps = mergeProps(props ?? {}, {
-												type: 'button' as const,
-												class: submitButtonClasses,
-												'aria-label': submitTooltipLabel
-											})}
-											<button {...mergedProps}>
-												<span class="hidden sm:inline">Submit</span>
-												<Send class="size-4" />
-											</button>
-										{/snippet}
-									</Tooltip.Trigger>
-									<Tooltip.Content>{submitTooltipLabel}</Tooltip.Content>
-								</Tooltip.Root>
-							</div>
 						</div>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								{@const mergedProps = mergeProps(props ?? {}, {
-									type: 'button' as const,
-									class: iconButtonClasses,
-									'aria-label': rightPaneControlLabel,
-									onclick: () => toggleMaximize('right')
-								})}
-								<button {...mergedProps}>
-									{#if maximizedPane === 'right'}
-										<Minimize2 class="size-4" />
-									{:else}
-										<Maximize2 class="size-4" />
-									{/if}
-								</button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>{rightPaneControlLabel}</Tooltip.Content>
-					</Tooltip.Root>
+						<div
+							class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
+							aria-label="Problem description"
+						>
+							<div class="markdown space-y-4">{@html markdownHtml}</div>
+						</div>
 					</div>
-					<Resizable.PaneGroup direction="vertical" class="code-pane-group min-h-0 flex-1">
-						<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[0]} minSize={0}>
-							<div class="code-editor-pane pb-2">
-								<div class="editor-shell" class:formatting={isFormatting} data-code-length={rightText.length}>
+				</Resizable.Pane>
+				<Resizable.Handle withHandle class="bg-border" />
+				<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
+					<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
+						<div class="flex items-center justify-between gap-2">
+							<div class="flex items-center pl-2">
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											{@const mergedProps = mergeProps(props ?? {}, {
+												type: 'button' as const,
+												class: cn(
+													formatButtonClasses(formatFailed),
+													isFormatting || isRunning ? 'pointer-events-none opacity-60' : ''
+												),
+												disabled: isFormatting || isRunning,
+												'aria-disabled': isFormatting || isRunning ? true : undefined,
+												'aria-busy': isFormatting ? true : undefined,
+												'aria-invalid': formatFailed ? true : undefined,
+												'aria-label': formatTooltipLabel,
+												onclick: handleFormatClick
+											})}
+											<button {...mergedProps}>
+												<TextAlignStart class="size-4" />
+												<span class="hidden sm:inline">Format Code</span>
+											</button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
+								</Tooltip.Root>
+								<div class="ml-4 flex items-center gap-2">
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+											{@const runButtonDisabled = isPyodideLoading && !isRunning}
+											{@const runButtonVisualBusy = isPyodideLoading && !isRunning}
+											{@const mergedProps = mergeProps(props ?? {}, {
+												type: 'button' as const,
+												class: runButtonClasses(isRunning, runButtonVisualBusy),
+												'aria-label': runTooltipLabel,
+												onclick: isRunning ? handleStopClick : handleRunClick,
+												disabled: runButtonDisabled,
+												'aria-disabled': runButtonDisabled ? true : undefined,
+												'aria-busy': isPyodideLoading ? true : undefined,
+												'aria-pressed': isRunning ? true : undefined
+											})}
+											<button {...mergedProps}>
+												<span class="flex-1 text-left">{isPyodideLoading ? 'Loading…' : isRunning ? 'Stop' : 'Run'}</span>
+												{#if !isPyodideLoading}
+													<span class="inline-flex shrink-0 items-center text-muted-foreground">
+														{#if isRunning}
+															<Square class="size-4" />
+														{:else}
+															<Play class="size-4" />
+														{/if}
+													</span>
+												{/if}
+											</button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>{runTooltipLabel}</Tooltip.Content>
+									</Tooltip.Root>
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												{@const mergedProps = mergeProps(props ?? {}, {
+													type: 'button' as const,
+													class: submitButtonClasses,
+													'aria-label': submitTooltipLabel,
+													disabled: isRunning,
+													'aria-disabled': isRunning ? true : undefined
+												})}
+												<button {...mergedProps}>
+													<span class="hidden sm:inline">Submit</span>
+													<Send class="size-4" />
+												</button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>{submitTooltipLabel}</Tooltip.Content>
+									</Tooltip.Root>
+								</div>
+							</div>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										{@const mergedProps = mergeProps(props ?? {}, {
+											type: 'button' as const,
+											class: iconButtonClasses,
+											'aria-label': rightPaneControlLabel,
+											onclick: () => toggleMaximize('right')
+										})}
+										<button {...mergedProps}>
+											{#if maximizedPane === 'right'}
+												<Minimize2 class="size-4" />
+											{:else}
+												<Maximize2 class="size-4" />
+											{/if}
+										</button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>{rightPaneControlLabel}</Tooltip.Content>
+							</Tooltip.Root>
+						</div>
+						<Resizable.PaneGroup direction="vertical" class="code-pane-group min-h-0 flex-1">
+							<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[0]} minSize={0}>
+								<div class="code-editor-pane pb-2">
 									<div
-										class="editor-container"
-										bind:this={editorContainer}
-										role="presentation"
-										aria-label="Python editor"
-									></div>
+										class="editor-shell"
+										class:formatting={isFormatting}
+										data-code-length={rightText.length}
+									>
+										<div
+											class="editor-container"
+											bind:this={editorContainer}
+											role="presentation"
+											aria-label="Python editor"
+										></div>
+									</div>
 								</div>
-							</div>
-						</Resizable.Pane>
-						<Resizable.Handle withHandle class="code-pane-handle" />
-						<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
-							<div class="code-output-pane pt-2">
-								<div class="code-output-shell" aria-label="Output panel" data-empty>
-									<span>Output panel</span>
+							</Resizable.Pane>
+							<Resizable.Handle withHandle class="code-pane-handle" />
+							<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
+								<div class="code-output-pane pt-2">
+									<div
+										class="code-output-shell"
+										aria-label="Output panel"
+										data-empty={runStatus === 'idle'}
+									>
+										{#if runStatus === 'idle'}
+											<span>Output panel</span>
+										{:else}
+											<div class="output-meta">
+												<div class="output-meta-item">
+													<span class="output-meta-label">Status</span>
+													<span>{runStatusLabel}</span>
+												</div>
+												<div class="output-meta-item">
+													<span class="output-meta-label">Runtime</span>
+													<span>{runtimeLabel}</span>
+												</div>
+											</div>
+											<div class="output-sections">
+												<div class="output-section">
+													<span class="output-section-label">STDIN</span>
+													<pre class="output-section-body">{PRESET_STDIN_TEXT}</pre>
+												</div>
+												<div class="output-section">
+													<span class="output-section-label">STDOUT</span>
+													<pre class="output-section-body">{stdoutText || '—'}</pre>
+												</div>
+												<div class="output-section">
+													<span class="output-section-label">STDERR</span>
+													<pre class="output-section-body">{stderrText || '—'}</pre>
+												</div>
+											</div>
+										{/if}
+									</div>
 								</div>
-							</div>
-						</Resizable.Pane>
-					</Resizable.PaneGroup>
-				</div>
-			</Resizable.Pane>
-		</Resizable.PaneGroup>
-	</div>
-</section>
+							</Resizable.Pane>
+						</Resizable.PaneGroup>
+					</div>
+				</Resizable.Pane>
+			</Resizable.PaneGroup>
+		</div>
+	</section>
 </Tooltip.Provider>
 
 <style lang="postcss">
@@ -629,24 +985,89 @@
 
 	.code-output-shell {
 		display: flex;
-		align-items: center;
-		justify-content: center;
+		flex-direction: column;
+		gap: 1rem;
 		flex: 1 1 auto;
 		min-height: 0;
 		height: 100%;
+		padding: 1rem;
 		border: 1px solid rgba(148, 163, 184, 0.26);
 		border-radius: 0.6rem;
 		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
 		background: color-mix(in srgb, currentColor 6%, transparent);
-		padding: 0.75rem;
-		font-size: 0.8rem;
+		font-size: 0.85rem;
+		color: inherit;
+	}
+
+	.code-output-shell[data-empty] {
+		align-items: center;
+		justify-content: center;
 		color: hsl(var(--muted-foreground));
 		text-align: center;
+		font-style: italic;
 	}
 
 	.code-output-shell[data-empty] span {
-		font-style: italic;
 		opacity: 0.8;
+	}
+
+	.output-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.25rem;
+		font-size: 0.78rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.output-meta-item {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+
+	.output-meta-label {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.output-sections {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.output-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.output-section-label {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.output-section-body {
+		background: color-mix(in srgb, currentColor 8%, transparent);
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 0.5rem;
+		padding: 0.65rem 0.85rem;
+		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+		font-size: 0.82rem;
+		line-height: 1.45;
+		white-space: pre;
+		overflow-x: auto;
+		overflow-y: auto;
+		max-height: 12rem;
+		scrollbar-gutter: stable both-edges;
 	}
 
 	.code-output-pane {
