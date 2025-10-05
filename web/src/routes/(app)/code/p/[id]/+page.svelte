@@ -4,18 +4,30 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import { loadMonaco } from '$lib/monaco/index.js';
+	import { mergeProps } from 'bits-ui';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
+	import Play from '@lucide/svelte/icons/play';
+	import Send from '@lucide/svelte/icons/send';
+	import TextAlignStart from '@lucide/svelte/icons/text-align-start';
 	import type { PageData } from './$types';
 
 	type PaneSide = 'left' | 'right';
 
 	const DEFAULT_LAYOUT = [50, 50] as const;
+	const CODE_PANE_DEFAULT_LAYOUT = [90, 10] as const;
 	const LEFT_MAX_LAYOUT = [100, 0] as const;
 	const RIGHT_MAX_LAYOUT = [0, 100] as const;
 
-	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), 'rounded-md');
+	const iconButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'icon' }), 'rounded-md cursor-pointer');
+	const formatButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-md cursor-pointer');
+	const runButtonClasses = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-md cursor-pointer');
+	const submitButtonClasses = cn(buttonVariants({ size: 'sm' }), 'rounded-md cursor-pointer');
+	const formatTooltipLabel = 'Format code';
+	const runTooltipLabel = 'Run code';
+	const submitTooltipLabel = 'Submit code';
 
 	export let data: PageData;
 
@@ -158,9 +170,20 @@
 			maximizedPane = null;
 		}
 	}
+
+	$: leftPaneControlLabel =
+		maximizedPane === 'left'
+			? 'Return problem statement pane to normal size'
+			: 'Maximize problem statement pane';
+
+	$: rightPaneControlLabel =
+		maximizedPane === 'right'
+			? 'Return code editor pane to normal size'
+			: 'Maximize code editor pane';
 </script>
 
-<section class="workspace-page flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+<Tooltip.Provider>
+	<section class="workspace-page overflow-hidden p-2">
 	<div class="workspace flex min-h-0 flex-1 overflow-hidden">
 		<Resizable.PaneGroup
 			direction="horizontal"
@@ -177,20 +200,26 @@
 							>
 							<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
 						</div>
-						<button
-							type="button"
-							class={iconButtonClasses}
-							on:click={() => toggleMaximize('left')}
-							aria-label={maximizedPane === 'left'
-								? 'Return left pane to normal size'
-								: 'Maximize left pane'}
-						>
-							{#if maximizedPane === 'left'}
-								<Minimize2 class="size-4" />
-							{:else}
-								<Maximize2 class="size-4" />
-							{/if}
-						</button>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								{@const mergedProps = mergeProps(props ?? {}, {
+									type: 'button' as const,
+									class: iconButtonClasses,
+									'aria-label': leftPaneControlLabel,
+									onclick: () => toggleMaximize('left')
+								})}
+								<button {...mergedProps}>
+									{#if maximizedPane === 'left'}
+										<Minimize2 class="size-4" />
+									{:else}
+										<Maximize2 class="size-4" />
+									{/if}
+								</button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content>{leftPaneControlLabel}</Tooltip.Content>
+					</Tooltip.Root>
 					</div>
 					<div
 						class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
@@ -204,40 +233,107 @@
 			<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
 				<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 					<div class="flex items-center justify-between gap-2">
-						<div class="flex flex-col">
-							<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-								>Editor</span
-							>
-							<h2 class="text-sm leading-tight font-semibold">Python workspace</h2>
+						<div class="flex items-center pl-2">
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										{@const mergedProps = mergeProps(props ?? {}, {
+											type: 'button' as const,
+											class: formatButtonClasses,
+											'aria-label': formatTooltipLabel
+										})}
+										<button {...mergedProps}>
+											<TextAlignStart class="size-4" />
+											<span class="hidden sm:inline">Format Code</span>
+										</button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
+							</Tooltip.Root>
+							<div class="ml-4 flex items-center gap-2">
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											{@const mergedProps = mergeProps(props ?? {}, {
+												type: 'button' as const,
+												class: runButtonClasses,
+												'aria-label': runTooltipLabel
+											})}
+											<button {...mergedProps}>
+												<span class="hidden sm:inline">Run</span>
+												<Play class="size-4" />
+											</button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>{runTooltipLabel}</Tooltip.Content>
+								</Tooltip.Root>
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											{@const mergedProps = mergeProps(props ?? {}, {
+												type: 'button' as const,
+												class: submitButtonClasses,
+												'aria-label': submitTooltipLabel
+											})}
+											<button {...mergedProps}>
+												<span class="hidden sm:inline">Submit</span>
+												<Send class="size-4" />
+											</button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>{submitTooltipLabel}</Tooltip.Content>
+								</Tooltip.Root>
+							</div>
 						</div>
-						<button
-							type="button"
-							class={iconButtonClasses}
-							on:click={() => toggleMaximize('right')}
-							aria-label={maximizedPane === 'right'
-								? 'Return right pane to normal size'
-								: 'Maximize right pane'}
-						>
-							{#if maximizedPane === 'right'}
-								<Minimize2 class="size-4" />
-							{:else}
-								<Maximize2 class="size-4" />
-							{/if}
-						</button>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								{@const mergedProps = mergeProps(props ?? {}, {
+									type: 'button' as const,
+									class: iconButtonClasses,
+									'aria-label': rightPaneControlLabel,
+									onclick: () => toggleMaximize('right')
+								})}
+								<button {...mergedProps}>
+									{#if maximizedPane === 'right'}
+										<Minimize2 class="size-4" />
+									{:else}
+										<Maximize2 class="size-4" />
+									{/if}
+								</button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content>{rightPaneControlLabel}</Tooltip.Content>
+					</Tooltip.Root>
 					</div>
-					<div class="editor-shell" data-code-length={rightText.length}>
-						<div
-							class="editor-container"
-							bind:this={editorContainer}
-							role="presentation"
-							aria-label="Python editor"
-						></div>
-					</div>
+					<Resizable.PaneGroup direction="vertical" class="code-pane-group min-h-0 flex-1">
+						<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[0]} minSize={0}>
+							<div class="code-editor-pane pb-2">
+								<div class="editor-shell" data-code-length={rightText.length}>
+									<div
+										class="editor-container"
+										bind:this={editorContainer}
+										role="presentation"
+										aria-label="Python editor"
+									></div>
+								</div>
+							</div>
+						</Resizable.Pane>
+						<Resizable.Handle withHandle class="code-pane-handle" />
+						<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
+							<div class="code-output-pane pt-2">
+								<div class="code-output-shell" aria-label="Output panel" data-empty>
+									<span>Output panel</span>
+								</div>
+							</div>
+						</Resizable.Pane>
+					</Resizable.PaneGroup>
 				</div>
 			</Resizable.Pane>
 		</Resizable.PaneGroup>
 	</div>
 </section>
+</Tooltip.Provider>
 
 <style lang="postcss">
 	/*
@@ -267,7 +363,7 @@
 		height: 100%;
 	}
 
-	.workspace-pane-group {
+	:global(.workspace-pane-group) {
 		height: 100%;
 		min-height: 0;
 		flex: 1 1 auto;
@@ -333,6 +429,7 @@
 	}
 
 	.editor-shell {
+		height: 100%;
 		flex: 1 1 auto;
 		min-height: 0;
 		overflow: hidden;
@@ -346,5 +443,51 @@
 	.editor-container {
 		height: 100%;
 		width: 100%;
+	}
+
+	.code-editor-pane {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		height: 100%;
+		min-height: 0;
+	}
+
+	:global(.code-pane-group) {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	:global(.code-pane-handle) {
+		position: relative;
+	}
+
+	.code-output-shell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 0.6rem;
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+		background: color-mix(in srgb, currentColor 6%, transparent);
+		padding: 0.75rem;
+		font-size: 0.8rem;
+		color: hsl(var(--muted-foreground));
+		text-align: center;
+	}
+
+	.code-output-shell[data-empty] span {
+		font-style: italic;
+		opacity: 0.8;
+	}
+
+	.code-output-pane {
+		display: flex;
+		flex: 1 1 auto;
+		height: 100%;
+		min-height: 0;
 	}
 </style>
