@@ -55,6 +55,10 @@ const QUIZZES: QuizDefinition[] = [
           { id: "D", label: "D", text: "Draw a graph and do BFS every time" },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Breaking a problem down and reusing solved pieces is the heart of DP.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -82,6 +86,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Anchoring the table with a tiny, known answer is exactly how base cases work.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -109,6 +117,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Keeping a table of solved states is exactly how DP avoids recomputing work.",
+        },
       },
     ],
   },
@@ -125,7 +137,7 @@ const QUIZZES: QuizDefinition[] = [
         kind: "info-card",
         id: "dp-topic-card-1",
         prompt: "What DP tries to do",
-        eyebrow: "Idea card",
+        eyebrow: "Concept",
         body: "Solve a problem by building from small, easy cases. Save answers as you go so you can reuse them later instead of redoing work.",
         continueLabel: "Next idea",
       },
@@ -133,7 +145,7 @@ const QUIZZES: QuizDefinition[] = [
         kind: "info-card",
         id: "dp-topic-card-2",
         prompt: "Two friendly styles",
-        eyebrow: "Idea card",
+        eyebrow: "Modes",
         body: "Memoization (top‑down): write a recursive function and remember results. Tabulation (bottom‑up): fill a small table from simple to harder cases. Both do the same thing: reuse answers.",
         continueLabel: "Let's practice",
       },
@@ -159,6 +171,10 @@ const QUIZZES: QuizDefinition[] = [
           { id: "D", label: "D", text: "Avoid loops and only use recursion" },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Caching function results so later calls return instantly is exactly memoization.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -182,6 +198,10 @@ const QUIZZES: QuizDefinition[] = [
           { id: "D", label: "D", text: "Guess an answer and move on" },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Starting with a clear state and tiny base case sets up every DP solution.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -214,6 +234,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Spotting repeated subproblems and caching them is the core DP habit.",
+        },
       },
     ],
   },
@@ -256,6 +280,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Combining the n−1 and n−2 paths is exactly how the stair DP recurrence works.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -288,6 +316,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Recognising the single-path edges sets up the grid DP base cases perfectly.",
+        },
       },
       {
         kind: "multiple-choice",
@@ -320,6 +352,10 @@ const QUIZZES: QuizDefinition[] = [
           },
         ],
         correctOptionId: "B",
+        correctFeedback: {
+          heading: "Nice work",
+          message: "Storing the answer right after you compute it is what makes memoization shine.",
+        },
       },
     ],
   },

@@ -8,7 +8,7 @@ const testUserSchema = z.union([
   z.string().regex(testUserIdRegex),
 ]);
 
-function shouldUseTestUser(): boolean {
+function isForceTestUser(): boolean {
   const raw = process.env.FORCE_TEST_USER;
   if (raw === undefined) {
     return false;
@@ -27,17 +27,21 @@ function resolveTestUserId(): string | undefined {
   resolved = true;
   loadLocalEnv();
 
-  if (!shouldUseTestUser()) {
+  if (isForceTestUser()) {
+    const id = testUserSchema.parse(process.env.TEST_USER);
+    if (id === undefined) {
+      const erroressage =
+        "testUserId: TEST_USER environment variable is not set";
+      console.error(erroressage);
+      throw new Error(erroressage);
+    }
+    console.log("testUserId: running as test user");
+    cachedTestUserId = id;
+    return cachedTestUserId;
+  } else {
     cachedTestUserId = undefined;
     return cachedTestUserId;
   }
-
-  const id = testUserSchema.parse(process.env.TEST_USER);
-  if (id !== undefined) {
-    console.log("testUserId: running as test user");
-  }
-  cachedTestUserId = id;
-  return cachedTestUserId;
 }
 
 export function isTestUser(): boolean {
