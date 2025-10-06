@@ -9,8 +9,8 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
-import { goto, invalidateAll } from '$app/navigation';
-import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 	import { onDestroy } from 'svelte';
 
@@ -32,7 +32,8 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
-	const SYNC_ERROR_MESSAGE = "We couldn't save your latest progress. Check your connection and try again.";
+	const SYNC_ERROR_MESSAGE =
+		"We couldn't save your latest progress. Check your connection and try again.";
 	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState = $state<PlanItemState | null>(data.planItemState ?? null);
 	let completionSyncError = $state<string | null>(null);
@@ -81,7 +82,9 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 			if (resolvedStatus === 'correct') {
 				return question.correctFeedback;
 			}
-			const correctOption = question.options.find((option) => option.id === question.correctOptionId);
+			const correctOption = question.options.find(
+				(option) => option.id === question.correctOptionId
+			);
 			return {
 				heading: dontKnow ? 'No worries' : "Let's review",
 				message: dontKnow
@@ -104,7 +107,11 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 	}
 
 	function cloneQuizState(state: PlanItemState): { base: PlanItemState; quiz: PlanItemQuizState } {
-		const existingQuiz = state.quiz ?? { lastQuestionIndex: undefined, questions: {}, serverCompletedAt: undefined };
+		const existingQuiz = state.quiz ?? {
+			lastQuestionIndex: undefined,
+			questions: {},
+			serverCompletedAt: undefined
+		};
 		const clonedQuiz: PlanItemQuizState = {
 			lastQuestionIndex: existingQuiz.lastQuestionIndex,
 			questions: { ...existingQuiz.questions },
@@ -161,20 +168,20 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		}, options);
 	}
 
-	async function persistLastQuestionIndex(index: number, options?: SessionUpdateOptions): Promise<void> {
+	async function persistLastQuestionIndex(
+		index: number,
+		options?: SessionUpdateOptions
+	): Promise<void> {
 		const questionId = getQuestionId(index);
-		await persistQuizState(
-			(state, quizState) => {
-				quizState.lastQuestionIndex = index;
-				if (questionId) {
-					quizState.lastQuestionId = questionId;
-				} else {
-					delete quizState.lastQuestionId;
-				}
-				return state;
-			},
-			options
-		);
+		await persistQuizState((state, quizState) => {
+			quizState.lastQuestionIndex = index;
+			if (questionId) {
+				quizState.lastQuestionId = questionId;
+			} else {
+				delete quizState.lastQuestionId;
+			}
+			return state;
+		}, options);
 	}
 
 	function mergeQuestionState(
@@ -250,16 +257,15 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		let nextIndex = currentIndex;
 		let pointerDefined = false;
 		if (quizState.lastQuestionId) {
-			const idMatch = quiz.questions.findIndex((question) => question.id === quizState.lastQuestionId);
+			const idMatch = quiz.questions.findIndex(
+				(question) => question.id === quizState.lastQuestionId
+			);
 			if (idMatch >= 0) {
 				nextIndex = idMatch;
 			}
 			pointerDefined = true;
 		} else if (typeof quizState.lastQuestionIndex === 'number') {
-			nextIndex = Math.min(
-				Math.max(quizState.lastQuestionIndex, 0),
-				nextAttempts.length - 1
-			);
+			nextIndex = Math.min(Math.max(quizState.lastQuestionIndex, 0), nextAttempts.length - 1);
 			pointerDefined = true;
 		}
 		if (!pointerDefined && firstPendingIndex >= 0 && firstPendingIndex > nextIndex) {
@@ -338,7 +344,6 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		}
 		const target = attempts[index];
 		if (target && (target.status !== 'pending' || target.seen)) {
-
 			currentIndex = index;
 			void persistLastQuestionIndex(index, { sync: false });
 		}
@@ -349,7 +354,11 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		if (!attempt || attempt.locked) {
 			return;
 		}
-		updateAttempt(currentIndex, (prev) => ({ ...prev, selectedOptionId: optionId, dontKnow: false }));
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			selectedOptionId: optionId,
+			dontKnow: false
+		}));
 	}
 
 	async function handleMultipleSubmit(optionId: string) {
@@ -377,8 +386,6 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 			firstViewedAt
 		}));
 
-
-
 		completionSyncError = null;
 		try {
 			await persistQuestionState(
@@ -404,24 +411,24 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		if (!question) {
 			return;
 		}
-	const attempt = attempts[currentIndex] ?? createInitialAttempt();
-	const now = attempt.firstViewedAt ?? new Date();
-	updateAttempt(currentIndex, (prev) => ({
-		...prev,
-		showHint: true,
-		seen: true,
-		firstViewedAt: prev.firstViewedAt ?? now
-	}));
+		const attempt = attempts[currentIndex] ?? createInitialAttempt();
+		const now = attempt.firstViewedAt ?? new Date();
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			showHint: true,
+			seen: true,
+			firstViewedAt: prev.firstViewedAt ?? now
+		}));
 
-	void persistQuestionState(
-		question.id,
-		{
-			hintUsed: true,
-			firstViewedAt: now
-		},
-		{ sync: false }
-	);
-}
+		void persistQuestionState(
+			question.id,
+			{
+				hintUsed: true,
+				firstViewedAt: now
+			},
+			{ sync: false }
+		);
+	}
 
 	async function handleDontKnow() {
 		const question = getQuestionByIndex(currentIndex);
@@ -432,16 +439,16 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		const attempt = attempts[currentIndex] ?? createInitialAttempt();
 		const firstViewedAt = attempt.firstViewedAt ?? now;
 		const feedback = buildFeedback(question, 'incorrect', attempt.selectedOptionId, true);
-	updateAttempt(currentIndex, (prev) => ({
-		...prev,
-		status: 'incorrect',
-		locked: true,
-		showContinue: true,
-		feedback,
-		dontKnow: true,
-		answeredAt: now,
-		firstViewedAt
-	}));
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			status: 'incorrect',
+			locked: true,
+			showContinue: true,
+			feedback,
+			dontKnow: true,
+			answeredAt: now,
+			firstViewedAt
+		}));
 
 		completionSyncError = null;
 		try {
@@ -450,7 +457,10 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 				{
 					status: 'incorrect',
 					dontKnow: true,
-					selectedOptionId: question.kind === 'multiple-choice' ? attempt.selectedOptionId ?? undefined : undefined,
+					selectedOptionId:
+						question.kind === 'multiple-choice'
+							? (attempt.selectedOptionId ?? undefined)
+							: undefined,
 					firstViewedAt,
 					answeredAt: now
 				},
@@ -460,7 +470,7 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 			console.error("Failed to sync 'don't know' submission", error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
 		}
-}
+	}
 
 	function handleTypeInput(value: string) {
 		const attempt = attempts[currentIndex];
@@ -491,18 +501,17 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		const firstViewedAt = attempt.firstViewedAt ?? now;
 		const feedback = buildFeedback(question, status, null, false);
 
-	updateAttempt(currentIndex, (prev) => ({
-		...prev,
-		value: trimmed,
-		status,
-		locked: true,
-		showContinue: true,
-		feedback,
-		dontKnow: false,
-		answeredAt: now,
-		firstViewedAt
-	}));
-
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			value: trimmed,
+			status,
+			locked: true,
+			showContinue: true,
+			feedback,
+			dontKnow: false,
+			answeredAt: now,
+			firstViewedAt
+		}));
 
 		completionSyncError = null;
 		try {
@@ -533,35 +542,35 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		const attempt = attempts[index] ?? createInitialAttempt();
 		const now = new Date();
 		const firstViewedAt = attempt.firstViewedAt ?? now;
-	updateAttempt(index, (prev) => ({
-		...prev,
-		status: 'correct',
-		locked: true,
-		showContinue: false,
-		feedback: null,
-		dontKnow: false,
-		answeredAt: now,
-		firstViewedAt
-	}));
+		updateAttempt(index, (prev) => ({
+			...prev,
+			status: 'correct',
+			locked: true,
+			showContinue: false,
+			feedback: null,
+			dontKnow: false,
+			answeredAt: now,
+			firstViewedAt
+		}));
 
 		completionSyncError = null;
-	try {
-		await persistQuestionState(
-			question.id,
-			{
-				status: 'correct',
-				dontKnow: false,
-				firstViewedAt,
-				answeredAt: now
-			},
-			{ sync: true, markInProgress: true }
-		);
-	} catch (error) {
-		console.error('Failed to sync info card progression', error);
-		completionSyncError = SYNC_ERROR_MESSAGE;
-		updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
-		return;
-	}
+		try {
+			await persistQuestionState(
+				question.id,
+				{
+					status: 'correct',
+					dontKnow: false,
+					firstViewedAt,
+					answeredAt: now
+				},
+				{ sync: true, markInProgress: true }
+			);
+		} catch (error) {
+			console.error('Failed to sync info card progression', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+			return;
+		}
 
 		try {
 			const advanced = await advanceFlow();
@@ -574,27 +583,27 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 			completionSyncError = SYNC_ERROR_MESSAGE;
 			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
 		}
-}
-
-async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
-	const completedAt = new Date();
-	try {
-		await sessionStateStore.markStatus(
-			data.planItem.id,
-			'completed',
-			{
-				completedAt
-			},
-			{ quizCompletion: { quizId: quiz.id } }
-		);
-		completionSyncError = null;
-		return true;
-	} catch (error) {
-		console.error('Failed to persist quiz completion state', error);
-		completionSyncError = SYNC_ERROR_MESSAGE;
-		return false;
 	}
-}
+
+	async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
+		const completedAt = new Date();
+		try {
+			await sessionStateStore.markStatus(
+				data.planItem.id,
+				'completed',
+				{
+					completedAt
+				},
+				{ quizCompletion: { quizId: quiz.id } }
+			);
+			completionSyncError = null;
+			return true;
+		} catch (error) {
+			console.error('Failed to persist quiz completion state', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			return false;
+		}
+	}
 
 	async function advanceFlow(): Promise<boolean> {
 		if (currentIndex < quiz.questions.length - 1) {
@@ -605,25 +614,24 @@ async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
 			return true;
 		}
 
-
 		await persistLastQuestionIndex(currentIndex, { sync: true });
-        const synced = await finalizeCompletion('manual');
-        if (synced && typeof window !== 'undefined') {
-            await invalidateAll();
-            goto(`/code/${data.sessionId}`, { invalidateAll: true });
-            return true;
-        }
+		const synced = await finalizeCompletion('manual');
+		if (synced && typeof window !== 'undefined') {
+			await invalidateAll();
+			goto(`/code/${data.sessionId}`, { invalidateAll: true });
+			return true;
+		}
 		return synced;
 	}
 
 	async function retryFinalize(): Promise<void> {
 		completionSyncError = null;
 
-    const synced = await finalizeCompletion('manual');
-    if (synced && typeof window !== 'undefined') {
-        await invalidateAll();
-        goto(`/code/${data.sessionId}`, { invalidateAll: true });
-    }
+		const synced = await finalizeCompletion('manual');
+		if (synced && typeof window !== 'undefined') {
+			await invalidateAll();
+			goto(`/code/${data.sessionId}`, { invalidateAll: true });
+		}
 	}
 
 	async function handleAdvanceFromAttempt() {
@@ -708,7 +716,9 @@ async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
 
 <div class="mx-auto flex w-full max-w-4xl flex-col gap-3 px-4 py-4 md:py-4">
 	{#if completionSyncError}
-		<div class="flex items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+		<div
+			class="flex items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+		>
 			<span class="flex-1">{completionSyncError}</span>
 			<Button size="sm" variant="outline" onclick={() => void retryFinalize()} class="shrink-0">
 				Retry save
@@ -780,7 +790,9 @@ async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
 				Take a break?
 			</h2>
 			<p class="text-sm leading-relaxed text-muted-foreground">
-				You still have {remainingCount} unanswered {remainingCount === 1 ? 'question' : 'questions'}. Your progress is saved — hop back in whenever you're ready.
+				You still have {remainingCount} unanswered {remainingCount === 1
+					? 'question'
+					: 'questions'}. Your progress is saved — hop back in whenever you're ready.
 			</p>
 		</div>
 		<div
