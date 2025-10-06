@@ -1,7 +1,5 @@
 # Spark — Product & Architecture Specification (SwiftUI + SvelteKit)
 
-IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
-
 ## 0) Monorepo Layout & Tooling Assumptions
 
 - `proto/` — Source of truth for Protocol Buffer definitions shared by client and server.
@@ -16,10 +14,14 @@ IMPORTANT: detailsed UI flows is defined in `docs/FLOW.md` file.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
 
-## 1) Product Goal
+## 1) Product Goals
 
-- Help GCSE students learn from their own study materials by turning photos of notes, textbooks, and past papers into short quizzes and flashcards, then summarizing progress after each quiz.
-- Focus: GCSE Triple Science (Biology, Chemistry, Physics) across AQA, Edexcel, OCR. Provide fast feedback loops: immediate acknowledgement that generation started and continuous progress updates via Firestore.
+- Spark is an effort comprising two apps:
+  - Spark Quiz (GCSE Triple Science helper)
+    - Help GCSE students learn from their own study materials by turning photos of notes, textbooks, and past papers into short quizzes and flashcards, then summarizing progress after each quiz.
+    - Focus: GCSE Triple Science (Biology, Chemistry, Physics) across AQA, Edexcel, OCR. Provide fast feedback loops: immediate acknowledgement that generation started and continuous progress updates via Firestore.
+  - Spark Code (British Informatics Olympiad prep)
+    - Help students prepare for the British Informatics Olympiad (BIO) with coding practice sessions and problems delivered via the web app (e.g., under `/code`), synced in real-time with Firestore.
 
 **Non-Goals**
 
