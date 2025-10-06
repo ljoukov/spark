@@ -3,7 +3,7 @@ import { getUserQuiz } from '$lib/server/quiz/repo';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
-	const { session, userId } = await parent();
+	const { session, userId, sessionState } = await parent();
 	const planItem = session.plan.find((item) => item.id === params.id);
 	if (!planItem || planItem.kind !== 'quiz') {
 		throw error(404, { message: 'Quiz not found in session plan' });
@@ -18,6 +18,8 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		planItem,
 		quiz,
 		sessionId: session.id,
-		userId
+		userId,
+		sessionState,
+		planItemState: sessionState.items[planItem.id] ?? null
 	};
 };
