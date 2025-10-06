@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { getContext, onDestroy, onMount } from 'svelte';
+	import { getContext, onDestroy } from 'svelte';
+	import type { PageData } from './$types';
+	import type { PlanItemState, UserStats } from '@spark/schemas';
+	import { createSessionStateStore } from '$lib/client/sessionState';
+	import { createUserStatsStore } from '$lib/client/user';
+	import { browser } from '$app/environment';
 
 	type UserStore = {
 		subscribe: (
@@ -19,16 +24,7 @@
 		});
 	}
 
-	onDestroy(() => {
-		unsubscribe?.();
-	});
-
-	const stats = [
-		{ label: 'XP', value: '1,420' },
-		{ label: 'Level', value: '7' },
-		{ label: 'Days 🔥', value: '12' },
-		{ label: 'Solved', value: '86' }
-	];
+	let { data }: { data: PageData } = $props();
 
 	type TimelineStep = {
 		key: string;
@@ -37,107 +33,97 @@
 		meta?: string;
 		description: string;
 		href: string;
-		done?: boolean;
+		status: PlanItemState['status'];
 	};
 
-	const STORAGE_KEY = 'spark-code-progress';
+	const userStatsStore = createUserStatsStore(data.userId);
+	let liveStats = $state<UserStats | null>(data.stats ?? null);
+	let stopUserStats = () => {};
+	if (browser) {
+		stopUserStats = userStatsStore.subscribe((value) => {
+			liveStats = value;
+		});
+	}
 
-	const focus = {
-		eyebrow: "Today's plan",
-		topic: 'DP easy win sprint',
-		summary:
-			'Warm up, explore the coin change transition, solve two easy DP problems, then seal it with a review quiz.'
-	};
+	const fallbackStats = Object.freeze([
+		{ label: 'XP', value: '—' },
+		{ label: 'Level', value: '—' },
+		{ label: 'Days 🔥', value: '—' },
+		{ label: 'Solved', value: '—' }
+	]);
 
-	const problems = [
-		{
-			key: 'problem-coin-change-ways',
-			slug: 'coin-change-ways',
-			title: 'Coin Change Ways',
-			icon: '🪙',
-			meta: 'DP • Easy',
-			description: 'Count combinations to reach a target amount with unlimited coins.'
-		},
-		{
-			key: 'problem-decode-ways',
-			slug: 'decode-ways',
-			title: 'Decode Ways',
-			icon: '🔐',
-			meta: 'DP • Easy',
-			description: 'Turn digit strings into letter counts with memoized recursion.'
+	function buildStats(source: UserStats | null | undefined) {
+		if (!source) {
+			return fallbackStats;
 		}
-	] as const;
+		return [
+			{ label: 'XP', value: source.xp.toLocaleString() },
+			{ label: 'Level', value: source.level.toLocaleString() },
+			{ label: 'Days 🔥', value: source.streakDays.toLocaleString() },
+			{ label: 'Solved', value: source.solvedCount.toLocaleString() }
+		];
+	}
 
-	const baseTimeline: TimelineStep[] = [
-		{
-			key: 'warmup',
-			title: 'Warm-up quiz',
-			icon: '🔥',
-			meta: '3 quick checks',
-			description: 'Get the DP basics firing before you code.',
-			href: '/code/quiz/dp-warmup-quiz'
-		},
-		{
-			key: 'topic',
-			title: 'Topic deck',
-			icon: '🧠',
-			meta: '5 guided steps',
-			description: 'Two info cards and three micro-quizzes on the coin change pattern.',
-			href: '/code/quiz/dp-topic-deck'
-		},
-		...problems.map((problem, index) => ({
-			key: problem.key,
-			title: `${index === 0 ? 'Practice' : 'Challenge'} · ${problem.title}`,
-			icon: problem.icon,
-			meta: problem.meta,
-			description: problem.description,
-			href: `/code/p/${problem.slug}`
-		})),
-		{
-			key: 'review',
-			title: 'Final review quiz',
-			icon: '✅',
-			meta: '3 questions',
-			description: 'Confirm the pattern sticks before tackling harder sets.',
-			href: '/code/quiz/dp-review-quiz'
-		}
-	];
-
-	const validKeys = new Set(baseTimeline.map((step) => step.key));
-
-	let completedKeys = $state<string[]>([]);
-
-	onMount(() => {
-		if (typeof window === 'undefined') {
-			return;
-		}
-
-		try {
-			const raw = window.sessionStorage.getItem(STORAGE_KEY);
-			if (!raw) {
-				return;
-			}
-			const parsed: unknown = JSON.parse(raw);
-			if (Array.isArray(parsed)) {
-				completedKeys = parsed.filter(
-					(entry): entry is string => typeof entry === 'string' && validKeys.has(entry)
-				);
-			}
-		} catch (error) {
-			console.error('Unable to load stored progress', error);
-			completedKeys = [];
-		}
+	let stats = $state(buildStats(data.stats));
+	$effect(() => {
+		stats = buildStats(liveStats ?? data.stats);
 	});
 
-	const completedSet = $derived(new Set(completedKeys));
+	const sessionId = $derived(data.session.id);
+	const sessionPlan = $derived(data.session.plan);
+
+	const planEyebrow = $derived(() => `Session · ${sessionId}`);
+	const planTopic = $derived(() => data.session.plan[0]?.title ?? 'Your session plan');
+	const planSummary = $derived(
+		() =>
+			data.session.plan[0]?.summary ??
+			data.session.plan[0]?.description ??
+			'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
+	);
+
+	const sessionStateStore = createSessionStateStore(data.userId, data.session.id);
+	let sessionStateItems = $state<Record<string, PlanItemState>>({});
+	const stopSessionStateSubscription = sessionStateStore.subscribe((value) => {
+		sessionStateItems = value.items;
+	});
+
+	onDestroy(() => {
+		unsubscribe?.();
+		stopSessionStateSubscription();
+		sessionStateStore.stop();
+		stopUserStats();
+		userStatsStore.stop();
+	});
+
+	const baseTimeline = $derived(
+		sessionPlan.map<TimelineStep>((item) => {
+			const icon = item.icon ?? (item.kind === 'quiz' ? '📝' : '🧠');
+			const meta = item.meta ?? (item.kind === 'quiz' ? 'Quiz' : 'Problem');
+			const description = item.summary ?? item.description ?? '';
+			const href =
+				item.kind === 'quiz'
+					? `/code/${sessionId}/quiz/${item.id}`
+					: `/code/${sessionId}/p/${item.id}`;
+			return {
+				key: item.id,
+				title: item.title,
+				icon,
+				meta,
+				description,
+				href,
+				status: 'not_started'
+			};
+		})
+	);
+
 	const timeline = $derived(
 		baseTimeline.map((step) => ({
 			...step,
-			done: completedSet.has(step.key)
+			status: sessionStateItems[step.key]?.status ?? 'not_started'
 		}))
 	);
 	const firstIncomplete = $derived(
-		timeline.find((step) => !step.done) ?? timeline[timeline.length - 1]!
+		timeline.find((step) => step.status !== 'completed') ?? timeline[timeline.length - 1]!
 	);
 	const startHref = $derived(firstIncomplete.href);
 	const startLabel = $derived(firstIncomplete.title);
@@ -183,9 +169,9 @@
 
 	<div class="plan-card">
 		<header class="plan-header">
-			<p class="plan-eyebrow">{focus.eyebrow}</p>
-			<h2>{focus.topic}</h2>
-			<p class="plan-summary">{focus.summary}</p>
+			<p class="plan-eyebrow">{planEyebrow}</p>
+			<h2>{planTopic}</h2>
+			<p class="plan-summary">{planSummary}</p>
 		</header>
 		<div class="plan-body">
 			{#each timeline as item, index}
@@ -194,11 +180,12 @@
 					href={item.href}
 					data-first={index === 0}
 					data-last={index === timeline.length - 1}
-					data-done={item.done}
+					data-done={item.status === 'completed'}
+					data-status={item.status}
 				>
 					<div class="timeline-hit">
-						<div class="timeline-point" data-done={item.done}>
-							<span class="timeline-circle" data-done={item.done}></span>
+						<div class="timeline-point" data-done={item.status === 'completed'}>
+							<span class="timeline-circle" data-done={item.status === 'completed'}></span>
 						</div>
 						<div class="timeline-body">
 							<span class="timeline-emoji" aria-hidden="true">

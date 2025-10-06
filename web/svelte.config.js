@@ -18,6 +18,7 @@ const config = {
 			config(config) {
 				const references = config.references ?? [];
 				references.push({ path: '../packages/llm' });
+				references.push({ path: '../packages/schemas' });
 				config.references = references;
 				return config;
 			}

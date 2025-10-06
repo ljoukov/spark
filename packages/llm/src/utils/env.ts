@@ -14,7 +14,7 @@ export function loadLocalEnv(): void {
 
 export function loadEnvFromFile(
   filePath: string,
-  { override = false }: { override?: boolean } = {}
+  { override = false }: { override?: boolean } = {},
 ): void {
   let content: string;
   try {
@@ -45,7 +45,7 @@ function parseEnvLine(line: string): [string, string] | null {
   }
 
   const match = trimmed.match(
-    /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_\-.]*)\s*=\s*(.*)$/u
+    /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_\-.]*)\s*=\s*(.*)$/u,
   );
   if (!match) {
     return null;

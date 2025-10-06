@@ -11,6 +11,7 @@
 - API logic lives under `web/src/routes/api/*`.
 - Web app lives under `web/src/routes/app`
 - Admin dashboard lives under `web/src/routes/admin`
+- `packages/schemas/` — shared Zod schemas + TypeScript types for Firestore docs (sessions, session state, user stats). Browser-safe and imported by both `web` and `eval` workspaces.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
 
@@ -38,7 +39,7 @@
   - Numeric answers include units, tolerance, significant figures checks.
   - Free-text answers graded server-side with board-aligned rubric; MCQ/TF handled on device with key from Firestore.
 - Progress & status: All long-running jobs acknowledged with `202 Accepted` and tracked in Firestore (`requests/{jobId}` + mirrored `client.events[jobId]`). Clients subscribe for live updates and handle TTL expiry.
-- Validation: Every external payload validated with `zod` (SvelteKit backend) or Swift structs + generated Proto validation helpers. No `as any`; normalize error responses to structured JSON (or proto errors when binary route is used).
+- Validation: Every external payload validated with `zod` (SvelteKit backend) or Swift structs + generated Proto validation helpers. No `as any`; normalize error responses to structured JSON (or proto errors when binary route is used). Shared Firestore schemas live in `packages/schemas` so `web` and `eval` consume the same runtime validation.
 - Internationalization not in scope for v1; all text in UK English.
 
 ## 3) Platform Architecture Overview
@@ -129,6 +130,11 @@ name of the oneof in `SparkApiRequestProto.request`.
 - `uploads/{uid}/{uploadId}`: metadata about raw assets (filename, storagePath, subject guess, status, createdAt, expiresAt).
 - `requests/{jobId}`: canonical job record with type (`generate`, `check_answer`, `summarize`), status enum, timestamps, error field, payload hashes.
 - `client/{uid}` document containing `events` map keyed by `jobId` (compact snapshots mirroring job status + minimal payload refs). TTL clean-up routine prunes old entries.
+- `spark/{uid}` user doc: canonical profile plus `currentSessionId?: string` and `stats?: { xp, level, streakDays, solvedCount }`. Stats are read-only client side; server mutates during scoring flows.
+- `spark/{uid}/sessions/{sessionId}`: server-only session plans. Each document stores `{ id, createdAt: Timestamp, plan: PlanItem[] }` where `PlanItem` is either a quiz (`{ id, kind: 'quiz', title, summary?, icon?, meta? }`) or problem (`{ id, kind: 'problem', title, summary?, icon?, meta?, difficulty?, topic? }`). Session IDs are short human-readable slugs used in URLs. Only SvelteKit server routes read/write this collection; the client receives sessions through the authenticated layout load.
+- `spark/{uid}/quiz/{quizId}`: quiz definitions delivered to the `/code` experience. Shape follows `QuizDefinitionSchema` (id, title, optional metadata, and an ordered array of questions). Written by server tooling; client never writes or reads directly.
+- `spark/{uid}/code/{problemId}`: code problem metadata (slug, summary, DP notes, examples, solutions) scoped to the user. Mirrors the structure in `CodeProblemSchema` and is used by the problem detail page.
+- `spark/{uid}/state/{sessionId}`: client-readable real-time state for the active session. Shape `{ sessionId, items: Record<planItemId, { status: 'not_started' | 'in_progress' | 'completed', score?, startedAt?, completedAt? }>, lastUpdatedAt }`. Clients subscribe directly; writes validated via `@spark/schemas`.
 - `quizzes/{quizId}`: quiz metadata; subcollection `questions/{questionId}` storing prompt, answer, explanation, type, rubric, board tagging.
 - `attempts/{uid}/{attemptId}`: per question attempts with grading outcome, rubric reference, numeric tolerance info.
 - `summary/{uid}/current`: latest 2–3 bullet summary plus timestamp and underlying attempt refs.

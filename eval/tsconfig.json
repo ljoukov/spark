@@ -8,11 +8,13 @@
 		"forceConsistentCasingInFileNames": true,
 		"skipLibCheck": true,
 		"types": ["node"],
-			"baseUrl": ".",
-			"paths": {
-				"@spark/llm": ["../packages/llm/src/index.ts"],
-				"@spark/llm/*": ["../packages/llm/src/*"]
-			}
+		"baseUrl": ".",
+		"paths": {
+			"@spark/llm": ["../packages/llm/src/index.ts"],
+			"@spark/llm/*": ["../packages/llm/src/*"],
+			"@spark/schemas": ["../packages/schemas/src/index.ts"],
+			"@spark/schemas/*": ["../packages/schemas/src/*"]
+		}
 		},
 	"include": ["src/**/*", "tests/**/*"]
 }

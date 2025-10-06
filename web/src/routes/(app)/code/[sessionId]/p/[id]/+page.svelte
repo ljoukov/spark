@@ -20,6 +20,8 @@
 		PythonRunnerWorkerMessage
 	} from '$lib/workers/python-runner.types';
 	import type { PageData } from './$types';
+	import { createSessionStateStore } from '$lib/client/sessionState';
+	import type { PlanItemState } from '@spark/schemas';
 
 	type HashAlgorithm = 'sha256' | 'sha512';
 
@@ -68,6 +70,13 @@
 
 	let problem = data.problem;
 	let markdownHtml = data.problem.markdownHtml;
+	const sessionStateStore = createSessionStateStore(data.userId, data.sessionId);
+	let planItemState: PlanItemState | null = null;
+	let hasMarkedStart = false;
+	let completionRecorded = false;
+	const stopSessionState = sessionStateStore.subscribe((value) => {
+		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+	});
 	const DEFAULT_CODE = 'print("hello world :)")';
 	let rightText = DEFAULT_CODE;
 	let maximizedPane: PaneSide | null = null;
@@ -302,6 +311,16 @@
 		stderrChunks = [...stderrChunks, 'Execution stopped by user.\n'];
 	}
 
+	function handleSubmitClick() {
+		if (completionRecorded) {
+			return;
+		}
+		completionRecorded = true;
+		void sessionStateStore.markStatus(data.planItem.id, 'completed', {
+			completedAt: new Date()
+		});
+	}
+
 	function handleWorkerMessage(message: PythonRunnerWorkerMessage) {
 		if (!activeRunId || message.requestId !== activeRunId) {
 			return;
@@ -485,6 +504,10 @@
 		runStartedAt = 0;
 	}
 
+	$: if (planItemState?.status === 'completed' && !completionRecorded) {
+		completionRecorded = true;
+	}
+
 	onMount(() => {
 		let subscription: IDisposable | null = null;
 		let themeObserver: MutationObserver | null = null;
@@ -493,6 +516,17 @@
 		let keybindingDisposables: IDisposable[] = [];
 
 		startPyodidePreload();
+		if (!hasMarkedStart) {
+			const status = planItemState?.status ?? 'not_started';
+			if (status === 'not_started') {
+				hasMarkedStart = true;
+				void sessionStateStore.markStatus(data.planItem.id, 'in_progress', {
+					startedAt: new Date()
+				});
+			} else {
+				hasMarkedStart = true;
+			}
+		}
 
 		const subscribeUndoRedoShortcuts = (monaco: Monaco, editor: CodeEditor | null) => {
 			if (!editor) {
@@ -616,6 +650,8 @@
 			cleanupPreloadWorker();
 		}
 		isPyodideLoading = false;
+		stopSessionState();
+		sessionStateStore.stop();
 	});
 
 	function applyLayout(layout: readonly number[]) {
@@ -708,7 +744,9 @@
 				<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[1]} minSize={0}>
 					<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 						<div class="flex items-center justify-between gap-2 pl-2">
-						<div class="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+							<div
+								class="flex min-w-0 flex-1 items-center overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+							>
 								<Tooltip.Root>
 									<Tooltip.Trigger>
 										{#snippet child({ props })}
@@ -733,7 +771,7 @@
 									</Tooltip.Trigger>
 									<Tooltip.Content>{formatTooltipLabel}</Tooltip.Content>
 								</Tooltip.Root>
-								<div class="flex items-center gap-2 ml-2 sm:ml-4">
+								<div class="ml-2 flex items-center gap-2 sm:ml-4">
 									<Tooltip.Root>
 										<Tooltip.Trigger>
 											{#snippet child({ props })}
@@ -777,8 +815,10 @@
 													type: 'button' as const,
 													class: submitButtonClasses,
 													'aria-label': submitTooltipLabel,
-													disabled: isRunning,
-													'aria-disabled': isRunning ? true : undefined
+													disabled: isRunning || completionRecorded,
+													'aria-disabled': isRunning || completionRecorded ? true : undefined,
+													onclick: handleSubmitClick,
+													'aria-pressed': completionRecorded ? true : undefined
 												})}
 												<button {...mergedProps}>
 													<span class="hidden sm:inline">Submit</span>
