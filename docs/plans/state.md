@@ -6,7 +6,7 @@ Scope: design and implementation plan only (no code changes yet). Source of trut
 
 ## Overview
 
-- Introduce per-user Sessions in Firestore under `spark/{userId}/sessions/{sessionId}` with `id` (human-readable), `createdAt`, and a `plan` of items (quiz or problem).
+- Introduce per-user Sessions in Firestore under `spark/{userId}/sessions/{sessionId}` with `id` (human-readable), `title`, `createdAt`, and a `plan` of items (quiz or problem).
 - Track current session per user in `spark/{userId}.currentSessionId`; if empty or invalid, select the latest by `createdAt`.
 - Client reads/writes per-session realtime state at `spark/{userId}/state/{sessionId}` (only state is client-accessible; sessions are server-only).
 - Quiz definitions live under `spark/{userId}/sessions/{sessionId}/quiz/{quizId}` and coding problems under `spark/{userId}/sessions/{sessionId}/code/{problemId}`; only the server accesses these docs.
@@ -38,7 +38,7 @@ Note: We are deliberately keeping schemas separate from any LLM deps to remain b
   - `stats?: { xp: number, level: number, streakDays: number, solvedCount: number }`
   - Other existing user fields remain unchanged.
 - `spark/{userId}/sessions/{sessionId}` (document)
-  - `SessionSchema`: `{ id: string, createdAt: Timestamp, plan: PlanItem[] }` where `id` is the human-readable session identifier used in URLs and stored as the document ID.
+  - `SessionSchema`: `{ id: string, title: string, createdAt: Timestamp, plan: PlanItem[] }` where `id` is the human-readable session identifier used in URLs and stored as the document ID.
   - `PlanItem`: `{ id: string, kind: 'quiz' | 'problem', title: string }`
   - Note: Ensure plan item shape matches what `/code` currently expects so URLs remain stable.
 - `spark/{userId}/state/{sessionId}` (document)
@@ -70,7 +70,7 @@ All Firestore reads/writes validated with `@spark/schemas` using Zod; normalize 
   - Uses `getTestUserId()` for the single allowed user.
     - Import from `packages/llm` (shared server package), to be renamed to `packages/shared-server` later.
   - Creates a fixed session with a simple static plan for now (no LLM). The client never embeds plans; it only reads from Firestore.
-  - Builds `Session` with `id` (generated human-readable short id), `createdAt` (server timestamp), and `plan`.
+  - Builds `Session` with `id` (generated human-readable short id), `title`, `createdAt` (server timestamp), and `plan`.
   - Writes via `saveSession()` and sets `currentSessionId` on the user doc.
   - Guard: exit unless operating on the test user.
   - Add npm script in `eval`: `"session:generate": "tsx src/code/session/generateTestSession.ts"`.
