@@ -13,12 +13,14 @@
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "session:generate": "FORCE_TEST_USER=true tsx src/code/session/generateTestSession.ts"
   },
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
     "commander": "^14.0.1",
-    "firebase-admin": "^13.5.0"
+    "firebase-admin": "^13.5.0",
+    "@spark/schemas": "file:../packages/schemas"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

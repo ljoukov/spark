@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
@@ -27,6 +28,8 @@
 	setContext('spark-code:user', { subscribe: userStore.subscribe });
 
 	let user = $state<ClientUser | null>(initialUser);
+	const sessionId = $derived($page.params.sessionId ?? null);
+	const sessionHomeHref = $derived(sessionId ? `/code/${sessionId}` : '/code');
 	let theme = $state<ThemePreference>('auto');
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
@@ -261,7 +264,7 @@
 <div class="app-page">
 	<div class="app-shell">
 		<header class="app-header">
-			<a class="app-brand" href="/code">
+			<a class="app-brand" href={sessionHomeHref}>
 				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
 				<div class="app-brand__text">
 					<span class="app-brand__title">Spark Code</span>

@@ -9,6 +9,7 @@ Scope: design and implementation plan only (no code changes yet). Source of trut
 - Introduce per-user Sessions in Firestore under `spark/{userId}/sessions/{sessionId}` with `id` (human-readable), `createdAt`, and a `plan` of items (quiz or problem).
 - Track current session per user in `spark/{userId}.currentSessionId`; if empty or invalid, select the latest by `createdAt`.
 - Client reads/writes per-session realtime state at `spark/{userId}/state/{sessionId}` (only state is client-accessible; sessions are server-only).
+- Quiz definitions live under `spark/{userId}/quiz/{quizId}` and coding problems under `spark/{userId}/code/{problemId}`; only the server accesses these docs.
 - Add read-only user `stats` to `spark/{userId}`: `xp`, `level`, `streakDays`, `solvedCount`.
 - Replace hardcoded plan in `/code` with server-provided session and make routes bookmarkable: `/code/[sessionId]`, `/code/[sessionId]/quiz/[id]`, `/code/[sessionId]/p/[id]`.
 - Provide a trivial session generation script for the test user only; it writes a fixed session (no LLM) into Firestore and sets `currentSessionId`.
@@ -38,7 +39,7 @@ Note: We are deliberately keeping schemas separate from any LLM deps to remain b
   - Other existing user fields remain unchanged.
 - `spark/{userId}/sessions/{sessionId}` (document)
   - `SessionSchema`: `{ id: string, createdAt: Timestamp, plan: PlanItem[] }` where `id` is the human-readable session identifier used in URLs and stored as the document ID.
-  - `PlanItem`: `{ id: string, kind: 'quiz' | 'problem', refId: string, title: string }`
+  - `PlanItem`: `{ id: string, kind: 'quiz' | 'problem', title: string }`
   - Note: Ensure plan item shape matches what `/code` currently expects so URLs remain stable.
 - `spark/{userId}/state/{sessionId}` (document)
   - `SessionStateSchema`: `{ sessionId: string, items: Record<planItemId, PlanItemState>, lastUpdatedAt: Timestamp }`
