@@ -72,10 +72,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_body', issues: error.issues }, { status: 400 });
 		}
-		return json({ error: 'invalid_body', message: 'Unable to parse request body as JSON' }, { status: 400 });
+		return json(
+			{ error: 'invalid_body', message: 'Unable to parse request body as JSON' },
+			{ status: 400 }
+		);
 	}
-
-
 
 	let incomingState: PlanItemState;
 	try {
@@ -91,7 +92,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_state', issues: error.issues }, { status: 400 });
 		}
-		return json({ error: 'invalid_state', message: 'Unable to parse plan item state' }, { status: 400 });
+		return json(
+			{ error: 'invalid_state', message: 'Unable to parse plan item state' },
+			{ status: 400 }
+		);
 	}
 
 	const session = await getSession(userId, sessionId);
@@ -107,10 +111,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	let xpAvailable = 0;
 	if (parsedBody.quizCompletion) {
 		if (planItem.kind !== 'quiz') {
-			return json({ error: 'invalid_plan_item', message: 'Plan item is not a quiz' }, { status: 400 });
+			return json(
+				{ error: 'invalid_plan_item', message: 'Plan item is not a quiz' },
+				{ status: 400 }
+			);
 		}
 		if (parsedBody.quizCompletion.quizId !== planItem.id) {
-			return json({ error: 'quiz_mismatch', message: 'quizId must match the plan item id' }, { status: 400 });
+			return json(
+				{ error: 'quiz_mismatch', message: 'quizId must match the plan item id' },
+				{ status: 400 }
+			);
 		}
 		const quiz = await getUserQuiz(userId, sessionId, parsedBody.quizCompletion.quizId);
 		if (!quiz) {
@@ -122,59 +132,59 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const firestore = getFirebaseAdminFirestore();
 	const userDocRef = firestore.collection('spark').doc(userId);
 	const sessionStateDocRef = userDocRef.collection('state').doc(sessionId);
-	const progressDocRef = userDocRef.collection('progress').doc(`quiz:${sessionId}:${parsedBody.planItemId}`);
+	const progressDocRef = userDocRef
+		.collection('progress')
+		.doc(`quiz:${sessionId}:${parsedBody.planItemId}`);
 
-    const result = await firestore.runTransaction(async (tx) => {
-        // Reads must occur before all writes in a transaction.
-        let xpAwarded = 0;
-        let nextStats: UserStats | null = null;
-        let alreadyCompleted = false;
+	const result = await firestore.runTransaction(async (tx) => {
+		// Reads must occur before all writes in a transaction.
+		let xpAwarded = 0;
+		let nextStats: UserStats | null = null;
+		let alreadyCompleted = false;
 
-        // Pre-read for XP awarding if applicable
-        let parsedStats: UserStats | null = null;
-        if (parsedBody.quizCompletion) {
-            const progressSnapshot = await tx.get(progressDocRef);
-            alreadyCompleted = progressSnapshot.exists;
-            if (!alreadyCompleted) {
-                const userSnapshot = await tx.get(userDocRef);
-                const rawStats = userSnapshot.exists ? userSnapshot.data()?.stats ?? {} : {};
-                parsedStats = UserStatsSchema.parse(rawStats ?? {});
-            }
-        }
+		// Pre-read for XP awarding if applicable
+		let parsedStats: UserStats | null = null;
+		if (parsedBody.quizCompletion) {
+			const progressSnapshot = await tx.get(progressDocRef);
+			alreadyCompleted = progressSnapshot.exists;
+			if (!alreadyCompleted) {
+				const userSnapshot = await tx.get(userDocRef);
+				const rawStats = userSnapshot.exists ? (userSnapshot.data()?.stats ?? {}) : {};
+				parsedStats = UserStatsSchema.parse(rawStats ?? {});
+			}
+		}
 
-        // Writes after reads
-        // Ensure document exists, then update nested field path without clobbering the entire items map
-        tx.set(sessionStateDocRef, { sessionId }, { merge: true });
-        tx.update(sessionStateDocRef, {
-            lastUpdatedAt: FieldValue.serverTimestamp(),
-            [`items.${parsedBody.planItemId}`]: incomingState
-        });
+		// Writes after reads
+		// Ensure document exists, then update nested field path without clobbering the entire items map
+		tx.set(sessionStateDocRef, { sessionId }, { merge: true });
+		tx.update(sessionStateDocRef, {
+			lastUpdatedAt: FieldValue.serverTimestamp(),
+			[`items.${parsedBody.planItemId}`]: incomingState
+		});
 
-        if (parsedBody.quizCompletion && !alreadyCompleted) {
-            xpAwarded = xpAvailable;
-            tx.set(progressDocRef, {
-                sessionId,
-                planItemId: parsedBody.planItemId,
-                quizId: parsedBody.quizCompletion.quizId,
-                xpAwarded,
-                createdAt: FieldValue.serverTimestamp()
-            });
+		if (parsedBody.quizCompletion && !alreadyCompleted) {
+			xpAwarded = xpAvailable;
+			tx.set(progressDocRef, {
+				sessionId,
+				planItemId: parsedBody.planItemId,
+				quizId: parsedBody.quizCompletion.quizId,
+				xpAwarded,
+				createdAt: FieldValue.serverTimestamp()
+			});
 
-            if (parsedStats) {
-                nextStats = {
-                    xp: parsedStats.xp + xpAwarded,
-                    level: parsedStats.level,
-                    streakDays: parsedStats.streakDays,
-                    solvedCount: parsedStats.solvedCount + 1
-                };
-                tx.set(userDocRef, { stats: nextStats }, { merge: true });
-            }
-        }
+			if (parsedStats) {
+				nextStats = {
+					xp: parsedStats.xp + xpAwarded,
+					level: parsedStats.level,
+					streakDays: parsedStats.streakDays,
+					solvedCount: parsedStats.solvedCount + 1
+				};
+				tx.set(userDocRef, { stats: nextStats }, { merge: true });
+			}
+		}
 
-        return { xpAwarded, alreadyCompleted, stats: nextStats };
-    });
-
-
+		return { xpAwarded, alreadyCompleted, stats: nextStats };
+	});
 
 	return json({
 		status: 'ok',

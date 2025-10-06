@@ -1,4 +1,9 @@
-import { PlanItemStateSchema, SessionStateSchema, type PlanItemState, type SessionState } from '@spark/schemas';
+import {
+	PlanItemStateSchema,
+	SessionStateSchema,
+	type PlanItemState,
+	type SessionState
+} from '@spark/schemas';
 import { getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
 import { z } from 'zod';
 

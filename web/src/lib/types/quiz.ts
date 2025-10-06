@@ -1,27 +1,27 @@
 export type QuizFeedbackTone = 'info' | 'success' | 'warning';
 
 export type QuizFeedback = {
-        message: string;
-        tone?: QuizFeedbackTone;
-        heading?: string;
+	message: string;
+	tone?: QuizFeedbackTone;
+	heading?: string;
 };
 
 export type QuizQuestionBase = {
-        id: string;
-        prompt: string;
-        hint?: string;
-        explanation?: string;
-        audioLabel?: string;
+	id: string;
+	prompt: string;
+	hint?: string;
+	explanation?: string;
+	audioLabel?: string;
 };
 
 export type QuizChoiceOption = {
-        id: string;
-        label: string;
-        text: string;
+	id: string;
+	label: string;
+	text: string;
 };
 
 export type QuizQuestionWithFeedback = QuizQuestionBase & {
-        correctFeedback: QuizFeedback;
+	correctFeedback: QuizFeedback;
 };
 
 export type QuizMultipleChoiceQuestion = QuizQuestionWithFeedback & {
