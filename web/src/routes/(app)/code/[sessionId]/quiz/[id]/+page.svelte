@@ -9,9 +9,9 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
-	import { createSessionStateStore } from '$lib/client/sessionState';
-	import type { PlanItemState } from '@spark/schemas';
+import { goto, invalidateAll } from '$app/navigation';
+import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
+	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 	import { onDestroy } from 'svelte';
 
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect' | 'skipped';
@@ -25,16 +25,22 @@
 		showContinue: boolean;
 		feedback: QuizFeedback | null;
 		seen: boolean;
+		dontKnow: boolean;
+		firstViewedAt: Date | null;
+		answeredAt: Date | null;
 	};
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
-	const sessionStateStore = createSessionStateStore(data.userId, data.sessionId);
-	let planItemState = $state<PlanItemState | null>(null);
-	let hasMarkedStart = false;
-	let completionRecorded = false;
+	const SYNC_ERROR_MESSAGE = "We couldn't save your latest progress. Check your connection and try again.";
+	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
+	let planItemState = $state<PlanItemState | null>(data.planItemState ?? null);
+	let completionSyncError = $state<string | null>(null);
 	const stopSessionState = sessionStateStore.subscribe((value) => {
 		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+		if (planItemState?.status === 'completed') {
+			completionSyncError = null;
+		}
 	});
 
 	function createInitialAttempt(seen = false): AttemptState {
@@ -46,8 +52,226 @@
 			value: '',
 			showContinue: false,
 			feedback: null,
-			seen
+			seen,
+			dontKnow: false,
+			firstViewedAt: null,
+			answeredAt: null
 		};
+	}
+
+	function getQuestionByIndex(index: number): QuizQuestion | null {
+		return quiz.questions[index] ?? null;
+	}
+
+	function getQuestionId(index: number): string | null {
+		return getQuestionByIndex(index)?.id ?? null;
+	}
+
+	function buildFeedback(
+		question: QuizQuestion,
+		status: AttemptStatus,
+		selectedOptionId: string | null,
+		dontKnow: boolean
+	): QuizFeedback | null {
+		const resolvedStatus: AttemptStatus = status === 'skipped' ? 'incorrect' : status;
+		if (resolvedStatus === 'pending') {
+			return null;
+		}
+		if (question.kind === 'multiple-choice') {
+			if (resolvedStatus === 'correct') {
+				return {
+					heading: 'Nice work',
+					message: 'That matches the DP condition we rely on here.'
+				};
+			}
+			const correctOption = question.options.find((option) => option.id === question.correctOptionId);
+			return {
+				heading: dontKnow ? 'No worries' : "Let's review",
+				message: dontKnow
+					? `Study option ${correctOption?.label ?? '…'} and the explanation below, then keep going.`
+					: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation below and try the next one.`
+			};
+		}
+		if (question.kind === 'type-answer') {
+			if (resolvedStatus === 'correct') {
+				return {
+					heading: 'Great answer',
+					message: 'Your reasoning lines up with the model solution.'
+				};
+			}
+			return {
+				heading: dontKnow ? 'No worries' : "Here's the catch",
+				message: dontKnow
+					? 'Read the explanation and keep the momentum going.'
+					: 'The answer we needed appears below—study it and move forward.'
+			};
+		}
+		return null;
+	}
+
+	function cloneQuizState(state: PlanItemState): { base: PlanItemState; quiz: PlanItemQuizState } {
+		const existingQuiz = state.quiz ?? { lastQuestionIndex: undefined, questions: {}, serverCompletedAt: undefined };
+		const clonedQuiz: PlanItemQuizState = {
+			lastQuestionIndex: existingQuiz.lastQuestionIndex,
+			questions: { ...existingQuiz.questions },
+			serverCompletedAt: existingQuiz.serverCompletedAt ?? undefined
+		};
+		return {
+			base: {
+				...state,
+				quiz: clonedQuiz
+			},
+			quiz: clonedQuiz
+		};
+	}
+
+	async function persistQuizState(
+		mutator: (state: PlanItemState, quizState: PlanItemQuizState) => PlanItemState,
+		options?: SessionUpdateOptions
+	): Promise<void> {
+		try {
+			await sessionStateStore.updateItem(
+				data.planItem.id,
+				(current) => {
+					const { base, quiz } = cloneQuizState(current);
+					const next = mutator(base, quiz);
+					if (options?.markInProgress && next.status === 'not_started') {
+						next.status = 'in_progress';
+						next.startedAt = next.startedAt ?? new Date();
+					}
+					return next;
+				},
+				options
+			);
+		} catch (error) {
+			console.error('Failed to persist quiz session state', error);
+			throw error;
+		}
+	}
+
+	async function persistQuestionState(
+		questionId: string,
+		overrides: Partial<QuizQuestionState>,
+		options?: SessionUpdateOptions
+	): Promise<void> {
+		await persistQuizState((state, quizState) => {
+			const nextQuestionState = mergeQuestionState(quizState.questions[questionId], overrides);
+			quizState.questions[questionId] = nextQuestionState;
+			// Keep the pointer anchored on the current question when answering/skipping,
+			// so the UI shows feedback + explanation instead of jumping ahead.
+			if (overrides.status && overrides.status !== 'pending') {
+				quizState.lastQuestionIndex = currentIndex;
+				quizState.lastQuestionId = questionId;
+			}
+			return state;
+		}, options);
+	}
+
+	async function persistLastQuestionIndex(index: number, options?: SessionUpdateOptions): Promise<void> {
+		const questionId = getQuestionId(index);
+		await persistQuizState(
+			(state, quizState) => {
+				quizState.lastQuestionIndex = index;
+				if (questionId) {
+					quizState.lastQuestionId = questionId;
+				} else {
+					delete quizState.lastQuestionId;
+				}
+				return state;
+			},
+			options
+		);
+	}
+
+	function mergeQuestionState(
+		existing: QuizQuestionState | undefined,
+		overrides: Partial<QuizQuestionState>
+	): QuizQuestionState {
+		const result: QuizQuestionState = {
+			status: overrides.status ?? existing?.status ?? 'pending'
+		};
+		const selectedOptionId = overrides.selectedOptionId ?? existing?.selectedOptionId ?? undefined;
+		if (selectedOptionId) {
+			result.selectedOptionId = selectedOptionId;
+		}
+		const resolvedTypedValue = overrides.typedValue ?? existing?.typedValue ?? undefined;
+		if (typeof resolvedTypedValue === 'string' && resolvedTypedValue.trim().length > 0) {
+			result.typedValue = resolvedTypedValue.trim();
+		}
+		const hintUsed = overrides.hintUsed ?? existing?.hintUsed;
+		if (hintUsed) {
+			result.hintUsed = true;
+		}
+		const dontKnow = overrides.dontKnow ?? existing?.dontKnow;
+		if (dontKnow) {
+			result.dontKnow = true;
+		}
+		const firstViewedAt = overrides.firstViewedAt ?? existing?.firstViewedAt;
+		if (firstViewedAt) {
+			result.firstViewedAt = firstViewedAt;
+		}
+		const answeredAt = overrides.answeredAt ?? existing?.answeredAt;
+		if (answeredAt) {
+			result.answeredAt = answeredAt;
+		}
+		return result;
+	}
+
+	function hydrateFromPlanState(state: PlanItemState | null): void {
+		if (!state?.quiz) {
+			return;
+		}
+		const quizState = state.quiz;
+		const nextAttempts = quiz.questions.map((question, index) => {
+			const saved = quizState.questions[question.id];
+			if (!saved) {
+				return createInitialAttempt(index === 0);
+			}
+			const status = saved.status;
+			const seen = Boolean(saved.firstViewedAt) || status !== 'pending' || index === 0;
+			const locked = status !== 'pending';
+			const showContinue = question.kind === 'info-card' ? false : status !== 'pending';
+			const feedback = buildFeedback(
+				question,
+				status === 'skipped' ? 'incorrect' : status,
+				saved.selectedOptionId ?? null,
+				Boolean(saved.dontKnow)
+			);
+			return {
+				status,
+				showHint: Boolean(saved.hintUsed),
+				locked,
+				selectedOptionId: saved.selectedOptionId ?? null,
+				value: saved.typedValue ?? '',
+				showContinue,
+				feedback,
+				seen,
+				dontKnow: Boolean(saved.dontKnow),
+				firstViewedAt: saved.firstViewedAt ?? null,
+				answeredAt: saved.answeredAt ?? null
+			};
+		});
+		attempts = nextAttempts;
+		const firstPendingIndex = nextAttempts.findIndex((attempt) => attempt.status === 'pending');
+		let nextIndex = currentIndex;
+		let pointerDefined = false;
+		if (quizState.lastQuestionId) {
+			const idMatch = quiz.questions.findIndex((question) => question.id === quizState.lastQuestionId);
+			if (idMatch >= 0) {
+				nextIndex = idMatch;
+			}
+			pointerDefined = true;
+		} else if (typeof quizState.lastQuestionIndex === 'number') {
+			nextIndex = Math.min(
+				Math.max(quizState.lastQuestionIndex, 0),
+				nextAttempts.length - 1
+			);
+			pointerDefined = true;
+		}
+		if (!pointerDefined && firstPendingIndex >= 0 && firstPendingIndex > nextIndex) {
+			nextIndex = firstPendingIndex;
+		}
+		currentIndex = nextIndex;
 	}
 
 	function toCardStatus(status: AttemptStatus): 'neutral' | 'correct' | 'incorrect' {
@@ -120,7 +344,9 @@
 		}
 		const target = attempts[index];
 		if (target && (target.status !== 'pending' || target.seen)) {
+
 			currentIndex = index;
+			void persistLastQuestionIndex(index, { sync: false });
 		}
 	}
 
@@ -129,81 +355,128 @@
 		if (!attempt || attempt.locked) {
 			return;
 		}
-		updateAttempt(currentIndex, (prev) => ({ ...prev, selectedOptionId: optionId }));
+		updateAttempt(currentIndex, (prev) => ({ ...prev, selectedOptionId: optionId, dontKnow: false }));
 	}
 
-	function handleMultipleSubmit(optionId: string) {
+	async function handleMultipleSubmit(optionId: string) {
 		const question = quiz.questions[currentIndex];
 		if (question.kind !== 'multiple-choice') {
 			return;
 		}
 
-		const correctOption = question.options.find((option) => option.id === question.correctOptionId);
+		const attempt = attempts[currentIndex] ?? createInitialAttempt();
 		const isCorrect = optionId === question.correctOptionId;
+		const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
+		const now = new Date();
+		const feedback = buildFeedback(question, status, optionId, false);
+		const firstViewedAt = attempt.firstViewedAt ?? now;
 
 		updateAttempt(currentIndex, (prev) => ({
 			...prev,
-			status: isCorrect ? 'correct' : 'incorrect',
+			status,
 			locked: true,
 			selectedOptionId: optionId,
 			showContinue: true,
-			feedback: isCorrect
-				? {
-						heading: 'Nice work',
-						message: 'That matches the DP condition we rely on here.'
-					}
-				: {
-						heading: "Let's review",
-						message: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation below and try the next one.`
-					}
+			feedback,
+			dontKnow: false,
+			answeredAt: now,
+			firstViewedAt
 		}));
+
+
+
+		completionSyncError = null;
+		try {
+			await persistQuestionState(
+				question.id,
+				{
+					status,
+					selectedOptionId: optionId,
+					hintUsed: attempt.showHint ? true : undefined,
+					dontKnow: false,
+					firstViewedAt,
+					answeredAt: now
+				},
+				{ sync: true, markInProgress: true }
+			);
+		} catch (error) {
+			console.error('Failed to sync multiple-choice submission', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+		}
 	}
 
 	function handleHint() {
-		updateAttempt(currentIndex, (prev) => ({ ...prev, showHint: true }));
-	}
-
-	function handleDontKnow() {
-		const question = quiz.questions[currentIndex];
-
-		if (question.kind === 'multiple-choice') {
-			const correctOption = question.options.find(
-				(option) => option.id === question.correctOptionId
-			);
-			updateAttempt(currentIndex, (prev) => ({
-				...prev,
-				status: 'incorrect',
-				locked: true,
-				showContinue: true,
-				feedback: {
-					heading: 'No worries',
-					message: `Study option ${correctOption?.label ?? '…'} and the explanation below, then keep going.`
-				}
-			}));
+		const question = getQuestionByIndex(currentIndex);
+		if (!question) {
 			return;
 		}
+	const attempt = attempts[currentIndex] ?? createInitialAttempt();
+	const now = attempt.firstViewedAt ?? new Date();
+	updateAttempt(currentIndex, (prev) => ({
+		...prev,
+		showHint: true,
+		seen: true,
+		firstViewedAt: prev.firstViewedAt ?? now
+	}));
 
-		updateAttempt(currentIndex, (prev) => ({
-			...prev,
-			status: 'incorrect',
-			locked: true,
-			showContinue: true,
-			feedback: {
-				heading: 'No worries',
-				message: 'Read the explanation and keep the momentum going.'
-			}
-		}));
-	}
+	void persistQuestionState(
+		question.id,
+		{
+			hintUsed: true,
+			firstViewedAt: now
+		},
+		{ sync: false }
+	);
+}
+
+	async function handleDontKnow() {
+		const question = getQuestionByIndex(currentIndex);
+		if (!question) {
+			return;
+		}
+		const now = new Date();
+		const attempt = attempts[currentIndex] ?? createInitialAttempt();
+		const firstViewedAt = attempt.firstViewedAt ?? now;
+		const feedback = buildFeedback(question, 'incorrect', attempt.selectedOptionId, true);
+	updateAttempt(currentIndex, (prev) => ({
+		...prev,
+		status: 'incorrect',
+		locked: true,
+		showContinue: true,
+		feedback,
+		dontKnow: true,
+		answeredAt: now,
+		firstViewedAt
+	}));
+
+		completionSyncError = null;
+		try {
+			await persistQuestionState(
+				question.id,
+				{
+					status: 'incorrect',
+					dontKnow: true,
+					selectedOptionId: question.kind === 'multiple-choice' ? attempt.selectedOptionId ?? undefined : undefined,
+					firstViewedAt,
+					answeredAt: now
+				},
+				{ sync: true, markInProgress: true }
+			);
+		} catch (error) {
+			console.error("Failed to sync 'don't know' submission", error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+		}
+}
 
 	function handleTypeInput(value: string) {
 		const attempt = attempts[currentIndex];
 		if (!attempt || attempt.locked) {
 			return;
 		}
-		updateAttempt(currentIndex, (prev) => ({ ...prev, value }));
+		updateAttempt(currentIndex, (prev) => ({ ...prev, value, dontKnow: false }));
 	}
 
-	function handleTypeSubmit(value: string) {
+	async function handleTypeSubmit(value: string) {
 		const trimmed = value.trim();
 		if (!trimmed) {
 			return;
@@ -218,72 +491,176 @@
 		);
 		const isCorrect = accepted.includes(trimmed.toLowerCase());
 
-		updateAttempt(currentIndex, (prev) => ({
-			...prev,
-			value: trimmed,
-			status: isCorrect ? 'correct' : 'incorrect',
-			locked: true,
-			showContinue: true,
-			feedback: isCorrect
-				? {
-						heading: 'Great answer',
-						message: 'Your reasoning lines up with the model solution.'
-					}
-				: {
-						heading: "Here's the catch",
-						message: `The answer we needed appears below—study it and move forward.`
-					}
-		}));
+		const attempt = attempts[currentIndex] ?? createInitialAttempt();
+		const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
+		const now = new Date();
+		const firstViewedAt = attempt.firstViewedAt ?? now;
+		const feedback = buildFeedback(question, status, null, false);
+
+	updateAttempt(currentIndex, (prev) => ({
+		...prev,
+		value: trimmed,
+		status,
+		locked: true,
+		showContinue: true,
+		feedback,
+		dontKnow: false,
+		answeredAt: now,
+		firstViewedAt
+	}));
+
+
+		completionSyncError = null;
+		try {
+			await persistQuestionState(
+				question.id,
+				{
+					status,
+					typedValue: trimmed,
+					hintUsed: attempt.showHint ? true : undefined,
+					dontKnow: false,
+					firstViewedAt,
+					answeredAt: now
+				},
+				{ sync: true, markInProgress: true }
+			);
+		} catch (error) {
+			console.error('Failed to sync typed answer submission', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+		}
 	}
 
-	function handleInfoContinue() {
-		const question = quiz.questions[currentIndex];
+	async function handleInfoContinue() {
+		const index = currentIndex;
+		const question = quiz.questions[index];
 		if (question.kind !== 'info-card') {
 			return;
 		}
+		const attempt = attempts[index] ?? createInitialAttempt();
+		const now = new Date();
+		const firstViewedAt = attempt.firstViewedAt ?? now;
+	updateAttempt(index, (prev) => ({
+		...prev,
+		status: 'correct',
+		locked: true,
+		showContinue: false,
+		feedback: null,
+		dontKnow: false,
+		answeredAt: now,
+		firstViewedAt
+	}));
 
-		updateAttempt(currentIndex, (prev) => ({
-			...prev,
-			status: 'correct',
-			locked: true,
-			showContinue: false,
-			feedback: null
-		}));
-
-		advanceFlow();
-	}
-
-	function advanceFlow() {
-		if (currentIndex < quiz.questions.length - 1) {
-			currentIndex += 1;
-			return;
-		}
-
-		if (typeof window !== 'undefined') {
-			goto(`/code/${data.sessionId}`);
-		}
-	}
-
-	function handleAdvanceFromAttempt() {
-		updateAttempt(currentIndex, (prev) => ({ ...prev, showContinue: false }));
-		advanceFlow();
-	}
-
-	function handleFinishEarly() {
-		attempts = attempts.map((attempt) =>
-			attempt.status === 'pending'
-				? {
-						...attempt,
-						status: 'skipped',
-						locked: true,
-						showContinue: false
-					}
-				: attempt
+		completionSyncError = null;
+	try {
+		await persistQuestionState(
+			question.id,
+			{
+				status: 'correct',
+				dontKnow: false,
+				firstViewedAt,
+				answeredAt: now
+			},
+			{ sync: true, markInProgress: true }
 		);
+	} catch (error) {
+		console.error('Failed to sync info card progression', error);
+		completionSyncError = SYNC_ERROR_MESSAGE;
+		updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+		return;
+	}
+
+		try {
+			const advanced = await advanceFlow();
+			if (!advanced) {
+				completionSyncError = SYNC_ERROR_MESSAGE;
+				updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+			}
+		} catch (error) {
+			console.error('Failed to advance after info card', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+		}
+}
+
+async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
+	const completedAt = new Date();
+	try {
+		await sessionStateStore.markStatus(
+			data.planItem.id,
+			'completed',
+			{
+				completedAt
+			},
+			{ quizCompletion: { quizId: quiz.id } }
+		);
+		completionSyncError = null;
+		return true;
+	} catch (error) {
+		console.error('Failed to persist quiz completion state', error);
+		completionSyncError = SYNC_ERROR_MESSAGE;
+		return false;
+	}
+}
+
+	async function advanceFlow(): Promise<boolean> {
+		if (currentIndex < quiz.questions.length - 1) {
+			const nextIndex = currentIndex + 1;
+
+			await persistLastQuestionIndex(nextIndex, { sync: true });
+			currentIndex = nextIndex;
+			return true;
+		}
+
+
+		await persistLastQuestionIndex(currentIndex, { sync: true });
+        const synced = await finalizeCompletion('manual');
+        if (synced && typeof window !== 'undefined') {
+            await invalidateAll();
+            goto(`/code/${data.sessionId}`, { invalidateAll: true });
+            return true;
+        }
+		return synced;
+	}
+
+	async function retryFinalize(): Promise<void> {
+		completionSyncError = null;
+
+    const synced = await finalizeCompletion('manual');
+    if (synced && typeof window !== 'undefined') {
+        await invalidateAll();
+        goto(`/code/${data.sessionId}`, { invalidateAll: true });
+    }
+	}
+
+	async function handleAdvanceFromAttempt() {
+		const index = currentIndex;
+		updateAttempt(index, (prev) => ({ ...prev, showContinue: false }));
+
+		completionSyncError = null;
+		try {
+			const advanced = await advanceFlow();
+			if (!advanced) {
+				completionSyncError = SYNC_ERROR_MESSAGE;
+				updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+			}
+		} catch (error) {
+			console.error('Failed to sync progression while advancing', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+		}
+	}
+
+	async function handleQuit() {
 		finishDialogOpen = false;
-		currentIndex = Math.min(currentIndex, quiz.questions.length - 1);
+
+		try {
+			await persistLastQuestionIndex(currentIndex, { sync: true });
+		} catch (error) {
+			console.error('Failed to persist progress before quitting', error);
+		}
 		if (typeof window !== 'undefined') {
-			goto(`/code/${data.sessionId}`);
+			await invalidateAll();
+			goto(`/code/${data.sessionId}`, { invalidateAll: true });
 		}
 	}
 
@@ -291,53 +668,38 @@
 		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
 		currentIndex = 0;
 		finishDialogOpen = false;
-		completionRecorded = false;
-		hasMarkedStart = false;
+		completionSyncError = null;
 	}
 
 	// Mark the current question as seen whenever it becomes active
 	$effect(() => {
+		const questionId = getQuestionId(currentIndex);
+		if (!questionId) {
+			return;
+		}
 		const attempt = attempts[currentIndex];
-		if (attempt && !attempt.seen) {
-			updateAttempt(currentIndex, (prev) => ({ ...prev, seen: true }));
-		}
-	});
-
-	$effect(() => {
-		if (planItemState?.status === 'completed') {
-			completionRecorded = true;
-		}
-	});
-
-	$effect(() => {
-		if (hasMarkedStart) {
+		if (!attempt) {
 			return;
 		}
-		const status = planItemState?.status ?? 'not_started';
-		if (status === 'not_started') {
-			hasMarkedStart = true;
-			void sessionStateStore.markStatus(data.planItem.id, 'in_progress', {
-				startedAt: new Date()
-			});
-		} else {
-			hasMarkedStart = true;
+		if (!attempt.seen) {
+			const now = attempt.firstViewedAt ?? new Date();
+			updateAttempt(currentIndex, (prev) => ({
+				...prev,
+				seen: true,
+				firstViewedAt: prev.firstViewedAt ?? now
+			}));
+			if (!attempt.firstViewedAt) {
+				void persistQuestionState(questionId, { firstViewedAt: now }, { sync: false });
+			}
+		} else if (!attempt.firstViewedAt) {
+			const now = new Date();
+			updateAttempt(currentIndex, (prev) => ({ ...prev, firstViewedAt: now }));
+			void persistQuestionState(questionId, { firstViewedAt: now }, { sync: false });
 		}
 	});
 
 	$effect(() => {
-		if (completionRecorded || !isQuizComplete) {
-			return;
-		}
-		completionRecorded = true;
-		const totalQuestions = scoredAttempts.length;
-		const correctAnswers = scoredAttempts.filter(
-			(entry) => entry.attempt.status === 'correct'
-		).length;
-		const score = totalQuestions > 0 ? correctAnswers / totalQuestions : undefined;
-		void sessionStateStore.markStatus(data.planItem.id, 'completed', {
-			completedAt: new Date(),
-			score
-		});
+		hydrateFromPlanState(planItemState);
 	});
 
 	onDestroy(() => {
@@ -351,6 +713,14 @@
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-4xl flex-col gap-3 px-4 py-4 md:py-4">
+	{#if completionSyncError}
+		<div class="flex items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+			<span class="flex-1">{completionSyncError}</span>
+			<Button size="sm" variant="outline" onclick={() => void retryFinalize()} class="shrink-0">
+				Retry save
+			</Button>
+		</div>
+	{/if}
 	<QuizProgress
 		steps={progressSteps}
 		{currentIndex}
@@ -372,10 +742,10 @@
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
 				on:select={(event) => handleOptionSelect(event.detail.optionId)}
-				on:submit={(event) => handleMultipleSubmit(event.detail.optionId)}
+				on:submit={(event) => void handleMultipleSubmit(event.detail.optionId)}
 				on:requestHint={handleHint}
-				on:dontKnow={handleDontKnow}
-				on:continue={handleAdvanceFromAttempt}
+				on:dontKnow={() => void handleDontKnow()}
+				on:continue={() => void handleAdvanceFromAttempt()}
 			/>
 		{:else if activeQuestion.kind === 'type-answer'}
 			<QuizTypeAnswer
@@ -389,17 +759,17 @@
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
 				on:input={(event) => handleTypeInput(event.detail.value)}
-				on:submit={(event) => handleTypeSubmit(event.detail.value)}
+				on:submit={(event) => void handleTypeSubmit(event.detail.value)}
 				on:requestHint={handleHint}
-				on:dontKnow={handleDontKnow}
-				on:continue={handleAdvanceFromAttempt}
+				on:dontKnow={() => void handleDontKnow()}
+				on:continue={() => void handleAdvanceFromAttempt()}
 			/>
 		{:else if activeQuestion.kind === 'info-card'}
 			<QuizInfoCard
 				question={activeQuestion}
 				status={toCardStatus(activeAttempt.status)}
 				{continueLabel}
-				on:continue={handleInfoContinue}
+				on:continue={() => void handleInfoContinue()}
 			/>
 		{/if}
 	</section>
@@ -413,10 +783,10 @@
 			class="space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12"
 		>
 			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-				Wrap up this quiz?
+				Take a break?
 			</h2>
 			<p class="text-sm leading-relaxed text-muted-foreground">
-				You still have {remainingCount} unanswered question(s). Choose what you would like to do next.
+				You still have {remainingCount} unanswered {remainingCount === 1 ? 'question' : 'questions'}. Your progress is saved — hop back in whenever you're ready.
 			</p>
 		</div>
 		<div
@@ -431,8 +801,8 @@
 			>
 				Keep practicing
 			</Button>
-			<Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleFinishEarly}
-				>Finish now</Button
+			<Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleQuit}
+				>Quit now</Button
 			>
 		</div>
 	</Dialog.Content>
