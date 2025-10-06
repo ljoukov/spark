@@ -783,7 +783,7 @@ const modularMagicQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'mod-intro-card-1',
         prompt: 'Remainders = wrap-around numbers',
-        eyebrow: 'Idea card',
+        eyebrow: 'Concept',
         body:
           'Imagine walking around a 12-hour clock. After 12 steps you are back at 0. Modulo arithmetic keeps only how far around the circle you travelled.',
         continueLabel: 'Next idea',
@@ -792,7 +792,7 @@ const modularMagicQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'mod-intro-card-2',
         prompt: 'Where mod pops up',
-        eyebrow: 'Idea card',
+        eyebrow: 'Examples',
         body:
           'Hash tables bucket keys by mod, cryptography hides secrets with modulus, and scheduling cycles through days using remainders.',
         continueLabel: 'Ready to try',
@@ -810,6 +810,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '0' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Dividing 17 by 5 leaves 2 behind, exactly the remainder we wanted.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -824,6 +828,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '29 is less than 7' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'You read the congruence correctly: 29 and 7 differ by a multiple of 7.',
+        },
       },
     ],
   },
@@ -839,7 +847,7 @@ const modularMagicQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'mod-lab-card-1',
         prompt: 'Two helpful rules',
-        eyebrow: 'Idea card',
+        eyebrow: 'Rules',
         body:
           '(a + b) mod m = ((a mod m) + (b mod m)) mod m. Negative answers wrap by adding m until you land in 0…m-1.',
         continueLabel: 'Try it',
@@ -853,6 +861,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
         answer: '1',
         acceptableAnswers: ['1'],
         placeholder: 'Enter a number',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Reducing each addend first makes the wrap land neatly on 1.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -867,6 +879,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '((a + m) × (b + m))' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Multiplying the reduced factors keeps the same remainder mod m.',
+        },
       },
       {
         kind: 'type-answer',
@@ -877,6 +893,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
         answer: '7',
         acceptableAnswers: ['7'],
         placeholder: '0-11',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Adding 12 once brings -5 into the 0…11 window at 7.',
+        },
       },
     ],
   },
@@ -901,6 +921,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'It halves the amount of memory used' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Keeping buckets inside 0…m-1 is exactly why we take key mod m.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -915,6 +939,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'a × b must be 0' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Spotting that a and b differ by a multiple of m is the key congruence fact.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -929,6 +957,10 @@ const modularMagicQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'It avoids dealing with minutes' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Wrapping long schedules back into a 24-hour window is exactly the point.',
+        },
       },
     ],
   },
@@ -946,7 +978,7 @@ const binarySparksQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'xor-intro-card-1',
         prompt: 'XOR is “different?”',
-        eyebrow: 'Idea card',
+        eyebrow: 'Concept',
         body:
           'Bitwise XOR compares two bits and outputs 1 only when they differ. It behaves like a light switch: toggle once to turn on, toggle again to turn off.',
         continueLabel: 'Next insight',
@@ -955,7 +987,7 @@ const binarySparksQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'xor-intro-card-2',
         prompt: 'Parity through XOR',
-        eyebrow: 'Idea card',
+        eyebrow: 'Insight',
         body:
           'Folding a list with XOR reports whether the count of 1s is odd (result 1) or even (result 0). That is why parity bits and Nim strategies use XOR.',
         continueLabel: 'Ready to quiz',
@@ -973,6 +1005,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'Undefined' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Matching bits cancel to 0, so 1 xor 1 landing at 0 is perfect.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -987,6 +1023,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'The result flips every bit to 1' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Toggling twice cancels out—x xor x collapsing to 0 shows you get it.',
+        },
       },
     ],
   },
@@ -1002,7 +1042,7 @@ const binarySparksQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'xor-practice-card-1',
         prompt: 'Three fast facts',
-        eyebrow: 'Idea card',
+        eyebrow: 'Facts',
         body:
           '1) XOR is commutative and associative. 2) x xor 0 = x. 3) x xor x = 0. Together these rules make it easy to fold long lists.',
         continueLabel: 'Try a drill',
@@ -1016,6 +1056,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
         answer: '10',
         acceptableAnswers: ['10'],
         placeholder: 'Enter a number',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'XORing 13 and 7 to get 10 shows you combined the bits perfectly.',
+        },
       },
       {
         kind: 'type-answer',
@@ -1026,6 +1070,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
         answer: '9',
         acceptableAnswers: ['9'],
         placeholder: 'Enter a number',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Canceling the pairs and leaving 9 nails the XOR trick.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1040,6 +1088,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '[2, 2, 2, 2, 2]' },
         ],
         correctOptionId: 'B',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Choosing the even toggle count [3, 3] keeps the lamp off exactly as planned.',
+        },
       },
     ],
   },
@@ -1064,6 +1116,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'Because XOR uses division internally' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Using XOR cancellations to isolate the lone element is exactly right.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1078,6 +1134,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'There are no valid moves' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Recognising a zero nim-sum as a losing position shows Nim mastery.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1092,6 +1152,10 @@ const binarySparksQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'The product of all bits' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Spotting XOR as a parity tracker is the exact insight we wanted.',
+        },
       },
     ],
   },
@@ -1109,7 +1173,7 @@ const digitalRootsQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'digital-intro-card-1',
         prompt: 'Digital roots in a nutshell',
-        eyebrow: 'Idea card',
+        eyebrow: 'Concept',
         body:
           'Take any positive number, add its digits, and repeat until one digit remains. That final digit is the digital root. Zero is its own digital root.',
         continueLabel: 'Next insight',
@@ -1118,7 +1182,7 @@ const digitalRootsQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'digital-intro-card-2',
         prompt: 'Casting out nines',
-        eyebrow: 'Idea card',
+        eyebrow: 'Shortcut',
         body:
           'Digital roots follow the same pattern as “modulo 9”. Two numbers with the same digital root differ by a multiple of 9.',
         continueLabel: 'Ready for questions',
@@ -1136,6 +1200,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '16' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Adding 4 + 9 + 3 and collapsing 16 to 7 shows you have the process down.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1150,6 +1218,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'Their difference is always less than 10' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Linking equal digital roots to a difference divisible by 9 is exactly the right takeaway.',
+        },
       },
     ],
   },
@@ -1165,7 +1237,7 @@ const digitalRootsQuizzes: QuizDefinition[] = [
         kind: 'info-card',
         id: 'digital-practice-card-1',
         prompt: 'Quick rules',
-        eyebrow: 'Idea card',
+        eyebrow: 'Tips',
         body:
           'Adding 9 does not change the digital root. Roots run 1…9 and reset to 0 only when the number itself is 0.',
         continueLabel: 'Let me try',
@@ -1179,6 +1251,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
         answer: '9',
         acceptableAnswers: ['9'],
         placeholder: 'Enter a digit',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Summing the digits (or using mod 9) to land on 9 shows you know the shortcut.',
+        },
       },
       {
         kind: 'type-answer',
@@ -1189,6 +1265,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
         answer: '1',
         acceptableAnswers: ['1'],
         placeholder: 'Enter a digit 0-9',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Topping the sum up to 18 with a 1 nails the divisibility trick.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1203,6 +1283,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: '40' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: '13 collapses to 1 + 3 = 4, exactly the root we asked for.',
+        },
       },
     ],
   },
@@ -1228,6 +1312,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'They remove the need for multiplication' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Using digital roots as a quick mod 9 check is exactly their power.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1242,6 +1330,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'Undefined' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Remembering that 0 maps to digital root 0 keeps the definitions straight.',
+        },
       },
       {
         kind: 'multiple-choice',
@@ -1256,6 +1348,10 @@ const digitalRootsQuizzes: QuizDefinition[] = [
           { id: 'D', label: 'D', text: 'n is divisible by 8 but not 9' },
         ],
         correctOptionId: 'A',
+        correctFeedback: {
+          heading: 'Nice work',
+          message: 'Seeing a digital root of 9 as “divisible by 9” is the exact interpretation.',
+        },
       },
     ],
   },
