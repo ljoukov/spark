@@ -73,7 +73,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw error(404, { message: 'Problem not found in session plan' });
 	}
 
-	const problemDoc = await getUserProblem(userId, planItem.id);
+	const problemDoc = await getUserProblem(userId, session.id, planItem.id);
 	if (!problemDoc) {
 		throw error(404, { message: `Problem ${planItem.id} not found` });
 	}

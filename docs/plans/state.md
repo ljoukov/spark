@@ -9,7 +9,7 @@ Scope: design and implementation plan only (no code changes yet). Source of trut
 - Introduce per-user Sessions in Firestore under `spark/{userId}/sessions/{sessionId}` with `id` (human-readable), `createdAt`, and a `plan` of items (quiz or problem).
 - Track current session per user in `spark/{userId}.currentSessionId`; if empty or invalid, select the latest by `createdAt`.
 - Client reads/writes per-session realtime state at `spark/{userId}/state/{sessionId}` (only state is client-accessible; sessions are server-only).
-- Quiz definitions live under `spark/{userId}/quiz/{quizId}` and coding problems under `spark/{userId}/code/{problemId}`; only the server accesses these docs.
+- Quiz definitions live under `spark/{userId}/sessions/{sessionId}/quiz/{quizId}` and coding problems under `spark/{userId}/sessions/{sessionId}/code/{problemId}`; only the server accesses these docs.
 - Add read-only user `stats` to `spark/{userId}`: `xp`, `level`, `streakDays`, `solvedCount`.
 - Replace hardcoded plan in `/code` with server-provided session and make routes bookmarkable: `/code/[sessionId]`, `/code/[sessionId]/quiz/[id]`, `/code/[sessionId]/p/[id]`.
 - Provide a trivial session generation script for the test user only; it writes a fixed session (no LLM) into Firestore and sets `currentSessionId`.

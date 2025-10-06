@@ -1,13 +1,16 @@
 import { Timestamp } from "firebase-admin/firestore";
+import { z } from "zod";
 import { getTestUserId, getFirebaseAdminFirestore } from "@spark/llm";
 import {
   SessionSchema,
+  SessionStateSchema,
   QuizDefinitionSchema,
   CodeProblemSchema,
 } from "@spark/schemas";
 import type {
   PlanItem,
   Session,
+  SessionState,
   QuizDefinition,
   CodeProblem,
 } from "@spark/schemas";
@@ -564,21 +567,37 @@ function buildPlan(): PlanItem[] {
   ];
 }
 
-async function seedContent(userId: string) {
+async function seedContent(userId: string, session: Session) {
   const firestore = getFirebaseAdminFirestore();
   const userRef = firestore.collection("spark").doc(userId);
+  const stateRef = userRef.collection("state").doc(session.id);
+  const sessionRef = userRef.collection("sessions").doc(session.id);
+
+  const initialState: SessionState = SessionStateSchema.parse({
+    sessionId: session.id,
+    items: session.plan.reduce<Record<string, SessionState["items"][string]>>(
+      (acc, item) => {
+        acc[item.id] = { status: "not_started" };
+        return acc;
+      },
+      {} as Record<string, SessionState["items"][string]>,
+    ),
+    lastUpdatedAt: Timestamp.now(),
+  });
+
+  await stateRef.set(initialState);
 
   await Promise.all(
     QUIZZES.map(async (quiz) => {
       const parsed = QuizDefinitionSchema.parse(quiz);
-      await userRef.collection("quiz").doc(parsed.id).set(parsed);
+      await sessionRef.collection("quiz").doc(parsed.id).set(parsed);
     }),
   );
 
   await Promise.all(
     PROBLEMS.map(async (problem) => {
       const parsed = CodeProblemSchema.parse(problem);
-      await userRef.collection("code").doc(parsed.slug).set(parsed);
+      await sessionRef.collection("code").doc(parsed.slug).set(parsed);
     }),
   );
 
@@ -589,17 +608,17 @@ async function main(): Promise<void> {
   const userId = getTestUserId();
   const sessionId = generateSessionId();
 
-  const session: Session = {
+  const sessionData = {
     id: sessionId,
     createdAt: Timestamp.now(),
     plan: buildPlan(),
-  };
+  } satisfies z.input<typeof SessionSchema>;
 
-  SessionSchema.parse(session);
+  const session = SessionSchema.parse(sessionData);
 
-  const userRef = await seedContent(userId);
+  const userRef = await seedContent(userId, session);
 
-  await userRef.collection("sessions").doc(session.id).set(session);
+  await userRef.collection("sessions").doc(session.id).set(sessionData);
   await userRef.set({ currentSessionId: session.id }, { merge: true });
 
   console.log(`Created session ${session.id} for test user ${userId}`);

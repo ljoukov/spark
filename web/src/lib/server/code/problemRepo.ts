@@ -4,19 +4,28 @@ import { z } from 'zod';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const problemIdSchema = z.string().trim().min(1, 'problemId is required');
+const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
 
-function resolveProblemDoc(userId: string, problemId: string) {
+function resolveProblemDoc(userId: string, sessionId: string, problemId: string) {
 	const firestore = getFirebaseAdminFirestore();
 	const uid = userIdSchema.parse(userId);
+	const sid = sessionIdSchema.parse(sessionId);
 	const pid = problemIdSchema.parse(problemId);
-	return firestore.collection('spark').doc(uid).collection('code').doc(pid);
+	return firestore
+		.collection('spark')
+		.doc(uid)
+		.collection('sessions')
+		.doc(sid)
+		.collection('code')
+		.doc(pid);
 }
 
 export async function getUserProblem(
 	userId: string,
+	sessionId: string,
 	problemId: string
 ): Promise<CodeProblem | null> {
-	const snapshot = await resolveProblemDoc(userId, problemId).get();
+	const snapshot = await resolveProblemDoc(userId, sessionId, problemId).get();
 	if (!snapshot.exists) {
 		return null;
 	}
@@ -27,7 +36,11 @@ export async function getUserProblem(
 	return CodeProblemSchema.parse({ slug: snapshot.id, ...raw });
 }
 
-export async function saveUserProblem(userId: string, problem: CodeProblem): Promise<void> {
+export async function saveUserProblem(
+	userId: string,
+	sessionId: string,
+	problem: CodeProblem
+): Promise<void> {
 	const parsed = CodeProblemSchema.parse(problem);
-	await resolveProblemDoc(userId, parsed.slug).set(parsed);
+	await resolveProblemDoc(userId, sessionId, parsed.slug).set(parsed);
 }
