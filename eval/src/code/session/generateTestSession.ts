@@ -19,6 +19,10 @@ function generateSessionId(): string {
   return "dp-coin-change-decode";
 }
 
+function generateSessionTitle(): string {
+  return "Warm-up quiz";
+}
+
 const QUIZZES: QuizDefinition[] = [
   {
     id: "dp-warmup-quiz",
@@ -610,6 +614,7 @@ async function main(): Promise<void> {
 
   const sessionData = {
     id: sessionId,
+    title: generateSessionTitle(),
     createdAt: Timestamp.now(),
     plan: buildPlan(),
   } satisfies z.input<typeof SessionSchema>;
