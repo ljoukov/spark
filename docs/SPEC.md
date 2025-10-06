@@ -121,6 +121,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
+- First-time visitors to `/code` without an existing session see a modal (shadcn dialog) offering three curated starter paths. Choosing a topic writes the session, quizzes, and two code problems to Firestore and redirects them to `/code/<sessionId>`.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
 - CSR avoided for marketing pages; islands used sparingly for forms.
 
