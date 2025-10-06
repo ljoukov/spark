@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw error(404, { message: 'Quiz not found in session plan' });
 	}
 
-	const quiz = await getUserQuiz(userId, planItem.id);
+	const quiz = await getUserQuiz(userId, session.id, planItem.id);
 	if (!quiz) {
 		throw error(404, { message: 'Quiz definition not found' });
 	}
