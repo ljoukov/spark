@@ -14,7 +14,7 @@ export function loadLocalEnv(): void {
 
 export function loadEnvFromFile(
   filePath: string,
-  { override = false }: { override?: boolean } = {},
+  { override = false }: { override?: boolean } = {}
 ): void {
   let content: string;
   try {
@@ -45,7 +45,7 @@ function parseEnvLine(line: string): [string, string] | null {
   }
 
   const match = trimmed.match(
-    /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_\-.]*)\s*=\s*(.*)$/u,
+    /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_\-.]*)\s*=\s*(.*)$/u
   );
   if (!match) {
     return null;
@@ -55,13 +55,13 @@ function parseEnvLine(line: string): [string, string] | null {
   let value = match[2] ?? "";
 
   if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-    value = decodeQuotedValue(value.slice(1, -1));
+    value = value.slice(1, -1);
   } else if (
     value.startsWith("'") &&
     value.endsWith("'") &&
     value.length >= 2
   ) {
-    value = decodeQuotedValue(value.slice(1, -1));
+    value = value.slice(1, -1);
   } else {
     const commentIndex = value.indexOf(" #");
     if (commentIndex >= 0) {
@@ -69,48 +69,5 @@ function parseEnvLine(line: string): [string, string] | null {
     }
     value = value.trim();
   }
-
   return [key, value];
-}
-
-function decodeQuotedValue(value: string): string {
-  let result = "";
-  let escaping = false;
-  for (const char of value) {
-    if (escaping) {
-      switch (char) {
-        case "n":
-          result += "\n";
-          break;
-        case "r":
-          result += "\r";
-          break;
-        case "t":
-          result += "\t";
-          break;
-        case "\\":
-          result += "\\";
-          break;
-        case '"':
-          result += char;
-          break;
-        case "'":
-          result += char;
-          break;
-        default:
-          result += `\\${char}`;
-      }
-      escaping = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaping = true;
-      continue;
-    }
-    result += char;
-  }
-  if (escaping) {
-    result += "\\";
-  }
-  return result;
 }
