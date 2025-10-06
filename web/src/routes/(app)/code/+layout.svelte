@@ -16,8 +16,6 @@
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
-	import { getFirestore, doc, onSnapshot, type Firestore } from 'firebase/firestore';
-	import { z } from 'zod';
 
 	type ClientUser = NonNullable<LayoutData['user']>;
 
@@ -37,14 +35,6 @@
 		{ label: 'Light', value: 'light' },
 		{ label: 'Dark', value: 'dark' }
 	];
-
-	const profileSchema = z
-		.object({
-			name: z.string().trim().min(1).nullable().optional(),
-			email: z.string().email().nullable().optional(),
-			photoUrl: z.string().url().nullable().optional()
-		})
-		.partial();
 
 	function patchUser(partial: Partial<ClientUser>): void {
 		userStore.update((current) => {
@@ -89,7 +79,6 @@
 			theme = value;
 		});
 
-		let stopProfile: () => void = () => {};
 		let stopCookieSync: () => void = () => {};
 		let stopAuthListener: () => void = () => {};
 		let syncingProfile = false;
@@ -148,40 +137,6 @@
 		}
 
 		try {
-			if (initialUser?.uid) {
-				const app = getFirebaseApp();
-				const db: Firestore = getFirestore(app);
-				const ref = doc(db, 'spark', initialUser.uid);
-				stopProfile = onSnapshot(ref, (snapshot) => {
-					if (!snapshot.exists()) {
-						return;
-					}
-					const parsed = profileSchema.safeParse(snapshot.data());
-					if (!parsed.success) {
-						console.warn('Unable to parse Spark Code profile document', parsed.error.flatten());
-						return;
-					}
-					const profile = parsed.data;
-					const patch: Partial<ClientUser> = {};
-					if ('name' in profile) {
-						patch.name = profile.name ?? null;
-					}
-					if ('email' in profile) {
-						patch.email = profile.email ?? null;
-					}
-					if ('photoUrl' in profile) {
-						patch.photoUrl = profile.photoUrl ?? null;
-					}
-					if (Object.keys(patch).length > 0) {
-						patchUser(patch);
-					}
-				});
-			}
-		} catch (error) {
-			console.error('Failed to subscribe to Spark Code profile document', error);
-		}
-
-		try {
 			const app = getFirebaseApp();
 			const auth = getAuth(app);
 			stopCookieSync = startIdTokenCookieSync(auth);
@@ -199,7 +154,6 @@
 		return () => {
 			unsubscribeUser();
 			unsubscribeTheme();
-			stopProfile();
 			stopCookieSync();
 			stopAuthListener();
 		};

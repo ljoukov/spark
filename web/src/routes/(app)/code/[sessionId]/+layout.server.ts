@@ -1,5 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
 import { getSession, getOrSelectCurrentSession } from '$lib/server/session/repo';
+import { getSessionState } from '$lib/server/sessionState/repo';
 import { getUserStats } from '$lib/server/user/repo';
 import type { LayoutServerLoad } from './$types';
 
@@ -24,10 +25,12 @@ export const load: LayoutServerLoad = async ({ locals, params }) => {
 	}
 
 	const stats = await getUserStats(user.uid);
+	const sessionState = await getSessionState(user.uid, session.id);
 
 	return {
 		session,
 		stats,
-		userId: user.uid
+		userId: user.uid,
+		sessionState
 	};
 };

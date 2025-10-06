@@ -3,8 +3,7 @@
 	import type { PageData } from './$types';
 	import type { PlanItemState, UserStats } from '@spark/schemas';
 	import { createSessionStateStore } from '$lib/client/sessionState';
-	import { createUserStatsStore } from '$lib/client/user';
-	import { browser } from '$app/environment';
+	import { initializeUserStats } from '$lib/client/userStats';
 
 	type UserStore = {
 		subscribe: (
@@ -36,15 +35,6 @@
 		status: PlanItemState['status'];
 	};
 
-	const userStatsStore = createUserStatsStore(data.userId);
-	let liveStats = $state<UserStats | null>(data.stats ?? null);
-	let stopUserStats = () => {};
-	if (browser) {
-		stopUserStats = userStatsStore.subscribe((value) => {
-			liveStats = value;
-		});
-	}
-
 	const fallbackStats = Object.freeze([
 		{ label: 'XP', value: '—' },
 		{ label: 'Level', value: '—' },
@@ -64,10 +54,13 @@
 		];
 	}
 
-	let stats = $state(buildStats(data.stats));
-	$effect(() => {
-		stats = buildStats(liveStats ?? data.stats);
+	const userStatsStore = initializeUserStats(data.stats ?? null);
+	let liveStats = $state<UserStats | null>(data.stats ?? null);
+	const stopUserStats = userStatsStore.subscribe((value) => {
+		liveStats = value;
 	});
+
+	const stats = $derived(buildStats(liveStats ?? data.stats));
 
 	const sessionId = $derived(data.session.id);
 	const sessionPlan = $derived(data.session.plan);
@@ -82,7 +75,7 @@
 		'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
 	);
 
-	const sessionStateStore = createSessionStateStore(data.userId, data.session.id);
+	const sessionStateStore = createSessionStateStore(data.session.id, data.sessionState);
 	let sessionStateItems = $state<Record<string, PlanItemState>>({});
 	const stopSessionStateSubscription = sessionStateStore.subscribe((value) => {
 		sessionStateItems = value.items;
@@ -93,7 +86,6 @@
 		stopSessionStateSubscription();
 		sessionStateStore.stop();
 		stopUserStats();
-		userStatsStore.stop();
 	});
 
 	const baseTimeline = $derived(

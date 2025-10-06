@@ -70,8 +70,8 @@
 
 	let problem = data.problem;
 	let markdownHtml = data.problem.markdownHtml;
-	const sessionStateStore = createSessionStateStore(data.userId, data.sessionId);
-	let planItemState: PlanItemState | null = null;
+	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
+	let planItemState: PlanItemState | null = data.sessionState.items[data.planItem.id] ?? null;
 	let hasMarkedStart = false;
 	let completionRecorded = false;
 	const stopSessionState = sessionStateStore.subscribe((value) => {
