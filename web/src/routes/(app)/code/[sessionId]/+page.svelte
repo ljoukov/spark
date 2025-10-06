@@ -71,8 +71,8 @@
 	);
 	const planSummary = $derived(
 		data.session.plan[0]?.summary ??
-		data.session.plan[0]?.description ??
-		'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
+			data.session.plan[0]?.description ??
+			'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
 	);
 
 	const sessionStateStore = createSessionStateStore(data.session.id, data.sessionState);

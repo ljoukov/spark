@@ -48,14 +48,15 @@ async function sendSessionUpdate(
 	});
 	if (!response.ok) {
 		let details: unknown = null;
-	try {
-		details = await response.json();
-	} catch {
-		details = null;
-	}
-		const message = details && typeof details === 'object' && 'error' in (details as Record<string, unknown>)
-			? `Session update failed: ${(details as Record<string, unknown>).error}`
-			: `Session update failed with status ${response.status}`;
+		try {
+			details = await response.json();
+		} catch {
+			details = null;
+		}
+		const message =
+			details && typeof details === 'object' && 'error' in (details as Record<string, unknown>)
+				? `Session update failed: ${(details as Record<string, unknown>).error}`
+				: `Session update failed with status ${response.status}`;
 		throw new Error(message);
 	}
 	const payload = await response.json();
@@ -83,7 +84,10 @@ export type SessionStateStore = Readable<SessionState> & {
 	stop: () => void;
 };
 
-export function createSessionStateStore(sessionId: string, initialState: SessionState): SessionStateStore {
+export function createSessionStateStore(
+	sessionId: string,
+	initialState: SessionState
+): SessionStateStore {
 	const store = writable<SessionState>(initialState);
 
 	if (!browser) {
