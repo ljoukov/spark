@@ -3,7 +3,7 @@
 - Source of truth: `docs/SPEC.md`. Follow it for requirements, interfaces, APIs, and conventions.
 - Scope: This AGENTS.md applies to the entire repository subtree.
 - Precedence: Direct system/developer/user instructions take precedence over this file.
-- Detailed UI flows is defined and maintained in `docs/FLOW.md` file.
+- UI/UX flows should be reflected in `docs/SPEC.md` and kept up to date alongside code-level docs.
 - SvelteKit has had many recent updates (eg ropes), docs are in `web/docs/sveltekit-docs.md`
 - /app and /admin UIs are built shadcn-svelte, docs are in `web/docs/shadcn-svelte.md`
 
@@ -26,7 +26,7 @@ For details, read `docs/SPEC.md`.
 IMPORTANT: maintain (i.e. make changes if contradicting changes are made or critical details are missing):
 
 - `docs/SPEC.md` general technical stack
-- `docs/FLOW.md` for changes to UI/UX of the app (iOS or web, this does NOT apply to /admin)
+- Update `docs/SPEC.md` for changes to UI/UX of the app (iOS or web; this does NOT apply to /admin)
 
 ## Quiz LLM Eval
 
