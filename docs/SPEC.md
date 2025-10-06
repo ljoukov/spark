@@ -123,6 +123,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
 - CSR avoided for marketing pages; islands used sparingly for forms.
+- First-time visit to `/code` shows a shadcn dialog with three welcome session choices (modular arithmetic, XOR parity, last-digit cycles). The selection writes the session, its quizzes, and two starter coding problems to Firestore before redirecting to `/code/<sessionId>`.
 
 ## 7) Firestore Data Model
 
