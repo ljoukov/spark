@@ -79,25 +79,19 @@ import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/
 		}
 		if (question.kind === 'multiple-choice') {
 			if (resolvedStatus === 'correct') {
-				return {
-					heading: 'Nice work',
-					message: 'That matches the DP condition we rely on here.'
-				};
+				return question.correctFeedback;
 			}
 			const correctOption = question.options.find((option) => option.id === question.correctOptionId);
 			return {
 				heading: dontKnow ? 'No worries' : "Let's review",
 				message: dontKnow
-					? `Study option ${correctOption?.label ?? '…'} and the explanation below, then keep going.`
-					: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation below and try the next one.`
+					? `Study option ${correctOption?.label ?? '…'} and the explanation above, then keep going.`
+					: `We were looking for option ${correctOption?.label ?? '…'}. Check the explanation above and try the next one.`
 			};
 		}
 		if (question.kind === 'type-answer') {
 			if (resolvedStatus === 'correct') {
-				return {
-					heading: 'Great answer',
-					message: 'Your reasoning lines up with the model solution.'
-				};
+				return question.correctFeedback;
 			}
 			return {
 				heading: dontKnow ? 'No worries' : "Here's the catch",

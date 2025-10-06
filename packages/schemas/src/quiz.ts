@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const trimmedString = z.string().trim().min(1);
 
+export const QuizFeedbackToneSchema = z.enum(["info", "success", "warning"]);
+
+export const QuizFeedbackSchema = z.object({
+  message: z.string().min(1),
+  tone: QuizFeedbackToneSchema.optional(),
+  heading: z.string().optional(),
+});
+
 export const QuizChoiceOptionSchema = z.object({
   id: trimmedString,
   label: trimmedString,
@@ -16,13 +24,17 @@ const QuizQuestionBaseSchema = z.object({
   audioLabel: z.string().optional(),
 });
 
-export const QuizMultipleChoiceSchema = QuizQuestionBaseSchema.extend({
+const QuizQuestionWithFeedbackSchema = QuizQuestionBaseSchema.extend({
+  correctFeedback: QuizFeedbackSchema,
+});
+
+export const QuizMultipleChoiceSchema = QuizQuestionWithFeedbackSchema.extend({
   kind: z.literal("multiple-choice"),
   options: z.array(QuizChoiceOptionSchema).min(2),
   correctOptionId: trimmedString,
 });
 
-export const QuizTypeAnswerSchema = QuizQuestionBaseSchema.extend({
+export const QuizTypeAnswerSchema = QuizQuestionWithFeedbackSchema.extend({
   kind: z.literal("type-answer"),
   answer: z.string().min(1),
   acceptableAnswers: z.array(trimmedString).optional(),
@@ -43,6 +55,8 @@ export const QuizQuestionSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type QuizQuestion = z.infer<typeof QuizQuestionSchema>;
+
+export type QuizFeedback = z.infer<typeof QuizFeedbackSchema>;
 
 export const QuizDefinitionSchema = z.object({
   id: trimmedString,
