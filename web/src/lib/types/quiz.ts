@@ -14,14 +14,14 @@ export type QuizChoiceOption = {
 
 export type QuizMultipleChoiceQuestion = QuizQuestionBase & {
 	kind: 'multiple-choice';
-	options: readonly QuizChoiceOption[];
+	options: QuizChoiceOption[];
 	correctOptionId: string;
 };
 
 export type QuizTypeAnswerQuestion = QuizQuestionBase & {
 	kind: 'type-answer';
 	answer: string;
-	acceptableAnswers?: readonly string[];
+	acceptableAnswers?: string[];
 	placeholder?: string;
 };
 
@@ -60,5 +60,5 @@ export type QuizDefinition = {
 	topic?: string;
 	estimatedMinutes?: number;
 	progressKey?: string;
-	questions: readonly QuizQuestion[];
+	questions: QuizQuestion[];
 };

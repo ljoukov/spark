@@ -10,6 +10,9 @@
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
+	import { createSessionStateStore } from '$lib/client/sessionState';
+	import type { PlanItemState } from '@spark/schemas';
+	import { onDestroy } from 'svelte';
 
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect' | 'skipped';
 
@@ -26,6 +29,13 @@
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
+	const sessionStateStore = createSessionStateStore(data.userId, data.sessionId);
+	let planItemState = $state<PlanItemState | null>(null);
+	let hasMarkedStart = false;
+	let completionRecorded = false;
+	const stopSessionState = sessionStateStore.subscribe((value) => {
+		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+	});
 
 	function createInitialAttempt(seen = false): AttemptState {
 		return {
@@ -50,11 +60,9 @@
 		return 'neutral';
 	}
 
-	const STORAGE_KEY = 'spark-code-progress';
 	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
-	let progressPersisted = false;
 
 	function handleFinishDialogChange(open: boolean) {
 		finishDialogOpen = open;
@@ -252,7 +260,7 @@
 		}
 
 		if (typeof window !== 'undefined') {
-			goto('/code');
+			goto(`/code/${data.sessionId}`);
 		}
 	}
 
@@ -275,7 +283,7 @@
 		finishDialogOpen = false;
 		currentIndex = Math.min(currentIndex, quiz.questions.length - 1);
 		if (typeof window !== 'undefined') {
-			goto('/code');
+			goto(`/code/${data.sessionId}`);
 		}
 	}
 
@@ -283,7 +291,8 @@
 		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
 		currentIndex = 0;
 		finishDialogOpen = false;
-		progressPersisted = false;
+		completionRecorded = false;
+		hasMarkedStart = false;
 	}
 
 	// Mark the current question as seen whenever it becomes active
@@ -295,23 +304,45 @@
 	});
 
 	$effect(() => {
-		if (!isQuizComplete) {
+		if (planItemState?.status === 'completed') {
+			completionRecorded = true;
+		}
+	});
+
+	$effect(() => {
+		if (hasMarkedStart) {
 			return;
 		}
-
-		if (quiz.progressKey && !progressPersisted && typeof window !== 'undefined') {
-			try {
-				const raw = window.sessionStorage.getItem(STORAGE_KEY);
-				const parsed: unknown = raw ? JSON.parse(raw) : [];
-				const existing = Array.isArray(parsed) ? parsed : [];
-				const next = new Set<string>(existing);
-				next.add(quiz.progressKey);
-				window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
-				progressPersisted = true;
-			} catch (error) {
-				console.error('Unable to persist quiz progress', error);
-			}
+		const status = planItemState?.status ?? 'not_started';
+		if (status === 'not_started') {
+			hasMarkedStart = true;
+			void sessionStateStore.markStatus(data.planItem.id, 'in_progress', {
+				startedAt: new Date()
+			});
+		} else {
+			hasMarkedStart = true;
 		}
+	});
+
+	$effect(() => {
+		if (completionRecorded || !isQuizComplete) {
+			return;
+		}
+		completionRecorded = true;
+		const totalQuestions = scoredAttempts.length;
+		const correctAnswers = scoredAttempts.filter(
+			(entry) => entry.attempt.status === 'correct'
+		).length;
+		const score = totalQuestions > 0 ? correctAnswers / totalQuestions : undefined;
+		void sessionStateStore.markStatus(data.planItem.id, 'completed', {
+			completedAt: new Date(),
+			score
+		});
+	});
+
+	onDestroy(() => {
+		stopSessionState();
+		sessionStateStore.stop();
 	});
 </script>
 
