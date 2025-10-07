@@ -9,7 +9,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 	import { onDestroy } from 'svelte';
@@ -29,6 +29,8 @@
 		firstViewedAt: Date | null;
 		answeredAt: Date | null;
 	};
+
+	type FinishState = 'confirm' | 'saving' | 'error';
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
@@ -287,10 +289,28 @@
 	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
+let finishState = $state<FinishState>('confirm');
+let finishError = $state<string | null>(null);
+let finishMode = $state<'quit' | 'finalize' | null>(null);
 
-	function handleFinishDialogChange(open: boolean) {
+function handleFinishDialogChange(open: boolean) {
+		if (!open && finishState === 'saving') {
+			return;
+		}
 		finishDialogOpen = open;
+	if (!open) {
+		finishState = 'confirm';
+		finishError = null;
+		finishMode = null;
 	}
+}
+
+function openFinishDialog() {
+	finishState = 'confirm';
+	finishError = null;
+	finishMode = 'quit';
+	finishDialogOpen = true;
+}
 
 	function updateAttempt(index: number, updater: (value: AttemptState) => AttemptState) {
 		attempts = attempts.map((attempt, idx) => (idx === index ? updater(attempt) : attempt));
@@ -614,25 +634,40 @@
 			return true;
 		}
 
-		await persistLastQuestionIndex(currentIndex, { sync: true });
-		const synced = await finalizeCompletion('manual');
-		if (synced && typeof window !== 'undefined') {
-			await invalidateAll();
-			goto(`/code/${data.sessionId}`, { invalidateAll: true });
-			return true;
+		// Show saving state while finalizing and navigating to dashboard
+		finishMode = 'finalize';
+		finishState = 'saving';
+		finishError = null;
+		finishDialogOpen = true;
+
+		try {
+			await persistLastQuestionIndex(currentIndex, { sync: true });
+			const synced = await finalizeCompletion('manual');
+			if (synced && typeof window !== 'undefined') {
+				await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+				return true;
+			}
+		} catch (error) {
+			console.error('Failed to finalize completion and navigate', error);
 		}
-		return synced;
+
+		// Any failure — close modal and show top error bar
+		finishDialogOpen = false;
+		finishState = 'confirm';
+		finishMode = null;
+		completionSyncError = SYNC_ERROR_MESSAGE;
+		return false;
 	}
 
-	async function retryFinalize(): Promise<void> {
-		completionSyncError = null;
-
-		const synced = await finalizeCompletion('manual');
-		if (synced && typeof window !== 'undefined') {
-			await invalidateAll();
-			goto(`/code/${data.sessionId}`, { invalidateAll: true });
-		}
-	}
+async function retryFinalize(): Promise<void> {
+    completionSyncError = null;
+    const synced = await finalizeCompletion('manual');
+    if (synced && typeof window !== 'undefined') {
+        await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+    } else {
+        completionSyncError = SYNC_ERROR_MESSAGE;
+    }
+}
 
 	async function handleAdvanceFromAttempt() {
 		const index = currentIndex;
@@ -653,23 +688,46 @@
 	}
 
 	async function handleQuit() {
-		finishDialogOpen = false;
-
-		try {
-			await persistLastQuestionIndex(currentIndex, { sync: true });
-		} catch (error) {
-			console.error('Failed to persist progress before quitting', error);
+		if (finishState === 'saving') {
+			return;
 		}
+		finishState = 'saving';
+		finishError = null;
+		finishMode = 'quit';
+    try {
+        await persistLastQuestionIndex(currentIndex, { sync: true });
+    } catch (error) {
+        console.error('Failed to persist progress before quitting', error);
+        // close modal and show top error bar instead of error state
+        finishDialogOpen = false;
+        finishState = 'confirm';
+        finishMode = null;
+        completionSyncError = SYNC_ERROR_MESSAGE;
+        return;
+    }
 		if (typeof window !== 'undefined') {
-			await invalidateAll();
-			goto(`/code/${data.sessionId}`, { invalidateAll: true });
-		}
+			try {
+				await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+            } catch (error) {
+                console.error('Navigation to session dashboard failed', error);
+                finishDialogOpen = false;
+                finishState = 'confirm';
+                finishMode = null;
+                completionSyncError = SYNC_ERROR_MESSAGE;
+            }
+        } else {
+            finishDialogOpen = false;
+            finishState = 'confirm';
+            finishError = null;
+        }
 	}
 
 	function resetQuiz() {
 		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
 		currentIndex = 0;
 		finishDialogOpen = false;
+		finishState = 'confirm';
+		finishError = null;
 		completionSyncError = null;
 	}
 
@@ -730,7 +788,7 @@
 		{currentIndex}
 		total={quiz.questions.length}
 		on:navigate={(event) => goToQuestion(event.detail.index)}
-		on:finish={() => (finishDialogOpen = true)}
+		on:finish={openFinishDialog}
 	/>
 
 	<section class="flex flex-col gap-6">
@@ -782,35 +840,52 @@
 <Dialog.Root open={finishDialogOpen} onOpenChange={handleFinishDialogChange}>
 	<Dialog.Content
 		class="finish-dialog max-w-lg overflow-hidden rounded-3xl bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
+		hideClose
 	>
-		<div
-			class="space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12"
-		>
-			<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-				Take a break?
-			</h2>
-			<p class="text-sm leading-relaxed text-muted-foreground">
-				You still have {remainingCount} unanswered {remainingCount === 1
-					? 'question'
-					: 'questions'}. Your progress is saved — hop back in whenever you're ready.
-			</p>
-		</div>
-		<div
-			class="finish-footer flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end"
-		>
-			<Button variant="outline" class="w-full sm:w-auto sm:min-w-[9rem]" onclick={resetQuiz}
-				>Restart quiz</Button
-			>
-			<Button
-				class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]"
-				onclick={() => (finishDialogOpen = false)}
-			>
-				Keep practicing
-			</Button>
-			<Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleQuit}
-				>Quit now</Button
-			>
-		</div>
+    {#if finishState === 'saving' || finishMode === 'finalize'}
+        <div class="finish-saving flex flex-col items-center gap-6 px-6 py-10 text-center">
+            <div class="finish-spinner" aria-hidden="true"></div>
+            <div class="finish-saving-copy space-y-2" role="status" aria-live="polite">
+                <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+                    Saving your progress…
+                </h2>
+                <p class="text-sm leading-relaxed text-muted-foreground">
+                    Hang tight while we sync your latest answers.
+                </p>
+            </div>
+        </div>
+    {:else if finishMode === 'quit'}
+        <div
+            class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12"
+        >
+            <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+                Take a break?
+            </h2>
+            <p class="text-sm leading-relaxed text-muted-foreground">
+                You still have {remainingCount} unanswered {remainingCount === 1
+                    ? 'question'
+                    : 'questions'}. Your progress is saved — hop back in whenever you're ready.
+            </p>
+        </div>
+        <div
+            class="finish-footer flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end"
+        >
+            <Button variant="outline" class="w-full sm:w-auto sm:min-w-[9rem]" onclick={resetQuiz}
+                >Restart quiz</Button
+            >
+            <Button
+                class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]"
+                onclick={() => (finishDialogOpen = false)}
+            >
+                Keep practicing
+            </Button>
+            <Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleQuit}
+                >Quit now</Button
+            >
+        </div>
+    {:else}
+        <!-- no content -->
+    {/if}
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -854,6 +929,38 @@
 
 	:global(.finish-continue:hover) {
 		background: #fb923c !important;
+	}
+
+	.finish-saving {
+		background: color-mix(in srgb, hsl(var(--background)) 96%, transparent 4%);
+	}
+
+	.finish-spinner {
+		height: 2.75rem;
+		width: 2.75rem;
+		border-radius: 9999px;
+		border: 3px solid rgba(148, 163, 184, 0.35);
+		border-top-color: rgba(59, 130, 246, 0.85);
+		animation: finish-spin 0.75s linear infinite;
+	}
+
+	.finish-saving-copy h2 {
+		margin: 0;
+	}
+
+	.finish-saving-copy p {
+		margin: 0;
+	}
+
+
+
+	@keyframes finish-spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	@media (min-width: 40rem) {
