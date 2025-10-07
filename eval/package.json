@@ -30,7 +30,7 @@
     "eslint": "^9.22.0",
     "prettier": "^3.4.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.7.3",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.22.0",
     "undici": "^7.16.0",
     "vitest": "^3.2.4",

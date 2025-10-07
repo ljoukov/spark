@@ -3,3 +3,5 @@
 .env*
 node_modules/
 eval/output/
+*.tsbuildinfo
+**/*.tsbuildinfo
