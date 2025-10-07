@@ -54,25 +54,17 @@ interface CliOptions {
 interface FirestorePayload {
   readonly slug: string;
   readonly title: string;
-  readonly summary: string;
-  readonly summaryBullets: readonly string[];
   readonly difficulty: CodeProblemExtraction["difficulty"];
-  readonly primaryTopic: string;
   readonly topics: readonly string[];
-  readonly tags: readonly string[];
-  readonly tasks: readonly string[];
+  readonly description: string;
+  readonly inputFormat: string;
   readonly constraints: readonly string[];
-  readonly edgeCases: readonly string[];
-  readonly hints: readonly string[];
-  readonly followUpIdeas: readonly string[];
   readonly examples: CodeProblemExtraction["examples"];
+  readonly tests: CodeProblemExtraction["tests"];
+  readonly hints: CodeProblemExtraction["hints"];
   readonly solution: {
-    readonly optimal: CodeProblemExtraction["optimalApproach"];
-    readonly alternatives: CodeProblemExtraction["alternativeApproaches"];
-  };
-  readonly source: {
-    readonly path: string;
-    readonly markdown: string;
+    readonly language: "python";
+    readonly code: string;
   };
   readonly metadataVersion: number;
 }
@@ -84,7 +76,7 @@ const cliOptionsSchema = z.object({
   statusMode: z.enum(["interactive", "plain", "off"]).default("interactive"),
 });
 
-const METADATA_VERSION = 1;
+const METADATA_VERSION = 2;
 
 ensureEvalEnvLoaded();
 
@@ -244,33 +236,23 @@ function initialiseFirestore(): Firestore {
 
 function buildFirestorePayload(options: {
   readonly slug: string;
-  readonly relativePath: string;
-  readonly markdown: string;
   readonly extracted: CodeProblemExtraction;
 }): FirestorePayload {
-  const { slug, relativePath, markdown, extracted } = options;
+  const { slug, extracted } = options;
   return {
     slug,
     title: extracted.title,
-    summary: extracted.summary,
-    summaryBullets: extracted.summaryBullets ?? [],
     difficulty: extracted.difficulty,
-    primaryTopic: extracted.primaryTopic,
     topics: extracted.topics,
-    tags: extracted.tags ?? [],
-    tasks: extracted.tasks ?? [],
-    constraints: extracted.constraints ?? [],
-    edgeCases: extracted.edgeCases ?? [],
-    hints: extracted.hints ?? [],
-    followUpIdeas: extracted.followUpIdeas ?? [],
-    examples: extracted.examples ?? [],
+    description: extracted.description,
+    inputFormat: extracted.inputFormat,
+    constraints: extracted.constraints,
+    examples: extracted.examples,
+    tests: extracted.tests,
+    hints: extracted.hints,
     solution: {
-      optimal: extracted.optimalApproach,
-      alternatives: extracted.alternativeApproaches ?? [],
-    },
-    source: {
-      path: relativePath,
-      markdown,
+      language: "python",
+      code: extracted.solutionCode,
     },
     metadataVersion: METADATA_VERSION,
   };
@@ -351,15 +333,12 @@ async function importProblem(
 
   const payload = buildFirestorePayload({
     slug: problemFile.slug,
-    relativePath: problemFile.relativePath,
-    markdown,
     extracted,
   });
 
   progress.log(`Title: ${payload.title}`);
-  progress.log(
-    `Difficulty: ${payload.difficulty} | Primary topic: ${payload.primaryTopic}`,
-  );
+  const headlineTopic = payload.topics[0] ?? "Unknown topic";
+  progress.log(`Difficulty: ${payload.difficulty} | Lead topic: ${headlineTopic}`);
   if (payload.topics.length > 0) {
     progress.log(`Topics: ${payload.topics.join(", ")}`);
   }

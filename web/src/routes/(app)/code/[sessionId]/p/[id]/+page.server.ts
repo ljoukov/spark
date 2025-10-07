@@ -14,24 +14,24 @@ const paramsSchema = z.object({
 type SerializableProblem = {
 	id: string;
 	title: string;
-	summary: string;
-	summaryBullets: readonly string[];
-	difficulty: 'easy' | 'medium' | 'hard';
-	primaryTopic: string;
+	difficulty: CodeProblem['difficulty'];
 	topics: readonly string[];
-	tags: readonly string[];
-	tasks: readonly string[];
+	description: string;
+	descriptionHtml: string;
+	inputFormat: string;
+	inputFormatHtml: string;
 	constraints: readonly string[];
-	edgeCases: readonly string[];
+	examples: Array<CodeProblem['examples'][number] & { explanationHtml: string }>;
+	tests: Array<
+		CodeProblem['tests'][number] & {
+			index: number;
+			explanationHtml: string | null;
+		}
+	>;
 	hints: readonly string[];
-	followUpIdeas: readonly string[];
-	examples: CodeProblem['examples'];
-	solution: CodeProblem['solution'];
+	hintsHtml: readonly string[];
+	solution: CodeProblem['solution'] & { code: string };
 	metadataVersion: number;
-	starterCode: string;
-	sourcePath: string;
-	sourceMarkdown: string;
-	markdownHtml: string;
 };
 
 function renderMarkdown(markdown: string): string {
@@ -43,24 +43,29 @@ function toSerializable(problem: CodeProblem): SerializableProblem {
 	return {
 		id: problem.slug,
 		title: problem.title,
-		summary: problem.summary,
-		summaryBullets: problem.summaryBullets,
 		difficulty: problem.difficulty,
-		primaryTopic: problem.primaryTopic,
 		topics: problem.topics,
-		tags: problem.tags,
-		tasks: problem.tasks,
+		description: problem.description,
+		descriptionHtml: renderMarkdown(problem.description),
+		inputFormat: problem.inputFormat,
+		inputFormatHtml: renderMarkdown(problem.inputFormat),
 		constraints: problem.constraints,
-		edgeCases: problem.edgeCases,
+		examples: problem.examples.map((example) => ({
+			...example,
+			explanationHtml: renderMarkdown(example.explanation)
+		})),
+		tests: problem.tests.map((test, index) => ({
+			...test,
+			index,
+			explanationHtml: test.explanation ? renderMarkdown(test.explanation) : null
+		})),
 		hints: problem.hints,
-		followUpIdeas: problem.followUpIdeas,
-		examples: problem.examples,
-		solution: problem.solution,
-		metadataVersion: problem.metadataVersion,
-		starterCode: problem.starterCode,
-		sourcePath: problem.source.path,
-		sourceMarkdown: problem.source.markdown,
-		markdownHtml: renderMarkdown(problem.source.markdown)
+		hintsHtml: problem.hints.map((hint) => renderMarkdown(hint)),
+		solution: {
+			...problem.solution,
+			code: problem.solution.code
+		},
+		metadataVersion: problem.metadataVersion
 	};
 }
 
