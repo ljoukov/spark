@@ -120,6 +120,21 @@
 	);
 	const startHref = $derived(firstIncomplete.href);
 	const startLabel = $derived(firstIncomplete.title);
+	const timelineStatuses = $derived(timeline.map((step) => step.status));
+	const allCompleted = $derived(
+		timelineStatuses.length > 0 && timelineStatuses.every((status) => status === 'completed')
+	);
+	const hasProgress = $derived(timelineStatuses.some((status) => status !== 'not_started'));
+	const ctaState = $derived(allCompleted ? 'completed' : hasProgress ? 'continue' : 'start');
+	const ctaIcon = $derived(allCompleted ? '🎉' : '▶');
+	const ctaLabel = $derived(allCompleted ? 'Finish' : hasProgress ? 'Continue' : 'Start');
+	const ctaAria = $derived(
+		allCompleted
+			? 'Session completed — review any step again if you like.'
+			: hasProgress
+				? `Continue with ${startLabel}`
+				: `Start ${startLabel}`
+	);
 </script>
 
 <svelte:head>
@@ -202,10 +217,15 @@
 			{/each}
 		</div>
 		<div class="plan-footer">
-			<a class="plan-start" href={startHref}>
-				▶ Start with {startLabel}
+			<a
+				class="plan-start"
+				href={startHref}
+				data-state={ctaState}
+				aria-label={ctaAria}
+			>
+				{ctaIcon} {ctaLabel}
 			</a>
-		</div>
+			</div>
 	</div>
 </section>
 
@@ -650,6 +670,24 @@
 		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
 		/* reduce costly shadow changes */
 		box-shadow: 0 18px 45px -26px rgba(37, 99, 235, 0.55);
+		border: 1px solid transparent;
+	}
+
+    /* removed unused .plan-start__icon and __label wrappers */
+
+	.plan-start[data-state='completed'] {
+		background: rgba(34, 197, 94, 0.16);
+		color: #14532d;
+		box-shadow: none;
+		border-color: rgba(34, 197, 94, 0.45);
+		gap: 0.5rem;
+	}
+
+	:global([data-theme='dark'] .plan-start[data-state='completed']),
+	:global(:root:not([data-theme='light']) .plan-start[data-state='completed']) {
+		background: rgba(34, 197, 94, 0.28);
+		color: rgba(240, 253, 244, 0.95);
+		border-color: rgba(74, 222, 128, 0.55);
 	}
 
 	.plan-start:hover {
