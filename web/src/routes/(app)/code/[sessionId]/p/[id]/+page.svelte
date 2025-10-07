@@ -38,7 +38,7 @@
 	type PaneSide = 'left' | 'right';
 
 	const DEFAULT_LAYOUT = [50, 50] as const;
-	const CODE_PANE_DEFAULT_LAYOUT = [70, 30] as const;
+	const CODE_PANE_DEFAULT_LAYOUT = [60, 40] as const;
 	const LEFT_MAX_LAYOUT = [100, 0] as const;
 	const RIGHT_MAX_LAYOUT = [0, 100] as const;
 
@@ -69,7 +69,6 @@
 	export let data: PageData;
 
 	let problem = data.problem;
-	let markdownHtml = data.problem.markdownHtml;
 	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState: PlanItemState | null = data.sessionState.items[data.planItem.id] ?? null;
 	let hasMarkedStart = false;
@@ -82,6 +81,14 @@
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
+	let revealedHintCount = 0;
+	const difficultyLabels: Record<string, string> = {
+		warmup: 'Warm-up',
+		intro: 'Intro',
+		easy: 'Easy',
+		medium: 'Medium',
+		hard: 'Hard'
+	};
 	let editorContainer: HTMLDivElement | null = null;
 	type CodeEditor = MonacoEditorNS.IStandaloneCodeEditor;
 	let monacoEditor: CodeEditor | null = null;
@@ -89,25 +96,36 @@
 	let isFormatting = false;
 	let formatFailed = false;
 
-	const PRESET_STDIN_LINES = ['3', '5'];
 	let isPyodideLoading = false;
 	let isPyodideReady = false;
 	let preloadWorker: Worker | null = null;
 	let preloadRequestId: string | null = null;
 	let isRunning = false;
 	let runStatus: 'idle' | 'running' | 'completed' | 'error' | 'stopped' = 'idle';
-	let stdoutChunks: string[] = [];
-	let stderrChunks: string[] = [];
-	let stdoutText = '';
-	let stderrText = '';
 	let runtimeMs: number | null = null;
 	let activeWorker: Worker | null = null;
-	let activeRunId: string | null = null;
 	let runStartedAt = 0;
 	let runTooltipLabel = RUN_TOOLTIP_LABEL;
+	type TestRunStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error';
+	type TestRunResult = {
+		index: number;
+		label: string;
+		input: string;
+		expectedOutput: string;
+		explanationHtml: string | null;
+		status: TestRunStatus;
+		stdout: string;
+		stderr: string;
+		normalizedStdout: string;
+		normalizedExpected: string;
+		errorMessage: string | null;
+		runtimeMs: number | null;
+	};
+	let testResults: TestRunResult[] = [];
+	let selectedTestIndex: number | null = null;
+	let selectedResult: TestRunResult | null = null;
+	let runErrorMessage: string | null = null;
 
-	$: stdoutText = stdoutChunks.join('\n');
-	$: stderrText = stderrChunks.join('\n');
 	$: runTooltipLabel = isRunning
 		? STOP_TOOLTIP_LABEL
 		: isPyodideLoading
@@ -138,8 +156,6 @@
 		}
 		return `${(value / 1000).toFixed(2)} s`;
 	}
-
-	const PRESET_STDIN_TEXT = PRESET_STDIN_LINES.join('\n');
 
 	function normalizeOutputChunk(text: string): string {
 		return text.replace(/\r\n?/g, '\n');
@@ -195,6 +211,7 @@
 				case 'status':
 					if (data.status === 'running') {
 						isPyodideReady = true;
+						isPyodideLoading = false;
 					}
 					break;
 				case 'ready':
@@ -228,10 +245,284 @@
 		return monacoEditor?.getValue() ?? rightText ?? '';
 	}
 
-	function resetOutputState() {
-		stdoutChunks = [];
-		stderrChunks = [];
-		runtimeMs = null;
+	function splitInputLines(raw: string): string[] {
+		if (!raw) {
+			return [];
+		}
+		return raw.split('\n');
+	}
+
+	function initializeTestResults(): TestRunResult[] {
+		return problem.tests.map((test, index) => ({
+			index,
+			label: `Test ${index + 1}`,
+			input: test.input,
+			expectedOutput: test.output,
+			explanationHtml: test.explanationHtml ?? null,
+			status: 'pending',
+			stdout: '',
+			stderr: '',
+			normalizedStdout: '',
+			normalizedExpected: normalizeOutputChunk(test.output).trimEnd(),
+			errorMessage: null,
+			runtimeMs: null
+		}));
+	}
+
+	type RunExecutionResult = {
+		stdout: string;
+		stderr: string;
+		errorMessage: string | null;
+	};
+
+	type WorkerRunContext = {
+		id: string;
+		stdoutChunks: string[];
+		stderrChunks: string[];
+		resolve: (value: RunExecutionResult) => void;
+		reject: (reason?: unknown) => void;
+	};
+
+	let currentWorkerRun: WorkerRunContext | null = null;
+	let stopRequested = false;
+
+	function attachWorker(worker: Worker) {
+		worker.onmessage = (event: MessageEvent<PythonRunnerWorkerMessage>) => {
+			const data = event.data;
+			if (!data) {
+				return;
+			}
+
+			if (data.type === 'status') {
+				if (data.status === 'initializing') {
+					isPyodideLoading = true;
+				} else if (data.status === 'running') {
+					isPyodideLoading = false;
+					isPyodideReady = true;
+				}
+				return;
+			}
+
+			if (data.type === 'ready') {
+				isPyodideReady = true;
+				isPyodideLoading = false;
+				return;
+			}
+
+			if (!currentWorkerRun || data.requestId !== currentWorkerRun.id) {
+				return;
+			}
+
+			switch (data.type) {
+				case 'stdout':
+					currentWorkerRun.stdoutChunks.push(normalizeOutputChunk(data.text));
+					break;
+				case 'stderr':
+					currentWorkerRun.stderrChunks.push(normalizeOutputChunk(data.text));
+					break;
+				case 'done':
+					currentWorkerRun.resolve({
+						stdout: currentWorkerRun.stdoutChunks.join(''),
+						stderr: currentWorkerRun.stderrChunks.join(''),
+						errorMessage: null
+					});
+					currentWorkerRun = null;
+					break;
+				case 'error':
+					currentWorkerRun.resolve({
+						stdout: currentWorkerRun.stdoutChunks.join(''),
+						stderr: currentWorkerRun.stderrChunks.join(''),
+						errorMessage: data.error ?? 'Execution failed'
+					});
+					currentWorkerRun = null;
+					break;
+				default:
+					break;
+			}
+		};
+
+		worker.onerror = (event) => {
+			const message = event?.message ?? 'Python worker crashed.';
+			if (currentWorkerRun) {
+				currentWorkerRun.reject(new Error(message));
+				currentWorkerRun = null;
+			}
+			isPyodideLoading = false;
+			isPyodideReady = false;
+		};
+	}
+
+	function runSingleTest(
+		worker: Worker,
+		source: string,
+		stdinInput: string
+	): Promise<RunExecutionResult> {
+		return new Promise<RunExecutionResult>((resolve, reject) => {
+			if (currentWorkerRun) {
+				reject(new Error('A Python run is already in progress.'));
+				return;
+			}
+
+			const requestId = generateWorkerRequestId();
+			currentWorkerRun = {
+				id: requestId,
+				stdoutChunks: [],
+				stderrChunks: [],
+				resolve,
+				reject
+			};
+
+			const message: PythonRunnerRequest = {
+				type: 'run',
+				requestId,
+				code: source,
+				stdin: splitInputLines(stdinInput)
+			};
+
+			worker.postMessage(message);
+		});
+	}
+
+	function getStatusLabel(result: TestRunResult): string {
+		switch (result.status) {
+			case 'passed':
+				return 'Passed';
+			case 'failed':
+				return 'Failed';
+			case 'error':
+				return 'Error';
+			case 'running':
+				return 'Running';
+			default:
+				return 'Pending';
+		}
+	}
+
+	function getActualOutputDisplay(result: TestRunResult): string {
+		if (result.status === 'pending') {
+			return '—';
+		}
+		if (result.status === 'running') {
+			return 'Running…';
+		}
+		if (result.stdout.length === 0) {
+			return result.errorMessage ? '' : '∅ (empty)';
+		}
+		return result.stdout;
+	}
+
+	function getChipClasses(result: TestRunResult, isSelected: boolean): string {
+		const base = 'rounded-full border px-3 py-1 text-xs font-semibold transition-colors';
+		const selected = isSelected ? 'ring-1 ring-primary/100' : '';
+		const tone = (() => {
+			switch (result.status) {
+				case 'passed':
+					return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600';
+				case 'failed':
+					return 'border-destructive/40 bg-destructive/10 text-destructive';
+				case 'error':
+					return 'border-destructive/60 bg-destructive/15 text-destructive';
+				case 'running':
+					return 'border-primary/50 bg-primary/10 text-primary';
+				default:
+					return 'border-muted-foreground/30 bg-muted text-muted-foreground';
+			}
+		})();
+		return cn(base, tone, selected);
+	}
+
+	function handleSelectTest(index: number): void {
+		selectedTestIndex = index;
+	}
+	async function runAllTests(source: string): Promise<void> {
+		let worker: Worker | null = null;
+		stopRequested = false;
+		try {
+			worker = createPythonWorker();
+		} catch (error) {
+			runStatus = 'error';
+			runErrorMessage = error instanceof Error ? error.message : String(error);
+			return;
+		}
+
+		activeWorker = worker;
+		attachWorker(worker);
+
+		for (const [index, test] of problem.tests.entries()) {
+			if (stopRequested) {
+				break;
+			}
+
+			testResults = testResults.map((result, i) =>
+				i === index
+					? {
+							...result,
+							status: 'running',
+							stdout: '',
+							stderr: '',
+							normalizedStdout: '',
+							errorMessage: null,
+							runtimeMs: null
+						}
+					: result
+			);
+
+			const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+			try {
+				const execution = await runSingleTest(worker, source, test.input);
+				const duration =
+					(typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+				const normalizedStdout = normalizeOutputChunk(execution.stdout).trimEnd();
+				const expected = testResults[index]?.normalizedExpected ?? '';
+				let status: TestRunStatus;
+				if (execution.errorMessage) {
+					status = 'error';
+				} else if (normalizedStdout === expected) {
+					status = 'passed';
+				} else {
+					status = 'failed';
+				}
+
+				testResults = testResults.map((result, i) =>
+					i === index
+						? {
+								...result,
+								status,
+								stdout: execution.stdout,
+								stderr: execution.stderr,
+								normalizedStdout,
+								errorMessage: execution.errorMessage,
+								runtimeMs: duration
+							}
+						: result
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				testResults = testResults.map((result, i) =>
+					i === index
+						? {
+								...result,
+								status: 'error',
+								errorMessage: message
+							}
+						: result
+				);
+				if (stopRequested) {
+					runStatus = 'stopped';
+					runErrorMessage = message;
+				} else {
+					runStatus = 'error';
+					runErrorMessage = message;
+				}
+				break;
+			}
+		}
+		if (worker) {
+			worker.terminate();
+		}
+		activeWorker = null;
+		currentWorkerRun = null;
 	}
 
 	function handleRunClick() {
@@ -242,73 +533,69 @@
 			console.warn('Code execution is only available in the browser runtime.');
 			return;
 		}
+
+		runErrorMessage = null;
+		testResults = initializeTestResults();
+		selectedTestIndex = testResults.length > 0 ? 0 : null;
+
 		const source = getCurrentSource();
-		resetOutputState();
 		if (preloadWorker) {
 			cleanupPreloadWorker();
 			isPyodideLoading = false;
 		}
+
 		runStatus = 'running';
 		isRunning = true;
-		const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-		runStartedAt = now;
-		const runId = generateWorkerRequestId();
+		runStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+		runtimeMs = null;
 
-		let worker: Worker;
-		try {
-			worker = createPythonWorker();
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			stderrChunks = [...stderrChunks, `${message}\n`];
-			isRunning = false;
-			runStatus = 'error';
-			isPyodideLoading = false;
-			return;
-		}
-
-		activeWorker = worker;
-		activeRunId = runId;
-
-		worker.onmessage = (event: MessageEvent<PythonRunnerWorkerMessage>) => {
-			if (!event?.data) {
-				return;
-			}
-			handleWorkerMessage(event.data);
-		};
-
-		worker.onerror = (event) => {
-			const message = event?.message ?? 'Python worker failed with an unknown error.';
-			stderrChunks = [...stderrChunks, `${message}\n`];
-			finalizeRun('error');
-		};
-
-		const message: PythonRunnerRequest = {
-			type: 'run',
-			requestId: runId,
-			code: source,
-			stdin: PRESET_STDIN_LINES
-		};
-
-		worker.postMessage(message);
+		void runAllTests(source)
+			.then(() => {
+				const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+				runtimeMs = finishedAt - runStartedAt;
+				if (stopRequested) {
+					runStatus = runStatus === 'error' ? 'error' : 'stopped';
+				} else if (runStatus !== 'error') {
+					runStatus = 'completed';
+				}
+				isRunning = false;
+				isPyodideLoading = false;
+			})
+			.catch((error) => {
+				const message = error instanceof Error ? error.message : String(error);
+				runStatus = 'error';
+				runErrorMessage = message;
+				isRunning = false;
+				isPyodideLoading = false;
+			});
 	}
-
 	function handleStopClick() {
 		if (!isRunning) {
 			return;
+		}
+		stopRequested = true;
+		if (currentWorkerRun) {
+			currentWorkerRun.reject(new Error('Execution stopped by user.'));
+			currentWorkerRun = null;
 		}
 		if (activeWorker) {
 			activeWorker.terminate();
 			activeWorker = null;
 		}
+		testResults = testResults.map((result) =>
+			result.status === 'running'
+				? { ...result, status: 'error', errorMessage: 'Execution stopped by user.' }
+				: result
+		);
 		isRunning = false;
-		runStatus = 'stopped';
+		isPyodideLoading = false;
 		const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
 		if (runStartedAt) {
 			runtimeMs = now - runStartedAt;
 		}
+		runStatus = 'stopped';
+		runErrorMessage = 'Execution stopped by user.';
 		runStartedAt = 0;
-		activeRunId = null;
-		stderrChunks = [...stderrChunks, 'Execution stopped by user.\n'];
 	}
 
 	function handleSubmitClick() {
@@ -319,58 +606,6 @@
 		void sessionStateStore.markStatus(data.planItem.id, 'completed', {
 			completedAt: new Date()
 		});
-	}
-
-	function handleWorkerMessage(message: PythonRunnerWorkerMessage) {
-		if (!activeRunId || message.requestId !== activeRunId) {
-			return;
-		}
-		switch (message.type) {
-			case 'stdout':
-				stdoutChunks = [...stdoutChunks, normalizeOutputChunk(message.text)];
-				break;
-			case 'stderr':
-				stderrChunks = [...stderrChunks, normalizeOutputChunk(message.text)];
-				break;
-			case 'error': {
-				const normalizedError = normalizeOutputChunk(message.error);
-				const errorText = normalizedError.endsWith('\n') ? normalizedError : `${normalizedError}\n`;
-				stderrChunks = [...stderrChunks, errorText];
-				finalizeRun('error');
-				break;
-			}
-			case 'done':
-				finalizeRun('completed');
-				break;
-			case 'status':
-				if (message.status === 'running') {
-					isPyodideReady = true;
-					isPyodideLoading = false;
-				}
-				break;
-			case 'ready':
-				isPyodideReady = true;
-				isPyodideLoading = false;
-				break;
-			default:
-				break;
-		}
-	}
-
-	function finalizeRun(outcome: 'completed' | 'error') {
-		if (activeWorker) {
-			activeWorker.terminate();
-			activeWorker = null;
-		}
-		isRunning = false;
-		isPyodideLoading = false;
-		if (runStartedAt) {
-			const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-			runtimeMs = now - runStartedAt;
-		}
-		runStartedAt = 0;
-		activeRunId = null;
-		runStatus = outcome;
 	}
 
 	const FORMAT_ENDPOINT = '/api/format';
@@ -477,16 +712,28 @@
 		return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
 	}
 
+	function revealNextHint() {
+		if (revealedHintCount < problem.hints.length) {
+			revealedHintCount += 1;
+		}
+	}
+
 	$: if (problem !== data.problem) {
 		problem = data.problem;
 	}
 
-	$: if (markdownHtml !== problem.markdownHtml) {
-		markdownHtml = problem.markdownHtml;
+	$: selectedResult = selectedTestIndex === null ? null : (testResults[selectedTestIndex] ?? null);
+	$: if (
+		selectedTestIndex !== null &&
+		(selectedTestIndex < 0 || selectedTestIndex >= testResults.length)
+	) {
+		selectedTestIndex = testResults.length > 0 ? 0 : null;
+		selectedResult = selectedTestIndex === null ? null : (testResults[selectedTestIndex] ?? null);
 	}
 
 	$: if (problem.id !== currentProblemId) {
 		currentProblemId = problem.id;
+		revealedHintCount = 0;
 		rightText = DEFAULT_CODE;
 		if (monacoEditor && monacoEditor.getValue() !== rightText) {
 			monacoEditor.setValue(rightText);
@@ -495,13 +742,17 @@
 			activeWorker.terminate();
 			activeWorker = null;
 		}
+		currentWorkerRun = null;
 		isRunning = false;
+		isPyodideLoading = false;
 		runStatus = 'idle';
-		stdoutChunks = [];
-		stderrChunks = [];
+		runErrorMessage = null;
 		runtimeMs = null;
-		activeRunId = null;
 		runStartedAt = 0;
+		stopRequested = false;
+		testResults = [];
+		selectedTestIndex = null;
+		selectedResult = null;
 	}
 
 	$: if (planItemState?.status === 'completed' && !completionRecorded) {
@@ -733,10 +984,100 @@
 							</Tooltip.Root>
 						</div>
 						<div
-							class="markdown-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
+							class="problem-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
 							aria-label="Problem description"
 						>
-							<div class="markdown space-y-4">{@html markdownHtml}</div>
+							<div class="space-y-6">
+								<section class="space-y-3">
+									<div
+										class="flex flex-wrap items-center gap-2 text-[0.7rem] font-medium tracking-wide uppercase"
+									>
+										<span class="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+											{difficultyLabels[problem.difficulty] ?? problem.difficulty}
+										</span>
+										{#each problem.topics as topic}
+											<span class="rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
+												>{topic}</span
+											>
+										{/each}
+									</div>
+									<div class="markdown space-y-3 text-sm">{@html problem.descriptionHtml}</div>
+								</section>
+								<section class="space-y-2">
+									<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Input Format
+									</h3>
+									<div class="markdown space-y-2 text-sm">{@html problem.inputFormatHtml}</div>
+								</section>
+								<section class="space-y-2">
+									<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Constraints
+									</h3>
+									<ul class="list-disc space-y-1 pl-4 text-sm">
+										{#each problem.constraints as constraint}
+											<li>{constraint}</li>
+										{/each}
+									</ul>
+								</section>
+								<section class="space-y-3">
+									<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+										Examples
+									</h3>
+									<div class="space-y-3">
+										{#each problem.examples as example}
+											<div class="space-y-2 rounded-md border border-input bg-muted/100 p-3">
+												<div class="text-sm font-semibold">{example.title}</div>
+												<div>
+													<div class="text-xs font-medium text-muted-foreground uppercase">
+														Input
+													</div>
+													<pre
+														class="rounded bg-background/80 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">
+{example.input}</pre>
+												</div>
+												<div>
+													<div class="text-xs font-medium text-muted-foreground uppercase">
+														Output
+													</div>
+													<pre
+														class="rounded bg-background/80 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">
+{example.output}</pre>
+												</div>
+												<div class="markdown space-y-2 text-xs text-muted-foreground">
+													{@html example.explanationHtml}
+												</div>
+											</div>
+										{/each}
+									</div>
+								</section>
+								<section class="space-y-3">
+									<div class="flex items-center justify-between gap-2">
+										<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+											Hints
+										</h3>
+										{#if revealedHintCount < problem.hints.length}
+											<button
+												type="button"
+												class={cn(buttonVariants({ size: 'sm' }), buttonShapeClass)}
+												onclick={revealNextHint}
+											>
+												Reveal hint {revealedHintCount + 1}
+											</button>
+										{/if}
+									</div>
+									<ol class="space-y-2 text-sm">
+										{#each problem.hintsHtml as hintHtml, index}
+											<li class="pl-1">
+												{#if index < revealedHintCount}
+													<div class="markdown space-y-2 text-sm">{@html hintHtml}</div>
+												{:else}
+													<span class="text-xs text-muted-foreground italic">Locked</span>
+												{/if}
+											</li>
+										{/each}
+									</ol>
+								</section>
+							</div>
 						</div>
 					</div>
 				</Resizable.Pane>
@@ -872,25 +1213,122 @@
 							<Resizable.Pane class="min-h-0" defaultSize={CODE_PANE_DEFAULT_LAYOUT[1]} minSize={0}>
 								<div class="code-output-pane pt-2">
 									<div class="code-output-shell" aria-label="Output panel">
-										<div class="output-sections">
-											<div class="flex gap-2 pl-2">
-												<span class="uppercase">Status:</span>
-												<span class="font-mono not-italic">{runStatusLabel}</span>
-												<span class="ml-2 uppercase">Runtime:</span>
-												<span class="font-mono not-italic">{runtimeLabel}</span>
+										<div class="output-sections space-y-3">
+											<div
+												class="flex flex-wrap items-center gap-2 pl-2 text-xs text-muted-foreground uppercase"
+											>
+												<span>Status:</span>
+												<span class="font-mono text-base text-foreground normal-case"
+													>{runStatusLabel}</span
+												>
+												<span class="ml-3">Runtime:</span>
+												<span class="font-mono text-base text-foreground normal-case"
+													>{runtimeLabel}</span
+												>
 											</div>
-											<div class="output-section">
-												<span class="output-section-label">STDIN</span>
-												<pre class="output-section-body">{PRESET_STDIN_TEXT}</pre>
+											{#if runErrorMessage && runStatus === 'error'}
+												<div
+													class="ml-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+												>
+													{runErrorMessage}
+												</div>
+											{/if}
+											<div class="ml-2 flex flex-wrap gap-2">
+												{#if testResults.length === 0}
+													<span class="text-xs text-muted-foreground"
+														>Run your code to see each test result.</span
+													>
+												{:else}
+													{#each testResults as result, idx}
+														<button
+															type="button"
+															class={getChipClasses(result, selectedTestIndex === idx)}
+															onclick={() => handleSelectTest(idx)}
+														>
+															{result.label}{result.status === 'error' ? ' 💥' : ''}
+														</button>
+													{/each}
+												{/if}
 											</div>
-											<div class="output-section">
-												<span class="output-section-label">STDOUT</span>
-												<pre class="output-section-body">{stdoutText || '—'}</pre>
-											</div>
-											<div class="output-section pb-4">
-												<span class="output-section-label">STDERR</span>
-												<pre class="output-section-body">{stderrText || '—'}</pre>
-											</div>
+											{#if selectedResult}
+												<div
+													class="ml-2 space-y-3 rounded-md border border-input bg-background/80 p-3 text-sm"
+												>
+													<div
+														class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground uppercase"
+													>
+														<span
+															>Status: <span
+																class="ml-1 font-mono text-base text-foreground normal-case"
+																>{getStatusLabel(selectedResult)}</span
+															></span
+														>
+														<span
+															>Runtime: <span
+																class="ml-1 font-mono text-base text-foreground normal-case"
+																>{formatRuntime(selectedResult.runtimeMs)}</span
+															></span
+														>
+													</div>
+													<div>
+														<h4 class="text-xs font-semibold text-muted-foreground uppercase">
+															Input
+														</h4>
+														<pre
+															class="mt-1 rounded bg-muted/30 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{selectedResult.input ||
+																'—'}</pre>
+													</div>
+													<div class="grid gap-3 md:grid-cols-2">
+														<div>
+															<h4 class="text-xs font-semibold text-muted-foreground uppercase">
+																Expected Output
+															</h4>
+															<pre
+																class="mt-1 rounded bg-muted/100 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{selectedResult.expectedOutput ||
+																	'—'}</pre>
+														</div>
+														<div>
+															<h4 class="text-xs font-semibold text-muted-foreground uppercase">
+																Actual Output
+															</h4>
+															<pre
+																class={cn(
+																	'mt-1 rounded p-2 font-mono text-xs leading-snug whitespace-pre-wrap',
+																	selectedResult.status === 'passed'
+																		? 'bg-emerald-500/10 text-emerald-600'
+																		: selectedResult.status === 'failed'
+																			? 'bg-destructive/10 text-destructive'
+																			: 'bg-muted/30 text-foreground'
+																)}>{getActualOutputDisplay(selectedResult)}</pre>
+														</div>
+													</div>
+													{#if selectedResult.stderr}
+														<div>
+															<h4 class="text-xs font-semibold text-muted-foreground uppercase">
+																Stderr
+															</h4>
+															<pre
+																class="mt-1 rounded bg-destructive/10 p-2 font-mono text-xs leading-snug whitespace-pre-wrap text-destructive">
+{selectedResult.stderr}</pre>
+														</div>
+													{:else if selectedResult.errorMessage}
+														<div class="rounded bg-destructive/10 p-2 text-xs text-destructive">
+															{selectedResult.errorMessage}
+														</div>
+													{/if}
+													{#if selectedResult.explanationHtml}
+														<div class="markdown space-y-2 text-xs text-muted-foreground">
+															{@html selectedResult.explanationHtml}
+														</div>
+													{/if}
+												</div>
+											{:else if testResults.length === 0}
+												<div
+													class="ml-2 rounded-md border border-dashed border-muted-foreground/40 bg-muted/10 p-4 text-xs text-muted-foreground"
+												>
+													Run your code to evaluate all tests.
+												</div>
+											{/if}
 										</div>
 									</div>
 								</div>
@@ -1036,11 +1474,8 @@
 	}
 
 	.code-output-shell {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		flex: 1 1 auto;
 		min-height: 0;
+		width: 100%;
 		height: 100%;
 		padding: 1rem;
 		border: 1px solid rgba(148, 163, 184, 0.26);

@@ -361,199 +361,303 @@ const QUIZZES: QuizDefinition[] = [
   },
 ];
 
+const coinChangeExampleOne = {
+  title: "Example 1",
+  input: ["5", "3", "1 2 5"].join("\n"),
+  output: "4",
+  explanation:
+    "Four combinations: 5; 2 + 2 + 1; 2 + 1 + 1 + 1; 1 + 1 + 1 + 1 + 1.",
+};
+
+const coinChangeExampleTwo = {
+  title: "Example 2",
+  input: ["3", "1", "2"].join("\n"),
+  output: "0",
+  explanation:
+    "Coin value 2 never sums to 3, so there are no valid combinations.",
+};
+
+const coinChangeExampleThree = {
+  title: "Example 3",
+  input: ["10", "4", "1 3 4 5"].join("\n"),
+  output: "12",
+  explanation:
+    "Using {1, 3, 4, 5} there are 12 combinations, including 5 + 5, 4 + 4 + 1 + 1, 4 + 3 + 3, and 3 + 3 + 3 + 1.",
+};
+
+const COIN_CHANGE_EXAMPLES = [
+  coinChangeExampleOne,
+  coinChangeExampleTwo,
+  coinChangeExampleThree,
+];
+
+const COIN_CHANGE_TESTS = [
+  {
+    input: coinChangeExampleOne.input,
+    output: coinChangeExampleOne.output,
+    explanation: coinChangeExampleOne.explanation,
+  },
+  {
+    input: coinChangeExampleTwo.input,
+    output: coinChangeExampleTwo.output,
+    explanation: coinChangeExampleTwo.explanation,
+  },
+  {
+    input: coinChangeExampleThree.input,
+    output: coinChangeExampleThree.output,
+    explanation: coinChangeExampleThree.explanation,
+  },
+  {
+    input: ["0", "3", "2 3 5"].join("\n"),
+    output: "1",
+  },
+  {
+    input: ["7", "4", "2 3 4 7"].join("\n"),
+    output: "3",
+  },
+  {
+    input: ["9", "3", "2 3 4"].join("\n"),
+    output: "3",
+  },
+  {
+    input: ["12", "3", "3 4 6"].join("\n"),
+    output: "4",
+  },
+  {
+    input: ["12", "2", "5 7"].join("\n"),
+    output: "1",
+  },
+  {
+    input: ["30", "3", "2 5 10"].join("\n"),
+    output: "10",
+  },
+  {
+    input: ["18", "3", "1 5 9"].join("\n"),
+    output: "7",
+  },
+  {
+    input: ["100", "4", "1 5 10 25"].join("\n"),
+    output: "242",
+  },
+  {
+    input: ["25", "3", "3 7 11"].join("\n"),
+    output: "3",
+  },
+  {
+    input: ["50", "6", "1 2 5 10 20 50"].join("\n"),
+    output: "451",
+  },
+  {
+    input: ["63", "4", "3 5 9 21"].join("\n"),
+    output: "38",
+  },
+  {
+    input: ["200", "8", "1 2 5 10 20 50 100 200"].join("\n"),
+    output: "73682",
+  },
+];
+
+const decodeExampleOne = {
+  title: "Example 1",
+  input: "12",
+  output: "2",
+  explanation: 'Two decodings: "AB" (1|2) and "L" (12).',
+};
+
+const decodeExampleTwo = {
+  title: "Example 2",
+  input: "226",
+  output: "3",
+  explanation:
+    'Three decodings: "BZ" (2|26), "VF" (22|6), and "BBF" (2|2|6).',
+};
+
+const decodeExampleThree = {
+  title: "Example 3",
+  input: "101",
+  output: "1",
+  explanation: 'Only "JA" (10|1) is valid because "01" is not a letter.',
+};
+
+const DECODE_EXAMPLES = [
+  decodeExampleOne,
+  decodeExampleTwo,
+  decodeExampleThree,
+];
+
+const DECODE_TESTS = [
+  {
+    input: decodeExampleOne.input,
+    output: decodeExampleOne.output,
+    explanation: decodeExampleOne.explanation,
+  },
+  {
+    input: decodeExampleTwo.input,
+    output: decodeExampleTwo.output,
+    explanation: decodeExampleTwo.explanation,
+  },
+  {
+    input: decodeExampleThree.input,
+    output: decodeExampleThree.output,
+    explanation: decodeExampleThree.explanation,
+  },
+  {
+    input: "06",
+    output: "0",
+  },
+  {
+    input: "0",
+    output: "0",
+  },
+  {
+    input: "27",
+    output: "1",
+  },
+  {
+    input: "2101",
+    output: "1",
+  },
+  {
+    input: "111111",
+    output: "13",
+  },
+  {
+    input: "2611055971756562",
+    output: "4",
+  },
+  {
+    input: "123123123",
+    output: "27",
+  },
+  {
+    input: "100",
+    output: "0",
+  },
+  {
+    input: "301",
+    output: "0",
+  },
+  {
+    input: "1",
+    output: "1",
+  },
+  {
+    input: "3015",
+    output: "0",
+  },
+];
+
 const PROBLEMS: CodeProblem[] = [
   {
     slug: "coin-change-ways",
     title: "Coin Change Ways",
-    summary:
-      "Count the number of combinations that make a target amount using unlimited coins.",
-    summaryBullets: [
-      "Classic unbounded knapsack / coin change counting variant",
-      "Order does not matter—combinations are sets of coin counts",
-      "Use DP where state is amount and iterate coins outer-most",
-    ],
     difficulty: "easy",
-    primaryTopic: "Dynamic Programming",
     topics: ["Dynamic Programming", "Combinatorics"],
-    tags: ["dp", "combinations", "coin-change"],
-    tasks: [
-      "Return the total number of ways to form the amount",
-      "Unlimited copies of each coin are available",
-    ],
+    description: [
+      "You are stocking a kiosk with unlimited copies of several coin denominations. Given a target amount, count how many unique combinations of these coins sum to the target. Order does not matter—3 + 2 + 2 is the same as 2 + 3 + 2.",
+      "",
+      "Write a program that reads the amount, the number of distinct coin values, and the coin values themselves from standard input. Print only the number of combinations."
+    ].join("\n"),
+    inputFormat: [
+      "- Line 1: integer A — the target amount.",
+      "- Line 2: integer K — the number of distinct coin values provided.",
+      "- Line 3: K space-separated integers listing each coin value. Duplicate numbers should be treated as the same coin."
+    ].join("\n"),
     constraints: [
-      "1 ≤ amount ≤ 5000",
-      "1 ≤ coins.length ≤ 50",
-      "1 ≤ coins[i] ≤ amount",
+      "0 ≤ A ≤ 5000",
+      "1 ≤ K ≤ 60",
+      "1 ≤ coin value ≤ 5000",
+      "The answer fits in a 64-bit signed integer"
     ],
-    edgeCases: [
-      "Amount 0 should return 1 (empty combination)",
-      "If no coins can form the amount, return 0",
-      "Duplicate coin values should be deduplicated or handled carefully",
-    ],
+    examples: COIN_CHANGE_EXAMPLES,
+    tests: COIN_CHANGE_TESTS,
     hints: [
-      "Sort coins so combinations are counted once",
-      "dp[a] = number of ways to make amount a",
-      "Iterate coins outer loop so each coin contributes once",
-    ],
-    followUpIdeas: [
-      "What if each coin can only be used at most once?",
-      "How would you output one actual combination?",
-    ],
-    examples: [
-      {
-        label: "Example 1",
-        input: "amount = 5, coins = [1,2,5]",
-        output: "4",
-        explanation: "Combinations: 5, 2+2+1, 2+1+1+1, 1+1+1+1+1",
-      },
-      {
-        label: "Example 2",
-        input: "amount = 3, coins = [2]",
-        output: "0",
-        explanation: "You cannot form amount 3 using only 2s",
-      },
+      "Sort and deduplicate the coin values, then think about building amounts from 0 up to A.",
+      "Let dp[x] be the number of ways to make amount x. Iterate coins on the outside so different orders of the same coins are not counted twice.",
+      "Set dp[0] = 1 and for each coin add dp[x - coin] into dp[x] for every x ≥ coin. The final dp[A] is the answer."
     ],
     solution: {
-      optimal: {
-        title: "Bottom-up DP over amount",
-        overview:
-          "Use a one-dimensional DP array where dp[a] counts combinations for amount a. Iterate coins first to avoid permutations.",
-        steps: [
-          "Initialise dp array of size amount + 1 with dp[0] = 1",
-          "For each coin, update dp[a] += dp[a - coin] for all a ≥ coin",
-          "Return dp[amount]",
-        ],
-        timeComplexity: "O(amount * coins.length)",
-        spaceComplexity: "O(amount)",
-        keyIdeas: [
-          "Iterate coins outer loop to avoid counting order variations",
-          "dp[a] uses previous value of same array for current coin",
-        ],
-      },
-      alternatives: [
-        {
-          title: "Top-down memoized recursion",
-          overview:
-            "Recurse on index and remaining amount, memoising results. Equivalent complexity but conceptually closer to recursive decomposition.",
-          steps: [
-            "Sort coins ascending",
-            "Define dfs(i, remaining) returning ways using coins[i:]",
-            "Memoise by (i, remaining) to avoid recomputation",
-          ],
-          timeComplexity: "O(amount * coins.length)",
-          spaceComplexity: "O(amount + coins.length)",
-          keyIdeas: [
-            "Memoisation",
-            "Avoid permutations by non-decreasing coin indexes",
-          ],
-        },
-      ],
+      language: "python",
+      code: [
+        "import sys",
+        "",
+        "data = sys.stdin.read().strip().split()",
+        "if not data:",
+        "    sys.exit(0)",
+        "it = iter(data)",
+        "amount = int(next(it))",
+        "coin_count = int(next(it))",
+        "coins = [int(next(it)) for _ in range(coin_count)]",
+        "coins = sorted(set(coins))",
+        "",
+        "dp = [0] * (amount + 1)",
+        "dp[0] = 1",
+        "for coin in coins:",
+        "    for value in range(coin, amount + 1):",
+        "        dp[value] += dp[value - coin]",
+        "",
+        "print(dp[amount])",
+      ].join("\n"),
     },
-    source: {
-      path: "generated/dp/coin-change-ways.md",
-      markdown:
-        "# Coin Change Ways\n\nGiven an integer amount and an array of coin denominations, return the number of combinations that make up that amount. Order does not matter. Use dynamic programming to accumulate combinations, iterating coins on the outer loop so permutations collapse into single counts.",
-    },
-    metadataVersion: 1,
-    starterCode:
-      "" +
-      "def change(amount: int, coins: list[int]) -> int:\n" +
-      "    # TODO: implement\n" +
-      "    return 0\n",
+    metadataVersion: 2,
   },
   {
     slug: "decode-ways",
     title: "Decode Ways",
-    summary:
-      "Count how many ways a digit string can map to letters using A=1 .. Z=26.",
-    summaryBullets: [
-      "Classic DP over string index",
-      "Handle zeros carefully—they must pair with 1 or 2",
-      "Use one- or two-character transitions",
-    ],
     difficulty: "easy",
-    primaryTopic: "Dynamic Programming",
     topics: ["Dynamic Programming", "Strings"],
-    tags: ["dp", "strings", "decode-ways"],
-    tasks: ["Return count of valid decodings", "Digits map A=1 through Z=26"],
-    constraints: ["1 ≤ s.length ≤ 100", "s contains digits only"],
-    edgeCases: [
-      "Leading zero invalid",
-      "'10' and '20' valid but '30' invalid",
-      "Long runs of zeros should return 0",
+    description: [
+      "Digits 1 through 26 map to uppercase letters A through Z. Given a digit string with no separators, count how many different letter sequences it can represent. For example, \"226\" can decode to \"BBF\", \"BZ\", or \"VF\".",
+      "",
+      "Write a program that reads the digit string from standard input and prints the number of distinct decodings. The program must read from stdin and write only the integer count."
+    ].join("\n"),
+    inputFormat: [
+      "- A single line containing the digit string s."
+    ].join("\n"),
+    constraints: [
+      "1 ≤ |s| ≤ 100",
+      "s consists only of characters '0'–'9'",
+      "The answer fits in a 32-bit signed integer"
     ],
+    examples: DECODE_EXAMPLES,
+    tests: DECODE_TESTS,
     hints: [
-      "dp[i] = ways to decode prefix of length i",
-      "Single digit valid if 1-9",
-      "Pair valid if between 10 and 26 inclusive",
-    ],
-    followUpIdeas: [
-      "Return sample decoding instead of count",
-      "Handle '*' wildcard digits (LeetCode Hard variant)",
-    ],
-    examples: [
-      {
-        label: "Example 1",
-        input: 's = "12"',
-        output: "2",
-        explanation: "1-2 → AB, 12 → L",
-      },
-      {
-        label: "Example 2",
-        input: 's = "226"',
-        output: "3",
-        explanation: "2-2-6, 22-6, 2-26",
-      },
-      {
-        label: "Example 3",
-        input: 's = "06"',
-        output: "0",
-        explanation: "Leading zero means invalid",
-      },
+      "Process the string left to right and consider how many ways each prefix can be decoded.",
+      "At position i, you can extend with s[i] when it is 1–9 and with s[i-1:i+1] when it forms a number 10–26.",
+      "Maintain two rolling counts: ways up to i-2 and ways up to i-1. Combine them to produce the current count."
     ],
     solution: {
-      optimal: {
-        title: "Bottom-up DP with constant space",
-        overview:
-          "Traverse the string and count decodings using previous two counts, checking valid single and double digit windows.",
-        steps: [
-          "Initialise prev2 = 1 (empty string), prev1 = 1 if first char valid else 0",
-          "For each index, compute current based on valid single and double digit segments",
-          "Slide window by updating prev2, prev1",
-        ],
-        timeComplexity: "O(n)",
-        spaceComplexity: "O(1)",
-        keyIdeas: [
-          "Treat invalid zero cases carefully",
-          "Reuse two rolling variables instead of full array",
-        ],
-      },
-      alternatives: [
-        {
-          title: "Top-down recursion with memo",
-          overview:
-            "Recursively decode starting at each index and memoise. Same complexity but easier to reason about for some learners.",
-          steps: [
-            "If current char is 0 return 0",
-            "Take single digit and double digit (if valid) recursions",
-            "Memoise index to count",
-          ],
-          timeComplexity: "O(n)",
-          spaceComplexity: "O(n)",
-          keyIdeas: ["Memoisation", "Two-character branching"],
-        },
-      ],
+      language: "python",
+      code: [
+        "import sys",
+        "",
+        "",
+        "def count_decodings(s: str) -> int:",
+        "    if not s or s[0] == \"0\":",
+        "        return 0",
+        "",
+        "    prev2 = 1",
+        "    prev1 = 1",
+        "    for index in range(1, len(s)):",
+        "        current = 0",
+        "        if s[index] != \"0\":",
+        "            current += prev1",
+        "        pair = int(s[index - 1 : index + 1])",
+        "        if 10 <= pair <= 26:",
+        "            current += prev2",
+        "        if current == 0:",
+        "            return 0",
+        "        prev2, prev1 = prev1, current",
+        "",
+        "    return prev1",
+        "data = sys.stdin.read().strip()",
+        "if not data:",
+        "    sys.exit(0)",
+        "s = data.split()[0]",
+        "print(count_decodings(s))",
+      ].join("\n"),
     },
-    source: {
-      path: "generated/dp/decode-ways.md",
-      markdown:
-        "# Decode Ways\n\nGiven a digit string s, return the number of ways to decode it using the mapping A=1, …, Z=26. Use DP to consider one- and two-digit transitions while rejecting invalid zeros.",
-    },
-    metadataVersion: 1,
-    starterCode:
-      "def num_decodings(s: str) -> int:\n" +
-      "    # TODO: implement\n" +
-      "    return 0\n",
+    metadataVersion: 2,
   },
 ];
 
