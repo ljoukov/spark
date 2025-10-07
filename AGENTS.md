@@ -12,6 +12,7 @@
 - After cloning, sync submodule URLs with `git submodule sync --recursive`.
 - Initialize and update all submodules with `git submodule update --init --recursive`.
 - Re-run the update command if new submodules are added or refs change.
+- For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 
 ## spark-data Submodule
 
