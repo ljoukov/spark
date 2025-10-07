@@ -171,6 +171,99 @@ function getErrorMessage(error: unknown): string {
   return "";
 }
 
+function parseRetryInfo(details: unknown): number | undefined {
+  if (Array.isArray(details)) {
+    for (const entry of details) {
+      const ms = parseRetryInfo(entry);
+      if (ms !== undefined) {
+        return ms;
+      }
+    }
+    return undefined;
+  }
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+  const retryDelay = (details as { retryDelay?: unknown }).retryDelay as
+    | { seconds?: unknown; nanos?: unknown }
+    | undefined;
+  if (retryDelay) {
+    const secondsRaw = retryDelay.seconds;
+    const nanosRaw = retryDelay.nanos;
+    const seconds =
+      typeof secondsRaw === "number"
+        ? secondsRaw
+        : typeof secondsRaw === "string"
+          ? Number.parseFloat(secondsRaw)
+          : 0;
+    const nanos =
+      typeof nanosRaw === "number"
+        ? nanosRaw
+        : typeof nanosRaw === "string"
+          ? Number.parseInt(nanosRaw, 10)
+          : 0;
+    if (Number.isFinite(seconds) || Number.isFinite(nanos)) {
+      const totalMs = seconds * 1000 + nanos / 1_000_000;
+      if (totalMs > 0) {
+        return totalMs;
+      }
+    }
+  }
+  const nestedDetails = (details as { details?: unknown }).details;
+  if (nestedDetails) {
+    const nested = parseRetryInfo(nestedDetails);
+    if (nested !== undefined) {
+      return nested;
+    }
+  }
+  return undefined;
+}
+
+function parseRetryAfterFromMessage(message: string): number | undefined {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const regex = /retry in\s+([0-9]+(?:\.[0-9]+)?)\s*(s|sec|secs|seconds?)/iu;
+  const match = regex.exec(trimmed);
+  if (match && match[1]) {
+    const value = Number.parseFloat(match[1]);
+    if (Number.isFinite(value) && value > 0) {
+      return value * 1000;
+    }
+  }
+  return undefined;
+}
+
+function getRetryAfterMs(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const infoFromDetails = parseRetryInfo((error as { errorDetails?: unknown }).errorDetails);
+  if (infoFromDetails !== undefined) {
+    return infoFromDetails;
+  }
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object") {
+    const nested = getRetryAfterMs(cause);
+    if (nested !== undefined) {
+      return nested;
+    }
+  }
+
+  const message = getErrorMessage(error);
+  if (message) {
+    const fromMessage = parseRetryAfterFromMessage(message.toLowerCase());
+    if (fromMessage !== undefined) {
+      return fromMessage;
+    }
+  }
+
+  return undefined;
+}
+
 function shouldRetry(error: unknown): boolean {
   const status = getStatus(error);
   if (status && RETRYABLE_STATUSES.has(status)) {
@@ -232,10 +325,13 @@ async function attemptWithRetries<T>(
     if (attempt >= MAX_ATTEMPTS || !shouldRetry(error)) {
       throw error;
     }
-    const delay = retryDelayMs(attempt);
+    const hintedDelay = getRetryAfterMs(error);
+    const delay = hintedDelay ?? retryDelayMs(attempt);
     const message = getErrorMessage(error);
     console.warn(
-      `[gemini] attempt ${attempt} failed: ${message || "unknown error"}; retrying in ${delay}ms`,
+      hintedDelay !== undefined
+        ? `[gemini] attempt ${attempt} failed: ${message || "unknown error"}; respecting retry hint ${Math.round(delay)}ms`
+        : `[gemini] attempt ${attempt} failed: ${message || "unknown error"}; retrying in ${delay}ms`,
     );
     await sleep(delay);
     return attemptWithRetries(fn, attempt + 1);
