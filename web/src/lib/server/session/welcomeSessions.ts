@@ -31,596 +31,514 @@ type WelcomeSessionTemplate = {
 	problems: CodeProblem[];
 	emoji: string;
 };
+const clockStepperExamples = [
+	{
+		title: 'Example 1',
+		input: ['12 3', '3', '4 6 5'].join('\n'),
+		output: '6',
+		explanation: 'Start at hour 3, add 15 total steps → 18. 18 mod 12 = 6.'
+	},
+	{
+		title: 'Example 2',
+		input: ['12 11', '2', '2 -5'].join('\n'),
+		output: '8',
+		explanation: '11 + 2 - 5 = 8, already within the clock.'
+	},
+	{
+		title: 'Example 3',
+		input: ['24 0', '3', '-1 -1 -1'].join('\n'),
+		output: '21',
+		explanation: 'Total movement is -3. Wrapping with modulo 24 lands on 21.'
+	}
+];
+
+const clockStepperTests = [
+	{ input: clockStepperExamples[0].input, output: clockStepperExamples[0].output, explanation: clockStepperExamples[0].explanation },
+	{ input: clockStepperExamples[1].input, output: clockStepperExamples[1].output, explanation: clockStepperExamples[1].explanation },
+	{ input: clockStepperExamples[2].input, output: clockStepperExamples[2].output, explanation: clockStepperExamples[2].explanation },
+	{ input: ['12 7', '0'].join('\n'), output: '7' },
+	{ input: ['8 1', '4', '3 3 3 3'].join('\n'), output: '5' },
+	{ input: ['15 5', '3', '-4 -7 12'].join('\n'), output: '6' },
+	{ input: ['24 0', '3', '-12 48 -1'].join('\n'), output: '11' },
+	{ input: ['10 9', '1', '1'].join('\n'), output: '0' },
+	{ input: ['10 9', '5', '1 1 1 1 1'].join('\n'), output: '4' },
+	{ input: ['6 2', '3', '6 -3 -9'].join('\n'), output: '2' },
+	{ input: ['13 3', '3', '13 26 39'].join('\n'), output: '3' },
+	{ input: ['5 4', '5', '-1 -1 -1 -1 -1'].join('\n'), output: '4' }
+];
+
 const clockStepperProblem: CodeProblem = {
 	slug: 'clock-stepper',
 	title: 'Clock Stepper',
-	summary: 'Walk around a clock by summing signed jumps and wrapping with modulo.',
-	summaryBullets: [
-		'Wrap totals to stay within the clock face',
-		'Handle negative and oversized jumps cleanly',
-		'Shows why modulo is just “looping around”'
-	],
-	difficulty: 'easy',
-	primaryTopic: 'Modular Arithmetic',
-	topics: ['Modular Arithmetic', 'Implementation'],
-	tags: ['mod', 'simulation', 'intro'],
-	tasks: [
-		'Return the final hour after applying every jump',
-		'Accept both positive and negative steps',
-		'Support a custom modulo (default 12)'
-	],
+	difficulty: 'intro',
+	topics: ['Modular Arithmetic', 'Simulation'],
+	description: [
+		'You are walking around a circular clock with `m` positions labelled `0` to `m-1`. Starting from an initial hour, you receive signed jumps that move you forward or backward around the clock.',
+		'',
+		'Read the clock size, the starting position, and the sequence of jumps from standard input. Apply every jump and print the final hour index after wrapping into `0…m-1`. Do not output any extra text.'
+	].join('\n'),
+	inputFormat: [
+		'- Line 1: two integers m and start (1 ≤ m, 0 ≤ start < m).',
+		'- Line 2: integer n — the number of jumps.',
+		'- Line 3 (present only when n > 0): n space-separated integers giving each jump amount.'
+	].join('\n'),
 	constraints: [
-		'1 <= modulo <= 24',
-		'1 <= len(steps) <= 10000',
-		'-1000000 <= step <= 1000000',
-		'0 <= start < modulo'
+		'1 ≤ m ≤ 1_000_000_000',
+		'0 ≤ start < m',
+		'0 ≤ n ≤ 200_000',
+		'-1_000_000_000 ≤ jump ≤ 1_000_000_000'
 	],
-	edgeCases: [
-		'No steps should return the starting hour',
-		'Large positive totals still wrap correctly',
-		'Negative totals wrap to the top end of the clock'
-	],
+	examples: clockStepperExamples,
+	tests: clockStepperTests,
 	hints: [
-		'Sum the steps once and wrap at the end',
-		'Python keeps remainders non-negative when you use %',
-		'You do not need to simulate hour by hour'
-	],
-	followUpIdeas: [
-		'Return every visited hour instead of only the last one',
-		'Support fractional steps for analogue clocks'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'start = 3\nsteps = [4, 6, 5]',
-			output: '6',
-			explanation: '3 + 4 + 6 + 5 = 18 and 18 % 12 = 6.'
-		},
-		{
-			label: 'Example 2',
-			input: 'start = 11\nsteps = [2, -5]',
-			output: '8',
-			explanation: '11 + 2 - 5 = 8.'
-		},
-		{
-			label: 'Example 3',
-			input: 'start = 0\nsteps = [-1, -1, -1]\nmodulo = 24',
-			output: '21',
-			explanation: 'Total is -3 and -3 % 24 = 21.'
-		}
+		'Start from the normalized starting position (modulo m) before applying jumps.',
+		'Sum each step into the current position and wrap with `% modulo` after every update.',
+		'Python’s modulo already handles negative numbers correctly, so no extra conditionals are required.'
 	],
 	solution: {
-		optimal: {
-			title: 'Sum offsets then wrap once',
-			overview: 'Compute a single total offset and apply modulo to keep the result on the clock.',
-			steps: [
-				'Start from the given hour and add the sum of all steps.',
-				'Apply modulo to clamp the result to 0…modulo-1.',
-				'Return the wrapped value.'
-			],
-			timeComplexity: 'O(n)',
-			spaceComplexity: 'O(1)',
-			keyIdeas: [
-				'Modulo performs wrap-around in one step',
-				'Negative totals wrap automatically with %'
-			]
-		},
-		alternatives: [
-			{
-				title: 'Iterative wrapping',
-				overview:
-					'Update the current hour after every step and wrap immediately. Slightly longer but mirrors the physical walk.',
-				steps: [
-					'Track the current hour, starting at start.',
-					'For each step, add it and wrap with modulo.',
-					'Return the final hour after processing the list.'
-				],
-				timeComplexity: 'O(n)',
-				spaceComplexity: 'O(1)',
-				keyIdeas: ['Shows wrap-around at each move', 'Equivalent total work but more state updates']
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'',
+			'data = sys.stdin.read().strip().split()',
+			'if not data:',
+			'    sys.exit(0)',
+			'it = iter(data)',
+			'modulo = int(next(it))',
+			'start = int(next(it))',
+			'step_count = int(next(it))',
+			'steps = [int(next(it)) for _ in range(step_count)]',
+			'',
+			'position = start % modulo',
+			'for step in steps:',
+			'    position = (position + step) % modulo',
+			'',
+			'print(position)'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/modular/clock-stepper.md',
-		markdown:
-			'# Clock Stepper\n\nYou are on a clock with `modulo` positions (12 by default). Starting at `start`, apply each signed step in order. Report the hour you land on after wrapping within `0…modulo-1` using modular arithmetic.'
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def final_hour(start: int, steps: list[int], modulo: int = 12) -> int:\n' +
-		'    """Return the hour index after applying all steps on a modulo clock."""\n' +
-		'    # TODO: implement using modular arithmetic\n' +
-		'    return 0\n'
+	metadataVersion: 2
 };
+
+
+const remainderBucketsExamples = [
+	{
+		title: 'Example 1',
+		input: ['4 5', '3 8 10 15'].join('\n'),
+		output: '2',
+		explanation: 'Remainder 3 appears twice (3 and 8) and remainder 0 appears twice (10 and 15).'
+	},
+	{
+		title: 'Example 2',
+		input: ['4 4', '-4 5 7 13'].join('\n'),
+		output: '1',
+		explanation: 'Normalising remainders gives {0,1,3,1}; only remainder 1 repeats.'
+	},
+	{
+		title: 'Example 3',
+		input: ['3 4', '1 2 3'].join('\n'),
+		output: '0',
+		explanation: 'Every remainder is unique so there are no friendly pairs.'
+	}
+];
+
+const remainderBucketsTests = [
+	{ input: remainderBucketsExamples[0].input, output: remainderBucketsExamples[0].output, explanation: remainderBucketsExamples[0].explanation },
+	{ input: remainderBucketsExamples[1].input, output: remainderBucketsExamples[1].output, explanation: remainderBucketsExamples[1].explanation },
+	{ input: remainderBucketsExamples[2].input, output: remainderBucketsExamples[2].output, explanation: remainderBucketsExamples[2].explanation },
+	{ input: ['1 5', '42'].join('\n'), output: '0' },
+	{ input: ['5 10', '10 20 30 40 50'].join('\n'), output: '10' },
+	{ input: ['5 5', '7 12 17 21 26'].join('\n'), output: '4' },
+	{ input: ['6 7', '1 8 15 22 29 36'].join('\n'), output: '15' },
+	{ input: ['6 4', '0 1 2 3 4 5'].join('\n'), output: '2' },
+	{ input: ['8 6', '5 11 17 23 29 0 -6 -12'].join('\n'), output: '13' },
+	{ input: ['7 9', '3 6 9 12 15 18 21'].join('\n'), output: '5' },
+	{ input: ['9 8', '8 16 24 32 1 9 17 25 33'].join('\n'), output: '16' },
+	{ input: ['10 11', '100 -1 22 33 44 55 66 77 88 99'].join('\n'), output: '28' },
+	{ input: ['6 3', '0 3 6 9 12 15'].join('\n'), output: '15' }
+];
+
 const remainderBucketsProblem: CodeProblem = {
 	slug: 'remainder-buckets',
 	title: 'Remainder Buckets',
-	summary: 'Count how many pairs of numbers share the same remainder modulo m.',
-	summaryBullets: [
-		'Bucket values by remainder using a dictionary',
-		'Use combinations to count pairs inside each bucket',
-		'Connects modular arithmetic with hashing intuition'
-	],
-	difficulty: 'easy',
-	primaryTopic: 'Number Theory',
-	topics: ['Modular Arithmetic', 'Hashing', 'Counting'],
-	tags: ['mod', 'hashing', 'pairs'],
-	tasks: [
-		'Return the number of unordered pairs that share the same remainder modulo m',
-		'Treat negative numbers by converting them to non-negative remainders',
-		'Scale to 100k numbers without nested loops'
-	],
+	difficulty: 'intro',
+	topics: ['Modular Arithmetic', 'Counting'],
+	description: [
+		"Numbers that leave the same remainder when divided by m land in the same modular bucket. Count how many unordered pairs of inputs share a bucket.",
+		'',
+		"Normalise negative numbers using Python's `%` and print only the total number of friendly pairs."
+	].join('\n'),
+	inputFormat: [
+		'- Line 1: two integers n and m (number of values and the modulus).',
+		'- Line 2: n space-separated integers.'
+	].join('\n'),
 	constraints: [
-		'1 <= len(values) <= 100000',
-		'2 <= modulus <= 10000',
-		'-1000000000 <= value <= 1000000000'
+		'1 ≤ n ≤ 100_000',
+		'2 ≤ m ≤ 10_000',
+		'-1_000_000_000 ≤ value ≤ 1_000_000_000'
 	],
-	edgeCases: [
-		'All values already share a remainder -> choose count pairs',
-		'All remainders unique -> result is 0',
-		'Mixing negative and positive numbers should still collide correctly'
-	],
+	examples: remainderBucketsExamples,
+	tests: remainderBucketsTests,
 	hints: [
-		'Use a dictionary mapping remainder -> frequency',
-		'Adding one more element to a bucket creates frequency additional pairs',
-		'Remember to normalise negative values with value % modulus'
-	],
-	followUpIdeas: [
-		'Return the remainder buckets alongside the pair count',
-		'Extend to triplets that share a remainder'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'values = [3, 8, 10, 15]\nmodulus = 5',
-			output: '2',
-			explanation: '3 and 8 share remainder 3 (1 pair); 10 and 15 share remainder 0 (1 pair).'
-		},
-		{
-			label: 'Example 2',
-			input: 'values = [-4, 5, 7, 13]\nmodulus = 4',
-			output: '1',
-			explanation: '-4 % 4 = 0, 5 % 4 = 1, 7 % 4 = 3, 13 % 4 = 1. Only remainder 1 appears twice.'
-		},
-		{
-			label: 'Example 3',
-			input: 'values = [1, 2, 3]\nmodulus = 4',
-			output: '0',
-			explanation: 'Remainders {1, 2, 3} are all different.'
-		}
+		'Bucket each value by computing value % m (Python already keeps the result in 0…m-1).',
+		'Every new element in a bucket adds the current bucket size to the answer.',
+		'With frequencies in hand you can also sum c * (c - 1) / 2 per bucket.'
 	],
 	solution: {
-		optimal: {
-			title: 'Count frequencies then use combinations',
-			overview:
-				'Bucket each value by remainder and accumulate c * (c - 1) / 2 for each bucket size c.',
-			steps: [
-				'Initialise a dictionary remainder -> count.',
-				'Iterate over values, incrementing the count for value % modulus.',
-				'For each count c, add c * (c - 1) // 2 to the answer.'
-			],
-			timeComplexity: 'O(n)',
-			spaceComplexity: 'O(k)',
-			keyIdeas: [
-				'Modulo groups values that behave the same under hashing',
-				'Combinations count pairs efficiently'
-			]
-		},
-		alternatives: [
-			{
-				title: 'Streaming accumulation',
-				overview:
-					'Update the answer as you go: each new element in a bucket adds existing_count pairs.',
-				steps: [
-					'Track counts in a dictionary.',
-					'When processing a value, add the current count for its remainder to the answer.',
-					'Increment the count, then continue.'
-				],
-				timeComplexity: 'O(n)',
-				spaceComplexity: 'O(k)',
-				keyIdeas: ['Avoid second pass', 'Same dictionary footprint']
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'from collections import defaultdict',
+			'',
+			'data = sys.stdin.read().strip().split()',
+			'if not data:',
+			'    sys.exit(0)',
+			'it = iter(data)',
+			'count = int(next(it))',
+			'modulus = int(next(it))',
+			'values = [int(next(it)) for _ in range(count)]',
+			'',
+			'bucket_counts = defaultdict(int)',
+			'pairs = 0',
+			'for value in values:',
+			'    remainder = value % modulus',
+			'    pairs += bucket_counts[remainder]',
+			'    bucket_counts[remainder] += 1',
+			'',
+			'print(pairs)'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/modular/remainder-buckets.md',
-		markdown:
-			"# Remainder Buckets\n\nGiven a list of integers and a modulus `m`, count how many unordered pairs share the same remainder when divided by `m`. Normalise negative numbers using Python's `%` and return the total number of friendly pairs."
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def count_same_remainder_pairs(values: list[int], modulus: int) -> int:\n' +
-		'    # TODO: count pairs that land in the same modulo bucket\n' +
-		'    return 0\n'
+	metadataVersion: 2
 };
+
+
+const xorLampExamples = [
+	{
+		title: "Example 1",
+		input: ['5 4', '1 2 1 4'].join('\n'),
+		output: '2 4',
+		explanation: 'Lamp 1 is toggled twice (OFF). Lamps 2 and 4 toggle once and stay ON.'
+	},
+	{
+		title: "Example 2",
+		input: ['3 3', '0 0 0'].join('\n'),
+		output: '0',
+		explanation: 'Lamp 0 toggles three times → odd parity → ON.'
+	},
+	{
+		title: "Example 3",
+		input: ['4 0'].join('\n'),
+		output: 'NONE',
+		explanation: 'No events means every lamp remains OFF.'
+	}
+];
+
+const xorLampTests = [
+	{ input: xorLampExamples[0].input, output: xorLampExamples[0].output, explanation: xorLampExamples[0].explanation },
+	{ input: xorLampExamples[1].input, output: xorLampExamples[1].output, explanation: xorLampExamples[1].explanation },
+	{ input: xorLampExamples[2].input, output: xorLampExamples[2].output, explanation: xorLampExamples[2].explanation },
+	{ input: ['6 6', '0 1 2 3 4 5'].join('\n'), output: '0 1 2 3 4 5' },
+	{ input: ['6 7', '0 1 2 1 0 5 5'].join('\n'), output: '2' },
+	{ input: ['10 4', '3 3 3 3'].join('\n'), output: 'NONE' },
+	{ input: ['8 5', '7 0 7 0 7'].join('\n'), output: '7' },
+	{ input: ['5 10', '0 0 1 1 2 2 3 3 4 4'].join('\n'), output: 'NONE' },
+	{ input: ['5 9', '0 1 2 3 4 0 1 2 3'].join('\n'), output: '4' },
+	{ input: ['7 3', '2 3 2'].join('\n'), output: '3' },
+	{ input: ['7 8', '6 6 6 1 1 0 0 2'].join('\n'), output: '2 6' },
+	{ input: ['4 3', '1 2 1'].join('\n'), output: '2' }
+];
+
 const xorLampGridProblem: CodeProblem = {
 	slug: 'xor-lamp-grid',
 	title: 'Lamp Toggler',
-	summary: 'Track lamps that remain ON after a sequence of toggle events.',
-	summaryBullets: [
-		'Treat each toggle as XOR with the previous state',
-		'Store only parity to avoid reprocessing events',
-		'Outputs sorted lamp indexes that stay lit'
+	difficulty: 'intro',
+	topics: ['Bitwise Operations', 'Simulation'],
+	description: [
+		'You control `count` lamps labelled 0…count-1. Every lamp starts OFF. Given a list of toggle events, flip the matching lamp.',
+		'',
+		'After processing the log, print the lamp indexes that remain ON in ascending order separated by spaces. If no lamps are lit, print `NONE`.'
+	].join('\n'),
+	inputFormat: [
+		'- Line 1: two integers count and t (number of lamps, number of toggle events).',
+		'- Line 2 (only if t > 0): t space-separated integers for the lamp indexes to toggle.'
+	].join('\n'),
+	constraints: [
+		'1 ≤ count ≤ 200_000',
+		'0 ≤ t ≤ 400_000',
+		'0 ≤ lamp index < count'
 	],
-	difficulty: 'easy',
-	primaryTopic: 'Bitwise Operations',
-	topics: ['Bitwise Operations', 'Simulation', 'Sets'],
-	tags: ['xor', 'parity', 'simulation'],
-	tasks: [
-		'Return a sorted list of lamp indexes that are ON at the end',
-		'All lamps start OFF and toggles flip their state',
-		'Indexes are zero-based and always within range'
-	],
-	constraints: ['1 <= count <= 100000', '0 <= len(toggles) <= 100000', '0 <= toggle < count'],
-	edgeCases: [
-		'No toggles leaves every lamp OFF',
-		'Toggling the same lamp twice cancels back to OFF',
-		'Large logs should still be processed in linear time'
-	],
+	examples: xorLampExamples,
+	tests: xorLampTests,
 	hints: [
-		'Use a set: add on first toggle, remove on second',
-		'This mirrors XOR behaviour where duplicates cancel to 0',
-		'Sort before returning for deterministic output'
-	],
-	followUpIdeas: [
-		'Return the number of toggles per lamp along with the ON set',
-		'Track when each lamp was last toggled to animate the grid'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'count = 5\ntoggles = [1, 2, 1, 4]',
-			output: '[2, 4]',
-			explanation: 'Lamp 1 toggled twice -> OFF. Lamps 2 and 4 toggled once -> ON.'
-		},
-		{
-			label: 'Example 2',
-			input: 'count = 3\ntoggles = [0, 0, 0]',
-			output: '[0]',
-			explanation: 'Three toggles means lamp 0 ends ON (odd parity).'
-		},
-		{
-			label: 'Example 3',
-			input: 'count = 4\ntoggles = []',
-			output: '[]',
-			explanation: 'No events: every lamp stays OFF.'
-		}
+		'Use a set to keep track of lamps toggled an odd number of times.',
+		'On each toggle, remove the lamp if it is already in the set; otherwise add it.',
+		'Sort the set at the end before printing. Output `NONE` when the set is empty.'
 	],
 	solution: {
-		optimal: {
-			title: 'Use a parity set',
-			overview:
-				'Track lamps with odd toggle count in a set; add when toggled ON, remove when returning to OFF.',
-			steps: [
-				'Initialise an empty set for lamps that are currently ON.',
-				'For each toggle, remove the lamp if it is already in the set, otherwise add it.',
-				'Return the sorted contents of the set.'
-			],
-			timeComplexity: 'O(n + k log k)',
-			spaceComplexity: 'O(k)',
-			keyIdeas: ['Sets capture XOR parity directly', 'Sorting at the end keeps output tidy']
-		},
-		alternatives: [
-			{
-				title: 'Count array in place',
-				overview:
-					'Maintain integer counts per lamp and check count % 2 at the end. Uses more memory when count is large but keeps output sorted.',
-				steps: [
-					'Create an array counts of length count initialised to 0.',
-					'Increment counts[index] for each toggle.',
-					'Collect indexes where counts[index] % 2 == 1.'
-				],
-				timeComplexity: 'O(n + count)',
-				spaceComplexity: 'O(count)',
-				keyIdeas: ['Trade memory for easier sorting', 'Good when count is small']
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'',
+			'data = sys.stdin.read().strip().split()',
+			'if not data:',
+			'    sys.exit(0)',
+			'it = iter(data)',
+			'count = int(next(it))',
+			'toggle_count = int(next(it))',
+			'toggles = [int(next(it)) for _ in range(toggle_count)]',
+			'',
+			'on = set()',
+			'for lamp in toggles:',
+			'    if lamp in on:',
+			'        on.remove(lamp)',
+			'    else:',
+			'        on.add(lamp)',
+			'',
+			'if not on:',
+			'    print("NONE")',
+			'else:',
+			'    print(" ".join(str(index) for index in sorted(on)))'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/binary/xor-lamp-grid.md',
-		markdown:
-			'# Lamp Toggler\n\nYou control `count` lamps labelled `0…count-1`. Every lamp starts OFF. Given a list of toggle events, flip the state of that lamp. After processing the log, return a sorted list of lamp indexes that remain ON. Think of toggling as XOR: odd counts leave 1, even counts drop back to 0.'
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def lamps_left_on(count: int, toggles: list[int]) -> list[int]:\n' +
-		'    """Return sorted lamp indexes that are ON after all toggles."""\n' +
-		'    # TODO: track parity for each lamp\n' +
-		'    return []\n'
+	metadataVersion: 2
 };
+
+
+const nimExamples = [
+	{
+		title: "Example 1",
+		input: ['3', '1 4 5'].join('\n'),
+		output: 'Second',
+		explanation: '1 XOR 4 XOR 5 = 0, so the starting player is already losing.'
+	},
+	{
+		title: "Example 2",
+		input: ['3', '3 4 5'].join('\n'),
+		output: 'First',
+		explanation: '3 XOR 4 XOR 5 = 2 ≠ 0, so the starter can force a win.'
+	},
+	{
+		title: "Example 3",
+		input: ['0'].join('\n'),
+		output: 'Second',
+		explanation: 'No piles means the first player has no move and loses.'
+	}
+];
+
+const nimTests = [
+	{ input: nimExamples[0].input, output: nimExamples[0].output, explanation: nimExamples[0].explanation },
+	{ input: nimExamples[1].input, output: nimExamples[1].output, explanation: nimExamples[1].explanation },
+	{ input: nimExamples[2].input, output: nimExamples[2].output, explanation: nimExamples[2].explanation },
+	{ input: ['1', '7'].join('\n'), output: 'First' },
+	{ input: ['4', '0 0 0 0'].join('\n'), output: 'Second' },
+	{ input: ['5', '1 1 1 1 1'].join('\n'), output: 'First' },
+	{ input: ['3', '10 10 10'].join('\n'), output: 'First' },
+	{ input: ['6', '2 4 6 8 10 12'].join('\n'), output: 'First' },
+	{ input: ['6', '1 2 3 4 5 6'].join('\n'), output: 'First' },
+	{ input: ['7', '7 7 7 7 7 7 7'].join('\n'), output: 'First' },
+	{ input: ['2', '0 0'].join('\n'), output: 'Second' },
+	{ input: ['5', '1024 512 256 128 64'].join('\n'), output: 'First' }
+];
+
 const nimBalanceProblem: CodeProblem = {
 	slug: 'nim-balance',
 	title: 'Nim Balance',
-	summary: 'Decide who wins a Nim pile configuration using XOR parity.',
-	summaryBullets: [
-		'Compute the nim-sum (XOR of all piles)',
-		'Zero nim-sum => next player loses with perfect play',
-		'Illustrates XOR as a strategy detector'
+	difficulty: 'intro',
+	topics: ['Game Theory', 'Bitwise Operations'],
+	description: [
+		'Nim position evaluation: read the pile heights, compute their xor (nim-sum), and decide who wins under optimal play.',
+		'',
+		'Print "First" if the starter wins, otherwise print "Second".'
+	].join('\n'),
+	inputFormat: [
+		'- Line 1: integer n — the number of piles.',
+		'- Line 2 (only if n > 0): n space-separated integers for the pile heights.'
+	].join('\n'),
+	constraints: [
+		'0 ≤ n ≤ 100_000',
+		'0 ≤ pile height ≤ 1_000_000_000'
 	],
-	difficulty: 'easy',
-	primaryTopic: 'Game Theory',
-	topics: ['Bitwise Operations', 'Game Theory'],
-	tags: ['xor', 'nim', 'parity'],
-	tasks: [
-		'Return "First" if the starting player has a winning strategy',
-		'Return "Second" if the next player loses assuming both play optimally',
-		'Treat empty piles or zero heights as valid input'
-	],
-	constraints: ['0 <= len(piles) <= 100000', '0 <= piles[i] <= 1000000000'],
-	edgeCases: [
-		'All piles zero -> nim-sum zero -> Second wins',
-		'Single non-zero pile -> First wins by taking all stones',
-		'Large pile counts must not overflow (XOR is safe)'
-	],
+	examples: nimExamples,
+	tests: nimTests,
 	hints: [
-		'Nim-sum is the XOR of every pile height',
-		'If nim-sum is zero, you are already in a losing position',
-		'Otherwise, there is always a move that makes the nim-sum zero'
-	],
-	followUpIdeas: [
-		'Return the actual pile and stones to remove for the winning move',
-		'Extend to misère Nim by adjusting the base case when piles are size 1'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'piles = [1, 4, 5]',
-			output: 'Second',
-			explanation: '1 ^ 4 ^ 5 = 0 so the next player loses with perfect play.'
-		},
-		{
-			label: 'Example 2',
-			input: 'piles = [3, 4, 5]',
-			output: 'First',
-			explanation: '3 ^ 4 ^ 5 = 2 (non-zero) so the starter can force a win.'
-		},
-		{
-			label: 'Example 3',
-			input: 'piles = []',
-			output: 'Second',
-			explanation: 'No stones means the first player has no move and loses.'
-		}
+		'Fold the pile heights with XOR (the nim-sum).',
+		'If the nim-sum is zero, the current player loses with perfect play.',
+		'Otherwise the first player can always move to a zero nim-sum position.'
 	],
 	solution: {
-		optimal: {
-			title: 'Compute nim-sum and compare with zero',
-			overview:
-				'Fold the array with XOR. Zero nim-sum means the current player is already at a disadvantage.',
-			steps: [
-				'Initialise nim_sum = 0.',
-				'XOR every pile height into nim_sum.',
-				'Return "First" if nim_sum != 0 else "Second".'
-			],
-			timeComplexity: 'O(n)',
-			spaceComplexity: 'O(1)',
-			keyIdeas: [
-				'XOR encodes parity of binary digits',
-				'Zero nim-sum is the losing position in Nim'
-			]
-		},
-		alternatives: [
-			{
-				title: 'Bit-by-bit reasoning',
-				overview:
-					'You can reason column-wise: for each bit position, if an odd number of piles have that bit set, the nim-sum bit becomes 1. Same conclusion, slower to code.',
-				steps: [
-					'Inspect every bit position up to the highest pile bit.',
-					'Count how many piles have that bit set.',
-					'If any count is odd, the nim-sum is non-zero, so First wins.'
-				],
-				timeComplexity: 'O(n log U)',
-				spaceComplexity: 'O(1)',
-				keyIdeas: ['Connects with parity idea explicitly', 'Useful for teaching why XOR works']
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'',
+			'data = sys.stdin.read().strip().split()',
+			'if not data:',
+			'    print("Second")',
+			'    sys.exit(0)',
+			'it = iter(data)',
+			'count = int(next(it))',
+			'piles = [int(next(it)) for _ in range(count)]',
+			'',
+			'nim_sum = 0',
+			'for height in piles:',
+			'    nim_sum ^= height',
+			'',
+			'print("First" if nim_sum else "Second")'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/binary/nim-balance.md',
-		markdown:
-			'# Nim Balance\n\nGiven an array of Nim pile heights, decide who wins under optimal play. Compute the nim-sum (bitwise XOR) of all piles. If it is zero, the position is losing for the next player (answer "Second"); otherwise the first player has a winning response (answer "First").'
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def nim_winner(piles: list[int]) -> str:\n' +
-		'    """Return "First" if the starter wins, else "Second"."""\n' +
-		'    # TODO: compute the nim-sum and decide the winner\n' +
-		'    return ""\n'
+	metadataVersion: 2
 };
+
+
+const digitalRootExamples = [
+	{
+		title: "Example 1",
+		input: '493',
+		output: '7',
+		explanation: '4 + 9 + 3 = 16 and 1 + 6 = 7.'
+	},
+	{
+		title: "Example 2",
+		input: '0',
+		output: '0',
+		explanation: 'By definition the digital root of zero is zero.'
+	},
+	{
+		title: "Example 3",
+		input: '99999',
+		output: '9',
+		explanation: 'The digits sum to 45 and 4 + 5 = 9.'
+	}
+];
+
+const digitalRootTests = [
+	{ input: digitalRootExamples[0].input, output: digitalRootExamples[0].output, explanation: digitalRootExamples[0].explanation },
+	{ input: digitalRootExamples[1].input, output: digitalRootExamples[1].output, explanation: digitalRootExamples[1].explanation },
+	{ input: digitalRootExamples[2].input, output: digitalRootExamples[2].output, explanation: digitalRootExamples[2].explanation },
+	{ input: '5', output: '5' },
+	{ input: '987654321', output: '9' },
+	{ input: '999999999999', output: '9' },
+	{ input: '12345678901234567890', output: '9' },
+	{ input: '10', output: '1' },
+	{ input: '18', output: '9' },
+	{ input: '1111111111111111111111111', output: '7' },
+	{ input: '27', output: '9' },
+	{ input: '58', output: '4' }
+];
+
 const digitalRootProblem: CodeProblem = {
 	slug: 'digital-root-finder',
 	title: 'Digital Root Finder',
-	summary: 'Reduce an integer to its digital root by summing digits repeatedly.',
-	summaryBullets: [
-		'Sum digits until a single digit remains',
-		'Handles 0 as a special case',
-		'Connects to modulo 9 arithmetic'
+	difficulty: 'intro',
+	topics: ['Number Theory'],
+	description: [
+		'Repeatedly sum the decimal digits of a non-negative integer until a single digit remains. That digit is the digital root.',
+		'',
+		'Read the integer from standard input and print its digital root. If the input is 0, print 0.'
+	].join('\n'),
+	inputFormat: ['- Single line containing a non-negative integer n.'].join('\n'),
+	constraints: [
+		'0 ≤ n < 10^1000'
 	],
-	difficulty: 'easy',
-	primaryTopic: 'Number Theory',
-	topics: ['Number Theory', 'Implementation'],
-	tags: ['digital-root', 'modular-arithmetic', 'math-trick'],
-	tasks: [
-		'Return the digital root of a non-negative integer',
-		'Support very large integers without string overflow issues',
-		'Treat 0 as having a digital root of 0'
-	],
-	constraints: ['0 <= n <= 1000000000000000000'],
-	edgeCases: [
-		'n = 0 should return 0',
-		'Single digit inputs return themselves',
-		'Numbers already divisible by 9 return 9 unless n == 0'
-	],
+	examples: digitalRootExamples,
+	tests: digitalRootTests,
 	hints: [
-		'Loop while n >= 10 and sum the digits',
-		'Alternatively use modulo 9 trick with a special case for 0',
-		'Converting to string is OK at this scale, but you can also use math'
-	],
-	followUpIdeas: [
-		'Return the intermediate sums as well as the final root',
-		'Apply the same idea in base b instead of base 10'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'n = 493',
-			output: '7',
-			explanation: '4 + 9 + 3 = 16, then 1 + 6 = 7.'
-		},
-		{
-			label: 'Example 2',
-			input: 'n = 0',
-			output: '0',
-			explanation: 'Digital root of zero is defined as zero.'
-		},
-		{
-			label: 'Example 3',
-			input: 'n = 99999',
-			output: '9',
-			explanation: 'Sum is 45, and 4 + 5 = 9.'
-		}
+		'The digital root is 0 for n = 0 and 1 + ((n - 1) % 9) otherwise.',
+		'Converting to an integer is fine in Python; it supports arbitrarily large numbers.',
+		'You can also simulate repeated summing of digits if you prefer.'
 	],
 	solution: {
-		optimal: {
-			title: 'Use modulo 9 with a zero check',
-			overview: 'For n > 0 the digital root is 1 + ((n - 1) % 9). Zero stays zero.',
-			steps: [
-				'If n == 0 return 0 immediately.',
-				'Otherwise return 1 + ((n - 1) % 9).',
-				'This formula skips loops and works for huge inputs.'
-			],
-			timeComplexity: 'O(1)',
-			spaceComplexity: 'O(1)',
-			keyIdeas: ['Digital root follows modulo 9 pattern', 'Zero needs its own branch']
-		},
-		alternatives: [
-			{
-				title: 'Repeated summation loop',
-				overview:
-					'Sum digits in a loop while n has more than one digit. Slower but extremely explicit and easy to understand.',
-				steps: [
-					'While n >= 10, replace n with the sum of its digits.',
-					'To sum digits, peel them off with % 10 or iterate over the string.',
-					'Return the single-digit result.'
-				],
-				timeComplexity: 'O(log n)',
-				spaceComplexity: 'O(1)',
-				keyIdeas: ['Great for demonstrating the process', 'Works in any base']
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'',
+			'text = sys.stdin.read().strip()',
+			'if not text:',
+			'    sys.exit(0)',
+			'n = int(text.split()[0])',
+			'if n == 0:',
+			'    print(0)',
+			'else:',
+			'    print(1 + (n - 1) % 9)'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/digital/digital-root.md',
-		markdown:
-			'# Digital Root Finder\n\nCompute the digital root of a non-negative integer `n`. The digital root is obtained by repeatedly summing decimal digits until one digit remains. For example, 493 → 4+9+3=16 → 1+6=7.'
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def digital_root(n: int) -> int:\n' +
-		'    """Return the digital root of n."""\n' +
-		'    # TODO: implement the repeated digit sum or use the modulo trick\n' +
-		'    return 0\n'
+	metadataVersion: 2
 };
+
+
+const nineAdjusterExamples = [
+	{
+		title: "Example 1",
+		input: '827',
+		output: '1',
+		explanation: '8 + 2 + 7 = 17; adding 1 reaches 18, divisible by 9.'
+	},
+	{
+		title: "Example 2",
+		input: '99',
+		output: '0',
+		explanation: 'Digit sum already divisible by 9, so append 0.'
+	},
+	{
+		title: "Example 3",
+		input: '4102',
+		output: '2',
+		explanation: '4 + 1 + 0 + 2 = 7, so adding 2 reaches 9.'
+	}
+];
+
+const nineAdjusterTests = [
+	{ input: nineAdjusterExamples[0].input, output: nineAdjusterExamples[0].output, explanation: nineAdjusterExamples[0].explanation },
+	{ input: nineAdjusterExamples[1].input, output: nineAdjusterExamples[1].output, explanation: nineAdjusterExamples[1].explanation },
+	{ input: nineAdjusterExamples[2].input, output: nineAdjusterExamples[2].output, explanation: nineAdjusterExamples[2].explanation },
+	{ input: '0', output: '0' },
+	{ input: '1', output: '8' },
+	{ input: '123456', output: '6' },
+	{ input: '9998', output: '1' },
+	{ input: '1000000000', output: '8' },
+	{ input: '55555', output: '2' },
+	{ input: '444444444', output: '0' },
+	{ input: '18', output: '0' },
+	{ input: '8', output: '1' }
+];
+
 const nineAdjusterProblem: CodeProblem = {
 	slug: 'nine-adjuster',
 	title: 'Casting Out Nines',
-	summary: 'Find the smallest digit to append so the sum of digits becomes divisible by nine.',
-	summaryBullets: [
-		'Sum digits, then choose the complement to the next multiple of nine',
-		'Treat the input as a string to avoid big integer overflow worries',
-		'Outputs a single character digit'
-	],
-	difficulty: 'easy',
-	primaryTopic: 'Number Theory',
+	difficulty: 'intro',
 	topics: ['Number Theory', 'String Processing'],
-	tags: ['digital-root', 'greedy', 'mod-9'],
-	tasks: [
-		'Return the smallest digit (0-9) that makes the digit sum divisible by 9 when appended',
-		'Handle already divisible sums by returning 0',
-		'Preserve leading zeros in the original string'
-	],
-	constraints: ['1 <= len(value) <= 100000', 'value consists only of decimal digits'],
-	edgeCases: [
-		'If the current sum is already divisible by 9, append 0',
-		'Large inputs require streaming digit sums to avoid overflow',
-		'Single digit inputs should still work'
-	],
+	description: [
+		'Given a string of decimal digits, append the smallest digit (0–9) that makes the overall digit sum divisible by 9.',
+		'',
+		'Print only that digit.'
+	].join('\n'),
+	inputFormat: ['- Single line containing a digit string.'].join('\n'),
+	constraints: ['1 ≤ |value| ≤ 100_000'],
+	examples: nineAdjusterExamples,
+	tests: nineAdjusterTests,
 	hints: [
-		'Compute sum(value) % 9',
-		'The digit to append is (-current_sum) mod 9, but use 0 instead of 9',
-		'You can iterate characters and convert to int with ord or int()'
-	],
-	followUpIdeas: [
-		'Return the full new string, not just the digit',
-		'Explain whether multiple choices are possible (only one smallest digit exists)'
-	],
-	examples: [
-		{
-			label: 'Example 1',
-			input: 'value = "827"',
-			output: '1',
-			explanation: '8 + 2 + 7 = 17. Adding 1 reaches 18, divisible by 9.'
-		},
-		{
-			label: 'Example 2',
-			input: 'value = "99"',
-			output: '0',
-			explanation: 'Sum is 18 already divisible by 9, so append 0.'
-		},
-		{
-			label: 'Example 3',
-			input: 'value = "4102"',
-			output: '2',
-			explanation: '4 + 1 + 0 + 2 = 7, so adding 2 reaches 9.'
-		}
+		'Compute the digit sum modulo 9.',
+		'If the remainder is zero, the answer is 0; otherwise return 9 - remainder.',
+		'Iterate characters directly instead of converting the entire number to avoid overflow concerns.'
 	],
 	solution: {
-		optimal: {
-			title: 'Use modulo 9 complement',
-			overview: 'Take the digit sum modulo 9. If zero, answer 0; otherwise return 9 - (sum % 9).',
-			steps: [
-				'Compute current = sum(int(d) for d in value) % 9.',
-				'If current == 0 return "0".',
-				'Else return str(9 - current).'
-			],
-			timeComplexity: 'O(n)',
-			spaceComplexity: 'O(1)',
-			keyIdeas: [
-				'Modulo 9 complement chooses the smallest fixer',
-				'String iteration avoids big integer issues'
-			]
-		},
-		alternatives: [
-			{
-				title: 'Digital root shortcut',
-				overview:
-					'Compute the digital root first. The append digit is (9 - root) % 9 with a special case when root == 0.',
-				steps: [
-					'Find the digital root r of the number.',
-					'If r == 0 return "0" else return str((9 - r) % 9).',
-					'Same work but connects with previous task.'
-				],
-				timeComplexity: 'O(n)',
-				spaceComplexity: 'O(1)',
-				keyIdeas: [
-					'Ties directly to digital root computation',
-					'Reuse previous helper if implemented'
-				]
-			}
-		]
+		language: 'python',
+		code: [
+			'import sys',
+			'',
+			'text = sys.stdin.read().strip()',
+			'if not text:',
+			'    sys.exit(0)',
+			'value = text.split()[0]',
+			'total = sum(int(ch) for ch in value) % 9',
+			'if total == 0:',
+			'    print(0)',
+			'else:',
+			'    print(9 - total)'
+		].join('\n')
 	},
-	source: {
-		path: 'generated/welcome/digital/nine-adjuster.md',
-		markdown:
-			'# Casting Out Nines\n\nGiven a string of digits `value`, find the smallest digit you can append so that the sum of all digits becomes divisible by 9. Return the digit as a string ("0"–"9").'
-	},
-	metadataVersion: 1,
-	starterCode:
-		'def digit_to_append(value: str) -> str:\n' +
-		'    """Return the smallest digit that makes the digit sum divisible by 9."""\n' +
-		'    # TODO: implement using the modulo 9 complement\n' +
-		'    return "0"\n'
+	metadataVersion: 2
 };
+
+
 const modularMagicPlan: PlanItem[] = [
 	{
 		id: 'modular-clock-intro',
