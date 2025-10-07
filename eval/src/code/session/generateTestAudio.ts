@@ -2,17 +2,7 @@
 // Purpose: Produce mock audio transcripts (intro/outro) for the DP test session
 // Output: Prints clearly formatted slides and narration to the console.
 
-type Speaker = "m" | "f";
-
-export type NarrationLine = {
-  speaker: Speaker;
-  text: string;
-};
-
-export type MediaSegment = {
-  slide: string; // markdown describing what to show on screen
-  narration: NarrationLine[]; // lines in speaking order
-};
+import { MediaSegment, NarrationLine, MediaSegmentSchema } from "@spark/llm";
 
 function buildIntro(): MediaSegment[] {
   const segments: MediaSegment[] = [
@@ -186,6 +176,13 @@ function printSegments(label: string, segments: MediaSegment[]): void {
 async function main(): Promise<void> {
   const intro = buildIntro();
   const outro = buildOutro();
+  // Validate with zod to ensure stability before printing
+  for (const s of intro) {
+    MediaSegmentSchema.parse(s);
+  }
+  for (const s of outro) {
+    MediaSegmentSchema.parse(s);
+  }
   printSegments("Intro", intro);
   printSegments("Outro", outro);
 }
@@ -194,4 +191,3 @@ main().catch((err) => {
   console.error("Failed to generate test audio segments", err);
   process.exit(1);
 });
-
