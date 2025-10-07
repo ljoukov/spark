@@ -96,46 +96,46 @@
 		</div>
 	</CardHeader>
 
-	<CardContent class="space-y-6 p-0">
-		{@render children?.()}
+    <CardContent class="p-0">
+        {@render children?.()}
 
-		{#if showHint && hint}
-			<div
-				class="dark:text-primary-100 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm dark:border-primary/40 dark:bg-primary/15"
-			>
-				<p
-					class="dark:text-primary-100/70 text-xs font-semibold tracking-[0.22em] text-primary/70 uppercase"
-				>
-					Hint
-				</p>
-				<p class="mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
-					{hint}
-				</p>
-			</div>
-		{/if}
+        {#if showHint && hint}
+            <div
+                class="mt-6 dark:text-primary-100 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm dark:border-primary/40 dark:bg-primary/15"
+            >
+                <p
+                    class="dark:text-primary-100/70 text-xs font-semibold tracking-[0.22em] text-primary/70 uppercase"
+                >
+                    Hint
+                </p>
+                <p class="mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
+                    {hint}
+                </p>
+            </div>
+        {/if}
 
-		{#if showExplanation && explanation}
-			<div
-				class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground dark:bg-muted/20"
-			>
-				<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
-					Explanation
-				</p>
-				<p class="mt-1 text-base leading-relaxed text-muted-foreground/90">
-					{explanation}
-				</p>
-			</div>
-		{/if}
+        {#if showExplanation && explanation}
+            <div
+                class="mt-6 rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground dark:bg-muted/20"
+            >
+                <p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
+                    Explanation
+                </p>
+                <p class="mt-1 text-base leading-relaxed text-muted-foreground/90">
+                    {explanation}
+                </p>
+            </div>
+        {/if}
 
-		{#if feedback}
-			<div class={cn('rounded-2xl border px-4 py-3 text-sm shadow-sm', feedbackClass)}>
-				{#if feedback.heading}
-					<p class="text-sm font-semibold tracking-tight">{feedback.heading}</p>
-				{/if}
-				<p class="mt-1 text-base leading-relaxed">{feedback.message}</p>
-			</div>
-		{/if}
-	</CardContent>
+        {#if feedback}
+            <div class={cn('mt-6 rounded-2xl border px-4 py-3 text-sm shadow-sm', feedbackClass)}>
+                {#if feedback.heading}
+                    <p class="text-sm font-semibold tracking-tight">{feedback.heading}</p>
+                {/if}
+                <p class="mt-1 text-base leading-relaxed">{feedback.message}</p>
+            </div>
+        {/if}
+    </CardContent>
 
 	{#if displayFooter}
 		<CardFooter class="flex flex-wrap items-center justify-between gap-3 p-0 pt-6">
