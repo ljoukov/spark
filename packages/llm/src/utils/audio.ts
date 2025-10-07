@@ -69,8 +69,8 @@ export type SynthesisedAudioResult = {
 const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_OUTPUT_MIME = "audio/mpeg";
 const DEFAULT_VOICE_MAP: Record<SpeakerCode, string> = {
-  m: "Puck",
-  f: "Charon",
+  m: "Fenrir",
+  f: "Leda",
 };
 
 type GenerateAudioOptions = {
@@ -127,10 +127,12 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 
 function convertRawPcmToWav(
   pcmData: Buffer,
-  meta: { sampleRate?: number; bitsPerSample?: number; channels?: number },
+  meta: { sampleRate?: number; bitsPerSample?: number; channels?: number }
 ): { buffer: Buffer; sampleRate: number; channels: 1 | 2 } {
-  const sampleRate = meta.sampleRate && meta.sampleRate > 0 ? meta.sampleRate : 24000;
-  const bitsPerSample = meta.bitsPerSample && meta.bitsPerSample > 0 ? meta.bitsPerSample : 16;
+  const sampleRate =
+    meta.sampleRate && meta.sampleRate > 0 ? meta.sampleRate : 24000;
+  const bitsPerSample =
+    meta.bitsPerSample && meta.bitsPerSample > 0 ? meta.bitsPerSample : 16;
   const channelsRaw = meta.channels && meta.channels > 0 ? meta.channels : 1;
   const normalisedChannels = channelsRaw >= 2 ? 2 : 1;
   const bytesPerSample = bitsPerSample / 8;
@@ -161,7 +163,7 @@ function convertRawPcmToWav(
 
 function normaliseAudioBuffer(
   rawBuffer: Buffer,
-  mimeType: string | undefined,
+  mimeType: string | undefined
 ): { data: Buffer; mimeType: string; sampleRate?: number; channels?: 1 | 2 } {
   if (!mimeType) {
     return { data: rawBuffer, mimeType: "audio/mpeg" };
@@ -175,21 +177,36 @@ function normaliseAudioBuffer(
   ) {
     const params = parseMimeParameters(mimeType);
     const sampleRate =
-      parsePositiveInteger(params.rate ?? params["sample-rate"] ?? params.samplerate) ?? 24000;
+      parsePositiveInteger(
+        params.rate ?? params["sample-rate"] ?? params.samplerate
+      ) ?? 24000;
     const bitsPerSample =
       parsePositiveInteger(
-        params.bits ?? params.bitdepth ?? params["bits-per-sample"] ?? params.samplewidth,
+        params.bits ??
+          params.bitdepth ??
+          params["bits-per-sample"] ??
+          params.samplewidth
       ) ?? (lower.includes("8") ? 8 : 16);
     const channels =
       parsePositiveInteger(
-        params.channels ?? params["channel-count"] ?? params.channel_count ?? params["channels"] ?? params["channel"],
+        params.channels ??
+          params["channel-count"] ??
+          params.channel_count ??
+          params["channels"] ??
+          params["channel"]
       ) ?? 1;
 
-    const { buffer, sampleRate: finalSampleRate, channels: finalChannels } = convertRawPcmToWav(
-      rawBuffer,
-      { sampleRate, bitsPerSample, channels },
-    );
-    return { data: buffer, mimeType: "audio/wav", sampleRate: finalSampleRate, channels: finalChannels };
+    const {
+      buffer,
+      sampleRate: finalSampleRate,
+      channels: finalChannels,
+    } = convertRawPcmToWav(rawBuffer, { sampleRate, bitsPerSample, channels });
+    return {
+      data: buffer,
+      mimeType: "audio/wav",
+      sampleRate: finalSampleRate,
+      channels: finalChannels,
+    };
   }
   if (lower.includes("wav") || lower.includes("wave")) {
     return { data: rawBuffer, mimeType: "audio/wav" };
@@ -208,7 +225,7 @@ function normaliseAudioBuffer(
 
 function getVoiceName(
   speaker: SpeakerCode,
-  overrides: Partial<Record<SpeakerCode, string>> | undefined,
+  overrides: Partial<Record<SpeakerCode, string>> | undefined
 ): string | undefined {
   const raw = overrides?.[speaker] ?? DEFAULT_VOICE_MAP[speaker];
   const trimmed = raw?.trim();
@@ -224,7 +241,7 @@ async function synthesiseSegment(
     index: number;
     totalSegments: number;
     getActiveCount: () => number;
-  },
+  }
 ): Promise<{
   data: Uint8Array;
   mimeType: string;
@@ -268,9 +285,11 @@ async function synthesiseSegment(
           continue;
         }
         for (const part of parts) {
-          const inline = (part as {
-            inlineData?: { data?: string; mimeType?: string };
-          }).inlineData;
+          const inline = (
+            part as {
+              inlineData?: { data?: string; mimeType?: string };
+            }
+          ).inlineData;
           if (!inline || !inline.data) {
             continue;
           }
@@ -290,7 +309,9 @@ async function synthesiseSegment(
       }
 
       if (buffers.length === 0) {
-        throw new Error("Gemini TTS response did not include inline audio data");
+        throw new Error(
+          "Gemini TTS response did not include inline audio data"
+        );
       }
 
       const combined = Buffer.concat(buffers);
@@ -312,7 +333,7 @@ async function synthesiseSegment(
       throw error;
     }
     console.warn(
-      `[tts] voice "${options.voiceName}" failed (${errorAsString(error)}); retrying with default voice`,
+      `[tts] voice "${options.voiceName}" failed (${errorAsString(error)}); retrying with default voice`
     );
     return runAttempt(undefined);
   }
@@ -363,14 +384,18 @@ export async function generateAudioFromSegments({
     try {
       return SegmentSchema.parse(segment);
     } catch (error) {
-      throw new Error(`Invalid segment at index ${index}: ${errorAsString(error)}`);
+      throw new Error(
+        `Invalid segment at index ${index}: ${errorAsString(error)}`
+      );
     }
   });
 
   const totalSegments = parsedSegments.length;
   progress?.onStart?.({ totalSegments });
 
-  const tempArtifacts: (SegmentArtifact | undefined)[] = new Array(totalSegments);
+  const tempArtifacts: (SegmentArtifact | undefined)[] = new Array(
+    totalSegments
+  );
   const extraTempFiles: string[] = [];
   let totalBytesAll = 0;
   let activeCount = 0;
@@ -392,14 +417,17 @@ export async function generateAudioFromSegments({
         let byteLength = 0;
 
         try {
-          const { data, mimeType, totalBytes } = await synthesiseSegment(segment, {
-            voiceName,
-            model,
-            progress,
-            index,
-            totalSegments,
-            getActiveCount: () => activeCount,
-          });
+          const { data, mimeType, totalBytes } = await synthesiseSegment(
+            segment,
+            {
+              voiceName,
+              model,
+              progress,
+              index,
+              totalSegments,
+              getActiveCount: () => activeCount,
+            }
+          );
           byteLength = totalBytes;
           const extension = extensionFromMime(mimeType);
           const tempFileName = `tts-segment-${index}-${randomUUID()}.${extension}`;
@@ -437,7 +465,7 @@ export async function generateAudioFromSegments({
             });
           }
         }
-      }),
+      })
     );
 
     const artifacts = tempArtifacts.map((artifact, index) => {
@@ -456,12 +484,12 @@ export async function generateAudioFromSegments({
     for (const artifact of artifacts) {
       if (artifact.sampleRate !== sampleRate) {
         throw new Error(
-          `Inconsistent sample rate detected: expected ${sampleRate}, got ${artifact.sampleRate}`,
+          `Inconsistent sample rate detected: expected ${sampleRate}, got ${artifact.sampleRate}`
         );
       }
       if (artifact.channels !== channels) {
         throw new Error(
-          `Inconsistent channel count detected: expected ${channels}, got ${artifact.channels}`,
+          `Inconsistent channel count detected: expected ${channels}, got ${artifact.channels}`
         );
       }
     }
@@ -469,7 +497,9 @@ export async function generateAudioFromSegments({
     const concatListFileName = `tts-concat-${randomUUID()}.txt`;
     const concatListPath = getTempFilePath(concatListFileName);
     const concatListContent = artifacts
-      .map((artifact) => `file '${escapeForFfmpegConcat(artifact.tempFilePath)}'`)
+      .map(
+        (artifact) => `file '${escapeForFfmpegConcat(artifact.tempFilePath)}'`
+      )
       .join("\n");
     await fs.writeFile(concatListPath, concatListContent, "utf8");
     extraTempFiles.push(concatListPath);
@@ -493,7 +523,7 @@ export async function generateAudioFromSegments({
 
     const totalDurationSec = segmentDurations.reduce(
       (acc, value) => acc + value,
-      0,
+      0
     );
 
     progress?.onComplete?.({
@@ -525,10 +555,10 @@ export async function generateAudioFromSegments({
           }
         } catch (error) {
           console.warn(
-            `[tts] Failed to remove temp file ${artifact.tempFilePath}: ${errorAsString(error)}`,
+            `[tts] Failed to remove temp file ${artifact.tempFilePath}: ${errorAsString(error)}`
           );
         }
-      }),
+      })
     );
     await Promise.all(
       extraTempFiles.map(async (filePath) => {
@@ -536,10 +566,10 @@ export async function generateAudioFromSegments({
           await fs.rm(filePath, { force: true });
         } catch (error) {
           console.warn(
-            `[tts] Failed to remove temp file ${filePath}: ${errorAsString(error)}`,
+            `[tts] Failed to remove temp file ${filePath}: ${errorAsString(error)}`
           );
         }
-      }),
+      })
     );
   }
 }
