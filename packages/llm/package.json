@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.21.0",
+    "execa": "^9.6.0",
     "zod": "^4.1.11"
   },
   "devDependencies": {
