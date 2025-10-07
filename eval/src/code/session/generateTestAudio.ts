@@ -11,7 +11,10 @@ import {
   type AudioGenerationProgress,
   generateAudioFromSegments,
 } from "@spark/llm";
-import { ensureEvalEnvLoaded } from "../../utils/paths";
+import {
+  ensureEvalEnvLoaded,
+  WORKSPACE_PATHS,
+} from "../../utils/paths";
 
 const SMALL_MODE_FLAG = "--small";
 const KEEP_OUTPUT_FLAG = "--keepOutput";
@@ -262,7 +265,7 @@ function formatTimestamp(seconds: number): string {
 }
 
 async function ensureOutputDir(): Promise<string> {
-  const dir = path.resolve(process.cwd(), "eval", "output");
+  const dir = WORKSPACE_PATHS.codeAudioDir;
   await fs.mkdir(dir, { recursive: true });
   return dir;
 }

@@ -30,6 +30,7 @@ export const WORKSPACE_PATHS = {
   codeRoot: CODE_ROOT,
   codeDownloadsDir: path.join(CODE_ROOT, "downloads"),
   codeSyntheticDir: path.join(CODE_ROOT, "synthetic"),
+  codeAudioDir: path.join(CODE_ROOT, "audio"),
 } as const;
 
 let envLoaded = false;
