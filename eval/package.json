@@ -19,9 +19,10 @@
   },
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
+    "@spark/schemas": "file:../packages/schemas",
     "commander": "^14.0.1",
     "firebase-admin": "^13.5.0",
-    "@spark/schemas": "file:../packages/schemas"
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
