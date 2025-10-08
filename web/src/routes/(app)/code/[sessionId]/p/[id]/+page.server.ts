@@ -2,7 +2,9 @@ import { error } from '@sveltejs/kit';
 import { marked } from 'marked';
 import { z } from 'zod';
 import { getUserProblem } from '$lib/server/code/problemRepo';
-import type { CodeProblem } from '@spark/schemas';
+import { savePlanItemState } from '$lib/server/sessionState/repo';
+import { DEFAULT_CODE_SOURCE } from '$lib/code/constants';
+import type { CodeProblem, PlanItemState } from '@spark/schemas';
 import type { PageServerLoad } from './$types';
 
 marked.setOptions({ breaks: true, gfm: true });
@@ -71,11 +73,38 @@ function toSerializable(problem: CodeProblem): SerializableProblem {
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { id } = paramsSchema.parse(params);
-	const { session, userId } = await parent();
+	const parentData = await parent();
+	const { session, userId, sessionState } = parentData;
 
 	const planItem = session.plan.find((item) => item.id === id);
 	if (!planItem || planItem.kind !== 'problem') {
 		throw error(404, { message: 'Problem not found in session plan' });
+	}
+
+	const existingState = (sessionState.items[planItem.id] as PlanItemState | undefined) ?? null;
+	const existingSource = existingState?.code?.source?.trim() ?? '';
+	if (!existingState?.code || existingSource.length === 0) {
+		const now = new Date();
+		const nextState: PlanItemState = existingState
+			? {
+					...existingState,
+					code: {
+						language: 'python',
+						source: DEFAULT_CODE_SOURCE,
+						savedAt: now
+					}
+				}
+			: {
+					status: 'not_started',
+					code: {
+						language: 'python',
+						source: DEFAULT_CODE_SOURCE,
+						savedAt: now
+					}
+				};
+
+		await savePlanItemState(userId, session.id, planItem.id, nextState);
+		sessionState.items[planItem.id] = nextState;
 	}
 
 	const problemDoc = await getUserProblem(userId, session.id, planItem.id);

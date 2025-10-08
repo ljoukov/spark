@@ -6,6 +6,43 @@ const trimmedId = z.string().trim().min(1, "id is required");
 const sessionStateStatus = z.enum(["not_started", "in_progress", "completed"]);
 
 const quizAttemptStatus = z.enum(["pending", "correct", "incorrect", "skipped"]);
+const codeLanguage = z.enum(["python"]);
+const codeRunStatus = z.enum(["passed", "failed", "error"]);
+
+export const PlanItemCodeStateSchema = z
+  .object({
+    language: codeLanguage.default("python"),
+    source: z.string().max(100_000, "code source is too long"),
+    savedAt: FirestoreTimestampSchema.optional(),
+    lastRunAt: FirestoreTimestampSchema.optional(),
+    lastRunStatus: codeRunStatus.optional(),
+  })
+  .transform(({ language, source, savedAt, lastRunAt, lastRunStatus }) => {
+    const result: {
+      language: z.infer<typeof codeLanguage>;
+      source: string;
+      savedAt?: Date;
+      lastRunAt?: Date;
+      lastRunStatus?: z.infer<typeof codeRunStatus>;
+    } = {
+      language,
+      source,
+    };
+
+    if (savedAt) {
+      result.savedAt = savedAt;
+    }
+    if (lastRunAt) {
+      result.lastRunAt = lastRunAt;
+    }
+    if (lastRunStatus) {
+      result.lastRunStatus = lastRunStatus;
+    }
+
+    return result;
+  });
+
+export type PlanItemCodeState = z.infer<typeof PlanItemCodeStateSchema>;
 
 export const QuizQuestionStateSchema = z
   .object({
@@ -93,13 +130,15 @@ export const PlanItemStateSchema = z
     startedAt: FirestoreTimestampSchema.optional(),
     completedAt: FirestoreTimestampSchema.optional(),
     quiz: PlanItemQuizStateSchema.optional(),
+    code: PlanItemCodeStateSchema.optional(),
   })
-  .transform(({ status, startedAt, completedAt, quiz }) => {
+  .transform(({ status, startedAt, completedAt, quiz, code }) => {
     const result: {
       status: z.infer<typeof sessionStateStatus>;
       startedAt?: Date;
       completedAt?: Date;
       quiz?: z.infer<typeof PlanItemQuizStateSchema>;
+      code?: z.infer<typeof PlanItemCodeStateSchema>;
     } = {
       status,
     };
@@ -112,6 +151,9 @@ export const PlanItemStateSchema = z
     }
     if (quiz) {
       result.quiz = quiz;
+    }
+    if (code) {
+      result.code = code;
     }
 
     return result;

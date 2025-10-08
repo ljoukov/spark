@@ -22,6 +22,7 @@ export type SessionUpdateOptions = {
 	};
 	sync?: boolean;
 	markInProgress?: boolean;
+	keepalive?: boolean;
 };
 
 const responseSchema = z.object({
@@ -40,6 +41,7 @@ async function sendSessionUpdate(
 	const response = await fetch(`/api/session/${sessionId}/update`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
+		keepalive: options?.keepalive ?? false,
 		body: JSON.stringify({
 			planItemId,
 			state,
