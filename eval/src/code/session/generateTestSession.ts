@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -32,36 +33,19 @@ import {
   INTRO_PLAN_ITEM_ID,
   OUTRO_PLAN_ITEM_ID,
 } from "./constants";
+import {
+  formatInteger,
+  logGeminiStreamingSummary,
+  type GeminiStreamingSummary,
+} from "../../utils/geminiStreaming";
+import { formatByteSize, formatDurationSeconds } from "../../utils/format";
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 // No local audio file constants: audio is generated on the fly
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
-  }
-  const units = ["KB", "MB", "GB", "TB"] as const;
-  let value = bytes;
-  let unitIndex = -1;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  if (unitIndex === -1) {
-    return `${Math.round(value)} B`;
-  }
-  const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
-  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
-}
+const AUDIO_MODEL_ID = "gemini-2.5-flash-preview-tts" as const;
 
 function formatTimestamp(seconds: number): string {
-  const totalMilliseconds = Math.round(seconds * 1000);
-  const totalSeconds = Math.floor(totalMilliseconds / 1000);
-  const millis = totalMilliseconds % 1000;
-  const minutes = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${minutes}:${secs.toString().padStart(2, "0")}.${Math.floor(millis / 10)
-    .toString()
-    .padStart(2, "0")}`;
+  return formatDurationSeconds(seconds);
 }
 
 type AudioGenerationProgress = import("@spark/llm").AudioGenerationProgress;
@@ -85,18 +69,18 @@ function createConsoleProgress(label: string): AudioGenerationProgress {
     },
     onSegmentChunk({ index, totalSegments, chunkBytes, totalBytes, activeCount }) {
       console.log(
-        `[${label}]    segment ${index + 1}/${totalSegments} +${formatBytes(chunkBytes)} (cum ${formatBytes(totalBytes)}) • active ${activeCount}`,
+        `[${label}]    segment ${index + 1}/${totalSegments} +${formatByteSize(chunkBytes)} (cum ${formatByteSize(totalBytes)}) • active ${activeCount}`,
       );
     },
     onSegmentComplete({ index, totalSegments, durationSec, totalBytes, activeCount }) {
       console.log(
-        `[${label}] ✔ Segment ${index + 1}/${totalSegments} finished ${formatTimestamp(durationSec)} (${formatBytes(totalBytes)}) • active now ${activeCount}`,
+        `[${label}] ✔ Segment ${index + 1}/${totalSegments} finished ${formatTimestamp(durationSec)} (${formatByteSize(totalBytes)}) • active now ${activeCount}`,
       );
     },
     onComplete({ totalSegments, totalBytes, totalDurationSec }) {
       const wallSeconds = (Date.now() - startTime) / 1000;
       console.log(
-        `[${label}] ✅ Completed ${totalSegments} segments • audio ${formatTimestamp(totalDurationSec)} • size ${formatBytes(totalBytes)} • wall ${formatTimestamp(wallSeconds)}`,
+        `[${label}] ✅ Completed ${totalSegments} segments • audio ${formatTimestamp(totalDurationSec)} • size ${formatByteSize(totalBytes)} • wall ${formatTimestamp(wallSeconds)}`,
       );
     },
   };
@@ -981,18 +965,51 @@ async function publishMediaAssets(userId: string, sessionId: string): Promise<vo
   const storageBucket = resolveStorageBucket();
 
   for (const source of MEDIA_SOURCES) {
+    const flattenedNarration = source.segments.flatMap((segment) => segment.narration);
+    const segmentCount = flattenedNarration.length;
+    const totalTextChars = flattenedNarration.reduce(
+      (acc, line) => acc + line.text.length,
+      0,
+    );
+    const uploadBytes = flattenedNarration.reduce(
+      (acc, line) => acc + Buffer.byteLength(line.text, "utf8"),
+      0,
+    );
+    const consoleLabel = source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro";
+    const statsLabel = `session/audio/${source.planItemId}`;
     const tmpPath = path.join(
       os.tmpdir(),
       `test-session-${source.planItemId}-${Date.now()}.mp3`,
     );
 
+    const startedAt = Date.now();
     const audioResult = await generateSessionAudio({
       segments: source.segments,
       outputFilePath: tmpPath,
       progress: createConsoleProgress(
-        source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro",
+        consoleLabel,
       ),
     });
+    const elapsedMs = Date.now() - startedAt;
+
+    const summary: GeminiStreamingSummary = {
+      label: statsLabel,
+      modelId: AUDIO_MODEL_ID,
+      uploadBytes,
+      chunkCount: segmentCount,
+      totalTextChars,
+      totalInlineBytes: audioResult.totalBytes,
+      promptTokens: 0,
+      cachedTokens: 0,
+      inferenceTokens: 0,
+      elapsedMs,
+    };
+    const notes = [
+      `segments ${formatInteger(segmentCount)}`,
+      `text ${formatInteger(totalTextChars)} chars`,
+      `audio ${formatTimestamp(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)}`,
+    ].join(" | ");
+    logGeminiStreamingSummary(summary, { notes });
 
     const publishResult = await publishSessionMediaClip({
       userId,

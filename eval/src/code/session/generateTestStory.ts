@@ -45,7 +45,7 @@ function timestampSlug(): string {
 function buildStoryPrompt(topic: string): string {
   const audienceDesc = "advanced maths school students";
   const dialect = "UK";
-  const wordCountRange = "2-3 minutes";
+  const length = "2-3 minutes";
   return `\
 Please carefully ideate on critical parts.
 Use web search tool to double check if anything requires verification.
@@ -55,7 +55,7 @@ Goal: Canonical Origin Story (audio-friendly).
 **Task**
 Write a single-voice, audio-friendly historical story that introduces **${topic}** to **${audienceDesc}** in **${dialect}**. It must be factual, vivid, and memorable.
 
-**Internal workflow (do not reveal unless I say “show planning”)**
+**Internal workflow**
 
 **Part A — Choose the discoverer and the canonical event**
 
@@ -94,13 +94,12 @@ Write a single-voice, audio-friendly historical story that introduces **${topic}
 * Single narrator; **paragraphs only** (no bullets, dialogue, or footnotes).
 * Short-to-medium sentences; TED-style momentum; vivid but restrained.
 * Prefer **spelled-out years** for listening.
-* Length: **${wordCountRange}** words.
+* Length: **${length}**.
 
 **Output format**
 
 * 2-4 word title
-* Story should be told in two voices: M and F. Each saying 1-2 sentences at a time.
-* Voice M should be a little more formal, F should be more explanatory emotional.
+* Story paragraphs
 
 **Safeguards (hard rules)**
 
