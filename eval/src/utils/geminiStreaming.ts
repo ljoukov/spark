@@ -13,6 +13,7 @@ export type GeminiStreamingSummary = {
   readonly totalInlineBytes: number;
   readonly promptTokens: number;
   readonly cachedTokens: number;
+  readonly thinkingTokens: number;
   readonly inferenceTokens: number;
   readonly firstChunkLatencyMs?: number;
   readonly elapsedMs: number;
@@ -40,9 +41,11 @@ export function createGeminiStreamingStats(
   let totalInlineBytes = 0;
   let lastPromptTokens = 0;
   let lastCachedTokens = 0;
+  let lastThinkingTokens = 0;
   let lastInferenceTokens = 0;
   let accumulatedPromptTokens = 0;
   let accumulatedCachedTokens = 0;
+  let accumulatedThinkingTokens = 0;
   let accumulatedInferenceTokens = 0;
 
   return {
@@ -57,10 +60,15 @@ export function createGeminiStreamingStats(
       }
       const promptTokensNow = usage.promptTokenCount ?? 0;
       const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
+      const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
       const inferenceTokensNow =
-        (usage.thoughtsTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0);
+        thinkingTokensNow + (usage.candidatesTokenCount ?? 0);
       const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
       const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
+      const thinkingDelta = Math.max(
+        0,
+        thinkingTokensNow - lastThinkingTokens
+      );
       const inferenceDelta = Math.max(
         0,
         inferenceTokensNow - lastInferenceTokens
@@ -71,11 +79,15 @@ export function createGeminiStreamingStats(
       if (cachedDelta > 0) {
         accumulatedCachedTokens += cachedDelta;
       }
+      if (thinkingDelta > 0) {
+        accumulatedThinkingTokens += thinkingDelta;
+      }
       if (inferenceDelta > 0) {
         accumulatedInferenceTokens += inferenceDelta;
       }
       lastPromptTokens = promptTokensNow;
       lastCachedTokens = cachedTokensNow;
+      lastThinkingTokens = thinkingTokensNow;
       lastInferenceTokens = inferenceTokensNow;
     },
     recordTextChars(delta: number): void {
@@ -95,6 +107,10 @@ export function createGeminiStreamingStats(
         lastPromptTokens
       );
       const cachedTokens = Math.max(accumulatedCachedTokens, lastCachedTokens);
+      const thinkingTokens = Math.max(
+        accumulatedThinkingTokens,
+        lastThinkingTokens
+      );
       const inferenceTokens = Math.max(
         accumulatedInferenceTokens,
         lastInferenceTokens
@@ -108,6 +124,7 @@ export function createGeminiStreamingStats(
         totalInlineBytes,
         promptTokens,
         cachedTokens,
+        thinkingTokens,
         inferenceTokens,
         firstChunkLatencyMs:
           firstChunkTimestamp !== undefined
@@ -132,6 +149,7 @@ export function logGeminiStreamingSummary(
     totalInlineBytes,
     promptTokens,
     cachedTokens,
+    thinkingTokens,
     inferenceTokens,
     firstChunkLatencyMs,
     elapsedMs,
@@ -146,7 +164,7 @@ export function logGeminiStreamingSummary(
       ` • chunks ${formatInteger(chunkCount)}` +
       ` • text ${formatInteger(totalTextChars)} chars` +
       ` • inline ${formatByteSize(totalInlineBytes)}` +
-      ` • tokens prompt ${formatInteger(promptTokens)} cached ${formatInteger(cachedTokens)} inference ${formatInteger(inferenceTokens)}` +
+      ` • tokens prompt ${formatInteger(promptTokens)} cached ${formatInteger(cachedTokens)} thinking ${formatInteger(thinkingTokens)} inference ${formatInteger(inferenceTokens)}` +
       ` • upload ${formatByteSize(uploadBytes)}` +
       ` • model ${options?.modelVersion ?? modelId}${notes}`
   );

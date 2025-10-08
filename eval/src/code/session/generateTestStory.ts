@@ -29,6 +29,23 @@ const optionsSchema = z.object({
   output: z.string().trim().min(1, "output path cannot be empty").optional(),
 });
 
+const StorySegmentNarrationSchema = z.object({
+  voice: z.enum(["M", "F"]),
+  text: z.string().trim().min(1),
+});
+
+const StorySegmentSchema = z.object({
+  imagePrompt: z.string().trim().min(1),
+  narration: z.array(StorySegmentNarrationSchema).min(1),
+});
+
+const StorySegmentationSchema = z.object({
+  title: z.string().trim().min(1),
+  segments: z.array(StorySegmentSchema).min(5).max(6),
+});
+
+type StorySegmentation = z.infer<typeof StorySegmentationSchema>;
+
 type CliOptions = z.infer<typeof optionsSchema>;
 
 function timestampSlug(): string {
@@ -110,6 +127,113 @@ Write a single-voice, audio-friendly historical story that introduces **${topic}
 `;
 }
 
+const SEGMENTATION_JSON_SCHEMA = `{
+  "type": "object",
+  "required": ["title", "segments"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "segments": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["imagePrompt", "narration"],
+        "properties": {
+          "imagePrompt": { "type": "string", "minLength": 1 },
+          "narration": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["voice", "text"],
+              "properties": {
+                "voice": { "type": "string", "enum": ["M", "F"] },
+                "text": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}`;
+
+function buildSegmentationPrompt(storyText: string): string {
+  return [
+    "Convert the provided historical story into a structured narration and illustration plan.",
+    "",
+    "Requirements:",
+    "1. Produce concise JSON that conforms exactly to the schema below. Do not include commentary or code fences.",
+    "2. Extract the `title` for the story.",
+    "3. Split the story into 5-6 chronological `segments`. Each segment represents a single focused beat of the story.",
+    "4. For every segment:",
+    "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
+    "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
+    "   • Provide `imagePrompt`, a detailed visual prompt that captures the same moment as the narration slice(s).",
+    "",
+    "Illustration guidance:",
+    "• Follow the master brief in <IMAGE_PROMPTS_REQUIREMENTS>. Every prompt must focus on the protagonist, specify the environment, lighting, and emotional cues, and call for a single clear action.",
+    "• Keep prompts grounded in the authentic historical setting and tone of the story.",
+    "",
+    "JSON schema:",
+    SEGMENTATION_JSON_SCHEMA,
+    "",
+    "Respond with JSON only. No markdown fences.",
+    "",
+    "================ Story to segment ================",
+    "<STORY>",
+    storyText,
+    "</STORY>",
+    "==================================================",
+    "",
+    "segmentation prompt:",
+    "------------------",
+    "Convert the story into alternating-voice narration segments with illustration prompts and a title, following all rules above.",
+    "<IMAGE_PROMPTS_REQUIREMENTS>",
+    "### **Master Prompt: The Historical Storyteller's Visual Guide**",
+    "",
+    "**Your Role:** You are a master storyteller and concept artist. Your talent lies in translating written narratives about history's great thinkers into powerful, emotionally resonant visual scenes. You understand how to tell a story through images, focusing on character, mood, and clarity.",
+    "",
+    "**Your Mission:** I will provide a story about a historical figure and their discovery. Your task is to generate a series of 5-6 illustration prompts based on the key moments of this story. Each prompt must be a self-contained, cinematic scene that captures a critical point in the narrative and could serve as a keyframe in a feature animated film.",
+    "",
+    "---",
+    "",
+    "### **Core Principles for Every Prompt:**",
+    "",
+    '1.  **The Character is the Heart:** Every scene must revolve around the protagonist. Focus on their actions, their emotional state, and their perspective. What are they thinking? What are they feeling? Use descriptive language for their facial expressions (e.g., "a furrowed brow of intense concentration," "a sudden, wide-eyed look of revelation," "a quiet smile of satisfaction").',
+    "",
+    "2.  **Make the Abstract Concrete:** Scientific and intellectual concepts are invisible. Your job is to make them visible and interactive. Brainstorm a clear, simple visual metaphor for the core concept. Instead of showing an abstract formula, show the character physically manipulating objects that represent the idea, or drawing a diagram that magically clarifies itself from a tangled mess. The hero must be *doing something* that represents their thought process.",
+    "",
+    "3.  **Cinematic and Grounded Scenes:** Each prompt should describe a complete, believable scene. Define the environment, the quality of light, and the overall atmosphere. Ensure the scene is grounded in a logical reality to avoid surreal or nonsensical outputs from the image generator. **Crucially, describe one single, clear, and focused action per image.**",
+    "",
+    "---",
+    "",
+    "### **Signature Art Style to Embody:**",
+    "",
+    'You must craft your prompts to evoke a specific high-end 3D animation style. Do not use words like "Pixar" or "DreamWorks." Instead, describe the style through its core components:',
+    "",
+    "*   **Characters:** Design appealing, stylized characters with expressive faces and believable emotions. They should feel like hand-sculpted clay models brought to life, not hyper-realistic humans.",
+    '*   **Lighting:** Describe warm, cinematic lighting. Use terms like "soft volumetric light streaming through a window," "a warm glow from a single desk lamp in a dark room," or "dramatic backlighting that creates a strong silhouette." Light should be used to direct the eye and create mood.',
+    "*   **Textures & Surfaces:** The world should feel tangible. Prompts should imply rich, detailed textures. Wood should have grain, metal should have a soft sheen, and paper should feel fibrous.",
+    "*   **Color:** The scenes should be built on a vibrant and harmonious color palette that enhances the emotional tone of the story.",
+    "",
+    "---",
+    "",
+    "### **Final Instructions:**",
+    "",
+    "*   Analyze the provided story for its most pivotal narrative and emotional beats.",
+    "*   Generate a numbered list of 5-6 illustration prompts.",
+    "*   Each prompt must have a short, evocative title.",
+    "*   Ensure your prompts are clear, concise, and focused, giving the image generator a direct and unambiguous task to execute beautifully.",
+    "</IMAGE_PROMPTS_REQUIREMENTS>",
+    "--------------",
+  ].join("\n");
+}
+
 function resolveOutputDir(rawOptions: CliOptions): string {
   const provided = rawOptions.output;
   if (provided) {
@@ -128,7 +252,13 @@ function resolveOutputDir(rawOptions: CliOptions): string {
 async function generateProseStory(
   topic: string,
   outDir: string
-): Promise<void> {
+): Promise<{
+  text: string;
+  prompt: string;
+  modelVersion: string;
+  storyPath: string;
+  promptPath: string;
+}> {
   console.log(
     "[story] generating prose with web-search-enabled Gemini 2.5 Pro"
   );
@@ -142,58 +272,60 @@ async function generateProseStory(
   );
   let streamingSummary: GeminiStreamingSummary | undefined;
   let finalStoryLength = 0;
-  const { text, modelVersion } = await runGeminiCall(async (client) => {
-    const stream = await client.models.generateContentStream({
-      model: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "user",
-          parts,
-        },
-      ],
-      config: {
-        thinkingConfig: {
-          thinkingBudget: 32_768,
-        },
-        tools: [
+  const { text: storyText, modelVersion } = await runGeminiCall(
+    async (client) => {
+      const stream = await client.models.generateContentStream({
+        model: TEXT_MODEL_ID,
+        contents: [
           {
-            googleSearch: {},
+            role: "user",
+            parts,
           },
         ],
-      },
-    });
+        config: {
+          thinkingConfig: {
+            thinkingBudget: 32_768,
+          },
+          tools: [
+            {
+              googleSearch: {},
+            },
+          ],
+        },
+      });
 
-    let aggregated = "";
-    let resolvedModelVersion: string = TEXT_MODEL_ID;
+      let aggregated = "";
+      let resolvedModelVersion: string = TEXT_MODEL_ID;
 
-    for await (const chunk of stream) {
-      stats.observeChunk(chunk);
-      if (chunk.modelVersion) {
-        resolvedModelVersion = chunk.modelVersion;
-      }
-      const candidates = chunk.candidates ?? [];
-      for (const candidate of candidates) {
-        const contentParts = candidate.content?.parts ?? [];
-        for (const part of contentParts) {
-          const content = part.text;
-          if (content) {
-            stats.recordTextChars(content.length);
-            aggregated += content;
+      for await (const chunk of stream) {
+        stats.observeChunk(chunk);
+        if (chunk.modelVersion) {
+          resolvedModelVersion = chunk.modelVersion;
+        }
+        const candidates = chunk.candidates ?? [];
+        for (const candidate of candidates) {
+          const contentParts = candidate.content?.parts ?? [];
+          for (const part of contentParts) {
+            const content = part.text;
+            if (content) {
+              stats.recordTextChars(content.length);
+              aggregated += content;
+            }
           }
         }
       }
+
+      streamingSummary = stats.summary();
+      const trimmed = aggregated.trim();
+      finalStoryLength = trimmed.length;
+      return {
+        text: aggregated.trim(),
+        modelVersion: resolvedModelVersion,
+      };
     }
+  );
 
-    streamingSummary = stats.summary();
-    const trimmed = aggregated.trim();
-    finalStoryLength = trimmed.length;
-    return {
-      text: aggregated.trim(),
-      modelVersion: resolvedModelVersion,
-    };
-  });
-
-  if (!text) {
+  if (!storyText) {
     throw new Error("Gemini response did not include prose output");
   }
 
@@ -207,12 +339,20 @@ async function generateProseStory(
   await mkdir(outDir, { recursive: true });
   const storyPath = path.join(outDir, "story.txt");
   const header = `modelVersion: ${modelVersion}\ntopic: ${topic}\n\n`;
-  await writeFile(storyPath, header + text, { encoding: "utf8" });
+  await writeFile(storyPath, header + storyText, { encoding: "utf8" });
   console.log(`[story] saved prose to ${storyPath}`);
 
   const promptPath = path.join(outDir, "prompt.txt");
   await writeFile(promptPath, prompt, { encoding: "utf8" });
   console.log(`[story] saved prompt snapshot to ${promptPath}`);
+
+  return {
+    text: storyText,
+    prompt,
+    modelVersion,
+    storyPath,
+    promptPath,
+  };
 }
 
 function extensionFromMime(mimeType?: string): string {
@@ -348,6 +488,142 @@ async function generateStoryImages(
   }
 }
 
+function extractJsonObject(rawText: string): unknown {
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    throw new Error("Gemini segmentation response was empty");
+  }
+
+  const unwrapped = (() => {
+    if (!trimmed.startsWith("```")) {
+      return trimmed;
+    }
+    const firstLineBreak = trimmed.indexOf("\n");
+    if (firstLineBreak === -1) {
+      return trimmed;
+    }
+    const withoutFence = trimmed.slice(firstLineBreak + 1);
+    const closingFenceIndex = withoutFence.lastIndexOf("```");
+    if (closingFenceIndex === -1) {
+      return withoutFence.trim();
+    }
+    return withoutFence.slice(0, closingFenceIndex).trim();
+  })();
+
+  const start = unwrapped.indexOf("{");
+  const end = unwrapped.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("Unable to locate JSON object in segmentation response");
+  }
+  const candidate = unwrapped.slice(start, end + 1);
+  return JSON.parse(candidate);
+}
+
+async function generateStorySegmentation(
+  storyText: string,
+  outDir: string
+): Promise<{
+  segmentation: StorySegmentation;
+  prompt: string;
+  modelVersion: string;
+  jsonPath: string;
+  promptPath: string;
+}> {
+  console.log("[story] generating narration segments with Gemini 2.5 Pro");
+  const prompt = buildSegmentationPrompt(storyText);
+  const parts: Part[] = [{ text: prompt }];
+  const uploadBytes = estimateUploadBytes(parts);
+  const stats = createGeminiStreamingStats(
+    "story/segmentation",
+    TEXT_MODEL_ID,
+    uploadBytes
+  );
+
+  let streamingSummary: GeminiStreamingSummary | undefined;
+  let aggregated = "";
+  let modelVersion: string = TEXT_MODEL_ID;
+  let finalLength = 0;
+
+  await runGeminiCall(async (client) => {
+    const stream = await client.models.generateContentStream({
+      model: TEXT_MODEL_ID,
+      contents: [
+        {
+          role: "user",
+          parts,
+        },
+      ],
+      config: {
+        thinkingConfig: {
+          thinkingBudget: 8_192,
+        },
+      },
+    });
+
+    for await (const chunk of stream) {
+      stats.observeChunk(chunk);
+      if (chunk.modelVersion) {
+        modelVersion = chunk.modelVersion;
+      }
+      const candidates = chunk.candidates ?? [];
+      for (const candidate of candidates) {
+        const contentParts = candidate.content?.parts ?? [];
+        for (const part of contentParts) {
+          if (part.thought) {
+            continue;
+          }
+          if (part.text) {
+            stats.recordTextChars(part.text.length);
+            aggregated += part.text;
+          }
+        }
+      }
+    }
+
+    streamingSummary = stats.summary();
+    finalLength = aggregated.trim().length;
+  });
+
+  if (streamingSummary) {
+    logGeminiStreamingSummary(streamingSummary, {
+      modelVersion,
+      notes: `segments text ${formatInteger(finalLength)} chars`,
+    });
+  }
+
+  if (!aggregated.trim()) {
+    throw new Error(
+      "Gemini segmentation response did not include any text output"
+    );
+  }
+
+  const parsedJson = extractJsonObject(aggregated);
+  const segmentation = StorySegmentationSchema.parse(parsedJson);
+
+  await mkdir(outDir, { recursive: true });
+  const jsonPath = path.join(outDir, "segments.json");
+  const payload = {
+    modelVersion,
+    ...segmentation,
+  };
+  await writeFile(jsonPath, JSON.stringify(payload, null, 2), {
+    encoding: "utf8",
+  });
+  console.log(`[story] saved segmentation JSON to ${jsonPath}`);
+
+  const promptPath = path.join(outDir, "segmentation-prompt.txt");
+  await writeFile(promptPath, prompt, { encoding: "utf8" });
+  console.log(`[story] saved segmentation prompt snapshot to ${promptPath}`);
+
+  return {
+    segmentation,
+    prompt,
+    modelVersion,
+    jsonPath,
+    promptPath,
+  };
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
@@ -386,7 +662,8 @@ async function main(): Promise<void> {
   console.log(`[story] output directory: ${outDir}`);
 
   if (shouldGenerateProse) {
-    await generateProseStory(parsed.topic, outDir);
+    const storyResult = await generateProseStory(parsed.topic, outDir);
+    await generateStorySegmentation(storyResult.text, outDir);
   }
 
   if (shouldGenerateImages) {
