@@ -14,6 +14,7 @@ import {
   getFirebaseAdminStorage,
 } from "@spark/llm";
 import type { MediaSegment } from "@spark/llm";
+import sharp from "sharp";
 
 import { createConsoleProgress, synthesizeAndPublishNarration } from "./narration";
 
@@ -770,7 +771,14 @@ export async function generateStory(
 
   const storagePaths: string[] = [];
   for (const image of images.images) {
-    const extension = extensionFromMime(image.mimeType);
+    const jpegBuffer = await sharp(image.data)
+      .jpeg({
+        quality: 92,
+        progressive: true,
+        chromaSubsampling: "4:4:4",
+      })
+      .toBuffer();
+    const extension = "jpg";
     const storagePath = buildImageStoragePath(
       options.userId,
       options.sessionId,
@@ -780,10 +788,10 @@ export async function generateStory(
       options.storagePrefix,
     );
     const file = bucket.file(storagePath);
-    await file.save(image.data, {
+    await file.save(jpegBuffer, {
       resumable: false,
       metadata: {
-        contentType: image.mimeType,
+        contentType: "image/jpeg",
         cacheControl: "public, max-age=0",
       },
     });
