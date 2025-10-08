@@ -1,6 +1,14 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import { getTestUserId, getFirebaseAdminFirestore } from "@spark/llm";
+import {
+  getTestUserId,
+  getFirebaseAdminFirestore,
+  publishSessionMediaClip,
+  parseFirebaseServiceAccount,
+} from "@spark/llm";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -14,14 +22,181 @@ import type {
   QuizDefinition,
   CodeProblem,
 } from "@spark/schemas";
+import type { MediaSegment, SessionAudioResult } from "@spark/llm";
 
-function generateSessionId(): string {
-  return "dp-coin-change-decode";
-}
+import {
+  TEST_SESSION_ID,
+  TEST_SESSION_TITLE,
+  INTRO_PLAN_ITEM_ID,
+  OUTRO_PLAN_ITEM_ID,
+} from "./constants";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 
-function generateSessionTitle(): string {
-  return "Warm-up quiz";
-}
+const INTRO_AUDIO_FILE = "test-session-intro.mp3";
+const OUTRO_AUDIO_FILE = "test-session-outro.mp3";
+const AUDIO_MIME_TYPE = "audio/mpeg";
+const DEFAULT_SAMPLE_RATE = 24_000;
+const DEFAULT_CHANNELS: 1 = 1;
+const FALLBACK_LINE_DURATION_SEC = 4.5;
+const MIN_LINE_DURATION_SEC = 1.4;
+
+const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
+  {
+    slide: "# Dynamic Programming\nBreak · Store · Reuse",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "Welcome. Today’s session builds practical intuition for dynamic programming: breaking problems into smaller pieces, storing answers, and reusing them to avoid repeated work.",
+      },
+      {
+        speaker: "f",
+        text:
+          "Think of it like LEGO: once you’ve built a sturdy mini‑module, you don’t rebuild it—you snap it in again whenever you need that shape.",
+      },
+    ],
+  },
+  {
+    slide: "### A short story\nRichard Bellman, 1950s",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "The term ‘dynamic programming’ dates to the 1950s. Richard Bellman used ‘programming’ in the classical sense of planning, and ‘dynamic’ to emphasize decisions unfolding over stages.",
+      },
+      {
+        speaker: "f",
+        text:
+          "The big idea stuck because it solves real problems—from routing and scheduling to bioinformatics. Reusing partial answers beats starting from scratch.",
+      },
+    ],
+  },
+  {
+    slide: "### Core intuition\nOverlapping subproblems",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "DP pays off when the same small question appears repeatedly. We capture a clear ‘state’, define base cases, and ensure each state is solved once.",
+      },
+      {
+        speaker: "f",
+        text:
+          "It’s like hiking with cairns. Mark each tricky fork once, then every traveler benefits from that marker without re‑exploring the whole trail.",
+      },
+    ],
+  },
+  {
+    slide: "### Two friendly styles\nMemoization vs. Tabulation",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "Top‑down memoization caches answers to recursive calls. Bottom‑up tabulation fills a small table from simple to harder cases. Both reuse results; only the direction differs.",
+      },
+      {
+        speaker: "f",
+        text:
+          "Memoization feels like asking a friend, ‘Have we seen this exact puzzle?’ Tabulation is packing your bag in order—socks before shoes—so each step is ready for the next.",
+      },
+    ],
+  },
+  {
+    slide: "### Today’s path\nWarm‑up → Ideas → Practice",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "We’ll start with a warm‑up quiz, review two idea cards, then practice with Coin Change (combinations) and Decode Ways (string DP). A final review locks it in.",
+      },
+      {
+        speaker: "f",
+        text:
+          "You’ll see the same rhythm: define the state, set tiny base cases, and write a transition that reuses what you already know.",
+      },
+    ],
+  },
+  {
+    slide: "### Two examples\nCoin Change · Decode Ways",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "In Coin Change, we count combinations by iterating coins on the outside so order doesn’t inflate the count. In Decode Ways, we step through a string and combine 1‑ and 2‑digit choices while handling zeros carefully.",
+      },
+      {
+        speaker: "f",
+        text:
+          "If Coin Change is arranging bills to reach a total, Decode Ways is reading a secret note where characters can pair up. The table keeps both stories consistent.",
+      },
+    ],
+  },
+];
+
+const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
+  {
+    slide: "## Wrap‑up\nDP in one breath",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "DP is about naming the state, anchoring with base cases, and reusing computed answers via a memo or table. Today you applied that to Coin Change and Decode Ways.",
+      },
+      {
+        speaker: "f",
+        text:
+          "Keep the mental checklist: What’s the state? What’s the tiniest known answer? How do small answers compose into the next one?",
+      },
+    ],
+  },
+  {
+    slide: "### What sticks\nHabits, not formulas",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "Spot overlapping subproblems early. Prefer clear states and minimal memory. Choose memoization or tabulation for clarity—both are valid.",
+      },
+      {
+        speaker: "f",
+        text:
+          "Like organizing tools in a small box: only keep what you reach for. The structure makes the next fix faster.",
+      },
+    ],
+  },
+  {
+    slide: "### Next steps\nPractice and explore",
+    narration: [
+      {
+        speaker: "m",
+        text:
+          "When you’re ready, try more DP patterns—stairs and grids, LIS, or knapsack. Short, focused reps will cement the skill.",
+      },
+      {
+        speaker: "f",
+        text:
+          "One more small session now beats a long one later. See you in the next lesson.",
+      },
+    ],
+  },
+];
+
+const MEDIA_SOURCES: Array<{
+  planItemId: string;
+  fileName: string;
+  segments: MediaSegment[];
+}> = [
+  {
+    planItemId: INTRO_PLAN_ITEM_ID,
+    fileName: INTRO_AUDIO_FILE,
+    segments: INTRO_MEDIA_SEGMENTS,
+  },
+  {
+    planItemId: OUTRO_PLAN_ITEM_ID,
+    fileName: OUTRO_AUDIO_FILE,
+    segments: OUTRO_MEDIA_SEGMENTS,
+  },
+];
 
 const QUIZZES: QuizDefinition[] = [
   {
@@ -664,6 +839,15 @@ const PROBLEMS: CodeProblem[] = [
 function buildPlan(): PlanItem[] {
   return [
     {
+      id: INTRO_PLAN_ITEM_ID,
+      kind: "media",
+      title: "Kick-off briefing",
+      icon: "🎧",
+      meta: "Start here",
+      summary:
+        "Preview the journey and set the rhythm before the quizzes and drills.",
+    },
+    {
       id: "dp-warmup-quiz",
       kind: "quiz",
       title: "Warm-up quiz",
@@ -708,7 +892,256 @@ function buildPlan(): PlanItem[] {
       summary:
         "Confirm the DP transition sticks with a final three-question review.",
     },
+    {
+      id: OUTRO_PLAN_ITEM_ID,
+      kind: "media",
+      title: "Cool-down recap",
+      icon: "🎧",
+      meta: "Wrap-up",
+      summary:
+        "Wind down with the key habits to carry into your next dynamic programming session.",
+    },
   ];
+}
+
+function normalizeBucketName(raw: string | undefined): string {
+  if (!raw) {
+    return "";
+  }
+  return raw
+    .trim()
+    .replace(/^gs:\/\//i, "")
+    .replace(/^https:\/\/storage\.googleapis\.com\//i, "")
+    .replace(/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i, "")
+    .replace(/\/.*$/, "");
+}
+
+function resolveStorageBucket(): string {
+  const sources = [
+    process.env.FIREBASE_STORAGE_BUCKET,
+    process.env.STORAGE_BUCKET,
+    process.env.GCLOUD_STORAGE_BUCKET,
+  ];
+  const bucketFromEnv = sources
+    .map((candidate) => normalizeBucketName(candidate))
+    .find((value) => value.length > 0);
+  if (bucketFromEnv) {
+    return bucketFromEnv;
+  }
+
+  const serviceAccountRaw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (serviceAccountRaw && serviceAccountRaw.trim().length > 0) {
+    try {
+      const serviceAccount = parseFirebaseServiceAccount(serviceAccountRaw);
+      if (serviceAccount.projectId) {
+        return `${serviceAccount.projectId}.firebasestorage.app`;
+      }
+    } catch (error) {
+      console.warn("Failed to derive storage bucket from GOOGLE_SERVICE_ACCOUNT_JSON", error);
+    }
+  }
+
+  throw new Error(
+    "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
+  );
+}
+
+type FlattenedLine = {
+  slideIndex: number;
+  text: string;
+};
+
+function distributeDurations(
+  segments: MediaSegment[],
+  totalDurationSec: number,
+): {
+  lineOffsets: number[];
+  lineDurations: number[];
+  slideOffsets: number[];
+  slideDurations: number[];
+} {
+  const flattened: FlattenedLine[] = [];
+  segments.forEach((segment, slideIndex) => {
+    segment.narration.forEach((line) => {
+      flattened.push({
+        slideIndex,
+        text: line.text,
+      });
+    });
+  });
+
+  const lineCount = flattened.length;
+  if (lineCount === 0) {
+    return {
+      lineOffsets: [],
+      lineDurations: [],
+      slideOffsets: segments.map(() => 0),
+      slideDurations: segments.map(() => 0),
+    };
+  }
+
+  const fallbackTotal = Math.max(lineCount * FALLBACK_LINE_DURATION_SEC, MIN_LINE_DURATION_SEC * lineCount);
+  const totalDuration = Number.isFinite(totalDurationSec) && totalDurationSec > 0
+    ? totalDurationSec
+    : fallbackTotal;
+
+  const weights = flattened.map(({ text }) => {
+    const words = text.split(/\s+/).filter(Boolean).length;
+    return Math.max(words, 3);
+  });
+  const totalWeight = weights.reduce((acc, value) => acc + value, 0);
+
+  const baseDurations = weights.map((weight) => {
+    if (totalWeight === 0) {
+      return FALLBACK_LINE_DURATION_SEC;
+    }
+    return (totalDuration * weight) / totalWeight;
+  });
+
+  const minimallyBounded = baseDurations.map((duration) =>
+    Math.max(duration, MIN_LINE_DURATION_SEC),
+  );
+
+  const boundedSum = minimallyBounded.reduce((acc, value) => acc + value, 0);
+  const normalisationFactor = boundedSum > 0 ? totalDuration / boundedSum : 1;
+  const adjustedDurations = minimallyBounded.map((duration) => duration * normalisationFactor);
+
+  const round = (value: number) => Math.max(0, Math.round(value * 1000) / 1000);
+  const normalizedDurations = (() => {
+    const rawDurations: number[] = [];
+    let cursor = 0;
+    adjustedDurations.forEach((duration) => {
+      rawDurations.push(duration);
+      cursor += duration;
+    });
+    const correction = totalDuration - cursor;
+    if (rawDurations.length > 0) {
+      rawDurations[rawDurations.length - 1] += correction;
+    }
+    return rawDurations;
+  })();
+
+  let roundedDurations = normalizedDurations.map(round);
+
+  const recomputeOffsets = (durations: number[]): number[] => {
+    const offsets: number[] = [];
+    let running = 0;
+    durations.forEach((duration) => {
+      offsets.push(round(running));
+      running += duration;
+    });
+    return offsets;
+  };
+
+  let roundedOffsets = recomputeOffsets(roundedDurations);
+
+  const roundedSum = roundedDurations.reduce((acc, value) => acc + value, 0);
+  const roundedCorrection = round(totalDuration - roundedSum);
+  if (roundedDurations.length > 0 && Math.abs(roundedCorrection) > 0.001) {
+    const updatedLast = Math.max(
+      MIN_LINE_DURATION_SEC,
+      roundedDurations[roundedDurations.length - 1] + roundedCorrection,
+    );
+    roundedDurations[roundedDurations.length - 1] = round(updatedLast);
+    roundedOffsets = recomputeOffsets(roundedDurations);
+  }
+
+  const slideOffsets = new Array(segments.length).fill(0);
+  const slideDurations = new Array(segments.length).fill(0);
+  const hasSlideStart = new Array(segments.length).fill(false);
+
+  roundedDurations.forEach((duration, index) => {
+    const { slideIndex } = flattened[index]!;
+    if (!hasSlideStart[slideIndex]) {
+      slideOffsets[slideIndex] = roundedOffsets[index] ?? 0;
+      hasSlideStart[slideIndex] = true;
+    }
+    slideDurations[slideIndex] += duration;
+  });
+
+  // Guard against uninitialised slides (e.g., narration missing)
+  slideOffsets.forEach((offset, index) => {
+    if (!hasSlideStart[index]) {
+      slideOffsets[index] = index === 0 ? 0 : slideOffsets[index - 1] + slideDurations[index - 1];
+    }
+  });
+
+  return {
+    lineOffsets: roundedOffsets,
+    lineDurations: roundedDurations,
+    slideOffsets: slideOffsets.map((value) => Math.round(value * 1000) / 1000),
+    slideDurations: slideDurations.map((value) => Math.round(value * 1000) / 1000),
+  };
+}
+
+async function buildAudioResultFromFile(
+  audioFilePath: string,
+  segments: MediaSegment[],
+): Promise<SessionAudioResult> {
+  const stats = await fs.stat(audioFilePath);
+  const flattenedLineCount = segments.reduce(
+    (acc, segment) => acc + segment.narration.length,
+    0,
+  );
+
+  const approximateDuration =
+    stats.size > 0 ? (stats.size * 8) / 128_000 : 0; // assume ~128kbps
+  const fallbackDuration = Math.max(
+    flattenedLineCount * FALLBACK_LINE_DURATION_SEC,
+    MIN_LINE_DURATION_SEC * flattenedLineCount,
+  );
+  const totalDurationSec = Math.max(approximateDuration, fallbackDuration);
+
+  const { lineOffsets, lineDurations, slideOffsets, slideDurations } = distributeDurations(
+    segments,
+    totalDurationSec,
+  );
+
+  return {
+    outputFilePath: audioFilePath,
+    outputMimeType: AUDIO_MIME_TYPE,
+    totalDurationSec,
+    segmentOffsets: lineOffsets,
+    segmentDurations: lineDurations,
+    sampleRate: DEFAULT_SAMPLE_RATE,
+    channels: DEFAULT_CHANNELS,
+    totalBytes: stats.size,
+    segmentFiles: [],
+    slideOffsets,
+    slideDurations,
+    lineOffsets,
+    lineDurations,
+  };
+}
+
+async function publishMediaAssets(userId: string, sessionId: string): Promise<void> {
+  const storageBucket = resolveStorageBucket();
+
+  for (const source of MEDIA_SOURCES) {
+    const audioFilePath = path.join(WORKSPACE_PATHS.codeAudioDir, source.fileName);
+    try {
+      await fs.access(audioFilePath);
+    } catch (error) {
+      throw new Error(
+        `Audio file not found for plan item ${source.planItemId}: ${audioFilePath}`,
+      );
+    }
+
+    const audioResult = await buildAudioResultFromFile(audioFilePath, source.segments);
+
+    await publishSessionMediaClip({
+      userId,
+      sessionId,
+      planItemId: source.planItemId,
+      segments: source.segments,
+      audio: audioResult,
+      storageBucket,
+    });
+
+    console.log(
+      `Published media ${source.planItemId} from ${audioFilePath} (${audioResult.totalDurationSec.toFixed(1)}s)`,
+    );
+  }
 }
 
 async function seedContent(userId: string, session: Session) {
@@ -749,12 +1182,13 @@ async function seedContent(userId: string, session: Session) {
 }
 
 async function main(): Promise<void> {
+  ensureEvalEnvLoaded();
   const userId = getTestUserId();
-  const sessionId = generateSessionId();
+  const sessionId = TEST_SESSION_ID;
 
   const sessionData = {
     id: sessionId,
-    title: generateSessionTitle(),
+    title: TEST_SESSION_TITLE,
     createdAt: Timestamp.now(),
     plan: buildPlan(),
   } satisfies z.input<typeof SessionSchema>;
@@ -764,6 +1198,7 @@ async function main(): Promise<void> {
   const userRef = await seedContent(userId, session);
 
   await userRef.collection("sessions").doc(session.id).set(sessionData);
+  await publishMediaAssets(userId, session.id);
   await userRef.set({ currentSessionId: session.id }, { merge: true });
 
   console.log(`Created session ${session.id} for test user ${userId}`);

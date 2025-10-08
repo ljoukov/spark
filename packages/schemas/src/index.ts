@@ -5,3 +5,4 @@ export * from "./stats";
 export * from "./user";
 export * from "./quiz";
 export * from "./codeProblem";
+export * from "./sessionMedia";
