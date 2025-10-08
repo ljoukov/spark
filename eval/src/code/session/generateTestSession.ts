@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as os from "node:os";
 
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import {
   getFirebaseAdminFirestore,
   publishSessionMediaClip,
   parseFirebaseServiceAccount,
+  generateSessionAudio,
 } from "@spark/llm";
 import {
   SessionSchema,
@@ -22,7 +24,7 @@ import type {
   QuizDefinition,
   CodeProblem,
 } from "@spark/schemas";
-import type { MediaSegment, SessionAudioResult } from "@spark/llm";
+import type { MediaSegment } from "@spark/llm";
 
 import {
   TEST_SESSION_ID,
@@ -30,15 +32,75 @@ import {
   INTRO_PLAN_ITEM_ID,
   OUTRO_PLAN_ITEM_ID,
 } from "./constants";
-import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { ensureEvalEnvLoaded } from "../../utils/paths";
+// No local audio file constants: audio is generated on the fly
 
-const INTRO_AUDIO_FILE = "test-session-intro.mp3";
-const OUTRO_AUDIO_FILE = "test-session-outro.mp3";
-const AUDIO_MIME_TYPE = "audio/mpeg";
-const DEFAULT_SAMPLE_RATE = 24_000;
-const DEFAULT_CHANNELS: 1 = 1;
-const FALLBACK_LINE_DURATION_SEC = 4.5;
-const MIN_LINE_DURATION_SEC = 1.4;
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["KB", "MB", "GB", "TB"] as const;
+  let value = bytes;
+  let unitIndex = -1;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  if (unitIndex === -1) {
+    return `${Math.round(value)} B`;
+  }
+  const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function formatTimestamp(seconds: number): string {
+  const totalMilliseconds = Math.round(seconds * 1000);
+  const totalSeconds = Math.floor(totalMilliseconds / 1000);
+  const millis = totalMilliseconds % 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${minutes}:${secs.toString().padStart(2, "0")}.${Math.floor(millis / 10)
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+type AudioGenerationProgress = import("@spark/llm").AudioGenerationProgress;
+
+function createConsoleProgress(label: string): AudioGenerationProgress {
+  const startTime = Date.now();
+  return {
+    onStart({ totalSegments }) {
+      console.log(
+        `[${label}] Starting audio generation for ${totalSegments} segments (parallel launch)`,
+      );
+    },
+    onSegmentStart({ index, totalSegments, speaker, activeCount, textPreview }) {
+      const preview = textPreview.length > 60 ? `${textPreview.slice(0, 57)}…` : textPreview;
+      console.log(
+        `[${label}] ▶ Segment ${index + 1}/${totalSegments} (${speaker}) started • active ${activeCount}`,
+      );
+      if (preview.length > 0) {
+        console.log(`[${label}]    text preview: ${preview}`);
+      }
+    },
+    onSegmentChunk({ index, totalSegments, chunkBytes, totalBytes, activeCount }) {
+      console.log(
+        `[${label}]    segment ${index + 1}/${totalSegments} +${formatBytes(chunkBytes)} (cum ${formatBytes(totalBytes)}) • active ${activeCount}`,
+      );
+    },
+    onSegmentComplete({ index, totalSegments, durationSec, totalBytes, activeCount }) {
+      console.log(
+        `[${label}] ✔ Segment ${index + 1}/${totalSegments} finished ${formatTimestamp(durationSec)} (${formatBytes(totalBytes)}) • active now ${activeCount}`,
+      );
+    },
+    onComplete({ totalSegments, totalBytes, totalDurationSec }) {
+      const wallSeconds = (Date.now() - startTime) / 1000;
+      console.log(
+        `[${label}] ✅ Completed ${totalSegments} segments • audio ${formatTimestamp(totalDurationSec)} • size ${formatBytes(totalBytes)} • wall ${formatTimestamp(wallSeconds)}`,
+      );
+    },
+  };
+}
 
 const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
@@ -153,17 +215,14 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
 
 const MEDIA_SOURCES: Array<{
   planItemId: string;
-  fileName: string;
   segments: MediaSegment[];
 }> = [
   {
     planItemId: INTRO_PLAN_ITEM_ID,
-    fileName: INTRO_AUDIO_FILE,
     segments: INTRO_MEDIA_SEGMENTS,
   },
   {
     planItemId: OUTRO_PLAN_ITEM_ID,
-    fileName: OUTRO_AUDIO_FILE,
     segments: OUTRO_MEDIA_SEGMENTS,
   },
 ];
@@ -916,190 +975,26 @@ function resolveStorageBucket(): string {
   );
 }
 
-type FlattenedLine = {
-  slideIndex: number;
-  text: string;
-};
 
-function distributeDurations(
-  segments: MediaSegment[],
-  totalDurationSec: number,
-): {
-  lineOffsets: number[];
-  lineDurations: number[];
-  slideOffsets: number[];
-  slideDurations: number[];
-} {
-  const flattened: FlattenedLine[] = [];
-  segments.forEach((segment, slideIndex) => {
-    segment.narration.forEach((line) => {
-      flattened.push({
-        slideIndex,
-        text: line.text,
-      });
-    });
-  });
-
-  const lineCount = flattened.length;
-  if (lineCount === 0) {
-    return {
-      lineOffsets: [],
-      lineDurations: [],
-      slideOffsets: segments.map(() => 0),
-      slideDurations: segments.map(() => 0),
-    };
-  }
-
-  const fallbackTotal = Math.max(lineCount * FALLBACK_LINE_DURATION_SEC, MIN_LINE_DURATION_SEC * lineCount);
-  const totalDuration = Number.isFinite(totalDurationSec) && totalDurationSec > 0
-    ? totalDurationSec
-    : fallbackTotal;
-
-  const weights = flattened.map(({ text }) => {
-    const words = text.split(/\s+/).filter(Boolean).length;
-    return Math.max(words, 3);
-  });
-  const totalWeight = weights.reduce((acc, value) => acc + value, 0);
-
-  const baseDurations = weights.map((weight) => {
-    if (totalWeight === 0) {
-      return FALLBACK_LINE_DURATION_SEC;
-    }
-    return (totalDuration * weight) / totalWeight;
-  });
-
-  const minimallyBounded = baseDurations.map((duration) =>
-    Math.max(duration, MIN_LINE_DURATION_SEC),
-  );
-
-  const boundedSum = minimallyBounded.reduce((acc, value) => acc + value, 0);
-  const normalisationFactor = boundedSum > 0 ? totalDuration / boundedSum : 1;
-  const adjustedDurations = minimallyBounded.map((duration) => duration * normalisationFactor);
-
-  const round = (value: number) => Math.max(0, Math.round(value * 1000) / 1000);
-  const normalizedDurations = (() => {
-    const rawDurations: number[] = [];
-    let cursor = 0;
-    adjustedDurations.forEach((duration) => {
-      rawDurations.push(duration);
-      cursor += duration;
-    });
-    const correction = totalDuration - cursor;
-    if (rawDurations.length > 0) {
-      rawDurations[rawDurations.length - 1] += correction;
-    }
-    return rawDurations;
-  })();
-
-  let roundedDurations = normalizedDurations.map(round);
-
-  const recomputeOffsets = (durations: number[]): number[] => {
-    const offsets: number[] = [];
-    let running = 0;
-    durations.forEach((duration) => {
-      offsets.push(round(running));
-      running += duration;
-    });
-    return offsets;
-  };
-
-  let roundedOffsets = recomputeOffsets(roundedDurations);
-
-  const roundedSum = roundedDurations.reduce((acc, value) => acc + value, 0);
-  const roundedCorrection = round(totalDuration - roundedSum);
-  if (roundedDurations.length > 0 && Math.abs(roundedCorrection) > 0.001) {
-    const updatedLast = Math.max(
-      MIN_LINE_DURATION_SEC,
-      roundedDurations[roundedDurations.length - 1] + roundedCorrection,
-    );
-    roundedDurations[roundedDurations.length - 1] = round(updatedLast);
-    roundedOffsets = recomputeOffsets(roundedDurations);
-  }
-
-  const slideOffsets = new Array(segments.length).fill(0);
-  const slideDurations = new Array(segments.length).fill(0);
-  const hasSlideStart = new Array(segments.length).fill(false);
-
-  roundedDurations.forEach((duration, index) => {
-    const { slideIndex } = flattened[index]!;
-    if (!hasSlideStart[slideIndex]) {
-      slideOffsets[slideIndex] = roundedOffsets[index] ?? 0;
-      hasSlideStart[slideIndex] = true;
-    }
-    slideDurations[slideIndex] += duration;
-  });
-
-  // Guard against uninitialised slides (e.g., narration missing)
-  slideOffsets.forEach((offset, index) => {
-    if (!hasSlideStart[index]) {
-      slideOffsets[index] = index === 0 ? 0 : slideOffsets[index - 1] + slideDurations[index - 1];
-    }
-  });
-
-  return {
-    lineOffsets: roundedOffsets,
-    lineDurations: roundedDurations,
-    slideOffsets: slideOffsets.map((value) => Math.round(value * 1000) / 1000),
-    slideDurations: slideDurations.map((value) => Math.round(value * 1000) / 1000),
-  };
-}
-
-async function buildAudioResultFromFile(
-  audioFilePath: string,
-  segments: MediaSegment[],
-): Promise<SessionAudioResult> {
-  const stats = await fs.stat(audioFilePath);
-  const flattenedLineCount = segments.reduce(
-    (acc, segment) => acc + segment.narration.length,
-    0,
-  );
-
-  const approximateDuration =
-    stats.size > 0 ? (stats.size * 8) / 128_000 : 0; // assume ~128kbps
-  const fallbackDuration = Math.max(
-    flattenedLineCount * FALLBACK_LINE_DURATION_SEC,
-    MIN_LINE_DURATION_SEC * flattenedLineCount,
-  );
-  const totalDurationSec = Math.max(approximateDuration, fallbackDuration);
-
-  const { lineOffsets, lineDurations, slideOffsets, slideDurations } = distributeDurations(
-    segments,
-    totalDurationSec,
-  );
-
-  return {
-    outputFilePath: audioFilePath,
-    outputMimeType: AUDIO_MIME_TYPE,
-    totalDurationSec,
-    segmentOffsets: lineOffsets,
-    segmentDurations: lineDurations,
-    sampleRate: DEFAULT_SAMPLE_RATE,
-    channels: DEFAULT_CHANNELS,
-    totalBytes: stats.size,
-    segmentFiles: [],
-    slideOffsets,
-    slideDurations,
-    lineOffsets,
-    lineDurations,
-  };
-}
 
 async function publishMediaAssets(userId: string, sessionId: string): Promise<void> {
   const storageBucket = resolveStorageBucket();
 
   for (const source of MEDIA_SOURCES) {
-    const audioFilePath = path.join(WORKSPACE_PATHS.codeAudioDir, source.fileName);
-    try {
-      await fs.access(audioFilePath);
-    } catch (error) {
-      throw new Error(
-        `Audio file not found for plan item ${source.planItemId}: ${audioFilePath}`,
-      );
-    }
+    const tmpPath = path.join(
+      os.tmpdir(),
+      `test-session-${source.planItemId}-${Date.now()}.mp3`,
+    );
 
-    const audioResult = await buildAudioResultFromFile(audioFilePath, source.segments);
+    const audioResult = await generateSessionAudio({
+      segments: source.segments,
+      outputFilePath: tmpPath,
+      progress: createConsoleProgress(
+        source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro",
+      ),
+    });
 
-    await publishSessionMediaClip({
+    const publishResult = await publishSessionMediaClip({
       userId,
       sessionId,
       planItemId: source.planItemId,
@@ -1108,8 +1003,15 @@ async function publishMediaAssets(userId: string, sessionId: string): Promise<vo
       storageBucket,
     });
 
+    // Clean up temp file; if it fails, continue silently
+    try {
+      await fs.rm(tmpPath, { force: true });
+    } catch {
+      /* ignore cleanup errors */
+    }
+
     console.log(
-      `Published media ${source.planItemId} from ${audioFilePath} (${audioResult.totalDurationSec.toFixed(1)}s)`,
+      `Published media ${source.planItemId} -> ${publishResult.storagePath} (doc ${publishResult.documentPath})`,
     );
   }
 }
