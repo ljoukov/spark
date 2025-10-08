@@ -1,16 +1,9 @@
-import { Buffer } from "node:buffer";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
-import * as os from "node:os";
-
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import {
   getTestUserId,
   getFirebaseAdminFirestore,
-  publishSessionMediaClip,
   parseFirebaseServiceAccount,
-  generateSessionAudio,
 } from "@spark/llm";
 import {
   SessionSchema,
@@ -31,62 +24,22 @@ import {
   TEST_SESSION_ID,
   TEST_SESSION_TITLE,
   INTRO_PLAN_ITEM_ID,
+  STORY_PLAN_ITEM_ID,
   OUTRO_PLAN_ITEM_ID,
 } from "./constants";
-import {
-  formatInteger,
-  formatByteSize,
-  formatDurationSeconds,
-  formatMillis,
-} from "../../utils/format";
 import { ensureEvalEnvLoaded } from "../../utils/paths";
+import {
+  createConsoleProgress,
+  synthesizeAndPublishNarration,
+} from "./narration";
+import {
+  generateStory,
+} from "./generateStory";
 // No local audio file constants: audio is generated on the fly
 
-const AUDIO_MODEL_ID = "gemini-2.5-flash-preview-tts" as const;
 const DEFAULT_MEDIA_IMAGE =
   "/spark/test-admin-0Rr2rEBRAg3T3SYk/sessions/dp-coin-change-decode/intro.jpeg";
-
-function formatTimestamp(seconds: number): string {
-  return formatDurationSeconds(seconds);
-}
-
-type AudioGenerationProgress = import("@spark/llm").AudioGenerationProgress;
-
-function createConsoleProgress(label: string): AudioGenerationProgress {
-  const startTime = Date.now();
-  return {
-    onStart({ totalSegments }) {
-      console.log(
-        `[${label}] Starting audio generation for ${totalSegments} segments (parallel launch)`,
-      );
-    },
-    onSegmentStart({ index, totalSegments, speaker, activeCount, textPreview }) {
-      const preview = textPreview.length > 60 ? `${textPreview.slice(0, 57)}…` : textPreview;
-      console.log(
-        `[${label}] ▶ Segment ${index + 1}/${totalSegments} (${speaker}) started • active ${activeCount}`,
-      );
-      if (preview.length > 0) {
-        console.log(`[${label}]    text preview: ${preview}`);
-      }
-    },
-    onSegmentChunk({ index, totalSegments, chunkBytes, totalBytes, activeCount }) {
-      console.log(
-        `[${label}]    segment ${index + 1}/${totalSegments} +${formatByteSize(chunkBytes)} (cum ${formatByteSize(totalBytes)}) • active ${activeCount}`,
-      );
-    },
-    onSegmentComplete({ index, totalSegments, durationSec, totalBytes, activeCount }) {
-      console.log(
-        `[${label}] ✔ Segment ${index + 1}/${totalSegments} finished ${formatTimestamp(durationSec)} (${formatByteSize(totalBytes)}) • active now ${activeCount}`,
-      );
-    },
-    onComplete({ totalSegments, totalBytes, totalDurationSec }) {
-      const wallSeconds = (Date.now() - startTime) / 1000;
-      console.log(
-        `[${label}] ✅ Completed ${totalSegments} segments • audio ${formatTimestamp(totalDurationSec)} • size ${formatByteSize(totalBytes)} • wall ${formatTimestamp(wallSeconds)}`,
-      );
-    },
-  };
-}
+const STORY_TOPIC = "dynamic programming";
 
 const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
@@ -851,7 +804,7 @@ const PROBLEMS: CodeProblem[] = [
   },
 ];
 
-function buildPlan(): PlanItem[] {
+function buildPlan(storyTitle: string): PlanItem[] {
   return [
     {
       id: INTRO_PLAN_ITEM_ID,
@@ -861,6 +814,15 @@ function buildPlan(): PlanItem[] {
       meta: "Start here",
       summary:
         "Preview the journey and set the rhythm before the quizzes and drills.",
+    },
+    {
+      id: STORY_PLAN_ITEM_ID,
+      kind: "media",
+      title: storyTitle,
+      icon: "📖",
+      meta: "Origin story",
+      summary:
+        "Listen for the historical moment when dynamic programming first took flight.",
     },
     {
       id: "dp-warmup-quiz",
@@ -963,61 +925,22 @@ function resolveStorageBucket(): string {
 
 
 
-async function publishMediaAssets(userId: string, sessionId: string): Promise<void> {
-  const storageBucket = resolveStorageBucket();
-
+async function publishMediaAssets(
+  userId: string,
+  sessionId: string,
+  storageBucket: string,
+): Promise<void> {
   for (const source of MEDIA_SOURCES) {
-    const flattenedNarration = source.segments.flatMap((segment) => segment.narration);
-    const segmentCount = flattenedNarration.length;
-    const totalTextChars = flattenedNarration.reduce(
-      (acc, line) => acc + line.text.length,
-      0,
-    );
-    const consoleLabel = source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro";
-    const statsLabel = `session/audio/${source.planItemId}`;
-    const tmpPath = path.join(
-      os.tmpdir(),
-      `test-session-${source.planItemId}-${Date.now()}.mp3`,
-    );
-
-    const startedAt = Date.now();
-    const audioResult = await generateSessionAudio({
-      segments: source.segments,
-      outputFilePath: tmpPath,
-      progress: createConsoleProgress(
-        consoleLabel,
-      ),
-    });
-    const elapsedMs = Date.now() - startedAt;
-
-    const notes = [
-      `segments ${formatInteger(segmentCount)}`,
-      `text ${formatInteger(totalTextChars)} chars`,
-      `audio ${formatTimestamp(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)}`,
-    ].join(" | ");
-    console.log(
-      `[${statsLabel}] ${notes} | elapsed ${formatMillis(elapsedMs)}`
-    );
-
-    const publishResult = await publishSessionMediaClip({
+    const consoleLabel =
+      source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro";
+    await synthesizeAndPublishNarration({
       userId,
       sessionId,
       planItemId: source.planItemId,
       segments: source.segments,
-      audio: audioResult,
       storageBucket,
+      progress: createConsoleProgress(consoleLabel),
     });
-
-    // Clean up temp file; if it fails, continue silently
-    try {
-      await fs.rm(tmpPath, { force: true });
-    } catch {
-      /* ignore cleanup errors */
-    }
-
-    console.log(
-      `Published media ${source.planItemId} -> ${publishResult.storagePath} (doc ${publishResult.documentPath})`,
-    );
   }
 }
 
@@ -1062,12 +985,21 @@ async function main(): Promise<void> {
   ensureEvalEnvLoaded();
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
+  const storageBucket = resolveStorageBucket();
+
+  const storyResult = await generateStory({
+    topic: STORY_TOPIC,
+    userId,
+    sessionId,
+    planItemId: STORY_PLAN_ITEM_ID,
+    storageBucket,
+  });
 
   const sessionData = {
     id: sessionId,
     title: TEST_SESSION_TITLE,
     createdAt: Timestamp.now(),
-    plan: buildPlan(),
+    plan: buildPlan(storyResult.title),
   } satisfies z.input<typeof SessionSchema>;
 
   const session = SessionSchema.parse(sessionData);
@@ -1075,7 +1007,7 @@ async function main(): Promise<void> {
   const userRef = await seedContent(userId, session);
 
   await userRef.collection("sessions").doc(session.id).set(sessionData);
-  await publishMediaAssets(userId, session.id);
+  await publishMediaAssets(userId, session.id, storageBucket);
   await userRef.set({ currentSessionId: session.id }, { merge: true });
 
   console.log(`Created session ${session.id} for test user ${userId}`);
