@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import Play from '@lucide/svelte/icons/play';
-	import Pause from '@lucide/svelte/icons/pause';
-	import Volume2 from '@lucide/svelte/icons/volume-2';
-	import VolumeX from '@lucide/svelte/icons/volume-x';
-	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
-	import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
-	import { cn } from '$lib/utils.js';
+import Play from '@lucide/svelte/icons/play';
+import Pause from '@lucide/svelte/icons/pause';
+import Volume2 from '@lucide/svelte/icons/volume-2';
+import VolumeX from '@lucide/svelte/icons/volume-x';
+import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+import ChevronRight from '@lucide/svelte/icons/chevron-right';
+import AlertCircle from '@lucide/svelte/icons/alert-circle';
+import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 	import { createSessionStateStore } from '$lib/client/sessionState';
 	import type { PageData } from './$types';
 	import type { PlanItemState } from '@spark/schemas';
@@ -53,15 +54,13 @@
 	let playbackError: string | null = audioInfo.url ? null : 'Clip is not available right now.';
 
 	const slideCount = slides.length;
-	const speakerLabel: Record<'m' | 'f', string> = { m: 'Voice A', f: 'Voice B' };
-	const speakerBadge: Record<'m' | 'f', string> = { m: 'M', f: 'F' };
 
 	$: sliderMax = Math.max(duration, baseTimelineEnd);
 	$: hasStarted = planItemState?.status !== 'not_started';
 	$: hasCompleted = planItemState?.status === 'completed';
 	$: activeSlide = slides[currentSlideOrder] ?? null;
 	$: activeCaption = currentCaptionIndex >= 0 ? captions[currentCaptionIndex] : null;
-	$: upcomingCaptions = captions.slice(Math.max(currentCaptionIndex + 1, 0), currentCaptionIndex + 3);
+	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 
 	function clampTime(value: number): number {
@@ -284,18 +283,9 @@
 		void markCompleted();
 	}
 
-	const playButtonClass = cn(
-		buttonVariants({ variant: 'outline', size: 'icon' }),
-		'rounded-full h-12 w-12 md:h-14 md:w-14'
-	);
-	const transportButtonClass = cn(
-		buttonVariants({ variant: 'ghost', size: 'icon' }),
-		'rounded-full h-10 w-10 md:h-11 md:w-11 text-foreground/70 hover:text-foreground'
-	);
-	const muteButtonClass = cn(
-		buttonVariants({ variant: 'ghost', size: 'sm' }),
-		'rounded-full px-3 md:px-4 font-medium'
-	);
+	const playControlClass = buttonVariants({ variant: 'secondary', size: 'icon' });
+	const navButtonClass = buttonVariants({ variant: 'outline', size: 'icon' });
+	const muteControlClass = buttonVariants({ variant: 'ghost', size: 'icon' });
 
 	updateTimelineState(0);
 </script>
@@ -321,72 +311,112 @@
 					Not started
 				{/if}
 			</span>
-			<code class="storage-path" title="Firebase Storage path">{audioInfo.storagePath}</code>
 		</div>
 	</header>
 
-	<div class="player-card">
-		<div class="player-top">
-			<button
-				class={playButtonClass}
-				type="button"
-				onclick={togglePlay}
-				disabled={!audioInfo.url}
-				aria-label={isPlaying ? 'Pause clip' : 'Play clip'}
-			>
-				{#if isPlaying}
-					<Pause aria-hidden="true" />
-				{:else}
-					<Play aria-hidden="true" />
-				{/if}
-			</button>
+	<div class="slide-stage">
+		<button
+			class={navButtonClass}
+			class:slide-nav-button={true}
+			type="button"
+			onclick={handlePrevSlide}
+			aria-label="Go to previous slide"
+			disabled={slideCount === 0}
+		>
+			<ChevronLeft aria-hidden="true" size={28} />
+		</button>
 
-			<div class="transport">
-				<div class="transport-row">
-					<button
-						class={transportButtonClass}
-						type="button"
-						onclick={handlePrevSlide}
-						aria-label="Previous slide"
-					>
-						<span aria-hidden="true" class="text-xl font-semibold">&lt;</span>
-					</button>
-					<div class="slide-badge">
-						<span>Slide {slideCount === 0 ? 0 : currentSlideOrder + 1}</span>
-						<small>of {slideCount}</small>
-					</div>
-					<button
-						class={transportButtonClass}
-						type="button"
-						onclick={handleNextSlide}
-						aria-label="Next slide"
-					>
-						<span aria-hidden="true" class="text-xl font-semibold">&gt;</span>
-					</button>
-				</div>
-				<div class="time-row">
-					<span>{formatTime(currentTime)}</span>
-					<span>{formatTime(sliderMax)}</span>
-				</div>
-			</div>
-
-			<button
-				class={muteButtonClass}
-				type="button"
-				onclick={toggleMute}
-				aria-label={isMuted ? 'Sound off' : 'Sound on'}
-			>
-				{#if isMuted}
-					<VolumeX class="mr-2" aria-hidden="true" />
-					Sound off
-				{:else}
-					<Volume2 class="mr-2" aria-hidden="true" />
-					Sound on
-				{/if}
-			</button>
+		<div class="slide-card">
+            {#if activeSlide}
+                <QuizQuestionCard
+                    eyebrow={`Slide ${currentSlideOrder + 1} · ${formatTime(activeSlide.startSec)}`}
+                    title={activeSlide.title}
+                    displayFooter={false}
+                    class="slide-card-inner"
+                >
+                    <div class="slide-body" class:empty={!activeSlide.bodyHtml}>
+                        {#if activeSlide.bodyHtml}
+                            <div class="slide-markdown prose prose-neutral max-w-none">
+                                {@html activeSlide.bodyHtml}
+                            </div>
+                        {:else}
+                            <p class="slide-placeholder-copy">Stay tuned for the narration.</p>
+                        {/if}
+                    </div>
+                </QuizQuestionCard>
+            {:else}
+                <div class="slide-card-empty">
+                    <p>No slides available for this clip yet.</p>
+                </div>
+            {/if}
 		</div>
 
-		<div class="slider-row">
+		<button
+			class={navButtonClass}
+			class:slide-nav-button={true}
+			type="button"
+			onclick={handleNextSlide}
+			aria-label="Go to next slide"
+			disabled={slideCount === 0}
+		>
+			<ChevronRight aria-hidden="true" size={28} />
+		</button>
+	</div>
+
+	<div
+		class="subtitle-strip"
+		class:has-error={Boolean(playbackError)}
+		aria-live="polite"
+		aria-label="Subtitles"
+	>
+		{#if playbackError}
+			<div class="error-banner">
+				<AlertCircle aria-hidden="true" />
+				<span>{playbackError}</span>
+			</div>
+		{:else if !isReady}
+			<p class="subtitle-placeholder">Loading clip…</p>
+		{:else if activeCaption}
+			<p class="subtitle-active">{activeCaption.text}</p>
+		{:else}
+			<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
+		{/if}
+	</div>
+
+	<div class="transport-bar">
+		<button
+			class={playControlClass}
+			class:play-toggle={true}
+			type="button"
+			onclick={togglePlay}
+			disabled={!audioInfo.url}
+			aria-label={isPlaying ? 'Pause clip' : 'Play clip'}
+		>
+			{#if isPlaying}
+				<Pause aria-hidden="true" size={28} />
+			{:else}
+				<Play aria-hidden="true" size={28} />
+			{/if}
+		</button>
+
+		<button
+			class={muteControlClass}
+			class:mute-toggle={true}
+			type="button"
+			onclick={toggleMute}
+			aria-label={isMuted ? 'Sound off' : 'Sound on'}
+			disabled={!audioInfo.url}
+		>
+			{#if isMuted}
+				<VolumeX aria-hidden="true" size={22} />
+			{:else}
+				<Volume2 aria-hidden="true" size={22} />
+			{/if}
+		</button>
+
+		<span class="transport-timestamp">{timestampLabel}</span>
+
+		<div class="transport-slider">
 			<input
 				type="range"
 				min="0"
@@ -396,84 +426,24 @@
 				oninput={handleSeekInput}
 				onchange={handleSeekCommit}
 				aria-label="Clip progress"
+				disabled={!audioInfo.url}
 			/>
 		</div>
-
-		{#if playbackError}
-			<div class="error-banner">
-				<AlertCircle aria-hidden="true" />
-				<span>{playbackError}</span>
-			</div>
-		{:else if !isReady}
-			<p class="loading-hint">Loading clip…</p>
-		{/if}
-
-		<audio
-			bind:this={audioElement}
-			src={audioInfo.url ?? undefined}
-			preload="auto"
-			muted={isMuted}
-			onloadedmetadata={handleLoadedMetadata}
-			ontimeupdate={handleTimeUpdate}
-			onplay={handlePlay}
-			onpause={handlePause}
-			onended={handleEnded}
-			onvolumechange={handleVolumeChange}
-			onerror={handleAudioError}
-		></audio>
 	</div>
 
-	{#if activeSlide}
-		<div class="slide-card">
-			<QuizQuestionCard
-				eyebrow={`Slide ${currentSlideOrder + 1} · ${formatTime(activeSlide.startSec)}`}
-				title={activeSlide.title}
-				displayFooter={false}
-			>
-				<div class="slide-body" class:empty={!activeSlide.bodyHtml}>
-					{#if activeSlide.bodyHtml}
-						<div class="slide-markdown prose prose-neutral max-w-none">
-							{@html activeSlide.bodyHtml}
-						</div>
-					{:else}
-						<p class="text-base text-foreground/80">Stay tuned for the narration.</p>
-					{/if}
-				</div>
-			</QuizQuestionCard>
-		</div>
-	{/if}
-
-	<section class="captions-panel" aria-live="polite" aria-label="Captions">
-		<h2>Captions</h2>
-		{#if activeCaption}
-			<div class="caption-line active">
-				<span class="caption-speaker" aria-hidden="true">
-					{speakerBadge[activeCaption.speaker]}
-				</span>
-				<div>
-					<p class="caption-voice">{speakerLabel[activeCaption.speaker]}</p>
-					<p class="caption-text">{activeCaption.text}</p>
-				</div>
-			</div>
-		{:else}
-			<p class="caption-placeholder">Captions will appear once the narration begins.</p>
-		{/if}
-		{#if upcomingCaptions.length > 0}
-			<ul class="caption-queue">
-				{#each upcomingCaptions as caption}
-					<li>
-						<span class="caption-speaker" aria-hidden="true">
-							{speakerBadge[caption.speaker]}
-						</span>
-						<div>
-							<p class="caption-voice">{speakerLabel[caption.speaker]}</p>
-							<p class="caption-text">{caption.text}</p>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+	<audio
+		bind:this={audioElement}
+		src={audioInfo.url ?? undefined}
+		preload="auto"
+		muted={isMuted}
+		onloadedmetadata={handleLoadedMetadata}
+		ontimeupdate={handleTimeUpdate}
+		onplay={handlePlay}
+		onpause={handlePause}
+		onended={handleEnded}
+		onvolumechange={handleVolumeChange}
+		onerror={handleAudioError}
+	></audio>
 
 	<div class="actions-row">
 		{#if !hasCompleted}
@@ -566,178 +536,109 @@
 		color: rgba(5, 122, 85, 0.95);
 	}
 
-	.storage-path {
-		font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
-		font-size: 0.8rem;
-		padding: 0.4rem 0.75rem;
-		border-radius: 0.75rem;
-		background: rgba(148, 163, 184, 0.16);
-		color: rgba(71, 85, 105, 0.9);
-	}
-
-	:global([data-theme='dark'] .storage-path),
-	:global(:root:not([data-theme='light']) .storage-path) {
-		background: rgba(148, 163, 184, 0.22);
-		color: rgba(203, 213, 225, 0.86);
-	}
-
-	.player-card {
-		display: flex;
-		flex-direction: column;
+	.slide-stage {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
 		gap: 1.25rem;
 		padding: 1.75rem;
-		border-radius: 1.5rem;
+		border-radius: 1.75rem;
 		border: 1px solid rgba(59, 130, 246, 0.16);
-		background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.92));
-		box-shadow: 0 24px 60px -40px rgba(59, 130, 246, 0.55);
+		background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.94));
+		box-shadow: 0 28px 60px -48px rgba(59, 130, 246, 0.5);
 		backdrop-filter: blur(18px);
 	}
 
-	:global([data-theme='dark'] .player-card),
-	:global(:root:not([data-theme='light']) .player-card) {
-		background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.92));
-		border-color: rgba(96, 165, 250, 0.2);
-		box-shadow: 0 24px 60px -48px rgba(14, 165, 233, 0.4);
+	:global([data-theme='dark'] .slide-stage),
+	:global(:root:not([data-theme='light']) .slide-stage) {
+		border-color: rgba(96, 165, 250, 0.22);
+		background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.94));
+		box-shadow: 0 28px 60px -48px rgba(14, 165, 233, 0.4);
 	}
 
-	.player-top {
-		display: flex;
+	.slide-nav-button {
+		display: inline-flex;
 		align-items: center;
-		gap: 1.5rem;
-		flex-wrap: wrap;
-		justify-content: space-between;
-	}
-
-	.transport {
-		display: flex;
-		flex-direction: column;
-		gap: 0.9rem;
-		align-items: stretch;
-	}
-
-	.transport-row {
-		display: flex;
-		align-items: center;
-		gap: 0.9rem;
-	}
-
-	.slide-badge {
-		display: flex;
-		align-items: baseline;
-		gap: 0.35rem;
-		padding: 0.4rem 0.9rem;
+		justify-content: center;
+		height: 3.25rem;
+		width: 3.25rem;
 		border-radius: 999px;
-		background: rgba(59, 130, 246, 0.12);
-		color: rgba(30, 64, 175, 0.9);
-		font-weight: 600;
+		box-shadow: 0 22px 55px -35px rgba(59, 130, 246, 0.45);
+		background: rgba(255, 255, 255, 0.72);
+		color: rgba(37, 99, 235, 0.92);
+		transition: transform 0.2s ease, box-shadow 0.2s ease;
 	}
 
-	.slide-badge small {
-		font-size: 0.75rem;
-		font-weight: 500;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: rgba(30, 64, 175, 0.7);
+	.slide-nav-button:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 28px 60px -34px rgba(59, 130, 246, 0.55);
 	}
 
-	:global([data-theme='dark'] .slide-badge),
-	:global(:root:not([data-theme='light']) .slide-badge) {
-		background: rgba(96, 165, 250, 0.18);
-		color: rgba(191, 219, 254, 0.94);
+	.slide-nav-button:disabled {
+		opacity: 0.5;
+		transform: none;
+		box-shadow: none;
 	}
 
-	:global([data-theme='dark'] .slide-badge small),
-	:global(:root:not([data-theme='light']) .slide-badge small) {
-		color: rgba(191, 219, 254, 0.75);
-	}
-
-	.time-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
-		font-size: 0.85rem;
-		color: rgba(15, 23, 42, 0.7);
-	}
-
-	:global([data-theme='dark'] .time-row),
-	:global(:root:not([data-theme='light']) .time-row) {
-		color: rgba(226, 232, 240, 0.75);
-	}
-
-	.slider-row {
-		width: 100%;
-	}
-
-	.slider-row input[type='range'] {
-		width: 100%;
-		-webkit-appearance: none;
-		height: 0.6rem;
-		border-radius: 999px;
-		background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(37, 99, 235, 0.9));
-		outline: none;
-		position: relative;
-	}
-
-	.slider-row input[type='range']::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		height: 1.1rem;
-		width: 1.1rem;
-		border-radius: 50%;
-		background: #ffffff;
-		border: 2px solid rgba(59, 130, 246, 0.9);
-		box-shadow: 0 8px 20px -10px rgba(59, 130, 246, 0.8);
-		cursor: pointer;
-	}
-
-	.slider-row input[type='range']::-moz-range-thumb {
-		height: 1.1rem;
-		width: 1.1rem;
-		border-radius: 50%;
-		background: #ffffff;
-		border: 2px solid rgba(59, 130, 246, 0.9);
-		box-shadow: 0 8px 20px -10px rgba(59, 130, 246, 0.8);
-		cursor: pointer;
-	}
-
-	.slider-row input[type='range']::-webkit-slider-runnable-track {
-		height: 0.6rem;
-		border-radius: 999px;
-		background: transparent;
-	}
-
-	.slider-row input[type='range']::-moz-range-track {
-		height: 0.6rem;
-		border-radius: 999px;
-		background: transparent;
-	}
-
-	.error-banner {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		padding: 0.9rem 1rem;
-		border-radius: 1rem;
-		background: rgba(248, 113, 113, 0.2);
-		color: rgba(220, 38, 38, 0.9);
-		font-size: 0.9rem;
-		line-height: 1.5;
-	}
-
-	.loading-hint {
-		font-size: 0.9rem;
-		color: rgba(59, 130, 246, 0.8);
+	:global([data-theme='dark'] .slide-nav-button),
+	:global(:root:not([data-theme='light']) .slide-nav-button) {
+		background: rgba(30, 41, 59, 0.9);
+		color: rgba(191, 219, 254, 0.85);
+		box-shadow: 0 22px 50px -35px rgba(14, 165, 233, 0.4);
 	}
 
 	.slide-card {
 		display: flex;
+		justify-content: center;
+	}
+
+	.slide-card-inner {
+		width: min(100%, 720px);
+		min-height: clamp(320px, 45vh, 380px);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.slide-card-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: min(100%, 720px);
+		min-height: clamp(280px, 40vh, 340px);
+		padding: 2rem;
+		border-radius: 1.5rem;
+		border: 1px dashed rgba(148, 163, 184, 0.42);
+		background: rgba(255, 255, 255, 0.7);
+		color: rgba(100, 116, 139, 0.85);
+		text-align: center;
+	}
+
+	:global([data-theme='dark'] .slide-card-empty),
+	:global(:root:not([data-theme='light']) .slide-card-empty) {
+		background: rgba(30, 41, 59, 0.78);
+		border-color: rgba(148, 163, 184, 0.35);
+		color: rgba(203, 213, 225, 0.78);
+	}
+
+	.slide-card-empty p {
+		margin: 0;
+		font-size: 1rem;
+		line-height: 1.6;
+	}
+
+	.slide-placeholder-copy {
+		font-size: 1rem;
+		color: rgba(15, 23, 42, 0.78);
+	}
+
+	:global([data-theme='dark'] .slide-placeholder-copy),
+	:global(:root:not([data-theme='light']) .slide-placeholder-copy) {
+		color: rgba(226, 232, 240, 0.78);
 	}
 
 	.slide-body {
 		padding-top: 0.75rem;
+		flex: 1;
 	}
 
 	.slide-body.empty {
@@ -789,83 +690,181 @@
 		color: rgba(226, 232, 240, 0.92);
 	}
 
-	.captions-panel {
+	.subtitle-strip {
 		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		padding: 1.5rem;
-		border-radius: 1.25rem;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		background: rgba(248, 250, 252, 0.72);
-		backdrop-filter: blur(14px);
+		align-items: center;
+		justify-content: center;
+		min-height: 3.25rem;
+		padding: 0.85rem 1.75rem;
+		border-radius: 999px;
+		background: rgba(59, 130, 246, 0.08);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 	}
 
-	.captions-panel h2 {
+	.subtitle-strip.has-error {
+		padding: 0;
+		background: transparent;
+		box-shadow: none;
+		min-height: auto;
+	}
+
+	.subtitle-active {
+		margin: 0;
 		font-size: 1.1rem;
 		font-weight: 600;
-		color: rgba(15, 23, 42, 0.85);
+		color: rgba(15, 23, 42, 0.9);
+		text-align: center;
 	}
 
-	.caption-line,
-	.caption-queue li {
+	.subtitle-placeholder {
+		margin: 0;
+		font-size: 0.95rem;
+		color: rgba(100, 116, 139, 0.85);
+		text-align: center;
+	}
+
+	:global([data-theme='dark'] .subtitle-strip:not(.has-error)),
+	:global(:root:not([data-theme='light']) .subtitle-strip:not(.has-error)) {
+		background: rgba(30, 41, 59, 0.7);
+		box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
+	}
+
+	:global([data-theme='dark'] .subtitle-active),
+	:global(:root:not([data-theme='light']) .subtitle-active) {
+		color: rgba(226, 232, 240, 0.94);
+	}
+
+	:global([data-theme='dark'] .subtitle-placeholder),
+	:global(:root:not([data-theme='light']) .subtitle-placeholder) {
+		color: rgba(148, 163, 184, 0.82);
+	}
+
+	.error-banner {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.caption-line.active {
-		padding: 0.9rem 1.1rem;
+		width: 100%;
+		padding: 0.85rem 1.1rem;
 		border-radius: 1rem;
-		background: rgba(59, 130, 246, 0.1);
+		background: rgba(248, 113, 113, 0.18);
+		color: rgba(185, 28, 28, 0.95);
+		font-size: 0.95rem;
+		line-height: 1.5;
 	}
 
-	.caption-speaker {
+	.transport-bar {
+		display: grid;
+		grid-template-columns: auto auto auto minmax(0, 1fr);
+		align-items: center;
+		gap: 1.25rem;
+		padding: 1.25rem 1.5rem;
+		border-radius: 1.5rem;
+		border: 1px solid rgba(59, 130, 246, 0.16);
+		background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(241, 245, 249, 0.88));
+		box-shadow: 0 24px 55px -48px rgba(59, 130, 246, 0.5);
+		backdrop-filter: blur(16px);
+	}
+
+	:global([data-theme='dark'] .transport-bar),
+	:global(:root:not([data-theme='light']) .transport-bar) {
+		border-color: rgba(96, 165, 250, 0.2);
+		background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9));
+		box-shadow: 0 24px 55px -48px rgba(14, 165, 233, 0.4);
+	}
+
+	.play-toggle {
+		height: 3.25rem;
+		width: 3.25rem;
+		border-radius: 999px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		font-weight: 600;
-		font-size: 0.85rem;
-		width: 2rem;
-		height: 2rem;
+		box-shadow: 0 24px 56px -36px rgba(59, 130, 246, 0.6);
+		color: rgba(37, 99, 235, 0.95);
+	}
+
+	:global([data-theme='dark'] .play-toggle),
+	:global(:root:not([data-theme='light']) .play-toggle) {
+		color: rgba(191, 219, 254, 0.94);
+		box-shadow: 0 24px 56px -36px rgba(14, 165, 233, 0.45);
+	}
+
+	.mute-toggle {
+		height: 2.75rem;
+		width: 2.75rem;
 		border-radius: 999px;
-		background: rgba(59, 130, 246, 0.15);
-		color: rgba(37, 99, 235, 0.9);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(15, 23, 42, 0.85);
 	}
 
-	.caption-voice {
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.18em;
-		color: rgba(59, 130, 246, 0.75);
-		margin-bottom: 0.25rem;
+	:global([data-theme='dark'] .mute-toggle),
+	:global(:root:not([data-theme='light']) .mute-toggle) {
+		color: rgba(226, 232, 240, 0.85);
 	}
 
-	.caption-text {
-		font-size: 1rem;
-		line-height: 1.5;
-		color: rgba(15, 23, 42, 0.9);
+	.transport-timestamp {
+		font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
+		font-size: 0.9rem;
+		color: rgba(15, 23, 42, 0.7);
+		white-space: nowrap;
+		min-width: 6rem;
 	}
 
-	.caption-placeholder {
-		font-size: 0.95rem;
-		color: rgba(100, 116, 139, 0.85);
+	:global([data-theme='dark'] .transport-timestamp),
+	:global(:root:not([data-theme='light']) .transport-timestamp) {
+		color: rgba(226, 232, 240, 0.78);
 	}
 
-	.caption-queue {
-		display: grid;
-		gap: 0.75rem;
-		margin: 0;
-		padding: 0;
-		list-style: none;
+	.transport-slider {
+		width: 100%;
+		display: flex;
+		align-items: center;
 	}
 
-	.caption-queue li .caption-voice {
-		color: rgba(148, 163, 184, 0.95);
+	.transport-slider input[type='range'] {
+		width: 100%;
+		-webkit-appearance: none;
+		height: 0.6rem;
+		border-radius: 999px;
+		background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(37, 99, 235, 0.9));
+		outline: none;
+		position: relative;
 	}
 
-	.caption-queue li .caption-text {
-		color: rgba(100, 116, 139, 0.92);
+	.transport-slider input[type='range']::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		height: 1.1rem;
+		width: 1.1rem;
+		border-radius: 50%;
+		background: #ffffff;
+		border: 2px solid rgba(59, 130, 246, 0.9);
+		box-shadow: 0 8px 20px -10px rgba(59, 130, 246, 0.8);
+		cursor: pointer;
+	}
+
+	.transport-slider input[type='range']::-moz-range-thumb {
+		height: 1.1rem;
+		width: 1.1rem;
+		border-radius: 50%;
+		background: #ffffff;
+		border: 2px solid rgba(59, 130, 246, 0.9);
+		box-shadow: 0 8px 20px -10px rgba(59, 130, 246, 0.8);
+		cursor: pointer;
+	}
+
+	.transport-slider input[type='range']::-webkit-slider-runnable-track {
+		height: 0.6rem;
+		border-radius: 999px;
+		background: transparent;
+	}
+
+	.transport-slider input[type='range']::-moz-range-track {
+		height: 0.6rem;
+		border-radius: 999px;
+		background: transparent;
 	}
 
 	.actions-row {
@@ -876,22 +875,46 @@
 	@media (max-width: 768px) {
 		.media-page {
 			padding: 2rem 1.25rem 3rem;
+			gap: 1.75rem;
 		}
 
-		.player-card {
-			padding: 1.5rem;
-		}
-
-		.player-top {
+		.slide-stage {
+			padding: 1.25rem;
 			gap: 1rem;
 		}
 
-		.transport {
-			width: 100%;
+		.slide-card-inner {
+			min-height: clamp(260px, 50vh, 340px);
 		}
 
-		.transport-row {
-			justify-content: space-between;
+		.slide-nav-button {
+			height: 2.75rem;
+			width: 2.75rem;
+		}
+
+		.play-toggle {
+			height: 3rem;
+			width: 3rem;
+		}
+
+		.mute-toggle {
+			height: 2.5rem;
+			width: 2.5rem;
+		}
+
+		.transport-bar {
+			grid-template-columns: auto auto;
+			grid-template-rows: auto auto;
+			row-gap: 0.75rem;
+		}
+
+		.transport-timestamp {
+			grid-column: 1 / -1;
+			text-align: center;
+		}
+
+		.transport-slider {
+			grid-column: 1 / -1;
 		}
 
 		.status-row {
@@ -902,27 +925,5 @@
 		.actions-row {
 			justify-content: flex-start;
 		}
-	}
-
-	:global([data-theme='dark'] .captions-panel),
-	:global(:root:not([data-theme='light']) .captions-panel) {
-		background: rgba(15, 23, 42, 0.8);
-		border-color: rgba(59, 130, 246, 0.2);
-	}
-
-	:global([data-theme='dark'] .caption-speaker),
-	:global(:root:not([data-theme='light']) .caption-speaker) {
-		background: rgba(37, 99, 235, 0.35);
-		color: rgba(191, 219, 254, 0.95);
-	}
-
-	:global([data-theme='dark'] .caption-text),
-	:global(:root:not([data-theme='light']) .caption-text) {
-		color: rgba(226, 232, 240, 0.9);
-	}
-
-	:global([data-theme='dark'] .caption-placeholder),
-	:global(:root:not([data-theme='light']) .caption-placeholder) {
-		color: rgba(148, 163, 184, 0.8);
 	}
 </style>
