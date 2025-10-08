@@ -5,15 +5,14 @@ import { Command } from "commander";
 import { z } from "zod";
 
 import type { Part } from "@google/genai";
-import { runGeminiCall } from "@spark/llm/utils/gemini";
+import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
 
 import { estimateUploadBytes } from "../../utils/llm";
+import { formatInteger, formatMillis } from "../../utils/format";
 import {
-  createGeminiStreamingStats,
-  formatInteger,
-  logGeminiStreamingSummary,
-  type GeminiStreamingSummary,
-} from "../../utils/geminiStreaming";
+  runJobsWithConcurrency,
+  type JobProgressReporter,
+} from "../../utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 
 ensureEvalEnvLoaded();
@@ -251,7 +250,8 @@ function resolveOutputDir(rawOptions: CliOptions): string {
 
 async function generateProseStory(
   topic: string,
-  outDir: string
+  outDir: string,
+  progress: JobProgressReporter
 ): Promise<{
   text: string;
   prompt: string;
@@ -259,21 +259,29 @@ async function generateProseStory(
   storyPath: string;
   promptPath: string;
 }> {
-  console.log(
+  progress.log(
     "[story] generating prose with web-search-enabled Gemini 2.5 Pro"
   );
   const prompt = buildStoryPrompt(topic);
   const parts: Part[] = [{ text: prompt }];
   const uploadBytes = estimateUploadBytes(parts);
-  const stats = createGeminiStreamingStats(
-    "story/prose",
-    TEXT_MODEL_ID,
-    uploadBytes
-  );
-  let streamingSummary: GeminiStreamingSummary | undefined;
-  let finalStoryLength = 0;
-  const { text: storyText, modelVersion } = await runGeminiCall(
-    async (client) => {
+  const callHandle = progress.startModelCall({
+    modelId: TEXT_MODEL_ID as GeminiModelId,
+    uploadBytes,
+  });
+  const startTime = Date.now();
+
+  let aggregated = "";
+  let resolvedModelVersion: string = TEXT_MODEL_ID;
+  let finalPromptTokens = 0;
+  let finalCachedTokens = 0;
+  let finalInferenceTokens = 0;
+  let totalThinkingTokens = 0;
+
+  let storyText = "";
+
+  try {
+    const result = await runGeminiCall(async (client) => {
       const stream = await client.models.generateContentStream({
         model: TEXT_MODEL_ID,
         contents: [
@@ -284,6 +292,7 @@ async function generateProseStory(
         ],
         config: {
           thinkingConfig: {
+            includeThoughts: true,
             thinkingBudget: 32_768,
           },
           tools: [
@@ -294,11 +303,12 @@ async function generateProseStory(
         },
       });
 
-      let aggregated = "";
-      let resolvedModelVersion: string = TEXT_MODEL_ID;
+      let lastPromptTokens = 0;
+      let lastCachedTokens = 0;
+      let lastThinkingTokens = 0;
+      let lastInferenceTokens = 0;
 
       for await (const chunk of stream) {
-        stats.observeChunk(chunk);
         if (chunk.modelVersion) {
           resolvedModelVersion = chunk.modelVersion;
         }
@@ -308,48 +318,87 @@ async function generateProseStory(
           for (const part of contentParts) {
             const content = part.text;
             if (content) {
-              stats.recordTextChars(content.length);
               aggregated += content;
+              progress.reportChars(content.length);
             }
           }
         }
+        const usage = chunk.usageMetadata;
+        if (usage) {
+          const promptTokensNow = usage.promptTokenCount ?? 0;
+          const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
+          const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
+          const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
+          const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
+          const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
+          const thinkingDelta = Math.max(
+            0,
+            thinkingTokensNow - lastThinkingTokens
+          );
+          const inferenceDelta = Math.max(
+            0,
+            inferenceTokensNow - lastInferenceTokens
+          );
+          if (
+            promptDelta > 0 ||
+            cachedDelta > 0 ||
+            inferenceDelta > 0
+          ) {
+            progress.recordModelUsage(callHandle, {
+              promptTokensDelta: promptDelta,
+              cachedTokensDelta: cachedDelta > 0 ? cachedDelta : undefined,
+              inferenceTokensDelta: inferenceDelta,
+              timestamp: Date.now(),
+            });
+          }
+          if (thinkingDelta > 0) {
+            totalThinkingTokens += thinkingDelta;
+          }
+          lastPromptTokens = promptTokensNow;
+          lastCachedTokens = cachedTokensNow;
+          lastThinkingTokens = thinkingTokensNow;
+          lastInferenceTokens = inferenceTokensNow;
+        }
       }
 
-      streamingSummary = stats.summary();
       const trimmed = aggregated.trim();
-      finalStoryLength = trimmed.length;
+      finalPromptTokens = lastPromptTokens;
+      finalCachedTokens = lastCachedTokens;
+      finalInferenceTokens = lastInferenceTokens;
       return {
-        text: aggregated.trim(),
+        text: trimmed,
         modelVersion: resolvedModelVersion,
       };
-    }
-  );
+    });
+    storyText = result.text;
+    resolvedModelVersion = result.modelVersion;
+  } finally {
+    progress.finishModelCall(callHandle);
+  }
 
   if (!storyText) {
     throw new Error("Gemini response did not include prose output");
   }
 
-  if (streamingSummary) {
-    logGeminiStreamingSummary(streamingSummary, {
-      modelVersion,
-      notes: `text ${formatInteger(finalStoryLength)} chars`,
-    });
-  }
-
   await mkdir(outDir, { recursive: true });
   const storyPath = path.join(outDir, "story.txt");
-  const header = `modelVersion: ${modelVersion}\ntopic: ${topic}\n\n`;
+  const header = `modelVersion: ${resolvedModelVersion}\ntopic: ${topic}\n\n`;
   await writeFile(storyPath, header + storyText, { encoding: "utf8" });
-  console.log(`[story] saved prose to ${storyPath}`);
+  progress.log(`[story] saved prose to ${storyPath}`);
 
   const promptPath = path.join(outDir, "prompt.txt");
   await writeFile(promptPath, prompt, { encoding: "utf8" });
-  console.log(`[story] saved prompt snapshot to ${promptPath}`);
+  progress.log(`[story] saved prompt snapshot to ${promptPath}`);
+
+  const elapsed = formatMillis(Date.now() - startTime);
+  progress.log(
+    `[story/prose] model ${resolvedModelVersion} finished in ${elapsed}`
+  );
 
   return {
     text: storyText,
     prompt,
-    modelVersion,
+    modelVersion: resolvedModelVersion,
     storyPath,
     promptPath,
   };
@@ -395,77 +444,129 @@ function buildImagePrompt(topic: string): string {
 
 async function generateStoryImages(
   topic: string,
-  outDir: string
+  outDir: string,
+  progress: JobProgressReporter
 ): Promise<void> {
-  console.log(
+  progress.log(
     "[story] generating companion images with Gemini 2.5 Flash Image"
   );
 
   const prompt = buildImagePrompt(topic);
   const requestParts: Part[] = [{ text: prompt }];
   const uploadBytes = estimateUploadBytes(requestParts);
-  const stats = createGeminiStreamingStats(
-    "story/images",
-    IMAGE_MODEL_ID,
-    uploadBytes
-  );
+  const callHandle = progress.startModelCall({
+    modelId: IMAGE_MODEL_ID as GeminiModelId,
+    uploadBytes,
+  });
+  const startTime = Date.now();
+
   const assetsDir = path.join(outDir, "images");
   await mkdir(assetsDir, { recursive: true });
 
   let nextIndex = 0;
   let aggregatedText = "";
   let modelVersion: string = IMAGE_MODEL_ID;
-  let streamingSummary: GeminiStreamingSummary | undefined;
-  let captionsLength = 0;
+  let finalPromptTokens = 0;
+  let finalCachedTokens = 0;
+  let finalInferenceTokens = 0;
+  let totalThinkingTokens = 0;
 
-  await runGeminiCall(async (client) => {
-    const stream = await client.models.generateContentStream({
-      model: IMAGE_MODEL_ID,
-      contents: [
-        {
-          role: "user",
-          parts: requestParts,
+  try {
+    await runGeminiCall(async (client) => {
+      const stream = await client.models.generateContentStream({
+        model: IMAGE_MODEL_ID,
+        contents: [
+          {
+            role: "user",
+            parts: requestParts,
+          },
+        ],
+        config: {
+          responseModalities: ["IMAGE", "TEXT"],
+          imageConfig: {
+            aspectRatio: "16:9",
+          },
         },
-      ],
-      config: {
-        responseModalities: ["IMAGE", "TEXT"],
-        imageConfig: {
-          aspectRatio: "16:9",
-        },
-      },
-    });
+      });
 
-    for await (const chunk of stream) {
-      stats.observeChunk(chunk);
-      if (chunk.modelVersion) {
-        modelVersion = chunk.modelVersion;
-      }
+      let lastPromptTokens = 0;
+      let lastCachedTokens = 0;
+      let lastThinkingTokens = 0;
+      let lastInferenceTokens = 0;
 
-      const candidates = chunk.candidates ?? [];
-      for (const candidate of candidates) {
-        const contentParts = candidate.content?.parts ?? [];
-        for (const part of contentParts) {
-          const inlineData = part.inlineData;
-          if (inlineData?.data) {
-            const ext = extensionFromMime(inlineData.mimeType);
-            const filePath = path.join(assetsDir, `panel-${nextIndex}.${ext}`);
-            nextIndex += 1;
-            const buffer = Buffer.from(inlineData.data, "base64");
-            stats.recordInlineBytes(buffer.byteLength);
-            await saveBinaryFile(filePath, buffer);
-            continue;
-          }
-          if (!part.thought && part.text) {
-            stats.recordTextChars(part.text.length);
-            aggregatedText += part.text;
+      for await (const chunk of stream) {
+        if (chunk.modelVersion) {
+          modelVersion = chunk.modelVersion;
+        }
+
+        const candidates = chunk.candidates ?? [];
+        for (const candidate of candidates) {
+          const contentParts = candidate.content?.parts ?? [];
+          for (const part of contentParts) {
+            const inlineData = part.inlineData;
+            if (inlineData?.data) {
+              const ext = extensionFromMime(inlineData.mimeType);
+              const filePath = path.join(
+                assetsDir,
+                `panel-${nextIndex}.${ext}`
+              );
+              nextIndex += 1;
+              const buffer = Buffer.from(inlineData.data, "base64");
+              await saveBinaryFile(filePath, buffer);
+              continue;
+            }
+            if (!part.thought && part.text) {
+              aggregatedText += part.text;
+              progress.reportChars(part.text.length);
+            }
           }
         }
-      }
-    }
 
-    streamingSummary = stats.summary();
-    captionsLength = aggregatedText.trim().length;
-  });
+        const usage = chunk.usageMetadata;
+        if (usage) {
+          const promptTokensNow = usage.promptTokenCount ?? 0;
+          const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
+          const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
+          const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
+          const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
+          const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
+          const thinkingDelta = Math.max(
+            0,
+            thinkingTokensNow - lastThinkingTokens
+          );
+          const inferenceDelta = Math.max(
+            0,
+            inferenceTokensNow - lastInferenceTokens
+          );
+          if (
+            promptDelta > 0 ||
+            cachedDelta > 0 ||
+            inferenceDelta > 0
+          ) {
+            progress.recordModelUsage(callHandle, {
+              promptTokensDelta: promptDelta,
+              cachedTokensDelta: cachedDelta > 0 ? cachedDelta : undefined,
+              inferenceTokensDelta: inferenceDelta,
+              timestamp: Date.now(),
+            });
+          }
+          if (thinkingDelta > 0) {
+            totalThinkingTokens += thinkingDelta;
+          }
+          lastPromptTokens = promptTokensNow;
+          lastCachedTokens = cachedTokensNow;
+          lastThinkingTokens = thinkingTokensNow;
+          lastInferenceTokens = inferenceTokensNow;
+        }
+      }
+
+      finalPromptTokens = lastPromptTokens;
+      finalCachedTokens = lastCachedTokens;
+      finalInferenceTokens = lastInferenceTokens;
+    });
+  } finally {
+    progress.finishModelCall(callHandle);
+  }
 
   if (aggregatedText.trim()) {
     const captionsPath = path.join(assetsDir, "captions.txt");
@@ -473,19 +574,13 @@ async function generateStoryImages(
     await writeFile(captionsPath, header + aggregatedText.trim(), {
       encoding: "utf8",
     });
-    console.log(`[story] saved image captions to ${captionsPath}`);
+    progress.log(`[story] saved image captions to ${captionsPath}`);
   }
 
-  if (streamingSummary) {
-    const notes = [
-      `panels ${formatInteger(nextIndex)}`,
-      `captions ${formatInteger(captionsLength)} chars`,
-    ].join(" | ");
-    logGeminiStreamingSummary(streamingSummary, {
-      modelVersion,
-      notes,
-    });
-  }
+  const elapsed = formatMillis(Date.now() - startTime);
+  progress.log(
+    `[story/images] model ${modelVersion} generated ${formatInteger(nextIndex)} panels in ${elapsed}`
+  );
 }
 
 function extractJsonObject(rawText: string): unknown {
@@ -521,7 +616,8 @@ function extractJsonObject(rawText: string): unknown {
 
 async function generateStorySegmentation(
   storyText: string,
-  outDir: string
+  outDir: string,
+  progress: JobProgressReporter
 ): Promise<{
   segmentation: StorySegmentation;
   prompt: string;
@@ -529,72 +625,114 @@ async function generateStorySegmentation(
   jsonPath: string;
   promptPath: string;
 }> {
-  console.log("[story] generating narration segments with Gemini 2.5 Pro");
+  progress.log("[story] generating narration segments with Gemini 2.5 Pro");
   const prompt = buildSegmentationPrompt(storyText);
   const parts: Part[] = [{ text: prompt }];
   const uploadBytes = estimateUploadBytes(parts);
-  const stats = createGeminiStreamingStats(
-    "story/segmentation",
-    TEXT_MODEL_ID,
-    uploadBytes
-  );
+  const callHandle = progress.startModelCall({
+    modelId: TEXT_MODEL_ID as GeminiModelId,
+    uploadBytes,
+  });
+  const startTime = Date.now();
 
-  let streamingSummary: GeminiStreamingSummary | undefined;
   let aggregated = "";
   let modelVersion: string = TEXT_MODEL_ID;
-  let finalLength = 0;
+  let finalPromptTokens = 0;
+  let finalCachedTokens = 0;
+  let finalInferenceTokens = 0;
+  let totalThinkingTokens = 0;
 
-  await runGeminiCall(async (client) => {
-    const stream = await client.models.generateContentStream({
-      model: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "user",
-          parts,
+  try {
+    await runGeminiCall(async (client) => {
+      const stream = await client.models.generateContentStream({
+        model: TEXT_MODEL_ID,
+        contents: [
+          {
+            role: "user",
+            parts,
+          },
+        ],
+        config: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 8_192,
+          },
         },
-      ],
-      config: {
-        thinkingConfig: {
-          thinkingBudget: 8_192,
-        },
-      },
-    });
+      });
 
-    for await (const chunk of stream) {
-      stats.observeChunk(chunk);
-      if (chunk.modelVersion) {
-        modelVersion = chunk.modelVersion;
-      }
-      const candidates = chunk.candidates ?? [];
-      for (const candidate of candidates) {
-        const contentParts = candidate.content?.parts ?? [];
-        for (const part of contentParts) {
-          if (part.thought) {
-            continue;
-          }
-          if (part.text) {
-            stats.recordTextChars(part.text.length);
-            aggregated += part.text;
+      let lastPromptTokens = 0;
+      let lastCachedTokens = 0;
+      let lastThinkingTokens = 0;
+      let lastInferenceTokens = 0;
+
+      for await (const chunk of stream) {
+        if (chunk.modelVersion) {
+          modelVersion = chunk.modelVersion;
+        }
+        const candidates = chunk.candidates ?? [];
+        for (const candidate of candidates) {
+          const contentParts = candidate.content?.parts ?? [];
+          for (const part of contentParts) {
+            if (part.thought) {
+              continue;
+            }
+            if (part.text) {
+              aggregated += part.text;
+              progress.reportChars(part.text.length);
+            }
           }
         }
+        const usage = chunk.usageMetadata;
+        if (usage) {
+          const promptTokensNow = usage.promptTokenCount ?? 0;
+          const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
+          const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
+          const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
+          const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
+          const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
+          const thinkingDelta = Math.max(
+            0,
+            thinkingTokensNow - lastThinkingTokens
+          );
+          const inferenceDelta = Math.max(
+            0,
+            inferenceTokensNow - lastInferenceTokens
+          );
+          if (
+            promptDelta > 0 ||
+            cachedDelta > 0 ||
+            inferenceDelta > 0
+          ) {
+            progress.recordModelUsage(callHandle, {
+              promptTokensDelta: promptDelta,
+              cachedTokensDelta: cachedDelta > 0 ? cachedDelta : undefined,
+              inferenceTokensDelta: inferenceDelta,
+              timestamp: Date.now(),
+            });
+          }
+          if (thinkingDelta > 0) {
+            totalThinkingTokens += thinkingDelta;
+          }
+          lastPromptTokens = promptTokensNow;
+          lastCachedTokens = cachedTokensNow;
+          lastThinkingTokens = thinkingTokensNow;
+          lastInferenceTokens = inferenceTokensNow;
+        }
       }
-    }
 
-    streamingSummary = stats.summary();
-    finalLength = aggregated.trim().length;
-  });
-
-  if (streamingSummary) {
-    logGeminiStreamingSummary(streamingSummary, {
-      modelVersion,
-      notes: `segments text ${formatInteger(finalLength)} chars`,
+      const trimmed = aggregated.trim();
+      if (!trimmed) {
+        throw new Error(
+          "Gemini segmentation response did not include any text output"
+        );
+      }
+      aggregated = trimmed;
+      finalPromptTokens = lastPromptTokens;
+      finalCachedTokens = lastCachedTokens;
+      finalInferenceTokens = lastInferenceTokens;
     });
-  }
-
-  if (!aggregated.trim()) {
-    throw new Error(
-      "Gemini segmentation response did not include any text output"
-    );
+  } finally {
+    progress.finishModelCall(callHandle);
   }
 
   const parsedJson = extractJsonObject(aggregated);
@@ -609,11 +747,18 @@ async function generateStorySegmentation(
   await writeFile(jsonPath, JSON.stringify(payload, null, 2), {
     encoding: "utf8",
   });
-  console.log(`[story] saved segmentation JSON to ${jsonPath}`);
+  progress.log(`[story] saved segmentation JSON to ${jsonPath}`);
 
   const promptPath = path.join(outDir, "segmentation-prompt.txt");
   await writeFile(promptPath, prompt, { encoding: "utf8" });
-  console.log(`[story] saved segmentation prompt snapshot to ${promptPath}`);
+  progress.log(
+    `[story] saved segmentation prompt snapshot to ${promptPath}`
+  );
+
+  const elapsed = formatMillis(Date.now() - startTime);
+  progress.log(
+    `[story/segments] model ${modelVersion} finished in ${elapsed}`
+  );
 
   return {
     segmentation,
@@ -661,16 +806,36 @@ async function main(): Promise<void> {
   const outDir = resolveOutputDir(parsed);
   console.log(`[story] output directory: ${outDir}`);
 
-  if (shouldGenerateProse) {
-    const storyResult = await generateProseStory(parsed.topic, outDir);
-    await generateStorySegmentation(storyResult.text, outDir);
-  }
+  await runJobsWithConcurrency({
+    items: [parsed],
+    concurrency: 1,
+    getId: () => "story",
+    label: "[story]",
+    handler: async (options, { progress }) => {
+      let storyResult:
+        | {
+            text: string;
+            prompt: string;
+            modelVersion: string;
+            storyPath: string;
+            promptPath: string;
+          }
+        | undefined;
 
-  if (shouldGenerateImages) {
-    await generateStoryImages(parsed.topic, outDir);
-  }
+      if (shouldGenerateProse) {
+        storyResult = await generateProseStory(options.topic, outDir, progress);
+        await generateStorySegmentation(storyResult.text, outDir, progress);
+      }
 
-  console.log("[story] generation finished");
+      if (shouldGenerateImages) {
+        await generateStoryImages(options.topic, outDir, progress);
+      }
+
+      progress.log("[story] generation finished");
+    },
+  });
+
+  console.log("[story] artifacts ready in", outDir);
 }
 
 void main().catch((error) => {
