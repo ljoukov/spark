@@ -8,25 +8,26 @@ const trimmed = z
 
 const nonNegativeNumber = z.number().finite().min(0, "Value must be non-negative");
 
-const SpeakerSchema = z.union([z.literal("m"), z.literal("f")]);
+const NarrationSpeakerSchema = z.union([z.literal("m"), z.literal("f")]);
 
-export const SessionMediaCaptionSchema = z.object({
-  speaker: SpeakerSchema,
+export const SessionMediaNarrationSchema = z.object({
+  speaker: NarrationSpeakerSchema.optional(),
   text: trimmed,
   startSec: nonNegativeNumber,
   durationSec: nonNegativeNumber,
 });
 
-export type SessionMediaCaption = z.infer<typeof SessionMediaCaptionSchema>;
+export type SessionMediaNarration = z.infer<typeof SessionMediaNarrationSchema>;
 
-export const SessionMediaSlideSchema = z.object({
-  index: z.number().int().min(0, "Slide index must be non-negative"),
-  markdown: trimmed,
-  startSec: nonNegativeNumber,
-  durationSec: nonNegativeNumber,
-});
+export const SessionMediaImageSchema = z
+  .object({
+    index: z.number().int().min(0, "Image index must be non-negative"),
+    storagePath: trimmed,
+    startSec: nonNegativeNumber,
+    durationSec: nonNegativeNumber,
+  });
 
-export type SessionMediaSlide = z.infer<typeof SessionMediaSlideSchema>;
+export type SessionMediaImage = z.infer<typeof SessionMediaImageSchema>;
 
 export const SessionMediaDocSchema = z
   .object({
@@ -35,15 +36,14 @@ export const SessionMediaDocSchema = z
     sessionId: trimmed,
     audio: z.object({
       storagePath: trimmed,
-      downloadUrl: trimmed.optional(),
       durationSec: nonNegativeNumber,
       mimeType: trimmed.optional(),
     }),
-    slides: z.array(SessionMediaSlideSchema).min(1, "At least one slide required"),
-    captions: z.array(SessionMediaCaptionSchema).min(1, "At least one caption line required"),
+    images: z.array(SessionMediaImageSchema).min(1, "At least one image required"),
+    narration: z.array(SessionMediaNarrationSchema).min(1, "At least one narration line required"),
     createdAt: FirestoreTimestampSchema,
     updatedAt: FirestoreTimestampSchema,
-    metadataVersion: z.number().int().min(1).default(1),
+    metadataVersion: z.number().int().min(1).default(2),
   })
   .transform(
     ({ createdAt, updatedAt, metadataVersion, ...rest }) => ({

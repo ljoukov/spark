@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-import Play from '@lucide/svelte/icons/play';
-import Pause from '@lucide/svelte/icons/pause';
-import Volume2 from '@lucide/svelte/icons/volume-2';
-import VolumeX from '@lucide/svelte/icons/volume-x';
-import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-import ChevronRight from '@lucide/svelte/icons/chevron-right';
-import AlertCircle from '@lucide/svelte/icons/alert-circle';
-import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
-import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
+	import Play from '@lucide/svelte/icons/play';
+	import Pause from '@lucide/svelte/icons/pause';
+	import Volume2 from '@lucide/svelte/icons/volume-2';
+	import VolumeX from '@lucide/svelte/icons/volume-x';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import { createSessionStateStore } from '$lib/client/sessionState';
 	import type { PageData } from './$types';
 	import type { PlanItemState } from '@spark/schemas';
@@ -28,15 +27,15 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		sessionStateStore.stop();
 	});
 
-	const slides = data.media.slides;
-	const captions = data.media.captions;
+	const images = data.media.images;
+	const narration = data.media.narration;
 	const audioInfo = data.media.audio;
 
 	const baseTimelineEnd = (() => {
-		if (slides.length === 0) {
+		if (images.length === 0) {
 			return audioInfo.durationSec ?? 0;
 		}
-		const last = slides[slides.length - 1];
+		const last = images[images.length - 1];
 		const lastCoverage = last.startSec + (last.durationSec ?? 0);
 		return Math.max(lastCoverage, audioInfo.durationSec ?? lastCoverage);
 	})();
@@ -49,17 +48,18 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 	let duration = audioInfo.durationSec && audioInfo.durationSec > 0 ? audioInfo.durationSec : baseTimelineEnd;
 	let manualSeeking = false;
 	let pendingSeek = 0;
-	let currentSlideOrder = 0;
-	let currentCaptionIndex = -1;
+	let currentImageOrder = 0;
+	let currentNarrationIndex = -1;
 	let playbackError: string | null = audioInfo.url ? null : 'Clip is not available right now.';
 
-	const slideCount = slides.length;
+	const imageCount = images.length;
 
 	$: sliderMax = Math.max(duration, baseTimelineEnd);
 	$: hasStarted = planItemState?.status !== 'not_started';
 	$: hasCompleted = planItemState?.status === 'completed';
-	$: activeSlide = slides[currentSlideOrder] ?? null;
-	$: activeCaption = currentCaptionIndex >= 0 ? captions[currentCaptionIndex] : null;
+	$: activeImage = images[currentImageOrder] ?? null;
+	$: activeNarrationLine =
+		currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 
@@ -71,51 +71,51 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		return Math.min(Math.max(value, 0), max);
 	}
 
-	function getCaptionEnd(index: number): number {
-		const caption = captions[index];
-		if (!caption) {
+	function getNarrationEnd(index: number): number {
+		const line = narration[index];
+		if (!line) {
 			return sliderMax;
 		}
-		if (caption.durationSec && caption.durationSec > 0) {
-			return caption.startSec + caption.durationSec;
+		if (line.durationSec && line.durationSec > 0) {
+			return line.startSec + line.durationSec;
 		}
-		const next = captions[index + 1];
+		const next = narration[index + 1];
 		return next ? next.startSec : sliderMax;
 	}
 
-	function resolveSlideOrder(time: number): number {
-		if (slides.length === 0) {
+	function resolveImageOrder(time: number): number {
+		if (images.length === 0) {
 			return 0;
 		}
-		for (let order = slides.length - 1; order >= 0; order -= 1) {
-			const slide = slides[order];
-			if (time + EPSILON >= slide.startSec) {
+		for (let order = images.length - 1; order >= 0; order -= 1) {
+			const image = images[order];
+			if (time + EPSILON >= image.startSec) {
 				return order;
 			}
 		}
 		return 0;
 	}
 
-	function resolveCaptionIndex(time: number): number {
-		if (captions.length === 0) {
+	function resolveNarrationIndex(time: number): number {
+		if (narration.length === 0) {
 			return -1;
 		}
-		for (let index = captions.length - 1; index >= 0; index -= 1) {
-			const caption = captions[index];
-			const end = getCaptionEnd(index);
-			if (time + EPSILON >= caption.startSec && time - EPSILON <= end) {
+		for (let index = narration.length - 1; index >= 0; index -= 1) {
+			const line = narration[index];
+			const end = getNarrationEnd(index);
+			if (time + EPSILON >= line.startSec && time - EPSILON <= end) {
 				return index;
 			}
 		}
-		return captions.length > 0 && time >= captions[captions.length - 1].startSec - EPSILON
-			? captions.length - 1
+		return narration.length > 0 && time >= narration[narration.length - 1].startSec - EPSILON
+			? narration.length - 1
 			: -1;
 	}
 
 	function updateTimelineState(time: number) {
 		const clamped = clampTime(time);
-		currentSlideOrder = resolveSlideOrder(clamped);
-		currentCaptionIndex = resolveCaptionIndex(clamped);
+		currentImageOrder = resolveImageOrder(clamped);
+		currentNarrationIndex = resolveNarrationIndex(clamped);
 	}
 
 	function formatTime(value: number): string {
@@ -255,28 +255,28 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		seekTo(pendingSeek);
 	}
 
-	function goToSlide(order: number) {
-		const slide = slides[order];
-		if (!slide) {
+	function goToImage(order: number) {
+		const image = images[order];
+		if (!image) {
 			return;
 		}
-		seekTo(slide.startSec);
+		seekTo(image.startSec);
 	}
 
-	function handlePrevSlide() {
-		if (currentSlideOrder <= 0) {
+	function handlePrevImage() {
+		if (currentImageOrder <= 0) {
 			seekTo(0);
 			return;
 		}
-		goToSlide(currentSlideOrder - 1);
+		goToImage(currentImageOrder - 1);
 	}
 
-	function handleNextSlide() {
-		if (currentSlideOrder >= slideCount - 1) {
+	function handleNextImage() {
+		if (currentImageOrder >= imageCount - 1) {
 			seekTo(sliderMax);
 			return;
 		}
-		goToSlide(currentSlideOrder + 1);
+		goToImage(currentImageOrder + 1);
 	}
 
 	function handleManualComplete() {
@@ -314,50 +314,51 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		</div>
 	</header>
 
-	<div class="slide-stage">
+	<div class="image-stage">
 		<button
 			class={navButtonClass}
-			class:slide-nav-button={true}
+			class:image-nav-button={true}
 			type="button"
-			onclick={handlePrevSlide}
-			aria-label="Go to previous slide"
-			disabled={slideCount === 0}
+			onclick={handlePrevImage}
+			aria-label="Go to previous image"
+			disabled={imageCount === 0}
 		>
 			<ChevronLeft aria-hidden="true" size={28} />
 		</button>
 
-		<div class="slide-card">
-            {#if activeSlide}
-                <QuizQuestionCard
-                    eyebrow={`Slide ${currentSlideOrder + 1} · ${formatTime(activeSlide.startSec)}`}
-                    title={activeSlide.title}
-                    displayFooter={false}
-                    class="slide-card-inner"
-                >
-                    <div class="slide-body" class:empty={!activeSlide.bodyHtml}>
-                        {#if activeSlide.bodyHtml}
-                            <div class="slide-markdown prose prose-neutral max-w-none">
-                                {@html activeSlide.bodyHtml}
-                            </div>
-                        {:else}
-                            <p class="slide-placeholder-copy">Stay tuned for the narration.</p>
-                        {/if}
-                    </div>
-                </QuizQuestionCard>
-            {:else}
-                <div class="slide-card-empty">
-                    <p>No slides available for this clip yet.</p>
-                </div>
-            {/if}
+		<div class="image-card">
+			{#if activeImage}
+				{#if activeImage.url}
+					<div class="image-frame">
+						<img
+							src={activeImage.url}
+							alt={`Session illustration ${currentImageOrder + 1}`}
+							loading="lazy"
+						/>
+					</div>
+				{:else}
+					<div class="image-card-empty">
+						<p>Image unavailable for this moment.</p>
+					</div>
+				{/if}
+				<div class="image-meta">
+					<span>Image {currentImageOrder + 1} of {imageCount}</span>
+					<span>At {formatTime(activeImage.startSec)}</span>
+				</div>
+			{:else}
+				<div class="image-card-empty">
+					<p>No images available for this clip yet.</p>
+				</div>
+			{/if}
 		</div>
 
 		<button
 			class={navButtonClass}
-			class:slide-nav-button={true}
+			class:image-nav-button={true}
 			type="button"
-			onclick={handleNextSlide}
-			aria-label="Go to next slide"
-			disabled={slideCount === 0}
+			onclick={handleNextImage}
+			aria-label="Go to next image"
+			disabled={imageCount === 0}
 		>
 			<ChevronRight aria-hidden="true" size={28} />
 		</button>
@@ -376,8 +377,8 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 			</div>
 		{:else if !isReady}
 			<p class="subtitle-placeholder">Loading clip…</p>
-		{:else if activeCaption}
-			<p class="subtitle-active">{activeCaption.text}</p>
+		{:else if activeNarrationLine}
+			<p class="subtitle-active">{activeNarrationLine.text}</p>
 		{:else}
 			<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
 		{/if}
@@ -536,7 +537,7 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		color: rgba(5, 122, 85, 0.95);
 	}
 
-	.slide-stage {
+	.image-stage {
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
@@ -549,14 +550,14 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		backdrop-filter: blur(18px);
 	}
 
-	:global([data-theme='dark'] .slide-stage),
-	:global(:root:not([data-theme='light']) .slide-stage) {
+	:global([data-theme='dark'] .image-stage),
+	:global(:root:not([data-theme='light']) .image-stage) {
 		border-color: rgba(96, 165, 250, 0.22);
 		background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.94));
 		box-shadow: 0 28px 60px -48px rgba(14, 165, 233, 0.4);
 	}
 
-	.slide-nav-button {
+	.image-nav-button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -569,37 +570,50 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		transition: transform 0.2s ease, box-shadow 0.2s ease;
 	}
 
-	.slide-nav-button:hover {
+	.image-nav-button:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 28px 60px -34px rgba(59, 130, 246, 0.55);
 	}
 
-	.slide-nav-button:disabled {
+	.image-nav-button:disabled {
 		opacity: 0.5;
 		transform: none;
 		box-shadow: none;
 	}
 
-	:global([data-theme='dark'] .slide-nav-button),
-	:global(:root:not([data-theme='light']) .slide-nav-button) {
+	:global([data-theme='dark'] .image-nav-button),
+	:global(:root:not([data-theme='light']) .image-nav-button) {
 		background: rgba(30, 41, 59, 0.9);
 		color: rgba(191, 219, 254, 0.85);
 		box-shadow: 0 22px 50px -35px rgba(14, 165, 233, 0.4);
 	}
 
-	.slide-card {
-		display: flex;
-		justify-content: center;
-	}
-
-	.slide-card-inner {
-		width: min(100%, 720px);
-		min-height: clamp(320px, 45vh, 380px);
+	.image-card {
 		display: flex;
 		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
 	}
 
-	.slide-card-empty {
+	.image-frame {
+		position: relative;
+		width: min(100%, 720px);
+		aspect-ratio: 16 / 9;
+		border-radius: 1.5rem;
+		overflow: hidden;
+		border: 1px solid rgba(59, 130, 246, 0.16);
+		background: rgba(15, 23, 42, 0.05);
+		box-shadow: 0 28px 60px -48px rgba(59, 130, 246, 0.4);
+	}
+
+	.image-frame img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.image-card-empty {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -613,81 +627,34 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 		text-align: center;
 	}
 
-	:global([data-theme='dark'] .slide-card-empty),
-	:global(:root:not([data-theme='light']) .slide-card-empty) {
+	:global([data-theme='dark'] .image-card-empty),
+	:global(:root:not([data-theme='light']) .image-card-empty) {
 		background: rgba(30, 41, 59, 0.78);
 		border-color: rgba(148, 163, 184, 0.35);
 		color: rgba(203, 213, 225, 0.78);
 	}
 
-	.slide-card-empty p {
+	.image-card-empty p {
 		margin: 0;
 		font-size: 1rem;
 		line-height: 1.6;
 	}
 
-	.slide-placeholder-copy {
-		font-size: 1rem;
-		color: rgba(15, 23, 42, 0.78);
-	}
-
-	:global([data-theme='dark'] .slide-placeholder-copy),
-	:global(:root:not([data-theme='light']) .slide-placeholder-copy) {
-		color: rgba(226, 232, 240, 0.78);
-	}
-
-	.slide-body {
-		padding-top: 0.75rem;
-		flex: 1;
-	}
-
-	.slide-body.empty {
-		padding-top: 0;
-	}
-
-	.slide-markdown :global(p) {
-		margin: 0 0 0.75rem;
-		font-size: 1rem;
-		line-height: 1.65;
-		color: rgba(15, 23, 42, 0.88);
-	}
-
-	.slide-markdown :global(h2),
-	.slide-markdown :global(h3),
-	.slide-markdown :global(h4) {
-		margin: 0 0 0.6rem;
-		font-size: 1.15rem;
+	.image-meta {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		width: min(100%, 720px);
+		font-size: 0.85rem;
 		font-weight: 600;
-		color: rgba(15, 23, 42, 0.92);
+		color: rgba(37, 99, 235, 0.85);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
 	}
 
-	.slide-markdown :global(ul) {
-		margin: 0;
-		padding-left: 1.2rem;
-		display: grid;
-		gap: 0.5rem;
-	}
-
-	.slide-markdown :global(li) {
-		font-size: 1rem;
-		color: rgba(15, 23, 42, 0.88);
-		line-height: 1.6;
-	}
-
-	:global([data-theme='dark'] .slide-markdown :global(p)),
-	:global([data-theme='dark'] .slide-markdown :global(li)),
-	:global(:root:not([data-theme='light']) .slide-markdown :global(p)),
-	:global(:root:not([data-theme='light']) .slide-markdown :global(li)) {
-		color: rgba(226, 232, 240, 0.85);
-	}
-
-	:global([data-theme='dark'] .slide-markdown :global(h2)),
-	:global([data-theme='dark'] .slide-markdown :global(h3)),
-	:global([data-theme='dark'] .slide-markdown :global(h4)),
-	:global(:root:not([data-theme='light']) .slide-markdown :global(h2)),
-	:global(:root:not([data-theme='light']) .slide-markdown :global(h3)),
-	:global(:root:not([data-theme='light']) .slide-markdown :global(h4)) {
-		color: rgba(226, 232, 240, 0.92);
+	:global([data-theme='dark'] .image-meta),
+	:global(:root:not([data-theme='light']) .image-meta) {
+		color: rgba(191, 219, 254, 0.78);
 	}
 
 	.subtitle-strip {
@@ -878,16 +845,16 @@ import QuizQuestionCard from '$lib/components/quiz/quiz-question-card.svelte';
 			gap: 1.75rem;
 		}
 
-		.slide-stage {
+		.image-stage {
 			padding: 1.25rem;
 			gap: 1rem;
 		}
 
-		.slide-card-inner {
-			min-height: clamp(260px, 50vh, 340px);
+		.image-frame {
+			width: 100%;
 		}
 
-		.slide-nav-button {
+		.image-nav-button {
 			height: 2.75rem;
 			width: 2.75rem;
 		}

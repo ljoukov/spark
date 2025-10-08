@@ -1,42 +1,11 @@
 import { error } from '@sveltejs/kit';
-import { marked } from 'marked';
 import { z } from 'zod';
 import { getSessionMedia } from '$lib/server/media/repo';
 import type { PageServerLoad } from './$types';
 
-marked.setOptions({ gfm: true, breaks: true });
-
 const paramsSchema = z.object({
 	id: z.string().trim().min(1, 'Media id is required')
 });
-
-function extractSlideParts(markdown: string): { title: string; bodyMarkdown: string } {
-	const lines = markdown.split(/\r?\n/);
-	let title = '';
-	let bodyStart = 0;
-
-	for (let index = 0; index < lines.length; index += 1) {
-		const raw = lines[index]?.trim() ?? '';
-		if (!raw) {
-			continue;
-		}
-		title = raw.replace(/^#+\s*/, '').trim();
-		bodyStart = index + 1;
-		break;
-	}
-
-	const bodyMarkdown = lines.slice(bodyStart).join('\n').trim();
-
-	return {
-		title: title || 'Slide',
-		bodyMarkdown
-	};
-}
-
-function toHtml(markdown: string): string {
-	const rendered = marked.parse(markdown);
-	return typeof rendered === 'string' ? rendered : '';
-}
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { id } = paramsSchema.parse(params);
@@ -52,32 +21,30 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw error(404, { message: 'Media content not found' });
 	}
 
-	const slides = media.slides
+	const images = media.images
 		.slice()
-		.sort((a, b) => a.index - b.index)
-		.map((slide, order) => {
-			const { title, bodyMarkdown } = extractSlideParts(slide.markdown);
-			const bodyHtml = bodyMarkdown ? toHtml(bodyMarkdown) : '';
+		.sort((a, b) => a.startSec - b.startSec || a.index - b.index)
+		.map((image, order) => {
 			return {
 				order,
-				index: slide.index,
-				title,
-				markdown: slide.markdown,
-				bodyHtml,
-				startSec: slide.startSec,
-				durationSec: slide.durationSec
+				index: image.index,
+				startSec: image.startSec,
+				durationSec: image.durationSec,
+				url: image.url,
+				storagePath: image.storagePath ?? null,
+				signedUrlExpiresAt: image.signedUrlExpiresAt?.toISOString() ?? null
 			};
 		});
 
-	const captions = media.captions
+	const narration = media.narration
 		.slice()
 		.sort((a, b) => a.startSec - b.startSec)
-		.map((caption, index) => ({
+		.map((line, index) => ({
 			index,
-			speaker: caption.speaker,
-			text: caption.text,
-			startSec: caption.startSec,
-			durationSec: caption.durationSec
+			speaker: line.speaker ?? null,
+			text: line.text,
+			startSec: line.startSec,
+			durationSec: line.durationSec
 		}));
 
 	return {
@@ -90,11 +57,11 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 				storagePath: media.audio.storagePath,
 				mimeType: media.audio.mimeType ?? 'audio/mpeg',
 				durationSec: media.audio.durationSec,
-				url: media.audio.signedUrl,
+				url: media.audio.url,
 				expiresAt: media.audio.signedUrlExpiresAt?.toISOString() ?? null
 			},
-			slides,
-			captions
+			images,
+			narration
 		}
 	};
 };
