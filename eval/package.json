@@ -14,7 +14,8 @@
     "lint": "npm run typecheck && npm run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run",
-    "session:generate": "FORCE_TEST_USER=true tsx src/code/session/generateTestSession.ts"
+    "session:generate": "FORCE_TEST_USER=true tsx src/code/session/generateTestSession.ts",
+    "session:story": "tsx src/code/session/generateTestStory.ts"
   },
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
