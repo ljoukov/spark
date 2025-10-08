@@ -30,7 +30,7 @@
 		answeredAt: Date | null;
 	};
 
-	type FinishState = 'confirm' | 'saving' | 'error';
+type FinishState = 'confirm' | 'saving';
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
@@ -289,28 +289,27 @@
 	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
-let finishState = $state<FinishState>('confirm');
-let finishError = $state<string | null>(null);
-let finishMode = $state<'quit' | 'finalize' | null>(null);
+	let finishState = $state<FinishState>('confirm');
+	let finishMode = $state<'quit' | 'finalize' | null>(null);
+	let quitPending = $state(false);
 
-function handleFinishDialogChange(open: boolean) {
-		if (!open && finishState === 'saving') {
+	function closeFinishDialog() {
+		finishDialogOpen = false;
+		finishState = 'confirm';
+		finishMode = null;
+		quitPending = false;
+	}
+
+	function handleFinishDialogChange(open: boolean) {
+		if (!open && (finishState === 'saving' || quitPending)) {
 			return;
 		}
-		finishDialogOpen = open;
-	if (!open) {
-		finishState = 'confirm';
-		finishError = null;
-		finishMode = null;
+		if (!open) {
+			closeFinishDialog();
+			return;
+		}
+		finishDialogOpen = true;
 	}
-}
-
-function openFinishDialog() {
-	finishState = 'confirm';
-	finishError = null;
-	finishMode = 'quit';
-	finishDialogOpen = true;
-}
 
 	function updateAttempt(index: number, updater: (value: AttemptState) => AttemptState) {
 		attempts = attempts.map((attempt, idx) => (idx === index ? updater(attempt) : attempt));
@@ -353,10 +352,20 @@ function openFinishDialog() {
 			)
 	);
 
-	const isQuizComplete = $derived(attempts.every((attempt) => attempt.status !== 'pending'));
 	const remainingCount = $derived(
 		scoredAttempts.filter((entry) => entry.attempt.status === 'pending').length
 	);
+
+	function openFinishDialog() {
+		if (remainingCount === 0) {
+			void handleQuit();
+			return;
+		}
+		finishState = 'confirm';
+		finishMode = 'quit';
+		quitPending = false;
+		finishDialogOpen = true;
+	}
 
 	function goToQuestion(index: number) {
 		if (index < 0 || index >= quiz.questions.length || index === currentIndex) {
@@ -637,7 +646,6 @@ function openFinishDialog() {
 		// Show saving state while finalizing and navigating to dashboard
 		finishMode = 'finalize';
 		finishState = 'saving';
-		finishError = null;
 		finishDialogOpen = true;
 
 		try {
@@ -652,9 +660,7 @@ function openFinishDialog() {
 		}
 
 		// Any failure — close modal and show top error bar
-		finishDialogOpen = false;
-		finishState = 'confirm';
-		finishMode = null;
+		closeFinishDialog();
 		completionSyncError = SYNC_ERROR_MESSAGE;
 		return false;
 	}
@@ -688,47 +694,22 @@ async function retryFinalize(): Promise<void> {
 	}
 
 	async function handleQuit() {
-		if (finishState === 'saving') {
+		if (quitPending) {
 			return;
 		}
-		finishState = 'saving';
-		finishError = null;
-		finishMode = 'quit';
-    try {
-        await persistLastQuestionIndex(currentIndex, { sync: true });
-    } catch (error) {
-        console.error('Failed to persist progress before quitting', error);
-        // close modal and show top error bar instead of error state
-        finishDialogOpen = false;
-        finishState = 'confirm';
-        finishMode = null;
-        completionSyncError = SYNC_ERROR_MESSAGE;
-        return;
-    }
-		if (typeof window !== 'undefined') {
-			try {
-				await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
-            } catch (error) {
-                console.error('Navigation to session dashboard failed', error);
-                finishDialogOpen = false;
-                finishState = 'confirm';
-                finishMode = null;
-                completionSyncError = SYNC_ERROR_MESSAGE;
-            }
-        } else {
-            finishDialogOpen = false;
-            finishState = 'confirm';
-            finishError = null;
-        }
-	}
-
-	function resetQuiz() {
-		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
-		currentIndex = 0;
-		finishDialogOpen = false;
-		finishState = 'confirm';
-		finishError = null;
+		quitPending = true;
 		completionSyncError = null;
+		if (typeof window === 'undefined') {
+			quitPending = false;
+			return;
+		}
+		try {
+			await goto(`/code/${data.sessionId}`, { replaceState: true });
+		} catch (error) {
+			console.error('Navigation to session dashboard failed', error);
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			quitPending = false;
+		}
 	}
 
 	// Mark the current question as seen whenever it becomes active
@@ -856,7 +837,7 @@ async function retryFinalize(): Promise<void> {
         </div>
     {:else if finishMode === 'quit'}
         <div
-            class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 dark:from-primary/12"
+            class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 text-center dark:from-primary/12"
         >
             <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
                 Take a break?
@@ -868,20 +849,21 @@ async function retryFinalize(): Promise<void> {
             </p>
         </div>
         <div
-            class="finish-footer flex flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-end"
+            class="finish-footer flex flex-col items-center gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-center"
         >
-            <Button variant="outline" class="w-full sm:w-auto sm:min-w-[9rem]" onclick={resetQuiz}
-                >Restart quiz</Button
-            >
             <Button
                 class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]"
-                onclick={() => (finishDialogOpen = false)}
+                onclick={() => closeFinishDialog()}
             >
                 Keep practicing
             </Button>
-            <Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" onclick={handleQuit}
-                >Quit now</Button
+            <Button
+                class="finish-continue w-full sm:w-auto sm:min-w-[9rem]"
+                disabled={quitPending}
+                onclick={() => void handleQuit()}
             >
+                Quit now
+            </Button>
         </div>
     {:else}
         <!-- no content -->
