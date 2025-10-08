@@ -16,10 +16,19 @@ import {
   StorySegmentationSchema,
 } from "./generateStory";
 import {
+  generateSessionAudio,
+  type MediaSegment,
+} from "@spark/llm";
+import {
   runJobsWithConcurrency,
   type JobProgressReporter,
 } from "../../utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import {
+  formatByteSize,
+  formatDurationSeconds,
+} from "../../utils/format";
+import { createConsoleProgress } from "./narration";
 
 ensureEvalEnvLoaded();
 
@@ -96,6 +105,53 @@ async function saveSegmentationArtifacts(
   const promptPath = path.join(outDir, "segmentation-prompt.txt");
   await writeFile(promptPath, result.prompt, { encoding: "utf8" });
   progress.log(`[story] saved segmentation prompt snapshot to ${promptPath}`);
+}
+
+function segmentationToMediaSegments(
+  segmentation: StorySegmentation
+): MediaSegment[] {
+  return segmentation.segments.map((segment, index) => ({
+    image: `/story/local/${String(index + 1).padStart(3, "0")}`,
+    narration: segment.narration.map((line) => ({
+      speaker: line.voice === "F" ? "f" : "m",
+      text: line.text.trim(),
+    })),
+  }));
+}
+
+async function saveAudioArtifacts(
+  segmentation: StorySegmentation,
+  outDir: string,
+  progress: JobProgressReporter
+): Promise<void> {
+  const audioDir = path.join(outDir, "audio");
+  await mkdir(audioDir, { recursive: true });
+  const audioPath = path.join(audioDir, "story.mp3");
+
+  const segments = segmentationToMediaSegments(segmentation);
+  const audioResult = await generateSessionAudio({
+    segments,
+    outputFilePath: audioPath,
+    progress: createConsoleProgress("Story audio"),
+  });
+
+  const metadataPath = path.join(audioDir, "story.json");
+  const metadata = {
+    mimeType: audioResult.outputMimeType,
+    durationSec: audioResult.totalDurationSec,
+    totalBytes: audioResult.totalBytes,
+    slideOffsets: audioResult.slideOffsets,
+    slideDurations: audioResult.slideDurations,
+    lineOffsets: audioResult.lineOffsets,
+    lineDurations: audioResult.lineDurations,
+  };
+  await writeFile(metadataPath, JSON.stringify(metadata, null, 2), {
+    encoding: "utf8",
+  });
+
+  progress.log(
+    `[story] saved audio to ${audioPath} (${formatDurationSeconds(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)})`,
+  );
 }
 
 function extensionFromMime(mimeType?: string): string {
@@ -215,6 +271,7 @@ async function main(): Promise<void> {
     handler: async (options, { progress }) => {
       let storyResult: StoryProseResult | undefined;
       let segmentationResult: StorySegmentationResult | undefined;
+      let audioSaved = false;
 
       if (shouldGenerateProse) {
         storyResult = await generateProseStory(options.topic, progress);
@@ -229,6 +286,8 @@ async function main(): Promise<void> {
           outDir,
           progress
         );
+        await saveAudioArtifacts(segmentationResult.segmentation, outDir, progress);
+        audioSaved = true;
       }
 
       if (shouldGenerateImages) {
@@ -246,6 +305,11 @@ async function main(): Promise<void> {
           throw new Error(
             "Cannot generate images without segmentation. Run with --prose first to create segments."
           );
+        }
+
+        if (!audioSaved) {
+          await saveAudioArtifacts(segmentation, outDir, progress);
+          audioSaved = true;
         }
 
         const imagesResult = await generateStoryImages(segmentation, progress);
