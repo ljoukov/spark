@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { goto, beforeNavigate } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
@@ -8,6 +9,8 @@
 	import type { Monaco } from '$lib/monaco/index.js';
 	import { mergeProps } from 'bits-ui';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import type { editor as MonacoEditorNS, IDisposable } from 'monaco-editor';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
@@ -20,8 +23,9 @@
 		PythonRunnerWorkerMessage
 	} from '$lib/workers/python-runner.types';
 	import type { PageData } from './$types';
-	import { createSessionStateStore } from '$lib/client/sessionState';
-	import type { PlanItemState } from '@spark/schemas';
+	import { createSessionStateStore, type SessionUpdateResult } from '$lib/client/sessionState';
+	import { DEFAULT_CODE_SOURCE } from '$lib/code/constants';
+	import type { PlanItemCodeState, PlanItemState } from '@spark/schemas';
 
 	type HashAlgorithm = 'sha256' | 'sha512';
 
@@ -36,6 +40,17 @@
 	};
 
 	type PaneSide = 'left' | 'right';
+	type PersistCodeOptions = {
+		keepalive?: boolean;
+		force?: boolean;
+		runStatus?: PlanItemCodeState['lastRunStatus'] | null;
+		runAt?: Date | null;
+		markCompleted?: boolean;
+	};
+	type LocalDraft = {
+		source: string;
+		savedAt: number;
+	};
 
 	const DEFAULT_LAYOUT = [50, 50] as const;
 	const CODE_PANE_DEFAULT_LAYOUT = [60, 40] as const;
@@ -65,19 +80,196 @@
 	const STOP_TOOLTIP_LABEL = 'Stop code execution';
 	const LOADING_TOOLTIP_LABEL = 'Python runtime is loading';
 	const submitTooltipLabel = 'Submit code';
+	const AUTOSAVE_INTERVAL_MS = 10_000;
+	const LOCAL_SAVE_INTERVAL_MS = 1_000;
+	const LOCAL_STORAGE_PREFIX = 'spark-code:editor';
+	const LOCAL_TIMESTAMP_TOLERANCE_MS = 500;
+	const SAVE_ERROR_MESSAGE =
+		'We could not save your latest code. Check your connection and try again.';
+	const SUBMIT_REQUIREMENT_MESSAGE =
+		'All tests must pass before submitting. Fix your code and try again.';
+	const SUBMIT_GENERIC_ERROR_MESSAGE =
+		'We could not submit your solution. Check your connection and try again.';
 
-	export let data: PageData;
+	function buildLocalStorageKey(userId: string, sessionId: string, planItemId: string): string {
+		return `${LOCAL_STORAGE_PREFIX}:${userId}:${sessionId}:${planItemId}`;
+	}
+
+	function readLocalDraftFromStorage(key: string): LocalDraft | null {
+		if (!browser) {
+			return null;
+		}
+		try {
+			const raw = localStorage.getItem(key);
+			if (!raw) {
+				return null;
+			}
+			const parsed = JSON.parse(raw) as Partial<LocalDraft>;
+			if (typeof parsed.source !== 'string' || typeof parsed.savedAt !== 'number') {
+				return null;
+			}
+			return {
+				source: parsed.source,
+				savedAt: parsed.savedAt
+			};
+		} catch (error) {
+			console.warn('Failed to read local draft from storage', error);
+			return null;
+		}
+	}
+
+	function writeLocalDraftToStorage(key: string, draft: LocalDraft): void {
+		if (!browser) {
+			return;
+		}
+		try {
+			localStorage.setItem(key, JSON.stringify(draft));
+		} catch (error) {
+			console.warn('Failed to write local draft to storage', error);
+		}
+	}
+
+export let data: PageData;
 
 	let problem = data.problem;
 	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState: PlanItemState | null = data.sessionState.items[data.planItem.id] ?? null;
-	let hasMarkedStart = false;
-	let completionRecorded = false;
-	const stopSessionState = sessionStateStore.subscribe((value) => {
-		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+let hasMarkedStart = false;
+let completionRecorded = planItemState?.status === 'completed';
+const CODE_LANGUAGE: PlanItemCodeState['language'] = 'python';
+const DEFAULT_CODE = DEFAULT_CODE_SOURCE;
+const localStorageKey = browser
+	? buildLocalStorageKey(data.userId, data.sessionId, data.planItem.id)
+	: null;
+const initialCodeState: PlanItemCodeState | null = planItemState?.code ?? null;
+let rightText = initialCodeState?.source ?? DEFAULT_CODE;
+let lastSavedSource = rightText;
+let lastSavedAt: Date | null = initialCodeState?.savedAt ?? null;
+let lastRunStatus: PlanItemCodeState['lastRunStatus'] | null =
+	initialCodeState?.lastRunStatus ?? null;
+let lastRunAt: Date | null = initialCodeState?.lastRunAt ?? null;
+let hasPendingChanges = false;
+let isPersistingCode = false;
+let pendingSavePromise: Promise<void> | null = null;
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let localSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveError: string | null = null;
+let isApplyingRemoteSource = false;
+let submitError: string | null = null;
+let isSubmitting = false;
+let celebrationOpen = false;
+let celebrationXpAwarded = 0;
+let celebrationStats: SessionUpdateResult['stats'] = null;
+let celebrationAlreadyCompleted = false;
+let celebrationClosingViaHandler = false;
+let celebrationEmoji = '🎉';
+let celebrationTitle = 'Brilliant job!';
+let celebrationMessage = 'Progress saved - head back to the dashboard for the next challenge.';
+let lastLocalSavedAt = 0;
+let shouldSyncLocalDraft = false;
+let isCodeReadOnly = Boolean(
+	planItemState?.status === 'completed' && planItemState.code?.lastRunStatus === 'passed'
+);
+
+if (browser && localStorageKey) {
+	const remoteSavedAtMs = lastSavedAt ? lastSavedAt.getTime() : 0;
+	const localDraft = readLocalDraftFromStorage(localStorageKey);
+	if (localDraft) {
+		lastLocalSavedAt = localDraft.savedAt;
+		const hasLocalSource = localDraft.source.trim().length > 0;
+		const localIsNewer =
+			localDraft.savedAt > remoteSavedAtMs + LOCAL_TIMESTAMP_TOLERANCE_MS && hasLocalSource;
+		if (localIsNewer && localDraft.source !== rightText) {
+			rightText = localDraft.source;
+			hasPendingChanges = true;
+			shouldSyncLocalDraft = true;
+		} else if (remoteSavedAtMs > 0) {
+			writeLocalDraftToStorage(localStorageKey, {
+				source: rightText,
+				savedAt: remoteSavedAtMs
+			});
+			lastLocalSavedAt = remoteSavedAtMs;
+		}
+	} else {
+		const fallbackTimestamp = remoteSavedAtMs || Date.now();
+		writeLocalDraftToStorage(localStorageKey, {
+			source: rightText,
+			savedAt: fallbackTimestamp
+		});
+		lastLocalSavedAt = fallbackTimestamp;
+	}
+}
+
+if (isCodeReadOnly) {
+	hasPendingChanges = false;
+	shouldSyncLocalDraft = false;
+}
+
+if (browser && shouldSyncLocalDraft) {
+	queueMicrotask(() => {
+		void persistCode('local-newer', { force: true }).catch(() => {});
 	});
-	const DEFAULT_CODE = 'print("hello world :)")';
-	let rightText = DEFAULT_CODE;
+	shouldSyncLocalDraft = false;
+}
+
+const stopSessionState = sessionStateStore.subscribe((value) => {
+		const nextState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+		planItemState = nextState ?? null;
+
+	if (planItemState?.status === 'completed') {
+		completionRecorded = true;
+	}
+
+	const nextCode = planItemState?.code ?? null;
+	if (!nextCode) {
+		return;
+	}
+
+	isCodeReadOnly = Boolean(
+		planItemState?.status === 'completed' && nextCode.lastRunStatus === 'passed'
+	);
+
+	const savedAt = nextCode.savedAt ?? null;
+	const sourceChanged = nextCode.source !== lastSavedSource;
+		const isNewer =
+			!!savedAt && (!lastSavedAt || savedAt.getTime() > lastSavedAt.getTime() + 5);
+		const shouldApplyRemote = !hasPendingChanges && sourceChanged && (isNewer || !savedAt);
+
+	if (shouldApplyRemote) {
+		lastSavedSource = nextCode.source;
+		lastSavedAt = savedAt;
+		if (monacoEditor) {
+			isApplyingRemoteSource = true;
+			monacoEditor.setValue(nextCode.source);
+			isApplyingRemoteSource = false;
+		}
+		rightText = nextCode.source;
+		hasPendingChanges = false;
+	} else if (isNewer) {
+		lastSavedSource = nextCode.source;
+		lastSavedAt = savedAt;
+	}
+
+	if (isNewer || shouldApplyRemote) {
+		saveError = null;
+
+		if (browser && localStorageKey) {
+			const savedAtMs = savedAt ? savedAt.getTime() : Date.now();
+			writeLocalDraftToStorage(localStorageKey, {
+				source: nextCode.source,
+				savedAt: savedAtMs
+			});
+			lastLocalSavedAt = savedAtMs;
+		}
+	}
+
+	if (nextCode.lastRunStatus) {
+		lastRunStatus = nextCode.lastRunStatus;
+	}
+	if (nextCode.lastRunAt) {
+		lastRunAt = nextCode.lastRunAt;
+	}
+});
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
@@ -125,6 +317,13 @@
 	let selectedTestIndex: number | null = null;
 	let selectedResult: TestRunResult | null = null;
 	let runErrorMessage: string | null = null;
+	$: celebrationEmoji = celebrationAlreadyCompleted ? '🌟' : '🎉';
+	$: celebrationTitle = celebrationAlreadyCompleted ? 'Welcome back!' : 'Brilliant job!';
+	$: celebrationMessage = celebrationAlreadyCompleted
+	? 'Your solution was already synced - hop back to the dashboard for the next challenge.'
+	: celebrationXpAwarded > 0
+		? `You earned ${celebrationXpAwarded} XP for solving this problem.`
+		: 'Progress saved - head back to pick the next challenge.';
 
 	$: runTooltipLabel = isRunning
 		? STOP_TOOLTIP_LABEL
@@ -177,6 +376,212 @@
 		preloadWorker?.terminate();
 		preloadWorker = null;
 		preloadRequestId = null;
+	}
+
+	function clearAutosaveTimer() {
+		if (autosaveTimer) {
+			clearTimeout(autosaveTimer);
+			autosaveTimer = null;
+		}
+	}
+
+	function clearLocalSaveTimer() {
+		if (localSaveTimer) {
+			clearTimeout(localSaveTimer);
+			localSaveTimer = null;
+		}
+	}
+
+	function scheduleLocalSave(source: string) {
+		if (!browser || !localStorageKey || isCodeReadOnly) {
+			return;
+		}
+		clearLocalSaveTimer();
+		localSaveTimer = setTimeout(() => {
+			localSaveTimer = null;
+			const savedAtMs = Date.now();
+			writeLocalDraftToStorage(localStorageKey, {
+				source,
+				savedAt: savedAtMs
+			});
+			lastLocalSavedAt = savedAtMs;
+		}, LOCAL_SAVE_INTERVAL_MS);
+	}
+
+	function flushLocalDraftImmediate(source?: string) {
+		if (!browser || !localStorageKey) {
+			return;
+		}
+		clearLocalSaveTimer();
+		const currentSource = source ?? monacoEditor?.getValue() ?? rightText ?? '';
+		const savedAtMs = Date.now();
+		writeLocalDraftToStorage(localStorageKey, {
+			source: currentSource,
+			savedAt: savedAtMs
+		});
+		lastLocalSavedAt = savedAtMs;
+	}
+
+	function scheduleAutosave(reason = 'autosave') {
+		if (!browser || isCodeReadOnly) {
+			return;
+		}
+		clearAutosaveTimer();
+		autosaveTimer = setTimeout(() => {
+			autosaveTimer = null;
+			void persistCode(reason).catch(() => {});
+		}, AUTOSAVE_INTERVAL_MS);
+	}
+
+	async function persistCode(reason: string, options?: PersistCodeOptions): Promise<void> {
+		if (!browser) {
+			return;
+		}
+
+		if (isPersistingCode && pendingSavePromise) {
+			try {
+				await pendingSavePromise;
+			} catch {
+				// ignore previous failure; continue with new attempt
+			}
+		}
+
+	const source = monacoEditor?.getValue() ?? rightText ?? '';
+	const desiredRunStatus = options?.runStatus ?? null;
+	const runStatusChanged =
+		desiredRunStatus !== null && desiredRunStatus !== undefined && desiredRunStatus !== lastRunStatus;
+	const shouldSkip =
+			!options?.force &&
+			!hasPendingChanges &&
+			source === lastSavedSource &&
+			(!runStatusChanged || desiredRunStatus === null || desiredRunStatus === undefined);
+	if (shouldSkip) {
+		return;
+	}
+
+	const now = new Date();
+	const runAt = options?.runAt ?? (runStatusChanged ? now : null);
+	isPersistingCode = true;
+	clearAutosaveTimer();
+	if (options?.force) {
+		flushLocalDraftImmediate(source);
+	}
+
+	const updatePromise = sessionStateStore
+		.updateItem(
+			data.planItem.id,
+				(current) => {
+					const nextStatus =
+						current.status === 'not_started' && !options?.markCompleted
+							? 'in_progress'
+							: options?.markCompleted
+								? 'completed'
+								: current.status;
+
+					let nextCode: PlanItemCodeState = {
+						language: current.code?.language ?? CODE_LANGUAGE,
+						source,
+						savedAt: now
+					};
+
+					if (runStatusChanged) {
+						nextCode = {
+							...nextCode,
+							lastRunStatus: desiredRunStatus ?? undefined,
+							lastRunAt: runAt ?? now
+						};
+					} else if (runAt) {
+						nextCode = {
+							...nextCode,
+							lastRunAt: runAt
+						};
+					}
+
+					const next: PlanItemState = {
+						...current,
+						status: nextStatus,
+						code: nextCode
+					};
+
+					if (current.quiz) {
+						next.quiz = current.quiz;
+					}
+
+					if (!current.startedAt) {
+						next.startedAt = now;
+					} else if (current.startedAt) {
+						next.startedAt = current.startedAt;
+					}
+
+					if (options?.markCompleted) {
+						next.completedAt = current.completedAt ?? now;
+					} else if (current.completedAt) {
+						next.completedAt = current.completedAt;
+					}
+
+					return next;
+				},
+				{ keepalive: options?.keepalive }
+			)
+			.then((result) => {
+				lastSavedSource = source;
+				lastSavedAt = now;
+			hasPendingChanges = false;
+			saveError = null;
+			if (runStatusChanged) {
+				lastRunStatus = desiredRunStatus;
+				lastRunAt = runAt ?? now;
+			} else if (runAt) {
+				lastRunAt = runAt;
+			}
+			if (options?.markCompleted) {
+				completionRecorded = true;
+			}
+			if (!options?.force) {
+				clearLocalSaveTimer();
+			}
+			flushLocalDraftImmediate(source);
+			return result;
+		})
+			.catch((error) => {
+				console.error('Failed to persist code', { reason, error });
+				saveError = SAVE_ERROR_MESSAGE;
+				throw error;
+			})
+			.finally(() => {
+				isPersistingCode = false;
+			});
+
+		const trackedPromise = updatePromise
+			.then(() => {})
+			.catch(() => {})
+			.finally(() => {
+				if (pendingSavePromise === trackedPromise) {
+					pendingSavePromise = null;
+				}
+			});
+		pendingSavePromise = trackedPromise;
+
+		await updatePromise;
+	}
+
+	function handleLocalCodeChange(value: string) {
+		if (isCodeReadOnly) {
+			return;
+		}
+		rightText = value;
+		if (isApplyingRemoteSource) {
+			return;
+		}
+		const changed = value !== lastSavedSource;
+		hasPendingChanges = changed;
+		if (changed) {
+			scheduleAutosave('edit');
+			scheduleLocalSave(value);
+		} else {
+			clearAutosaveTimer();
+			clearLocalSaveTimer();
+		}
 	}
 
 	function startPyodidePreload() {
@@ -267,6 +672,22 @@
 			errorMessage: null,
 			runtimeMs: null
 		}));
+	}
+
+	function deriveRunOutcome(results: TestRunResult[]): PlanItemCodeState['lastRunStatus'] | null {
+		if (!results || results.length === 0) {
+			return null;
+		}
+		if (results.some((result) => result.status === 'error')) {
+			return 'error';
+		}
+		if (results.some((result) => result.status === 'failed')) {
+			return 'failed';
+		}
+		if (results.every((result) => result.status === 'passed')) {
+			return 'passed';
+		}
+		return null;
 	}
 
 	type RunExecutionResult = {
@@ -525,13 +946,19 @@
 		currentWorkerRun = null;
 	}
 
-	function handleRunClick() {
-		if (isRunning) {
-			return;
-		}
+	async function startRun(reason: 'run' | 'submit'): Promise<PlanItemCodeState['lastRunStatus'] | null> {
 		if (!browser) {
 			console.warn('Code execution is only available in the browser runtime.');
-			return;
+			return null;
+		}
+		if (isRunning || isCodeReadOnly) {
+			return null;
+		}
+
+		try {
+			await persistCode(`${reason}-pre-run`, { force: true });
+		} catch (error) {
+			console.warn('Failed to sync code before run', error);
 		}
 
 		runErrorMessage = null;
@@ -549,26 +976,58 @@
 		runStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 		runtimeMs = null;
 
-		void runAllTests(source)
-			.then(() => {
-				const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-				runtimeMs = finishedAt - runStartedAt;
-				if (stopRequested) {
-					runStatus = runStatus === 'error' ? 'error' : 'stopped';
-				} else if (runStatus !== 'error') {
-					runStatus = 'completed';
+		let sawError = false;
+
+		try {
+			await runAllTests(source);
+			const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+			runtimeMs = finishedAt - runStartedAt;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			runStatus = 'error';
+			runErrorMessage = message;
+			sawError = true;
+		} finally {
+			isRunning = false;
+			isPyodideLoading = false;
+		}
+
+		const outcome = deriveRunOutcome(testResults);
+		const sawRunError = sawError || outcome === 'error';
+		if (!sawRunError) {
+			runStatus = stopRequested ? 'stopped' : 'completed';
+		} else {
+			runStatus = 'error';
+		}
+		const outcomeStatus: PlanItemCodeState['lastRunStatus'] | null = sawRunError
+			? 'error'
+			: outcome;
+
+		const runRecordedAt = new Date();
+		void persistCode(`${reason}-complete`, {
+			force: true,
+			runStatus: outcomeStatus ?? undefined,
+			runAt: runRecordedAt
+		}).catch(() => {});
+
+		return outcomeStatus;
+	}
+
+	function handleRunClick() {
+		if (isRunning || isSubmitting || isCodeReadOnly) {
+			return;
+		}
+		void startRun('run')
+			.then((outcome) => {
+				if (outcome === 'passed') {
+					submitError = null;
 				}
-				isRunning = false;
-				isPyodideLoading = false;
 			})
 			.catch((error) => {
-				const message = error instanceof Error ? error.message : String(error);
-				runStatus = 'error';
-				runErrorMessage = message;
-				isRunning = false;
-				isPyodideLoading = false;
+				console.error('Run failed', error);
 			});
 	}
+
 	function handleStopClick() {
 		if (!isRunning) {
 			return;
@@ -598,14 +1057,85 @@
 		runStartedAt = 0;
 	}
 
-	function handleSubmitClick() {
-		if (completionRecorded) {
+	async function handleSubmitClick() {
+		if (completionRecorded || isSubmitting || isRunning || isCodeReadOnly) {
 			return;
 		}
-		completionRecorded = true;
-		void sessionStateStore.markStatus(data.planItem.id, 'completed', {
-			completedAt: new Date()
+
+		isSubmitting = true;
+		submitError = null;
+
+		try {
+			const outcome = await startRun('submit');
+			if (outcome !== 'passed') {
+				submitError = SUBMIT_REQUIREMENT_MESSAGE;
+				return;
+			}
+
+			if (pendingSavePromise) {
+				try {
+					await pendingSavePromise;
+				} catch {
+					// Ignore autosave failure; submission will attempt again.
+				}
+			}
+
+			clearAutosaveTimer();
+
+			const submissionAt = new Date();
+			const source = getCurrentSource();
+			const result = await sessionStateStore.markStatus(
+				data.planItem.id,
+				'completed',
+				{
+					completedAt: submissionAt,
+					code: {
+						language: CODE_LANGUAGE,
+						source,
+						savedAt: submissionAt,
+						lastRunStatus: 'passed',
+						lastRunAt: submissionAt
+					}
+				}
+			);
+
+			lastSavedSource = source;
+			lastSavedAt = submissionAt;
+			lastRunStatus = 'passed';
+			lastRunAt = submissionAt;
+			hasPendingChanges = false;
+			saveError = null;
+			clearLocalSaveTimer();
+			flushLocalDraftImmediate(source);
+			completionRecorded = true;
+			celebrationXpAwarded = result?.xpAwarded ?? 0;
+			celebrationStats = result?.stats ?? null;
+			celebrationAlreadyCompleted = result?.alreadyCompleted ?? false;
+			celebrationOpen = true;
+		} catch (error) {
+			console.error('Submit failed', error);
+			submitError = SUBMIT_GENERIC_ERROR_MESSAGE;
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	function handleCelebrationConfirm() {
+		if (celebrationClosingViaHandler) {
+			return;
+		}
+		celebrationClosingViaHandler = true;
+		celebrationOpen = false;
+		void goto(`/code/${data.sessionId}`).finally(() => {
+			celebrationClosingViaHandler = false;
 		});
+	}
+
+	function handleCelebrationOpenChange(open: boolean) {
+		celebrationOpen = open;
+		if (!open && !celebrationClosingViaHandler) {
+			void goto(`/code/${data.sessionId}`);
+		}
 	}
 
 	const FORMAT_ENDPOINT = '/api/format';
@@ -731,13 +1261,30 @@
 		selectedResult = selectedTestIndex === null ? null : (testResults[selectedTestIndex] ?? null);
 	}
 
+	$: if (monacoEditor) {
+		monacoEditor.updateOptions({ readOnly: isCodeReadOnly });
+	}
+
 	$: if (problem.id !== currentProblemId) {
 		currentProblemId = problem.id;
 		revealedHintCount = 0;
-		rightText = DEFAULT_CODE;
-		if (monacoEditor && monacoEditor.getValue() !== rightText) {
-			monacoEditor.setValue(rightText);
+		const resetSource = planItemState?.code?.source ?? DEFAULT_CODE;
+		const resetSavedAt = planItemState?.code?.savedAt ?? null;
+		const resetRunStatus = planItemState?.code?.lastRunStatus ?? null;
+		const resetRunAt = planItemState?.code?.lastRunAt ?? null;
+		clearAutosaveTimer();
+		clearLocalSaveTimer();
+		isApplyingRemoteSource = true;
+		rightText = resetSource;
+		lastSavedSource = resetSource;
+		lastSavedAt = resetSavedAt;
+		lastRunStatus = resetRunStatus;
+		lastRunAt = resetRunAt;
+		hasPendingChanges = false;
+		if (monacoEditor && monacoEditor.getValue() !== resetSource) {
+			monacoEditor.setValue(resetSource);
 		}
+		isApplyingRemoteSource = false;
 		if (activeWorker) {
 			activeWorker.terminate();
 			activeWorker = null;
@@ -753,6 +1300,11 @@
 		testResults = [];
 		selectedTestIndex = null;
 		selectedResult = null;
+		if (browser && localStorageKey) {
+			const savedAtMs = resetSavedAt ? resetSavedAt.getTime() : Date.now();
+			writeLocalDraftToStorage(localStorageKey, { source: resetSource, savedAt: savedAtMs });
+			lastLocalSavedAt = savedAtMs;
+		}
 	}
 
 	$: if (planItemState?.status === 'completed' && !completionRecorded) {
@@ -765,6 +1317,19 @@
 		let mediaQuery: MediaQueryList | null = null;
 		let applyTheme: (() => void) | null = null;
 		let keybindingDisposables: IDisposable[] = [];
+		const handleBeforeUnload = () => {
+			flushLocalDraftImmediate();
+			if (!hasPendingChanges && !isPersistingCode) {
+				return;
+			}
+			void persistCode('beforeunload', { keepalive: true, force: true }).catch(() => {});
+		};
+
+		window.addEventListener('beforeunload', handleBeforeUnload);
+		beforeNavigate(() => {
+			flushLocalDraftImmediate();
+			void persistCode('navigate', { force: true }).catch(() => {});
+		});
 
 		startPyodidePreload();
 		if (!hasMarkedStart) {
@@ -834,8 +1399,9 @@
 
 			monacoEditor = monaco.editor.create(editorContainer, {
 				value: rightText,
-				language: 'python',
+				language: CODE_LANGUAGE,
 				automaticLayout: true,
+				readOnly: isCodeReadOnly,
 				minimap: { enabled: false },
 				fontSize: 15,
 				fontFamily: '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, monospace',
@@ -864,7 +1430,8 @@
 			});
 
 			subscription = monacoEditor.onDidChangeModelContent(() => {
-				rightText = monacoEditor?.getValue() ?? '';
+				const value = monacoEditor?.getValue() ?? '';
+				handleLocalCodeChange(value);
 			});
 		})();
 
@@ -887,6 +1454,9 @@
 		};
 
 		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+			clearLocalSaveTimer();
+			flushLocalDraftImmediate();
 			disposeEditor?.();
 			disposeEditor = null;
 		};
@@ -901,6 +1471,12 @@
 			cleanupPreloadWorker();
 		}
 		isPyodideLoading = false;
+		clearAutosaveTimer();
+		clearLocalSaveTimer();
+		flushLocalDraftImmediate();
+		if (hasPendingChanges || isPersistingCode) {
+			void persistCode('destroy', { keepalive: true, force: true }).catch(() => {});
+		}
 		stopSessionState();
 		sessionStateStore.stop();
 	});
@@ -1095,10 +1671,13 @@
 												type: 'button' as const,
 												class: cn(
 													formatButtonClasses(formatFailed),
-													isFormatting || isRunning ? 'pointer-events-none opacity-60' : ''
+													isFormatting || isRunning || isCodeReadOnly
+														? 'pointer-events-none opacity-60'
+														: ''
 												),
-												disabled: isFormatting || isRunning,
-												'aria-disabled': isFormatting || isRunning ? true : undefined,
+												disabled: isFormatting || isRunning || isCodeReadOnly,
+												'aria-disabled':
+													isFormatting || isRunning || isCodeReadOnly ? true : undefined,
 												'aria-busy': isFormatting ? true : undefined,
 												'aria-invalid': formatFailed ? true : undefined,
 												'aria-label': formatTooltipLabel,
@@ -1116,7 +1695,8 @@
 									<Tooltip.Root>
 										<Tooltip.Trigger>
 											{#snippet child({ props })}
-												{@const runButtonDisabled = isPyodideLoading && !isRunning}
+												{@const runButtonDisabled =
+													(isPyodideLoading && !isRunning) || isSubmitting || isCodeReadOnly}
 												{@const runButtonVisualBusy = isPyodideLoading && !isRunning}
 												{@const mergedProps = mergeProps(props ?? {}, {
 													type: 'button' as const,
@@ -1125,7 +1705,7 @@
 													onclick: isRunning ? handleStopClick : handleRunClick,
 													disabled: runButtonDisabled,
 													'aria-disabled': runButtonDisabled ? true : undefined,
-													'aria-busy': isPyodideLoading ? true : undefined,
+													'aria-busy': isPyodideLoading || isRunning ? true : undefined,
 													'aria-pressed': isRunning ? true : undefined
 												})}
 												<button {...mergedProps}>
@@ -1155,14 +1735,21 @@
 												{@const mergedProps = mergeProps(props ?? {}, {
 													type: 'button' as const,
 													class: submitButtonClasses,
-													'aria-label': submitTooltipLabel,
-													disabled: isRunning || completionRecorded,
-													'aria-disabled': isRunning || completionRecorded ? true : undefined,
+													'aria-label': isSubmitting ? 'Submitting code' : submitTooltipLabel,
+													disabled:
+														isRunning || completionRecorded || isSubmitting || isCodeReadOnly,
+													'aria-disabled':
+														isRunning || completionRecorded || isSubmitting || isCodeReadOnly
+															? true
+															: undefined,
 													onclick: handleSubmitClick,
+													'aria-busy': isSubmitting ? true : undefined,
 													'aria-pressed': completionRecorded ? true : undefined
 												})}
 												<button {...mergedProps}>
-													<span class="hidden sm:inline">Submit</span>
+													<span class={isSubmitting ? 'inline' : 'hidden sm:inline'}>
+														{isSubmitting ? 'Submitting…' : 'Submit'}
+													</span>
 													<Send class="size-4" />
 												</button>
 											{/snippet}
@@ -1231,6 +1818,20 @@
 													class="ml-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
 												>
 													{runErrorMessage}
+												</div>
+											{/if}
+											{#if saveError}
+												<div
+													class="ml-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+												>
+													{saveError}
+												</div>
+											{/if}
+											{#if submitError}
+												<div
+													class="ml-2 rounded-md border border-amber-300/50 bg-amber-200/30 px-3 py-2 text-xs text-amber-900 dark:border-amber-200/40 dark:bg-amber-500/20 dark:text-amber-100"
+												>
+													{submitError}
 												</div>
 											{/if}
 											<div class="ml-2 flex flex-wrap gap-2">
@@ -1340,6 +1941,40 @@
 		</div>
 	</section>
 </Tooltip.Provider>
+
+<Dialog.Root open={celebrationOpen} onOpenChange={handleCelebrationOpenChange}>
+	<Dialog.Content
+		class="celebration-dialog max-w-md rounded-3xl border border-border/70 bg-background/95 p-8 text-center shadow-[0_30px_60px_rgba(15,23,42,0.25)] dark:border-border/40 dark:bg-background/98 dark:shadow-[0_30px_60px_rgba(2,6,23,0.55)]"
+		hideClose
+	>
+		<div class="celebration-body space-y-5">
+			<div class="celebration-emoji text-5xl" aria-hidden="true">{celebrationEmoji}</div>
+			<h2 class="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+				{celebrationTitle}
+			</h2>
+			<p class="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground md:text-base">
+				{celebrationMessage}
+			</p>
+			<div class="flex flex-col items-center gap-2 font-medium text-muted-foreground">
+				{#if celebrationXpAwarded > 0}
+					<span class="celebration-xp-pill">
+						+{celebrationXpAwarded.toLocaleString()} XP
+					</span>
+				{:else}
+					<span class="celebration-xp-pill celebration-xp-pill--muted">Progress saved</span>
+				{/if}
+				{#if celebrationStats}
+					<span class="text-xs text-muted-foreground/70">
+						Total XP: {celebrationStats.xp.toLocaleString()}
+					</span>
+				{/if}
+			</div>
+			<Button class="celebration-ok w-full sm:w-auto" onclick={handleCelebrationConfirm}>
+				OK
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
 <style lang="postcss">
 	/*
@@ -1569,5 +2204,46 @@
 		flex: 1 1 auto;
 		height: 100%;
 		min-height: 0;
+	}
+
+	.celebration-body {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.celebration-emoji {
+		filter: drop-shadow(0 18px 28px rgba(250, 204, 21, 0.35));
+	}
+
+	.celebration-xp-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.45rem 1.2rem;
+		border-radius: 9999px;
+		background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.08));
+		color: #047857;
+		font-size: 0.85rem;
+	}
+
+	:global([data-theme='dark'] .celebration-xp-pill) {
+		background: linear-gradient(135deg, rgba(34, 197, 94, 0.35), rgba(34, 197, 94, 0.18));
+		color: #bbf7d0;
+	}
+
+	.celebration-xp-pill--muted {
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0.08));
+		color: #1d4ed8;
+	}
+
+	:global([data-theme='dark'] .celebration-xp-pill--muted) {
+		background: linear-gradient(135deg, rgba(96, 165, 250, 0.3), rgba(59, 130, 246, 0.16));
+		color: #bfdbfe;
+	}
+
+	:global(.celebration-ok) {
+		min-width: 8rem;
+		font-weight: 600;
 	}
 </style>

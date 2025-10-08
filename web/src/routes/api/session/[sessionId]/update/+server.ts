@@ -6,6 +6,7 @@ import {
 	DEFAULT_USER_STATS,
 	PlanItemStateSchema,
 	UserStatsSchema,
+	type PlanItem,
 	type PlanItemState,
 	type UserStats
 } from '@spark/schemas';
@@ -27,17 +28,53 @@ const requestSchema = z.object({
 		.optional()
 });
 
+type AwardingContext =
+	| {
+			kind: 'quiz';
+			progressDocId: string;
+			xpAvailable: number;
+			quizId: string;
+	  }
+	| {
+			kind: 'code';
+			progressDocId: string;
+			xpAvailable: number;
+	  }
+	| null;
+
 const QUESTION_XP: Record<string, number> = Object.freeze({
 	'multiple-choice': 10,
 	'type-answer': 12,
 	'info-card': 5
 });
 
+const CODE_PROBLEM_XP: Record<string, number> = Object.freeze({
+	warmup: 20,
+	intro: 30,
+	easy: 40,
+	medium: 60,
+	hard: 80
+});
+
+const DEFAULT_CODE_XP = 40;
+
 function computeQuizXp(quiz: Awaited<ReturnType<typeof getUserQuiz>>): number {
 	if (!quiz) {
 		return 0;
 	}
 	return quiz.questions.reduce((total, question) => total + (QUESTION_XP[question.kind] ?? 0), 0);
+}
+
+function computeCodeXp(planItem: PlanItem, state: PlanItemState): number {
+	if (planItem.kind !== 'problem' || state.status !== 'completed') {
+		return 0;
+	}
+	const source = state.code?.source;
+	if (!source || source.trim().length === 0) {
+		return 0;
+	}
+	const difficultyKey = planItem.difficulty?.toLowerCase() ?? '';
+	return CODE_PROBLEM_XP[difficultyKey] ?? DEFAULT_CODE_XP;
 }
 
 // Note: server no longer computes/merges session state transitions.
@@ -108,7 +145,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'not_found', message: 'Plan item not found in session' }, { status: 404 });
 	}
 
-	let xpAvailable = 0;
+	let awardingContext: AwardingContext = null;
 	if (parsedBody.quizCompletion) {
 		if (planItem.kind !== 'quiz') {
 			return json(
@@ -126,15 +163,32 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (!quiz) {
 			return json({ error: 'not_found', message: 'Quiz definition not found' }, { status: 404 });
 		}
-		xpAvailable = computeQuizXp(quiz);
+		const xpAvailable = computeQuizXp(quiz);
+		awardingContext = {
+			kind: 'quiz',
+			progressDocId: `quiz:${sessionId}:${parsedBody.planItemId}`,
+			xpAvailable,
+			quizId: parsedBody.quizCompletion.quizId
+		};
+	} else if (
+		planItem.kind === 'problem' &&
+		incomingState.status === 'completed' &&
+		typeof incomingState.code?.source === 'string' &&
+		incomingState.code.source.trim().length > 0
+	) {
+		const xpAvailable = computeCodeXp(planItem, incomingState);
+		if (xpAvailable > 0) {
+			awardingContext = {
+				kind: 'code',
+				progressDocId: `code:${sessionId}:${parsedBody.planItemId}`,
+				xpAvailable
+			};
+		}
 	}
 
 	const firestore = getFirebaseAdminFirestore();
 	const userDocRef = firestore.collection('spark').doc(userId);
 	const sessionStateDocRef = userDocRef.collection('state').doc(sessionId);
-	const progressDocRef = userDocRef
-		.collection('progress')
-		.doc(`quiz:${sessionId}:${parsedBody.planItemId}`);
 
 	const result = await firestore.runTransaction(async (tx) => {
 		// Reads must occur before all writes in a transaction.
@@ -144,7 +198,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// Pre-read for XP awarding if applicable
 		let parsedStats: UserStats | null = null;
-		if (parsedBody.quizCompletion) {
+		let progressDocRef: FirebaseFirestore.DocumentReference | null = null;
+		if (awardingContext && awardingContext.xpAvailable > 0) {
+			progressDocRef = userDocRef.collection('progress').doc(awardingContext.progressDocId);
 			const progressSnapshot = await tx.get(progressDocRef);
 			alreadyCompleted = progressSnapshot.exists;
 			if (!alreadyCompleted) {
@@ -162,15 +218,35 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			[`items.${parsedBody.planItemId}`]: incomingState
 		});
 
-		if (parsedBody.quizCompletion && !alreadyCompleted) {
-			xpAwarded = xpAvailable;
-			tx.set(progressDocRef, {
+		if (
+			awardingContext &&
+			awardingContext.xpAvailable > 0 &&
+			progressDocRef &&
+			!alreadyCompleted
+		) {
+			xpAwarded = awardingContext.xpAvailable;
+			const baseProgressPayload = {
 				sessionId,
 				planItemId: parsedBody.planItemId,
-				quizId: parsedBody.quizCompletion.quizId,
 				xpAwarded,
 				createdAt: FieldValue.serverTimestamp()
-			});
+			};
+
+			if (awardingContext.kind === 'quiz') {
+				tx.set(progressDocRef, {
+					...baseProgressPayload,
+					quizId: awardingContext.quizId
+				});
+			} else {
+				const problemDifficulty =
+					planItem.kind === 'problem' ? planItem.difficulty ?? null : null;
+				tx.set(progressDocRef, {
+					...baseProgressPayload,
+					problemId: planItem.id,
+					difficulty: problemDifficulty,
+					language: incomingState.code?.language ?? null
+				});
+			}
 
 			if (parsedStats) {
 				nextStats = {
