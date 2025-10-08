@@ -90,13 +90,19 @@
 
 	const baseTimeline = $derived(
 		sessionPlan.map<TimelineStep>((item) => {
-			const icon = item.icon ?? (item.kind === 'quiz' ? '📝' : '🧠');
-			const meta = item.meta ?? (item.kind === 'quiz' ? 'Quiz' : 'Problem');
+			const icon =
+				item.icon ??
+				(item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
+			const meta =
+				item.meta ??
+				(item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
 			const description = item.summary ?? item.description ?? '';
 			const href =
 				item.kind === 'quiz'
 					? `/code/${sessionId}/quiz/${item.id}`
-					: `/code/${sessionId}/p/${item.id}`;
+					: item.kind === 'problem'
+						? `/code/${sessionId}/p/${item.id}`
+						: `/code/${sessionId}/m/${item.id}`;
 			return {
 				key: item.id,
 				title: item.title,

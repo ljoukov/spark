@@ -25,9 +25,15 @@ const ProblemPlanItemSchema = planItemBase.extend({
   topic: optionalTrimmed,
 });
 
+const MediaPlanItemSchema = planItemBase.extend({
+  kind: z.literal("media"),
+  duration: z.number().nonnegative().optional(),
+});
+
 export const PlanItemSchema = z.discriminatedUnion("kind", [
   QuizPlanItemSchema,
   ProblemPlanItemSchema,
+  MediaPlanItemSchema,
 ]);
 
 export type PlanItem = z.infer<typeof PlanItemSchema>;
