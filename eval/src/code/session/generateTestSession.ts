@@ -42,92 +42,62 @@ const MIN_LINE_DURATION_SEC = 1.4;
 
 const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
-    slide: "# Dynamic Programming\nBreak · Store · Reuse",
+    slide: "# Bellman’s Pitch\nLaramie, Wyoming · Sept 2, 1954",
     narration: [
       {
         speaker: "m",
         text:
-          "Welcome. Today’s session builds practical intuition for dynamic programming: breaking problems into smaller pieces, storing answers, and reusing them to avoid repeated work.",
-      },
-      {
-        speaker: "f",
-        text:
-          "Think of it like LEGO: once you’ve built a sturdy mini‑module, you don’t rebuild it—you snap it in again whenever you need that shape.",
+          "It’s September 2, 1954, in Laramie, Wyoming. Richard Bellman, a mathematician from the RAND Corporation, is at the American Mathematical Society’s summer meeting. He’s there to introduce a new method for making a series of decisions. He calls it ‘dynamic programming’ and unveils a core idea now known as the ‘principle of optimality’.",
       },
     ],
   },
   {
-    slide: "### A short story\nRichard Bellman, 1950s",
+    slide: "### Why the Name\nA phrase built to survive",
     narration: [
-      {
-        speaker: "m",
-        text:
-          "The term ‘dynamic programming’ dates to the 1950s. Richard Bellman used ‘programming’ in the classical sense of planning, and ‘dynamic’ to emphasize decisions unfolding over stages.",
-      },
       {
         speaker: "f",
         text:
-          "The big idea stuck because it solves real problems—from routing and scheduling to bioinformatics. Reusing partial answers beats starting from scratch.",
+          "That name, ‘dynamic programming,’ wasn’t for show. His boss back in Washington, Secretary of Defense Charles Wilson, had a visceral dislike for the word ‘research’. Bellman needed to keep the funding flowing for his work at RAND, a military think tank. So, he chose his words carefully: ‘dynamic’ sounded powerful, and ‘programming’ was just a synonym for planning. It was a clever disguise for some very serious math.",
       },
     ],
   },
   {
-    slide: "### Core intuition\nOverlapping subproblems",
+    slide: "### The Real Problem\nAir Force logistics, not toy paths",
     narration: [
       {
         speaker: "m",
         text:
-          "DP pays off when the same small question appears repeatedly. We capture a clear ‘state’, define base cases, and ensure each state is solved once.",
-      },
-      {
-        speaker: "f",
-        text:
-          "It’s like hiking with cairns. Mark each tricky fork once, then every traveler benefits from that marker without re‑exploring the whole trail.",
+          "The problem Bellman was tackling wasn’t about getting from one town to another. It was about much higher stakes: figuring out the best way to manage Air Force logistics. Imagine deciding how many spare engines to stock for bomber fleets across the country to keep them ready, without wasting millions on parts that just sit in a warehouse. This was a real issue RAND was working on in the 1950s.",
       },
     ],
   },
   {
-    slide: "### Two friendly styles\nMemoization vs. Tabulation",
+    slide: "### Solve Backwards\nGreedy fails; goals guide decisions",
     narration: [
-      {
-        speaker: "m",
-        text:
-          "Top‑down memoization caches answers to recursive calls. Bottom‑up tabulation fills a small table from simple to harder cases. Both reuse results; only the direction differs.",
-      },
       {
         speaker: "f",
         text:
-          "Memoization feels like asking a friend, ‘Have we seen this exact puzzle?’ Tabulation is packing your bag in order—socks before shoes—so each step is ready for the next.",
+          "Think about it like this: if you order too few spare parts, a bomber is grounded. If you order too many, you’ve wasted a fortune that could have been used elsewhere. And the decision you make this month affects what you’ll need next month, and the month after that. A greedy approach—just ordering the cheapest parts now—could lead to disaster later. Bellman’s breakthrough was to solve the problem backward. Start from the end goal—total fleet readiness at the lowest cost—and work your way back, making the optimal decision at each step. By solving these smaller, overlapping problems just once and remembering the answers, you build the perfect plan.",
       },
     ],
   },
   {
-    slide: "### Today’s path\nWarm‑up → Ideas → Practice",
+    slide: "### Principle of Optimality\nBreak, store, reuse",
     narration: [
       {
         speaker: "m",
         text:
-          "We’ll start with a warm‑up quiz, review two idea cards, then practice with Coin Change (combinations) and Decode Ways (string DP). A final review locks it in.",
-      },
-      {
-        speaker: "f",
-        text:
-          "You’ll see the same rhythm: define the state, set tiny base cases, and write a transition that reuses what you already know.",
+          "The essence of dynamic programming is this: solve a complex problem by breaking it down into simpler, overlapping subproblems. You find the optimal solution to each subproblem once and store it. The key insight, Bellman’s ‘principle of optimality,’ is that any optimal plan must be built from optimal smaller plans.",
       },
     ],
   },
   {
-    slide: "### Two examples\nCoin Change · Decode Ways",
+    slide: "### Impact and Legacy\nFrom economics to aerospace",
     narration: [
-      {
-        speaker: "m",
-        text:
-          "In Coin Change, we count combinations by iterating coins on the outside so order doesn’t inflate the count. In Decode Ways, we step through a string and combine 1‑ and 2‑digit choices while handling zeros carefully.",
-      },
       {
         speaker: "f",
         text:
-          "If Coin Change is arranging bills to reach a total, Decode Ways is reading a secret note where characters can pair up. The table keeps both stories consistent.",
+          "Bellman’s deliberately blandly named method went on to be used in everything from economics to aerospace engineering. He even coined the phrase ‘curse of dimensionality’ to describe the explosion of possibilities in complex problems. That day in Wyoming, with a name designed to fly under the radar, he gave the world a powerful new way to think about the future.",
       },
     ],
   },
