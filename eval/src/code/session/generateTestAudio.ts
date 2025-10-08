@@ -23,92 +23,47 @@ const TTS_ONLY_FLAG = "--ttsOnly";
 function buildIntro(): MediaSegment[] {
   const segments: MediaSegment[] = [
     {
-      slide: "# Dynamic Programming\nBreak · Store · Reuse",
+      slide: "# Toggle Truth\nBell Labs Origins",
       narration: [
         {
           speaker: "m",
           text:
-            "Welcome. Today’s session builds practical intuition for dynamic programming: breaking problems into smaller pieces, storing answers, and reusing them to avoid repeated work.",
+            "Bell Labs, summer 1947. Richard Hamming is a young mathematician whose programs keep dying on the relay computer every weekend. The card reader flags “bad data,” then quits. Days of work are lost. He wants the machine not just to complain, but to rescue the result.",
         },
         {
           speaker: "f",
           text:
-            "Think of it like LEGO: once you’ve built a sturdy mini‑module, you don’t rebuild it—you snap it in again whenever you need that shape.",
+            "Picture a long line of light switches, one for each binary digit. A one flips its switch, a zero leaves it alone. At the end you peek: is the final lamp on or off? That on-ness is called parity. It’s the odd-or-even mood of the bits.",
         },
       ],
     },
     {
-      slide: "### A short story\nRichard Bellman, 1950s",
+      slide: "## XOR Intuition\nFlip Once, Notice Twice",
       narration: [
         {
           speaker: "m",
           text:
-            "The term ‘dynamic programming’ dates to the 1950s. Richard Bellman used ‘programming’ in the classical sense of planning, and ‘dynamic’ to emphasize decisions unfolding over stages.",
+            "He leans on XOR—exclusive OR, a bitwise rule that compares two bits and outputs one when they differ and zero when they match. Bitwise means it works one digit at a time. XOR is perfect for parity because flipping twice cancels and order doesn’t matter.",
         },
         {
           speaker: "f",
           text:
-            "The big idea stuck because it solves real problems—from routing and scheduling to bioinformatics. Reusing partial answers beats starting from scratch.",
+            "Tiny example. Data is one, zero, one, one. Flip, don’t, flip, flip. Three flips end with the lamp on, so we attach one extra bit that makes the total flips even. Send the data and that helper bit together.",
         },
       ],
     },
     {
-      slide: "### Core intuition\nOverlapping subproblems",
+      slide: "## Weekend Constraints\nNo Second Chances",
       narration: [
         {
           speaker: "m",
           text:
-            "DP pays off when the same small question appears repeatedly. We capture a clear ‘state’, define base cases, and ensure each state is solved once.",
+            "The constraint was brutal: reruns cost days, machines were scarce, and operators wouldn’t babysit errors. Naïve fixes like sending everything twice waste time and still miss some faults.",
         },
         {
           speaker: "f",
           text:
-            "It’s like hiking with cairns. Mark each tricky fork once, then every traveler benefits from that marker without re‑exploring the whole trail.",
-        },
-      ],
-    },
-    {
-      slide: "### Two friendly styles\nMemoization vs. Tabulation",
-      narration: [
-        {
-          speaker: "m",
-          text:
-            "Top‑down memoization caches answers to recursive calls. Bottom‑up tabulation fills a small table from simple to harder cases. Both reuse results; only the direction differs.",
-        },
-        {
-          speaker: "f",
-          text:
-            "Memoization feels like asking a friend, ‘Have we seen this exact puzzle?’ Tabulation is packing your bag in order—socks before shoes—so each step is ready for the next.",
-        },
-      ],
-    },
-    {
-      slide: "### Today’s path\nWarm‑up → Ideas → Practice",
-      narration: [
-        {
-          speaker: "m",
-          text:
-            "We’ll start with a warm‑up quiz, review two idea cards, then practice with Coin Change (combinations) and Decode Ways (string DP). A final review locks it in.",
-        },
-        {
-          speaker: "f",
-          text:
-            "You’ll see the same rhythm: define the state, set tiny base cases, and write a transition that reuses what you already know.",
-        },
-      ],
-    },
-    {
-      slide: "### Two examples\nCoin Change · Decode Ways",
-      narration: [
-        {
-          speaker: "m",
-          text:
-            "In Coin Change, we count combinations by iterating coins on the outside so order doesn’t inflate the count. In Decode Ways, we step through a string and combine 1‑ and 2‑digit choices while handling zeros carefully.",
-        },
-        {
-          speaker: "f",
-          text:
-            "If Coin Change is arranging bills to reach a total, Decode Ways is reading a secret note where characters can pair up. The table keeps both stories consistent.",
+            "The mini recipe is simple. First, compute the parity with XOR as you stream the bits. Second, ship the data plus that parity bit. Third, on the other end, recompute and compare; if the mood doesn’t match, you caught a slip.",
         },
       ],
     },
@@ -120,47 +75,32 @@ function buildIntro(): MediaSegment[] {
 function buildOutro(): MediaSegment[] {
   const segments: MediaSegment[] = [
     {
-      slide: "## Wrap‑up\nDP in one breath",
+      slide: "## Why It Works\nParity Invariant",
       narration: [
         {
           speaker: "m",
           text:
-            "DP is about naming the state, anchoring with base cases, and reusing computed answers via a memo or table. Today you applied that to Coin Change and Decode Ways.",
+            "The why is an invariant in plain words: flipping the same switch twice undoes itself. Therefore any single-bit slip always shows up as the wrong mood at the end.",
         },
         {
           speaker: "f",
           text:
-            "Keep the mental checklist: What’s the state? What’s the tiniest known answer? How do small answers compose into the next one?",
+            "Contrast time. OR only turns lamps on and can’t notice a lost one. Regular addition drags in carries and order; the odd-even mood gets muddied.",
         },
       ],
     },
     {
-      slide: "### What sticks\nHabits, not formulas",
+      slide: "## Legacy\nFrom Hamming Codes Onward",
       narration: [
         {
           speaker: "m",
           text:
-            "Spot overlapping subproblems early. Prefer clear states and minimal memory. Choose memoization or tabulation for clarity—both are valid.",
+            "Hamming pushed further to codes that could locate and fix the bad bit. In 1950 he published them, and they spread to memory chips, disks, and deep-space links.",
         },
         {
           speaker: "f",
           text:
-            "Like organizing tools in a small box: only keep what you reach for. The structure makes the next fix faster.",
-        },
-      ],
-    },
-    {
-      slide: "### Next steps\nPractice and explore",
-      narration: [
-        {
-          speaker: "m",
-          text:
-            "When you’re ready, try more DP patterns—stairs and grids, LIS, or knapsack. Short, focused reps will cement the skill.",
-        },
-        {
-          speaker: "f",
-          text:
-            "One more small session now beats a long one later. See you in the next lesson.",
+            "Memorable line? Flip twice, get back. Outcome? Hamming turned weekend failures into reliable computing, and XOR became the quiet hero behind it.",
         },
       ],
     },
