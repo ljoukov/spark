@@ -9,8 +9,8 @@ import {
 import {
   SessionMediaDocSchema,
   type SessionMediaDoc,
-  type SessionMediaSlide,
-  type SessionMediaCaption,
+  type SessionMediaImage,
+  type SessionMediaNarration,
 } from "@spark/schemas";
 import type { SessionAudioResult } from "./audio";
 import type { MediaSegment } from "./schemas";
@@ -40,29 +40,40 @@ function roundTime(value: number): number {
   return Math.round(safe * 1000) / 1000;
 }
 
-function buildSlides(
+function normaliseImageStoragePath(imagePath: string): string {
+  const path = imagePath.trim();
+  if (!path) {
+    return "";
+  }
+  if (path.startsWith("/")) {
+    return path;
+  }
+  return `/${path}`;
+}
+
+function buildImages(
   segments: readonly MediaSegment[],
   audio: SessionAudioResult
-): SessionMediaSlide[] {
+): SessionMediaImage[] {
   return segments.map((segment, index) => ({
     index,
-    markdown: segment.slide,
+    storagePath: normaliseImageStoragePath(segment.image),
     startSec: roundTime(audio.slideOffsets[index] ?? 0),
     durationSec: roundTime(audio.slideDurations[index] ?? 0),
   }));
 }
 
-function buildCaptions(
+function buildNarration(
   segments: readonly MediaSegment[],
   audio: SessionAudioResult
-): SessionMediaCaption[] {
-  const captions: SessionMediaCaption[] = [];
+): SessionMediaNarration[] {
+  const narration: SessionMediaNarration[] = [];
   let offsetIndex = 0;
   for (const segment of segments) {
     for (const line of segment.narration) {
       const start = audio.lineOffsets[offsetIndex] ?? 0;
       const duration = audio.lineDurations[offsetIndex] ?? 0;
-      captions.push({
+      narration.push({
         speaker: line.speaker,
         text: line.text,
         startSec: roundTime(start),
@@ -71,7 +82,7 @@ function buildCaptions(
       offsetIndex += 1;
     }
   }
-  return captions;
+  return narration;
 }
 
 export type PublishSessionMediaInput = {
@@ -127,8 +138,8 @@ export async function publishSessionMediaClip(
     .collection("media")
     .doc(planItemId);
 
-  const slides = buildSlides(input.segments, input.audio);
-  const captions = buildCaptions(input.segments, input.audio);
+  const images = buildImages(input.segments, input.audio);
+  const narration = buildNarration(input.segments, input.audio);
   const now = Timestamp.now();
 
   const existing = await docRef.get();
@@ -146,11 +157,11 @@ export async function publishSessionMediaClip(
       durationSec: roundTime(input.audio.totalDurationSec),
       mimeType: input.audio.outputMimeType,
     },
-    slides,
-    captions,
+    images,
+    narration,
     createdAt,
     updatedAt: now,
-    metadataVersion: 1,
+    metadataVersion: 2,
   };
 
   // Validate shape before writing (convert timestamps to Date for schema parsing).

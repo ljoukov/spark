@@ -18,7 +18,7 @@ export const NarrationLineSchema = z.object({
 });
 
 export const MediaSegmentSchema = z.object({
-  slide: TrimmedString, // markdown to render on the slide
+  image: TrimmedString, // storage path or absolute URL for the segment image
   narration: z.array(NarrationLineSchema).min(1),
 });
 

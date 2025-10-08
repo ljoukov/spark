@@ -43,6 +43,8 @@ import { ensureEvalEnvLoaded } from "../../utils/paths";
 // No local audio file constants: audio is generated on the fly
 
 const AUDIO_MODEL_ID = "gemini-2.5-flash-preview-tts" as const;
+const DEFAULT_MEDIA_IMAGE =
+  "/spark/test-admin-0Rr2rEBRAg3T3SYk/sessions/dp-coin-change-decode/intro.jpeg";
 
 function formatTimestamp(seconds: number): string {
   return formatDurationSeconds(seconds);
@@ -88,7 +90,7 @@ function createConsoleProgress(label: string): AudioGenerationProgress {
 
 const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
-    slide: "# Bellman’s Pitch\nLaramie, Wyoming · Sept 2, 1954",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",
@@ -98,7 +100,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### Why the Name\nA phrase built to survive",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "f",
@@ -108,7 +110,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### The Real Problem\nAir Force logistics, not toy paths",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",
@@ -118,7 +120,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### Solve Backwards\nGreedy fails; goals guide decisions",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "f",
@@ -128,7 +130,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### Principle of Optimality\nBreak, store, reuse",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",
@@ -138,7 +140,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### Impact and Legacy\nFrom economics to aerospace",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "f",
@@ -151,7 +153,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
 
 const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
-    slide: "## Wrap‑up\nDP in one breath",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",
@@ -166,7 +168,7 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### What sticks\nHabits, not formulas",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",
@@ -181,7 +183,7 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     ],
   },
   {
-    slide: "### Next steps\nPractice and explore",
+    image: DEFAULT_MEDIA_IMAGE,
     narration: [
       {
         speaker: "m",

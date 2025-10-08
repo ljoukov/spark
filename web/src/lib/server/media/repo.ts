@@ -10,11 +10,30 @@ function normaliseStoragePath(input: string): string {
 	return input.replace(/^\/+/, '');
 }
 
+async function createSignedUrl(storagePath: string): Promise<{ url: string; expiresAt: Date }> {
+	const bucket = getFirebaseAdminBucket();
+	const file = bucket.file(normaliseStoragePath(storagePath));
+	const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+	const [url] = await file.getSignedUrl({
+		action: 'read',
+		expires: expiresAt
+	});
+	return { url, expiresAt };
+}
+
+export type SessionMediaImageWithUrl = SessionMediaDoc['images'][number] & {
+	signedUrl: string | null;
+	signedUrlExpiresAt: Date | null;
+	url: string | null;
+};
+
 export type SessionMediaWithUrl = SessionMediaDoc & {
 	audio: SessionMediaDoc['audio'] & {
 		signedUrl: string | null;
 		signedUrlExpiresAt: Date | null;
+		url: string | null;
 	};
+	images: SessionMediaImageWithUrl[];
 };
 
 export async function getSessionMedia(
@@ -56,37 +75,61 @@ export async function getSessionMedia(
 		throw error;
 	}
 
-	let signedUrl: string | null = null;
-	let signedUrlExpiresAt: Date | null = null;
+	let audioSignedUrl: string | null = null;
+	let audioSignedUrlExpiresAt: Date | null = null;
 
 	if (parsed.audio.storagePath) {
 		try {
-			const bucket = getFirebaseAdminBucket();
-			const file = bucket.file(normaliseStoragePath(parsed.audio.storagePath));
-			const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-			const [url] = await file.getSignedUrl({
-				action: 'read',
-				expires: expiresAt
-			});
-			signedUrl = url;
-			signedUrlExpiresAt = expiresAt;
+			const { url, expiresAt } = await createSignedUrl(parsed.audio.storagePath);
+			audioSignedUrl = url;
+			audioSignedUrlExpiresAt = expiresAt;
 		} catch (error) {
 			console.warn(
 				`Unable to create signed URL for session media ${parsed.id} at ${parsed.audio.storagePath}`,
 				error
 			);
-			signedUrl = parsed.audio.downloadUrl ?? null;
 		}
-	} else if (parsed.audio.downloadUrl) {
-		signedUrl = parsed.audio.downloadUrl;
 	}
+
+	const audioUrl = audioSignedUrl;
+
+	const images: SessionMediaImageWithUrl[] = await Promise.all(
+		parsed.images.map(async (image) => {
+			let signedUrl: string | null = null;
+			let signedUrlExpiresAt: Date | null = null;
+
+			if (image.storagePath) {
+				try {
+					const { url, expiresAt } = await createSignedUrl(image.storagePath);
+					signedUrl = url;
+					signedUrlExpiresAt = expiresAt;
+				} catch (error) {
+					console.warn(
+						`Unable to create signed URL for session media image ${parsed.id} at ${image.storagePath}`,
+						error
+					);
+				}
+			}
+
+				const url = signedUrl;
+
+			return {
+				...image,
+				signedUrl,
+				signedUrlExpiresAt,
+				url
+			};
+		})
+	);
 
 	return {
 		...parsed,
 		audio: {
 			...parsed.audio,
-			signedUrl,
-			signedUrlExpiresAt
+			signedUrl: audioSignedUrl,
+			signedUrlExpiresAt: audioSignedUrlExpiresAt,
+			url: audioUrl
 		},
+		images
 	};
 }
