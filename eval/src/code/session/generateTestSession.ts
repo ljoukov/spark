@@ -35,10 +35,10 @@ import {
 } from "./constants";
 import {
   formatInteger,
-  logGeminiStreamingSummary,
-  type GeminiStreamingSummary,
-} from "../../utils/geminiStreaming";
-import { formatByteSize, formatDurationSeconds } from "../../utils/format";
+  formatByteSize,
+  formatDurationSeconds,
+  formatMillis,
+} from "../../utils/format";
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 // No local audio file constants: audio is generated on the fly
 
@@ -971,10 +971,6 @@ async function publishMediaAssets(userId: string, sessionId: string): Promise<vo
       (acc, line) => acc + line.text.length,
       0,
     );
-    const uploadBytes = flattenedNarration.reduce(
-      (acc, line) => acc + Buffer.byteLength(line.text, "utf8"),
-      0,
-    );
     const consoleLabel = source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro";
     const statsLabel = `session/audio/${source.planItemId}`;
     const tmpPath = path.join(
@@ -992,24 +988,14 @@ async function publishMediaAssets(userId: string, sessionId: string): Promise<vo
     });
     const elapsedMs = Date.now() - startedAt;
 
-    const summary: GeminiStreamingSummary = {
-      label: statsLabel,
-      modelId: AUDIO_MODEL_ID,
-      uploadBytes,
-      chunkCount: segmentCount,
-      totalTextChars,
-      totalInlineBytes: audioResult.totalBytes,
-      promptTokens: 0,
-      cachedTokens: 0,
-      inferenceTokens: 0,
-      elapsedMs,
-    };
     const notes = [
       `segments ${formatInteger(segmentCount)}`,
       `text ${formatInteger(totalTextChars)} chars`,
       `audio ${formatTimestamp(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)}`,
     ].join(" | ");
-    logGeminiStreamingSummary(summary, { notes });
+    console.log(
+      `[${statsLabel}] ${notes} | elapsed ${formatMillis(elapsedMs)}`
+    );
 
     const publishResult = await publishSessionMediaClip({
       userId,
