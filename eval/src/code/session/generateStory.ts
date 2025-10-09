@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { Part } from "@google/genai";
@@ -77,63 +76,6 @@ function useProgress(progress: StoryProgress) {
   };
 }
 
-async function writeDebugText(
-  baseDir: string | undefined,
-  relativePath: string,
-  content: string,
-  { append = false }: { append?: boolean } = {}
-): Promise<void> {
-  if (!baseDir) {
-    return;
-  }
-  try {
-    const filePath = path.join(baseDir, relativePath);
-    await mkdir(path.dirname(filePath), { recursive: true });
-    if (append) {
-      await appendFile(filePath, content, { encoding: "utf8" });
-    } else {
-      await writeFile(filePath, content, { encoding: "utf8" });
-    }
-  } catch {
-    // Debug output is best-effort.
-  }
-}
-
-async function writeDebugBinary(
-  baseDir: string | undefined,
-  relativePath: string,
-  data: Buffer
-): Promise<void> {
-  if (!baseDir) {
-    return;
-  }
-  try {
-    const filePath = path.join(baseDir, relativePath);
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, data);
-  } catch {
-    // Debug output is best-effort.
-  }
-}
-
-function formatPartsForDebug(parts: readonly Part[]): string {
-  return parts
-    .map((part) => {
-      if (typeof part.text === "string") {
-        return part.text;
-      }
-      if (part.inlineData) {
-        const mime = part.inlineData.mimeType ?? "binary";
-        return `[inline data ${mime} omitted]`;
-      }
-      if (part.fileData?.fileUri) {
-        return `[file ${part.fileData.fileUri}]`;
-      }
-      return "[unsupported part]";
-    })
-    .join("\n");
-}
-
 const StorySegmentNarrationSchema = z.object({
   voice: z.enum(["M", "F"]),
   text: z.string().trim().min(1),
@@ -165,29 +107,39 @@ export type SegmentationAttemptFailure = {
   charCount?: number;
 };
 
-export type SegmentationJudgeSuggestion = {
-  index: number;
+export type SegmentationPromptCorrection = {
+  promptIndex: number;
   updatedPrompt: string;
-  notes?: string;
+  critique: string;
 };
 
-const SegmentationJudgeResponseSchema = z.object({
-  pass: z.boolean(),
-  issuesSummary: z.string().trim().optional(),
-  suggestions: z
-    .array(
-      z.object({
-        index: z.number().int().min(0),
-        updatedPrompt: z.string().trim().min(1),
-        notes: z.string().trim().optional(),
-      })
-    )
-    .optional(),
-});
+const SegmentationCorrectorResponseSchema = z
+  .object({
+    issuesSummary: z.string().trim().optional(),
+    corrections: z
+      .array(
+        z.object({
+          prompt_index: z.number().int().min(0).max(11),
+          critique: z.string().trim().min(1),
+          updatedPrompt: z.string().trim().min(1),
+        })
+      )
+      .default([]),
+  })
+  .transform((data) => ({
+    issuesSummary: data.issuesSummary ?? "",
+    corrections: data.corrections.map((entry) => ({
+      promptIndex: entry.prompt_index,
+      critique: entry.critique,
+      updatedPrompt: entry.updatedPrompt,
+    })),
+  }));
 
-type SegmentationJudgeResponse = z.infer<typeof SegmentationJudgeResponseSchema>;
+type SegmentationCorrectorResponse = z.infer<
+  typeof SegmentationCorrectorResponseSchema
+>;
 
-export type SegmentationAttemptPhase = "generation" | "judge";
+export type SegmentationAttemptPhase = "generation" | "correction";
 
 export type SegmentationAttemptSnapshot = {
   phase: SegmentationAttemptPhase;
@@ -203,12 +155,12 @@ export type SegmentationAttemptSnapshotSaver = (
   snapshot: SegmentationAttemptSnapshot
 ) => Promise<void> | void;
 
-export type SegmentationReviewAttempt = {
+export type SegmentationCorrectorAttempt = {
   attempt: number;
   prompt: string;
   rawResponse: string;
   modelVersion: string;
-  response?: SegmentationJudgeResponse;
+  response?: SegmentationCorrectorResponse;
   thoughts?: string[];
   parseError?: string;
   charCount?: number;
@@ -225,15 +177,15 @@ export class SegmentationValidationError extends Error {
   }
 }
 
-export class SegmentationReviewError extends Error {
+export class SegmentationCorrectionError extends Error {
   constructor(
     message: string,
     readonly generationPrompt: string,
-    readonly attempts: SegmentationReviewAttempt[],
+    readonly attempts: SegmentationCorrectorAttempt[],
     readonly segmentation: StorySegmentation
   ) {
     super(message);
-    this.name = "SegmentationReviewError";
+    this.name = "SegmentationCorrectionError";
   }
 }
 
@@ -337,7 +289,7 @@ export type StorySegmentationResult = {
   prompt: string;
   modelVersion: string;
   attempt: number;
-  reviewAttempts?: SegmentationReviewAttempt[];
+  correctionAttempts?: SegmentationCorrectorAttempt[];
 };
 
 export type GeneratedStoryImage = {
@@ -467,7 +419,7 @@ export function buildSegmentationPrompt(storyText: string): string {
     "1. Produce concise JSON that conforms exactly to the schema below. Do not include commentary or code fences.",
     "2. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
-    "3. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster.",
+    "3. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Keep any visible text within four words.",
     '4. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.',
     "5. For each of the ten `segments`:",
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
@@ -494,25 +446,34 @@ export function buildSegmentationPrompt(storyText: string): string {
   ].join("\n");
 }
 
-// Build a single 4-image batch prompt: style first, then the numbered image prompts
-function buildFourImageBatchPrompt(
+// Build the prompt parts for the full 12-image set generation.
+function buildFullImageSetPrompt(
   styleLines: readonly string[],
-  pairs: Array<{ index: number; prompt: string }>
+  entries: Array<{ index: number; prompt: string }>,
+  options: { endingIndex: number; posterIndex: number }
 ): Part[] {
   const parts: Part[] = [];
   const headerLines: string[] = [
-    "You are generating vintage cartoon-style illustrations for a historical story.",
-    "Follow the style requirements exactly, then create four separate illustrations.",
-    "Do not output captions or commentary; only return the images.",
+    "Please make a total of 12 images:",
+    "- 1-10 story images",
+    '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
+    '- the "movie poster" image for the whole story (hook)',
+    "Make high quality, high positivity cartoon style.",
     "",
-    "Style Requirements:",
+    "Follow the style:",
     ...styleLines,
     "",
-    "Now generate the following illustrations:",
+    "Image descriptions:",
   ];
   parts.push({ text: headerLines.join("\n") });
-  for (const { index, prompt } of pairs) {
-    parts.push({ text: `Image ${index}: ${prompt}` });
+  for (const { index, prompt } of entries) {
+    let label = `Image ${index}`;
+    if (index === options.endingIndex) {
+      label = `Image ${index} (the end)`;
+    } else if (index === options.posterIndex) {
+      label = `Image ${index} (poster)`;
+    }
+    parts.push({ text: `${label}: ${prompt}` });
   }
   return parts;
 }
@@ -564,7 +525,6 @@ export async function generateProseStory(
 
       let lastPromptTokens = 0;
       let lastCachedTokens = 0;
-      let lastThinkingTokens = 0;
       let lastInferenceTokens = 0;
 
       for await (const chunk of stream) {
@@ -591,14 +551,9 @@ export async function generateProseStory(
         if (usage) {
           const promptTokensNow = usage.promptTokenCount ?? 0;
           const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
-          const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
           const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
           const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
           const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
-          const thinkingDelta = Math.max(
-            0,
-            thinkingTokensNow - lastThinkingTokens
-          );
           const inferenceDelta = Math.max(
             0,
             inferenceTokensNow - lastInferenceTokens
@@ -613,7 +568,6 @@ export async function generateProseStory(
           }
           lastPromptTokens = promptTokensNow;
           lastCachedTokens = cachedTokensNow;
-          lastThinkingTokens = thinkingTokensNow;
           lastInferenceTokens = inferenceTokensNow;
         }
       }
@@ -676,38 +630,37 @@ function extractJsonObject(rawText: string): unknown {
   return JSON.parse(candidate);
 }
 
-const DEFAULT_SEGMENTATION_REVIEW_ATTEMPTS = 2;
+const DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS = 1;
 
-function buildSegmentationReviewPrompt(
+function buildSegmentationCorrectorPrompt(
   segmentation: StorySegmentation,
   generationPrompt: string
 ): string {
   const lines: string[] = [
-    "You are the segmentation quality judge for illustrated historical stories.",
+    "You are the image prompt corrector for illustrated historical stories.",
     "Assess whether the illustration prompts comply with the brief and rewrite only the prompts that violate the rules.",
     "",
-    "Return strict JSON: { pass: boolean, issuesSummary?: string, suggestions?: Array<{ index: number, updatedPrompt: string, notes?: string }> }.",
-    "If pass is false, provide rewritten prompts under `updatedPrompt` and explain the fix in `notes` when helpful.",
+    "Return strict JSON: { issuesSummary: string, corrections: Array<{ prompt_index: number, critique: string, updatedPrompt: string }> }.",
+    "Only include entries under `corrections` for prompts that must be updated.",
     "",
     "Check for:",
     "- Each prompt grounds the scene in time and place (decade, location, or workplace details).",
     '- Every prompt includes consistent style anchors such as "Vintage cartoon style", "muted colors", and "clear composition".',
     "- One clear action, at most two characters, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
     '- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
+    "- Poster (index 11) reads like a high-impact cover: stunning, captivating, interesting, and intriguing. It explicitly mentions the protagonist by name (or a concise moniker) while keeping any visible text within four words.",
     "",
     "===== Segmentation generation brief =====",
     generationPrompt,
     "===== End brief =====",
     "",
-    "Indexed prompts (poster = 0, segments 1-10, ending = 11):",
+    'Indexed prompts (0-9 story panels, 10 = ending card labelled "the end", 11 = poster/cover):',
   ];
 
-  lines.push(`Prompt 0 (poster) image prompt: ${segmentation.posterPrompt}`);
-
   segmentation.segments.forEach((segment, idx) => {
-    const promptIndex = idx + 1;
+    const promptIndex = idx;
     lines.push(
-      `Prompt ${promptIndex} (segment ${idx + 1}) image prompt: ${segment.imagePrompt}`
+      `Prompt ${promptIndex} (story panel ${idx + 1}) image prompt: ${segment.imagePrompt}`
     );
     const narrationSummary = segment.narration
       .map((line) => `${line.voice}: ${line.text}`)
@@ -717,9 +670,14 @@ function buildSegmentationReviewPrompt(
     }
   });
 
-  const endingIndex = segmentation.segments.length + 1;
+  const endingIndex = segmentation.segments.length;
   lines.push(
-    `Prompt ${endingIndex} (ending) image prompt: ${segmentation.endingPrompt}`
+    `Prompt ${endingIndex} ("the end" card) image prompt: ${segmentation.endingPrompt}`
+  );
+
+  const posterIndex = segmentation.segments.length + 1;
+  lines.push(
+    `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`
   );
   lines.push("");
   lines.push("Return JSON only.");
@@ -727,42 +685,46 @@ function buildSegmentationReviewPrompt(
   return lines.join("\n");
 }
 
-function applySegmentationSuggestions(
+function applySegmentationCorrections(
   segmentation: StorySegmentation,
-  suggestions: readonly SegmentationJudgeSuggestion[]
+  corrections: readonly SegmentationPromptCorrection[]
 ): StorySegmentation {
-  if (!suggestions.length) {
+  if (!corrections.length) {
     return segmentation;
   }
 
   const draft = JSON.parse(JSON.stringify(segmentation)) as StorySegmentation;
   const totalSegments = draft.segments.length;
-  const endingIndex = totalSegments + 1;
+  const endingIndex = totalSegments;
+  const posterIndex = totalSegments + 1;
 
-  for (const suggestion of suggestions) {
-    const targetIndex = suggestion.index;
-    const updatedPrompt = suggestion.updatedPrompt.trim();
-    if (targetIndex === 0) {
-      draft.posterPrompt = updatedPrompt;
-      continue;
+  corrections.forEach((correction) => {
+    const targetIndex = correction.promptIndex;
+    const updatedPrompt = correction.updatedPrompt.trim();
+    if (!updatedPrompt) {
+      throw new Error("Segmentation corrector provided an empty prompt.");
     }
-    if (targetIndex >= 1 && targetIndex <= totalSegments) {
-      draft.segments[targetIndex - 1].imagePrompt = updatedPrompt;
-      continue;
+    if (targetIndex >= 0 && targetIndex < totalSegments) {
+      draft.segments[targetIndex].imagePrompt = updatedPrompt;
+      return;
     }
     if (targetIndex === endingIndex) {
       draft.endingPrompt = updatedPrompt;
-      continue;
+      return;
+    }
+    if (targetIndex === posterIndex) {
+      draft.posterPrompt = updatedPrompt;
+      return;
     }
     throw new Error(
-      `Segmentation judge returned invalid prompt index ${targetIndex}`
+      `Segmentation corrector returned invalid prompt index ${targetIndex}`
     );
-  }
+  });
 
   return StorySegmentationSchema.parse(draft);
 }
 
-async function reviewSegmentationPrompts(
+async function runSegmentationCorrector(
   initialSegmentation: StorySegmentation,
   generationPrompt: string,
   adapter: ReturnType<typeof useProgress>,
@@ -770,25 +732,27 @@ async function reviewSegmentationPrompts(
   snapshotSaver?: SegmentationAttemptSnapshotSaver
 ): Promise<{
   segmentation: StorySegmentation;
-  attempts: SegmentationReviewAttempt[];
+  attempts: SegmentationCorrectorAttempt[];
 }> {
   if (maxAttempts <= 0) {
     return { segmentation: initialSegmentation, attempts: [] };
   }
 
   let workingSegmentation = initialSegmentation;
-  const attempts: SegmentationReviewAttempt[] = [];
+  const attempts: SegmentationCorrectorAttempt[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const reviewPrompt = buildSegmentationReviewPrompt(
+    const reviewPrompt = buildSegmentationCorrectorPrompt(
       workingSegmentation,
       generationPrompt
     );
     const parts: Part[] = [{ text: reviewPrompt }];
-    adapter.log(`[story/segments/judge] attempt ${attempt} prompt prepared`);
+    adapter.log(
+      `[story/segments/corrector] attempt ${attempt} prompt prepared`
+    );
     const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
     adapter.log(
-      `[story/segments/judge] request prepared with ${sanitisedRequest.length} part(s)`
+      `[story/segments/corrector] request prepared with ${sanitisedRequest.length} part(s)`
     );
 
     const { text, modelVersion, thoughts, elapsedMs, charCount } =
@@ -799,16 +763,16 @@ async function reviewSegmentationPrompts(
       });
     const elapsed = formatMillis(elapsedMs);
     adapter.log(
-      `[story/segments/judge] attempt ${attempt} model ${modelVersion} finished in ${elapsed} (${charCount} chars)`
+      `[story/segments/corrector] attempt ${attempt} model ${modelVersion} finished in ${elapsed} (${charCount} chars)`
     );
     if (thoughts && thoughts.length > 0) {
       adapter.log(
-        `[story/segments/judge] attempt ${attempt} thoughts captured (${thoughts.length})`
+        `[story/segments/corrector] attempt ${attempt} thoughts captured (${thoughts.length})`
       );
     }
 
     await snapshotSaver?.({
-      phase: "judge",
+      phase: "correction",
       attempt,
       prompt: reviewPrompt,
       response: text,
@@ -817,11 +781,11 @@ async function reviewSegmentationPrompts(
       charCount,
     });
 
-    let response: SegmentationJudgeResponse | undefined;
+    let response: SegmentationCorrectorResponse | undefined;
     let parseError: string | undefined;
     try {
       const parsedJson = extractJsonObject(text);
-      response = SegmentationJudgeResponseSchema.parse(parsedJson);
+      response = SegmentationCorrectorResponseSchema.parse(parsedJson);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       parseError = message;
@@ -839,17 +803,23 @@ async function reviewSegmentationPrompts(
     });
 
     if (!response) {
-      throw new SegmentationReviewError(
-        "Segmentation judge did not return valid JSON.",
+      throw new SegmentationCorrectionError(
+        "Segmentation corrector did not return valid JSON.",
         generationPrompt,
         attempts,
         workingSegmentation
       );
     }
 
-    if (response.pass) {
+    if (response.issuesSummary) {
       adapter.log(
-        `[story/segments/judge] attempt ${attempt} approved the segmentation prompts`
+        `[story/segments/corrector] attempt ${attempt} issues summary: ${response.issuesSummary}`
+      );
+    }
+
+    if (response.corrections.length === 0) {
+      adapter.log(
+        `[story/segments/corrector] attempt ${attempt} returned no corrections`
       );
       return {
         segmentation: workingSegmentation,
@@ -857,55 +827,54 @@ async function reviewSegmentationPrompts(
       };
     }
 
-    const suggestions = response.suggestions ?? [];
-    if (suggestions.length === 0) {
-      throw new SegmentationReviewError(
-        "Segmentation judge rejected prompts but did not provide suggestions.",
-        generationPrompt,
-        attempts,
-        workingSegmentation
-      );
-    }
-
-    if (attempt >= maxAttempts) {
-      break;
-    }
-
     adapter.log(
-      `[story/segments/judge] attempt ${attempt} applying ${suggestions
-        .map((s) => s.index)
+      `[story/segments/corrector] attempt ${attempt} applying corrections for indices ${response.corrections
+        .map((c) => c.promptIndex)
         .join(", ")}`
     );
+    response.corrections.forEach((correction) => {
+      adapter.log(
+        `[story/segments/corrector] prompt ${correction.promptIndex} critique: ${correction.critique}`
+      );
+    });
 
     try {
-      workingSegmentation = applySegmentationSuggestions(
+      workingSegmentation = applySegmentationCorrections(
         workingSegmentation,
-        suggestions
+        response.corrections
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new SegmentationReviewError(
-        `Segmentation judge suggestions could not be applied: ${message}`,
+      throw new SegmentationCorrectionError(
+        `Segmentation corrector corrections could not be applied: ${message}`,
         generationPrompt,
         attempts,
         workingSegmentation
       );
     }
+
+    if (attempt === maxAttempts) {
+      adapter.log(
+        `[story/segments/corrector] attempt ${attempt} reached max attempts after applying corrections`
+      );
+      return {
+        segmentation: workingSegmentation,
+        attempts,
+      };
+    }
   }
 
-  throw new SegmentationReviewError(
-    `Segmentation judge rejected prompts after ${maxAttempts} attempt(s).`,
-    generationPrompt,
+  return {
+    segmentation: workingSegmentation,
     attempts,
-    workingSegmentation
-  );
+  };
 }
 
 export async function generateStorySegmentation(
   storyText: string,
   progress?: StoryProgress,
   options?: {
-    maxRevisionAttempts?: number;
+    maxCorrectionAttempts?: number;
     onAttemptSnapshot?: SegmentationAttemptSnapshotSaver;
   }
 ): Promise<StorySegmentationResult> {
@@ -976,24 +945,24 @@ export async function generateStorySegmentation(
       let segmentation = StorySegmentationSchema.parse(parsedJson);
       adapter.log(`[story/segments] attempt ${attempt} parsed successfully`);
 
-      const rawReviewAttempts =
-        options?.maxRevisionAttempts ?? DEFAULT_SEGMENTATION_REVIEW_ATTEMPTS;
-      const maxReviewAttempts =
-        Number.isFinite(rawReviewAttempts) && rawReviewAttempts >= 0
-          ? Math.floor(rawReviewAttempts)
-          : DEFAULT_SEGMENTATION_REVIEW_ATTEMPTS;
-      let reviewAttempts: SegmentationReviewAttempt[] | undefined;
-      if (maxReviewAttempts > 0) {
-        const reviewResult = await reviewSegmentationPrompts(
+      const rawCorrectionAttempts =
+        options?.maxCorrectionAttempts ?? DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS;
+      const maxCorrectionAttempts =
+        Number.isFinite(rawCorrectionAttempts) && rawCorrectionAttempts >= 0
+          ? Math.floor(rawCorrectionAttempts)
+          : DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS;
+      let correctionAttempts: SegmentationCorrectorAttempt[] | undefined;
+      if (maxCorrectionAttempts > 0) {
+        const reviewResult = await runSegmentationCorrector(
           segmentation,
           prompt,
           adapter,
-          maxReviewAttempts,
+          maxCorrectionAttempts,
           options?.onAttemptSnapshot
         );
         segmentation = reviewResult.segmentation;
         if (reviewResult.attempts.length > 0) {
-          reviewAttempts = reviewResult.attempts;
+          correctionAttempts = reviewResult.attempts;
         }
       }
 
@@ -1002,9 +971,12 @@ export async function generateStorySegmentation(
         prompt,
         modelVersion,
         attempt,
-        reviewAttempts,
+        correctionAttempts,
       };
     } catch (error) {
+      if (error instanceof SegmentationCorrectionError) {
+        throw error;
+      }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       const zodIssues = error instanceof z.ZodError ? error.issues : undefined;
@@ -1054,90 +1026,99 @@ function extensionFromMime(mimeType?: string): string {
   return "png";
 }
 
-// =====================
-// Image judging helpers
-// =====================
+// ===============================
+// Image set comparison and assets
+// ===============================
 
-const JudgeResponseSchema = z.object({
-  pass: z.boolean(),
-  issuesSummary: z.string().trim().optional(),
-  suggestions: z
-    .array(
-      z.object({
-        index: z.number().int().min(1),
-        updatedPrompt: z.string().trim().min(1),
-        notes: z.string().trim().optional(),
-      })
-    )
-    .optional(),
+const ImageSetJudgeResponseSchema = z.object({
+  reasoning: z.string().trim().min(1),
+  verdict: z.enum(["set_a", "set_b"]),
 });
-type JudgeResponse = z.infer<typeof JudgeResponseSchema>;
 
-function buildJudgePromptParts(
-  allImages: readonly GeneratedStoryImage[],
-  focusIndices: readonly number[],
-  promptsByIndex: Map<number, string>
-): Part[] {
-  const parts: Part[] = [];
-  const sorted = [...allImages].sort((a, b) => a.index - b.index);
-  for (const img of sorted) {
-    parts.push({ text: `Image ${img.index}` });
-    parts.push({
-      inlineData: {
-        mimeType: img.mimeType,
-        data: img.data.toString("base64"),
-      },
-    });
-  }
-  const header: string[] = [
-    "You are the image quality judge. Review the images ABOVE first.",
-    "After considering them, evaluate ONLY the last four images listed below.",
-    "Assess adherence to these basics: subject accuracy, single clear action, grounded historical setting, readable composition, vintage cartoon style fidelity (line art, muted palette, subtle paper texture).",
-    'If any writing appears (signage, title card, diagrams), ensure it is spelled correctly, limited to four words or fewer, and period-appropriate; flag long academic titles, paragraphs, or explicit equation-style notation that spells out symbols or formulas. Generic descriptions such as "chalkboard filled with formulas" are acceptable.',
-    "Return strict JSON: { pass: boolean, issuesSummary?: string, suggestions?: Array<{ index, updatedPrompt, notes? }> }.",
-    "For each suggestion, provide an improved prompt (keep content faithful; adjust composition, lighting, and clarity; do not introduce modern elements).",
-    "",
-    "Focus on these images and their prompts:",
-  ];
-  parts.push({ text: header.join("\n") });
-  const focus = [...focusIndices].sort((a, b) => a - b);
-  for (const idx of focus) {
-    const p = promptsByIndex.get(idx) ?? "";
-    parts.push({ text: `Image ${idx} prompt: ${p}` });
-  }
-  parts.push({ text: "Return JSON only." });
-  return parts;
-}
+type ImageSetJudgeResponse = z.infer<typeof ImageSetJudgeResponseSchema>;
 
-async function judgeBatch(
-  allImages: readonly GeneratedStoryImage[],
-  focusIndices: readonly number[],
+type ImageSetArtifact = {
+  label: "set_a" | "set_b";
+  promptParts: Part[];
+  modelVersion: string;
+  aggregatedText: string;
+  imageCount: number;
+};
+
+type ImageSetRunResult = {
+  label: "set_a" | "set_b";
+  promptParts: Part[];
+  modelVersion: string;
+  aggregatedText: string;
+  images: GeneratedStoryImage[];
+};
+
+export type StoryImagesArtifacts = {
+  style: readonly string[];
+  sets: ImageSetArtifact[];
+  judge?: {
+    requestPartsCount: number;
+    requestPartsSanitised: unknown[];
+    responseText: string;
+    responseJson: ImageSetJudgeResponse;
+    modelVersion: string;
+    thoughts?: string[];
+  };
+  selectedSet: "set_a" | "set_b";
+};
+
+async function judgeImageSets(
+  setA: ImageSetRunResult,
+  setB: ImageSetRunResult,
   promptsByIndex: Map<number, string>,
   adapter: ReturnType<typeof useProgress>
 ): Promise<{
-  response: JudgeResponse;
+  response: ImageSetJudgeResponse;
   rawText: string;
   modelVersion: string;
   requestParts: Part[];
   thoughts?: string[];
 }> {
-  const judgeParts = buildJudgePromptParts(
-    allImages,
-    focusIndices,
-    promptsByIndex
-  );
-  const sanitisedRequest = judgeParts.map((part) =>
-    sanitisePartForLogging(part)
-  );
+  const headerLines: string[] = [
+    "You are the image quality judge for illustrated historical stories.",
+    "Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a \"the end\" card, and a poster.",
+    "Evaluate which set better satisfies the prompts and style requirements.",
+    "Criteria: prompt fidelity, clear single action, grounded historical setting, readable composition, and accurate vintage cartoon style (ink outlines, muted palette, subtle paper texture).",
+    "If any writing appears, ensure it is four words or fewer, spelled correctly, and period-appropriate.",
+  ];
+
+  const parts: Part[] = [{ text: headerLines.join("\n") }];
+  const addSet = (set: ImageSetRunResult) => {
+    const name = set.label === "set_a" ? "Set A" : "Set B";
+    parts.push({ text: `${name} illustrations follow.` });
+    const sorted = [...set.images].sort((a, b) => a.index - b.index);
+    for (const image of sorted) {
+      const prompt = promptsByIndex.get(image.index) ?? "";
+      parts.push({ text: `${name} – Image ${image.index} prompt: ${prompt}` });
+      parts.push({
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.data.toString("base64"),
+        },
+      });
+    }
+  };
+  addSet(setA);
+  addSet(setB);
+  parts.push({
+    text: 'Compare Set A and Set B. Return strict JSON: { reasoning: string, verdict: "set_a" | "set_b" }. Provide the reasoning first, then the verdict. Respond with JSON only.',
+  });
+
+  const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
   adapter.log(
-    `[images/judge] request prepared with ${sanitisedRequest.length} part(s)`
+    `[images/judge] set comparison request prepared with ${sanitisedRequest.length} part(s)`
   );
-  const uploadBytes = estimateUploadBytes(judgeParts);
+
+  const uploadBytes = estimateUploadBytes(parts);
   const callHandle = adapter.startModelCall({
     modelId: TEXT_MODEL_ID as GeminiModelId,
     uploadBytes,
   });
-  const start = Date.now();
   let aggregated = "";
   let modelVersion: string = TEXT_MODEL_ID;
   const thoughts: string[] = [];
@@ -1145,7 +1126,7 @@ async function judgeBatch(
     await runGeminiCall(async (client) => {
       const stream = await client.models.generateContentStream({
         model: TEXT_MODEL_ID,
-        contents: [{ role: "user", parts: judgeParts }],
+        contents: [{ role: "user", parts }],
         config: {
           thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 },
         },
@@ -1155,18 +1136,18 @@ async function judgeBatch(
           modelVersion = chunk.modelVersion;
         }
         const candidates = chunk.candidates ?? [];
-        for (const c of candidates) {
-          const ps = c.content?.parts ?? [];
-          for (const p of ps) {
-            const content = p.text;
-            if (!content) {
+        for (const candidate of candidates) {
+          const contentParts = candidate.content?.parts ?? [];
+          for (const part of contentParts) {
+            const text = part.text;
+            if (!text) {
               continue;
             }
-            if (p.thought) {
-              thoughts.push(content);
+            if (part.thought) {
+              thoughts.push(text);
               continue;
             }
-            aggregated += content;
+            aggregated += text;
           }
         }
       }
@@ -1174,12 +1155,12 @@ async function judgeBatch(
   } finally {
     adapter.finishModelCall(callHandle);
   }
-  const elapsed = formatMillis(Date.now() - start);
-  adapter.log(`[images/judge] model ${modelVersion} finished in ${elapsed}`);
-  const json = extractJsonObject(aggregated);
   adapter.log(`[images/judge] raw response text: ${aggregated}`);
-  const response = JudgeResponseSchema.parse(json);
-  adapter.log(`[images/judge] parsed response: ${JSON.stringify(response)}`);
+  const json = extractJsonObject(aggregated);
+  const response = ImageSetJudgeResponseSchema.parse(json);
+  adapter.log(
+    `[images/judge] parsed response: ${JSON.stringify(response)}`
+  );
   if (thoughts.length > 0) {
     adapter.log(`[images/judge] thoughts: ${thoughts.join(" | ")}`);
   }
@@ -1187,127 +1168,80 @@ async function judgeBatch(
     response,
     rawText: aggregated,
     modelVersion,
-    requestParts: judgeParts,
+    requestParts: parts,
     thoughts: thoughts.length > 0 ? [...thoughts] : undefined,
   };
 }
-
-// ==============================
-// Batched image generation (4x3)
-// ==============================
-
-export type ImageBatchArtifact = {
-  batchIndex: number;
-  promptParts: Part[];
-  judge: Array<{
-    attempt: number;
-    requestPartsCount: number;
-    requestPartsSanitised: unknown[];
-    responseText: string;
-    responseJson: JudgeResponse;
-    modelVersion: string;
-    thoughts?: string[];
-  }>;
-};
-
-export type StoryImagesArtifacts = {
-  style: readonly string[];
-  batches: ImageBatchArtifact[];
-};
 
 export async function generateStoryImages(
   segmentation: StorySegmentation,
   progress?: StoryProgress
 ): Promise<StoryImagesResult & { artifacts?: StoryImagesArtifacts }> {
   const adapter = useProgress(progress);
-  adapter.log("[story] generating 12 images in 3 batches of 4");
+  adapter.log(
+    "[story] generating 12 images via dual-set comparison workflow"
+  );
 
-  // Build 12 prompts: 1 cover, 10 interior (from segmentation), 1 ending
-  const coverPrompt = segmentation.posterPrompt.trim();
+  const posterPrompt = segmentation.posterPrompt.trim();
   const endingPrompt = segmentation.endingPrompt.trim();
-  if (!coverPrompt) {
+  if (!posterPrompt) {
     throw new Error("Segmentation did not include a posterPrompt");
   }
   if (!endingPrompt) {
     throw new Error("Segmentation did not include an endingPrompt");
   }
 
-  const allPrompts: string[] = [];
-  allPrompts.push(coverPrompt); // Image 1
+  const entries: Array<{ index: number; prompt: string }> = [];
+  const promptsByIndex = new Map<number, string>();
+
   for (let i = 0; i < segmentation.segments.length; i++) {
-    const segmentPrompt = segmentation.segments[i]!.imagePrompt.trim();
+    const segment = segmentation.segments[i];
+    if (!segment) {
+      throw new Error(`Segmentation segment ${i + 1} is missing data`);
+    }
+    const segmentPrompt = segment.imagePrompt.trim();
     if (!segmentPrompt) {
       throw new Error(
         `Segmentation segment ${i + 1} is missing an imagePrompt`
       );
     }
-    allPrompts.push(segmentPrompt); // Images 2..11
-  }
-  allPrompts.push(endingPrompt); // Image 12
-
-  const images: GeneratedStoryImage[] = [];
-  const promptsByIndex = new Map<number, string>();
-  for (let i = 0; i < allPrompts.length; i++) {
-    promptsByIndex.set(i + 1, allPrompts[i]!);
+    const index = i + 1;
+    entries.push({ index, prompt: segmentPrompt });
+    promptsByIndex.set(index, segmentPrompt);
   }
 
-  const artifacts: StoryImagesArtifacts = {
-    style: ART_STYLE_VINTAGE_CARTOON,
-    batches: [],
-  };
+  const endingIndex = segmentation.segments.length + 1;
+  entries.push({ index: endingIndex, prompt: endingPrompt });
+  promptsByIndex.set(endingIndex, endingPrompt);
+
+  const posterIndex = segmentation.segments.length + 2;
+  entries.push({ index: posterIndex, prompt: posterPrompt });
+  promptsByIndex.set(posterIndex, posterPrompt);
+
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
 
-  let finalModelVersion: string = IMAGE_MODEL_ID;
-  let captionsText = "";
-
-  // helper to run a single 4-image call
-  const runBatch = async (
-    batchIndex: number,
-    targetIndices: number[],
-    frozenPrefixParts: Part[] | undefined
-  ): Promise<{
-    promptParts: Part[];
-    images: GeneratedStoryImage[];
-    modelVersion: string;
-    aggregatedText: string;
-  }> => {
-    const promptPairs = targetIndices.map((idx) => ({
-      index: idx,
-      prompt: promptsByIndex.get(idx)!,
-    }));
-    const parts = frozenPrefixParts
-      ? [
-          ...frozenPrefixParts,
-          ...promptPairs.map((p) => ({
-            text: `Image ${p.index}: ${p.prompt}`,
-          })),
-        ]
-      : buildFourImageBatchPrompt(styleLines, promptPairs);
-
-    const promptSummary =
-      promptPairs.map((p) => `Image ${p.index}: ${p.prompt}`).join(" || ") ||
-      "(no additional prompts)";
-    adapter.log(
-      `[story/images] batch ${batchIndex} prompt summary: ${promptSummary}`
+  const runImageSet = async (
+    label: "set_a" | "set_b"
+  ): Promise<ImageSetRunResult> => {
+    const promptParts = buildFullImageSetPrompt(styleLines, entries, {
+      endingIndex,
+      posterIndex,
+    });
+    const sanitisedRequest = promptParts.map((part) =>
+      sanitisePartForLogging(part)
     );
-    if (frozenPrefixParts) {
-      adapter.log(
-        `[story/images] batch ${batchIndex} reusing prefix parts (${frozenPrefixParts.length})`
-      );
-    }
-    const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
     adapter.log(
-      `[story/images] batch ${batchIndex} request prepared with ${sanitisedRequest.length} part(s)`
+      `[story/images/${label}] request prepared with ${sanitisedRequest.length} part(s)`
     );
 
-    const uploadBytes = estimateUploadBytes(parts);
+    const uploadBytes = estimateUploadBytes(promptParts);
     const callHandle = adapter.startModelCall({
       modelId: IMAGE_MODEL_ID as GeminiModelId,
       uploadBytes,
     });
     const start = Date.now();
 
-    const batchImages: GeneratedStoryImage[] = [];
+    const setImages: GeneratedStoryImage[] = [];
     let modelVersion: string = IMAGE_MODEL_ID;
     let aggregatedText = "";
 
@@ -1315,19 +1249,19 @@ export async function generateStoryImages(
       await runGeminiCall(async (client) => {
         const stream = await client.models.generateContentStream({
           model: IMAGE_MODEL_ID,
-          contents: [{ role: "user", parts }],
+          contents: [{ role: "user", parts: promptParts }],
           config: {
             responseModalities: ["IMAGE", "TEXT"],
             imageConfig: { aspectRatio: "16:9" },
           },
         });
+
         let lastPromptTokens = 0;
         let lastCachedTokens = 0;
-        let lastThinkingTokens = 0;
         let lastInferenceTokens = 0;
-
-        // We will assign images in the order they arrive to the respective target indices
+        const assignmentOrder = [...entries].sort((a, b) => a.index - b.index);
         let assignCursor = 0;
+
         for await (const chunk of stream) {
           if (chunk.modelVersion) {
             modelVersion = chunk.modelVersion;
@@ -1338,21 +1272,21 @@ export async function generateStoryImages(
             for (const part of contentParts) {
               const inlineData = part.inlineData;
               if (inlineData?.data) {
-                const ext = extensionFromMime(inlineData.mimeType);
-                const mappedIndex =
-                  targetIndices[assignCursor] ??
-                  targetIndices[targetIndices.length - 1]!;
-                const buffer = Buffer.from(inlineData.data, "base64");
-                batchImages.push({
-                  index: mappedIndex,
-                  mimeType: inlineData.mimeType ?? `image/${ext}`,
-                  data: buffer,
-                });
-                adapter.log(
-                  `[story/images] batch ${batchIndex} received image ${mappedIndex} (${buffer.length} bytes)`
-                );
-                assignCursor += 1;
-                continue;
+                const target = assignmentOrder[assignCursor];
+                if (target) {
+                  const buffer = Buffer.from(inlineData.data, "base64");
+                  const ext = extensionFromMime(inlineData.mimeType);
+                  setImages.push({
+                    index: target.index,
+                    mimeType: inlineData.mimeType ?? `image/${ext}`,
+                    data: buffer,
+                  });
+                  adapter.log(
+                    `[story/images/${label}] received image ${target.index} (${buffer.length} bytes)`
+                  );
+                  assignCursor += 1;
+                  continue;
+                }
               }
               if (!part.thought && part.text) {
                 aggregatedText += part.text;
@@ -1364,14 +1298,9 @@ export async function generateStoryImages(
           if (usage) {
             const promptTokensNow = usage.promptTokenCount ?? 0;
             const cachedTokensNow = usage.cachedContentTokenCount ?? 0;
-            const thinkingTokensNow = usage.thoughtsTokenCount ?? 0;
             const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
             const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
             const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
-            const thinkingDelta = Math.max(
-              0,
-              thinkingTokensNow - lastThinkingTokens
-            );
             const inferenceDelta = Math.max(
               0,
               inferenceTokensNow - lastInferenceTokens
@@ -1386,7 +1315,6 @@ export async function generateStoryImages(
             }
             lastPromptTokens = promptTokensNow;
             lastCachedTokens = cachedTokensNow;
-            lastThinkingTokens = thinkingTokensNow;
             lastInferenceTokens = inferenceTokensNow;
           }
         }
@@ -1397,257 +1325,94 @@ export async function generateStoryImages(
 
     const elapsed = formatMillis(Date.now() - start);
     adapter.log(
-      `[story/images] batch ${batchIndex} model ${modelVersion} generated ${formatInteger(batchImages.length)} illustrations in ${elapsed}`
+      `[story/images/${label}] model ${modelVersion} generated ${formatInteger(setImages.length)} illustrations in ${elapsed}`
     );
     if (aggregatedText.trim()) {
       adapter.log(
-        `[story/images] batch ${batchIndex} text response: ${aggregatedText.trim()}`
+        `[story/images/${label}] text response: ${aggregatedText.trim()}`
       );
     }
+
+    if (setImages.length !== entries.length) {
+      throw new Error(
+        `Image generation for ${label} returned ${setImages.length} image(s); expected ${entries.length}`
+      );
+    }
+
     return {
-      promptParts: parts,
-      images: batchImages,
+      label,
+      promptParts,
       modelVersion,
       aggregatedText,
+      images: setImages,
     };
   };
 
-  // Batch 1: images 1-4
-  const b1 = await runBatch(1, [1, 2, 3, 4], undefined);
-  finalModelVersion = b1.modelVersion;
-  captionsText += b1.aggregatedText;
-  // Judge batch 1 (focus on 1-4)
-  artifacts.batches.push({
-    batchIndex: 1,
-    promptParts: b1.promptParts,
-    judge: [],
-  });
-  {
-    let pass = false;
-    let attempt = 0;
-    const maxAttempts = 3;
-    while (!pass && attempt < maxAttempts) {
-      attempt += 1;
-      const j = await judgeBatch(
-        [...images, ...b1.images],
-        [1, 2, 3, 4],
-        promptsByIndex,
-        adapter
-      );
-      artifacts.batches[0]!.judge.push({
-        attempt,
-        requestPartsCount: j.requestParts.length,
-        requestPartsSanitised: j.requestParts.map((p) =>
-          sanitisePartForLogging(p)
-        ),
-        responseText: j.rawText,
-        responseJson: j.response,
-        modelVersion: j.modelVersion,
-        thoughts: j.thoughts,
-      });
-      adapter.log(
-        `[images/judge] batch 1 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
-      );
-      if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(
-          `[images/judge] batch 1 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
-        );
-      }
-      pass = j.response.pass;
-      if (!pass) {
-        const suggestions = j.response.suggestions ?? [];
-        for (const s of suggestions) {
-          if ([1, 2, 3, 4].includes(s.index)) {
-            promptsByIndex.set(s.index, s.updatedPrompt);
-          }
-        }
-        // regenerate the four images with updated prompts (overwrite)
-        const retry = await runBatch(
-          1,
-          [1, 2, 3, 4],
-          buildFourImageBatchPrompt(styleLines, [])
-        );
-        // Clear any images from indices 1..4 and replace
-        for (const idx of [1, 2, 3, 4]) {
-          const pos = images.findIndex((im) => im.index === idx);
-          if (pos >= 0) {
-            images.splice(pos, 1);
-          }
-        }
-        for (const im of retry.images) {
-          images.push(im);
-        }
-        captionsText += retry.aggregatedText;
-        finalModelVersion = retry.modelVersion;
-      }
-    }
-    // On success or max attempts, accept batch 1 images
-    for (const im of b1.images) {
-      // If overwritten above due to retry, the last write wins in images[]
-      const existing = images.find((x) => x.index === im.index);
-      if (!existing) {
-        images.push(im);
-      }
-    }
+  const [setA, setB] = await Promise.all([
+    runImageSet("set_a"),
+    runImageSet("set_b"),
+  ]);
+
+  let selectedSet: ImageSetRunResult = setA;
+  const artifacts: StoryImagesArtifacts = {
+    style: styleLines,
+    sets: [
+      {
+        label: "set_a",
+        promptParts: setA.promptParts,
+        modelVersion: setA.modelVersion,
+        aggregatedText: setA.aggregatedText,
+        imageCount: setA.images.length,
+      },
+      {
+        label: "set_b",
+        promptParts: setB.promptParts,
+        modelVersion: setB.modelVersion,
+        aggregatedText: setB.aggregatedText,
+        imageCount: setB.images.length,
+      },
+    ],
+    selectedSet: "set_a",
+  };
+
+  try {
+    const judge = await judgeImageSets(setA, setB, promptsByIndex, adapter);
+    artifacts.judge = {
+      requestPartsCount: judge.requestParts.length,
+      requestPartsSanitised: judge.requestParts.map((part) =>
+        sanitisePartForLogging(part)
+      ),
+      responseText: judge.rawText,
+      responseJson: judge.response,
+      modelVersion: judge.modelVersion,
+      thoughts: judge.thoughts,
+    };
+    selectedSet = judge.response.verdict === "set_b" ? setB : setA;
+    artifacts.selectedSet = judge.response.verdict;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    adapter.log(
+      `[images/judge] failed to compare sets (${message}); defaulting to Set A`
+    );
   }
 
-  // Batch 2: images 5-8. Prepend the exact text parts used previously to enable caching.
-  const frozenPrefix = b1.promptParts;
-  const b2 = await runBatch(2, [5, 6, 7, 8], frozenPrefix);
-  finalModelVersion = b2.modelVersion;
-  captionsText += b2.aggregatedText;
-  artifacts.batches.push({
-    batchIndex: 2,
-    promptParts: b2.promptParts,
-    judge: [],
-  });
-  {
-    let pass = false;
-    let attempt = 0;
-    const maxAttempts = 3;
-    while (!pass && attempt < maxAttempts) {
-      attempt += 1;
-      const j = await judgeBatch(
-        [...images, ...b1.images, ...b2.images],
-        [5, 6, 7, 8],
-        promptsByIndex,
-        adapter
-      );
-      artifacts.batches[1]!.judge.push({
-        attempt,
-        requestPartsCount: j.requestParts.length,
-        requestPartsSanitised: j.requestParts.map((p) =>
-          sanitisePartForLogging(p)
-        ),
-        responseText: j.rawText,
-        responseJson: j.response,
-        modelVersion: j.modelVersion,
-        thoughts: j.thoughts,
-      });
-      adapter.log(
-        `[images/judge] batch 2 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
-      );
-      if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(
-          `[images/judge] batch 2 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
-        );
-      }
-      pass = j.response.pass;
-      if (!pass) {
-        const suggestions = j.response.suggestions ?? [];
-        for (const s of suggestions) {
-          if ([5, 6, 7, 8].includes(s.index)) {
-            promptsByIndex.set(s.index, s.updatedPrompt);
-          }
-        }
-        const retry = await runBatch(2, [5, 6, 7, 8], frozenPrefix);
-        // Overwrite indices 5..8
-        for (const idx of [5, 6, 7, 8]) {
-          const pos = images.findIndex((im) => im.index === idx);
-          if (pos >= 0) {
-            images.splice(pos, 1);
-          }
-        }
-        for (const im of retry.images) {
-          images.push(im);
-        }
-        captionsText += retry.aggregatedText;
-        finalModelVersion = retry.modelVersion;
-      }
-    }
-    for (const im of b2.images) {
-      const existing = images.find((x) => x.index === im.index);
-      if (!existing) {
-        images.push(im);
-      }
-    }
-  }
-
-  // Batch 3: images 9-12
-  const b3 = await runBatch(3, [9, 10, 11, 12], frozenPrefix);
-  finalModelVersion = b3.modelVersion;
-  captionsText += b3.aggregatedText;
-  artifacts.batches.push({
-    batchIndex: 3,
-    promptParts: b3.promptParts,
-    judge: [],
-  });
-  {
-    let pass = false;
-    let attempt = 0;
-    const maxAttempts = 3;
-    while (!pass && attempt < maxAttempts) {
-      attempt += 1;
-      const j = await judgeBatch(
-        [...images, ...b1.images, ...b2.images, ...b3.images],
-        [9, 10, 11, 12],
-        promptsByIndex,
-        adapter
-      );
-      artifacts.batches[2]!.judge.push({
-        attempt,
-        requestPartsCount: j.requestParts.length,
-        requestPartsSanitised: j.requestParts.map((p) =>
-          sanitisePartForLogging(p)
-        ),
-        responseText: j.rawText,
-        responseJson: j.response,
-        modelVersion: j.modelVersion,
-        thoughts: j.thoughts,
-      });
-      adapter.log(
-        `[images/judge] batch 3 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
-      );
-      if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(
-          `[images/judge] batch 3 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
-        );
-      }
-      pass = j.response.pass;
-      if (!pass) {
-        const suggestions = j.response.suggestions ?? [];
-        for (const s of suggestions) {
-          if ([9, 10, 11, 12].includes(s.index)) {
-            promptsByIndex.set(s.index, s.updatedPrompt);
-          }
-        }
-        const retry = await runBatch(3, [9, 10, 11, 12], frozenPrefix);
-        // Overwrite indices 9..12
-        for (const idx of [9, 10, 11, 12]) {
-          const pos = images.findIndex((im) => im.index === idx);
-          if (pos >= 0) {
-            images.splice(pos, 1);
-          }
-        }
-        for (const im of retry.images) {
-          images.push(im);
-        }
-        captionsText += retry.aggregatedText;
-        finalModelVersion = retry.modelVersion;
-      }
-    }
-    for (const im of b3.images) {
-      const existing = images.find((x) => x.index === im.index);
-      if (!existing) {
-        images.push(im);
-      }
-    }
-  }
-
-  // Build a single human-readable prompt snapshot: style + Image 1..12 lines
+  const orderedEntries = [...entries].sort((a, b) => a.index - b.index);
   const snapshotLines: string[] = ["Style Requirements:", ...styleLines, ""];
-  for (let i = 1; i <= allPrompts.length; i++) {
-    snapshotLines.push(`Image ${i}: ${promptsByIndex.get(i)}`);
+  for (const entry of orderedEntries) {
+    snapshotLines.push(`Image ${entry.index}: ${entry.prompt}`);
   }
+
+  const captionsText = selectedSet.aggregatedText.trim();
 
   return {
-    images: images.sort((a, b) => a.index - b.index),
+    images: [...selectedSet.images].sort((a, b) => a.index - b.index),
     prompt: snapshotLines.join("\n"),
-    modelVersion: finalModelVersion,
-    captions: captionsText.trim() || undefined,
+    modelVersion: selectedSet.modelVersion,
+    captions: captionsText || undefined,
     artifacts,
   };
 }
+
 
 type GenerateStoryOptions = {
   topic: string;
@@ -1718,14 +1483,12 @@ export async function generateStory(
     segmentation.segmentation,
     options.progress
   );
-  // We now generate 12 images total: 1 cover, 10 interior panels, 1 ending.
-  // For media segments we only use the 10 interior images (indices 2..11).
-  const interior = images.images.filter(
-    (im) => im.index >= 2 && im.index <= 11
-  );
+  // We now generate 12 images total: 10 story panels, 1 ending card, 1 poster.
+  // For media segments we only use the 10 interior images (indices 1..10).
+  const interior = images.images.filter((im) => im.index >= 1 && im.index <= 10);
   if (interior.length !== segmentation.segmentation.segments.length) {
     throw new Error(
-      `Expected ${segmentation.segmentation.segments.length} interior images (2..11), received ${interior.length}`
+      `Expected ${segmentation.segmentation.segments.length} interior images (1..10), received ${interior.length}`
     );
   }
 
@@ -1735,8 +1498,7 @@ export async function generateStory(
   const bucket = storage.bucket(options.storageBucket);
 
   const storagePaths: string[] = [];
-  for (let i = 0; i < interior.length; i++) {
-    const image = interior[i]!;
+  for (const [i, image] of interior.entries()) {
     const seqIndex = i + 1; // 1..10 for media segments
     const jpegBuffer = await sharp(image.data)
       .jpeg({
