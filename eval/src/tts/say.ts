@@ -5,7 +5,7 @@ import path from "node:path";
 import {
   GoogleTextToSpeechClient,
   type SynthesizeAudioEncoding,
-} from "@spark/llm/utils/googleTTS";
+} from "@spark/llm/utils/googleTextToSpeechClient";
 import { z } from "zod";
 
 import { createCliCommand } from "../utils/cli";
@@ -49,8 +49,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     locale: string;
     encoding: string;
   }>();
-  const textParts = parsed.args.map((value) => String(value));
-  const text = textParts.join(" ").trim();
+  const text = parsed.args.map((arg) => String(arg)).join(" ").trim();
 
   return CliOptionsSchema.parse({
     voice: opts.voice,

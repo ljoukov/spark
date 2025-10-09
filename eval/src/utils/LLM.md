@@ -10,19 +10,21 @@ It is used across eval tools and session generators.
 
 ## Public API
 
-- `runLlmTextCall(options): Promise<string>`
+- `generateText(options): Promise<string>`
   - Streams a text response and returns the final concatenated text.
 - `runLlmImageCall(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
   - Streams images (and optional text) and returns image buffers.
-- `runLlmJsonCall<T>(options): Promise<T>`
-  - Like `runLlmTextCall` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
+- `generateImages(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
+  - Attempts to produce one image per entry in `imagePrompts`, defaulting to four attempts and re-prompting with the remaining prompts plus the expected output format when needed.
+- `generateJson<T>(options): Promise<T>`
+  - Like `generateText` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
 
 ### Shared options
 
 All calls accept:
 - `modelId`: text model (Gemini) or image model (`gemini-2.5-flash-image`).
-- `parts`: array of content parts:
-  - `{ type: 'text', text: string }`
+- `contents`: ordered array of `{ role: 'user' | 'model' | 'system' | 'tool'; parts: LlmContentPart[] }` representing the conversation you want to send to Gemini. Each part can be:
+  - `{ type: 'text', text: string, thought?: boolean }`
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
 - `progress?`: `JobProgressReporter` (see below). If omitted, a concise fallback logger is used.
 - `debug?`: `{ rootDir: string; stage?: string; subStage?: string; attempt?: number|string; enabled?: boolean }`
@@ -34,10 +36,13 @@ All calls accept:
 
 ### JSON convenience
 
-`runLlmJsonCall` adds:
+`generateJson` adds:
 - `schema`: `z.ZodSchema<T>`
-- `process?`: `(raw: string) => unknown` to pre-extract JSON (e.g. un-fence code blocks)
+- `responseSchema`: Google `Schema` definition applied at request time (required)
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
+- Responses are automatically requested as `application/json` and parsed before validation.
+
+Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
 
 ## Progress and Metrics
 
@@ -53,7 +58,7 @@ The default reporter used by our concurrency display aggregates across all calls
 ```
 
 Notes:
-- Thinking tokens are included in `chars` and `speed` metrics. Visible response text still determines the returned value from `runLlmTextCall`.
+- Thinking tokens are included in `chars` and `speed` metrics. Visible response text still determines the returned value from `generateText`.
 - Per-model periodic "progress …" logs are intentionally suppressed to avoid console spam; only the aggregate display updates continuously, plus a final per-call completion line.
 
 ## Debug Snapshots (Prompts and Responses)
@@ -65,14 +70,14 @@ If `debug.rootDir` is provided, each call writes snapshots under:
 ```
 
 - `stage` defaults to the `modelId` unless explicitly set via `debug.stage`.
-- `attempt` is appended if provided; for `runLlmJsonCall`, the attempt number (1-based) is automatically passed to the underlying stream.
+- `attempt` is appended if provided; for `generateJson`, the attempt number (1-based) is automatically passed to the underlying stream.
+- The target directory is cleared (recursively) before writing new snapshots so stale files from earlier runs never linger.
 
 Generated files:
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
 - `response.txt`: Summary header followed by:
-  - “===== Thoughts =====” with streamed thinking (if any)
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
-  - “===== Chunks =====” with lines like `chunk 3: +512 chars, +0 bytes`
+  - “===== Content =====” with a structured dump of the final parts when available
 - For image calls, one file per image: `image-01.<ext>`, `image-02.<ext>`, …
 
 Example layout:
@@ -93,27 +98,47 @@ Example layout:
 Text call:
 
 ```ts
-import { runLlmTextCall, type LlmContentPart } from "./llm";
+import { generateText, type LlmContent } from "./llm";
 
-const parts: LlmContentPart[] = [{ type: "text", text: "Explain XOR briefly." }];
-const text = await runLlmTextCall({
+const contents: LlmContent[] = [
+  { role: "user", parts: [{ type: "text", text: "Explain XOR briefly." }] },
+];
+
+const text = await generateText({
   modelId: "gemini-2.5-pro",
-  parts,
+  contents,
   tools: [{ type: "web-search" }],
   debug: { rootDir: "/tmp/llm-debug", stage: "xor" },
 });
 ```
 
-JSON call with Zod validation and fenced JSON extraction:
+JSON call with Zod validation:
 
 ```ts
+import { Type } from "@google/genai";
+
 const schema = z.object({ title: z.string(), items: z.array(z.string()) });
-const data = await runLlmJsonCall({
+const responseSchema = {
+  type: Type.OBJECT,
+  required: ["title", "items"],
+  properties: {
+    title: { type: Type.STRING },
+    items: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+  },
+} as const;
+const data = await generateJson({
   modelId: "gemini-2.5-pro",
-  parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
+  contents: [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
+    },
+  ],
+  responseSchema,
   schema,
-  process: (raw) => JSON.parse(raw.slice(raw.indexOf("{")).slice(0, raw.lastIndexOf("}") - raw.indexOf("{") + 1)),
-  maxAttempts: 2,
   debug: { rootDir: "/tmp/llm-debug", stage: "json-task" },
 });
 ```
@@ -121,13 +146,51 @@ const data = await runLlmJsonCall({
 Image call:
 
 ```ts
+const contents = [
+  {
+    role: "user",
+    parts: [{ type: "text", text: "Draw a vintage cartoon poster of XOR." }],
+  },
+];
+
 const images = await runLlmImageCall({
   modelId: "gemini-2.5-flash-image",
-  parts: [
-    { type: "text", text: "Draw a vintage cartoon poster of XOR." },
-  ],
+  contents,
   imageAspectRatio: "16:9",
   debug: { rootDir: "/tmp/llm-debug", stage: "poster" },
+});
+
+`generateImages` composes its own request prompt. Supply:
+- `stylePrompt`: ordered list of strings describing the shared art direction.
+- `imagePrompts`: ordered list of per-image descriptions; the function returns one image per entry, in order.
+- `maxAttempts?`: defaults to `4`. Each prompt can be attempted up to this many times before we give up on it.
+- `batchSize?`: defaults to `4`. Prompts are submitted in batches of this size; omitted images are retried in the next batch before new prompts are added.
+- `referenceImages?`: ordered list of `{ mimeType?: string; data: Buffer }` used as style references. When present, the prompt includes them immediately after the style text with the header:
+
+  ```
+  ------
+  Please consistently follow the characters from earlier frames:
+  <styleImage1>
+  ...
+  <styleImageN>
+  ------
+  ```
+- When retrying a batch, any images that have already been generated are reattached using the same header to preserve character consistency, and the prompt re-lists every image description while pointing out the indices that still need work.
+
+const reliableImages = await generateImages({
+  modelId: "gemini-2.5-flash-image",
+  stylePrompt: [
+    "Bold, colourful flat design avatars with clear lighting and clean shapes.",
+    "Keep poses dynamic but readable; maintain consistent proportions across characters.",
+  ],
+  imagePrompts: [
+    "A cheerful robotics engineer adjusting a small drone on a workbench.",
+    "A confident data scientist presenting charts on a holographic display.",
+    "An adventurous explorer holding a compass at the edge of a jungle.",
+    "A friendly teacher welcoming students into a bright classroom.",
+  ],
+  maxAttempts: 4,
+  debug: { rootDir: "/tmp/llm-debug", stage: "avatars" },
 });
 ```
 

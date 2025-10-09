@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import {
@@ -26,20 +27,19 @@ import {
   INTRO_PLAN_ITEM_ID,
   STORY_PLAN_ITEM_ID,
   OUTRO_PLAN_ITEM_ID,
+  STORY_TOPIC,
 } from "./constants";
-import { ensureEvalEnvLoaded } from "../../utils/paths";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
-import {
-  generateStory,
-} from "./generateStory";
+import { generateStory } from "./generateStory";
+import { runJobsWithConcurrency } from "../../utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
 const DEFAULT_MEDIA_IMAGE =
   "/spark/test-admin-0Rr2rEBRAg3T3SYk/sessions/dp-coin-change-decode/intro.jpeg";
-const STORY_TOPIC = "dynamic programming";
 
 const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
   {
@@ -47,8 +47,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "It’s September 2, 1954, in Laramie, Wyoming. Richard Bellman, a mathematician from the RAND Corporation, is at the American Mathematical Society’s summer meeting. He’s there to introduce a new method for making a series of decisions. He calls it ‘dynamic programming’ and unveils a core idea now known as the ‘principle of optimality’.",
+        text: "It’s September 2, 1954, in Laramie, Wyoming. Richard Bellman, a mathematician from the RAND Corporation, is at the American Mathematical Society’s summer meeting. He’s there to introduce a new method for making a series of decisions. He calls it ‘dynamic programming’ and unveils a core idea now known as the ‘principle of optimality’.",
       },
     ],
   },
@@ -57,8 +56,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "f",
-        text:
-          "That name, ‘dynamic programming,’ wasn’t for show. His boss back in Washington, Secretary of Defense Charles Wilson, had a visceral dislike for the word ‘research’. Bellman needed to keep the funding flowing for his work at RAND, a military think tank. So, he chose his words carefully: ‘dynamic’ sounded powerful, and ‘programming’ was just a synonym for planning. It was a clever disguise for some very serious math.",
+        text: "That name, ‘dynamic programming,’ wasn’t for show. His boss back in Washington, Secretary of Defense Charles Wilson, had a visceral dislike for the word ‘research’. Bellman needed to keep the funding flowing for his work at RAND, a military think tank. So, he chose his words carefully: ‘dynamic’ sounded powerful, and ‘programming’ was just a synonym for planning. It was a clever disguise for some very serious math.",
       },
     ],
   },
@@ -67,8 +65,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "The problem Bellman was tackling wasn’t about getting from one town to another. It was about much higher stakes: figuring out the best way to manage Air Force logistics. Imagine deciding how many spare engines to stock for bomber fleets across the country to keep them ready, without wasting millions on parts that just sit in a warehouse. This was a real issue RAND was working on in the 1950s.",
+        text: "The problem Bellman was tackling wasn’t about getting from one town to another. It was about much higher stakes: figuring out the best way to manage Air Force logistics. Imagine deciding how many spare engines to stock for bomber fleets across the country to keep them ready, without wasting millions on parts that just sit in a warehouse. This was a real issue RAND was working on in the 1950s.",
       },
     ],
   },
@@ -77,8 +74,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "f",
-        text:
-          "Think about it like this: if you order too few spare parts, a bomber is grounded. If you order too many, you’ve wasted a fortune that could have been used elsewhere. And the decision you make this month affects what you’ll need next month, and the month after that. A greedy approach—just ordering the cheapest parts now—could lead to disaster later. Bellman’s breakthrough was to solve the problem backward. Start from the end goal—total fleet readiness at the lowest cost—and work your way back, making the optimal decision at each step. By solving these smaller, overlapping problems just once and remembering the answers, you build the perfect plan.",
+        text: "Think about it like this: if you order too few spare parts, a bomber is grounded. If you order too many, you’ve wasted a fortune that could have been used elsewhere. And the decision you make this month affects what you’ll need next month, and the month after that. A greedy approach—just ordering the cheapest parts now—could lead to disaster later. Bellman’s breakthrough was to solve the problem backward. Start from the end goal—total fleet readiness at the lowest cost—and work your way back, making the optimal decision at each step. By solving these smaller, overlapping problems just once and remembering the answers, you build the perfect plan.",
       },
     ],
   },
@@ -87,8 +83,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "The essence of dynamic programming is this: solve a complex problem by breaking it down into simpler, overlapping subproblems. You find the optimal solution to each subproblem once and store it. The key insight, Bellman’s ‘principle of optimality,’ is that any optimal plan must be built from optimal smaller plans.",
+        text: "The essence of dynamic programming is this: solve a complex problem by breaking it down into simpler, overlapping subproblems. You find the optimal solution to each subproblem once and store it. The key insight, Bellman’s ‘principle of optimality,’ is that any optimal plan must be built from optimal smaller plans.",
       },
     ],
   },
@@ -97,8 +92,7 @@ const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "f",
-        text:
-          "Bellman’s deliberately blandly named method went on to be used in everything from economics to aerospace engineering. He even coined the phrase ‘curse of dimensionality’ to describe the explosion of possibilities in complex problems. That day in Wyoming, with a name designed to fly under the radar, he gave the world a powerful new way to think about the future.",
+        text: "Bellman’s deliberately blandly named method went on to be used in everything from economics to aerospace engineering. He even coined the phrase ‘curse of dimensionality’ to describe the explosion of possibilities in complex problems. That day in Wyoming, with a name designed to fly under the radar, he gave the world a powerful new way to think about the future.",
       },
     ],
   },
@@ -110,13 +104,11 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "DP is about naming the state, anchoring with base cases, and reusing computed answers via a memo or table. Today you applied that to Coin Change and Decode Ways.",
+        text: "DP is about naming the state, anchoring with base cases, and reusing computed answers via a memo or table. Today you applied that to Coin Change and Decode Ways.",
       },
       {
         speaker: "f",
-        text:
-          "Keep the mental checklist: What’s the state? What’s the tiniest known answer? How do small answers compose into the next one?",
+        text: "Keep the mental checklist: What’s the state? What’s the tiniest known answer? How do small answers compose into the next one?",
       },
     ],
   },
@@ -125,13 +117,11 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "Spot overlapping subproblems early. Prefer clear states and minimal memory. Choose memoization or tabulation for clarity—both are valid.",
+        text: "Spot overlapping subproblems early. Prefer clear states and minimal memory. Choose memoization or tabulation for clarity—both are valid.",
       },
       {
         speaker: "f",
-        text:
-          "Like organizing tools in a small box: only keep what you reach for. The structure makes the next fix faster.",
+        text: "Like organizing tools in a small box: only keep what you reach for. The structure makes the next fix faster.",
       },
     ],
   },
@@ -140,13 +130,11 @@ const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
     narration: [
       {
         speaker: "m",
-        text:
-          "When you’re ready, try more DP patterns—stairs and grids, LIS, or knapsack. Short, focused reps will cement the skill.",
+        text: "When you’re ready, try more DP patterns—stairs and grids, LIS, or knapsack. Short, focused reps will cement the skill.",
       },
       {
         speaker: "f",
-        text:
-          "One more small session now beats a long one later. See you in the next lesson.",
+        text: "One more small session now beats a long one later. See you in the next lesson.",
       },
     ],
   },
@@ -200,7 +188,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Breaking a problem down and reusing solved pieces is the heart of DP.",
+          message:
+            "Breaking a problem down and reusing solved pieces is the heart of DP.",
         },
       },
       {
@@ -231,7 +220,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Anchoring the table with a tiny, known answer is exactly how base cases work.",
+          message:
+            "Anchoring the table with a tiny, known answer is exactly how base cases work.",
         },
       },
       {
@@ -262,7 +252,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Keeping a table of solved states is exactly how DP avoids recomputing work.",
+          message:
+            "Keeping a table of solved states is exactly how DP avoids recomputing work.",
         },
       },
     ],
@@ -316,7 +307,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Caching function results so later calls return instantly is exactly memoization.",
+          message:
+            "Caching function results so later calls return instantly is exactly memoization.",
         },
       },
       {
@@ -343,7 +335,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Starting with a clear state and tiny base case sets up every DP solution.",
+          message:
+            "Starting with a clear state and tiny base case sets up every DP solution.",
         },
       },
       {
@@ -379,7 +372,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Spotting repeated subproblems and caching them is the core DP habit.",
+          message:
+            "Spotting repeated subproblems and caching them is the core DP habit.",
         },
       },
     ],
@@ -425,7 +419,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Combining the n−1 and n−2 paths is exactly how the stair DP recurrence works.",
+          message:
+            "Combining the n−1 and n−2 paths is exactly how the stair DP recurrence works.",
         },
       },
       {
@@ -461,7 +456,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Recognising the single-path edges sets up the grid DP base cases perfectly.",
+          message:
+            "Recognising the single-path edges sets up the grid DP base cases perfectly.",
         },
       },
       {
@@ -497,7 +493,8 @@ const QUIZZES: QuizDefinition[] = [
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
-          message: "Storing the answer right after you compute it is what makes memoization shine.",
+          message:
+            "Storing the answer right after you compute it is what makes memoization shine.",
         },
       },
     ],
@@ -611,8 +608,7 @@ const decodeExampleTwo = {
   title: "Example 2",
   input: "226",
   output: "3",
-  explanation:
-    'Three decodings: "BZ" (2|26), "VF" (22|6), and "BBF" (2|2|6).',
+  explanation: 'Three decodings: "BZ" (2|26), "VF" (22|6), and "BBF" (2|2|6).',
 };
 
 const decodeExampleThree = {
@@ -699,25 +695,25 @@ const PROBLEMS: CodeProblem[] = [
     description: [
       "You are stocking a kiosk with unlimited copies of several coin denominations. Given a target amount, count how many unique combinations of these coins sum to the target. Order does not matter—3 + 2 + 2 is the same as 2 + 3 + 2.",
       "",
-      "Write a program that reads the amount, the number of distinct coin values, and the coin values themselves from standard input. Print only the number of combinations."
+      "Write a program that reads the amount, the number of distinct coin values, and the coin values themselves from standard input. Print only the number of combinations.",
     ].join("\n"),
     inputFormat: [
       "- Line 1: integer A — the target amount.",
       "- Line 2: integer K — the number of distinct coin values provided.",
-      "- Line 3: K space-separated integers listing each coin value. Duplicate numbers should be treated as the same coin."
+      "- Line 3: K space-separated integers listing each coin value. Duplicate numbers should be treated as the same coin.",
     ].join("\n"),
     constraints: [
       "0 ≤ A ≤ 5000",
       "1 ≤ K ≤ 60",
       "1 ≤ coin value ≤ 5000",
-      "The answer fits in a 64-bit signed integer"
+      "The answer fits in a 64-bit signed integer",
     ],
     examples: COIN_CHANGE_EXAMPLES,
     tests: COIN_CHANGE_TESTS,
     hints: [
       "Sort and deduplicate the coin values, then think about building amounts from 0 up to A.",
       "Let dp[x] be the number of ways to make amount x. Iterate coins on the outside so different orders of the same coins are not counted twice.",
-      "Set dp[0] = 1 and for each coin add dp[x - coin] into dp[x] for every x ≥ coin. The final dp[A] is the answer."
+      "Set dp[0] = 1 and for each coin add dp[x - coin] into dp[x] for every x ≥ coin. The final dp[A] is the answer.",
     ],
     solution: {
       language: "python",
@@ -750,24 +746,22 @@ const PROBLEMS: CodeProblem[] = [
     difficulty: "easy",
     topics: ["Dynamic Programming", "Strings"],
     description: [
-      "Digits 1 through 26 map to uppercase letters A through Z. Given a digit string with no separators, count how many different letter sequences it can represent. For example, \"226\" can decode to \"BBF\", \"BZ\", or \"VF\".",
+      'Digits 1 through 26 map to uppercase letters A through Z. Given a digit string with no separators, count how many different letter sequences it can represent. For example, "226" can decode to "BBF", "BZ", or "VF".',
       "",
-      "Write a program that reads the digit string from standard input and prints the number of distinct decodings. The program must read from stdin and write only the integer count."
+      "Write a program that reads the digit string from standard input and prints the number of distinct decodings. The program must read from stdin and write only the integer count.",
     ].join("\n"),
-    inputFormat: [
-      "- A single line containing the digit string s."
-    ].join("\n"),
+    inputFormat: ["- A single line containing the digit string s."].join("\n"),
     constraints: [
       "1 ≤ |s| ≤ 100",
       "s consists only of characters '0'–'9'",
-      "The answer fits in a 32-bit signed integer"
+      "The answer fits in a 32-bit signed integer",
     ],
     examples: DECODE_EXAMPLES,
     tests: DECODE_TESTS,
     hints: [
       "Process the string left to right and consider how many ways each prefix can be decoded.",
       "At position i, you can extend with s[i] when it is 1–9 and with s[i-1:i+1] when it forms a number 10–26.",
-      "Maintain two rolling counts: ways up to i-2 and ways up to i-1. Combine them to produce the current count."
+      "Maintain two rolling counts: ways up to i-2 and ways up to i-1. Combine them to produce the current count.",
     ],
     solution: {
       language: "python",
@@ -776,14 +770,14 @@ const PROBLEMS: CodeProblem[] = [
         "",
         "",
         "def count_decodings(s: str) -> int:",
-        "    if not s or s[0] == \"0\":",
+        '    if not s or s[0] == "0":',
         "        return 0",
         "",
         "    prev2 = 1",
         "    prev1 = 1",
         "    for index in range(1, len(s)):",
         "        current = 0",
-        "        if s[index] != \"0\":",
+        '        if s[index] != "0":',
         "            current += prev1",
         "        pair = int(s[index - 1 : index + 1])",
         "        if 10 <= pair <= 26:",
@@ -881,6 +875,14 @@ function buildPlan(storyTitle: string): PlanItem[] {
   ];
 }
 
+function resolveDebugRootDir(): string {
+  return path.join(
+    WORKSPACE_PATHS.codeSyntheticDir,
+    "sessions",
+    "test-user"
+  );
+}
+
 function normalizeBucketName(raw: string | undefined): string {
   if (!raw) {
     return "";
@@ -912,17 +914,15 @@ function resolveStorageBucket(): string {
   } catch (error) {
     throw new Error(
       "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-      { cause: error instanceof Error ? error : undefined },
+      { cause: error instanceof Error ? error : undefined }
     );
   }
 }
 
-
-
 async function publishMediaAssets(
   userId: string,
   sessionId: string,
-  storageBucket: string,
+  storageBucket: string
 ): Promise<void> {
   for (const source of MEDIA_SOURCES) {
     const consoleLabel =
@@ -951,7 +951,7 @@ async function seedContent(userId: string, session: Session) {
         acc[item.id] = { status: "not_started" };
         return acc;
       },
-      {} as Record<string, SessionState["items"][string]>,
+      {} as Record<string, SessionState["items"][string]>
     ),
     lastUpdatedAt: Timestamp.now(),
   });
@@ -962,14 +962,14 @@ async function seedContent(userId: string, session: Session) {
     QUIZZES.map(async (quiz) => {
       const parsed = QuizDefinitionSchema.parse(quiz);
       await sessionRef.collection("quiz").doc(parsed.id).set(parsed);
-    }),
+    })
   );
 
   await Promise.all(
     PROBLEMS.map(async (problem) => {
       const parsed = CodeProblemSchema.parse(problem);
       await sessionRef.collection("code").doc(parsed.slug).set(parsed);
-    }),
+    })
   );
 
   return userRef;
@@ -980,13 +980,24 @@ async function main(): Promise<void> {
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
   const storageBucket = resolveStorageBucket();
+  const debugRootDir = resolveDebugRootDir();
 
-  const storyResult = await generateStory({
-    topic: STORY_TOPIC,
-    userId,
-    sessionId,
-    planItemId: STORY_PLAN_ITEM_ID,
-    storageBucket,
+  const [storyResult] = await runJobsWithConcurrency({
+    items: ["story"],
+    concurrency: 1,
+    getId: () => "story",
+    label: "[test-session/story]",
+    handler: async (_item, { progress }) => {
+      return generateStory({
+        topic: STORY_TOPIC,
+        userId,
+        sessionId,
+        planItemId: STORY_PLAN_ITEM_ID,
+        storageBucket,
+        progress,
+        debugRootDir,
+      });
+    },
   });
 
   const sessionData = {

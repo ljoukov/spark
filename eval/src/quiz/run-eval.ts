@@ -625,7 +625,6 @@ async function callModel<T>({
         progress,
         modelId: model,
         parts,
-        responseMimeType: "application/json",
         responseSchema,
         schema,
         maxAttempts: 1,
