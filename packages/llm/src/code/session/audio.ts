@@ -6,6 +6,7 @@ import {
   type SpeakerCode,
   type AudioGenerationProgress,
 } from "../../utils/audio";
+import type { SynthesizeAudioEncoding } from "../../utils/googleTextToSpeechClient";
 import { errorAsString } from "../../utils/error";
 import { MediaSegmentSchema, type MediaSegment } from "./schemas";
 
@@ -21,10 +22,11 @@ const MediaSegmentsSchema = z.array(MediaSegmentSchema);
 type GenerateSessionAudioOptions = {
   segments: readonly MediaSegment[];
   outputFilePath: string;
-  model?: string;
   voiceMap?: Partial<Record<SpeakerCode, string>>;
   progress?: AudioGenerationProgress;
   persistSegmentsDir?: string;
+  languageCode?: string;
+  audioEncoding?: SynthesizeAudioEncoding;
 };
 
 export async function generateSessionAudio(
@@ -55,10 +57,11 @@ export async function generateSessionAudio(
   const baseResult = await generateAudioFromSegments({
     segments: flattenedNarration,
     outputFilePath: options.outputFilePath,
-    model: options.model,
     voiceMap: options.voiceMap,
     progress: options.progress,
     persistSegmentsDir: options.persistSegmentsDir,
+    languageCode: options.languageCode,
+    audioEncoding: options.audioEncoding,
   });
 
   const slideOffsets: number[] = [];
