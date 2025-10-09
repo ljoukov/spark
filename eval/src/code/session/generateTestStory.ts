@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command, Option } from "commander";
@@ -10,6 +10,9 @@ import {
   generateStoryImages,
   generateStorySegmentation,
   SegmentationValidationError,
+  buildSegmentationPrompt,
+  buildStoryPrompt,
+  ART_STYLE_VINTAGE_CARTOON,
   type StoryImagesResult,
   type StoryProseResult,
   type StorySegmentation,
@@ -102,6 +105,143 @@ function isFileNotFound(error: unknown): boolean {
   );
 }
 
+function formatAttemptLabel(attempt: number): string {
+  return `attempt-${String(attempt).padStart(2, "0")}`;
+}
+
+async function removeArtifacts(paths: string[]): Promise<void> {
+  await Promise.all(
+    paths.map(async (target) => {
+      await rm(target, { recursive: true, force: true });
+    })
+  );
+}
+
+async function writeTextSnapshot(targetPath: string, contents: string): Promise<void> {
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, contents, { encoding: "utf8" });
+}
+
+async function writeJsonSnapshot(targetPath: string, payload: unknown): Promise<void> {
+  await writeTextSnapshot(targetPath, JSON.stringify(payload, null, 2));
+}
+
+function buildImagesPromptSnapshot(segmentation: StorySegmentation): string {
+  const lines: string[] = [
+    "Style Requirements:",
+    ...ART_STYLE_VINTAGE_CARTOON,
+    "",
+  ];
+  lines.push(`Image 1: ${segmentation.posterPrompt.trim()}`);
+  segmentation.segments.forEach((segment, index) => {
+    lines.push(`Image ${index + 2}: ${segment.imagePrompt.trim()}`);
+  });
+  const endingIndex = segmentation.segments.length + 2;
+  lines.push(`Image ${endingIndex}: ${segmentation.endingPrompt.trim()}`);
+  return lines.join("\n");
+}
+
+async function cleanProseStage(outDir: string): Promise<void> {
+  await removeArtifacts([
+    path.join(outDir, "story.txt"),
+    path.join(outDir, "story.json"),
+    path.join(outDir, "story-thoughts.txt"),
+    path.join(outDir, "prompt.txt"),
+    path.join(outDir, "prompts"),
+  ]);
+}
+
+async function prepareProsePrompt(topic: string, outDir: string): Promise<string> {
+  const promptText = buildStoryPrompt(topic);
+  const latestPath = path.join(outDir, "prompt.txt");
+  await writeTextSnapshot(latestPath, promptText);
+  const attemptDir = path.join(outDir, "prompts", formatAttemptLabel(1));
+  await writeTextSnapshot(
+    path.join(attemptDir, `prompt-${formatAttemptLabel(1)}.txt`),
+    promptText,
+  );
+  return promptText;
+}
+
+async function cleanSegmentationStage(outDir: string): Promise<void> {
+  const attemptPromptPaths: string[] = [];
+  try {
+    const entries = await readdir(outDir);
+    for (const entry of entries) {
+      if (
+        entry.startsWith("segmentation-prompt-attempt-") &&
+        entry.endsWith(".txt")
+      ) {
+        attemptPromptPaths.push(path.join(outDir, entry));
+      }
+    }
+  } catch (error) {
+    if (!isFileNotFound(error)) {
+      throw error;
+    }
+  }
+
+  await removeArtifacts([
+    path.join(outDir, "segments.json"),
+    path.join(outDir, "segmentation-prompt.txt"),
+    path.join(outDir, "segmentation-attempts"),
+    path.join(outDir, "segmentation"),
+    ...attemptPromptPaths,
+  ]);
+}
+
+async function prepareSegmentationPrompt(
+  storyText: string,
+  outDir: string,
+): Promise<string> {
+  const promptText = buildSegmentationPrompt(storyText);
+  const latestPath = path.join(outDir, "segmentation-prompt.txt");
+  await writeTextSnapshot(latestPath, promptText);
+  const attemptPath = path.join(
+    outDir,
+    `segmentation-prompt-${formatAttemptLabel(1)}.txt`
+  );
+  await writeTextSnapshot(attemptPath, promptText);
+  return promptText;
+}
+
+async function cleanAudioStage(outDir: string): Promise<void> {
+  await removeArtifacts([path.join(outDir, "audio")]);
+}
+
+async function prepareAudioInputs(
+  segmentation: StorySegmentation,
+  outDir: string,
+): Promise<void> {
+  const mediaSegments = segmentationToMediaSegments(segmentation);
+  const audioDir = path.join(outDir, "audio");
+  await writeJsonSnapshot(path.join(audioDir, "input.json"), mediaSegments);
+  const attemptDir = path.join(audioDir, "attempts", formatAttemptLabel(1));
+  await writeJsonSnapshot(
+    path.join(attemptDir, `input-${formatAttemptLabel(1)}.json`),
+    mediaSegments,
+  );
+}
+
+async function cleanImagesStage(outDir: string): Promise<void> {
+  await removeArtifacts([path.join(outDir, "images")]);
+}
+
+async function prepareImagesPrompt(
+  segmentation: StorySegmentation,
+  outDir: string,
+): Promise<string> {
+  const snapshot = buildImagesPromptSnapshot(segmentation);
+  const latestPath = path.join(outDir, "images", "prompt.txt");
+  await writeTextSnapshot(latestPath, snapshot);
+  const attemptDir = path.join(outDir, "images", "prompts", formatAttemptLabel(1));
+  await writeTextSnapshot(
+    path.join(attemptDir, `prompt-${formatAttemptLabel(1)}.txt`),
+    snapshot,
+  );
+  return snapshot;
+}
+
 async function saveStoryArtifacts(
   result: StoryProseResult,
   topic: string,
@@ -149,21 +289,24 @@ async function saveSegmentationArtifacts(
   outDir: string,
   progress: JobProgressReporter
 ): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-
-  const jsonPath = path.join(outDir, "segments.json");
   const payload = {
     modelVersion: result.modelVersion,
     ...result.segmentation,
   };
-  await writeFile(jsonPath, JSON.stringify(payload, null, 2), {
-    encoding: "utf8",
-  });
-  progress.log(`[story] saved segmentation JSON to ${jsonPath}`);
+
+  const jsonPath = path.join(outDir, "segments.json");
+  await writeJsonSnapshot(jsonPath, payload);
+  progress.log(`[story] saved segmentation JSON to ${jsonPath} (attempt ${result.attempt})`);
+
+  const attemptLabel = formatAttemptLabel(result.attempt);
+  const responseDir = path.join(outDir, "segmentation", "responses", attemptLabel);
+  await writeJsonSnapshot(path.join(responseDir, `segments-${attemptLabel}.json`), payload);
 
   const promptPath = path.join(outDir, "segmentation-prompt.txt");
-  await writeFile(promptPath, result.prompt, { encoding: "utf8" });
-  progress.log(`[story] saved segmentation prompt snapshot to ${promptPath}`);
+  await writeTextSnapshot(promptPath, result.prompt);
+  const promptAttemptPath = path.join(outDir, `segmentation-prompt-${attemptLabel}.txt`);
+  await writeTextSnapshot(promptAttemptPath, result.prompt);
+  progress.log(`[story] saved segmentation prompt snapshot to ${promptPath} (attempt ${result.attempt})`);
 }
 
 async function saveSegmentationFailureArtifacts(
@@ -174,35 +317,24 @@ async function saveSegmentationFailureArtifacts(
   const attemptsDir = path.join(outDir, "segmentation-attempts");
   await mkdir(attemptsDir, { recursive: true });
 
-  const promptPath = path.join(attemptsDir, "prompt.txt");
-  await writeFile(promptPath, failure.prompt, { encoding: "utf8" });
-
   for (const attempt of failure.attempts) {
-    const attemptDir = path.join(
-      attemptsDir,
-      `attempt-${String(attempt.attempt).padStart(2, "0")}`
-    );
+    const attemptLabel = formatAttemptLabel(attempt.attempt);
+    const attemptDir = path.join(attemptsDir, attemptLabel);
     await mkdir(attemptDir, { recursive: true });
-    await writeFile(path.join(attemptDir, "raw.txt"), attempt.rawText, {
-      encoding: "utf8",
-    });
-    const meta = {
+    await writeTextSnapshot(path.join(attemptDir, `prompt-${attemptLabel}.txt`), failure.prompt);
+    await writeTextSnapshot(path.join(attemptDir, `response-${attemptLabel}.txt`), attempt.rawText);
+    const payload = {
       attempt: attempt.attempt,
       modelVersion: attempt.modelVersion,
       errorMessage: attempt.errorMessage,
       zodIssues: attempt.zodIssues ?? undefined,
       thoughts: attempt.thoughts ?? undefined,
     };
-    await writeFile(
-      path.join(attemptDir, "meta.json"),
-      JSON.stringify(meta, null, 2),
-      { encoding: "utf8" }
-    );
+    await writeJsonSnapshot(path.join(attemptDir, `meta-${attemptLabel}.json`), payload);
     if (attempt.thoughts && attempt.thoughts.length > 0) {
-      await writeFile(
-        path.join(attemptDir, "thoughts.txt"),
+      await writeTextSnapshot(
+        path.join(attemptDir, `thoughts-${attemptLabel}.txt`),
         attempt.thoughts.join("\n---\n"),
-        { encoding: "utf8" }
       );
     }
   }
@@ -322,22 +454,19 @@ async function saveImageArtifacts(
       // Judge iterations
       if (batch.judge.length > 0) {
         const jd = path.join(bd, "judge");
-        await mkdir(jd, { recursive: true });
         for (const j of batch.judge) {
-          const rd = path.join(jd, `attempt-${j.attempt}`);
-          await mkdir(rd, { recursive: true });
-          await writeFile(path.join(rd, "response.txt"), j.responseText, { encoding: "utf8" });
-          await writeFile(path.join(rd, "response.json"), JSON.stringify(j.responseJson, null, 2), { encoding: "utf8" });
-          await writeFile(
-            path.join(rd, "request.json"),
-            JSON.stringify({ parts: j.requestPartsSanitised, count: j.requestPartsCount }, null, 2),
-            { encoding: "utf8" }
+          const attemptLabel = formatAttemptLabel(j.attempt);
+          const rd = path.join(jd, attemptLabel);
+          await writeTextSnapshot(path.join(rd, `response-${attemptLabel}.txt`), j.responseText);
+          await writeJsonSnapshot(path.join(rd, `response-${attemptLabel}.json`), j.responseJson);
+          await writeJsonSnapshot(
+            path.join(rd, `request-${attemptLabel}.json`),
+            { parts: j.requestPartsSanitised, count: j.requestPartsCount },
           );
           if (j.thoughts && j.thoughts.length > 0) {
-            await writeFile(
-              path.join(rd, "thoughts.txt"),
+            await writeTextSnapshot(
+              path.join(rd, `thoughts-${attemptLabel}.txt`),
               j.thoughts.join("\n---\n"),
-              { encoding: "utf8" }
             );
           }
         }
@@ -469,6 +598,9 @@ async function main(): Promise<void> {
         progress.log(`[story] stage: ${stage}`);
         switch (stage) {
           case "prose": {
+            await cleanProseStage(outDir);
+            await prepareProsePrompt(options.topic, outDir);
+            progress.log("[story] prepared prose prompt snapshot");
             const storyResult = await generateProseStory(options.topic, progress);
             currentStory = {
               text: storyResult.text,
@@ -485,6 +617,9 @@ async function main(): Promise<void> {
           }
           case "segmentation": {
             const story = await ensureStory();
+            await cleanSegmentationStage(outDir);
+            await prepareSegmentationPrompt(story.text, outDir);
+            progress.log("[story] prepared segmentation prompt snapshot");
             try {
               segmentationResult = await generateStorySegmentation(
                 story.text,
@@ -512,6 +647,9 @@ async function main(): Promise<void> {
             const segments =
               segmentationResult?.segmentation ?? (await ensureSegmentation());
             segmentation = segments;
+            await cleanAudioStage(outDir);
+            await prepareAudioInputs(segments, outDir);
+            progress.log("[story] prepared audio input snapshot");
             await saveAudioArtifacts(segments, outDir, progress);
             break;
           }
@@ -519,6 +657,9 @@ async function main(): Promise<void> {
             const segments =
               segmentationResult?.segmentation ?? (await ensureSegmentation());
             segmentation = segments;
+            await cleanImagesStage(outDir);
+            await prepareImagesPrompt(segments, outDir);
+            progress.log("[story] prepared image prompt snapshot");
             const imagesResult = await generateStoryImages(segments, progress);
             await saveImageArtifacts(imagesResult, outDir, progress);
             break;

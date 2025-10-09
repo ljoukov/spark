@@ -6,19 +6,17 @@ import type { Part } from "@google/genai";
 import { z, type ZodIssue } from "zod";
 
 import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
-import {
-  estimateUploadBytes,
-  sanitisePartForLogging,
-} from "../../utils/llm";
+import { estimateUploadBytes, sanitisePartForLogging } from "../../utils/llm";
 import { formatInteger, formatMillis } from "../../utils/format";
 import type { JobProgressReporter } from "../../utils/concurrency";
-import {
-  getFirebaseAdminStorage,
-} from "@spark/llm";
+import { getFirebaseAdminStorage } from "@spark/llm";
 import type { MediaSegment } from "@spark/llm";
 import sharp from "sharp";
 
-import { createConsoleProgress, synthesizeAndPublishNarration } from "./narration";
+import {
+  createConsoleProgress,
+  synthesizeAndPublishNarration,
+} from "./narration";
 
 export const DEFAULT_TOPIC = "xor bitwise operations" as const;
 export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
@@ -58,12 +56,15 @@ function useProgress(progress: StoryProgress) {
       }
       return Symbol("model-call");
     },
-    recordModelUsage(handle: symbol, delta: {
-      promptTokensDelta: number;
-      inferenceTokensDelta: number;
-      cachedTokensDelta?: number;
-      timestamp: number;
-    }) {
+    recordModelUsage(
+      handle: symbol,
+      delta: {
+        promptTokensDelta: number;
+        inferenceTokensDelta: number;
+        cachedTokensDelta?: number;
+        timestamp: number;
+      }
+    ) {
       if (progress) {
         progress.recordModelUsage(handle, delta);
       }
@@ -80,7 +81,7 @@ async function writeDebugText(
   baseDir: string | undefined,
   relativePath: string,
   content: string,
-  { append = false }: { append?: boolean } = {},
+  { append = false }: { append?: boolean } = {}
 ): Promise<void> {
   if (!baseDir) {
     return;
@@ -101,7 +102,7 @@ async function writeDebugText(
 async function writeDebugBinary(
   baseDir: string | undefined,
   relativePath: string,
-  data: Buffer,
+  data: Buffer
 ): Promise<void> {
   if (!baseDir) {
     return;
@@ -166,7 +167,7 @@ export class SegmentationValidationError extends Error {
   constructor(
     message: string,
     readonly prompt: string,
-    readonly attempts: SegmentationAttemptFailure[],
+    readonly attempts: SegmentationAttemptFailure[]
   ) {
     super(message);
     this.name = "SegmentationValidationError";
@@ -184,6 +185,7 @@ export type StorySegmentationResult = {
   segmentation: StorySegmentation;
   prompt: string;
   modelVersion: string;
+  attempt: number;
 };
 
 export type GeneratedStoryImage = {
@@ -236,7 +238,7 @@ const SEGMENTATION_JSON_SCHEMA = `{
   "additionalProperties": false
 }`;
 
-function buildStoryPrompt(topic: string): string {
+export function buildStoryPrompt(topic: string): string {
   const audienceDesc = "advanced maths school students";
   const dialect = "UK";
   const length = "2-3 minutes";
@@ -304,7 +306,7 @@ Write a single-voice, audio-friendly historical story that introduces **${topic}
 `;
 }
 
-function buildSegmentationPrompt(storyText: string): string {
+export function buildSegmentationPrompt(storyText: string): string {
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
   return [
     "Convert the provided historical story into a structured narration and illustration plan.",
@@ -314,7 +316,7 @@ function buildSegmentationPrompt(storyText: string): string {
     "2. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
     "3. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster.",
-    "4. `endingPrompt` is a graceful \"The End\" card with a minimal motif from the story.",
+    '4. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.',
     "5. For each of the ten `segments`:",
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
     "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
@@ -342,7 +344,7 @@ function buildSegmentationPrompt(storyText: string): string {
 // Build a single 4-image batch prompt: style first, then the numbered image prompts
 function buildFourImageBatchPrompt(
   styleLines: readonly string[],
-  pairs: Array<{ index: number; prompt: string }>,
+  pairs: Array<{ index: number; prompt: string }>
 ): Part[] {
   const parts: Part[] = [];
   const headerLines: string[] = [
@@ -364,14 +366,15 @@ function buildFourImageBatchPrompt(
 
 export async function generateProseStory(
   topic: string,
-  progress?: StoryProgress,
+  progress?: StoryProgress
 ): Promise<StoryProseResult> {
   const adapter = useProgress(progress);
-  adapter.log("[story] generating prose with web-search-enabled Gemini 2.5 Pro");
+  adapter.log(
+    "[story] generating prose with web-search-enabled Gemini 2.5 Pro"
+  );
   const prompt = buildStoryPrompt(topic);
   const parts: Part[] = [{ text: prompt }];
-  await writeFile(path.join(WORKSPACE_PATHS.storyTmpDir ?? ".", `prose-prompt-${Date.now()}.txt`), prompt, { encoding: "utf8" }).catch(() => undefined);
-  adapter.log(`[story/prose] prompt: ${prompt}`);
+  adapter.log("[story/prose] prompt prepared");
   const uploadBytes = estimateUploadBytes(parts);
   const callHandle = adapter.startModelCall({
     modelId: TEXT_MODEL_ID as GeminiModelId,
@@ -441,11 +444,11 @@ export async function generateProseStory(
           const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
           const thinkingDelta = Math.max(
             0,
-            thinkingTokensNow - lastThinkingTokens,
+            thinkingTokensNow - lastThinkingTokens
           );
           const inferenceDelta = Math.max(
             0,
-            inferenceTokensNow - lastInferenceTokens,
+            inferenceTokensNow - lastInferenceTokens
           );
           if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
             adapter.recordModelUsage(callHandle, {
@@ -474,14 +477,16 @@ export async function generateProseStory(
     });
 
     const elapsed = formatMillis(Date.now() - startTime);
-    adapter.log(`[story/prose] model ${result.modelVersion} finished in ${elapsed}`);
+    adapter.log(
+      `[story/prose] model ${result.modelVersion} finished in ${elapsed}`
+    );
 
-      return {
-        text: result.text,
-        prompt,
-        modelVersion: result.modelVersion,
-        thoughts: thoughts.length > 0 ? [...thoughts] : undefined,
-      };
+    return {
+      text: result.text,
+      prompt,
+      modelVersion: result.modelVersion,
+      thoughts: thoughts.length > 0 ? [...thoughts] : undefined,
+    };
   } finally {
     adapter.finishModelCall(callHandle);
   }
@@ -520,21 +525,27 @@ function extractJsonObject(rawText: string): unknown {
 
 export async function generateStorySegmentation(
   storyText: string,
-  progress?: StoryProgress,
+  progress?: StoryProgress
 ): Promise<StorySegmentationResult> {
   const adapter = useProgress(progress);
   adapter.log("[story] generating narration segments with Gemini 2.5 Pro");
   const prompt = buildSegmentationPrompt(storyText);
   const parts: Part[] = [{ text: prompt }];
-  adapter.log(`[story/segments] prompt: ${prompt}`);
+  adapter.log("[story/segments] prompt prepared");
   const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
-  adapter.log(`[story/segments] request parts: ${JSON.stringify(sanitisedRequest)}`);
+  adapter.log(
+    `[story/segments] request prepared with ${sanitisedRequest.length} part(s)`
+  );
   const maxAttempts = 3;
   const failures: SegmentationAttemptFailure[] = [];
 
   const runAttempt = async (
-    attempt: number,
-  ): Promise<{ rawText: string; modelVersion: string; thoughts?: string[] }> => {
+    attempt: number
+  ): Promise<{
+    rawText: string;
+    modelVersion: string;
+    thoughts?: string[];
+  }> => {
     const uploadBytes = estimateUploadBytes(parts);
     const callHandle = adapter.startModelCall({
       modelId: TEXT_MODEL_ID as GeminiModelId,
@@ -598,11 +609,11 @@ export async function generateStorySegmentation(
             const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
             const thinkingDelta = Math.max(
               0,
-              thinkingTokensNow - lastThinkingTokens,
+              thinkingTokensNow - lastThinkingTokens
             );
             const inferenceDelta = Math.max(
               0,
-              inferenceTokensNow - lastInferenceTokens,
+              inferenceTokensNow - lastInferenceTokens
             );
             if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
               adapter.recordModelUsage(callHandle, {
@@ -625,12 +636,14 @@ export async function generateStorySegmentation(
 
     const elapsed = formatMillis(Date.now() - startTime);
     adapter.log(
-      `[story/segments] attempt ${attempt} model ${modelVersion} finished in ${elapsed}`,
+      `[story/segments] attempt ${attempt} model ${modelVersion} finished in ${elapsed}`
     );
     const trimmed = aggregated.trim();
     adapter.log(`[story/segments] attempt ${attempt} raw response: ${trimmed}`);
     if (attemptThoughts.length > 0) {
-      adapter.log(`[story/segments] attempt ${attempt} thoughts: ${attemptThoughts.join(" | ")}`);
+      adapter.log(
+        `[story/segments] attempt ${attempt} thoughts: ${attemptThoughts.join(" | ")}`
+      );
     }
     return {
       rawText: trimmed,
@@ -640,7 +653,11 @@ export async function generateStorySegmentation(
   };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const { rawText, modelVersion, thoughts: attemptThoughts } = await runAttempt(attempt);
+    const {
+      rawText,
+      modelVersion,
+      thoughts: attemptThoughts,
+    } = await runAttempt(attempt);
     try {
       const parsedJson = extractJsonObject(rawText);
       const segmentation = StorySegmentationSchema.parse(parsedJson);
@@ -649,9 +666,11 @@ export async function generateStorySegmentation(
         segmentation,
         prompt,
         modelVersion,
+        attempt,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const zodIssues = error instanceof z.ZodError ? error.issues : undefined;
       failures.push({
         attempt,
@@ -665,11 +684,11 @@ export async function generateStorySegmentation(
         throw new SegmentationValidationError(
           `Gemini segmentation did not produce valid JSON after ${maxAttempts} attempts`,
           prompt,
-          failures,
+          failures
         );
       }
       adapter.log(
-        `[story/segments] attempt ${attempt} invalid response (${errorMessage}); retrying...`,
+        `[story/segments] attempt ${attempt} invalid response (${errorMessage}); retrying...`
       );
     }
   }
@@ -710,7 +729,7 @@ const JudgeResponseSchema = z.object({
         index: z.number().int().min(1),
         updatedPrompt: z.string().trim().min(1),
         notes: z.string().trim().optional(),
-      }),
+      })
     )
     .optional(),
 });
@@ -719,7 +738,7 @@ type JudgeResponse = z.infer<typeof JudgeResponseSchema>;
 function buildJudgePromptParts(
   allImages: readonly GeneratedStoryImage[],
   focusIndices: readonly number[],
-  promptsByIndex: Map<number, string>,
+  promptsByIndex: Map<number, string>
 ): Part[] {
   const parts: Part[] = [];
   const sorted = [...allImages].sort((a, b) => a.index - b.index);
@@ -756,11 +775,25 @@ async function judgeBatch(
   allImages: readonly GeneratedStoryImage[],
   focusIndices: readonly number[],
   promptsByIndex: Map<number, string>,
-  adapter: ReturnType<typeof useProgress>,
-): Promise<{ response: JudgeResponse; rawText: string; modelVersion: string; requestParts: Part[]; thoughts?: string[] }> {
-  const judgeParts = buildJudgePromptParts(allImages, focusIndices, promptsByIndex);
-  const sanitisedRequest = judgeParts.map((part) => sanitisePartForLogging(part));
-  adapter.log(`[images/judge] request parts: ${JSON.stringify(sanitisedRequest)}`);
+  adapter: ReturnType<typeof useProgress>
+): Promise<{
+  response: JudgeResponse;
+  rawText: string;
+  modelVersion: string;
+  requestParts: Part[];
+  thoughts?: string[];
+}> {
+  const judgeParts = buildJudgePromptParts(
+    allImages,
+    focusIndices,
+    promptsByIndex
+  );
+  const sanitisedRequest = judgeParts.map((part) =>
+    sanitisePartForLogging(part)
+  );
+  adapter.log(
+    `[images/judge] request prepared with ${sanitisedRequest.length} part(s)`
+  );
   const uploadBytes = estimateUploadBytes(judgeParts);
   const callHandle = adapter.startModelCall({
     modelId: TEXT_MODEL_ID as GeminiModelId,
@@ -846,7 +879,7 @@ export type StoryImagesArtifacts = {
 
 export async function generateStoryImages(
   segmentation: StorySegmentation,
-  progress?: StoryProgress,
+  progress?: StoryProgress
 ): Promise<StoryImagesResult & { artifacts?: StoryImagesArtifacts }> {
   const adapter = useProgress(progress);
   adapter.log("[story] generating 12 images in 3 batches of 4");
@@ -866,7 +899,9 @@ export async function generateStoryImages(
   for (let i = 0; i < segmentation.segments.length; i++) {
     const segmentPrompt = segmentation.segments[i]!.imagePrompt.trim();
     if (!segmentPrompt) {
-      throw new Error(`Segmentation segment ${i + 1} is missing an imagePrompt`);
+      throw new Error(
+        `Segmentation segment ${i + 1} is missing an imagePrompt`
+      );
     }
     allPrompts.push(segmentPrompt); // Images 2..11
   }
@@ -878,7 +913,10 @@ export async function generateStoryImages(
     promptsByIndex.set(i + 1, allPrompts[i]!);
   }
 
-  const artifacts: StoryImagesArtifacts = { style: ART_STYLE_VINTAGE_CARTOON, batches: [] };
+  const artifacts: StoryImagesArtifacts = {
+    style: ART_STYLE_VINTAGE_CARTOON,
+    batches: [],
+  };
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
 
   let finalModelVersion: string = IMAGE_MODEL_ID;
@@ -888,23 +926,47 @@ export async function generateStoryImages(
   const runBatch = async (
     batchIndex: number,
     targetIndices: number[],
-    frozenPrefixParts: Part[] | undefined,
-  ): Promise<{ promptParts: Part[]; images: GeneratedStoryImage[]; modelVersion: string; aggregatedText: string }> => {
-    const promptPairs = targetIndices.map((idx) => ({ index: idx, prompt: promptsByIndex.get(idx)! }));
+    frozenPrefixParts: Part[] | undefined
+  ): Promise<{
+    promptParts: Part[];
+    images: GeneratedStoryImage[];
+    modelVersion: string;
+    aggregatedText: string;
+  }> => {
+    const promptPairs = targetIndices.map((idx) => ({
+      index: idx,
+      prompt: promptsByIndex.get(idx)!,
+    }));
     const parts = frozenPrefixParts
-      ? [...frozenPrefixParts, ...promptPairs.map((p) => ({ text: `Image ${p.index}: ${p.prompt}` }))]
+      ? [
+          ...frozenPrefixParts,
+          ...promptPairs.map((p) => ({
+            text: `Image ${p.index}: ${p.prompt}`,
+          })),
+        ]
       : buildFourImageBatchPrompt(styleLines, promptPairs);
 
-    const promptSummary = promptPairs.map((p) => `Image ${p.index}: ${p.prompt}`).join(" || ") || "(no additional prompts)";
-    adapter.log(`[story/images] batch ${batchIndex} prompt summary: ${promptSummary}`);
+    const promptSummary =
+      promptPairs.map((p) => `Image ${p.index}: ${p.prompt}`).join(" || ") ||
+      "(no additional prompts)";
+    adapter.log(
+      `[story/images] batch ${batchIndex} prompt summary: ${promptSummary}`
+    );
     if (frozenPrefixParts) {
-      adapter.log(`[story/images] batch ${batchIndex} reusing prefix parts (${frozenPrefixParts.length})`);
+      adapter.log(
+        `[story/images] batch ${batchIndex} reusing prefix parts (${frozenPrefixParts.length})`
+      );
     }
     const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
-    adapter.log(`[story/images] batch ${batchIndex} request parts: ${JSON.stringify(sanitisedRequest)}`);
+    adapter.log(
+      `[story/images] batch ${batchIndex} request prepared with ${sanitisedRequest.length} part(s)`
+    );
 
     const uploadBytes = estimateUploadBytes(parts);
-    const callHandle = adapter.startModelCall({ modelId: IMAGE_MODEL_ID as GeminiModelId, uploadBytes });
+    const callHandle = adapter.startModelCall({
+      modelId: IMAGE_MODEL_ID as GeminiModelId,
+      uploadBytes,
+    });
     const start = Date.now();
 
     const batchImages: GeneratedStoryImage[] = [];
@@ -916,7 +978,10 @@ export async function generateStoryImages(
         const stream = await client.models.generateContentStream({
           model: IMAGE_MODEL_ID,
           contents: [{ role: "user", parts }],
-          config: { responseModalities: ["IMAGE", "TEXT"], imageConfig: { aspectRatio: "16:9" } },
+          config: {
+            responseModalities: ["IMAGE", "TEXT"],
+            imageConfig: { aspectRatio: "16:9" },
+          },
         });
         let lastPromptTokens = 0;
         let lastCachedTokens = 0;
@@ -936,10 +1001,18 @@ export async function generateStoryImages(
               const inlineData = part.inlineData;
               if (inlineData?.data) {
                 const ext = extensionFromMime(inlineData.mimeType);
-                const mappedIndex = targetIndices[assignCursor] ?? targetIndices[targetIndices.length - 1]!;
+                const mappedIndex =
+                  targetIndices[assignCursor] ??
+                  targetIndices[targetIndices.length - 1]!;
                 const buffer = Buffer.from(inlineData.data, "base64");
-                batchImages.push({ index: mappedIndex, mimeType: inlineData.mimeType ?? `image/${ext}` , data: buffer });
-                adapter.log(`[story/images] batch ${batchIndex} received image ${mappedIndex} (${buffer.length} bytes)`);
+                batchImages.push({
+                  index: mappedIndex,
+                  mimeType: inlineData.mimeType ?? `image/${ext}`,
+                  data: buffer,
+                });
+                adapter.log(
+                  `[story/images] batch ${batchIndex} received image ${mappedIndex} (${buffer.length} bytes)`
+                );
                 assignCursor += 1;
                 continue;
               }
@@ -957,8 +1030,14 @@ export async function generateStoryImages(
             const inferenceTokensNow = usage.candidatesTokenCount ?? 0;
             const promptDelta = Math.max(0, promptTokensNow - lastPromptTokens);
             const cachedDelta = Math.max(0, cachedTokensNow - lastCachedTokens);
-            const thinkingDelta = Math.max(0, thinkingTokensNow - lastThinkingTokens);
-            const inferenceDelta = Math.max(0, inferenceTokensNow - lastInferenceTokens);
+            const thinkingDelta = Math.max(
+              0,
+              thinkingTokensNow - lastThinkingTokens
+            );
+            const inferenceDelta = Math.max(
+              0,
+              inferenceTokensNow - lastInferenceTokens
+            );
             if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
               adapter.recordModelUsage(callHandle, {
                 promptTokensDelta: promptDelta,
@@ -980,12 +1059,19 @@ export async function generateStoryImages(
 
     const elapsed = formatMillis(Date.now() - start);
     adapter.log(
-      `[story/images] batch ${batchIndex} model ${modelVersion} generated ${formatInteger(batchImages.length)} illustrations in ${elapsed}`,
+      `[story/images] batch ${batchIndex} model ${modelVersion} generated ${formatInteger(batchImages.length)} illustrations in ${elapsed}`
     );
     if (aggregatedText.trim()) {
-      adapter.log(`[story/images] batch ${batchIndex} text response: ${aggregatedText.trim()}`);
+      adapter.log(
+        `[story/images] batch ${batchIndex} text response: ${aggregatedText.trim()}`
+      );
     }
-    return { promptParts: parts, images: batchImages, modelVersion, aggregatedText };
+    return {
+      promptParts: parts,
+      images: batchImages,
+      modelVersion,
+      aggregatedText,
+    };
   };
 
   // Batch 1: images 1-4
@@ -993,29 +1079,58 @@ export async function generateStoryImages(
   finalModelVersion = b1.modelVersion;
   captionsText += b1.aggregatedText;
   // Judge batch 1 (focus on 1-4)
-  artifacts.batches.push({ batchIndex: 1, promptParts: b1.promptParts, judge: [] });
+  artifacts.batches.push({
+    batchIndex: 1,
+    promptParts: b1.promptParts,
+    judge: [],
+  });
   {
-    let pass = false; let attempt = 0; const maxAttempts = 3;
+    let pass = false;
+    let attempt = 0;
+    const maxAttempts = 3;
     while (!pass && attempt < maxAttempts) {
       attempt += 1;
-      const j = await judgeBatch([...images, ...b1.images], [1,2,3,4], promptsByIndex, adapter);
-      artifacts.batches[0]!.judge.push({ attempt, requestPartsCount: j.requestParts.length, requestPartsSanitised: j.requestParts.map((p) => sanitisePartForLogging(p)), responseText: j.rawText, responseJson: j.response, modelVersion: j.modelVersion, thoughts: j.thoughts });
-      adapter.log(`[images/judge] batch 1 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`);
+      const j = await judgeBatch(
+        [...images, ...b1.images],
+        [1, 2, 3, 4],
+        promptsByIndex,
+        adapter
+      );
+      artifacts.batches[0]!.judge.push({
+        attempt,
+        requestPartsCount: j.requestParts.length,
+        requestPartsSanitised: j.requestParts.map((p) =>
+          sanitisePartForLogging(p)
+        ),
+        responseText: j.rawText,
+        responseJson: j.response,
+        modelVersion: j.modelVersion,
+        thoughts: j.thoughts,
+      });
+      adapter.log(
+        `[images/judge] batch 1 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
+      );
       if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(`[images/judge] batch 1 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`);
+        adapter.log(
+          `[images/judge] batch 1 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
+        );
       }
       pass = j.response.pass;
       if (!pass) {
         const suggestions = j.response.suggestions ?? [];
         for (const s of suggestions) {
-          if ([1,2,3,4].includes(s.index)) {
+          if ([1, 2, 3, 4].includes(s.index)) {
             promptsByIndex.set(s.index, s.updatedPrompt);
           }
         }
         // regenerate the four images with updated prompts (overwrite)
-        const retry = await runBatch(1, [1,2,3,4], buildFourImageBatchPrompt(styleLines, []));
+        const retry = await runBatch(
+          1,
+          [1, 2, 3, 4],
+          buildFourImageBatchPrompt(styleLines, [])
+        );
         // Clear any images from indices 1..4 and replace
-        for (const idx of [1,2,3,4]) {
+        for (const idx of [1, 2, 3, 4]) {
           const pos = images.findIndex((im) => im.index === idx);
           if (pos >= 0) {
             images.splice(pos, 1);
@@ -1040,31 +1155,56 @@ export async function generateStoryImages(
 
   // Batch 2: images 5-8. Prepend the exact text parts used previously to enable caching.
   const frozenPrefix = b1.promptParts;
-  const b2 = await runBatch(2, [5,6,7,8], frozenPrefix);
+  const b2 = await runBatch(2, [5, 6, 7, 8], frozenPrefix);
   finalModelVersion = b2.modelVersion;
   captionsText += b2.aggregatedText;
-  artifacts.batches.push({ batchIndex: 2, promptParts: b2.promptParts, judge: [] });
+  artifacts.batches.push({
+    batchIndex: 2,
+    promptParts: b2.promptParts,
+    judge: [],
+  });
   {
-    let pass = false; let attempt = 0; const maxAttempts = 3;
+    let pass = false;
+    let attempt = 0;
+    const maxAttempts = 3;
     while (!pass && attempt < maxAttempts) {
       attempt += 1;
-      const j = await judgeBatch([...images, ...b1.images, ...b2.images], [5,6,7,8], promptsByIndex, adapter);
-      artifacts.batches[1]!.judge.push({ attempt, requestPartsCount: j.requestParts.length, requestPartsSanitised: j.requestParts.map((p) => sanitisePartForLogging(p)), responseText: j.rawText, responseJson: j.response, modelVersion: j.modelVersion, thoughts: j.thoughts });
-      adapter.log(`[images/judge] batch 2 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`);
+      const j = await judgeBatch(
+        [...images, ...b1.images, ...b2.images],
+        [5, 6, 7, 8],
+        promptsByIndex,
+        adapter
+      );
+      artifacts.batches[1]!.judge.push({
+        attempt,
+        requestPartsCount: j.requestParts.length,
+        requestPartsSanitised: j.requestParts.map((p) =>
+          sanitisePartForLogging(p)
+        ),
+        responseText: j.rawText,
+        responseJson: j.response,
+        modelVersion: j.modelVersion,
+        thoughts: j.thoughts,
+      });
+      adapter.log(
+        `[images/judge] batch 2 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
+      );
       if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(`[images/judge] batch 2 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`);
+        adapter.log(
+          `[images/judge] batch 2 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
+        );
       }
       pass = j.response.pass;
       if (!pass) {
         const suggestions = j.response.suggestions ?? [];
         for (const s of suggestions) {
-          if ([5,6,7,8].includes(s.index)) {
+          if ([5, 6, 7, 8].includes(s.index)) {
             promptsByIndex.set(s.index, s.updatedPrompt);
           }
         }
-        const retry = await runBatch(2, [5,6,7,8], frozenPrefix);
+        const retry = await runBatch(2, [5, 6, 7, 8], frozenPrefix);
         // Overwrite indices 5..8
-        for (const idx of [5,6,7,8]) {
+        for (const idx of [5, 6, 7, 8]) {
           const pos = images.findIndex((im) => im.index === idx);
           if (pos >= 0) {
             images.splice(pos, 1);
@@ -1086,31 +1226,56 @@ export async function generateStoryImages(
   }
 
   // Batch 3: images 9-12
-  const b3 = await runBatch(3, [9,10,11,12], frozenPrefix);
+  const b3 = await runBatch(3, [9, 10, 11, 12], frozenPrefix);
   finalModelVersion = b3.modelVersion;
   captionsText += b3.aggregatedText;
-  artifacts.batches.push({ batchIndex: 3, promptParts: b3.promptParts, judge: [] });
+  artifacts.batches.push({
+    batchIndex: 3,
+    promptParts: b3.promptParts,
+    judge: [],
+  });
   {
-    let pass = false; let attempt = 0; const maxAttempts = 3;
+    let pass = false;
+    let attempt = 0;
+    const maxAttempts = 3;
     while (!pass && attempt < maxAttempts) {
       attempt += 1;
-      const j = await judgeBatch([...images, ...b1.images, ...b2.images, ...b3.images], [9,10,11,12], promptsByIndex, adapter);
-      artifacts.batches[2]!.judge.push({ attempt, requestPartsCount: j.requestParts.length, requestPartsSanitised: j.requestParts.map((p) => sanitisePartForLogging(p)), responseText: j.rawText, responseJson: j.response, modelVersion: j.modelVersion, thoughts: j.thoughts });
-      adapter.log(`[images/judge] batch 3 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`);
+      const j = await judgeBatch(
+        [...images, ...b1.images, ...b2.images, ...b3.images],
+        [9, 10, 11, 12],
+        promptsByIndex,
+        adapter
+      );
+      artifacts.batches[2]!.judge.push({
+        attempt,
+        requestPartsCount: j.requestParts.length,
+        requestPartsSanitised: j.requestParts.map((p) =>
+          sanitisePartForLogging(p)
+        ),
+        responseText: j.rawText,
+        responseJson: j.response,
+        modelVersion: j.modelVersion,
+        thoughts: j.thoughts,
+      });
+      adapter.log(
+        `[images/judge] batch 3 attempt ${attempt} evaluation: ${JSON.stringify(j.response)}`
+      );
       if (j.thoughts && j.thoughts.length > 0) {
-        adapter.log(`[images/judge] batch 3 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`);
+        adapter.log(
+          `[images/judge] batch 3 attempt ${attempt} thoughts: ${j.thoughts.join(" | ")}`
+        );
       }
       pass = j.response.pass;
       if (!pass) {
         const suggestions = j.response.suggestions ?? [];
         for (const s of suggestions) {
-          if ([9,10,11,12].includes(s.index)) {
+          if ([9, 10, 11, 12].includes(s.index)) {
             promptsByIndex.set(s.index, s.updatedPrompt);
           }
         }
-        const retry = await runBatch(3, [9,10,11,12], frozenPrefix);
+        const retry = await runBatch(3, [9, 10, 11, 12], frozenPrefix);
         // Overwrite indices 9..12
-        for (const idx of [9,10,11,12]) {
+        for (const idx of [9, 10, 11, 12]) {
           const pos = images.findIndex((im) => im.index === idx);
           if (pos >= 0) {
             images.splice(pos, 1);
@@ -1132,11 +1297,7 @@ export async function generateStoryImages(
   }
 
   // Build a single human-readable prompt snapshot: style + Image 1..12 lines
-  const snapshotLines: string[] = [
-    "Style Requirements:",
-    ...styleLines,
-    "",
-  ];
+  const snapshotLines: string[] = ["Style Requirements:", ...styleLines, ""];
   for (let i = 1; i <= allPrompts.length; i++) {
     snapshotLines.push(`Image ${i}: ${promptsByIndex.get(i)}`);
   }
@@ -1178,21 +1339,23 @@ function buildImageStoragePath(
   planItemId: string,
   index: number,
   extension: string,
-  prefix?: string,
+  prefix?: string
 ): string {
   const folder = prefix
     ? path.join(prefix, userId, "sessions", sessionId, planItemId)
     : path.join("spark", userId, "sessions", sessionId, planItemId);
-  return path.join(folder, `image_${String(index).padStart(3, "0")}.${extension}`).replace(/\\/g, "/");
+  return path
+    .join(folder, `image_${String(index).padStart(3, "0")}.${extension}`)
+    .replace(/\\/g, "/");
 }
 
 function toMediaSegments(
   segmentation: StorySegmentation,
-  imagePaths: readonly string[],
+  imagePaths: readonly string[]
 ): MediaSegment[] {
   if (segmentation.segments.length !== imagePaths.length) {
     throw new Error(
-      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`,
+      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`
     );
   }
 
@@ -1206,23 +1369,25 @@ function toMediaSegments(
 }
 
 export async function generateStory(
-  options: GenerateStoryOptions,
+  options: GenerateStoryOptions
 ): Promise<GenerateStoryResult> {
   const story = await generateProseStory(options.topic, options.progress);
   const segmentation = await generateStorySegmentation(
     story.text,
-    options.progress,
+    options.progress
   );
   const images = await generateStoryImages(
     segmentation.segmentation,
-    options.progress,
+    options.progress
   );
   // We now generate 12 images total: 1 cover, 10 interior panels, 1 ending.
   // For media segments we only use the 10 interior images (indices 2..11).
-  const interior = images.images.filter((im) => im.index >= 2 && im.index <= 11);
+  const interior = images.images.filter(
+    (im) => im.index >= 2 && im.index <= 11
+  );
   if (interior.length !== segmentation.segmentation.segments.length) {
     throw new Error(
-      `Expected ${segmentation.segmentation.segments.length} interior images (2..11), received ${interior.length}`,
+      `Expected ${segmentation.segmentation.segments.length} interior images (2..11), received ${interior.length}`
     );
   }
 
@@ -1249,7 +1414,7 @@ export async function generateStory(
       options.planItemId,
       seqIndex,
       extension,
-      options.storagePrefix,
+      options.storagePrefix
     );
     const file = bucket.file(storagePath);
     await file.save(jpegBuffer, {
@@ -1265,7 +1430,7 @@ export async function generateStory(
 
   const segments: MediaSegment[] = toMediaSegments(
     segmentation.segmentation,
-    storagePaths,
+    storagePaths
   );
 
   const narration = await synthesizeAndPublishNarration({
@@ -1275,7 +1440,7 @@ export async function generateStory(
     segments,
     storageBucket: options.storageBucket,
     progress: createConsoleProgress(
-      options.audioProgressLabel ?? options.planItemId,
+      options.audioProgressLabel ?? options.planItemId
     ),
   });
 
