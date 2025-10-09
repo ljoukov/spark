@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { z } from "zod";
 
 import {
@@ -32,25 +32,19 @@ import { createConsoleProgress } from "./narration";
 
 ensureEvalEnvLoaded();
 
+const StageEnum = z.enum(["prose", "segmentation", "audio", "images"]);
+type StageName = z.infer<typeof StageEnum>;
+const STAGE_ORDER = StageEnum.options;
+
 const optionsSchema = z.object({
   prose: z.boolean(),
   images: z.boolean(),
   topic: z.string().trim().min(1, "topic cannot be empty"),
   output: z.string().trim().min(1, "output path cannot be empty").optional(),
+  stages: z.array(StageEnum).default([]),
 });
 
 type CliOptions = z.infer<typeof optionsSchema>;
-
-function timestampSlug(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mi = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
-}
 
 function resolveOutputDir(rawOptions: CliOptions): string {
   const provided = rawOptions.output;
@@ -63,7 +57,46 @@ function resolveOutputDir(rawOptions: CliOptions): string {
   return path.join(
     WORKSPACE_PATHS.codeSyntheticDir,
     "stories",
-    `story-${timestampSlug()}`
+    "test-story"
+  );
+}
+
+function resolveStageSequence(options: CliOptions): StageName[] {
+  const requested = new Set<StageName>(options.stages);
+
+  if (options.prose) {
+    requested.add("prose");
+    requested.add("segmentation");
+    requested.add("audio");
+  }
+
+  if (options.images) {
+    requested.add("images");
+    requested.add("audio");
+  }
+
+  if (requested.size === 0) {
+    return [...STAGE_ORDER];
+  }
+
+  return STAGE_ORDER.filter((stage) => requested.has(stage));
+}
+
+const StoryJsonSchema = z.object({
+  modelVersion: z.string().trim().min(1),
+  topic: z.string().trim().min(1),
+  text: z.string().trim().min(1),
+  prompt: z.string().trim().optional(),
+});
+
+type StoredStory = z.infer<typeof StoryJsonSchema>;
+
+function isFileNotFound(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: string }).code === "ENOENT"
   );
 }
 
@@ -79,6 +112,18 @@ async function saveStoryArtifacts(
   const header = `modelVersion: ${result.modelVersion}\ntopic: ${topic}\n\n`;
   await writeFile(storyPath, header + result.text, { encoding: "utf8" });
   progress.log(`[story] saved prose to ${storyPath}`);
+
+  const storyJsonPath = path.join(outDir, "story.json");
+  const storyPayload = {
+    modelVersion: result.modelVersion,
+    topic,
+    text: result.text,
+    prompt: result.prompt,
+  };
+  await writeFile(storyJsonPath, JSON.stringify(storyPayload, null, 2), {
+    encoding: "utf8",
+  });
+  progress.log(`[story] saved prose JSON to ${storyJsonPath}`);
 
   const promptPath = path.join(outDir, "prompt.txt");
   await writeFile(promptPath, result.prompt, { encoding: "utf8" });
@@ -204,6 +249,22 @@ async function saveImageArtifacts(
   }
 }
 
+async function loadStoryFromDisk(outDir: string): Promise<StoredStory> {
+  const jsonPath = path.join(outDir, "story.json");
+  try {
+    const raw = await readFile(jsonPath, { encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return StoryJsonSchema.parse(parsed);
+  } catch (error) {
+    if (isFileNotFound(error)) {
+      throw new Error(
+        `[story] missing story JSON at ${jsonPath}. Run stage 'prose' first.`
+      );
+    }
+    throw error;
+  }
+}
+
 async function loadSegmentationFromDisk(
   outDir: string
 ): Promise<StorySegmentation | undefined> {
@@ -213,12 +274,7 @@ async function loadSegmentationFromDisk(
     const parsed = JSON.parse(raw);
     return StorySegmentationSchema.parse(parsed);
   } catch (error: unknown) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: string }).code === "ENOENT"
-    ) {
+    if (isFileNotFound(error)) {
       return undefined;
     }
     throw error;
@@ -234,6 +290,12 @@ async function main(): Promise<void> {
     .option(
       "--output <dir>",
       "Output directory (absolute or relative to spark-data/code/synthetic)"
+    )
+    .addOption(
+      new Option(
+        "--stage <stage...>",
+        "Stages to run (prose, segmentation, audio, images)"
+      ).choices(STAGE_ORDER)
     );
 
   program.parse(process.argv);
@@ -242,6 +304,7 @@ async function main(): Promise<void> {
     images?: boolean;
     topic?: string;
     output?: string;
+    stage?: string[];
   }>();
 
   const parsed = optionsSchema.parse({
@@ -249,16 +312,8 @@ async function main(): Promise<void> {
     images: Boolean(rawOptions.images),
     topic: rawOptions.topic ?? DEFAULT_TOPIC,
     output: rawOptions.output,
+    stages: (rawOptions.stage ?? []).map((value) => value.toLowerCase()),
   });
-
-  const shouldGenerateProse = parsed.prose || (!parsed.prose && !parsed.images);
-  const shouldGenerateImages =
-    parsed.images || (!parsed.prose && !parsed.images);
-
-  if (!shouldGenerateProse && !shouldGenerateImages) {
-    console.log("[story] nothing to do (no generation flags set)");
-    return;
-  }
 
   const outDir = resolveOutputDir(parsed);
   console.log(`[story] output directory: ${outDir}`);
@@ -269,51 +324,101 @@ async function main(): Promise<void> {
     getId: () => "story",
     label: "[story]",
     handler: async (options, { progress }) => {
-      let storyResult: StoryProseResult | undefined;
-      let segmentationResult: StorySegmentationResult | undefined;
-      let audioSaved = false;
-
-      if (shouldGenerateProse) {
-        storyResult = await generateProseStory(options.topic, progress);
-        await saveStoryArtifacts(storyResult, options.topic, outDir, progress);
-
-        segmentationResult = await generateStorySegmentation(
-          storyResult.text,
-          progress
-        );
-        await saveSegmentationArtifacts(
-          segmentationResult,
-          outDir,
-          progress
-        );
-        await saveAudioArtifacts(segmentationResult.segmentation, outDir, progress);
-        audioSaved = true;
+      const stages = resolveStageSequence(options);
+      if (stages.length === 0) {
+        progress.log("[story] nothing to do (no stages resolved)");
+        return;
       }
 
-      if (shouldGenerateImages) {
-        let segmentation = segmentationResult?.segmentation;
-        if (!segmentation) {
-          segmentation = await loadSegmentationFromDisk(outDir);
-          if (segmentation) {
-            progress.log(
-              "[story] loaded existing segmentation from segments.json"
-            );
-          }
-        }
+      let currentStory: StoredStory | undefined;
+      let storyLoadedFromDisk = false;
+      let segmentationResult: StorySegmentationResult | undefined;
+      let segmentation: StorySegmentation | undefined;
+      let segmentationLoadedFromDisk = false;
 
-        if (!segmentation) {
+      const ensureStory = async (): Promise<StoredStory> => {
+        if (currentStory) {
+          return currentStory;
+        }
+        const loaded = await loadStoryFromDisk(outDir);
+        if (!storyLoadedFromDisk) {
+          progress.log("[story] loaded existing prose from disk");
+          storyLoadedFromDisk = true;
+        }
+        currentStory = loaded;
+        return currentStory;
+      };
+
+      const ensureSegmentation = async (): Promise<StorySegmentation> => {
+        if (segmentation) {
+          return segmentation;
+        }
+        const loaded = await loadSegmentationFromDisk(outDir);
+        if (!loaded) {
           throw new Error(
-            "Cannot generate images without segmentation. Run with --prose first to create segments."
+            "Cannot continue without segmentation. Run stage 'segmentation' first."
           );
         }
-
-        if (!audioSaved) {
-          await saveAudioArtifacts(segmentation, outDir, progress);
-          audioSaved = true;
+        if (!segmentationLoadedFromDisk) {
+          progress.log("[story] loaded existing segmentation from segments.json");
+          segmentationLoadedFromDisk = true;
         }
+        segmentation = loaded;
+        return segmentation;
+      };
 
-        const imagesResult = await generateStoryImages(segmentation, progress);
-        await saveImageArtifacts(imagesResult, outDir, progress);
+      for (const stage of stages) {
+        progress.log(`[story] stage: ${stage}`);
+        switch (stage) {
+          case "prose": {
+            const storyResult = await generateProseStory(options.topic, progress);
+            currentStory = {
+              text: storyResult.text,
+              prompt: storyResult.prompt,
+              modelVersion: storyResult.modelVersion,
+              topic: options.topic,
+            };
+            segmentationResult = undefined;
+            segmentation = undefined;
+            segmentationLoadedFromDisk = false;
+            await saveStoryArtifacts(storyResult, options.topic, outDir, progress);
+            break;
+          }
+          case "segmentation": {
+            const story = await ensureStory();
+            segmentationResult = await generateStorySegmentation(
+              story.text,
+              progress
+            );
+            segmentation = segmentationResult.segmentation;
+            await saveSegmentationArtifacts(
+              segmentationResult,
+              outDir,
+              progress
+            );
+            break;
+          }
+          case "audio": {
+            const segments =
+              segmentationResult?.segmentation ?? (await ensureSegmentation());
+            segmentation = segments;
+            await saveAudioArtifacts(segments, outDir, progress);
+            break;
+          }
+          case "images": {
+            const segments =
+              segmentationResult?.segmentation ?? (await ensureSegmentation());
+            segmentation = segments;
+            const imagesResult = await generateStoryImages(segments, progress);
+            await saveImageArtifacts(imagesResult, outDir, progress);
+            break;
+          }
+          default:
+            {
+              const exhaustiveCheck: never = stage;
+              throw new Error(`Unknown stage encountered: ${exhaustiveCheck}`);
+            }
+        }
       }
 
       progress.log("[story] generation finished");
