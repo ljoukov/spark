@@ -10,7 +10,7 @@ import {
   generateStoryImages,
   generateStorySegmentation,
   SegmentationValidationError,
-  SegmentationReviewError,
+  SegmentationCorrectionError,
   buildSegmentationPrompt,
   buildStoryPrompt,
   ART_STYLE_VINTAGE_CARTOON,
@@ -19,7 +19,8 @@ import {
   type StorySegmentation,
   type StorySegmentationResult,
   type SegmentationAttemptSnapshot,
-  type SegmentationReviewAttempt,
+  type SegmentationCorrectorAttempt,
+  type StoryImagesArtifacts,
   StorySegmentationSchema,
 } from "./generateStory";
 import {
@@ -131,16 +132,27 @@ async function writeJsonSnapshot(targetPath: string, payload: unknown): Promise<
 
 function buildImagesPromptSnapshot(segmentation: StorySegmentation): string {
   const lines: string[] = [
-    "Style Requirements:",
+    "Please make a total of 12 images:",
+    "- 1-10 story images",
+    '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
+    '- the "movie poster" image for the whole story (hook)',
+    "Make high quality, high positivity cartoon style.",
+    "",
+    "Follow the style:",
     ...ART_STYLE_VINTAGE_CARTOON,
     "",
+    "Image descriptions:",
   ];
-  lines.push(`Image 1: ${segmentation.posterPrompt.trim()}`);
   segmentation.segments.forEach((segment, index) => {
-    lines.push(`Image ${index + 2}: ${segment.imagePrompt.trim()}`);
+    const prompt = segment.imagePrompt.trim();
+    lines.push(`Image ${index + 1}: ${prompt}`);
   });
-  const endingIndex = segmentation.segments.length + 2;
-  lines.push(`Image ${endingIndex}: ${segmentation.endingPrompt.trim()}`);
+  const endingIndex = segmentation.segments.length + 1;
+  lines.push(
+    `Image ${endingIndex} (the end): ${segmentation.endingPrompt.trim()}`
+  );
+  const posterIndex = segmentation.segments.length + 2;
+  lines.push(`Image ${posterIndex} (poster): ${segmentation.posterPrompt.trim()}`);
   return lines.join("\n");
 }
 
@@ -294,7 +306,9 @@ async function saveSegmentationSnapshotArtifacts(
 ): Promise<void> {
   const attemptLabel = formatAttemptLabel(snapshot.attempt);
   const prefix =
-    snapshot.phase === "judge" ? "segmentation-judge" : "segmentation";
+    snapshot.phase === "correction"
+      ? "segmentation-corrector"
+      : "segmentation";
   const promptPath = path.join(
     outDir,
     `${prefix}-prompt-${attemptLabel}.txt`
@@ -320,8 +334,8 @@ async function saveSegmentationSnapshotArtifacts(
   );
 }
 
-async function saveSegmentationJudgeArtifacts(
-  attempts: readonly SegmentationReviewAttempt[] | undefined,
+async function saveSegmentationCorrectorArtifacts(
+  attempts: readonly SegmentationCorrectorAttempt[] | undefined,
   baseDir: string
 ): Promise<void> {
   if (!attempts || attempts.length === 0) {
@@ -397,31 +411,41 @@ async function saveSegmentationArtifacts(
   await writeTextSnapshot(promptAttemptPath, result.prompt);
   progress.log(`[story] saved segmentation prompt snapshot to ${promptPath} (attempt ${result.attempt})`);
 
-  const judgeDir = path.join(outDir, "segmentation", "judge");
-  await saveSegmentationJudgeArtifacts(result.reviewAttempts, judgeDir);
-  if (result.reviewAttempts && result.reviewAttempts.length > 0) {
-    progress.log(`[story] saved segmentation judge artifacts to ${judgeDir}`);
+  const correctorDir = path.join(outDir, "segmentation", "corrector");
+  await saveSegmentationCorrectorArtifacts(
+    result.correctionAttempts,
+    correctorDir
+  );
+  if (result.correctionAttempts && result.correctionAttempts.length > 0) {
+    progress.log(
+      `[story] saved segmentation corrector artifacts to ${correctorDir}`
+    );
   }
 }
 
 async function saveSegmentationFailureArtifacts(
-  failure: SegmentationValidationError | SegmentationReviewError,
+  failure: SegmentationValidationError | SegmentationCorrectionError,
   outDir: string,
   progress: JobProgressReporter
 ): Promise<void> {
-  if (failure instanceof SegmentationReviewError) {
-    const judgeDir = path.join(outDir, "segmentation", "judge");
-    await saveSegmentationJudgeArtifacts(failure.attempts, judgeDir);
-    await mkdir(judgeDir, { recursive: true });
-    const summaryPath = path.join(judgeDir, "failure-summary.json");
+  if (failure instanceof SegmentationCorrectionError) {
+    const correctorDir = path.join(outDir, "segmentation", "corrector");
+    await saveSegmentationCorrectorArtifacts(failure.attempts, correctorDir);
+    await mkdir(correctorDir, { recursive: true });
+    const summaryPath = path.join(correctorDir, "failure-summary.json");
     const summaryPayload = {
       message: failure.message,
       attemptCount: failure.attempts.length,
     };
     await writeJsonSnapshot(summaryPath, summaryPayload);
-    const rejectedPath = path.join(judgeDir, "rejected-segmentation.json");
+    const rejectedPath = path.join(
+      correctorDir,
+      "rejected-segmentation.json"
+    );
     await writeJsonSnapshot(rejectedPath, failure.segmentation);
-    progress.log(`[story] saved segmentation judge failure artifacts to ${judgeDir}`);
+    progress.log(
+      `[story] saved segmentation corrector failure artifacts to ${correctorDir}`
+    );
     return;
   }
 
@@ -523,7 +547,7 @@ function extensionFromMime(mimeType?: string): string {
 }
 
 async function saveImageArtifacts(
-  result: StoryImagesResult & { artifacts?: { style: readonly string[]; batches: Array<{ batchIndex: number; promptParts: unknown[]; judge: Array<{ attempt: number; requestPartsCount: number; requestPartsSanitised: unknown[]; responseText: string; responseJson: unknown; modelVersion: string; thoughts?: string[] }> }> } },
+  result: StoryImagesResult & { artifacts?: StoryImagesArtifacts },
   outDir: string,
   progress: JobProgressReporter
 ): Promise<void> {
@@ -551,41 +575,79 @@ async function saveImageArtifacts(
     progress.log(`[story] saved image captions to ${captionsPath}`);
   }
 
-  // Extra artifacts: per-batch prompts and judge outcomes
+  // Extra artifacts: prompt snapshots per set and judge outcome
   if (result.artifacts) {
-    const batchesDir = path.join(assetsDir, "batches");
-    await mkdir(batchesDir, { recursive: true });
-    // Save style
-    const stylePath = path.join(batchesDir, "style.txt");
-    await writeFile(stylePath, result.artifacts.style.join("\n"), { encoding: "utf8" });
-    for (const batch of result.artifacts.batches) {
-      const bd = path.join(batchesDir, `batch-${batch.batchIndex}`);
-      await mkdir(bd, { recursive: true });
-      // Save prompt parts as a single text snapshot
-      const promptText = (batch.promptParts as Array<{ text?: string }>).map((p) => p?.text ?? "").filter(Boolean).join("\n");
-      await writeFile(path.join(bd, "prompt.txt"), promptText, { encoding: "utf8" });
-      // Judge iterations
-      if (batch.judge.length > 0) {
-        const jd = path.join(bd, "judge");
-        for (const j of batch.judge) {
-          const attemptLabel = formatAttemptLabel(j.attempt);
-          const rd = path.join(jd, attemptLabel);
-          await writeTextSnapshot(path.join(rd, `response-${attemptLabel}.txt`), j.responseText);
-          await writeJsonSnapshot(path.join(rd, `response-${attemptLabel}.json`), j.responseJson);
-          await writeJsonSnapshot(
-            path.join(rd, `request-${attemptLabel}.json`),
-            { parts: j.requestPartsSanitised, count: j.requestPartsCount },
-          );
-          if (j.thoughts && j.thoughts.length > 0) {
-            await writeTextSnapshot(
-              path.join(rd, `thoughts-${attemptLabel}.txt`),
-              j.thoughts.join("\n---\n"),
-            );
-          }
+    const artifactsDir = path.join(assetsDir, "artifacts");
+    await mkdir(artifactsDir, { recursive: true });
+
+    await writeFile(
+      path.join(artifactsDir, "style.txt"),
+      result.artifacts.style.join("\n"),
+      { encoding: "utf8" }
+    );
+    await writeJsonSnapshot(
+      path.join(artifactsDir, "selection.json"),
+      { selectedSet: result.artifacts.selectedSet }
+    );
+
+    const setsDir = path.join(artifactsDir, "sets");
+    await mkdir(setsDir, { recursive: true });
+    for (const set of result.artifacts.sets) {
+      const setDir = path.join(setsDir, set.label);
+      await mkdir(setDir, { recursive: true });
+      const promptText = (set.promptParts as Array<{ text?: string }>)
+        .map((p) => p?.text ?? "")
+        .filter(Boolean)
+        .join("\n");
+      if (promptText) {
+        await writeTextSnapshot(path.join(setDir, "prompt.txt"), promptText);
+      }
+      if (set.aggregatedText.trim()) {
+        await writeTextSnapshot(
+          path.join(setDir, "text-response.txt"),
+          set.aggregatedText.trim()
+        );
+      }
+      await writeJsonSnapshot(
+        path.join(setDir, "meta.json"),
+        {
+          modelVersion: set.modelVersion,
+          imageCount: set.imageCount,
         }
+      );
+    }
+
+    if (result.artifacts.judge) {
+      const judgeDir = path.join(artifactsDir, "judge");
+      await mkdir(judgeDir, { recursive: true });
+      await writeTextSnapshot(
+        path.join(judgeDir, "response.txt"),
+        result.artifacts.judge.responseText
+      );
+      await writeJsonSnapshot(
+        path.join(judgeDir, "response.json"),
+        result.artifacts.judge.responseJson
+      );
+      await writeJsonSnapshot(
+        path.join(judgeDir, "request.json"),
+        {
+          count: result.artifacts.judge.requestPartsCount,
+          parts: result.artifacts.judge.requestPartsSanitised,
+          modelVersion: result.artifacts.judge.modelVersion,
+        }
+      );
+      if (
+        result.artifacts.judge.thoughts &&
+        result.artifacts.judge.thoughts.length > 0
+      ) {
+        await writeTextSnapshot(
+          path.join(judgeDir, "thoughts.txt"),
+          result.artifacts.judge.thoughts.join("\n---\n")
+        );
       }
     }
-    progress.log(`[story] saved image batch artifacts under ${batchesDir}`);
+
+    progress.log(`[story] saved image artifacts under ${artifactsDir}`);
   }
 }
 
@@ -759,7 +821,7 @@ async function main(): Promise<void> {
             } catch (error) {
               if (
                 error instanceof SegmentationValidationError ||
-                error instanceof SegmentationReviewError
+                error instanceof SegmentationCorrectionError
               ) {
                 await saveSegmentationFailureArtifacts(
                   error,
