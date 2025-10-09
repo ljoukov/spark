@@ -10,6 +10,7 @@ import {
   generateStoryImages,
   generateStorySegmentation,
   SegmentationValidationError,
+  SegmentationReviewError,
   buildSegmentationPrompt,
   buildStoryPrompt,
   ART_STYLE_VINTAGE_CARTOON,
@@ -17,6 +18,8 @@ import {
   type StoryProseResult,
   type StorySegmentation,
   type StorySegmentationResult,
+  type SegmentationAttemptSnapshot,
+  type SegmentationReviewAttempt,
   StorySegmentationSchema,
 } from "./generateStory";
 import {
@@ -284,6 +287,92 @@ async function saveStoryArtifacts(
   }
 }
 
+async function saveSegmentationSnapshotArtifacts(
+  snapshot: SegmentationAttemptSnapshot,
+  outDir: string,
+  progress: JobProgressReporter
+): Promise<void> {
+  const attemptLabel = formatAttemptLabel(snapshot.attempt);
+  const prefix =
+    snapshot.phase === "judge" ? "segmentation-judge" : "segmentation";
+  const promptPath = path.join(
+    outDir,
+    `${prefix}-prompt-${attemptLabel}.txt`
+  );
+  const responsePath = path.join(
+    outDir,
+    `${prefix}-response-${attemptLabel}.txt`
+  );
+
+  await writeTextSnapshot(promptPath, snapshot.prompt);
+  await writeTextSnapshot(responsePath, snapshot.response);
+
+  if (snapshot.thoughts && snapshot.thoughts.length > 0) {
+    const thoughtsPath = path.join(
+      outDir,
+      `${prefix}-thoughts-${attemptLabel}.txt`
+    );
+    await writeTextSnapshot(thoughtsPath, snapshot.thoughts.join("\n---\n"));
+  }
+
+  progress.log(
+    `[story] saved ${snapshot.phase} attempt ${snapshot.attempt} response to ${responsePath}`
+  );
+}
+
+async function saveSegmentationJudgeArtifacts(
+  attempts: readonly SegmentationReviewAttempt[] | undefined,
+  baseDir: string
+): Promise<void> {
+  if (!attempts || attempts.length === 0) {
+    return;
+  }
+
+  await mkdir(baseDir, { recursive: true });
+
+  for (const attempt of attempts) {
+    const attemptLabel = formatAttemptLabel(attempt.attempt);
+    const attemptDir = path.join(baseDir, attemptLabel);
+    await mkdir(attemptDir, { recursive: true });
+    await writeTextSnapshot(
+      path.join(attemptDir, `prompt-${attemptLabel}.txt`),
+      attempt.prompt
+    );
+    await writeTextSnapshot(
+      path.join(attemptDir, `response-${attemptLabel}.txt`),
+      attempt.rawResponse
+    );
+    if (attempt.response) {
+      await writeJsonSnapshot(
+        path.join(attemptDir, `parsed-${attemptLabel}.json`),
+        attempt.response
+      );
+    }
+    const metaPayload = {
+      attempt: attempt.attempt,
+      modelVersion: attempt.modelVersion,
+      charCount: attempt.charCount ?? undefined,
+      parseError: attempt.parseError ?? undefined,
+    };
+    await writeJsonSnapshot(
+      path.join(attemptDir, `meta-${attemptLabel}.json`),
+      metaPayload
+    );
+    if (attempt.parseError) {
+      await writeTextSnapshot(
+        path.join(attemptDir, `parse-error-${attemptLabel}.txt`),
+        attempt.parseError
+      );
+    }
+    if (attempt.thoughts && attempt.thoughts.length > 0) {
+      await writeTextSnapshot(
+        path.join(attemptDir, `thoughts-${attemptLabel}.txt`),
+        attempt.thoughts.join("\n---\n")
+      );
+    }
+  }
+}
+
 async function saveSegmentationArtifacts(
   result: StorySegmentationResult,
   outDir: string,
@@ -307,13 +396,35 @@ async function saveSegmentationArtifacts(
   const promptAttemptPath = path.join(outDir, `segmentation-prompt-${attemptLabel}.txt`);
   await writeTextSnapshot(promptAttemptPath, result.prompt);
   progress.log(`[story] saved segmentation prompt snapshot to ${promptPath} (attempt ${result.attempt})`);
+
+  const judgeDir = path.join(outDir, "segmentation", "judge");
+  await saveSegmentationJudgeArtifacts(result.reviewAttempts, judgeDir);
+  if (result.reviewAttempts && result.reviewAttempts.length > 0) {
+    progress.log(`[story] saved segmentation judge artifacts to ${judgeDir}`);
+  }
 }
 
 async function saveSegmentationFailureArtifacts(
-  failure: SegmentationValidationError,
+  failure: SegmentationValidationError | SegmentationReviewError,
   outDir: string,
   progress: JobProgressReporter
 ): Promise<void> {
+  if (failure instanceof SegmentationReviewError) {
+    const judgeDir = path.join(outDir, "segmentation", "judge");
+    await saveSegmentationJudgeArtifacts(failure.attempts, judgeDir);
+    await mkdir(judgeDir, { recursive: true });
+    const summaryPath = path.join(judgeDir, "failure-summary.json");
+    const summaryPayload = {
+      message: failure.message,
+      attemptCount: failure.attempts.length,
+    };
+    await writeJsonSnapshot(summaryPath, summaryPayload);
+    const rejectedPath = path.join(judgeDir, "rejected-segmentation.json");
+    await writeJsonSnapshot(rejectedPath, failure.segmentation);
+    progress.log(`[story] saved segmentation judge failure artifacts to ${judgeDir}`);
+    return;
+  }
+
   const attemptsDir = path.join(outDir, "segmentation-attempts");
   await mkdir(attemptsDir, { recursive: true });
 
@@ -329,6 +440,8 @@ async function saveSegmentationFailureArtifacts(
       errorMessage: attempt.errorMessage,
       zodIssues: attempt.zodIssues ?? undefined,
       thoughts: attempt.thoughts ?? undefined,
+      elapsedMs: attempt.elapsedMs ?? undefined,
+      charCount: attempt.charCount ?? undefined,
     };
     await writeJsonSnapshot(path.join(attemptDir, `meta-${attemptLabel}.json`), payload);
     if (attempt.thoughts && attempt.thoughts.length > 0) {
@@ -620,10 +733,22 @@ async function main(): Promise<void> {
             await cleanSegmentationStage(outDir);
             await prepareSegmentationPrompt(story.text, outDir);
             progress.log("[story] prepared segmentation prompt snapshot");
+            const snapshotSaver = async (
+              snapshot: SegmentationAttemptSnapshot
+            ): Promise<void> => {
+              await saveSegmentationSnapshotArtifacts(
+                snapshot,
+                outDir,
+                progress
+              );
+            };
             try {
               segmentationResult = await generateStorySegmentation(
                 story.text,
-                progress
+                progress,
+                {
+                  onAttemptSnapshot: snapshotSaver,
+                }
               );
               segmentation = segmentationResult.segmentation;
               await saveSegmentationArtifacts(
@@ -632,7 +757,10 @@ async function main(): Promise<void> {
                 progress
               );
             } catch (error) {
-              if (error instanceof SegmentationValidationError) {
+              if (
+                error instanceof SegmentationValidationError ||
+                error instanceof SegmentationReviewError
+              ) {
                 await saveSegmentationFailureArtifacts(
                   error,
                   outDir,
