@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import type { Content, GenerateContentResponse, Part } from "@google/genai";
 
 import {
   getGoogleAuthOptions,
@@ -409,4 +410,68 @@ export async function runGeminiCall<T>(
   fn: (client: GoogleGenAI) => Promise<T>,
 ): Promise<T> {
   return schedule(async () => fn(await getGeminiClient()));
+}
+
+function collectTextChunk(chunk: GenerateContentResponse): string {
+  let text = "";
+  if (Array.isArray(chunk.candidates)) {
+    for (const candidate of chunk.candidates) {
+      const parts = candidate.content?.parts ?? [];
+      for (const part of parts) {
+        if (typeof part.text === "string" && !part.thought) {
+          text += part.text;
+        }
+      }
+    }
+  }
+  if (!chunk.candidates && typeof chunk.text === "string") {
+    text += chunk.text;
+  }
+  return text;
+}
+
+export async function streamGeminiTextResponse({
+  model,
+  parts,
+  contents,
+  config,
+  trimOutput = true,
+}: {
+  readonly model: string;
+  readonly parts?: Part[];
+  readonly contents?: Content[];
+  readonly config?: Record<string, unknown>;
+  readonly trimOutput?: boolean;
+}): Promise<{ text: string; modelVersion: string }> {
+  const effectiveContents =
+    contents ??
+    [
+      {
+        role: "user",
+        parts: parts ?? [],
+      },
+    ];
+  let aggregated = "";
+  let resolvedModelVersion = model;
+  await runGeminiCall(async (client) => {
+    const stream = await client.models.generateContentStream({
+      model,
+      contents: effectiveContents,
+      config,
+    });
+    for await (const chunk of stream) {
+      if (chunk.modelVersion) {
+        resolvedModelVersion = chunk.modelVersion;
+      }
+      aggregated += collectTextChunk(chunk);
+    }
+  });
+  const finalText = trimOutput ? aggregated.trim() : aggregated;
+  if (!finalText) {
+    throw new Error("Gemini returned empty text response");
+  }
+  return {
+    text: finalText,
+    modelVersion: resolvedModelVersion,
+  };
 }

@@ -1,6 +1,9 @@
 import type { Part } from "@google/genai";
 
-import { runGeminiCall, type GeminiModelId } from "../utils/gemini";
+import {
+  streamGeminiTextResponse,
+  type GeminiModelId,
+} from "../utils/gemini";
 import {
   CodeProblemExtractionSchema,
   CODE_PROBLEM_RESPONSE_SCHEMA,
@@ -50,23 +53,15 @@ export async function extractCodeProblemFromMarkdown(
 ): Promise<CodeProblemExtraction> {
   const request = buildCodeProblemExtractionRequest(options);
 
-  const response = await runGeminiCall((client) =>
-    client.models.generateContent({
-      model: request.modelId,
-      contents: [
-        {
-          role: "user",
-          parts: request.parts,
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
-      },
-    }),
-  );
-
-  const text = response.text;
+  const { text } = await streamGeminiTextResponse({
+    model: request.modelId,
+    parts: request.parts,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
+    },
+    trimOutput: false,
+  });
   if (!text) {
     throw new Error("Gemini did not return text for code problem extraction");
   }

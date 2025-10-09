@@ -1,6 +1,9 @@
 import { Type, type Schema } from "@google/genai";
 import type { Part } from "@google/genai";
-import { runGeminiCall, type GeminiModelId } from "../utils/gemini";
+import {
+  streamGeminiTextResponse,
+  type GeminiModelId,
+} from "../utils/gemini";
 import {
   JudgeAuditSchema,
   JudgeVerdictSchema,
@@ -119,24 +122,16 @@ async function callModel({
   parts: Part[];
   schema: Schema;
 }): Promise<unknown> {
-  const response = await runGeminiCall((client) =>
-    client.models.generateContent({
-      model,
-      contents: [
-        {
-          role: "user",
-          parts,
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.15,
-      },
-    }),
-  );
-
-  const text = response.text;
+  const { text } = await streamGeminiTextResponse({
+    model,
+    parts,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      temperature: 0.15,
+    },
+    trimOutput: false,
+  });
   if (!text) {
     throw new Error(`Gemini ${model} did not return any text`);
   }
