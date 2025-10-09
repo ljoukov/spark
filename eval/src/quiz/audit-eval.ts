@@ -1,11 +1,9 @@
-import { Buffer } from "node:buffer";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { z } from "zod";
 
-import { runGeminiCall } from "@spark/llm/utils/gemini";
 import { QUIZ_EVAL_MODEL_ID } from "@spark/llm/quiz/judge";
 import {
   DEFAULT_EXTENSION_QUESTION_COUNT,
@@ -17,6 +15,7 @@ import {
 } from "@spark/llm/quiz/prompts";
 import { runJobsWithConcurrency } from "../utils/concurrency";
 import type { JobProgressReporter } from "../utils/concurrency";
+import { runLlmTextCall } from "../utils/llm";
 import { createCliCommand, splitCommaSeparated } from "../utils/cli";
 import {
   AUDIT_CHECKPOINT_PATH,
@@ -377,48 +376,13 @@ async function callModel(
   prompt: string,
   progress: JobProgressReporter,
 ): Promise<string> {
-  const uploadBytes = Buffer.byteLength(prompt, "utf8");
-  const handle = progress.startModelCall({
+  const text = await runLlmTextCall({
+    progress,
     modelId: QUIZ_EVAL_MODEL_ID,
-    uploadBytes,
+    parts: [{ type: "text", text: prompt }],
+    responseMimeType: "text/plain",
   });
-  try {
-    const response = await runGeminiCall((client) =>
-      client.models.generateContent({
-        model: QUIZ_EVAL_MODEL_ID,
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }],
-          },
-        ],
-        config: {
-          responseMimeType: "text/plain",
-          temperature: 0.35,
-        },
-      }),
-    );
-    const usage = response.usageMetadata;
-    if (usage) {
-      const promptTokens = usage.promptTokenCount ?? 0;
-      const cachedTokens = usage.cachedContentTokenCount ?? 0;
-      const inferenceTokens =
-        (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
-      if (promptTokens > 0 || cachedTokens > 0 || inferenceTokens > 0) {
-        progress.recordModelUsage(handle, {
-          promptTokensDelta: promptTokens,
-          cachedTokensDelta: cachedTokens,
-          inferenceTokensDelta: inferenceTokens,
-          timestamp: Date.now(),
-        });
-      }
-    }
-    const text = response.text ?? "";
-    progress.reportChars(text.length);
-    return text;
-  } finally {
-    progress.finishModelCall(handle);
-  }
+  return text;
 }
 
 function collectFailureCases(

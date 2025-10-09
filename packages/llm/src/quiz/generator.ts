@@ -1,6 +1,9 @@
 import type { Part } from "@google/genai";
 
-import { runGeminiCall, type GeminiModelId } from "../utils/gemini";
+import {
+  streamGeminiTextResponse,
+  type GeminiModelId,
+} from "../utils/gemini";
 import {
   QUIZ_RESPONSE_SCHEMA,
   QuizGenerationSchema,
@@ -38,23 +41,15 @@ export async function generateQuizFromSource(
     ...buildSourceParts(options.sourceFiles),
   ];
 
-  const response = await runGeminiCall((client) =>
-    client.models.generateContent({
-      model: QUIZ_GENERATION_MODEL_ID,
-      contents: [
-        {
-          role: "user",
-          parts,
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: QUIZ_RESPONSE_SCHEMA,
-      },
-    }),
-  );
-
-  const text = response.text;
+  const { text } = await streamGeminiTextResponse({
+    model: QUIZ_GENERATION_MODEL_ID,
+    parts,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: QUIZ_RESPONSE_SCHEMA,
+    },
+    trimOutput: false,
+  });
   if (!text) {
     throw new Error("Gemini did not return any text for quiz generation");
   }
@@ -86,23 +81,15 @@ export async function extendQuizWithMoreQuestions(
     },
   ];
 
-  const response = await runGeminiCall((client) =>
-    client.models.generateContent({
-      model: QUIZ_GENERATION_MODEL_ID,
-      contents: [
-        {
-          role: "user",
-          parts,
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: QUIZ_RESPONSE_SCHEMA,
-      },
-    }),
-  );
-
-  const text = response.text;
+  const { text } = await streamGeminiTextResponse({
+    model: QUIZ_GENERATION_MODEL_ID,
+    parts,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: QUIZ_RESPONSE_SCHEMA,
+    },
+    trimOutput: false,
+  });
   if (!text) {
     throw new Error("Gemini did not return any text for quiz extension");
   }
