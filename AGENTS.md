@@ -84,3 +84,8 @@ Notes
 - Zod: ALWAYS use `zod` for runtime validation and parsing of external inputs (API request bodies, query params, headers, environment/config, webhook payloads, third‑party responses). Avoid ad‑hoc `typeof` checks.
   - Normalize with `transform()` to return a clean, typed shape for downstream logic.
   - On validation errors, return a clear 4xx with an error summary (do not throw raw exceptions).
+- Prefer trusting TypeScript’s static analysis: check for `undefined`/`null` instead of using `typeof` to re-discover declared types. Only add runtime type guards when the type truly is ambiguous (rare).
+- Avoid `Array.prototype.forEach` for control-flow heavy logic; use `for..of` so `break`, `continue`, and early returns remain obvious.
+- Prefer `for..of` when iterating sequentially; use index-based loops only when the index is required (parallel arrays, slicing, etc.).
+- Favor `.map()` (or `.flatMap`) when the loop purpose is to transform into a new array without side effects.
+- Do not use `Array.isArray` (or similar runtime shape checks) when the type already guarantees an array; prefer `value !== undefined` / `value !== null` checks unless the type is genuinely ambiguous.
