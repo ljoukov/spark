@@ -1,8 +1,12 @@
+import { Buffer } from "node:buffer";
+
 import { z } from "zod";
 
 import { getGoogleAuth } from "./googleAuth";
 
-const GOOGLE_TTS_ENDPOINT = "https://texttospeech.googleapis.com/v1beta1/voices";
+const GOOGLE_TTS_BASE_URL = "https://texttospeech.googleapis.com/v1beta1";
+const GOOGLE_TTS_VOICES_ENDPOINT = `${GOOGLE_TTS_BASE_URL}/voices`;
+const GOOGLE_TTS_SYNTHESIZE_ENDPOINT = `${GOOGLE_TTS_BASE_URL}/text:synthesize`;
 const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
 const VoiceSchema = z
@@ -20,10 +24,62 @@ const ListVoicesResponseSchema = z
   })
   .passthrough();
 
+const SynthesizeResponseSchema = z
+  .object({
+    audioContent: z.string().min(1),
+    audioConfig: z
+      .object({
+        audioEncoding: z.string().optional(),
+        speakingRate: z.number().optional(),
+        pitch: z.number().optional(),
+        volumeGainDb: z.number().optional(),
+        sampleRateHertz: z.number().optional(),
+        effectsProfileId: z.array(z.string()).optional(),
+        voiceProfile: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    timepoints: z
+      .array(
+        z
+          .object({
+            markName: z.string().optional(),
+            timeSeconds: z.number().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
 export type GoogleTextToSpeechVoice = z.infer<typeof VoiceSchema>;
 
 export type ListVoicesOptions = {
   languageCode?: string;
+};
+
+export type SynthesizeAudioEncoding = "MP3" | "OGG_OPUS" | "LINEAR16";
+
+export type SynthesizeOptions = {
+  text: string;
+  voice: {
+    languageCode: string;
+    name?: string;
+    ssmlGender?: string;
+  };
+  audioConfig?: {
+    audioEncoding?: SynthesizeAudioEncoding;
+    speakingRate?: number;
+    pitch?: number;
+    volumeGainDb?: number;
+    sampleRateHertz?: number;
+    effectsProfileId?: string[];
+  };
+};
+
+export type SynthesizeResult = {
+  audio: Uint8Array;
+  audioConfig?: z.infer<typeof SynthesizeResponseSchema>["audioConfig"];
 };
 
 export class GoogleTextToSpeechClient {
@@ -31,7 +87,7 @@ export class GoogleTextToSpeechClient {
 
   async listVoices(options: ListVoicesOptions = {}): Promise<GoogleTextToSpeechVoice[]> {
     const accessToken = await this.getAccessToken();
-    const url = new URL(GOOGLE_TTS_ENDPOINT);
+    const url = new URL(GOOGLE_TTS_VOICES_ENDPOINT);
     if (options.languageCode && options.languageCode.trim().length > 0) {
       url.searchParams.set("languageCode", options.languageCode.trim());
     }
@@ -62,6 +118,73 @@ export class GoogleTextToSpeechClient {
 
     const parsed = ListVoicesResponseSchema.parse(payload);
     return parsed.voices ?? [];
+  }
+
+  async synthesize(options: SynthesizeOptions): Promise<SynthesizeResult> {
+    const accessToken = await this.getAccessToken();
+    const audioEncoding = options.audioConfig?.audioEncoding ?? "MP3";
+    const requestBody = {
+      input: {
+        text: options.text,
+      },
+      voice: {
+        languageCode: options.voice.languageCode,
+        ...(options.voice.name ? { name: options.voice.name } : {}),
+        ...(options.voice.ssmlGender ? { ssmlGender: options.voice.ssmlGender } : {}),
+      },
+      audioConfig: {
+        audioEncoding,
+        ...(options.audioConfig?.speakingRate !== undefined
+          ? { speakingRate: options.audioConfig.speakingRate }
+          : {}),
+        ...(options.audioConfig?.pitch !== undefined
+          ? { pitch: options.audioConfig.pitch }
+          : {}),
+        ...(options.audioConfig?.volumeGainDb !== undefined
+          ? { volumeGainDb: options.audioConfig.volumeGainDb }
+          : {}),
+        ...(options.audioConfig?.sampleRateHertz !== undefined
+          ? { sampleRateHertz: options.audioConfig.sampleRateHertz }
+          : {}),
+        ...(options.audioConfig?.effectsProfileId
+          ? { effectsProfileId: options.audioConfig.effectsProfileId }
+          : {}),
+      },
+    };
+
+    const response = await fetch(GOOGLE_TTS_SYNTHESIZE_ENDPOINT, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+
+    const bodyText = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        `Google Text-to-Speech text:synthesize failed (${response.status} ${response.statusText}): ${bodyText}`,
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (error) {
+      throw new Error(
+        `Google Text-to-Speech text:synthesize returned invalid JSON: ${(error as Error).message}`,
+      );
+    }
+
+    const parsed = SynthesizeResponseSchema.parse(payload);
+    const audio = new Uint8Array(Buffer.from(parsed.audioContent, "base64"));
+
+    return {
+      audio,
+      audioConfig: parsed.audioConfig,
+    };
   }
 
   private async getAccessToken(): Promise<string> {

@@ -10,6 +10,7 @@
     "code:import": "tsx src/code/import-problems.ts",
     "code:download:leetcode": "tsx src/code/download-leetcode.ts",
     "tts:list-voices": "tsx src/tts/list-voices.ts",
+    "tts:say": "tsx src/tts/say.ts",
     "test:gemini": "tsx src/tests/testGeminiApi.ts",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
