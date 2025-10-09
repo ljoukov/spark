@@ -8,54 +8,19 @@ import {
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage, type Storage } from "firebase-admin/storage";
-import { z } from "zod";
-import { loadLocalEnv } from "./env";
+import {
+  getGoogleServiceAccount,
+  type GoogleServiceAccount,
+} from "./googleAuth";
 
 export type FirebaseAdminOptions = {
   storageBucket?: string;
 };
 
-export type FirebaseServiceAccount = {
-  projectId: string;
-  clientEmail: string;
-  privateKey: string;
-};
+let cachedApp: App | null = null;
+let cachedBucket: string | undefined;
 
-const serviceAccountJsonSchema = z
-  .object({
-    project_id: z.string().min(1),
-    client_email: z.string().email(),
-    private_key: z.string().min(1),
-  })
-  .transform(({ project_id, client_email, private_key }) => ({
-    projectId: project_id,
-    clientEmail: client_email,
-    privateKey: private_key.replace(/\\n/g, "\n"),
-  }));
-
-export function parseFirebaseServiceAccount(
-  input: string,
-): FirebaseServiceAccount {
-  try {
-    const parsed = JSON.parse(input);
-    return serviceAccountJsonSchema.parse(parsed);
-  } catch (error) {
-    console.error("Failed to parse Firebase service account JSON", error);
-    throw new Error("Invalid Firebase service account JSON");
-  }
-}
-
-const appCache = new Map<string, App>();
-
-function cacheKey(
-  config: FirebaseServiceAccount,
-  options?: FirebaseAdminOptions,
-): string {
-  const bucket = options?.storageBucket ?? "";
-  return `${config.projectId}|${bucket}`;
-}
-
-function toServiceAccount(config: FirebaseServiceAccount): ServiceAccount {
+function toServiceAccount(config: GoogleServiceAccount): ServiceAccount {
   return {
     projectId: config.projectId,
     clientEmail: config.clientEmail,
@@ -64,35 +29,36 @@ function toServiceAccount(config: FirebaseServiceAccount): ServiceAccount {
 }
 
 function resolveServiceAccount(
-  config?: FirebaseServiceAccount,
-): FirebaseServiceAccount {
-  if (config) {
-    return config;
-  }
-  loadLocalEnv();
-  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!json || json.trim().length === 0) {
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON must be provided");
-  }
-  return parseFirebaseServiceAccount(json);
+  config?: GoogleServiceAccount,
+): GoogleServiceAccount {
+  return config ?? getGoogleServiceAccount();
 }
 
 export function getFirebaseAdminApp(
-  config?: FirebaseServiceAccount,
+  config?: GoogleServiceAccount,
   options: FirebaseAdminOptions = {},
 ): App {
   const resolvedConfig = resolveServiceAccount(config);
-  const key = cacheKey(resolvedConfig, options);
-  const cached = appCache.get(key);
-  if (cached) {
-    return cached;
+  const desiredBucket = options.storageBucket;
+
+  if (cachedApp) {
+    if (
+      desiredBucket !== undefined &&
+      cachedBucket !== undefined &&
+      desiredBucket !== cachedBucket
+    ) {
+      throw new Error(
+        "Firebase app already initialised with a different storage bucket.",
+      );
+    }
+    return cachedApp;
   }
 
   const registeredApps = getApps();
   if (registeredApps.length > 0) {
-    const existing = registeredApps[0]!;
-    appCache.set(key, existing);
-    return existing;
+    cachedApp = registeredApps[0]!;
+    cachedBucket = desiredBucket ?? cachedBucket;
+    return cachedApp;
   }
 
   const initializeOptions: {
@@ -104,31 +70,31 @@ export function getFirebaseAdminApp(
     projectId: resolvedConfig.projectId,
   };
 
-  if (options.storageBucket) {
-    initializeOptions.storageBucket = options.storageBucket;
+  if (desiredBucket) {
+    initializeOptions.storageBucket = desiredBucket;
   }
 
-  const app = initializeApp(initializeOptions);
-  appCache.set(key, app);
-  return app;
+  cachedApp = initializeApp(initializeOptions);
+  cachedBucket = desiredBucket ?? cachedBucket;
+  return cachedApp;
 }
 
 export function getFirebaseAdminAuth(
-  config?: FirebaseServiceAccount,
+  config?: GoogleServiceAccount,
   options: FirebaseAdminOptions = {},
 ): Auth {
   return getAuth(getFirebaseAdminApp(config, options));
 }
 
 export function getFirebaseAdminFirestore(
-  config?: FirebaseServiceAccount,
+  config?: GoogleServiceAccount,
   options: FirebaseAdminOptions = {},
 ): Firestore {
   return getFirestore(getFirebaseAdminApp(config, options));
 }
 
 export function getFirebaseAdminStorage(
-  config?: FirebaseServiceAccount,
+  config?: GoogleServiceAccount,
   options: FirebaseAdminOptions = {},
 ): Storage {
   return getStorage(getFirebaseAdminApp(config, options));

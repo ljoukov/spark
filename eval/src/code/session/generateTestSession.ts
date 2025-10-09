@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   getTestUserId,
   getFirebaseAdminFirestore,
-  parseFirebaseServiceAccount,
+  getGoogleServiceAccount,
 } from "@spark/llm";
 import {
   SessionSchema,
@@ -906,21 +906,15 @@ function resolveStorageBucket(): string {
     return bucketFromEnv;
   }
 
-  const serviceAccountRaw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (serviceAccountRaw && serviceAccountRaw.trim().length > 0) {
-    try {
-      const serviceAccount = parseFirebaseServiceAccount(serviceAccountRaw);
-      if (serviceAccount.projectId) {
-        return `${serviceAccount.projectId}.firebasestorage.app`;
-      }
-    } catch (error) {
-      console.warn("Failed to derive storage bucket from GOOGLE_SERVICE_ACCOUNT_JSON", error);
-    }
+  try {
+    const serviceAccount = getGoogleServiceAccount();
+    return `${serviceAccount.projectId}.firebasestorage.app`;
+  } catch (error) {
+    throw new Error(
+      "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
+      { cause: error instanceof Error ? error : undefined },
+    );
   }
-
-  throw new Error(
-    "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-  );
 }
 
 
