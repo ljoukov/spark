@@ -405,7 +405,6 @@ function buildFilePart(file: SampleFile, buffer: Buffer): Part {
 
 async function callGeminiJson({
   parts,
-  label: _label,
   progress,
 }: {
   parts: Part[];
@@ -417,7 +416,6 @@ async function callGeminiJson({
     progress,
     modelId: GEMINI_MODEL_ID,
     parts: llmParts,
-    responseMimeType: "application/json",
     responseSchema: RAW_CLASSIFICATION_SCHEMA,
     schema: RawClassificationSchema,
     maxAttempts: 1,
@@ -468,88 +466,6 @@ function formatError(error: unknown): string {
   } catch {
     return String(error);
   }
-}
-
-function buildValidationErrorMessage({
-  issues,
-  payload,
-  label,
-}: {
-  issues: z.core.$ZodIssue[];
-  payload: unknown;
-  label: string;
-}): string {
-  const issueLines = issues.map((issue) => {
-    const labelSegments = issue.path.map((segment) =>
-      typeof segment === "symbol"
-        ? (segment.description ?? segment.toString())
-        : String(segment),
-    );
-    const pathLabel =
-      labelSegments.length > 0 ? labelSegments.join(".") : "(root)";
-    const value = formatValueForError(getValueAtPath(payload, issue.path));
-    const received = value === undefined ? "" : ` (received ${value})`;
-    return `${pathLabel}: ${issue.message}${received}`;
-  });
-  const payloadJson = safeStringify(payload, 2);
-  return `Validation failed for ${label}:\n${issueLines.join("\n")}\nPayload:\n${payloadJson}`;
-}
-
-function safeStringify(value: unknown, spacing = 2): string {
-  try {
-    return JSON.stringify(value, null, spacing);
-  } catch {
-    return String(value);
-  }
-}
-
-function getValueAtPath(
-  payload: unknown,
-  path: readonly PropertyKey[],
-): unknown {
-  let current: unknown = payload;
-  for (const segment of path) {
-    if (current === null || typeof current !== "object") {
-      return undefined;
-    }
-    if (Array.isArray(current)) {
-      const index =
-        typeof segment === "number"
-          ? segment
-          : Number.parseInt(String(segment), 10);
-      if (!Number.isFinite(index) || index < 0 || index >= current.length) {
-        return undefined;
-      }
-      current = current[index];
-      continue;
-    }
-    const container = current as Record<PropertyKey, unknown>;
-    if (!(segment in container)) {
-      return undefined;
-    }
-    current = container[segment];
-  }
-  return current;
-}
-
-function formatValueForError(value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === null) {
-    return "null";
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    const clipped =
-      trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
-    return JSON.stringify(clipped);
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  const json = safeStringify(value);
-  return json.length > 200 ? `${json.slice(0, 197)}...` : json;
 }
 
 async function classifyBatch({
