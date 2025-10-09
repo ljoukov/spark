@@ -5,3 +5,5 @@ export * from "./utils/env";
 export * from "./utils/testUser";
 export * from "./utils/firebaseAdmin";
 export * from "./utils/audio";
+export * from "./utils/googleAuth";
+export * from "./utils/googleTextToSpeechClient";

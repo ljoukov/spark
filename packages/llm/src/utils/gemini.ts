@@ -1,5 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 
+import {
+  getGoogleAuthOptions,
+  getGoogleServiceAccount,
+} from "./googleAuth";
+
 const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
@@ -34,24 +39,40 @@ type QueueJob = () => Promise<void>;
 
 const queue: QueueJob[] = [];
 
-type GeminiKeyResolver = () => Promise<string | undefined> | string | undefined;
+const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+const DEFAULT_VERTEX_LOCATION = "global";
 
-let customKeyResolver: GeminiKeyResolver | undefined;
+let clientPromise: Promise<GoogleGenAI> | undefined;
 
-export function configureGemini(options: {
-  readonly apiKey?: string;
-  readonly resolver?: GeminiKeyResolver;
-}): void {
-  if (options.apiKey !== undefined) {
-    const trimmed = options.apiKey?.trim();
-    customKeyResolver = () => (trimmed ? trimmed : undefined);
-    return;
+type GeminiConfiguration = {
+  readonly projectId?: string;
+  readonly location?: string;
+};
+
+let geminiConfiguration: GeminiConfiguration = {};
+
+function normaliseConfigValue(value?: string | null): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
   }
-  if (options.resolver) {
-    customKeyResolver = options.resolver;
-    return;
-  }
-  customKeyResolver = undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function configureGemini(options: GeminiConfiguration = {}): void {
+  const nextProjectId = normaliseConfigValue(options.projectId);
+  const nextLocation = normaliseConfigValue(options.location);
+  geminiConfiguration = {
+    projectId:
+      nextProjectId !== undefined
+        ? nextProjectId
+        : geminiConfiguration.projectId,
+    location:
+      nextLocation !== undefined
+        ? nextLocation
+        : geminiConfiguration.location,
+  };
+  clientPromise = undefined;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -60,32 +81,34 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-async function resolveGeminiApiKey(): Promise<string> {
-  if (customKeyResolver) {
-    const resolved = await customKeyResolver();
-    const trimmed = typeof resolved === "string" ? resolved.trim() : "";
-    if (trimmed) {
-      return trimmed;
-    }
+function resolveProjectId(): string {
+  const override = geminiConfiguration.projectId;
+  if (override) {
+    return override;
   }
-
-  const fromProcess = process.env.GEMINI_API_KEY?.trim();
-  if (fromProcess) {
-    return fromProcess;
-  }
-
-  throw new Error(
-    "GEMINI_API_KEY is not set. Provide it in environment variables.",
-  );
+  const serviceAccount = getGoogleServiceAccount();
+  return serviceAccount.projectId;
 }
 
-let clientPromise: Promise<GoogleGenAI> | undefined;
+function resolveLocation(): string {
+  const override = geminiConfiguration.location;
+  if (override) {
+    return override;
+  }
+  return DEFAULT_VERTEX_LOCATION;
+}
 
 async function getGeminiClient(): Promise<GoogleGenAI> {
   if (!clientPromise) {
     clientPromise = (async () => {
-      const apiKey = await resolveGeminiApiKey();
-      return new GoogleGenAI({ apiKey });
+      const projectId = resolveProjectId();
+      const location = resolveLocation();
+      return new GoogleGenAI({
+        vertexai: true,
+        project: projectId,
+        location,
+        googleAuthOptions: getGoogleAuthOptions(CLOUD_PLATFORM_SCOPE),
+      });
     })();
   }
   return clientPromise;

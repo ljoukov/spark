@@ -8,19 +8,22 @@ import { getStorage } from 'firebase-admin/storage';
 import { clientFirebaseConfig } from '../../config/firebase';
 import {
 	getFirebaseAdminApp as getSharedFirebaseAdminApp,
-	parseFirebaseServiceAccount,
-	type FirebaseServiceAccount,
-	type FirebaseAdminOptions
+	type FirebaseAdminOptions,
+	getGoogleServiceAccount,
+	type GoogleServiceAccount
 } from '@spark/llm';
 
-function loadServiceAccount(): FirebaseServiceAccount {
-	if (!GOOGLE_SERVICE_ACCOUNT_JSON || GOOGLE_SERVICE_ACCOUNT_JSON.trim().length === 0) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON must be set');
+function loadServiceAccount(): GoogleServiceAccount {
+	try {
+		return getGoogleServiceAccount();
+	} catch (error) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON must be set', {
+			cause: error instanceof Error ? error : undefined
+		});
 	}
-	return parseFirebaseServiceAccount(GOOGLE_SERVICE_ACCOUNT_JSON);
 }
 
-const serviceAccountConfig: FirebaseServiceAccount = Object.freeze(loadServiceAccount());
+const serviceAccountConfig: GoogleServiceAccount = Object.freeze(loadServiceAccount());
 
 const adminOptions: FirebaseAdminOptions = Object.freeze({
 	storageBucket: clientFirebaseConfig.storageBucket

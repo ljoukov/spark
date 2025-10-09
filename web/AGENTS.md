@@ -36,41 +36,39 @@ Gemini API
 
 - Model selection: Hardcode model IDs per task based on evals. Default to `gemini-2.5-flash` for the quiz extraction/generation/judging pipeline (validated in integration tests). Escalate to `gemini-2.5-pro` only for new tasks that demonstrably require heavier OCR or long-form reasoning. Do not use a `GEMINI_MODEL` env var.
 - API route: `POST /api/admin/chat` — body `{ messages: {role:'user'|'model', content:string}[] }`, streams plain text.
-- `GEMINI_API_KEY` is already set in then env variables.
+- Service auth: set `GOOGLE_SERVICE_ACCOUNT_JSON`; shared helpers handle Gemini/TTS access tokens.
 
 Gemini Prompting & Structured Output
 
 - Prompting guide: use structured output to get JSON the server can validate.
   Docs: https://ai.google.dev/gemini-api/docs/structured-output#javascript
 
-Example (Node/TS) using `@google/genai`:
+Example (Node/TS) using the shared helper:
 
 ```ts
-import { GoogleGenAI, Type } from '@google/genai';
-
-const ai = new GoogleGenAI({});
+import { Type } from '@google/genai';
+import { runGeminiCall } from '@spark/llm/utils/gemini';
 
 export async function exampleStructuredOutput() {
-	const response = await ai.models.generateContent({
-		// Choose model explicitly; no env override.
-		// Use "gemini-2.5-flash" for simple tasks; switch to "gemini-2.5-pro" for harder ones.
-		model: 'gemini-2.5-flash',
-		contents: 'List a few popular cookie recipes, and include the amounts of ingredients.',
-		config: {
-			responseMimeType: 'application/json',
-			responseSchema: {
-				type: Type.ARRAY,
-				items: {
-					type: Type.OBJECT,
-					properties: {
-						recipeName: { type: Type.STRING },
-						ingredients: { type: Type.ARRAY, items: { type: Type.STRING } }
-					},
-					propertyOrdering: ['recipeName', 'ingredients']
+	const response = await runGeminiCall((client) =>
+		client.models.generateContent({
+			model: 'gemini-2.5-flash',
+			contents: 'List a few popular cookie recipes, and include the amounts of ingredients.',
+			config: {
+				responseMimeType: 'application/json',
+				responseSchema: {
+					type: Type.ARRAY,
+					items: {
+						type: Type.OBJECT,
+						properties: {
+							recipeName: { type: Type.STRING },
+							ingredients: { type: Type.ARRAY, items: { type: Type.STRING } }
+						}
+					}
 				}
 			}
-		}
-	});
+		}),
+	);
 
 	return response.text; // JSON string per responseMimeType
 }
