@@ -49,8 +49,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     locale: string;
     encoding: string;
   }>();
-  const textParts = parsed.args as string[];
-  const text = textParts.join(" ").trim();
+  const text = parsed.args.map((arg) => String(arg)).join(" ").trim();
 
   return CliOptionsSchema.parse({
     voice: opts.voice,

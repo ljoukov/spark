@@ -1,4 +1,3 @@
-import { GeminiModelId } from "@spark/llm/utils/gemini";
 import { clearInterval, setInterval } from "node:timers";
 
 const SPEED_WINDOW_MS = 10_000;
@@ -10,21 +9,19 @@ export type StatusMode = "interactive" | "plain" | "off";
 
 export type ModelCallHandle = symbol;
 
-export type ModelUsageDelta = {
-  readonly promptTokensDelta: number;
-  readonly inferenceTokensDelta: number;
-  readonly cachedTokensDelta?: number;
-  readonly timestamp: number;
+export type LlmUsageChunk = {
+  readonly modelVersion?: string;
+  readonly outputCharsDelta?: number;
+  readonly outputBytesDelta?: number;
 };
 
 export type JobProgressReporter = {
-  reportChars(delta: number): void;
   log(message: string): void;
   startModelCall(details: {
-    modelId: GeminiModelId;
+    modelId: string;
     uploadBytes: number;
   }): ModelCallHandle;
-  recordModelUsage(handle: ModelCallHandle, delta: ModelUsageDelta): void;
+  recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void;
   finishModelCall(handle: ModelCallHandle): void;
 };
 
@@ -45,112 +42,92 @@ export type JobRunnerOptions<I, O> = {
 };
 
 type PerModelMetrics = {
-  promptTokens: number;
-  cachedTokens: number;
-  inferenceTokens: number;
+  uploadBytes: number;
+  downloadBytes: number;
+  outputChars: number;
 };
 
 type MetricsSnapshot = {
   readonly totalChars: number;
   readonly totalUploadBytes: number;
+  readonly totalDownloadBytes: number;
   readonly activeCalls: number;
-  readonly totalPromptTokens: number;
-  readonly totalCachedTokens: number;
-  readonly totalInferenceTokens: number;
-  readonly promptTokensPerSecond: number;
-  readonly inferenceTokensPerSecond: number;
+  readonly charsPerSecond: number;
+  readonly downloadBytesPerSecond: number;
   readonly perModel: Array<{
     readonly modelId: string;
-    readonly promptTokens: number;
-    readonly cachedTokens: number;
-    readonly inferenceTokens: number;
+    readonly uploadBytes: number;
+    readonly downloadBytes: number;
+    readonly outputChars: number;
   }>;
 };
 
 class MetricsTracker {
   private totalChars = 0;
   private totalUploadBytes = 0;
+  private totalDownloadBytes = 0;
   private activeCalls = 0;
-  private totalPromptTokens = 0;
-  private totalCachedTokens = 0;
-  private totalInferenceTokens = 0;
   private readonly perModel = new Map<string, PerModelMetrics>();
   private readonly callInfo = new Map<
     ModelCallHandle,
-    { readonly modelId: string }
+    { readonly modelId: string; modelVersion?: string }
   >();
-  private readonly usageWindow: Array<{
-    timestamp: number;
-    promptTokens: number;
-    cachedTokens: number;
-    inferenceTokens: number;
-  }> = [];
-
-  reportChars(delta: number): void {
-    if (delta <= 0) {
-      return;
-    }
-    this.totalChars += delta;
-  }
+  private readonly charWindow: Array<{ timestamp: number; chars: number }> = [];
+  private readonly downloadWindow: Array<{ timestamp: number; bytes: number }> = [];
 
   startCall(modelId: string, uploadBytes: number): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("model-call");
     this.callInfo.set(handle, { modelId });
     this.activeCalls += 1;
+    const metrics =
+      this.perModel.get(modelId) ??
+      {
+        uploadBytes: 0,
+        downloadBytes: 0,
+        outputChars: 0,
+      };
+    this.perModel.set(modelId, metrics);
     if (uploadBytes > 0) {
       this.totalUploadBytes += uploadBytes;
+      metrics.uploadBytes += uploadBytes;
     }
     return handle;
   }
 
-  recordUsage(handle: ModelCallHandle, delta: ModelUsageDelta): void {
+  recordUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
     const info = this.callInfo.get(handle);
     if (!info) {
       return;
     }
-    let promptDelta = 0;
-    let cachedDelta = 0;
-    let inferenceDelta = 0;
-    if (delta.promptTokensDelta > 0) {
-      this.totalPromptTokens += delta.promptTokensDelta;
-      const metrics = this.perModel.get(info.modelId) ?? {
-        promptTokens: 0,
-        cachedTokens: 0,
-        inferenceTokens: 0,
+    const metrics =
+      this.perModel.get(info.modelId) ??
+      {
+        uploadBytes: 0,
+        downloadBytes: 0,
+        outputChars: 0,
       };
-      metrics.promptTokens += delta.promptTokensDelta;
-      this.perModel.set(info.modelId, metrics);
-      promptDelta = delta.promptTokensDelta;
-    }
-    if (delta.cachedTokensDelta && delta.cachedTokensDelta > 0) {
-      this.totalCachedTokens += delta.cachedTokensDelta;
-      const metrics = this.perModel.get(info.modelId) ?? {
-        promptTokens: 0,
-        cachedTokens: 0,
-        inferenceTokens: 0,
-      };
-      metrics.cachedTokens += delta.cachedTokensDelta;
-      this.perModel.set(info.modelId, metrics);
-      cachedDelta = delta.cachedTokensDelta;
-    }
-    if (delta.inferenceTokensDelta > 0) {
-      this.totalInferenceTokens += delta.inferenceTokensDelta;
-      const metrics = this.perModel.get(info.modelId) ?? {
-        promptTokens: 0,
-        cachedTokens: 0,
-        inferenceTokens: 0,
-      };
-      metrics.inferenceTokens += delta.inferenceTokensDelta;
-      this.perModel.set(info.modelId, metrics);
-      inferenceDelta = delta.inferenceTokensDelta;
-    }
-    if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
-      this.usageWindow.push({
-        timestamp: delta.timestamp,
-        promptTokens: promptDelta,
-        cachedTokens: cachedDelta,
-        inferenceTokens: inferenceDelta,
+    this.perModel.set(info.modelId, metrics);
+    const timestamp = Date.now();
+    const charDelta = Math.max(0, chunk.outputCharsDelta ?? 0);
+    const byteDelta = Math.max(0, chunk.outputBytesDelta ?? 0);
+    if (charDelta > 0) {
+      this.totalChars += charDelta;
+      metrics.outputChars += charDelta;
+      this.charWindow.push({
+        timestamp,
+        chars: charDelta,
       });
+    }
+    if (byteDelta > 0) {
+      this.totalDownloadBytes += byteDelta;
+      metrics.downloadBytes += byteDelta;
+      this.downloadWindow.push({
+        timestamp,
+        bytes: byteDelta,
+      });
+    }
+    if (chunk.modelVersion) {
+      info.modelVersion = chunk.modelVersion;
     }
   }
 
@@ -162,42 +139,60 @@ class MetricsTracker {
 
   getSnapshot(): MetricsSnapshot {
     const now = Date.now();
-    while (
-      this.usageWindow.length > 0 &&
-      this.usageWindow[0].timestamp <= now - SPEED_WINDOW_MS
-    ) {
-      this.usageWindow.shift();
-    }
-    let promptWindowTokens = 0;
-    let inferenceWindowTokens = 0;
-    for (const entry of this.usageWindow) {
-      promptWindowTokens += entry.promptTokens;
-      inferenceWindowTokens += entry.inferenceTokens;
-    }
-    const windowStart =
-      this.usageWindow.length > 0 ? this.usageWindow[0].timestamp : now;
-    const elapsedSeconds = Math.max((now - windowStart) / 1000, 1);
-    const promptSpeed = promptWindowTokens / elapsedSeconds;
-    const inferenceSpeed = inferenceWindowTokens / elapsedSeconds;
+    this.trimWindow(this.charWindow, now);
+    this.trimWindow(this.downloadWindow, now);
+    const charsWindowTotal = this.charWindow.reduce(
+      (acc, entry) => acc + entry.chars,
+      0,
+    );
+    const downloadWindowTotal = this.downloadWindow.reduce(
+      (acc, entry) => acc + entry.bytes,
+      0,
+    );
+    const charWindowStart =
+      this.charWindow.length > 0 ? this.charWindow[0].timestamp : now;
+    const downloadWindowStart =
+      this.downloadWindow.length > 0 ? this.downloadWindow[0].timestamp : now;
+    const charsElapsedSeconds = Math.max(
+      (now - charWindowStart) / 1000,
+      1,
+    );
+    const downloadElapsedSeconds = Math.max(
+      (now - downloadWindowStart) / 1000,
+      1,
+    );
+    const charsPerSecond = charsWindowTotal / charsElapsedSeconds;
+    const downloadBytesPerSecond = downloadWindowTotal / downloadElapsedSeconds;
     const perModel = Array.from(this.perModel.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([modelId, metrics]) => ({
         modelId,
-        promptTokens: metrics.promptTokens,
-        cachedTokens: metrics.cachedTokens,
-        inferenceTokens: metrics.inferenceTokens,
+        uploadBytes: metrics.uploadBytes,
+        downloadBytes: metrics.downloadBytes,
+        outputChars: metrics.outputChars,
       }));
     return {
       totalChars: this.totalChars,
       totalUploadBytes: this.totalUploadBytes,
+      totalDownloadBytes: this.totalDownloadBytes,
       activeCalls: this.activeCalls,
-      totalPromptTokens: this.totalPromptTokens,
-      totalCachedTokens: this.totalCachedTokens,
-      totalInferenceTokens: this.totalInferenceTokens,
-      promptTokensPerSecond: promptSpeed,
-      inferenceTokensPerSecond: inferenceSpeed,
+      charsPerSecond,
+      downloadBytesPerSecond,
       perModel,
     };
+  }
+
+  private trimWindow<T extends { timestamp: number }>(
+    window: T[],
+    now: number,
+  ): void {
+    while (window.length > 0) {
+      const first = window[0];
+      if (!first || first.timestamp > now - SPEED_WINDOW_MS) {
+        break;
+      }
+      window.shift();
+    }
   }
 }
 
@@ -277,14 +272,6 @@ class ProgressDisplay {
     this.render(this.mode === "interactive");
   }
 
-  reportChars(delta: number): void {
-    if (this.mode === "off") {
-      return;
-    }
-    this.metrics.reportChars(delta);
-    this.dirty = true;
-  }
-
   startModelCall(modelId: string, uploadBytes: number): ModelCallHandle {
     if (this.mode === "off") {
       return Symbol("model-call");
@@ -293,11 +280,11 @@ class ProgressDisplay {
     return this.metrics.startCall(modelId, uploadBytes);
   }
 
-  recordModelUsage(handle: ModelCallHandle, delta: ModelUsageDelta): void {
+  recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
     if (this.mode === "off") {
       return;
     }
-    this.metrics.recordUsage(handle, delta);
+    this.metrics.recordUsage(handle, chunk);
     this.dirty = true;
   }
 
@@ -336,7 +323,6 @@ class ProgressDisplay {
   createReporter(): JobProgressReporter {
     if (this.mode === "off") {
       return {
-        reportChars: () => {},
         log: (message) => {
           console.log(message);
         },
@@ -346,16 +332,13 @@ class ProgressDisplay {
       };
     }
     return {
-      reportChars: (delta) => {
-        this.reportChars(delta);
-      },
       log: (message) => {
         this.log(message);
       },
       startModelCall: ({ modelId, uploadBytes }) =>
         this.startModelCall(modelId, uploadBytes),
-      recordModelUsage: (handle, delta) => {
-        this.recordModelUsage(handle, delta);
+      recordModelUsage: (handle, chunk) => {
+        this.recordModelUsage(handle, chunk);
       },
       finishModelCall: (handle) => {
         this.finishModelCall(handle);
@@ -390,17 +373,17 @@ class ProgressDisplay {
       0,
     );
     const metrics = this.metrics.getSnapshot();
-    const promptSpeedDisplay = formatNumber(
-      Math.round(metrics.promptTokensPerSecond),
-    );
-    const inferenceSpeedDisplay = formatNumber(
-      Math.round(metrics.inferenceTokensPerSecond),
+    const charsSpeedDisplay = formatNumber(Math.round(metrics.charsPerSecond));
+    const downloadSpeedDisplay = formatBytes(
+      Math.round(metrics.downloadBytesPerSecond),
     );
     const line =
       `${this.labelDisplay} ${percent}% | ${this.completedJobs} / ${this.totalJobs}` +
       ` | ${waitingJobs} waiting` +
+      ` | chars ${formatNumber(metrics.totalChars)}` +
       ` | up ${formatBytes(metrics.totalUploadBytes)}` +
-      ` | speed P ${promptSpeedDisplay}/s I ${inferenceSpeedDisplay}/s` +
+      ` | down ${formatBytes(metrics.totalDownloadBytes)}` +
+      ` | speed ${charsSpeedDisplay} chars/s ↓ ${downloadSpeedDisplay}/s` +
       ` | ${formatPerModel(metrics.perModel)}`;
     this.writeLine(line);
     this.lastRenderTime = now;
@@ -531,7 +514,6 @@ export async function runJobsWithConcurrency<I, O>({
         const result = await handler(item, {
           index: currentIndex,
           progress: {
-            reportChars: reporter.reportChars,
             log: (message: string) => {
               reporter.log(`[${id}] ${message}`);
             },
@@ -584,10 +566,10 @@ function formatPerModel(perModel: MetricsSnapshot["perModel"]): string {
     return "models: n/a";
   }
   const entries = perModel.map((entry) => {
-    const prompt = formatNumber(entry.promptTokens);
-    const cached = formatNumber(entry.cachedTokens);
-    const inference = formatNumber(entry.inferenceTokens);
-    return `${entry.modelId.replace("gemini-", "")}: P ${prompt} / C ${cached} / I ${inference}`;
+    const chars = formatNumber(entry.outputChars);
+    const up = formatBytes(entry.uploadBytes);
+    const down = formatBytes(entry.downloadBytes);
+    return `${entry.modelId.replace("gemini-", "")}: chars ${chars} up ${up} down ${down}`;
   });
   return `models: ${entries.join(", ")}`;
 }

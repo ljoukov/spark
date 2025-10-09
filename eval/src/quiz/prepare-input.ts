@@ -14,23 +14,17 @@ import {
   writeFile,
 } from "node:fs/promises";
 
-import {
-  Type,
-  type Schema,
-  type Part,
-  type GenerateContentResponse,
-} from "@google/genai";
+import { Type, type Schema, type Part } from "@google/genai";
 import { z } from "zod";
 
-import { GeminiModelId, runGeminiCall } from "@spark/llm/utils/gemini";
+import { GeminiModelId } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,
   type JobProgressReporter,
-  type ModelCallHandle,
 } from "../utils/concurrency";
 import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
 import { detectMimeType } from "../utils/mime";
-import { estimateUploadBytes } from "../utils/llm";
+import { convertGooglePartsToLlmParts, runLlmJsonCall } from "../utils/llm";
 import { createCliCommand, createIntegerParser } from "../utils/cli";
 
 ensureEvalEnvLoaded();
@@ -411,93 +405,22 @@ function buildFilePart(file: SampleFile, buffer: Buffer): Part {
 
 async function callGeminiJson({
   parts,
-  label,
+  label: _label,
   progress,
 }: {
   parts: Part[];
   label: string;
   progress: JobProgressReporter;
-}): Promise<{ text: string; modelVersion: string }> {
-  const uploadBytes = estimateUploadBytes(parts);
-  return runGeminiCall(async (client) => {
-    const callHandle: ModelCallHandle = progress.startModelCall({
-      modelId: GEMINI_MODEL_ID,
-      uploadBytes,
-    });
-    try {
-      const stream = await client.models.generateContentStream({
-        model: GEMINI_MODEL_ID,
-        contents: [
-          {
-            role: "user",
-            parts,
-          },
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: RAW_CLASSIFICATION_SCHEMA,
-        },
-      });
-      let latestText = "";
-      let lastPromptTokens = 0;
-      let lastCachedTokens = 0;
-      let lastInferenceTokens = 0;
-      let modelVersion: string = GEMINI_MODEL_ID;
-      let finalChunk: GenerateContentResponse | undefined;
-      for await (const chunk of stream) {
-        if (chunk.modelVersion) {
-          modelVersion = chunk.modelVersion;
-        }
-        if (chunk.candidates) {
-          for (const candidate of chunk.candidates) {
-            const contentParts = candidate.content?.parts ?? [];
-            for (const part of contentParts) {
-              if (part.thought || !part.text) {
-                continue;
-              }
-              latestText += part.text;
-              progress.reportChars(part.text.length);
-            }
-          }
-        } else if (chunk.text) {
-          latestText += chunk.text;
-          progress.reportChars(chunk.text.length);
-        }
-        finalChunk = chunk;
-        const usage = chunk.usageMetadata;
-        if (usage) {
-          const promptTokens = usage.promptTokenCount ?? 0;
-          const cachedTokens = usage.cachedContentTokenCount ?? 0;
-          const inferenceTokens =
-            (usage.thoughtsTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0);
-          const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
-          const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
-          const inferenceDelta = Math.max(
-            0,
-            inferenceTokens - lastInferenceTokens,
-          );
-          if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
-            progress.recordModelUsage(callHandle, {
-              promptTokensDelta: promptDelta,
-              cachedTokensDelta: cachedDelta,
-              inferenceTokensDelta: inferenceDelta,
-              timestamp: Date.now(),
-            });
-          }
-          lastPromptTokens = promptTokens;
-          lastCachedTokens = cachedTokens;
-          lastInferenceTokens = inferenceTokens;
-        }
-      }
-      const fallbackText = finalChunk?.text ?? "";
-      const finalText = latestText || fallbackText;
-      if (!finalText) {
-        throw new Error(`[${label}] Empty response from Gemini`);
-      }
-      return { text: finalText, modelVersion };
-    } finally {
-      progress.finishModelCall(callHandle);
-    }
+}): Promise<RawClassification> {
+  const llmParts = convertGooglePartsToLlmParts(parts);
+  return runLlmJsonCall<RawClassification>({
+    progress,
+    modelId: GEMINI_MODEL_ID,
+    parts: llmParts,
+    responseMimeType: "application/json",
+    responseSchema: RAW_CLASSIFICATION_SCHEMA,
+    schema: RawClassificationSchema,
+    maxAttempts: 1,
   });
 }
 
@@ -550,12 +473,10 @@ function formatError(error: unknown): string {
 function buildValidationErrorMessage({
   issues,
   payload,
-  rawText,
   label,
 }: {
   issues: z.core.$ZodIssue[];
   payload: unknown;
-  rawText: string;
   label: string;
 }): string {
   const issueLines = issues.map((issue) => {
@@ -571,11 +492,7 @@ function buildValidationErrorMessage({
     return `${pathLabel}: ${issue.message}${received}`;
   });
   const payloadJson = safeStringify(payload, 2);
-  const rawTextSection =
-    rawText && rawText.trim() && rawText.trim() !== payloadJson.trim()
-      ? `\nRaw response text:\n${rawText}`
-      : "";
-  return `Validation failed for ${label}:\n${issueLines.join("\n")}\nPayload:\n${payloadJson}${rawTextSection}`;
+  return `Validation failed for ${label}:\n${issueLines.join("\n")}\nPayload:\n${payloadJson}`;
 }
 
 function safeStringify(value: unknown, spacing = 2): string {
@@ -658,40 +575,21 @@ async function classifyBatch({
       try {
         const buffer = await readFile(file.sourcePath);
         const parts: Part[] = [buildFilePart(file, buffer), { text: prompt }];
-        const { text, modelVersion } = await callGeminiJson({
+        const classificationData = await callGeminiJson({
           parts,
           label: file.relativePath,
           progress: context.progress,
         });
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(text);
-        } catch (error) {
-          throw new Error(
-            `Failed to parse JSON for ${file.relativePath}: ${(error as Error).message}\n${text}`,
-          );
-        }
-        const validation = RawClassificationSchema.safeParse(parsed);
-        if (!validation.success) {
-          throw new Error(
-            buildValidationErrorMessage({
-              issues: validation.error.issues,
-              payload: parsed,
-              rawText: text,
-              label: file.relativePath,
-            }),
-          );
-        }
-        const classification = normaliseClassification(validation.data);
+        const classification = normaliseClassification(classificationData);
         if (!options.dryRun) {
           cacheData[file.relativePath] = {
             classification,
-            modelVersion,
+            modelVersion: GEMINI_MODEL_ID,
             updatedAt: new Date().toISOString(),
           };
           scheduleCacheWrite();
         }
-        return { file, classification, modelVersion } satisfies JobResult;
+        return { file, classification, modelVersion: GEMINI_MODEL_ID } satisfies JobResult;
       } catch (error) {
         const message = formatError(error);
         context.progress.log(`Failed ${file.relativePath}: ${message}`);

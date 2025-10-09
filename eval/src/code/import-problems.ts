@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import { access, readFile, readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
@@ -18,13 +17,16 @@ import { z } from "zod";
 
 import {
   buildCodeProblemExtractionRequest,
-  parseCodeProblemExtractionResponse,
   CODE_PROBLEM_EXTRACTION_MODEL_ID,
   CODE_PROBLEM_RESPONSE_SCHEMA,
+  CodeProblemExtractionSchema,
   type CodeProblemExtraction,
   type CodeProblemExtractionRequest,
 } from "@spark/llm/code";
-import { runGeminiCall } from "@spark/llm/utils/gemini";
+import {
+  convertGooglePartsToLlmParts,
+  runLlmJsonCall,
+} from "../utils/llm";
 import {
   runJobsWithConcurrency,
   type JobProgressReporter,
@@ -261,52 +263,18 @@ function buildFirestorePayload(options: {
 async function callExtractionModel(
   request: CodeProblemExtractionRequest,
   progress: JobProgressReporter,
-): Promise<string> {
-  const uploadBytes = Buffer.byteLength(request.prompt, "utf8");
-  const handle = progress.startModelCall({
+): Promise<CodeProblemExtraction> {
+  const parts = convertGooglePartsToLlmParts(request.parts);
+  const extraction = await runLlmJsonCall<CodeProblemExtraction>({
+    progress,
     modelId: request.modelId,
-    uploadBytes,
+    parts,
+    responseMimeType: "application/json",
+    responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
+    schema: CodeProblemExtractionSchema,
+    maxAttempts: 1,
   });
-  try {
-    const response = await runGeminiCall((client) =>
-      client.models.generateContent({
-        model: request.modelId,
-        contents: [
-          {
-            role: "user",
-            parts: request.parts,
-          },
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
-        },
-      }),
-    );
-    const usage = response.usageMetadata;
-    if (usage) {
-      const promptTokens = usage.promptTokenCount ?? 0;
-      const cachedTokens = usage.cachedContentTokenCount ?? 0;
-      const inferenceTokens =
-        (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
-      if (promptTokens > 0 || cachedTokens > 0 || inferenceTokens > 0) {
-        progress.recordModelUsage(handle, {
-          promptTokensDelta: promptTokens,
-          cachedTokensDelta: cachedTokens,
-          inferenceTokensDelta: inferenceTokens,
-          timestamp: Date.now(),
-        });
-      }
-    }
-    const text = response.text ?? "";
-    progress.reportChars(text.length);
-    if (!text.trim()) {
-      throw new Error("Gemini returned an empty response");
-    }
-    return text;
-  } finally {
-    progress.finishModelCall(handle);
-  }
+  return extraction;
 }
 
 async function importProblem(
@@ -326,10 +294,7 @@ async function importProblem(
   });
 
   progress.log("Prompting Gemini for structured metadata");
-  const responseText = await callExtractionModel(request, progress);
-
-  progress.log("Parsing Gemini JSON payload");
-  const extracted = parseCodeProblemExtractionResponse(responseText);
+  const extracted = await callExtractionModel(request, progress);
 
   const payload = buildFirestorePayload({
     slug: problemFile.slug,

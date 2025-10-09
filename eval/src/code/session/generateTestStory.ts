@@ -11,8 +11,6 @@ import {
   generateStorySegmentation,
   SegmentationValidationError,
   SegmentationReviewError,
-  buildSegmentationPrompt,
-  buildStoryPrompt,
   ART_STYLE_VINTAGE_CARTOON,
   type StoryImagesResult,
   type StoryProseResult,
@@ -66,6 +64,22 @@ function resolveOutputDir(rawOptions: CliOptions): string {
     "stories",
     "test-story"
   );
+}
+
+function resolveCheckpointsDir(outDir: string): string {
+  return path.join(outDir, "checkpoints");
+}
+
+async function writeCheckpoint(
+  outDir: string,
+  stage: StageName,
+  payload: unknown,
+): Promise<string> {
+  const checkpointsDir = resolveCheckpointsDir(outDir);
+  const filePath = path.join(checkpointsDir, `${stage}.json`);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(payload, null, 2), { encoding: "utf8" });
+  return filePath;
 }
 
 function resolveStageSequence(options: CliOptions): StageName[] {
@@ -144,106 +158,15 @@ function buildImagesPromptSnapshot(segmentation: StorySegmentation): string {
   return lines.join("\n");
 }
 
-async function cleanProseStage(outDir: string): Promise<void> {
-  await removeArtifacts([
-    path.join(outDir, "story.txt"),
-    path.join(outDir, "story.json"),
-    path.join(outDir, "story-thoughts.txt"),
-    path.join(outDir, "prompt.txt"),
-    path.join(outDir, "prompts"),
-  ]);
-}
+// Prose stage in test mode does not write legacy artifacts; checkpoints only.
 
-async function prepareProsePrompt(topic: string, outDir: string): Promise<string> {
-  const promptText = buildStoryPrompt(topic);
-  const latestPath = path.join(outDir, "prompt.txt");
-  await writeTextSnapshot(latestPath, promptText);
-  const attemptDir = path.join(outDir, "prompts", formatAttemptLabel(1));
-  await writeTextSnapshot(
-    path.join(attemptDir, `prompt-${formatAttemptLabel(1)}.txt`),
-    promptText,
-  );
-  return promptText;
-}
+// Segmentation stage in test mode does not write legacy artifacts; checkpoints only.
 
-async function cleanSegmentationStage(outDir: string): Promise<void> {
-  const attemptPromptPaths: string[] = [];
-  try {
-    const entries = await readdir(outDir);
-    for (const entry of entries) {
-      if (
-        entry.startsWith("segmentation-prompt-attempt-") &&
-        entry.endsWith(".txt")
-      ) {
-        attemptPromptPaths.push(path.join(outDir, entry));
-      }
-    }
-  } catch (error) {
-    if (!isFileNotFound(error)) {
-      throw error;
-    }
-  }
+// Audio stage in test mode does not write audio files; checkpoints only.
 
-  await removeArtifacts([
-    path.join(outDir, "segments.json"),
-    path.join(outDir, "segmentation-prompt.txt"),
-    path.join(outDir, "segmentation-attempts"),
-    path.join(outDir, "segmentation"),
-    ...attemptPromptPaths,
-  ]);
-}
+// Images stage in test mode does not write assets; checkpoints only.
 
-async function prepareSegmentationPrompt(
-  storyText: string,
-  outDir: string,
-): Promise<string> {
-  const promptText = buildSegmentationPrompt(storyText);
-  const latestPath = path.join(outDir, "segmentation-prompt.txt");
-  await writeTextSnapshot(latestPath, promptText);
-  const attemptPath = path.join(
-    outDir,
-    `segmentation-prompt-${formatAttemptLabel(1)}.txt`
-  );
-  await writeTextSnapshot(attemptPath, promptText);
-  return promptText;
-}
-
-async function cleanAudioStage(outDir: string): Promise<void> {
-  await removeArtifacts([path.join(outDir, "audio")]);
-}
-
-async function prepareAudioInputs(
-  segmentation: StorySegmentation,
-  outDir: string,
-): Promise<void> {
-  const mediaSegments = segmentationToMediaSegments(segmentation);
-  const audioDir = path.join(outDir, "audio");
-  await writeJsonSnapshot(path.join(audioDir, "input.json"), mediaSegments);
-  const attemptDir = path.join(audioDir, "attempts", formatAttemptLabel(1));
-  await writeJsonSnapshot(
-    path.join(attemptDir, `input-${formatAttemptLabel(1)}.json`),
-    mediaSegments,
-  );
-}
-
-async function cleanImagesStage(outDir: string): Promise<void> {
-  await removeArtifacts([path.join(outDir, "images")]);
-}
-
-async function prepareImagesPrompt(
-  segmentation: StorySegmentation,
-  outDir: string,
-): Promise<string> {
-  const snapshot = buildImagesPromptSnapshot(segmentation);
-  const latestPath = path.join(outDir, "images", "prompt.txt");
-  await writeTextSnapshot(latestPath, snapshot);
-  const attemptDir = path.join(outDir, "images", "prompts", formatAttemptLabel(1));
-  await writeTextSnapshot(
-    path.join(attemptDir, `prompt-${formatAttemptLabel(1)}.txt`),
-    snapshot,
-  );
-  return snapshot;
-}
+// no-op legacy writers removed.
 
 async function saveStoryArtifacts(
   result: StoryProseResult,
@@ -590,7 +513,7 @@ async function saveImageArtifacts(
 }
 
 async function loadStoryFromDisk(outDir: string): Promise<StoredStory> {
-  const jsonPath = path.join(outDir, "story.json");
+  const jsonPath = path.join(resolveCheckpointsDir(outDir), "prose.json");
   try {
     const raw = await readFile(jsonPath, { encoding: "utf8" });
     const parsed = JSON.parse(raw);
@@ -608,7 +531,7 @@ async function loadStoryFromDisk(outDir: string): Promise<StoredStory> {
 async function loadSegmentationFromDisk(
   outDir: string
 ): Promise<StorySegmentation | undefined> {
-  const jsonPath = path.join(outDir, "segments.json");
+  const jsonPath = path.join(resolveCheckpointsDir(outDir), "segmentation.json");
   try {
     const raw = await readFile(jsonPath, { encoding: "utf8" });
     const parsed = JSON.parse(raw);
@@ -700,21 +623,19 @@ async function main(): Promise<void> {
           );
         }
         if (!segmentationLoadedFromDisk) {
-          progress.log("[story] loaded existing segmentation from segments.json");
+          progress.log("[story] loaded existing segmentation from checkpoints/segmentation.json");
           segmentationLoadedFromDisk = true;
         }
         segmentation = loaded;
         return segmentation;
       };
 
+      const debugRootDir = path.join(outDir, "debug");
       for (const stage of stages) {
         progress.log(`[story] stage: ${stage}`);
         switch (stage) {
           case "prose": {
-            await cleanProseStage(outDir);
-            await prepareProsePrompt(options.topic, outDir);
-            progress.log("[story] prepared prose prompt snapshot");
-            const storyResult = await generateProseStory(options.topic, progress);
+            const storyResult = await generateProseStory(options.topic, progress, { debugRootDir });
             currentStory = {
               text: storyResult.text,
               prompt: storyResult.prompt,
@@ -725,47 +646,38 @@ async function main(): Promise<void> {
             segmentationResult = undefined;
             segmentation = undefined;
             segmentationLoadedFromDisk = false;
-            await saveStoryArtifacts(storyResult, options.topic, outDir, progress);
+            const proseCheckpoint = {
+              modelVersion: storyResult.modelVersion,
+              topic: options.topic,
+              text: storyResult.text,
+              prompt: storyResult.prompt,
+              thoughts: storyResult.thoughts,
+            } satisfies StoredStory;
+            const saved = await writeCheckpoint(outDir, "prose", proseCheckpoint);
+            progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
           case "segmentation": {
             const story = await ensureStory();
-            await cleanSegmentationStage(outDir);
-            await prepareSegmentationPrompt(story.text, outDir);
-            progress.log("[story] prepared segmentation prompt snapshot");
-            const snapshotSaver = async (
-              snapshot: SegmentationAttemptSnapshot
-            ): Promise<void> => {
-              await saveSegmentationSnapshotArtifacts(
-                snapshot,
-                outDir,
-                progress
-              );
-            };
             try {
               segmentationResult = await generateStorySegmentation(
                 story.text,
                 progress,
-                {
-                  onAttemptSnapshot: snapshotSaver,
-                }
+                { debugRootDir }
               );
               segmentation = segmentationResult.segmentation;
-              await saveSegmentationArtifacts(
-                segmentationResult,
-                outDir,
-                progress
-              );
+              const segCheckpoint = {
+                modelVersion: segmentationResult.modelVersion,
+                segmentation: segmentationResult.segmentation,
+              };
+              const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
+              progress.log(`[story] wrote checkpoint ${saved}`);
             } catch (error) {
               if (
                 error instanceof SegmentationValidationError ||
                 error instanceof SegmentationReviewError
               ) {
-                await saveSegmentationFailureArtifacts(
-                  error,
-                  outDir,
-                  progress
-                );
+                // Keep failure visible in console for test mode; no artifact writes.
               }
               throw error;
             }
@@ -775,21 +687,23 @@ async function main(): Promise<void> {
             const segments =
               segmentationResult?.segmentation ?? (await ensureSegmentation());
             segmentation = segments;
-            await cleanAudioStage(outDir);
-            await prepareAudioInputs(segments, outDir);
-            progress.log("[story] prepared audio input snapshot");
-            await saveAudioArtifacts(segments, outDir, progress);
+            const mediaSegments = segmentationToMediaSegments(segments);
+            const audioCheckpoint = { inputSegments: mediaSegments };
+            const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
+            progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
           case "images": {
             const segments =
               segmentationResult?.segmentation ?? (await ensureSegmentation());
             segmentation = segments;
-            await cleanImagesStage(outDir);
-            await prepareImagesPrompt(segments, outDir);
-            progress.log("[story] prepared image prompt snapshot");
-            const imagesResult = await generateStoryImages(segments, progress);
-            await saveImageArtifacts(imagesResult, outDir, progress);
+            const imagesResult = await generateStoryImages(segments, progress, { debugRootDir });
+            const imagesCheckpoint = {
+              modelVersion: imagesResult.modelVersion,
+              imagesCount: imagesResult.images.length,
+            };
+            const saved = await writeCheckpoint(outDir, "images", imagesCheckpoint);
+            progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
           default:

@@ -10,7 +10,6 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { z } from "zod";
 
-import { type Part, type Schema, GenerateContentResponse } from "@google/genai";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
 
 import {
@@ -35,6 +34,7 @@ import {
   DEFAULT_GENERATION_QUESTION_COUNT,
   QUIZ_GENERATION_MODEL_ID,
 } from "@spark/llm/quiz/generator";
+import { type Schema } from "@google/genai";
 import {
   AUDIT_RESPONSE_SCHEMA,
   JUDGE_RESPONSE_SCHEMA,
@@ -42,7 +42,7 @@ import {
   buildJudgePrompt,
   QUIZ_EVAL_MODEL_ID,
 } from "@spark/llm/quiz/judge";
-import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
+import type { GeminiModelId } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,
   type JobProgressReporter,
@@ -57,7 +57,13 @@ import {
 } from "./auditArtifacts";
 import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
 import { readJson, writeJson } from "../utils/fs";
-import { estimateUploadBytes, sanitisePartForLogging } from "../utils/llm";
+import {
+  LlmJsonCallError,
+  convertGooglePartsToLlmParts,
+  runLlmJsonCall,
+  sanitisePartForLogging,
+  type LlmContentPart,
+} from "../utils/llm";
 import { detectMimeType } from "../utils/mime";
 import {
   createCliCommand,
@@ -568,13 +574,12 @@ async function callModel<T>({
   model: GeminiModelId;
   responseSchema: Schema;
   schema: z.ZodType<T>;
-  parts: Part[];
+  parts: LlmContentPart[];
   rawFilePath: string;
   label: string;
   normalise?: (value: unknown) => unknown;
   progress: JobProgressReporter;
-}): Promise<{ text: string; modelId: string; data: T }> {
-  const uploadBytes = estimateUploadBytes(parts);
+}): Promise<{ modelId: string; data: T }> {
   const maxAttempts = 3;
   const requestFilePath = requestPathForRaw(rawFilePath);
   const promptFilePath = promptPathForRaw(rawFilePath);
@@ -591,11 +596,11 @@ async function callModel<T>({
     config: {
       responseMimeType: "application/json",
       responseSchema: JSON.parse(JSON.stringify(responseSchema)),
-      thinkingConfig: { includeThoughts: true },
+      thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 },
     },
   };
   const promptSegments = parts
-    .map((part) => (typeof part.text === "string" ? part.text : undefined))
+    .map((part) => (part.type === "text" ? part.text : undefined))
     .filter((segment): segment is string =>
       Boolean(segment && segment.length > 0),
     );
@@ -615,134 +620,26 @@ async function callModel<T>({
   );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const callHandle = progress.startModelCall({ modelId: model, uploadBytes });
     try {
-      let finalPromptTokens = 0;
-      let finalInferenceTokens = 0;
-      const { text } = await runGeminiCall(async (client) => {
-        const stream = await client.models.generateContentStream({
-          model,
-          contents: [
-            {
-              role: "user",
-              parts,
-            },
-          ],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema,
-            thinkingConfig: { includeThoughts: true },
-          },
-        });
-
-        let firstChunkReceived = false;
-        let latestText = "";
-        let finalChunk: GenerateContentResponse | undefined;
-        let lastPromptTokens = 0;
-        let lastCachedTokens = 0;
-        let lastInferenceTokens = 0;
-
-        for await (const chunk of stream) {
-          if (chunk.candidates) {
-            for (const candidate of chunk.candidates) {
-              if (!candidate.content || !candidate.content.parts) {
-                continue;
-              }
-              for (const part of candidate.content.parts) {
-                if (!part.text) {
-                  continue;
-                }
-                const charCount = part.text.length;
-                progress.reportChars(charCount);
-                if (!part.thought) {
-                  latestText += part.text;
-                }
-              }
-            }
-          }
-          if (!chunk.candidates && chunk.text) {
-            progress.reportChars(chunk.text.length);
-            latestText += chunk.text;
-          }
-          finalChunk = chunk;
-          const usage = chunk.usageMetadata;
-          if (usage) {
-            const promptTokens = usage.promptTokenCount ?? 0;
-            const cachedTokens = usage.cachedContentTokenCount ?? 0;
-            const inferenceTokens =
-              (usage.thoughtsTokenCount ?? 0) +
-              (usage.candidatesTokenCount ?? 0);
-            const promptDelta = Math.max(0, promptTokens - lastPromptTokens);
-            const cachedDelta = Math.max(0, cachedTokens - lastCachedTokens);
-            const inferenceDelta = Math.max(
-              0,
-              inferenceTokens - lastInferenceTokens,
-            );
-            if (promptDelta > 0 || cachedDelta > 0 || inferenceDelta > 0) {
-              progress.recordModelUsage(callHandle, {
-                promptTokensDelta: promptDelta,
-                cachedTokensDelta: cachedDelta,
-                inferenceTokensDelta: inferenceDelta,
-                timestamp: Date.now(),
-              });
-            }
-            lastPromptTokens = promptTokens;
-            lastCachedTokens = cachedTokens;
-            lastInferenceTokens = inferenceTokens;
-          }
-          if (!firstChunkReceived) {
-            firstChunkReceived = true;
-          }
-        }
-
-        if (!firstChunkReceived) {
-          throw new Error(`[${model}] ${label}: stream produced no chunks`);
-        }
-
-        if (latestText.length === 0 && finalChunk?.text) {
-          progress.reportChars(finalChunk.text.length);
-        }
-        finalPromptTokens = lastPromptTokens;
-        finalInferenceTokens = lastInferenceTokens;
-        const finalText = latestText || finalChunk?.text || "";
-        if (!finalText) {
-          throw new Error(`[${model}] ${label}: empty response`);
-        }
-
-        return { text: finalText };
+      const parsed = await runLlmJsonCall<T>({
+        progress,
+        modelId: model,
+        parts,
+        responseMimeType: "application/json",
+        responseSchema,
+        schema,
+        maxAttempts: 1,
       });
 
-      await writeFile(rawFilePath, text, "utf8");
+      const serialised = JSON.stringify(parsed, null, 2);
+      await writeFile(rawFilePath, `${serialised}\n`, "utf8");
       const attemptPath = rawPathForAttempt(rawFilePath, attempt);
-      await writeFile(attemptPath, text, "utf8");
+      await writeFile(attemptPath, `${serialised}\n`, "utf8");
 
-      const trimmed = text.trimStart();
-      const promptTokensTotal = finalPromptTokens;
-      const inferenceTokensTotal = finalInferenceTokens;
-      if (promptTokensTotal === 0 && inferenceTokensTotal > 0) {
-        progress.log(
-          `[eval] ${label} (attempt ${attempt}) WARN prompt token count zero; usage metadata may be missing promptTokenCount.`,
-        );
-      }
-      if (!trimmed.startsWith("{")) {
-        progress.log(
-          `[${model}] ${label}: WARN non-JSON response on attempt ${attempt} (first char: ${trimmed.charAt(0) || "∅"})`,
-        );
-        continue;
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch (error) {
-        progress.log(
-          `[${model}] ${label}: WARN failed to parse JSON on attempt ${attempt}: ${error}`,
-        );
-        continue;
-      }
-      let candidate = parsed;
+      let candidate: unknown = parsed;
       if (normalise) {
         try {
-          candidate = normalise(parsed);
+          candidate = normalise(candidate);
         } catch (error) {
           progress.log(
             `[${model}] ${label}: WARN failed to normalise response on attempt ${attempt}: ${error}`,
@@ -750,24 +647,19 @@ async function callModel<T>({
           continue;
         }
       }
-      const validation = schema.safeParse(candidate);
-      if (!validation.success) {
-        const issueMessages = validation.error.issues
-          .map((issue) => {
-            const path =
-              issue.path.length > 0 ? issue.path.join(".") : "<root>";
-            return `- ${path}: ${issue.message}`;
-          })
-          .join("\n");
-        progress.log(
-          `[${model}] ${label}: WARN schema validation failed on attempt ${attempt}:\n${issueMessages}`,
-        );
-        continue;
-      }
 
-      return { text, modelId: model, data: validation.data };
-    } finally {
-      progress.finishModelCall(callHandle);
+      return { modelId: model, data: candidate as T };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      progress.log(
+        `[${model}] ${label}: attempt ${attempt} failed: ${message}`,
+      );
+      if (error instanceof LlmJsonCallError) {
+        const last = error.attempts.at(-1);
+        if (last?.rawText) {
+          await writeFile(rawFilePath, last.rawText, "utf8");
+        }
+      }
     }
   }
 
@@ -789,7 +681,10 @@ async function generateQuizPayload(
     sourceFiles: [source],
   };
   const prompt = buildGenerationPrompt(options);
-  const parts = [{ text: prompt }, ...buildSourceParts(options.sourceFiles)];
+  const parts: LlmContentPart[] = [
+    { type: "text", text: prompt },
+    ...convertGooglePartsToLlmParts(buildSourceParts(options.sourceFiles)),
+  ];
   const { data: quiz } = await callModel<QuizGeneration>({
     model: QUIZ_GENERATION_MODEL_ID,
     responseSchema: QUIZ_RESPONSE_SCHEMA,
@@ -839,10 +734,10 @@ async function generateExtensionPayload(
     (question, index) => `${index + 1}. ${question.prompt}`,
   );
   const pastQuizBlock = `<PAST_QUIZES>\n${pastQuizLines.join("\n")}\n</PAST_QUIZES>`;
-  const parts: Part[] = [
-    { text: prompt },
-    ...buildSourceParts([source]),
-    { text: `Previous quiz prompts:\n${pastQuizBlock}` },
+  const parts: LlmContentPart[] = [
+    { type: "text", text: prompt },
+    ...convertGooglePartsToLlmParts(buildSourceParts([source])),
+    { type: "text", text: `Previous quiz prompts:\n${pastQuizBlock}` },
   ];
   const { data: generated } = await callModel<QuizGeneration>({
     model: QUIZ_GENERATION_MODEL_ID,
@@ -905,10 +800,13 @@ async function judgeQuizPayload(
     sourceFiles: [source],
     candidateQuiz: quiz,
   });
-  const parts: Part[] = [
-    { text: prompt },
-    ...buildSourceParts([source]),
-    { text: `Candidate quiz JSON:\n${JSON.stringify(quiz, null, 2)}` },
+  const parts: LlmContentPart[] = [
+    { type: "text", text: prompt },
+    ...convertGooglePartsToLlmParts(buildSourceParts([source])),
+    {
+      type: "text",
+      text: `Candidate quiz JSON:\n${JSON.stringify(quiz, null, 2)}`,
+    },
   ];
   const { data: parsedVerdict, modelId } = await callModel<JudgeVerdict>({
     model: QUIZ_EVAL_MODEL_ID,
@@ -948,10 +846,11 @@ async function auditJudgeDecisionPayload(
   progress: JobProgressReporter,
 ): Promise<JudgeFilePayload["audit"]> {
   const prompt = buildAuditPrompt();
-  const parts: Part[] = [
-    { text: prompt },
-    ...buildSourceParts([source]),
+  const parts: LlmContentPart[] = [
+    { type: "text", text: prompt },
+    ...convertGooglePartsToLlmParts(buildSourceParts([source])),
     {
+      type: "text",
       text: `Judge verdict JSON:\n${JSON.stringify(judgeVerdict, null, 2)}\n\nCandidate quiz JSON:\n${JSON.stringify(
         quiz,
         null,
