@@ -5,7 +5,10 @@ import * as path from "node:path";
 import { z } from "zod";
 
 import { concatAudio, getAudioDetails } from "./ffmpeg";
-import { runGeminiCall } from "./gemini";
+import {
+  GoogleTextToSpeechClient,
+  type SynthesizeAudioEncoding,
+} from "./googleTextToSpeechClient";
 import { errorAsString } from "./error";
 import { getTempFilePath } from "./file";
 
@@ -66,20 +69,23 @@ export type SynthesisedAudioResult = {
   segmentFiles: string[];
 };
 
-const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
-const DEFAULT_OUTPUT_MIME = "audio/mpeg";
+const ttsClient = new GoogleTextToSpeechClient();
+
+const DEFAULT_LANGUAGE_CODE = "en-GB";
+const DEFAULT_AUDIO_ENCODING: SynthesizeAudioEncoding = "MP3";
 const DEFAULT_VOICE_MAP: Record<SpeakerCode, string> = {
-  m: "Fenrir",
-  f: "Leda",
+  m: "en-GB-Chirp3-HD-Sadaltager",
+  f: "en-GB-Chirp3-HD-Leda",
 };
 
 type GenerateAudioOptions = {
   segments: readonly TtsSegmentInput[];
   outputFilePath: string;
-  model?: string;
   voiceMap?: Partial<Record<SpeakerCode, string>>;
   progress?: AudioGenerationProgress;
   persistSegmentsDir?: string;
+  languageCode?: string;
+  audioEncoding?: SynthesizeAudioEncoding;
 };
 
 type SegmentArtifact = {
@@ -92,135 +98,26 @@ type SegmentArtifact = {
   persisted: boolean;
 };
 
-function parseMimeParameters(mimeType: string): Record<string, string> {
-  return mimeType
-    .split(";")
-    .slice(1)
-    .map((part) => part.trim())
-    .reduce<Record<string, string>>((acc, part) => {
-      if (!part) {
-        return acc;
-      }
-      const [key, value] = part.split("=");
-      if (!key || value === undefined) {
-        return acc;
-      }
-      const normalisedKey = key.trim().toLowerCase();
-      const normalisedValue = value.trim().replace(/^"|"$/g, "");
-      if (normalisedKey) {
-        acc[normalisedKey] = normalisedValue;
-      }
-      return acc;
-    }, {});
+function mimeTypeFromEncoding(encoding: SynthesizeAudioEncoding): string {
+  switch (encoding) {
+    case "MP3":
+      return "audio/mpeg";
+    case "OGG_OPUS":
+      return "audio/ogg";
+    case "LINEAR16":
+      return "audio/wav";
+  }
 }
 
-function parsePositiveInteger(value: string | undefined): number | undefined {
-  if (!value) {
-    return undefined;
+function extensionFromEncoding(encoding: SynthesizeAudioEncoding): string {
+  switch (encoding) {
+    case "MP3":
+      return "mp3";
+    case "OGG_OPUS":
+      return "ogg";
+    case "LINEAR16":
+      return "wav";
   }
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed;
-  }
-  return undefined;
-}
-
-function convertRawPcmToWav(
-  pcmData: Buffer,
-  meta: { sampleRate?: number; bitsPerSample?: number; channels?: number }
-): { buffer: Buffer; sampleRate: number; channels: 1 | 2 } {
-  const sampleRate =
-    meta.sampleRate && meta.sampleRate > 0 ? meta.sampleRate : 24000;
-  const bitsPerSample =
-    meta.bitsPerSample && meta.bitsPerSample > 0 ? meta.bitsPerSample : 16;
-  const channelsRaw = meta.channels && meta.channels > 0 ? meta.channels : 1;
-  const normalisedChannels = channelsRaw >= 2 ? 2 : 1;
-  const bytesPerSample = bitsPerSample / 8;
-  const byteRate = sampleRate * normalisedChannels * bytesPerSample;
-  const blockAlign = normalisedChannels * bytesPerSample;
-  const header = Buffer.alloc(44);
-
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcmData.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(normalisedChannels, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(bitsPerSample, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(pcmData.length, 40);
-
-  return {
-    buffer: Buffer.concat([header, pcmData]),
-    sampleRate,
-    channels: normalisedChannels as 1 | 2,
-  };
-}
-
-function normaliseAudioBuffer(
-  rawBuffer: Buffer,
-  mimeType: string | undefined
-): { data: Buffer; mimeType: string; sampleRate?: number; channels?: 1 | 2 } {
-  if (!mimeType) {
-    return { data: rawBuffer, mimeType: "audio/mpeg" };
-  }
-  const lower = mimeType.toLowerCase();
-  if (
-    lower.includes("audio/raw") ||
-    lower.includes("audio/x-raw") ||
-    lower.includes("linear16") ||
-    lower.includes("pcm")
-  ) {
-    const params = parseMimeParameters(mimeType);
-    const sampleRate =
-      parsePositiveInteger(
-        params.rate ?? params["sample-rate"] ?? params.samplerate
-      ) ?? 24000;
-    const bitsPerSample =
-      parsePositiveInteger(
-        params.bits ??
-          params.bitdepth ??
-          params["bits-per-sample"] ??
-          params.samplewidth
-      ) ?? (lower.includes("8") ? 8 : 16);
-    const channels =
-      parsePositiveInteger(
-        params.channels ??
-          params["channel-count"] ??
-          params.channel_count ??
-          params["channels"] ??
-          params["channel"]
-      ) ?? 1;
-
-    const {
-      buffer,
-      sampleRate: finalSampleRate,
-      channels: finalChannels,
-    } = convertRawPcmToWav(rawBuffer, { sampleRate, bitsPerSample, channels });
-    return {
-      data: buffer,
-      mimeType: "audio/wav",
-      sampleRate: finalSampleRate,
-      channels: finalChannels,
-    };
-  }
-  if (lower.includes("wav") || lower.includes("wave")) {
-    return { data: rawBuffer, mimeType: "audio/wav" };
-  }
-  if (lower.includes("ogg") || lower.includes("opus")) {
-    return { data: rawBuffer, mimeType: "audio/ogg" };
-  }
-  if (lower.includes("flac")) {
-    return { data: rawBuffer, mimeType: "audio/flac" };
-  }
-  if (lower.includes("mp3") || lower.includes("mpeg")) {
-    return { data: rawBuffer, mimeType: "audio/mpeg" };
-  }
-  return { data: rawBuffer, mimeType };
 }
 
 function getVoiceName(
@@ -236,7 +133,8 @@ async function synthesiseSegment(
   segment: z.infer<typeof SegmentSchema>,
   options: {
     voiceName?: string;
-    model: string;
+    languageCode: string;
+    audioEncoding: SynthesizeAudioEncoding;
     progress?: AudioGenerationProgress;
     index: number;
     totalSegments: number;
@@ -249,87 +147,41 @@ async function synthesiseSegment(
   sampleRate?: number;
   channels?: 1 | 2;
 }> {
-  const runAttempt = async (voiceName?: string) =>
-    runGeminiCall(async (client) => {
-      const config = {
-        responseModalities: ["audio" as const],
-        speechConfig: voiceName
-          ? {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName,
-                },
-              },
-            }
-          : undefined,
-      } satisfies Record<string, unknown>;
-
-      const stream = await client.models.generateContentStream({
-        model: options.model,
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: segment.text }],
-          },
-        ],
-        config,
-      });
-
-      const buffers: Buffer[] = [];
-      let mimeType: string | undefined;
-      let totalBytes = 0;
-
-      for await (const chunk of stream) {
-        const parts = chunk.candidates?.[0]?.content?.parts;
-        if (!parts) {
-          continue;
-        }
-        for (const part of parts) {
-          const inline = (
-            part as {
-              inlineData?: { data?: string; mimeType?: string };
-            }
-          ).inlineData;
-          if (!inline || !inline.data) {
-            continue;
-          }
-          const buffer = Buffer.from(inline.data, "base64");
-          const chunkBytes = buffer.byteLength;
-          totalBytes += chunkBytes;
-          mimeType = inline.mimeType ?? mimeType;
-          buffers.push(buffer);
-          options.progress?.onSegmentChunk?.({
-            index: options.index,
-            totalSegments: options.totalSegments,
-            chunkBytes,
-            totalBytes,
-            activeCount: options.getActiveCount(),
-          });
-        }
-      }
-
-      if (buffers.length === 0) {
-        throw new Error(
-          "Gemini TTS response did not include inline audio data"
-        );
-      }
-
-      const combined = Buffer.concat(buffers);
-      const normalised = normaliseAudioBuffer(combined, mimeType);
-      return {
-        data: normalised.data,
-        mimeType: normalised.mimeType,
-        totalBytes: normalised.data.byteLength,
-        sampleRate: normalised.sampleRate,
-        channels: normalised.channels,
-      };
+  const runAttempt = async (voiceName?: string) => {
+    const { audio, audioConfig } = await ttsClient.synthesize({
+      text: segment.text,
+      voice: {
+        languageCode: options.languageCode,
+        ...(voiceName ? { name: voiceName } : {}),
+      },
+      audioConfig: {
+        audioEncoding: options.audioEncoding,
+      },
     });
+
+    const buffer = Buffer.from(audio);
+    const totalBytes = buffer.byteLength;
+    options.progress?.onSegmentChunk?.({
+      index: options.index,
+      totalSegments: options.totalSegments,
+      chunkBytes: totalBytes,
+      totalBytes,
+      activeCount: options.getActiveCount(),
+    });
+
+    return {
+      data: buffer,
+      mimeType: mimeTypeFromEncoding(options.audioEncoding),
+      totalBytes,
+      sampleRate: audioConfig?.sampleRateHertz,
+      channels: undefined,
+    };
+  };
 
   try {
     return await runAttempt(options.voiceName);
   } catch (error) {
-    const message = errorAsString(error).toLowerCase();
-    if (!options.voiceName || message.includes("gemini_api_key")) {
+    if (!options.voiceName) {
       throw error;
     }
     console.warn(
@@ -339,31 +191,6 @@ async function synthesiseSegment(
   }
 }
 
-function extensionFromMime(mimeType: string): string {
-  const value = mimeType.toLowerCase();
-  if (value.includes("wav") || value.includes("wave")) {
-    return "wav";
-  }
-  if (value.includes("ogg") || value.includes("opus")) {
-    return "ogg";
-  }
-  if (value.includes("flac")) {
-    return "flac";
-  }
-  if (
-    value.includes("audio/raw") ||
-    value.includes("audio/x-raw") ||
-    value.includes("linear16") ||
-    value.includes("pcm")
-  ) {
-    return "wav";
-  }
-  if (value.includes("mp3") || value.includes("mpeg")) {
-    return "mp3";
-  }
-  return "mp3";
-}
-
 function escapeForFfmpegConcat(filePath: string): string {
   return filePath.replace(/'/g, "'\\''");
 }
@@ -371,10 +198,11 @@ function escapeForFfmpegConcat(filePath: string): string {
 export async function generateAudioFromSegments({
   segments,
   outputFilePath,
-  model = DEFAULT_TTS_MODEL,
   voiceMap,
   progress,
   persistSegmentsDir,
+  languageCode = DEFAULT_LANGUAGE_CODE,
+  audioEncoding = DEFAULT_AUDIO_ENCODING,
 }: GenerateAudioOptions): Promise<SynthesisedAudioResult> {
   if (!Array.isArray(segments) || segments.length === 0) {
     throw new Error("At least one narration segment is required");
@@ -417,19 +245,17 @@ export async function generateAudioFromSegments({
         let byteLength = 0;
 
         try {
-          const { data, mimeType, totalBytes } = await synthesiseSegment(
-            segment,
-            {
-              voiceName,
-              model,
-              progress,
-              index,
-              totalSegments,
-              getActiveCount: () => activeCount,
-            }
-          );
+          const { data, totalBytes } = await synthesiseSegment(segment, {
+            voiceName,
+            languageCode,
+            audioEncoding,
+            progress,
+            index,
+            totalSegments,
+            getActiveCount: () => activeCount,
+          });
           byteLength = totalBytes;
-          const extension = extensionFromMime(mimeType);
+          const extension = extensionFromEncoding(audioEncoding);
           const tempFileName = `tts-segment-${index}-${randomUUID()}.${extension}`;
           let tempFilePath: string;
           let persisted = false;
@@ -534,7 +360,7 @@ export async function generateAudioFromSegments({
 
     return {
       outputFilePath,
-      outputMimeType: DEFAULT_OUTPUT_MIME,
+      outputMimeType: mimeTypeFromEncoding(audioEncoding),
       totalDurationSec,
       segmentOffsets,
       segmentDurations,
