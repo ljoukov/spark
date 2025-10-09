@@ -9,6 +9,7 @@ import {
   generateProseStory,
   generateStoryImages,
   generateStorySegmentation,
+  SegmentationValidationError,
   type StoryImagesResult,
   type StoryProseResult,
   type StorySegmentation,
@@ -87,6 +88,7 @@ const StoryJsonSchema = z.object({
   topic: z.string().trim().min(1),
   text: z.string().trim().min(1),
   prompt: z.string().trim().optional(),
+  thoughts: z.array(z.string()).optional(),
 });
 
 type StoredStory = z.infer<typeof StoryJsonSchema>;
@@ -119,6 +121,7 @@ async function saveStoryArtifacts(
     topic,
     text: result.text,
     prompt: result.prompt,
+    thoughts: result.thoughts,
   };
   await writeFile(storyJsonPath, JSON.stringify(storyPayload, null, 2), {
     encoding: "utf8",
@@ -128,6 +131,17 @@ async function saveStoryArtifacts(
   const promptPath = path.join(outDir, "prompt.txt");
   await writeFile(promptPath, result.prompt, { encoding: "utf8" });
   progress.log(`[story] saved prompt snapshot to ${promptPath}`);
+
+  if (result.thoughts && result.thoughts.length > 0) {
+    const thoughtsPath = path.join(outDir, "story-thoughts.txt");
+    const thoughtHeader = `modelVersion: ${result.modelVersion}\nthoughtCount: ${result.thoughts.length}\n\n`;
+    await writeFile(
+      thoughtsPath,
+      thoughtHeader + result.thoughts.join("\n---\n"),
+      { encoding: "utf8" }
+    );
+    progress.log(`[story] saved model thoughts to ${thoughtsPath}`);
+  }
 }
 
 async function saveSegmentationArtifacts(
@@ -150,6 +164,50 @@ async function saveSegmentationArtifacts(
   const promptPath = path.join(outDir, "segmentation-prompt.txt");
   await writeFile(promptPath, result.prompt, { encoding: "utf8" });
   progress.log(`[story] saved segmentation prompt snapshot to ${promptPath}`);
+}
+
+async function saveSegmentationFailureArtifacts(
+  failure: SegmentationValidationError,
+  outDir: string,
+  progress: JobProgressReporter
+): Promise<void> {
+  const attemptsDir = path.join(outDir, "segmentation-attempts");
+  await mkdir(attemptsDir, { recursive: true });
+
+  const promptPath = path.join(attemptsDir, "prompt.txt");
+  await writeFile(promptPath, failure.prompt, { encoding: "utf8" });
+
+  for (const attempt of failure.attempts) {
+    const attemptDir = path.join(
+      attemptsDir,
+      `attempt-${String(attempt.attempt).padStart(2, "0")}`
+    );
+    await mkdir(attemptDir, { recursive: true });
+    await writeFile(path.join(attemptDir, "raw.txt"), attempt.rawText, {
+      encoding: "utf8",
+    });
+    const meta = {
+      attempt: attempt.attempt,
+      modelVersion: attempt.modelVersion,
+      errorMessage: attempt.errorMessage,
+      zodIssues: attempt.zodIssues ?? undefined,
+      thoughts: attempt.thoughts ?? undefined,
+    };
+    await writeFile(
+      path.join(attemptDir, "meta.json"),
+      JSON.stringify(meta, null, 2),
+      { encoding: "utf8" }
+    );
+    if (attempt.thoughts && attempt.thoughts.length > 0) {
+      await writeFile(
+        path.join(attemptDir, "thoughts.txt"),
+        attempt.thoughts.join("\n---\n"),
+        { encoding: "utf8" }
+      );
+    }
+  }
+
+  progress.log(`[story] saved invalid segmentation attempts to ${attemptsDir}`);
 }
 
 function segmentationToMediaSegments(
@@ -220,7 +278,7 @@ function extensionFromMime(mimeType?: string): string {
 }
 
 async function saveImageArtifacts(
-  result: StoryImagesResult,
+  result: StoryImagesResult & { artifacts?: { style: readonly string[]; batches: Array<{ batchIndex: number; promptParts: unknown[]; judge: Array<{ attempt: number; requestPartsCount: number; requestPartsSanitised: unknown[]; responseText: string; responseJson: unknown; modelVersion: string; thoughts?: string[] }> }> } },
   outDir: string,
   progress: JobProgressReporter
 ): Promise<void> {
@@ -246,6 +304,46 @@ async function saveImageArtifacts(
       encoding: "utf8",
     });
     progress.log(`[story] saved image captions to ${captionsPath}`);
+  }
+
+  // Extra artifacts: per-batch prompts and judge outcomes
+  if (result.artifacts) {
+    const batchesDir = path.join(assetsDir, "batches");
+    await mkdir(batchesDir, { recursive: true });
+    // Save style
+    const stylePath = path.join(batchesDir, "style.txt");
+    await writeFile(stylePath, result.artifacts.style.join("\n"), { encoding: "utf8" });
+    for (const batch of result.artifacts.batches) {
+      const bd = path.join(batchesDir, `batch-${batch.batchIndex}`);
+      await mkdir(bd, { recursive: true });
+      // Save prompt parts as a single text snapshot
+      const promptText = (batch.promptParts as Array<{ text?: string }>).map((p) => p?.text ?? "").filter(Boolean).join("\n");
+      await writeFile(path.join(bd, "prompt.txt"), promptText, { encoding: "utf8" });
+      // Judge iterations
+      if (batch.judge.length > 0) {
+        const jd = path.join(bd, "judge");
+        await mkdir(jd, { recursive: true });
+        for (const j of batch.judge) {
+          const rd = path.join(jd, `attempt-${j.attempt}`);
+          await mkdir(rd, { recursive: true });
+          await writeFile(path.join(rd, "response.txt"), j.responseText, { encoding: "utf8" });
+          await writeFile(path.join(rd, "response.json"), JSON.stringify(j.responseJson, null, 2), { encoding: "utf8" });
+          await writeFile(
+            path.join(rd, "request.json"),
+            JSON.stringify({ parts: j.requestPartsSanitised, count: j.requestPartsCount }, null, 2),
+            { encoding: "utf8" }
+          );
+          if (j.thoughts && j.thoughts.length > 0) {
+            await writeFile(
+              path.join(rd, "thoughts.txt"),
+              j.thoughts.join("\n---\n"),
+              { encoding: "utf8" }
+            );
+          }
+        }
+      }
+    }
+    progress.log(`[story] saved image batch artifacts under ${batchesDir}`);
   }
 }
 
@@ -377,6 +475,7 @@ async function main(): Promise<void> {
               prompt: storyResult.prompt,
               modelVersion: storyResult.modelVersion,
               topic: options.topic,
+              thoughts: storyResult.thoughts,
             };
             segmentationResult = undefined;
             segmentation = undefined;
@@ -386,16 +485,27 @@ async function main(): Promise<void> {
           }
           case "segmentation": {
             const story = await ensureStory();
-            segmentationResult = await generateStorySegmentation(
-              story.text,
-              progress
-            );
-            segmentation = segmentationResult.segmentation;
-            await saveSegmentationArtifacts(
-              segmentationResult,
-              outDir,
-              progress
-            );
+            try {
+              segmentationResult = await generateStorySegmentation(
+                story.text,
+                progress
+              );
+              segmentation = segmentationResult.segmentation;
+              await saveSegmentationArtifacts(
+                segmentationResult,
+                outDir,
+                progress
+              );
+            } catch (error) {
+              if (error instanceof SegmentationValidationError) {
+                await saveSegmentationFailureArtifacts(
+                  error,
+                  outDir,
+                  progress
+                );
+              }
+              throw error;
+            }
             break;
           }
           case "audio": {
