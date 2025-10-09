@@ -2,12 +2,16 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { AudioGenerationProgress } from "@spark/llm";
+import type {
+  AudioGenerationProgress,
+  MediaSegment,
+  SpeakerCode,
+  SynthesizeAudioEncoding,
+} from "@spark/llm";
 import {
   generateSessionAudio,
   publishSessionMediaClip,
 } from "@spark/llm";
-import type { MediaSegment } from "@spark/llm";
 
 import {
   formatByteSize,
@@ -15,8 +19,6 @@ import {
   formatInteger,
   formatMillis,
 } from "../../utils/format";
-
-const AUDIO_MODEL_ID = "gemini-2.5-flash-preview-tts" as const;
 
 function formatTimestamp(seconds: number): string {
   return formatDurationSeconds(seconds);
@@ -64,7 +66,9 @@ export type NarrationJob = {
   planItemId: string;
   segments: readonly MediaSegment[];
   storageBucket: string;
-  audioModelId?: string;
+  languageCode?: string;
+  audioEncoding?: SynthesizeAudioEncoding;
+  voiceMap?: Partial<Record<SpeakerCode, string>>;
   progress?: AudioGenerationProgress;
 };
 
@@ -96,7 +100,9 @@ export async function synthesizeAndPublishNarration(
   const audioResult = await generateSessionAudio({
     segments: job.segments,
     outputFilePath: tmpPath,
-    model: job.audioModelId ?? AUDIO_MODEL_ID,
+    languageCode: job.languageCode,
+    audioEncoding: job.audioEncoding,
+    voiceMap: job.voiceMap,
     progress: job.progress ?? createConsoleProgress(job.planItemId),
   });
   const elapsedMs = Date.now() - startedAt;
