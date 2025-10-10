@@ -122,6 +122,28 @@ type SegmentationCorrectorResponse = z.infer<
   typeof SegmentationCorrectorResponseSchema
 >;
 
+const SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["corrections"],
+  propertyOrdering: ["issuesSummary", "corrections"],
+  properties: {
+    issuesSummary: { type: Type.STRING },
+    corrections: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["prompt_index", "critique", "updatedPrompt"],
+        propertyOrdering: ["prompt_index", "critique", "updatedPrompt"],
+        properties: {
+          prompt_index: { type: Type.NUMBER, minimum: 0, maximum: 11 },
+          critique: { type: Type.STRING, minLength: "1" },
+          updatedPrompt: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+  },
+};
+
 export class SegmentationValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -193,43 +215,14 @@ const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-// JSON schema string included in the segmentation prompt (mirrors origin/main)
-const SEGMENTATION_JSON_SCHEMA = `{
-  "type": "object",
-  "required": ["title", "posterPrompt", "segments", "endingPrompt"],
-  "properties": {
-    "title": { "type": "string", "minLength": 1 },
-    "posterPrompt": { "type": "string", "minLength": 1 },
-    "segments": {
-      "type": "array",
-      "minItems": 10,
-      "maxItems": 10,
-      "items": {
-        "type": "object",
-        "required": ["imagePrompt", "narration"],
-        "properties": {
-          "imagePrompt": { "type": "string", "minLength": 1 },
-          "narration": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "required": ["voice", "text"],
-              "properties": {
-                "voice": { "type": "string", "enum": ["M", "F"] },
-                "text": { "type": "string", "minLength": 1 }
-              },
-              "additionalProperties": false
-            }
-          }
-        },
-        "additionalProperties": false
-      }
-    },
-    "endingPrompt": { "type": "string", "minLength": 1 }
-  },
-  "additionalProperties": false
-}`;
+const SEGMENTATION_SCHEMA_REQUIREMENTS = [
+  "Return strict JSON with these top-level keys only: title, posterPrompt, segments, endingPrompt.",
+  "All string fields must be non-empty once trimmed.",
+  "segments must contain exactly 10 entries. Each entry has imagePrompt and narration.",
+  "narration is an array with at least one item. Every item contains voice and text.",
+  "voice must be either \"M\" or \"F\". text must be a non-empty string.",
+  "Do not include any additional properties at any level.",
+];
 
 // (no image batch JSON schema; set comparison uses ImageSetJudgeResponseSchema below)
 
@@ -307,7 +300,7 @@ export function buildSegmentationPrompt(storyText: string): string {
     "Convert the provided historical story into a structured narration and illustration plan.",
     "",
     "Requirements:",
-    "1. Produce concise JSON that conforms exactly to the schema below. Do not include commentary or code fences.",
+    "1. Produce concise JSON that conforms exactly to the structure below. Do not include commentary or code fences.",
     "2. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
     "3. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Keep any visible text within four words.",
@@ -320,8 +313,8 @@ export function buildSegmentationPrompt(storyText: string): string {
     '7. Explicitly anchor every prompt in time and place (decade, setting, or specific workspace details) and include consistent style cues such as "Vintage cartoon style", "muted colors", and "clear composition" so the aesthetic remains uniform.',
     '8. Writing inside any `imagePrompt` should be optional and minimal. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
     "",
-    "JSON schema:",
-    SEGMENTATION_JSON_SCHEMA,
+    "Required JSON shape:",
+    ...SEGMENTATION_SCHEMA_REQUIREMENTS,
     "",
     "Respond with JSON only. No markdown fences.",
     "",
@@ -528,6 +521,7 @@ export async function correctStorySegmentation(
         progress: adapter,
         modelId: TEXT_MODEL_ID,
         parts: [{ type: "text", text: reviewPrompt }],
+        responseSchema: SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA,
         schema: SegmentationCorrectorResponseSchema,
         maxAttempts: 2,
         debug: options?.debugRootDir
@@ -596,6 +590,16 @@ const ImageSetJudgeResponseSchema = z.object({
   verdict: z.enum(["set_a", "set_b"]),
 });
 type ImageSetJudgeResponse = z.infer<typeof ImageSetJudgeResponseSchema>;
+
+const IMAGE_SET_JUDGE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["reasoning", "verdict"],
+  propertyOrdering: ["reasoning", "verdict"],
+  properties: {
+    reasoning: { type: Type.STRING, minLength: "1" },
+    verdict: { type: Type.STRING, enum: ["set_a", "set_b"] },
+  },
+};
 
 type ImageSetArtifact = {
   label: "set_a" | "set_b";
@@ -679,6 +683,7 @@ async function judgeImageSets(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     parts,
+    responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
     maxAttempts: 1,
     debug: debugRootDir

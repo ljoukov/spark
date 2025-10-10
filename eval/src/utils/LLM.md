@@ -36,6 +36,7 @@ All calls accept:
 
 `runLlmJsonCall` adds:
 - `schema`: `z.ZodSchema<T>`
+- `responseSchema`: Google `Schema` definition applied at request time (required)
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
 - Responses are automatically requested as `application/json` and parsed before validation.
 
@@ -107,10 +108,24 @@ const text = await runLlmTextCall({
 JSON call with Zod validation:
 
 ```ts
+import { Type } from "@google/genai";
+
 const schema = z.object({ title: z.string(), items: z.array(z.string()) });
+const responseSchema = {
+  type: Type.OBJECT,
+  required: ["title", "items"],
+  properties: {
+    title: { type: Type.STRING },
+    items: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+  },
+} as const;
 const data = await runLlmJsonCall({
   modelId: "gemini-2.5-pro",
   parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
+  responseSchema,
   schema,
   maxAttempts: 2,
   debug: { rootDir: "/tmp/llm-debug", stage: "json-task" },

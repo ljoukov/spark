@@ -665,8 +665,9 @@ export async function runLlmImageCall(
   return images;
 }
 
-export type LlmJsonCallOptions<T> = LlmTextCallOptions & {
+export type LlmJsonCallOptions<T> = Omit<LlmTextCallOptions, "responseSchema"> & {
   readonly schema: z.ZodSchema<T>;
+  readonly responseSchema: Schema;
   readonly maxAttempts?: number;
 };
 
@@ -689,11 +690,13 @@ export async function runLlmJsonCall<T>(
 ): Promise<T> {
   const {
     schema,
+    responseSchema,
     maxAttempts = 2,
     ...rest
   } = options;
   const textOptions: LlmTextCallOptions = {
     ...rest,
+    responseSchema,
     responseMimeType: rest.responseMimeType ?? "application/json",
   };
 
