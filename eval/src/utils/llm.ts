@@ -667,7 +667,6 @@ export async function runLlmImageCall(
 
 export type LlmJsonCallOptions<T> = LlmTextCallOptions & {
   readonly schema: z.ZodSchema<T>;
-  readonly process?: (rawText: string) => unknown;
   readonly maxAttempts?: number;
 };
 
@@ -690,10 +689,13 @@ export async function runLlmJsonCall<T>(
 ): Promise<T> {
   const {
     schema,
-    process,
     maxAttempts = 2,
-    ...textOptions
+    ...rest
   } = options;
+  const textOptions: LlmTextCallOptions = {
+    ...rest,
+    responseMimeType: rest.responseMimeType ?? "application/json",
+  };
 
   const totalAttempts = Math.max(1, maxAttempts);
   const failures: Array<{
@@ -706,7 +708,7 @@ export async function runLlmJsonCall<T>(
     const meta = await executeLlmText(textOptions, attempt);
     const rawText = meta.text;
     try {
-      const payload = process ? process(rawText) : JSON.parse(rawText);
+      const payload = JSON.parse(rawText);
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {

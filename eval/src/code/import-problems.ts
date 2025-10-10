@@ -269,7 +269,6 @@ async function callExtractionModel(
     progress,
     modelId: request.modelId,
     parts,
-    responseMimeType: "application/json",
     responseSchema: CODE_PROBLEM_RESPONSE_SCHEMA,
     schema: CodeProblemExtractionSchema,
     maxAttempts: 1,

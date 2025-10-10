@@ -36,8 +36,8 @@ All calls accept:
 
 `runLlmJsonCall` adds:
 - `schema`: `z.ZodSchema<T>`
-- `process?`: `(raw: string) => unknown` to pre-extract JSON (e.g. un-fence code blocks)
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
+- Responses are automatically requested as `application/json` and parsed before validation.
 
 ## Progress and Metrics
 
@@ -104,7 +104,7 @@ const text = await runLlmTextCall({
 });
 ```
 
-JSON call with Zod validation and fenced JSON extraction:
+JSON call with Zod validation:
 
 ```ts
 const schema = z.object({ title: z.string(), items: z.array(z.string()) });
@@ -112,7 +112,6 @@ const data = await runLlmJsonCall({
   modelId: "gemini-2.5-pro",
   parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
   schema,
-  process: (raw) => JSON.parse(raw.slice(raw.indexOf("{")).slice(0, raw.lastIndexOf("}") - raw.indexOf("{") + 1)),
   maxAttempts: 2,
   debug: { rootDir: "/tmp/llm-debug", stage: "json-task" },
 });

@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import path from "node:path";
 
 import { Type, type Schema } from "@google/genai";
-import { z, type ZodIssue } from "zod";
+import { z } from "zod";
 
 import {
   runLlmImageCall,
@@ -10,7 +10,6 @@ import {
   runLlmTextCall,
   type LlmContentPart,
   sanitisePartForLogging,
-  LlmJsonCallError,
 } from "../../utils/llm";
 import type {
   JobProgressReporter,
@@ -91,17 +90,6 @@ export const StorySegmentationSchema = z.object({
 
 export type StorySegmentation = z.infer<typeof StorySegmentationSchema>;
 
-export type SegmentationAttemptFailure = {
-  attempt: number;
-  rawText: string;
-  modelVersion: string;
-  errorMessage: string;
-  zodIssues?: readonly ZodIssue[];
-  thoughts?: string[];
-  elapsedMs?: number;
-  charCount?: number;
-};
-
 export type SegmentationPromptCorrection = {
   promptIndex: number;
   updatedPrompt: string;
@@ -134,39 +122,8 @@ type SegmentationCorrectorResponse = z.infer<
   typeof SegmentationCorrectorResponseSchema
 >;
 
-export type SegmentationAttemptPhase = "generation" | "correction";
-
-export type SegmentationAttemptSnapshot = {
-  phase: SegmentationAttemptPhase;
-  attempt: number;
-  prompt: string;
-  response: string;
-  modelVersion: string;
-  thoughts?: string[];
-  charCount: number;
-};
-
-export type SegmentationAttemptSnapshotSaver = (
-  snapshot: SegmentationAttemptSnapshot
-) => Promise<void> | void;
-
-export type SegmentationCorrectorAttempt = {
-  attempt: number;
-  prompt: string;
-  rawResponse: string;
-  modelVersion: string;
-  response?: SegmentationCorrectorResponse;
-  thoughts?: string[];
-  parseError?: string;
-  charCount?: number;
-};
-
 export class SegmentationValidationError extends Error {
-  constructor(
-    message: string,
-    readonly prompt: string,
-    readonly attempts: SegmentationAttemptFailure[]
-  ) {
+  constructor(message: string) {
     super(message);
     this.name = "SegmentationValidationError";
   }
@@ -175,8 +132,6 @@ export class SegmentationValidationError extends Error {
 export class SegmentationCorrectionError extends Error {
   constructor(
     message: string,
-    readonly generationPrompt: string,
-    readonly attempts: SegmentationCorrectorAttempt[],
     readonly segmentation: StorySegmentation
   ) {
     super(message);
@@ -186,14 +141,6 @@ export class SegmentationCorrectionError extends Error {
 
 export type StoryProseResult = {
   text: string;
-};
-
-export type StorySegmentationResult = {
-  segmentation: StorySegmentation;
-  prompt: string;
-  modelVersion: string;
-  attempt: number;
-  correctionAttempts?: SegmentationCorrectorAttempt[];
 };
 
 export type GeneratedStoryImage = {
@@ -400,7 +347,7 @@ export async function generateProseStory(
 ): Promise<StoryProseResult> {
   const adapter = useProgress(progress);
   adapter.log(
-    "[story] generating prose with web-search-enabled Gemini 2.5 Pro"
+    `[story] generating prose with web-search-enabled ${TEXT_MODEL_ID}`
   );
   const prompt = buildStoryPrompt(topic);
   const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
@@ -418,38 +365,8 @@ export async function generateProseStory(
   return { text };
 }
 
-function extractJsonObject(rawText: string): unknown {
-  const trimmed = rawText.trim();
-  if (!trimmed) {
-    throw new Error("Gemini segmentation response was empty");
-  }
-
-  const unwrapped = (() => {
-    if (!trimmed.startsWith("```")) {
-      return trimmed;
-    }
-    const firstLineBreak = trimmed.indexOf("\n");
-    if (firstLineBreak === -1) {
-      return trimmed;
-    }
-    const withoutFence = trimmed.slice(firstLineBreak + 1);
-    const closingFenceIndex = withoutFence.lastIndexOf("```");
-    if (closingFenceIndex === -1) {
-      return withoutFence.trim();
-    }
-    return withoutFence.slice(0, closingFenceIndex).trim();
-  })();
-
-  const start = unwrapped.indexOf("{");
-  const end = unwrapped.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("Unable to locate JSON object in segmentation response");
-  }
-  const candidate = unwrapped.slice(start, end + 1);
-  return JSON.parse(candidate);
-}
-
-const DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS = 1;
+const SEGMENTATION_GENERATION_ATTEMPTS = 3;
+const SEGMENTATION_CORRECTION_ATTEMPTS = 3;
 
 function buildSegmentationCorrectorPrompt(
   segmentation: StorySegmentation,
@@ -543,265 +460,127 @@ function applySegmentationCorrections(
   return StorySegmentationSchema.parse(draft);
 }
 
-async function runSegmentationCorrector(
-  initialSegmentation: StorySegmentation,
-  generationPrompt: string,
-  adapter: ReturnType<typeof useProgress>,
-  maxAttempts: number,
-  snapshotSaver?: SegmentationAttemptSnapshotSaver,
-  debugRootDir?: string
-): Promise<{
-  segmentation: StorySegmentation;
-  attempts: SegmentationCorrectorAttempt[];
-}> {
-  if (maxAttempts <= 0) {
-    return { segmentation: initialSegmentation, attempts: [] };
-  }
-
-  let workingSegmentation = initialSegmentation;
-  const attempts: SegmentationCorrectorAttempt[] = [];
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const reviewPrompt = buildSegmentationCorrectorPrompt(
-      workingSegmentation,
-      generationPrompt
-    );
-    const parts: LlmContentPart[] = [{ type: "text", text: reviewPrompt }];
-    adapter.log(`[story/segments/corrector] attempt ${attempt} prompt prepared`);
-    const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
-    adapter.log(
-      `[story/segments/corrector] request prepared with ${sanitisedRequest.length} part(s)`
-    );
-
-    const responseText = await runLlmTextCall({
-      progress: adapter,
-      modelId: TEXT_MODEL_ID,
-      parts,
-      debug: debugRootDir
-        ? { rootDir: debugRootDir, stage: "segmentation", subStage: "corrector", attempt }
-        : undefined,
-    });
-
-    await snapshotSaver?.({
-      phase: "correction",
-      attempt,
-      prompt: reviewPrompt,
-      response: responseText,
-      modelVersion: TEXT_MODEL_ID,
-      thoughts: undefined,
-      charCount: responseText.length,
-    });
-
-    let response: SegmentationCorrectorResponse | undefined;
-    let parseError: string | undefined;
-    try {
-      const parsedJson = extractJsonObject(responseText);
-      response = SegmentationCorrectorResponseSchema.parse(parsedJson);
-    } catch (error) {
-      parseError = error instanceof Error ? error.message : String(error);
-    }
-
-    attempts.push({
-      attempt,
-      prompt: reviewPrompt,
-      rawResponse: responseText,
-      modelVersion: TEXT_MODEL_ID,
-      response,
-      thoughts: undefined,
-      parseError,
-      charCount: responseText.length,
-    });
-
-    if (!response) {
-      throw new SegmentationCorrectionError(
-        "Segmentation corrector did not return valid JSON.",
-        generationPrompt,
-        attempts,
-        workingSegmentation
-      );
-    }
-
-    if (response.issuesSummary) {
-      adapter.log(
-        `[story/segments/corrector] attempt ${attempt} issues summary: ${response.issuesSummary}`
-      );
-    }
-
-    if (response.corrections.length === 0) {
-      adapter.log(
-        `[story/segments/corrector] attempt ${attempt} returned no corrections`
-      );
-      return { segmentation: workingSegmentation, attempts };
-    }
-
-    adapter.log(
-      `[story/segments/corrector] attempt ${attempt} applying corrections for indices ${response.corrections
-        .map((c) => c.promptIndex)
-        .join(", ")}`
-    );
-
-    try {
-      workingSegmentation = applySegmentationCorrections(
-        workingSegmentation,
-        response.corrections
-      );
-    } catch (error) {
-      throw new SegmentationCorrectionError(
-        `Segmentation corrector corrections could not be applied: ${error instanceof Error ? error.message : String(error)}`,
-        generationPrompt,
-        attempts,
-        workingSegmentation
-      );
-    }
-  }
-
-  return { segmentation: workingSegmentation, attempts };
-}
-
 export async function generateStorySegmentation(
   storyText: string,
   progress?: StoryProgress,
   options?: {
-    maxCorrectionAttempts?: number;
-    onAttemptSnapshot?: SegmentationAttemptSnapshotSaver;
     debugRootDir?: string;
   }
-): Promise<StorySegmentationResult> {
+): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
-  adapter.log("[story] generating narration segments with Gemini 2.5 Pro");
+  adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
   const prompt = buildSegmentationPrompt(storyText);
   const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
-  adapter.log("[story/segments] prompt prepared");
-  const sanitisedRequest = parts.map((part) => sanitisePartForLogging(part));
-  adapter.log(
-    `[story/segments] request prepared with ${sanitisedRequest.length} part(s)`
-  );
-  const maxAttempts = 3;
-  const failures: SegmentationAttemptFailure[] = [];
 
-  const runAttempt = async (
-    attempt: number
-  ): Promise<{
-    rawText: string;
-    segmentation: StorySegmentation;
-  }> => {
+  for (let attempt = 1; attempt <= SEGMENTATION_GENERATION_ATTEMPTS; attempt += 1) {
     try {
       const segmentation = await runLlmJsonCall<StorySegmentation>({
         progress: adapter,
         modelId: TEXT_MODEL_ID,
         parts,
-        responseMimeType: "application/json",
         responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
         schema: StorySegmentationSchema,
-        process: extractJsonObject,
-        maxAttempts: 1,
+        maxAttempts: 2,
         debug: options?.debugRootDir
-          ? { rootDir: options.debugRootDir, stage: "segmentation" }
+          ? { rootDir: options.debugRootDir, stage: "segmentation", attempt }
           : undefined,
       });
-      const serialised = JSON.stringify(segmentation, null, 2);
-      await options?.onAttemptSnapshot?.({
-        phase: "generation",
-        attempt,
-        prompt,
-        response: serialised,
-        modelVersion: TEXT_MODEL_ID,
-        thoughts: undefined,
-        charCount: serialised.length,
-      });
-      return { rawText: serialised, segmentation };
-    } catch (error) {
-      if (error instanceof LlmJsonCallError) {
-        const last = error.attempts.at(-1);
-        if (last) {
-          failures.push({
-            attempt,
-            rawText: last.rawText,
-            modelVersion: TEXT_MODEL_ID,
-            errorMessage: last.error instanceof Error ? last.error.message : String(last.error),
-            zodIssues:
-              last.error instanceof z.ZodError ? last.error.issues : undefined,
-            thoughts: undefined,
-            charCount: last.rawText.length,
-          });
-          await options?.onAttemptSnapshot?.({
-            phase: "generation",
-            attempt,
-            prompt,
-            response: last.rawText,
-            modelVersion: TEXT_MODEL_ID,
-            thoughts: undefined,
-            charCount: last.rawText.length,
-          });
-        }
-      } else {
-        failures.push({
-          attempt,
-          rawText: "",
-          modelVersion: TEXT_MODEL_ID,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          thoughts: undefined,
-        });
-      }
-      throw error;
-    }
-  };
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const attemptResult = await runAttempt(attempt);
-      const parsedSegmentation = attemptResult.segmentation;
       adapter.log(`[story/segments] attempt ${attempt} parsed successfully`);
-
-      const rawCorrectionAttempts =
-        options?.maxCorrectionAttempts ?? DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS;
-      const maxCorrectionAttempts =
-        Number.isFinite(rawCorrectionAttempts) && rawCorrectionAttempts >= 0
-          ? Math.floor(rawCorrectionAttempts)
-          : DEFAULT_SEGMENTATION_CORRECTOR_ATTEMPTS;
-      let correctionAttempts: SegmentationCorrectorAttempt[] | undefined;
-      let segmentation = parsedSegmentation;
-      if (maxCorrectionAttempts > 0) {
-        const reviewResult = await runSegmentationCorrector(
-          segmentation,
-          prompt,
-          adapter,
-          maxCorrectionAttempts,
-          options?.onAttemptSnapshot,
-          options?.debugRootDir
-        );
-        segmentation = reviewResult.segmentation;
-        if (reviewResult.attempts.length > 0) {
-          correctionAttempts = reviewResult.attempts;
-        }
-      }
-
-      return {
-        segmentation,
-        prompt,
-        modelVersion: TEXT_MODEL_ID,
-        attempt,
-        correctionAttempts,
-      };
+      return segmentation;
     } catch (error) {
-      if (error instanceof SegmentationCorrectionError) {
-        throw error;
-      }
       const message = error instanceof Error ? error.message : String(error);
-      if (attempt >= maxAttempts) {
+      if (attempt >= SEGMENTATION_GENERATION_ATTEMPTS) {
         throw new SegmentationValidationError(
-          `Gemini segmentation did not produce valid JSON after ${maxAttempts} attempts`,
-          prompt,
-          failures
+          `Gemini segmentation did not produce valid JSON after ${SEGMENTATION_GENERATION_ATTEMPTS} attempt(s): ${message}`
         );
       }
       adapter.log(
-        `[story/segments] attempt ${attempt} invalid response (${message}); retrying...`
+        `[story/segments] attempt ${attempt} failed (${message}); retrying...`
       );
     }
   }
 
-  throw new Error("Segmentation attempts exhausted unexpectedly");
+  throw new SegmentationValidationError(
+    "Gemini segmentation attempts exhausted unexpectedly"
+  );
+}
+
+export async function correctStorySegmentation(
+  storyText: string,
+  initialSegmentation: StorySegmentation,
+  progress?: StoryProgress,
+  options?: {
+    debugRootDir?: string;
+  }
+): Promise<StorySegmentation> {
+  const adapter = useProgress(progress);
+  const generationPrompt = buildSegmentationPrompt(storyText);
+  let workingSegmentation = initialSegmentation;
+  adapter.log(`[story] reviewing segmentation prompts with ${TEXT_MODEL_ID}`);
+
+  for (let attempt = 1; attempt <= SEGMENTATION_CORRECTION_ATTEMPTS; attempt += 1) {
+    const reviewPrompt = buildSegmentationCorrectorPrompt(
+      workingSegmentation,
+      generationPrompt
+    );
+    try {
+      const response = await runLlmJsonCall<SegmentationCorrectorResponse>({
+        progress: adapter,
+        modelId: TEXT_MODEL_ID,
+        parts: [{ type: "text", text: reviewPrompt }],
+        schema: SegmentationCorrectorResponseSchema,
+        maxAttempts: 2,
+        debug: options?.debugRootDir
+          ? {
+              rootDir: options.debugRootDir,
+              stage: "segmentation",
+              subStage: "corrector",
+              attempt,
+            }
+          : undefined,
+      });
+
+      if (response.issuesSummary) {
+        adapter.log(
+          `[story/segments/corrector] attempt ${attempt} issues summary: ${response.issuesSummary}`
+        );
+      }
+
+      if (response.corrections.length === 0) {
+        adapter.log(
+          `[story/segments/corrector] attempt ${attempt} returned no corrections`
+        );
+        return workingSegmentation;
+      }
+
+      try {
+        workingSegmentation = applySegmentationCorrections(
+          workingSegmentation,
+          response.corrections
+        );
+        adapter.log(
+          `[story/segments/corrector] attempt ${attempt} applied ${response.corrections.length} correction(s)`
+        );
+        return workingSegmentation;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        adapter.log(
+          `[story/segments/corrector] attempt ${attempt} failed to apply corrections (${message}); retrying...`
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      adapter.log(
+        `[story/segments/corrector] attempt ${attempt} failed (${message}); retrying...`
+      );
+    }
+  }
+
+  throw new SegmentationCorrectionError(
+    `Segmentation correction failed after ${SEGMENTATION_CORRECTION_ATTEMPTS} attempt(s).`,
+    workingSegmentation
+  );
 }
 
 // =====================
@@ -900,9 +679,7 @@ async function judgeImageSets(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     parts,
-    responseMimeType: "application/json",
     schema: ImageSetJudgeResponseSchema,
-    process: extractJsonObject,
     maxAttempts: 1,
     debug: debugRootDir
       ? { rootDir: debugRootDir, stage: "images", subStage: "judge" }
@@ -1113,7 +890,7 @@ type GenerateStoryOptions = {
 export type GenerateStoryResult = {
   title: string;
   story: StoryProseResult;
-  segmentation: StorySegmentationResult;
+  segmentation: StorySegmentation;
   images: {
     storagePaths: string[];
     modelVersion: string;
@@ -1160,20 +937,22 @@ export async function generateStory(
   options: GenerateStoryOptions
 ): Promise<GenerateStoryResult> {
   const story = await generateProseStory(options.topic, options.progress);
-  const segmentation = await generateStorySegmentation(
+  const initialSegmentation = await generateStorySegmentation(
     story.text,
     options.progress
   );
-  const images = await generateStoryImages(
-    segmentation.segmentation,
+  const segmentation = await correctStorySegmentation(
+    story.text,
+    initialSegmentation,
     options.progress
   );
+  const images = await generateStoryImages(segmentation, options.progress);
   // We now generate 12 images total: 10 story panels, 1 ending card, 1 poster.
   // For media segments we only use the 10 interior images (indices 1..10).
   const interior = images.images.filter((im) => im.index >= 1 && im.index <= 10);
-  if (interior.length !== segmentation.segmentation.segments.length) {
+  if (interior.length !== segmentation.segments.length) {
     throw new Error(
-      `Expected ${segmentation.segmentation.segments.length} interior images (1..10), received ${interior.length}`
+      `Expected ${segmentation.segments.length} interior images (1..10), received ${interior.length}`
     );
   }
 
@@ -1217,10 +996,7 @@ export async function generateStory(
     storagePaths.push(normalised);
   }
 
-  const segments: MediaSegment[] = toMediaSegments(
-    segmentation.segmentation,
-    storagePaths
-  );
+  const segments: MediaSegment[] = toMediaSegments(segmentation, storagePaths);
 
   const narration = await synthesizeAndPublishNarration({
     userId: options.userId,
@@ -1234,7 +1010,7 @@ export async function generateStory(
   });
 
   return {
-    title: segmentation.segmentation.title,
+    title: segmentation.title,
     story,
     segmentation,
     images: {

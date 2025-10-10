@@ -416,7 +416,6 @@ async function callGeminiJson({
     progress,
     modelId: GEMINI_MODEL_ID,
     parts: llmParts,
-    responseMimeType: "application/json",
     responseSchema: RAW_CLASSIFICATION_SCHEMA,
     schema: RawClassificationSchema,
     maxAttempts: 1,

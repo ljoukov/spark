@@ -7,12 +7,12 @@ import { z } from "zod";
 import {
   DEFAULT_TOPIC,
   generateProseStory,
+  correctStorySegmentation,
   generateStoryImages,
   generateStorySegmentation,
   SegmentationValidationError,
   SegmentationCorrectionError,
   type StorySegmentation,
-  type StorySegmentationResult,
   StorySegmentationSchema,
 } from "./generateStory";
 import { type MediaSegment } from "@spark/llm";
@@ -21,7 +21,13 @@ import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 
 ensureEvalEnvLoaded();
 
-const StageEnum = z.enum(["prose", "segmentation", "audio", "images"]);
+const StageEnum = z.enum([
+  "prose",
+  "segmentation",
+  "segmentation_correction",
+  "audio",
+  "images",
+]);
 type StageName = z.infer<typeof StageEnum>;
 const STAGE_ORDER = StageEnum.options;
 
@@ -72,11 +78,14 @@ function resolveStageSequence(options: CliOptions): StageName[] {
   if (options.prose) {
     requested.add("prose");
     requested.add("segmentation");
+    requested.add("segmentation_correction");
     requested.add("audio");
   }
 
   if (options.images) {
     requested.add("images");
+    requested.add("segmentation");
+    requested.add("segmentation_correction");
     requested.add("audio");
   }
 
@@ -172,6 +181,25 @@ async function loadSegmentationFromDisk(
   }
 }
 
+async function loadCorrectedSegmentationFromDisk(
+  outDir: string
+): Promise<StorySegmentation | undefined> {
+  const jsonPath = path.join(
+    resolveCheckpointsDir(outDir),
+    "segmentation_correction.json"
+  );
+  try {
+    const raw = await readFile(jsonPath, { encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return StorySegmentationSchema.parse(parsed);
+  } catch (error: unknown) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
@@ -223,9 +251,10 @@ async function main(): Promise<void> {
 
       let currentStory: StoredStory | undefined;
       let storyLoadedFromDisk = false;
-      let segmentationResult: StorySegmentationResult | undefined;
-      let segmentation: StorySegmentation | undefined;
-      let segmentationLoadedFromDisk = false;
+      let segmentationDraft: StorySegmentation | undefined;
+      let segmentationDraftLoadedFromDisk = false;
+      let correctedSegmentation: StorySegmentation | undefined;
+      let correctedSegmentationLoadedFromDisk = false;
 
       const ensureStory = async (): Promise<StoredStory> => {
         if (currentStory) {
@@ -240,9 +269,9 @@ async function main(): Promise<void> {
         return currentStory;
       };
 
-      const ensureSegmentation = async (): Promise<StorySegmentation> => {
-        if (segmentation) {
-          return segmentation;
+      const ensureDraftSegmentation = async (): Promise<StorySegmentation> => {
+        if (segmentationDraft) {
+          return segmentationDraft;
         }
         const loaded = await loadSegmentationFromDisk(outDir);
         if (!loaded) {
@@ -250,12 +279,34 @@ async function main(): Promise<void> {
             "Cannot continue without segmentation. Run stage 'segmentation' first."
           );
         }
-        if (!segmentationLoadedFromDisk) {
-          progress.log("[story] loaded existing segmentation from checkpoints/segmentation.json");
-          segmentationLoadedFromDisk = true;
+        if (!segmentationDraftLoadedFromDisk) {
+          progress.log(
+            "[story] loaded existing segmentation from checkpoints/segmentation.json"
+          );
+          segmentationDraftLoadedFromDisk = true;
         }
-        segmentation = loaded;
-        return segmentation;
+        segmentationDraft = loaded;
+        return segmentationDraft;
+      };
+
+      const ensureCorrectedSegmentation = async (): Promise<StorySegmentation> => {
+        if (correctedSegmentation) {
+          return correctedSegmentation;
+        }
+        const loaded = await loadCorrectedSegmentationFromDisk(outDir);
+        if (!loaded) {
+          throw new Error(
+            "Cannot continue without corrected segmentation. Run stage 'segmentation_correction' first."
+          );
+        }
+        if (!correctedSegmentationLoadedFromDisk) {
+          progress.log(
+            "[story] loaded existing corrected segmentation from checkpoints/segmentation_correction.json"
+          );
+          correctedSegmentationLoadedFromDisk = true;
+        }
+        correctedSegmentation = loaded;
+        return correctedSegmentation;
       };
 
       const debugRootDir = path.join(outDir, "debug");
@@ -268,9 +319,10 @@ async function main(): Promise<void> {
               topic: options.topic,
               text: storyResult.text,
             };
-            segmentationResult = undefined;
-            segmentation = undefined;
-            segmentationLoadedFromDisk = false;
+            segmentationDraft = undefined;
+            segmentationDraftLoadedFromDisk = false;
+            correctedSegmentation = undefined;
+            correctedSegmentationLoadedFromDisk = false;
             const proseCheckpoint = currentStory;
             const saved = await writeCheckpoint(outDir, "prose", proseCheckpoint);
             progress.log(`[story] wrote checkpoint ${saved}`);
@@ -279,23 +331,45 @@ async function main(): Promise<void> {
           case "segmentation": {
             const story = await ensureStory();
             try {
-              segmentationResult = await generateStorySegmentation(
+              segmentationDraft = await generateStorySegmentation(
                 story.text,
                 progress,
                 { debugRootDir }
               );
-              segmentation = segmentationResult.segmentation;
-              const segCheckpoint = {
-                modelVersion: segmentationResult.modelVersion,
-                segmentation: segmentationResult.segmentation,
-              };
+              segmentationDraftLoadedFromDisk = false;
+              correctedSegmentation = undefined;
+              correctedSegmentationLoadedFromDisk = false;
+              const segCheckpoint = segmentationDraft;
               const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
               progress.log(`[story] wrote checkpoint ${saved}`);
             } catch (error) {
-              if (
-                error instanceof SegmentationValidationError ||
-                error instanceof SegmentationCorrectionError
-              ) {
+              if (error instanceof SegmentationValidationError) {
+                // Keep failure visible in console for test mode; no artifact writes.
+              }
+              throw error;
+            }
+            break;
+          }
+          case "segmentation_correction": {
+            const story = await ensureStory();
+            const draftSegmentation =
+              segmentationDraft ?? (await ensureDraftSegmentation());
+            try {
+              correctedSegmentation = await correctStorySegmentation(
+                story.text,
+                draftSegmentation,
+                progress,
+                { debugRootDir }
+              );
+              correctedSegmentationLoadedFromDisk = false;
+              const saved = await writeCheckpoint(
+                outDir,
+                "segmentation_correction",
+                correctedSegmentation
+              );
+              progress.log(`[story] wrote checkpoint ${saved}`);
+            } catch (error) {
+              if (error instanceof SegmentationCorrectionError) {
                 // Keep failure visible in console for test mode; no artifact writes.
               }
               throw error;
@@ -304,8 +378,7 @@ async function main(): Promise<void> {
           }
           case "audio": {
             const segments =
-              segmentationResult?.segmentation ?? (await ensureSegmentation());
-            segmentation = segments;
+              correctedSegmentation ?? (await ensureCorrectedSegmentation());
             const mediaSegments = segmentationToMediaSegments(segments);
             const audioCheckpoint = { inputSegments: mediaSegments };
             const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
@@ -314,9 +387,10 @@ async function main(): Promise<void> {
           }
           case "images": {
             const segments =
-              segmentationResult?.segmentation ?? (await ensureSegmentation());
-            segmentation = segments;
-            const imagesResult = await generateStoryImages(segments, progress, { debugRootDir });
+              correctedSegmentation ?? (await ensureCorrectedSegmentation());
+            const imagesResult = await generateStoryImages(segments, progress, {
+              debugRootDir,
+            });
             const imagesCheckpoint = {
               modelVersion: imagesResult.modelVersion,
               imagesCount: imagesResult.images.length,
