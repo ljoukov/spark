@@ -27,16 +27,9 @@ export const DEFAULT_TOPIC = "xor bitwise operations" as const;
 export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
 export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 
-// Artwork style (extracted from segmentation and applied at image-generation time)
-// NOTE: We keep this as an array to make it easy to render as top-of-prompt lines.
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
-  "Craft prompts to evoke a vintage, mid-century cartoon illustration style. Describe the style through its core components:",
-  "",
-  "*   **Characters:** Design appealing, stylized characters with simple, expressive features reminiscent of classic 1950s comics. Faces should be defined by clean lines and communicate emotion clearly without complex detail.",
-  "*   **Line Art:** All elements should be defined by clear, black ink outlines. The line weight should be consistent but with subtle imperfections, giving it a warm, hand-drawn feel rather than a perfect vector look.",
-  "*   **Color & Shading:** Use a muted, retro color palette with earthy tones like ochre, beige, and desaturated blues and greens. Shading should be simple, using flat color washes or subtle cross-hatching textures, avoiding smooth digital gradients.",
-  "*   **Texture:** The final image should have a subtle, overlying paper or canvas texture. This gives the illustration a tangible, printed quality, as if it came from a vintage book or magazine.",
-  "",
+  "A beautiful and engaging vintage cartoon illustration.",
+  "Use a high-positivity tone, high quality, bright colors, and a clear composition.",
 ];
 
 export type StoryProgress = JobProgressReporter | undefined;
