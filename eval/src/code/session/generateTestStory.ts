@@ -88,11 +88,8 @@ function resolveStageSequence(options: CliOptions): StageName[] {
 }
 
 const StoryJsonSchema = z.object({
-  modelVersion: z.string().trim().min(1),
   topic: z.string().trim().min(1),
   text: z.string().trim().min(1),
-  prompt: z.string().trim().optional(),
-  thoughts: z.array(z.string()).optional(),
 });
 
 type StoredStory = z.infer<typeof StoryJsonSchema>;
@@ -268,22 +265,13 @@ async function main(): Promise<void> {
           case "prose": {
             const storyResult = await generateProseStory(options.topic, progress, { debugRootDir });
             currentStory = {
-              text: storyResult.text,
-              prompt: storyResult.prompt,
-              modelVersion: storyResult.modelVersion,
               topic: options.topic,
-              thoughts: storyResult.thoughts,
+              text: storyResult.text,
             };
             segmentationResult = undefined;
             segmentation = undefined;
             segmentationLoadedFromDisk = false;
-            const proseCheckpoint = {
-              modelVersion: storyResult.modelVersion,
-              topic: options.topic,
-              text: storyResult.text,
-              prompt: storyResult.prompt,
-              thoughts: storyResult.thoughts,
-            } satisfies StoredStory;
+            const proseCheckpoint = currentStory;
             const saved = await writeCheckpoint(outDir, "prose", proseCheckpoint);
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;

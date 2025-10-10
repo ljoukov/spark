@@ -186,9 +186,6 @@ export class SegmentationCorrectionError extends Error {
 
 export type StoryProseResult = {
   text: string;
-  prompt: string;
-  modelVersion: string;
-  thoughts?: string[];
 };
 
 export type StorySegmentationResult = {
@@ -418,11 +415,7 @@ export async function generateProseStory(
       : undefined,
   });
 
-  return {
-    text,
-    prompt,
-    modelVersion: TEXT_MODEL_ID,
-  };
+  return { text };
 }
 
 function extractJsonObject(rawText: string): unknown {
