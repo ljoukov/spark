@@ -70,9 +70,7 @@ type LlmChunkData = {
   readonly inlineData: LlmInlineData[];
 };
 
-function extractLlmChunkData(
-  chunk: GenerateContentResponse,
-): LlmChunkData {
+function extractLlmChunkData(chunk: GenerateContentResponse): LlmChunkData {
   const textParts: string[] = [];
   const thoughtParts: string[] = [];
   const inlineData: LlmInlineData[] = [];
@@ -113,29 +111,38 @@ function estimateContentsUploadBytes(contents: readonly Content[]): number {
   }, 0);
 }
 
+function clonePart(part: Part): Part {
+  const cloned: Part = { ...part };
+  if (part.inlineData) {
+    cloned.inlineData = { ...part.inlineData };
+  }
+  if (part.fileData) {
+    cloned.fileData = { ...part.fileData };
+  }
+  if (part.functionCall) {
+    cloned.functionCall = { ...part.functionCall };
+  }
+  if (part.functionResponse) {
+    cloned.functionResponse = { ...part.functionResponse };
+  }
+  return cloned;
+}
+
 function cloneContent(content: Content): Content {
   const cloned: Content = {
     ...content,
   };
   if (Array.isArray(content.parts)) {
-    cloned.parts = content.parts.map((part) => {
-      const clonedPart: Part = { ...part };
-      if (part.inlineData) {
-        clonedPart.inlineData = { ...part.inlineData };
-      }
-      if (part.fileData) {
-        clonedPart.fileData = { ...part.fileData };
-      }
-      if (part.functionCall) {
-        clonedPart.functionCall = { ...part.functionCall };
-      }
-      if (part.functionResponse) {
-        clonedPart.functionResponse = { ...part.functionResponse };
-      }
-      return clonedPart;
-    });
+    cloned.parts = content.parts.map(clonePart);
   }
   return cloned;
+}
+
+function countInlineParts(parts: readonly Part[]): number {
+  return parts.reduce((total, part) => {
+    const data = part.inlineData?.data;
+    return typeof data === "string" && data.length > 0 ? total + 1 : total;
+  }, 0);
 }
 
 const MODERATION_FINISH_REASONS = new Set<FinishReason>([
@@ -164,7 +171,7 @@ function findLastInlineDataIndex(parts: readonly Part[]): number {
 
 function trimPartsForContinuation(
   parts: Part[],
-  moderationFailure: boolean,
+  moderationFailure: boolean
 ): void {
   if (parts.length === 0) {
     return;
@@ -179,15 +186,16 @@ function trimPartsForContinuation(
   if (moderationFailure) {
     parts.splice(lastImageIndex, 1);
     const precedingIndex = lastImageIndex - 1;
-    if (
-      precedingIndex >= 0 &&
-      typeof parts[precedingIndex].text === "string"
-    ) {
+    if (precedingIndex >= 0 && typeof parts[precedingIndex].text === "string") {
       parts.splice(precedingIndex, 1);
     }
   }
   const trimmedLastImageIndex = findLastInlineDataIndex(parts);
-  for (let index = parts.length - 1; index > trimmedLastImageIndex; index -= 1) {
+  for (
+    let index = parts.length - 1;
+    index > trimmedLastImageIndex;
+    index -= 1
+  ) {
     if (typeof parts[index].text === "string") {
       parts.splice(index, 1);
     }
@@ -242,7 +250,7 @@ export type LlmContentPart =
   | { type: "inlineData"; data: string; mimeType?: string };
 
 export function convertGooglePartsToLlmParts(
-  parts: readonly Part[],
+  parts: readonly Part[]
 ): LlmContentPart[] {
   const result: LlmContentPart[] = [];
   for (const part of parts) {
@@ -313,7 +321,7 @@ function normalisePathSegment(value: string): string {
 }
 
 function toGeminiTools(
-  tools: readonly LlmToolConfig[] | undefined,
+  tools: readonly LlmToolConfig[] | undefined
 ): Tool[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
@@ -344,7 +352,7 @@ async function resetDebugDir(debugDir?: string): Promise<void> {
 
 function resolveDebugDir(
   debug: LlmDebugOptions | undefined,
-  attemptLabel?: number | string,
+  attemptLabel?: number | string
 ): string | undefined {
   if (!debug || !debug.rootDir || debug.enabled === false) {
     return undefined;
@@ -390,7 +398,7 @@ function formatContentsForSnapshot(contents: readonly Content[]): string {
         case "inlineData": {
           const bytes = estimateInlineBytes(part.data);
           lines.push(
-            `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`,
+            `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
           );
           break;
         }
@@ -405,7 +413,7 @@ function formatContentsForSnapshot(contents: readonly Content[]): string {
 
 async function writePromptSnapshot(
   pathname: string,
-  contents: readonly Content[],
+  contents: readonly Content[]
 ): Promise<void> {
   const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
@@ -483,7 +491,7 @@ async function writeImageDebugArtifacts({
       const extension = image.mimeType?.split("/")[1] ?? "bin";
       const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
       await writeFile(path.join(debugDir, filename), image.data);
-    }),
+    })
   );
 }
 
@@ -516,10 +524,7 @@ async function runLlmStream({
     readonly imageAspectRatio?: string;
     readonly tools?: readonly LlmToolConfig[];
   };
-  handleChunk: (
-    chunk: GenerateContentResponse,
-    data: LlmChunkData,
-  ) => void;
+  handleChunk: (chunk: GenerateContentResponse, data: LlmChunkData) => void;
   attemptLabel?: number | string;
 }): Promise<{
   elapsedMs: number;
@@ -532,22 +537,19 @@ async function runLlmStream({
   stage: LlmCallStage;
   lastCandidates?: Candidate[];
   promptFeedback?: GenerateContentResponse["promptFeedback"];
+  latestCandidateParts?: Part[];
 }> {
   const stage = buildCallStage({
     modelId: options.modelId,
     debug: options.debug,
     attemptLabel,
   });
-  const reporter =
-    options.progress ?? createFallbackProgress(stage.label);
+  const reporter = options.progress ?? createFallbackProgress(stage.label);
   const log = (message: string) => {
     reporter.log(`[${stage.label}] ${message}`);
   };
 
-  if (
-    !options.contents &&
-    (!options.parts || options.parts.length === 0)
-  ) {
+  if (!options.contents && (!options.parts || options.parts.length === 0)) {
     throw new Error("LLM call requires parts or contents");
   }
 
@@ -573,7 +575,7 @@ async function runLlmStream({
   const isImageCall = Boolean(
     options.imageAspectRatio ||
       (Array.isArray(responseModalities) &&
-        responseModalities.some((m) => String(m).toUpperCase() === "IMAGE")),
+        responseModalities.some((m) => String(m).toUpperCase() === "IMAGE"))
   );
   const isImageModel = options.modelId === "gemini-2.5-flash-image";
   const supportsThinking = !isImageCall && !isImageModel;
@@ -604,7 +606,10 @@ async function runLlmStream({
   await resetDebugDir(stage.debugDir);
   await ensureDebugDir(stage.debugDir);
   if (stage.debugDir) {
-    await writePromptSnapshot(path.join(stage.debugDir, "prompt.txt"), contents);
+    await writePromptSnapshot(
+      path.join(stage.debugDir, "prompt.txt"),
+      contents
+    );
   }
 
   const uploadBytes = estimateContentsUploadBytes(contents);
@@ -623,10 +628,13 @@ async function runLlmStream({
   const textAggregator = { value: "" };
   let lastCandidates: Candidate[] | undefined;
   let promptFeedback: GenerateContentResponse["promptFeedback"] | undefined;
+  let latestCandidateParts: Part[] | undefined;
+  let latestInlineCount = 0;
+  let latestPartCount = 0;
 
   const summariseChunk = (
     data: LlmChunkData,
-    chunk: GenerateContentResponse,
+    chunk: GenerateContentResponse
   ): { charDelta: number; byteDelta: number } => {
     let charDelta = 0;
     // Count visible response text
@@ -670,6 +678,20 @@ async function runLlmStream({
         }
         if (Array.isArray(chunk.candidates) && chunk.candidates.length > 0) {
           lastCandidates = chunk.candidates;
+          const primary = chunk.candidates[0];
+          const candidateParts = primary.content?.parts ?? [];
+          if (candidateParts.length > 0) {
+            const candidateInlineCount = countInlineParts(candidateParts);
+            if (
+              candidateInlineCount > latestInlineCount ||
+              (candidateInlineCount === latestInlineCount &&
+                candidateParts.length >= latestPartCount)
+            ) {
+              latestInlineCount = candidateInlineCount;
+              latestPartCount = candidateParts.length;
+              latestCandidateParts = candidateParts.map(clonePart);
+            }
+          }
         }
         const data = extractLlmChunkData(chunk);
         const { charDelta, byteDelta } = summariseChunk(data, chunk);
@@ -677,7 +699,7 @@ async function runLlmStream({
         totalBytes += byteDelta;
         chunkIndex += 1;
         chunkLog.push(
-          `chunk ${chunkIndex}: +${charDelta} chars, +${formatByteSize(byteDelta)} bytes`,
+          `chunk ${chunkIndex}: +${charDelta} chars, +${formatByteSize(byteDelta)} bytes`
         );
         // Do not emit per-model periodic progress logs; aggregate display handles this.
         // Keep tracking for snapshots and final completion log.
@@ -694,7 +716,7 @@ async function runLlmStream({
 
   const elapsedMs = Date.now() - startedAt;
   log(
-    `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)} (${formatInteger(totalChars)} chars, ${formatByteSize(totalBytes)} down)`,
+    `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)} (${formatInteger(totalChars)} chars, ${formatByteSize(totalBytes)} down)`
   );
 
   return {
@@ -708,6 +730,7 @@ async function runLlmStream({
     stage,
     lastCandidates,
     promptFeedback,
+    latestCandidateParts,
   };
 }
 
@@ -723,7 +746,7 @@ type LlmTextCallMeta = {
 
 async function executeLlmText(
   options: LlmTextCallOptions,
-  attemptLabel?: number | string,
+  attemptLabel?: number | string
 ): Promise<LlmTextCallMeta> {
   const {
     elapsedMs,
@@ -778,14 +801,14 @@ async function executeLlmText(
 }
 
 export async function runLlmTextCall(
-  options: LlmTextCallOptions,
+  options: LlmTextCallOptions
 ): Promise<string> {
   const { text } = await executeLlmText(options);
   return text;
 }
 
 export async function runLlmImageCall(
-  options: LlmImageCallOptions,
+  options: LlmImageCallOptions
 ): Promise<LlmImagePart[]> {
   const images: LlmImagePart[] = [];
 
@@ -838,7 +861,7 @@ export type GenerateImagesOptions = LlmImageCallOptions & {
 };
 
 export async function generateImages(
-  options: GenerateImagesOptions,
+  options: GenerateImagesOptions
 ): Promise<LlmImagePart[]> {
   const { numImages, maxAttempts = 2, ...rest } = options;
   if (!Number.isFinite(numImages) || numImages <= 0) {
@@ -884,7 +907,7 @@ export async function generateImages(
 
   const runImageAttempt = async (
     attempt: number,
-    contentsOverride?: readonly Content[],
+    contentsOverride?: readonly Content[]
   ) => {
     const attemptImages: LlmImagePart[] = [];
     const streamOptions =
@@ -931,6 +954,7 @@ export async function generateImages(
       images: attemptImages,
       lastCandidates: result.lastCandidates,
       promptFeedback: result.promptFeedback,
+      latestCandidateParts: result.latestCandidateParts,
     };
   };
 
@@ -1005,7 +1029,10 @@ export async function generateImages(
   return collectedImages.slice(0, numImages);
 }
 
-export type LlmJsonCallOptions<T> = Omit<LlmTextCallOptions, "responseSchema"> & {
+export type LlmJsonCallOptions<T> = Omit<
+  LlmTextCallOptions,
+  "responseSchema"
+> & {
   readonly schema: z.ZodSchema<T>;
   readonly responseSchema: Schema;
   readonly maxAttempts?: number;
@@ -1018,7 +1045,7 @@ export class LlmJsonCallError extends Error {
       readonly attempt: number;
       readonly rawText: string;
       readonly error: unknown;
-    }>,
+    }>
   ) {
     super(message);
     this.name = "LlmJsonCallError";
@@ -1026,14 +1053,9 @@ export class LlmJsonCallError extends Error {
 }
 
 export async function runLlmJsonCall<T>(
-  options: LlmJsonCallOptions<T>,
+  options: LlmJsonCallOptions<T>
 ): Promise<T> {
-  const {
-    schema,
-    responseSchema,
-    maxAttempts = 2,
-    ...rest
-  } = options;
+  const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
   const textOptions: LlmTextCallOptions = {
     ...rest,
     responseSchema,
@@ -1055,12 +1077,13 @@ export async function runLlmJsonCall<T>(
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {
-      const handledError = error instanceof Error ? error : new Error(String(error));
+      const handledError =
+        error instanceof Error ? error : new Error(String(error));
       failures.push({ attempt, rawText, error: handledError });
       if (attempt >= totalAttempts) {
         throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
-          failures,
+          failures
         );
       }
     }

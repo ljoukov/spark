@@ -343,9 +343,6 @@ export function buildSegmentationPrompt(storyText: string): string {
   ].join("\n");
 }
 
-// Build a single 4-image batch prompt: style first, then the numbered image prompts
-// (batch prompt builder removed; using full-set prompt below)
-
 export async function generateProseStory(
   topic: string,
   progress?: StoryProgress,
@@ -666,7 +663,7 @@ export async function generateImageSets(
       "Please make a total of 12 images:",
       "- 1-10 story images",
       '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
-      '- the "movie poster" image for the whole story (hook)',
+      '- the "movie poster" image for the whole story (hook), poster should feature happy characters, bright colors and be engaging, positive and exciting',
       "Make high quality, high positivity cartoon style.",
       "",
       "Follow the style:",
