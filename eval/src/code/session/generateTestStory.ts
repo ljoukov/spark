@@ -8,8 +8,14 @@ import {
   DEFAULT_TOPIC,
   generateProseStory,
   correctStorySegmentation,
-  generateStoryImages,
   generateStorySegmentation,
+  generateImageSets,
+  judgeImageSets,
+  serialiseStoryImageSets,
+  deserialiseStoryImageSets,
+  SerialisedStoryImageSetSchema,
+  type SerialisedStoryImageSet,
+  type StoryImageSet,
   type StorySegmentation,
   StorySegmentationSchema,
 } from "./generateStory";
@@ -24,7 +30,8 @@ const StageEnum = z.enum([
   "segmentation",
   "segmentation_correction",
   "audio",
-  "images",
+  "image-sets",
+  "images-judge",
 ]);
 type StageName = z.infer<typeof StageEnum>;
 const STAGE_ORDER = StageEnum.options;
@@ -81,7 +88,8 @@ function resolveStageSequence(options: CliOptions): StageName[] {
   }
 
   if (options.images) {
-    requested.add("images");
+    requested.add("image-sets");
+    requested.add("images-judge");
     requested.add("segmentation");
     requested.add("segmentation_correction");
     requested.add("audio");
@@ -116,6 +124,23 @@ const SegmentationCheckpointSchema = z
     return value.segmentation;
   });
 
+const ImageSetsCheckpointSchema = z.object({
+  imageSets: z.array(SerialisedStoryImageSetSchema).min(1),
+});
+
+type ImageSetsCheckpoint = z.infer<typeof ImageSetsCheckpointSchema>;
+
+const ImageJudgeCheckpointSchema = z.object({
+  modelVersion: z.string().trim().min(1),
+  selectedSet: z.enum(["set_a", "set_b"]),
+  response: z.object({
+    reasoning: z.string().trim().min(1),
+    verdict: z.enum(["set_a", "set_b"]),
+  }),
+});
+
+type ImageJudgeCheckpoint = z.infer<typeof ImageJudgeCheckpointSchema>;
+
 function isFileNotFound(error: unknown): boolean {
   return Boolean(
     error &&
@@ -131,7 +156,7 @@ function isFileNotFound(error: unknown): boolean {
 
 // Audio stage in test mode does not write audio files; checkpoints only.
 
-// Images stage in test mode does not write assets; checkpoints only.
+// Image generation stages in test mode do not write assets; checkpoints only.
 
 // no-op legacy writers removed.
 
@@ -198,6 +223,23 @@ async function loadCorrectedSegmentationFromDisk(
   }
 }
 
+async function loadImageSetsFromDisk(
+  outDir: string
+): Promise<SerialisedStoryImageSet[] | undefined> {
+  const jsonPath = path.join(resolveCheckpointsDir(outDir), "image-sets.json");
+  try {
+    const raw = await readFile(jsonPath, { encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    const checkpoint = ImageSetsCheckpointSchema.parse(parsed);
+    return checkpoint.imageSets;
+  } catch (error: unknown) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
@@ -211,7 +253,7 @@ async function main(): Promise<void> {
     .addOption(
       new Option(
         "--stage <stage...>",
-        "Stages to run (prose, segmentation, audio, images)"
+        "Stages to run (prose, segmentation, segmentation_correction, audio, image-sets, images-judge)"
       ).choices(STAGE_ORDER)
     );
 
@@ -253,6 +295,8 @@ async function main(): Promise<void> {
       let segmentationDraftLoadedFromDisk = false;
       let correctedSegmentation: StorySegmentation | undefined;
       let correctedSegmentationLoadedFromDisk = false;
+      let imageSetsSerialised: SerialisedStoryImageSet[] | undefined;
+      let imageSetsLoadedFromDisk = false;
 
       const ensureStory = async (): Promise<StoredStory> => {
         if (currentStory) {
@@ -307,6 +351,26 @@ async function main(): Promise<void> {
         return correctedSegmentation;
       };
 
+      const ensureImageSets = async (): Promise<SerialisedStoryImageSet[]> => {
+        if (imageSetsSerialised) {
+          return imageSetsSerialised;
+        }
+        const loaded = await loadImageSetsFromDisk(outDir);
+        if (!loaded) {
+          throw new Error(
+            "Cannot continue without image sets. Run stage 'image-sets' first."
+          );
+        }
+        if (!imageSetsLoadedFromDisk) {
+          progress.log(
+            "[story] loaded existing image sets from checkpoints/image-sets.json"
+          );
+          imageSetsLoadedFromDisk = true;
+        }
+        imageSetsSerialised = loaded;
+        return imageSetsSerialised;
+      };
+
       const debugRootDir = path.join(outDir, "debug");
       for (const stage of stages) {
         progress.log(`[story] stage: ${stage}`);
@@ -321,6 +385,8 @@ async function main(): Promise<void> {
             segmentationDraftLoadedFromDisk = false;
             correctedSegmentation = undefined;
             correctedSegmentationLoadedFromDisk = false;
+            imageSetsSerialised = undefined;
+            imageSetsLoadedFromDisk = false;
             const proseCheckpoint = currentStory;
             const saved = await writeCheckpoint(outDir, "prose", proseCheckpoint);
             progress.log(`[story] wrote checkpoint ${saved}`);
@@ -337,14 +403,16 @@ async function main(): Promise<void> {
               segmentationDraftLoadedFromDisk = false;
               correctedSegmentation = undefined;
               correctedSegmentationLoadedFromDisk = false;
-            const segCheckpoint = segmentationDraft;
-            const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
-            progress.log(`[story] wrote checkpoint ${saved}`);
-          } catch (error) {
-            throw error;
+              imageSetsSerialised = undefined;
+              imageSetsLoadedFromDisk = false;
+              const segCheckpoint = segmentationDraft;
+              const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
+              progress.log(`[story] wrote checkpoint ${saved}`);
+            } catch (error) {
+              throw error;
+            }
+            break;
           }
-          break;
-        }
           case "segmentation_correction": {
             const story = await ensureStory();
             const draftSegmentation =
@@ -357,6 +425,8 @@ async function main(): Promise<void> {
                 { debugRootDir }
               );
               correctedSegmentationLoadedFromDisk = false;
+              imageSetsSerialised = undefined;
+              imageSetsLoadedFromDisk = false;
               const saved = await writeCheckpoint(
                 outDir,
                 "segmentation_correction",
@@ -377,17 +447,38 @@ async function main(): Promise<void> {
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
-          case "images": {
+          case "image-sets": {
             const segments =
               correctedSegmentation ?? (await ensureCorrectedSegmentation());
-            const imagesResult = await generateStoryImages(segments, progress, {
+            const imageSets = await generateImageSets(segments, progress, {
               debugRootDir,
             });
-            const imagesCheckpoint = {
-              modelVersion: imagesResult.modelVersion,
-              imagesCount: imagesResult.images.length,
+            imageSetsSerialised = serialiseStoryImageSets(imageSets);
+            imageSetsLoadedFromDisk = false;
+            const imageSetsCheckpoint: ImageSetsCheckpoint = {
+              imageSets: imageSetsSerialised,
             };
-            const saved = await writeCheckpoint(outDir, "images", imagesCheckpoint);
+            ImageSetsCheckpointSchema.parse(imageSetsCheckpoint);
+            const saved = await writeCheckpoint(outDir, "image-sets", imageSetsCheckpoint);
+            progress.log(`[story] wrote checkpoint ${saved}`);
+            break;
+          }
+          case "images-judge": {
+            const segments =
+              correctedSegmentation ?? (await ensureCorrectedSegmentation());
+            const serialisedSets = await ensureImageSets();
+            const imageSets: StoryImageSet[] =
+              deserialiseStoryImageSets(serialisedSets);
+            const judgement = await judgeImageSets(imageSets, segments, progress, {
+              debugRootDir,
+            });
+            const judgeCheckpoint: ImageJudgeCheckpoint = {
+              modelVersion: judgement.modelVersion,
+              selectedSet: judgement.winningImageSetLabel,
+              response: judgement.response,
+            };
+            ImageJudgeCheckpointSchema.parse(judgeCheckpoint);
+            const saved = await writeCheckpoint(outDir, "images-judge", judgeCheckpoint);
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }

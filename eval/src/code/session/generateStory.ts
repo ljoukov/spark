@@ -9,7 +9,6 @@ import {
   runLlmJsonCall,
   runLlmTextCall,
   type LlmContentPart,
-  sanitisePartForLogging,
 } from "../../utils/llm";
 import type {
   JobProgressReporter,
@@ -160,6 +159,57 @@ export type StoryImagesResult = {
   modelVersion: string;
   captions?: string;
 };
+
+export type StoryImageSet = {
+  imageSetLabel: "set_a" | "set_b";
+  modelVersion: string;
+  images: GeneratedStoryImage[];
+};
+
+export const SerialisedStoryImageSchema = z.object({
+  index: z.number().int().min(1),
+  mimeType: z.string().trim().min(1),
+  data: z.string().trim().min(1),
+});
+
+export const SerialisedStoryImageSetSchema = z.object({
+  imageSetLabel: z.enum(["set_a", "set_b"]),
+  modelVersion: z.string().trim().min(1),
+  images: z.array(SerialisedStoryImageSchema).min(1),
+});
+
+export type SerialisedStoryImage = z.infer<typeof SerialisedStoryImageSchema>;
+export type SerialisedStoryImageSet = z.infer<
+  typeof SerialisedStoryImageSetSchema
+>;
+
+export function serialiseStoryImageSets(
+  imageSets: readonly StoryImageSet[]
+): SerialisedStoryImageSet[] {
+  return imageSets.map((set) => ({
+    imageSetLabel: set.imageSetLabel,
+    modelVersion: set.modelVersion,
+    images: set.images.map((image) => ({
+      index: image.index,
+      mimeType: image.mimeType,
+      data: image.data.toString("base64"),
+    })),
+  }));
+}
+
+export function deserialiseStoryImageSets(
+  serialised: readonly SerialisedStoryImageSet[]
+): StoryImageSet[] {
+  return serialised.map((set) => ({
+    imageSetLabel: set.imageSetLabel,
+    modelVersion: set.modelVersion,
+    images: set.images.map((image) => ({
+      index: image.index,
+      mimeType: image.mimeType,
+      data: Buffer.from(image.data, "base64"),
+    })),
+  }));
+}
 
 export class SegmentationCorrectionError extends Error {
   constructor(
@@ -573,20 +623,69 @@ const IMAGE_SET_JUDGE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-type ImageSetArtifact = {
-  label: "set_a" | "set_b";
-  promptParts: LlmContentPart[];
-  modelVersion: string;
-  aggregatedText: string;
-  imageCount: number;
+type SegmentationImageEntry = {
+  index: number;
+  prompt: string;
 };
 
-type ImageSetRunResult = {
-  label: "set_a" | "set_b";
-  promptParts: LlmContentPart[];
+type SegmentationImageContext = {
+  entries: SegmentationImageEntry[];
+  promptsByIndex: Map<number, string>;
+  endingIndex: number;
+  posterIndex: number;
+};
+
+function collectSegmentationImageContext(
+  segmentation: StorySegmentation
+): SegmentationImageContext {
+  const posterPrompt = segmentation.posterPrompt.trim();
+  const endingPrompt = segmentation.endingPrompt.trim();
+  if (!posterPrompt) {
+    throw new Error("Segmentation did not include a posterPrompt");
+  }
+  if (!endingPrompt) {
+    throw new Error("Segmentation did not include an endingPrompt");
+  }
+
+  const entries: SegmentationImageEntry[] = [];
+  const promptsByIndex = new Map<number, string>();
+
+  for (let i = 0; i < segmentation.segments.length; i++) {
+    const segment = segmentation.segments[i];
+    if (!segment) {
+      throw new Error(`Segmentation segment ${i + 1} is missing data`);
+    }
+    const segmentPrompt = segment.imagePrompt.trim();
+    if (!segmentPrompt) {
+      throw new Error(
+        `Segmentation segment ${i + 1} is missing an imagePrompt`
+      );
+    }
+    const index = i + 1;
+    entries.push({ index, prompt: segmentPrompt });
+    promptsByIndex.set(index, segmentPrompt);
+  }
+
+  const endingIndex = segmentation.segments.length + 1;
+  entries.push({ index: endingIndex, prompt: endingPrompt });
+  promptsByIndex.set(endingIndex, endingPrompt);
+
+  const posterIndex = segmentation.segments.length + 2;
+  entries.push({ index: posterIndex, prompt: posterPrompt });
+  promptsByIndex.set(posterIndex, posterPrompt);
+
+  return {
+    entries,
+    promptsByIndex,
+    endingIndex,
+    posterIndex,
+  };
+}
+
+type ImageSetArtifact = {
+  imageSetLabel: "set_a" | "set_b";
   modelVersion: string;
-  aggregatedText: string;
-  images: GeneratedStoryImage[];
+  imageCount: number;
 };
 
 export type StoryImagesArtifacts = {
@@ -594,7 +693,6 @@ export type StoryImagesArtifacts = {
   sets: ImageSetArtifact[];
   judge?: {
     requestPartsCount: number;
-    requestPartsSanitised: unknown[];
     responseText: string;
     responseJson: ImageSetJudgeResponse;
     modelVersion: string;
@@ -603,19 +701,117 @@ export type StoryImagesArtifacts = {
   selectedSet: "set_a" | "set_b";
 };
 
-async function judgeImageSets(
-  setA: ImageSetRunResult,
-  setB: ImageSetRunResult,
-  promptsByIndex: Map<number, string>,
-  adapter: ReturnType<typeof useProgress>,
-  debugRootDir?: string
+export async function generateImageSets(
+  segmentation: StorySegmentation,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string }
+): Promise<StoryImageSet[]> {
+  const adapter = useProgress(progress);
+  const { entries, endingIndex, posterIndex } =
+    collectSegmentationImageContext(segmentation);
+  const styleLines = ART_STYLE_VINTAGE_CARTOON;
+
+  const buildSetPrompt = (): string => {
+    const headerLines: string[] = [
+      "Please make a total of 12 images:",
+      "- 1-10 story images",
+      '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
+      '- the "movie poster" image for the whole story (hook)',
+      "Make high quality, high positivity cartoon style.",
+      "",
+      "Follow the style:",
+      ...styleLines,
+      "",
+      "Image descriptions:",
+    ];
+    const lines = [...headerLines];
+    for (const { index, prompt } of entries) {
+      let label = `Image ${index}`;
+      if (index === endingIndex) {
+        label = `Image ${index} (the end)`;
+      } else if (index === posterIndex) {
+        label = `Image ${index} (poster)`;
+      }
+      lines.push(`${label}: ${prompt}`);
+    }
+    return lines.join("\n");
+  };
+
+  const promptText = buildSetPrompt();
+
+  const runImageSet = async (
+    imageSetLabel: "set_a" | "set_b"
+  ): Promise<StoryImageSet> => {
+    adapter.log(`[story/image-sets/${imageSetLabel}] request prepared`);
+    const promptParts: LlmContentPart[] = [{ type: "text", text: promptText }];
+
+    const images: GeneratedStoryImage[] = [];
+    const imageParts = await runLlmImageCall({
+      progress: adapter,
+      modelId: IMAGE_MODEL_ID,
+      parts: promptParts,
+      imageAspectRatio: "16:9",
+      debug: options?.debugRootDir
+        ? {
+            rootDir: options.debugRootDir,
+            stage: "image-sets",
+            subStage: imageSetLabel,
+          }
+        : undefined,
+    });
+
+    const assignmentOrder = [...entries].sort((a, b) => a.index - b.index);
+    let assignCursor = 0;
+    for (const inlineImage of imageParts) {
+      const target = assignmentOrder[assignCursor] ?? assignmentOrder.at(-1);
+      if (target) {
+        images.push({
+          index: target.index,
+          mimeType: inlineImage.mimeType ?? "image/png",
+          data: inlineImage.data,
+        });
+        adapter.log(
+          `[story/image-sets/${imageSetLabel}] received image ${target.index} (${inlineImage.data.length} bytes)`
+        );
+        assignCursor += 1;
+      }
+    }
+
+    return {
+      imageSetLabel,
+      modelVersion: IMAGE_MODEL_ID,
+      images,
+    };
+  };
+
+  return Promise.all([runImageSet("set_a"), runImageSet("set_b")]);
+}
+
+export async function judgeImageSets(
+  imageSets: readonly StoryImageSet[],
+  segmentation: StorySegmentation,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string }
 ): Promise<{
+  winningImageSetLabel: "set_a" | "set_b";
   response: ImageSetJudgeResponse;
   rawText: string;
   modelVersion: string;
   requestParts: LlmContentPart[];
   thoughts?: string[];
 }> {
+  const adapter = useProgress(progress);
+  const { promptsByIndex } = collectSegmentationImageContext(segmentation);
+  const setA = imageSets.find(
+    (set) => set.imageSetLabel === "set_a"
+  );
+  const setB = imageSets.find(
+    (set) => set.imageSetLabel === "set_b"
+  );
+  if (!setA || !setB) {
+    throw new Error("Both set_a and set_b must be provided for judging");
+  }
+
   const headerLines: string[] = [
     "You are the image quality judge for illustrated historical stories.",
     "Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a \"the end\" card, and a poster.",
@@ -625,8 +821,8 @@ async function judgeImageSets(
   ];
 
   const parts: LlmContentPart[] = [{ type: "text", text: headerLines.join("\n") }];
-  const addSet = (set: ImageSetRunResult) => {
-    const name = set.label === "set_a" ? "Set A" : "Set B";
+  const addSet = (set: StoryImageSet) => {
+    const name = set.imageSetLabel === "set_a" ? "Set A" : "Set B";
     parts.push({ type: "text", text: `${name} illustrations follow.` });
     const sorted = [...set.images].sort((a, b) => a.index - b.index);
     for (const image of sorted) {
@@ -646,10 +842,7 @@ async function judgeImageSets(
     text: 'Compare Set A and Set B. Return strict JSON: { reasoning: string, verdict: "set_a" | "set_b" }. Provide the reasoning first, then the verdict. Respond with JSON only.',
   });
 
-  const sanitisedRequest = parts.map((p) => sanitisePartForLogging(p));
-  adapter.log(
-    `[images/judge] set comparison request prepared with ${sanitisedRequest.length} part(s)`
-  );
+  adapter.log(`[story/images-judge] set comparison request prepared`);
 
   const response = await runLlmJsonCall<ImageSetJudgeResponse>({
     progress: adapter,
@@ -658,13 +851,14 @@ async function judgeImageSets(
     responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
     maxAttempts: 1,
-    debug: debugRootDir
-      ? { rootDir: debugRootDir, stage: "images", subStage: "judge" }
+    debug: options?.debugRootDir
+      ? { rootDir: options.debugRootDir, stage: "images-judge" }
       : undefined,
   });
   const serialised = JSON.stringify(response, null, 2);
-  adapter.log(`[images/judge] parsed response: ${serialised}`);
+  adapter.log(`[story/images-judge] parsed response: ${serialised}`);
   return {
+    winningImageSetLabel: response.verdict,
     response,
     rawText: serialised,
     modelVersion: TEXT_MODEL_ID,
@@ -683,131 +877,20 @@ export async function generateStoryImages(
     "[story] generating 12 images via dual-set comparison workflow"
   );
 
-  const posterPrompt = segmentation.posterPrompt.trim();
-  const endingPrompt = segmentation.endingPrompt.trim();
-  if (!posterPrompt) {
-    throw new Error("Segmentation did not include a posterPrompt");
-  }
-  if (!endingPrompt) {
-    throw new Error("Segmentation did not include an endingPrompt");
-  }
-
-  const entries: Array<{ index: number; prompt: string }> = [];
-  const promptsByIndex = new Map<number, string>();
-
-  for (let i = 0; i < segmentation.segments.length; i++) {
-    const segment = segmentation.segments[i];
-    if (!segment) {
-      throw new Error(`Segmentation segment ${i + 1} is missing data`);
-    }
-    const segmentPrompt = segment.imagePrompt.trim();
-    if (!segmentPrompt) {
-      throw new Error(
-        `Segmentation segment ${i + 1} is missing an imagePrompt`
-      );
-    }
-    const index = i + 1; // 1..10 for story panels
-    entries.push({ index, prompt: segmentPrompt });
-    promptsByIndex.set(index, segmentPrompt);
-  }
-
-  const endingIndex = segmentation.segments.length + 1; // 11
-  entries.push({ index: endingIndex, prompt: endingPrompt });
-  promptsByIndex.set(endingIndex, endingPrompt);
-
-  const posterIndex = segmentation.segments.length + 2; // 12
-  entries.push({ index: posterIndex, prompt: posterPrompt });
-  promptsByIndex.set(posterIndex, posterPrompt);
-
+  const { entries, promptsByIndex } =
+    collectSegmentationImageContext(segmentation);
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
 
-  const buildSetPrompt = (): LlmContentPart[] => {
-    const parts: LlmContentPart[] = [];
-    const headerLines: string[] = [
-      "Please make a total of 12 images:",
-      "- 1-10 story images",
-      '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
-      '- the "movie poster" image for the whole story (hook)',
-      "Make high quality, high positivity cartoon style.",
-      "",
-      "Follow the style:",
-      ...styleLines,
-      "",
-      "Image descriptions:",
-    ];
-    parts.push({ type: "text", text: headerLines.join("\n") });
-    for (const { index, prompt } of entries) {
-      let label = `Image ${index}`;
-      if (index === endingIndex) {
-        label = `Image ${index} (the end)`;
-      } else if (index === posterIndex) {
-        label = `Image ${index} (poster)`;
-      }
-      parts.push({ type: "text", text: `${label}: ${prompt}` });
-    }
-    return parts;
-  };
-
-  const runImageSet = async (
-    label: "set_a" | "set_b"
-  ): Promise<ImageSetRunResult> => {
-    const promptParts = buildSetPrompt();
-    const sanitisedRequest = promptParts.map((part) => sanitisePartForLogging(part));
-    adapter.log(
-      `[story/images/${label}] request prepared with ${sanitisedRequest.length} part(s)`
-    );
-
-    const images: GeneratedStoryImage[] = [];
-    const imageParts = await runLlmImageCall({
-      progress: adapter,
-      modelId: IMAGE_MODEL_ID,
-      parts: promptParts,
-      imageAspectRatio: "16:9",
-      debug: options?.debugRootDir
-        ? { rootDir: options.debugRootDir, stage: "images", subStage: label }
-        : undefined,
-    });
-
-    const assignmentOrder = [...entries].sort((a, b) => a.index - b.index);
-    let assignCursor = 0;
-    for (const inlineImage of imageParts) {
-      const target = assignmentOrder[assignCursor] ?? assignmentOrder.at(-1);
-      if (target) {
-        images.push({
-          index: target.index,
-          mimeType: inlineImage.mimeType ?? "image/png",
-          data: inlineImage.data,
-        });
-        adapter.log(
-          `[story/images/${label}] received image ${target.index} (${inlineImage.data.length} bytes)`
-        );
-        assignCursor += 1;
-      }
-    }
-
-    return {
-      label,
-      promptParts,
-      modelVersion: IMAGE_MODEL_ID,
-      aggregatedText: "",
-      images,
-    };
-  };
-
-  const [setA, setB] = await Promise.all([
-    runImageSet("set_a"),
-    runImageSet("set_b"),
-  ]);
-
-  const judge = await judgeImageSets(
-    setA,
-    setB,
-    promptsByIndex,
-    adapter,
-    options?.debugRootDir
+  const imageSets = await generateImageSets(segmentation, adapter, options);
+  const judge = await judgeImageSets(imageSets, segmentation, adapter, options);
+  const winner = imageSets.find(
+    (set) => set.imageSetLabel === judge.winningImageSetLabel
   );
-  const selected = judge.response.verdict;
-  const winner = selected === "set_a" ? setA : setB;
+  if (!winner) {
+    throw new Error(
+      `Winning image set ${judge.winningImageSetLabel} not found in generated sets`
+    );
+  }
 
   const snapshotLines: string[] = ["Style Requirements:", ...styleLines, ""];
   const maxIndex = Math.max(...entries.map((e) => e.index));
@@ -817,31 +900,19 @@ export async function generateStoryImages(
 
   const artifacts: StoryImagesArtifacts = {
     style: styleLines,
-    sets: [
-      {
-        label: setA.label,
-        promptParts: setA.promptParts,
-        modelVersion: setA.modelVersion,
-        aggregatedText: setA.aggregatedText,
-        imageCount: setA.images.length,
-      },
-      {
-        label: setB.label,
-        promptParts: setB.promptParts,
-        modelVersion: setB.modelVersion,
-        aggregatedText: setB.aggregatedText,
-        imageCount: setB.images.length,
-      },
-    ],
+    sets: imageSets.map((set) => ({
+      imageSetLabel: set.imageSetLabel,
+      modelVersion: set.modelVersion,
+      imageCount: set.images.length,
+    })),
     judge: {
       requestPartsCount: judge.requestParts.length,
-      requestPartsSanitised: judge.requestParts.map((p) => sanitisePartForLogging(p)),
       responseText: judge.rawText,
       responseJson: judge.response,
       modelVersion: judge.modelVersion,
       thoughts: judge.thoughts,
     },
-    selectedSet: selected,
+    selectedSet: judge.winningImageSetLabel,
   };
 
   return {
