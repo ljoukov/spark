@@ -127,7 +127,6 @@ const data = await runLlmJsonCall({
   parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
   responseSchema,
   schema,
-  maxAttempts: 2,
   debug: { rootDir: "/tmp/llm-debug", stage: "json-task" },
 });
 ```

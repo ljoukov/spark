@@ -358,7 +358,6 @@ export async function generateProseStory(
   return { text };
 }
 
-const SEGMENTATION_GENERATION_ATTEMPTS = 3;
 const SEGMENTATION_CORRECTION_ATTEMPTS = 3;
 
 function buildSegmentationCorrectorPrompt(
@@ -465,37 +464,25 @@ export async function generateStorySegmentation(
   const prompt = buildSegmentationPrompt(storyText);
   const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
 
-  for (let attempt = 1; attempt <= SEGMENTATION_GENERATION_ATTEMPTS; attempt += 1) {
-    try {
-      const segmentation = await runLlmJsonCall<StorySegmentation>({
-        progress: adapter,
-        modelId: TEXT_MODEL_ID,
-        parts,
-        responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
-        schema: StorySegmentationSchema,
-        maxAttempts: 2,
-        debug: options?.debugRootDir
-          ? { rootDir: options.debugRootDir, stage: "segmentation", attempt }
-          : undefined,
-      });
-      adapter.log(`[story/segments] attempt ${attempt} parsed successfully`);
-      return segmentation;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (attempt >= SEGMENTATION_GENERATION_ATTEMPTS) {
-        throw new SegmentationValidationError(
-          `Gemini segmentation did not produce valid JSON after ${SEGMENTATION_GENERATION_ATTEMPTS} attempt(s): ${message}`
-        );
-      }
-      adapter.log(
-        `[story/segments] attempt ${attempt} failed (${message}); retrying...`
-      );
-    }
+  try {
+    const segmentation = await runLlmJsonCall<StorySegmentation>({
+      progress: adapter,
+      modelId: TEXT_MODEL_ID,
+      parts,
+      responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
+      schema: StorySegmentationSchema,
+      debug: options?.debugRootDir
+        ? { rootDir: options.debugRootDir, stage: "segmentation" }
+        : undefined,
+    });
+    adapter.log("[story/segments] parsed successfully");
+    return segmentation;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SegmentationValidationError(
+      `Gemini segmentation did not produce valid JSON: ${message}`
+    );
   }
-
-  throw new SegmentationValidationError(
-    "Gemini segmentation attempts exhausted unexpectedly"
-  );
 }
 
 export async function correctStorySegmentation(
@@ -523,7 +510,6 @@ export async function correctStorySegmentation(
         parts: [{ type: "text", text: reviewPrompt }],
         responseSchema: SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA,
         schema: SegmentationCorrectorResponseSchema,
-        maxAttempts: 2,
         debug: options?.debugRootDir
           ? {
               rootDir: options.debugRootDir,
