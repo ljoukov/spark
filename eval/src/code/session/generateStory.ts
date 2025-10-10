@@ -651,17 +651,39 @@ export async function generateImageSets(
   const { entries, endingIndex, posterIndex } =
     collectSegmentationImageContext(segmentation);
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
+  const posterEntry = entries.find((entry) => entry.index === posterIndex);
+  const endingEntry = entries.find((entry) => entry.index === endingIndex);
+  if (!posterEntry) {
+    throw new Error(
+      `Segmentation image context is missing the poster entry (index ${posterIndex})`
+    );
+  }
+  if (!endingEntry) {
+    throw new Error(
+      `Segmentation image context is missing the ending entry (index ${endingIndex})`
+    );
+  }
+  const panelEntries = entries
+    .filter(
+      (entry) => entry.index !== posterIndex && entry.index !== endingIndex
+    )
+    .sort((a, b) => a.index - b.index);
 
   const runImageSet = async (
     imageSetLabel: "set_a" | "set_b"
   ): Promise<StoryImageSet> => {
     adapter.log(`[story/image-sets/${imageSetLabel}] request prepared`);
-    const imagePrompts = entries.map(({ index, prompt }) => {
-      if (index === endingIndex) {
-        return `The end card: ${prompt}`;
-      }
+    const requestEntries: SegmentationImageEntry[] = [
+      posterEntry,
+      ...panelEntries,
+      endingEntry,
+    ];
+    const imagePrompts = requestEntries.map(({ index, prompt }) => {
       if (index === posterIndex) {
         return `Poster illustration: ${prompt}`;
+      }
+      if (index === endingIndex) {
+        return `The end card: ${prompt}`;
       }
       return prompt;
     });
@@ -682,10 +704,10 @@ export async function generateImageSets(
         : undefined,
     });
 
-    const assignmentOrder = [...entries].sort((a, b) => a.index - b.index);
     let assignCursor = 0;
     for (const inlineImage of imageParts) {
-      const target = assignmentOrder[assignCursor] ?? assignmentOrder.at(-1);
+      const target =
+        requestEntries[assignCursor] ?? requestEntries.at(-1);
       if (target) {
         images.push({
           index: target.index,
