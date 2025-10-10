@@ -332,6 +332,7 @@ export function buildSegmentationPrompt(storyText: string): string {
     "5. Keep each `imagePrompt` drawable as a single vintage cartoon panel: emphasise one main action, at most two characters, simple props, and broad composition notes. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.",
     '6. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
     "7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.",
+    "8. No formulas or diagrams or tables are requested",
     "",
     "================ Story to segment ================",
     storyText,
@@ -384,6 +385,8 @@ function buildSegmentationCorrectorPrompt(
     "- Each prompt grounds the scene in time and place (decade, location, or workplace details).",
     "- One clear action, at most two characters, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
     '- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
+    "- Characters are not expected to hold a paper, book or poster",
+    "- No formulas or diagrams or tables are requested",
     "- Poster (index 11) reads like a high-impact cover: stunning, captivating, interesting, and intriguing. It explicitly mentions the protagonist by name (or a concise moniker) while keeping any visible text within four words.",
     "",
     "===== Segmentation generation brief =====",
@@ -649,42 +652,25 @@ export async function generateImageSets(
     collectSegmentationImageContext(segmentation);
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
 
-  const buildSetPrompt = (): string => {
-    const headerLines: string[] = [
-      "Please make a total of 12 images:",
-      "",
-      "Follow the style:",
-      ...styleLines,
-      "",
-      "Image descriptions:",
-    ];
-    const lines = [...headerLines];
-    for (const { index, prompt } of entries) {
-      let label = `Image ${index}`;
-      if (index === endingIndex) {
-        label = `Image ${index} (the end)`;
-      } else if (index === posterIndex) {
-        label = `Image ${index} (poster)`;
-      }
-      lines.push(`\n${label}: ${prompt}`);
-    }
-    return lines.join("\n");
-  };
-
-  const promptText = buildSetPrompt();
-
   const runImageSet = async (
     imageSetLabel: "set_a" | "set_b"
   ): Promise<StoryImageSet> => {
     adapter.log(`[story/image-sets/${imageSetLabel}] request prepared`);
-    const promptParts: LlmContentPart[] = [{ type: "text", text: promptText }];
-
+    const imagePrompts = entries.map(({ index, prompt }) => {
+      if (index === endingIndex) {
+        return `The end card: ${prompt}`;
+      }
+      if (index === posterIndex) {
+        return `Poster illustration: ${prompt}`;
+      }
+      return prompt;
+    });
     const images: GeneratedStoryImage[] = [];
     const imageParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
-      parts: promptParts,
-      numImages: entries.length,
+      stylePrompt: styleLines,
+      imagePrompts,
       maxAttempts: 4,
       imageAspectRatio: "16:9",
       debug: options?.debugRootDir

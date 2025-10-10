@@ -15,7 +15,7 @@ It is used across eval tools and session generators.
 - `runLlmImageCall(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
   - Streams images (and optional text) and returns image buffers.
 - `generateImages(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
-  - Attempts to produce `numImages` images in as few calls as possible, retrying once with the model’s previous response if fewer than expected were returned.
+  - Attempts to produce one image per entry in `imagePrompts`, defaulting to four attempts and re-prompting with the remaining prompts plus the expected output format when needed.
 - `runLlmJsonCall<T>(options): Promise<T>`
   - Like `runLlmTextCall` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
 
@@ -23,7 +23,7 @@ It is used across eval tools and session generators.
 
 All calls accept:
 - `modelId`: text model (Gemini) or image model (`gemini-2.5-flash-image`).
-- `parts`: array of content parts (most calls only need this):
+- `parts`: array of content parts (used by `runLlmTextCall` and `runLlmImageCall`):
   - `{ type: 'text', text: string }`
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
 - `contents?`: advanced override to send a multi-turn Gemini `Content[]` conversation (each entry `{ role, parts }`). When provided, `parts` may be omitted.
@@ -149,11 +149,24 @@ const images = await runLlmImageCall({
   debug: { rootDir: "/tmp/llm-debug", stage: "poster" },
 });
 
+`generateImages` composes its own request prompt. Supply:
+- `stylePrompt`: ordered list of strings describing the shared art direction.
+- `imagePrompts`: ordered list of per-image descriptions; the function expects to return one image per entry, in order.
+- `maxAttempts?`: defaults to `4`. Retries remind the model of the remaining indices, prompts, and the required output format.
+
 const reliableImages = await generateImages({
   modelId: "gemini-2.5-flash-image",
-  parts: [{ type: "text", text: "Produce four stylised avatars in a consistent art style." }],
-  numImages: 4,
-  maxAttempts: 2,
+  stylePrompt: [
+    "Bold, colourful flat design avatars with clear lighting and clean shapes.",
+    "Keep poses dynamic but readable; maintain consistent proportions across characters.",
+  ],
+  imagePrompts: [
+    "A cheerful robotics engineer adjusting a small drone on a workbench.",
+    "A confident data scientist presenting charts on a holographic display.",
+    "An adventurous explorer holding a compass at the edge of a jungle.",
+    "A friendly teacher welcoming students into a bright classroom.",
+  ],
+  maxAttempts: 4,
   debug: { rootDir: "/tmp/llm-debug", stage: "avatars" },
 });
 ```

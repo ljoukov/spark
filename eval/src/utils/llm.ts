@@ -706,7 +706,6 @@ async function runLlmStream({
       });
       let lastLog = startedAt;
       for await (const chunk of stream) {
-        const chunkOrdinal = chunkIndex + 1;
         if (chunk.modelVersion) {
           resolvedModelVersion = chunk.modelVersion;
         }
@@ -924,33 +923,116 @@ export async function runLlmImageCall(
   return images;
 }
 
-export type GenerateImagesOptions = LlmImageCallOptions & {
-  readonly numImages: number;
+export type GenerateImagesOptions = Omit<LlmImageCallOptions, "parts"> & {
+  readonly stylePrompt: readonly string[];
+  readonly imagePrompts: readonly string[];
   readonly maxAttempts?: number;
 };
 
 export async function generateImages(
   options: GenerateImagesOptions
 ): Promise<LlmImagePart[]> {
-  const { numImages, maxAttempts = 2, ...rest } = options;
-  if (!Number.isFinite(numImages) || numImages <= 0) {
-    return [];
-  }
-  if (!rest.parts || rest.parts.length === 0) {
-    throw new Error("generateImages requires at least one prompt part");
-  }
-  if (rest.contents && rest.contents.length > 0) {
-    throw new Error("generateImages does not support pre-seeded contents");
-  }
-
   const {
-    parts: promptParts,
+    stylePrompt,
+    imagePrompts,
+    maxAttempts = 4,
+    contents,
     progress,
     modelId,
     debug,
     responseModalities,
     imageAspectRatio,
-  } = rest;
+  } = options;
+
+  if (contents && contents.length > 0) {
+    throw new Error("generateImages does not support pre-seeded contents");
+  }
+
+  const styleLines = Array.from(stylePrompt);
+  const cleanedStyle = styleLines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  type PromptEntry = { index: number; prompt: string };
+  const promptList = Array.from(imagePrompts);
+  const promptEntries: PromptEntry[] = promptList.map(
+    (rawPrompt, arrayIndex) => {
+      const trimmedPrompt = rawPrompt.trim();
+      if (!trimmedPrompt) {
+        throw new Error(
+          `imagePrompts[${arrayIndex}] must be a non-empty string`
+        );
+      }
+      return {
+        index: arrayIndex + 1,
+        prompt: trimmedPrompt,
+      };
+    }
+  );
+
+  const numImages = promptEntries.length;
+  if (numImages <= 0) {
+    return [];
+  }
+
+  const entryByIndex = new Map<number, PromptEntry>();
+  for (const entry of promptEntries) {
+    entryByIndex.set(entry.index, entry);
+  }
+
+  const buildOutputFormatLines = (entries: PromptEntry[]): string[] => {
+    const formatLines: string[] = [];
+    for (const entry of entries) {
+      formatLines.push(
+        `${entry.index}. <repeat prompt for image ${entry.index}>`
+      );
+      formatLines.push("<image>");
+    }
+    return formatLines;
+  };
+
+  const buildInitialPrompt = (): string => {
+    const headerLines: string[] = [
+      `Please make a total of ${numImages} images:`,
+      "",
+      "Follow the style:",
+      ...cleanedStyle,
+      "",
+      "Image descriptions:",
+    ];
+    const lines = [...headerLines];
+    for (const entry of promptEntries) {
+      lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
+    }
+    lines.push("");
+    lines.push("Output format:");
+    lines.push(...buildOutputFormatLines(promptEntries));
+    return lines.join("\n");
+  };
+
+  const buildContinuationPrompt = (pending: PromptEntry[]): string => {
+    const pendingIds = pending.map((entry) => entry.index).join(", ");
+    const lines: string[] = [
+      `Please continue generating the remaining images: ${pendingIds}.`,
+    ];
+    if (cleanedStyle.length > 0) {
+      lines.push("");
+      lines.push("Follow the style:");
+      lines.push(...cleanedStyle);
+    }
+    lines.push("");
+    lines.push("Image descriptions:");
+    for (const entry of pending) {
+      lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
+    }
+    lines.push("");
+    lines.push("Output format:");
+    lines.push(...buildOutputFormatLines(pending));
+    return lines.join("\n");
+  };
+
+  const generationPrompt = buildInitialPrompt();
+  const promptParts: LlmContentPart[] = [{ type: "text", text: generationPrompt }];
 
   const resolvedResponseModalities =
     responseModalities && responseModalities.length > 0
@@ -973,6 +1055,8 @@ export async function generateImages(
   const collectedImages: LlmImagePart[] = [];
   let pendingContents: Content[] | undefined;
   let historyContent: Content | undefined;
+
+  const totalAttempts = Math.max(1, maxAttempts);
 
   const runImageAttempt = async (
     attempt: number,
@@ -1037,7 +1121,7 @@ export async function generateImages(
     };
   };
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
     const attemptResult = await runImageAttempt(attempt, pendingContents);
     let attemptImages = attemptResult.images;
     const candidate = attemptResult.lastCandidates?.[0];
@@ -1056,7 +1140,7 @@ export async function generateImages(
     if (generatedSoFar >= numImages) {
       break;
     }
-    if (attempt === maxAttempts) {
+    if (attempt === totalAttempts) {
       break;
     }
     // Build continuation content from all images produced in this attempt.
@@ -1107,15 +1191,23 @@ export async function generateImages(
       break;
     }
 
-    const instruction = `Please continue generating images ${pendingIndices.join(", ")}.`;
-    pendingContents = [
-      promptContent,
-      historyContent,
-      {
-        role: "user",
-        parts: [{ text: instruction }],
-      },
-    ];
+    const pendingEntries = pendingIndices
+      .map((index) => entryByIndex.get(index))
+      .filter((entry): entry is PromptEntry => Boolean(entry));
+    if (pendingEntries.length === 0) {
+      break;
+    }
+
+    const instruction = buildContinuationPrompt(pendingEntries);
+    const continuation: Content[] = [promptContent];
+    if (historyContent) {
+      continuation.push(historyContent);
+    }
+    continuation.push({
+      role: "user",
+      parts: [{ text: instruction }],
+    });
+    pendingContents = continuation;
   }
 
   return collectedImages.slice(0, numImages);
