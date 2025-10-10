@@ -131,12 +131,7 @@ const ImageSetsCheckpointSchema = z.object({
 type ImageSetsCheckpoint = z.infer<typeof ImageSetsCheckpointSchema>;
 
 const ImageJudgeCheckpointSchema = z.object({
-  modelVersion: z.string().trim().min(1),
   selectedSet: z.enum(["set_a", "set_b"]),
-  response: z.object({
-    reasoning: z.string().trim().min(1),
-    verdict: z.enum(["set_a", "set_b"]),
-  }),
 });
 
 type ImageJudgeCheckpoint = z.infer<typeof ImageJudgeCheckpointSchema>;
@@ -473,9 +468,7 @@ async function main(): Promise<void> {
               debugRootDir,
             });
             const judgeCheckpoint: ImageJudgeCheckpoint = {
-              modelVersion: judgement.modelVersion,
               selectedSet: judgement.winningImageSetLabel,
-              response: judgement.response,
             };
             ImageJudgeCheckpointSchema.parse(judgeCheckpoint);
             const saved = await writeCheckpoint(outDir, "images-judge", judgeCheckpoint);

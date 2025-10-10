@@ -162,7 +162,6 @@ export type StoryImagesResult = {
 
 export type StoryImageSet = {
   imageSetLabel: "set_a" | "set_b";
-  modelVersion: string;
   images: GeneratedStoryImage[];
 };
 
@@ -174,7 +173,6 @@ export const SerialisedStoryImageSchema = z.object({
 
 export const SerialisedStoryImageSetSchema = z.object({
   imageSetLabel: z.enum(["set_a", "set_b"]),
-  modelVersion: z.string().trim().min(1),
   images: z.array(SerialisedStoryImageSchema).min(1),
 });
 
@@ -188,7 +186,6 @@ export function serialiseStoryImageSets(
 ): SerialisedStoryImageSet[] {
   return imageSets.map((set) => ({
     imageSetLabel: set.imageSetLabel,
-    modelVersion: set.modelVersion,
     images: set.images.map((image) => ({
       index: image.index,
       mimeType: image.mimeType,
@@ -202,7 +199,6 @@ export function deserialiseStoryImageSets(
 ): StoryImageSet[] {
   return serialised.map((set) => ({
     imageSetLabel: set.imageSetLabel,
-    modelVersion: set.modelVersion,
     images: set.images.map((image) => ({
       index: image.index,
       mimeType: image.mimeType,
@@ -682,25 +678,6 @@ function collectSegmentationImageContext(
   };
 }
 
-type ImageSetArtifact = {
-  imageSetLabel: "set_a" | "set_b";
-  modelVersion: string;
-  imageCount: number;
-};
-
-export type StoryImagesArtifacts = {
-  style: readonly string[];
-  sets: ImageSetArtifact[];
-  judge?: {
-    requestPartsCount: number;
-    responseText: string;
-    responseJson: ImageSetJudgeResponse;
-    modelVersion: string;
-    thoughts?: string[];
-  };
-  selectedSet: "set_a" | "set_b";
-};
-
 export async function generateImageSets(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
@@ -779,7 +756,6 @@ export async function generateImageSets(
 
     return {
       imageSetLabel,
-      modelVersion: IMAGE_MODEL_ID,
       images,
     };
   };
@@ -794,11 +770,6 @@ export async function judgeImageSets(
   options?: { debugRootDir?: string }
 ): Promise<{
   winningImageSetLabel: "set_a" | "set_b";
-  response: ImageSetJudgeResponse;
-  rawText: string;
-  modelVersion: string;
-  requestParts: LlmContentPart[];
-  thoughts?: string[];
 }> {
   const adapter = useProgress(progress);
   const { promptsByIndex } = collectSegmentationImageContext(segmentation);
@@ -859,11 +830,6 @@ export async function judgeImageSets(
   adapter.log(`[story/images-judge] parsed response: ${serialised}`);
   return {
     winningImageSetLabel: response.verdict,
-    response,
-    rawText: serialised,
-    modelVersion: TEXT_MODEL_ID,
-    requestParts: parts,
-    thoughts: undefined,
   };
 }
 
@@ -871,7 +837,7 @@ export async function generateStoryImages(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
   options?: { debugRootDir?: string }
-): Promise<StoryImagesResult & { artifacts?: StoryImagesArtifacts }> {
+): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
   adapter.log(
     "[story] generating 12 images via dual-set comparison workflow"
@@ -898,29 +864,11 @@ export async function generateStoryImages(
     snapshotLines.push(`Image ${i}: ${promptsByIndex.get(i)}`);
   }
 
-  const artifacts: StoryImagesArtifacts = {
-    style: styleLines,
-    sets: imageSets.map((set) => ({
-      imageSetLabel: set.imageSetLabel,
-      modelVersion: set.modelVersion,
-      imageCount: set.images.length,
-    })),
-    judge: {
-      requestPartsCount: judge.requestParts.length,
-      responseText: judge.rawText,
-      responseJson: judge.response,
-      modelVersion: judge.modelVersion,
-      thoughts: judge.thoughts,
-    },
-    selectedSet: judge.winningImageSetLabel,
-  };
-
   return {
     images: winner.images.sort((a, b) => a.index - b.index),
     prompt: snapshotLines.join("\n"),
-    modelVersion: winner.modelVersion,
+    modelVersion: IMAGE_MODEL_ID,
     captions: undefined,
-    artifacts,
   };
 }
 
