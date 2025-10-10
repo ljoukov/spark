@@ -730,6 +730,7 @@ export async function judgeImageSets(
     "Evaluate which set better satisfies the prompts and style requirements.",
     "Criteria: prompt fidelity, clear single action, grounded historical setting, readable composition, and accurate vintage cartoon style (ink outlines, muted palette, subtle paper texture).",
     "If any writing appears, ensure it is four words or fewer, spelled correctly, and period-appropriate.",
+    "Make sure that the images do not carry wrong meaning, e.g. the poster should NOT say 'The End' and similar obviously wrong artefacts.",
   ];
 
   const parts: LlmContentPart[] = [
