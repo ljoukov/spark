@@ -4,12 +4,14 @@ import path from "node:path";
 
 // NOTE: Keep eval/src/utils/LLM.md in sync with any API changes to this file.
 // The markdown doc explains the public wrapper API and debug snapshot layout.
-import type {
-  Content,
-  GenerateContentResponse,
-  Part,
-  Schema,
-  Tool,
+import {
+  FinishReason,
+  type Candidate,
+  type Content,
+  type GenerateContentResponse,
+  type Part,
+  type Schema,
+  type Tool,
 } from "@google/genai";
 import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
 import { z } from "zod";
@@ -111,6 +113,87 @@ function estimateContentsUploadBytes(contents: readonly Content[]): number {
   }, 0);
 }
 
+function cloneContent(content: Content): Content {
+  const cloned: Content = {
+    ...content,
+  };
+  if (Array.isArray(content.parts)) {
+    cloned.parts = content.parts.map((part) => {
+      const clonedPart: Part = { ...part };
+      if (part.inlineData) {
+        clonedPart.inlineData = { ...part.inlineData };
+      }
+      if (part.fileData) {
+        clonedPart.fileData = { ...part.fileData };
+      }
+      if (part.functionCall) {
+        clonedPart.functionCall = { ...part.functionCall };
+      }
+      if (part.functionResponse) {
+        clonedPart.functionResponse = { ...part.functionResponse };
+      }
+      return clonedPart;
+    });
+  }
+  return cloned;
+}
+
+const MODERATION_FINISH_REASONS = new Set<FinishReason>([
+  FinishReason.SAFETY,
+  FinishReason.BLOCKLIST,
+  FinishReason.PROHIBITED_CONTENT,
+  FinishReason.SPII,
+]);
+
+function isModerationFinish(reason: FinishReason | undefined): boolean {
+  if (!reason) {
+    return false;
+  }
+  return MODERATION_FINISH_REASONS.has(reason);
+}
+
+function findLastInlineDataIndex(parts: readonly Part[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const inlineData = parts[index].inlineData?.data;
+    if (typeof inlineData === "string" && inlineData.length > 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function trimPartsForContinuation(
+  parts: Part[],
+  moderationFailure: boolean,
+): void {
+  if (parts.length === 0) {
+    return;
+  }
+  const lastImageIndex = findLastInlineDataIndex(parts);
+  if (lastImageIndex === -1) {
+    if (moderationFailure) {
+      parts.length = 0;
+    }
+    return;
+  }
+  if (moderationFailure) {
+    parts.splice(lastImageIndex, 1);
+    const precedingIndex = lastImageIndex - 1;
+    if (
+      precedingIndex >= 0 &&
+      typeof parts[precedingIndex].text === "string"
+    ) {
+      parts.splice(precedingIndex, 1);
+    }
+  }
+  const trimmedLastImageIndex = findLastInlineDataIndex(parts);
+  for (let index = parts.length - 1; index > trimmedLastImageIndex; index -= 1) {
+    if (typeof parts[index].text === "string") {
+      parts.splice(index, 1);
+    }
+  }
+}
+
 function estimateInlineBytes(data: string): number {
   try {
     return Buffer.from(data, "base64").byteLength;
@@ -186,11 +269,13 @@ export function convertGooglePartsToLlmParts(
 type LlmCallBaseOptions = {
   readonly progress?: JobProgressReporter;
   readonly modelId: LlmModelId;
-  readonly parts: readonly LlmContentPart[];
+  readonly parts?: readonly LlmContentPart[];
+  readonly contents?: readonly Content[];
   readonly debug?: LlmDebugOptions;
 };
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
+  readonly parts: readonly LlmContentPart[];
   readonly responseMimeType?: string;
   readonly responseSchema?: Schema;
   readonly tools?: readonly LlmToolConfig[];
@@ -202,6 +287,7 @@ export type LlmImagePart = {
 };
 
 export type LlmImageCallOptions = LlmCallBaseOptions & {
+  readonly parts: readonly LlmContentPart[];
   readonly responseModalities?: readonly string[];
   readonly imageAspectRatio?: string;
 };
@@ -279,35 +365,49 @@ function resolveDebugDir(
   return path.join(...segments);
 }
 
-function formatPartsForSnapshot(parts: readonly LlmContentPart[]): string {
+function formatContentsForSnapshot(contents: readonly Content[]): string {
   const lines: string[] = [];
-  parts.forEach((part, index) => {
-    const header = `Part ${index + 1}`;
-    switch (part.type) {
-      case "text":
-        lines.push(`${header} (text):`);
-        lines.push(part.text);
-        break;
-      case "inlineData": {
-        const bytes = estimateInlineBytes(part.data);
-        lines.push(
-          `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`,
-        );
-        break;
-      }
-      default:
-        lines.push(`${header}: [unknown part]`);
+  contents.forEach((content, contentIndex) => {
+    const role = content.role ?? "unspecified";
+    lines.push(`=== Message ${contentIndex + 1} (${role}) ===`);
+    const parts = content.parts ?? [];
+    if (parts.length === 0) {
+      lines.push("(no parts)", "");
+      return;
     }
-    lines.push("");
+    const llmParts = convertGooglePartsToLlmParts(parts);
+    if (llmParts.length === 0) {
+      lines.push("(no serialisable parts)", "");
+      return;
+    }
+    llmParts.forEach((part, partIndex) => {
+      const header = `Part ${partIndex + 1}`;
+      switch (part.type) {
+        case "text":
+          lines.push(`${header} (text):`);
+          lines.push(part.text);
+          break;
+        case "inlineData": {
+          const bytes = estimateInlineBytes(part.data);
+          lines.push(
+            `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`,
+          );
+          break;
+        }
+        default:
+          lines.push(`${header}: [unknown part]`);
+      }
+      lines.push("");
+    });
   });
   return lines.join("\n");
 }
 
 async function writePromptSnapshot(
   pathname: string,
-  parts: readonly LlmContentPart[],
+  contents: readonly Content[],
 ): Promise<void> {
-  const snapshot = formatPartsForSnapshot(parts);
+  const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
 }
 
@@ -340,6 +440,51 @@ async function writeTextResponseSnapshot({
   }
   await mkdir(path.dirname(pathname), { recursive: true });
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
+}
+
+async function writeImageDebugArtifacts({
+  stage,
+  modelVersion,
+  elapsedMs,
+  charCount,
+  chunkLog,
+  thoughts,
+  text,
+  images,
+}: {
+  stage: LlmCallStage;
+  modelVersion: string;
+  elapsedMs: number;
+  charCount: number;
+  chunkLog: string[];
+  thoughts: string[];
+  text: string;
+  images: readonly LlmImagePart[];
+}): Promise<void> {
+  const { debugDir } = stage;
+  if (!debugDir) {
+    return;
+  }
+  const responsePath = path.join(debugDir, "response.txt");
+  await writeTextResponseSnapshot({
+    pathname: responsePath,
+    summary: [
+      `Model: ${modelVersion}`,
+      `Elapsed: ${formatMillis(elapsedMs)}`,
+      `Characters: ${formatInteger(charCount)}`,
+      `Images: ${images.length}`,
+    ],
+    thoughts,
+    text,
+    chunkLog,
+  });
+  await Promise.all(
+    images.map(async (image, index) => {
+      const extension = image.mimeType?.split("/")[1] ?? "bin";
+      const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
+      await writeFile(path.join(debugDir, filename), image.data);
+    }),
+  );
 }
 
 function buildCallStage({
@@ -385,6 +530,8 @@ async function runLlmStream({
   thoughts: string[];
   textAggregator: { value: string };
   stage: LlmCallStage;
+  lastCandidates?: Candidate[];
+  promptFeedback?: GenerateContentResponse["promptFeedback"];
 }> {
   const stage = buildCallStage({
     modelId: options.modelId,
@@ -397,12 +544,28 @@ async function runLlmStream({
     reporter.log(`[${stage.label}] ${message}`);
   };
 
-  const contents: Content[] = [
-    {
-      role: "user",
-      parts: options.parts.map(toGooglePart),
-    },
-  ];
+  if (
+    !options.contents &&
+    (!options.parts || options.parts.length === 0)
+  ) {
+    throw new Error("LLM call requires parts or contents");
+  }
+
+  const contentsSource: readonly Content[] | undefined =
+    options.contents && options.contents.length > 0
+      ? options.contents
+      : options.parts
+        ? [
+            {
+              role: "user",
+              parts: options.parts.map(toGooglePart),
+            },
+          ]
+        : undefined;
+  if (!contentsSource || contentsSource.length === 0) {
+    throw new Error("LLM call received an empty prompt");
+  }
+  const contents = contentsSource.map(cloneContent);
   const config: GeminiCallConfig = {};
   // Enable thinking only when supported. Image models (e.g. gemini-2.5-flash-image)
   // do not support thinking and will fail with INVALID_ARGUMENT if requested.
@@ -441,7 +604,7 @@ async function runLlmStream({
   await resetDebugDir(stage.debugDir);
   await ensureDebugDir(stage.debugDir);
   if (stage.debugDir) {
-    await writePromptSnapshot(path.join(stage.debugDir, "prompt.txt"), options.parts);
+    await writePromptSnapshot(path.join(stage.debugDir, "prompt.txt"), contents);
   }
 
   const uploadBytes = estimateContentsUploadBytes(contents);
@@ -458,6 +621,8 @@ async function runLlmStream({
   const thoughts: string[] = [];
   const chunkLog: string[] = [];
   const textAggregator = { value: "" };
+  let lastCandidates: Candidate[] | undefined;
+  let promptFeedback: GenerateContentResponse["promptFeedback"] | undefined;
 
   const summariseChunk = (
     data: LlmChunkData,
@@ -500,6 +665,12 @@ async function runLlmStream({
         if (chunk.modelVersion) {
           resolvedModelVersion = chunk.modelVersion;
         }
+        if (chunk.promptFeedback) {
+          promptFeedback = chunk.promptFeedback;
+        }
+        if (Array.isArray(chunk.candidates) && chunk.candidates.length > 0) {
+          lastCandidates = chunk.candidates;
+        }
         const data = extractLlmChunkData(chunk);
         const { charDelta, byteDelta } = summariseChunk(data, chunk);
         totalChars += charDelta;
@@ -535,6 +706,8 @@ async function runLlmStream({
     thoughts,
     textAggregator,
     stage,
+    lastCandidates,
+    promptFeedback,
   };
 }
 
@@ -645,32 +818,191 @@ export async function runLlmImageCall(
     },
   });
 
-  const { debugDir } = stage;
-
-  if (debugDir) {
-    const responsePath = path.join(debugDir, "response.txt");
-    await writeTextResponseSnapshot({
-      pathname: responsePath,
-      summary: [
-        `Model: ${modelVersion}`,
-        `Elapsed: ${formatMillis(elapsedMs)}`,
-        `Characters: ${formatInteger(charCount)}`,
-        `Images: ${images.length}`,
-      ],
-      thoughts,
-      text: textAggregator.value,
-      chunkLog,
-    });
-    await Promise.all(
-      images.map(async (image, index) => {
-        const extension = image.mimeType?.split("/")[1] ?? "bin";
-        const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
-        await writeFile(path.join(debugDir, filename), image.data);
-      }),
-    );
-  }
+  await writeImageDebugArtifacts({
+    stage,
+    modelVersion,
+    elapsedMs,
+    charCount,
+    chunkLog,
+    thoughts,
+    text: textAggregator.value,
+    images,
+  });
 
   return images;
+}
+
+export type GenerateImagesOptions = LlmImageCallOptions & {
+  readonly numImages: number;
+  readonly maxAttempts?: number;
+};
+
+export async function generateImages(
+  options: GenerateImagesOptions,
+): Promise<LlmImagePart[]> {
+  const { numImages, maxAttempts = 2, ...rest } = options;
+  if (!Number.isFinite(numImages) || numImages <= 0) {
+    return [];
+  }
+  if (!rest.parts || rest.parts.length === 0) {
+    throw new Error("generateImages requires at least one prompt part");
+  }
+  if (rest.contents && rest.contents.length > 0) {
+    throw new Error("generateImages does not support pre-seeded contents");
+  }
+
+  const {
+    parts: promptParts,
+    progress,
+    modelId,
+    debug,
+    responseModalities,
+    imageAspectRatio,
+  } = rest;
+
+  const resolvedResponseModalities =
+    responseModalities && responseModalities.length > 0
+      ? responseModalities
+      : ["IMAGE", "TEXT"];
+
+  const promptContent: Content = {
+    role: "user",
+    parts: promptParts.map(toGooglePart),
+  };
+
+  const sharedStreamOptions = {
+    progress,
+    modelId,
+    debug,
+    responseModalities: resolvedResponseModalities,
+    imageAspectRatio,
+  } satisfies Omit<LlmImageCallOptions, "parts" | "contents">;
+
+  const collectedImages: LlmImagePart[] = [];
+  let pendingContents: Content[] | undefined;
+  let historyContent: Content | undefined;
+
+  const runImageAttempt = async (
+    attempt: number,
+    contentsOverride?: readonly Content[],
+  ) => {
+    const attemptImages: LlmImagePart[] = [];
+    const streamOptions =
+      contentsOverride && contentsOverride.length > 0
+        ? {
+            ...sharedStreamOptions,
+            contents: contentsOverride,
+          }
+        : {
+            ...sharedStreamOptions,
+            parts: promptParts,
+          };
+    const result = await runLlmStream({
+      options: streamOptions,
+      handleChunk: (_chunk, data) => {
+        for (const inline of data.inlineData) {
+          let buffer: Buffer;
+          try {
+            buffer = Buffer.from(inline.data, "base64");
+          } catch {
+            buffer = Buffer.from(inline.data, "base64url");
+          }
+          attemptImages.push({
+            mimeType: inline.mimeType,
+            data: buffer,
+          });
+        }
+      },
+      attemptLabel: attempt,
+    });
+
+    await writeImageDebugArtifacts({
+      stage: result.stage,
+      modelVersion: result.modelVersion,
+      elapsedMs: result.elapsedMs,
+      charCount: result.charCount,
+      chunkLog: result.chunkLog,
+      thoughts: result.thoughts,
+      text: result.textAggregator.value,
+      images: attemptImages,
+    });
+
+    return {
+      images: attemptImages,
+      lastCandidates: result.lastCandidates,
+      promptFeedback: result.promptFeedback,
+    };
+  };
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const attemptResult = await runImageAttempt(attempt, pendingContents);
+    let attemptImages = attemptResult.images;
+    const candidate = attemptResult.lastCandidates?.[0];
+    const moderationFailure =
+      isModerationFinish(candidate?.finishReason) ||
+      Boolean(attemptResult.promptFeedback?.blockReason);
+
+    if (moderationFailure && attemptImages.length > 0) {
+      attemptImages = attemptImages.slice(0, -1);
+    }
+
+    if (attemptImages.length > 0) {
+      collectedImages.push(...attemptImages);
+    }
+    const generatedSoFar = collectedImages.length;
+    if (generatedSoFar >= numImages) {
+      break;
+    }
+    if (attempt === maxAttempts) {
+      break;
+    }
+    if (!candidate?.content) {
+      break;
+    }
+
+    const responseClone = cloneContent(candidate.content);
+    const responseParts = Array.isArray(responseClone.parts)
+      ? responseClone.parts.slice()
+      : [];
+    trimPartsForContinuation(responseParts, moderationFailure);
+    responseClone.parts = responseParts;
+
+    if (!historyContent) {
+      historyContent = {
+        role: responseClone.role ?? "model",
+        parts: responseParts,
+      };
+    } else {
+      const aggregatedParts = [
+        ...(historyContent.parts ?? []),
+        ...responseParts,
+      ];
+      historyContent = {
+        role: historyContent.role ?? responseClone.role ?? "model",
+        parts: aggregatedParts,
+      };
+    }
+
+    const pendingIndices: number[] = [];
+    for (let index = generatedSoFar + 1; index <= numImages; index += 1) {
+      pendingIndices.push(index);
+    }
+    if (pendingIndices.length === 0) {
+      break;
+    }
+
+    const instruction = `Please continue generating images ${pendingIndices.join(", ")}.`;
+    pendingContents = [
+      promptContent,
+      historyContent,
+      {
+        role: "user",
+        parts: [{ text: instruction }],
+      },
+    ];
+  }
+
+  return collectedImages.slice(0, numImages);
 }
 
 export type LlmJsonCallOptions<T> = Omit<LlmTextCallOptions, "responseSchema"> & {

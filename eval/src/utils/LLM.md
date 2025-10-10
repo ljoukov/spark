@@ -14,6 +14,8 @@ It is used across eval tools and session generators.
   - Streams a text response and returns the final concatenated text.
 - `runLlmImageCall(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
   - Streams images (and optional text) and returns image buffers.
+- `generateImages(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
+  - Attempts to produce `numImages` images in as few calls as possible, retrying once with the model’s previous response if fewer than expected were returned.
 - `runLlmJsonCall<T>(options): Promise<T>`
   - Like `runLlmTextCall` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
 
@@ -21,9 +23,10 @@ It is used across eval tools and session generators.
 
 All calls accept:
 - `modelId`: text model (Gemini) or image model (`gemini-2.5-flash-image`).
-- `parts`: array of content parts:
+- `parts`: array of content parts (most calls only need this):
   - `{ type: 'text', text: string }`
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
+- `contents?`: advanced override to send a multi-turn Gemini `Content[]` conversation (each entry `{ role, parts }`). When provided, `parts` may be omitted.
 - `progress?`: `JobProgressReporter` (see below). If omitted, a concise fallback logger is used.
 - `debug?`: `{ rootDir: string; stage?: string; subStage?: string; attempt?: number|string; enabled?: boolean }`
 - Optional generation controls:
@@ -144,6 +147,14 @@ const images = await runLlmImageCall({
   ],
   imageAspectRatio: "16:9",
   debug: { rootDir: "/tmp/llm-debug", stage: "poster" },
+});
+
+const reliableImages = await generateImages({
+  modelId: "gemini-2.5-flash-image",
+  parts: [{ type: "text", text: "Produce four stylised avatars in a consistent art style." }],
+  numImages: 4,
+  maxAttempts: 2,
+  debug: { rootDir: "/tmp/llm-debug", stage: "avatars" },
 });
 ```
 
