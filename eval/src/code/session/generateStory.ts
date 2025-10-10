@@ -254,17 +254,6 @@ const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-const SEGMENTATION_SCHEMA_REQUIREMENTS = [
-  "Return strict JSON with these top-level keys only: title, posterPrompt, segments, endingPrompt.",
-  "All string fields must be non-empty once trimmed.",
-  "segments must contain exactly 10 entries. Each entry has imagePrompt and narration.",
-  "narration is an array with at least one item. Every item contains voice and text.",
-  "voice must be either \"M\" or \"F\". text must be a non-empty string.",
-  "Do not include any additional properties at any level.",
-];
-
-// (no image batch JSON schema; set comparison uses ImageSetJudgeResponseSchema below)
-
 export function buildStoryPrompt(topic: string): string {
   const audienceDesc = "advanced maths school students";
   const dialect = "UK";
@@ -352,15 +341,8 @@ export function buildSegmentationPrompt(storyText: string): string {
     '7. Explicitly anchor every prompt in time and place (decade, setting, or specific workspace details) and include consistent style cues such as "Vintage cartoon style", "muted colors", and "clear composition" so the aesthetic remains uniform.',
     '8. Writing inside any `imagePrompt` should be optional and minimal. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
     "",
-    "Required JSON shape:",
-    ...SEGMENTATION_SCHEMA_REQUIREMENTS,
-    "",
-    "Respond with JSON only. No markdown fences.",
-    "",
     "================ Story to segment ================",
-    "<STORY>",
     storyText,
-    "</STORY>",
     "==================================================",
     "",
     "segmentation prompt:",
@@ -445,8 +427,6 @@ function buildSegmentationCorrectorPrompt(
   lines.push(
     `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`
   );
-  lines.push("");
-  lines.push("Return JSON only.");
 
   return lines.join("\n");
 }
@@ -529,7 +509,11 @@ export async function correctStorySegmentation(
   let workingSegmentation = initialSegmentation;
   adapter.log(`[story] reviewing segmentation prompts with ${TEXT_MODEL_ID}`);
 
-  for (let attempt = 1; attempt <= SEGMENTATION_CORRECTION_ATTEMPTS; attempt += 1) {
+  for (
+    let attempt = 1;
+    attempt <= SEGMENTATION_CORRECTION_ATTEMPTS;
+    attempt += 1
+  ) {
     const reviewPrompt = buildSegmentationCorrectorPrompt(
       workingSegmentation,
       generationPrompt
@@ -568,11 +552,12 @@ export async function correctStorySegmentation(
           workingSegmentation,
           response.corrections
         );
-        adapter.log(`[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`);
+        adapter.log(
+          `[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`
+        );
         return workingSegmentation;
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         adapter.log(
           `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`
         );
@@ -769,32 +754,33 @@ export async function judgeImageSets(
 }> {
   const adapter = useProgress(progress);
   const { promptsByIndex } = collectSegmentationImageContext(segmentation);
-  const setA = imageSets.find(
-    (set) => set.imageSetLabel === "set_a"
-  );
-  const setB = imageSets.find(
-    (set) => set.imageSetLabel === "set_b"
-  );
+  const setA = imageSets.find((set) => set.imageSetLabel === "set_a");
+  const setB = imageSets.find((set) => set.imageSetLabel === "set_b");
   if (!setA || !setB) {
     throw new Error("Both set_a and set_b must be provided for judging");
   }
 
   const headerLines: string[] = [
     "You are the image quality judge for illustrated historical stories.",
-    "Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a \"the end\" card, and a poster.",
+    'Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a "the end" card, and a poster.',
     "Evaluate which set better satisfies the prompts and style requirements.",
     "Criteria: prompt fidelity, clear single action, grounded historical setting, readable composition, and accurate vintage cartoon style (ink outlines, muted palette, subtle paper texture).",
     "If any writing appears, ensure it is four words or fewer, spelled correctly, and period-appropriate.",
   ];
 
-  const parts: LlmContentPart[] = [{ type: "text", text: headerLines.join("\n") }];
+  const parts: LlmContentPart[] = [
+    { type: "text", text: headerLines.join("\n") },
+  ];
   const addSet = (set: StoryImageSet) => {
     const name = set.imageSetLabel === "set_a" ? "Set A" : "Set B";
     parts.push({ type: "text", text: `${name} illustrations follow.` });
     const sorted = [...set.images].sort((a, b) => a.index - b.index);
     for (const image of sorted) {
       const prompt = promptsByIndex.get(image.index) ?? "";
-      parts.push({ type: "text", text: `${name} – Image ${image.index} prompt: ${prompt}` });
+      parts.push({
+        type: "text",
+        text: `${name} – Image ${image.index} prompt: ${prompt}`,
+      });
       parts.push({
         type: "inlineData",
         mimeType: image.mimeType,
@@ -835,9 +821,7 @@ export async function generateStoryImages(
   options?: { debugRootDir?: string }
 ): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
-  adapter.log(
-    "[story] generating 12 images via dual-set comparison workflow"
-  );
+  adapter.log("[story] generating 12 images via dual-set comparison workflow");
 
   const { entries, promptsByIndex } =
     collectSegmentationImageContext(segmentation);
@@ -941,7 +925,9 @@ export async function generateStory(
   const images = await generateStoryImages(segmentation, options.progress);
   // We now generate 12 images total: 10 story panels, 1 ending card, 1 poster.
   // For media segments we only use the 10 interior images (indices 1..10).
-  const interior = images.images.filter((im) => im.index >= 1 && im.index <= 10);
+  const interior = images.images.filter(
+    (im) => im.index >= 1 && im.index <= 10
+  );
   if (interior.length !== segmentation.segments.length) {
     throw new Error(
       `Expected ${segmentation.segments.length} interior images (1..10), received ${interior.length}`
