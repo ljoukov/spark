@@ -10,8 +10,6 @@ import {
   correctStorySegmentation,
   generateStoryImages,
   generateStorySegmentation,
-  SegmentationValidationError,
-  SegmentationCorrectionError,
   type StorySegmentation,
   StorySegmentationSchema,
 } from "./generateStory";
@@ -339,17 +337,14 @@ async function main(): Promise<void> {
               segmentationDraftLoadedFromDisk = false;
               correctedSegmentation = undefined;
               correctedSegmentationLoadedFromDisk = false;
-              const segCheckpoint = segmentationDraft;
-              const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
-              progress.log(`[story] wrote checkpoint ${saved}`);
-            } catch (error) {
-              if (error instanceof SegmentationValidationError) {
-                // Keep failure visible in console for test mode; no artifact writes.
-              }
-              throw error;
-            }
-            break;
+            const segCheckpoint = segmentationDraft;
+            const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
+            progress.log(`[story] wrote checkpoint ${saved}`);
+          } catch (error) {
+            throw error;
           }
+          break;
+        }
           case "segmentation_correction": {
             const story = await ensureStory();
             const draftSegmentation =
@@ -369,9 +364,6 @@ async function main(): Promise<void> {
               );
               progress.log(`[story] wrote checkpoint ${saved}`);
             } catch (error) {
-              if (error instanceof SegmentationCorrectionError) {
-                // Keep failure visible in console for test mode; no artifact writes.
-              }
               throw error;
             }
             break;

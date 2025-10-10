@@ -144,23 +144,6 @@ const SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-export class SegmentationValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SegmentationValidationError";
-  }
-}
-
-export class SegmentationCorrectionError extends Error {
-  constructor(
-    message: string,
-    readonly segmentation: StorySegmentation
-  ) {
-    super(message);
-    this.name = "SegmentationCorrectionError";
-  }
-}
-
 export type StoryProseResult = {
   text: string;
 };
@@ -177,6 +160,16 @@ export type StoryImagesResult = {
   modelVersion: string;
   captions?: string;
 };
+
+export class SegmentationCorrectionError extends Error {
+  constructor(
+    message: string,
+    readonly segmentation: StorySegmentation
+  ) {
+    super(message);
+    this.name = "SegmentationCorrectionError";
+  }
+}
 
 const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -464,25 +457,18 @@ export async function generateStorySegmentation(
   const prompt = buildSegmentationPrompt(storyText);
   const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
 
-  try {
-    const segmentation = await runLlmJsonCall<StorySegmentation>({
-      progress: adapter,
-      modelId: TEXT_MODEL_ID,
-      parts,
-      responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
-      schema: StorySegmentationSchema,
-      debug: options?.debugRootDir
-        ? { rootDir: options.debugRootDir, stage: "segmentation" }
-        : undefined,
-    });
-    adapter.log("[story/segments] parsed successfully");
-    return segmentation;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new SegmentationValidationError(
-      `Gemini segmentation did not produce valid JSON: ${message}`
-    );
-  }
+  const segmentation = await runLlmJsonCall<StorySegmentation>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    parts,
+    responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
+    schema: StorySegmentationSchema,
+    debug: options?.debugRootDir
+      ? { rootDir: options.debugRootDir, stage: "segmentation" }
+      : undefined,
+  });
+  adapter.log("[story/segments] parsed successfully");
+  return segmentation;
 }
 
 export async function correctStorySegmentation(
