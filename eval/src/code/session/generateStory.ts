@@ -5,7 +5,7 @@ import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
 import {
-  runLlmImageCall,
+  generateImages,
   runLlmJsonCall,
   runLlmTextCall,
   type LlmContentPart,
@@ -696,10 +696,11 @@ export async function generateImageSets(
     const promptParts: LlmContentPart[] = [{ type: "text", text: promptText }];
 
     const images: GeneratedStoryImage[] = [];
-    const imageParts = await runLlmImageCall({
+    const imageParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
       parts: promptParts,
+      numImages: entries.length,
       imageAspectRatio: "16:9",
       debug: options?.debugRootDir
         ? {
