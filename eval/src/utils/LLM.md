@@ -40,6 +40,8 @@ All calls accept:
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
 - Responses are automatically requested as `application/json` and parsed before validation.
 
+Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
+
 ## Progress and Metrics
 
 The wrappers report per-call usage to a `JobProgressReporter`:

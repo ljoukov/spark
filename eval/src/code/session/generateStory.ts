@@ -407,7 +407,6 @@ function buildSegmentationCorrectorPrompt(
     "You are the image prompt corrector for illustrated historical stories.",
     "Assess whether the illustration prompts comply with the brief and rewrite only the prompts that violate the rules.",
     "",
-    "Return strict JSON: { issuesSummary: string, corrections: Array<{ prompt_index: number, critique: string, updatedPrompt: string }> }.",
     "Only include entries under `corrections` for prompts that must be updated.",
     "",
     "Check for:",
