@@ -425,12 +425,14 @@ async function writeTextResponseSnapshot({
   thoughts,
   text,
   chunkLog,
+  contents,
 }: {
   pathname: string;
   summary: string[];
   thoughts: readonly string[];
   text: string;
   chunkLog: readonly string[];
+  contents?: readonly Content[];
 }): Promise<void> {
   const sections: string[] = [];
   if (summary.length > 0) {
@@ -442,7 +444,16 @@ async function writeTextResponseSnapshot({
   } else {
     sections.push(...thoughts);
   }
-  sections.push("", "===== Response =====", text, "");
+  sections.push("", "===== Response =====");
+  sections.push(text, "");
+  if (contents && contents.length > 0) {
+    sections.push("===== Content =====");
+    const contentLines = formatContentsForSnapshot(contents).split("\n");
+    sections.push(...contentLines);
+    if (sections[sections.length - 1] !== "") {
+      sections.push("");
+    }
+  }
   if (chunkLog.length > 0) {
     sections.push("===== Chunks =====", ...chunkLog, "");
   }
@@ -459,6 +470,7 @@ async function writeImageDebugArtifacts({
   thoughts,
   text,
   images,
+  contents,
 }: {
   stage: LlmCallStage;
   modelVersion: string;
@@ -468,12 +480,33 @@ async function writeImageDebugArtifacts({
   thoughts: string[];
   text: string;
   images: readonly LlmImagePart[];
+  contents?: readonly Content[];
 }): Promise<void> {
   const { debugDir } = stage;
   if (!debugDir) {
     return;
   }
   const responsePath = path.join(debugDir, "response.txt");
+  // Build a snapshot-friendly view of the response content. The GenAI streaming
+  // API may expose only the latest candidate parts at the end of the stream,
+  // which can omit earlier inline images. Prefer reconstructing content from
+  // the collected images to ensure all generated images are listed in the
+  // snapshot. Fall back to provided contents when no images were collected.
+  const contentsForSnapshot: readonly Content[] | undefined =
+    images.length > 0
+      ? [
+          {
+            role: "model",
+            parts: images.map((img) => ({
+              inlineData: {
+                // Default to binary when mime type is undefined for logging.
+                mimeType: img.mimeType,
+                data: img.data.toString("base64"),
+              },
+            })),
+          },
+        ]
+      : contents;
   await writeTextResponseSnapshot({
     pathname: responsePath,
     summary: [
@@ -485,6 +518,7 @@ async function writeImageDebugArtifacts({
     thoughts,
     text,
     chunkLog,
+    contents: contentsForSnapshot,
   });
   await Promise.all(
     images.map(async (image, index) => {
@@ -538,6 +572,7 @@ async function runLlmStream({
   lastCandidates?: Candidate[];
   promptFeedback?: GenerateContentResponse["promptFeedback"];
   latestCandidateParts?: Part[];
+  latestCandidateRole?: string;
 }> {
   const stage = buildCallStage({
     modelId: options.modelId,
@@ -569,8 +604,8 @@ async function runLlmStream({
   }
   const contents = contentsSource.map(cloneContent);
   const config: GeminiCallConfig = {};
-  // Enable thinking only when supported. Image models (e.g. gemini-2.5-flash-image)
-  // do not support thinking and will fail with INVALID_ARGUMENT if requested.
+  // Enable thinking only when supported. Image models and image responses do
+  // not support thinking and will fail if requested.
   const responseModalities = options.responseModalities;
   const isImageCall = Boolean(
     options.imageAspectRatio ||
@@ -629,6 +664,7 @@ async function runLlmStream({
   let lastCandidates: Candidate[] | undefined;
   let promptFeedback: GenerateContentResponse["promptFeedback"] | undefined;
   let latestCandidateParts: Part[] | undefined;
+  let latestCandidateRole: string | undefined;
   let latestInlineCount = 0;
   let latestPartCount = 0;
 
@@ -670,6 +706,7 @@ async function runLlmStream({
       });
       let lastLog = startedAt;
       for await (const chunk of stream) {
+        const chunkOrdinal = chunkIndex + 1;
         if (chunk.modelVersion) {
           resolvedModelVersion = chunk.modelVersion;
         }
@@ -679,17 +716,18 @@ async function runLlmStream({
         if (Array.isArray(chunk.candidates) && chunk.candidates.length > 0) {
           lastCandidates = chunk.candidates;
           const primary = chunk.candidates[0];
-          const candidateParts = primary.content?.parts ?? [];
-          if (candidateParts.length > 0) {
-            const candidateInlineCount = countInlineParts(candidateParts);
+          const primaryParts = primary.content?.parts ?? [];
+          if (primaryParts.length > 0) {
+            const candidateInlineCount = countInlineParts(primaryParts);
             if (
               candidateInlineCount > latestInlineCount ||
               (candidateInlineCount === latestInlineCount &&
-                candidateParts.length >= latestPartCount)
+                primaryParts.length >= latestPartCount)
             ) {
               latestInlineCount = candidateInlineCount;
-              latestPartCount = candidateParts.length;
-              latestCandidateParts = candidateParts.map(clonePart);
+              latestPartCount = primaryParts.length;
+              latestCandidateParts = primaryParts.map(clonePart);
+              latestCandidateRole = primary.content?.role;
             }
           }
         }
@@ -714,6 +752,14 @@ async function runLlmStream({
     reporter.finishModelCall(callHandle);
   }
 
+  const finalSanitisedParts =
+    latestCandidateParts && latestCandidateParts.length > 0
+      ? convertGooglePartsToLlmParts(latestCandidateParts).map((part) =>
+          sanitisePartForLogging(part)
+        )
+      : [];
+  log(`final candidate parts: ${JSON.stringify(finalSanitisedParts)}`);
+
   const elapsedMs = Date.now() - startedAt;
   log(
     `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)} (${formatInteger(totalChars)} chars, ${formatByteSize(totalBytes)} down)`
@@ -731,6 +777,7 @@ async function runLlmStream({
     lastCandidates,
     promptFeedback,
     latestCandidateParts,
+    latestCandidateRole,
   };
 }
 
@@ -756,6 +803,8 @@ async function executeLlmText(
     thoughts,
     textAggregator,
     stage,
+    latestCandidateParts,
+    latestCandidateRole,
   } = await runLlmStream({
     options: {
       ...options,
@@ -786,6 +835,15 @@ async function executeLlmText(
       thoughts,
       text: resolvedText,
       chunkLog,
+      contents:
+        latestCandidateParts && latestCandidateParts.length > 0
+          ? [
+              {
+                role: latestCandidateRole ?? "model",
+                parts: latestCandidateParts.map(clonePart),
+              },
+            ]
+          : undefined,
     });
   }
 
@@ -820,6 +878,8 @@ export async function runLlmImageCall(
     thoughts,
     textAggregator,
     stage,
+    latestCandidateParts,
+    latestCandidateRole,
   } = await runLlmStream({
     options: {
       ...options,
@@ -850,6 +910,15 @@ export async function runLlmImageCall(
     thoughts,
     text: textAggregator.value,
     images,
+    contents:
+      latestCandidateParts && latestCandidateParts.length > 0
+        ? [
+            {
+              role: latestCandidateRole ?? "model",
+              parts: latestCandidateParts.map(clonePart),
+            },
+          ]
+        : undefined,
   });
 
   return images;
@@ -948,6 +1017,15 @@ export async function generateImages(
       thoughts: result.thoughts,
       text: result.textAggregator.value,
       images: attemptImages,
+      contents:
+        result.latestCandidateParts && result.latestCandidateParts.length > 0
+          ? [
+              {
+                role: result.latestCandidateRole ?? "model",
+                parts: result.latestCandidateParts.map(clonePart),
+              },
+            ]
+          : undefined,
     });
 
     return {
@@ -955,6 +1033,7 @@ export async function generateImages(
       lastCandidates: result.lastCandidates,
       promptFeedback: result.promptFeedback,
       latestCandidateParts: result.latestCandidateParts,
+      latestCandidateRole: result.latestCandidateRole,
     };
   };
 
@@ -980,29 +1059,42 @@ export async function generateImages(
     if (attempt === maxAttempts) {
       break;
     }
-    if (!candidate?.content) {
+    // Build continuation content from all images produced in this attempt.
+    // Relying on the last candidate's parts can drop earlier images since
+    // candidates often only include the latest chunk. Using collected images
+    // guarantees we preserve the full attempt output in the conversation.
+    let continuationParts: Part[] | undefined;
+    if (attemptImages.length > 0) {
+      continuationParts = attemptImages.map((img) => ({
+        inlineData: {
+          data: img.data.toString("base64"),
+          mimeType: img.mimeType,
+        },
+      }));
+    } else if (candidate?.content) {
+      // Fallback to candidate content when no images were collected (e.g. text-only)
+      const responseClone = cloneContent(candidate.content);
+      const responseParts = Array.isArray(responseClone.parts)
+        ? responseClone.parts.slice()
+        : [];
+      trimPartsForContinuation(responseParts, moderationFailure);
+      continuationParts = responseParts;
+    } else {
       break;
     }
 
-    const responseClone = cloneContent(candidate.content);
-    const responseParts = Array.isArray(responseClone.parts)
-      ? responseClone.parts.slice()
-      : [];
-    trimPartsForContinuation(responseParts, moderationFailure);
-    responseClone.parts = responseParts;
-
     if (!historyContent) {
       historyContent = {
-        role: responseClone.role ?? "model",
-        parts: responseParts,
+        role: "model",
+        parts: continuationParts,
       };
     } else {
       const aggregatedParts = [
         ...(historyContent.parts ?? []),
-        ...responseParts,
+        ...(continuationParts ?? []),
       ];
       historyContent = {
-        role: historyContent.role ?? responseClone.role ?? "model",
+        role: historyContent.role ?? "model",
         parts: aggregatedParts,
       };
     }

@@ -54,11 +54,7 @@ function resolveOutputDir(rawOptions: CliOptions): string {
       : path.join(WORKSPACE_PATHS.codeSyntheticDir, provided);
     return absolute;
   }
-  return path.join(
-    WORKSPACE_PATHS.codeSyntheticDir,
-    "stories",
-    "test-story"
-  );
+  return path.join(WORKSPACE_PATHS.codeSyntheticDir, "stories", "test-story");
 }
 
 function resolveCheckpointsDir(outDir: string): string {
@@ -68,12 +64,14 @@ function resolveCheckpointsDir(outDir: string): string {
 async function writeCheckpoint(
   outDir: string,
   stage: StageName,
-  payload: unknown,
+  payload: unknown
 ): Promise<string> {
   const checkpointsDir = resolveCheckpointsDir(outDir);
   const filePath = path.join(checkpointsDir, `${stage}.json`);
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(payload, null, 2), { encoding: "utf8" });
+  await writeFile(filePath, JSON.stringify(payload, null, 2), {
+    encoding: "utf8",
+  });
   return filePath;
 }
 
@@ -139,21 +137,11 @@ type ImageJudgeCheckpoint = z.infer<typeof ImageJudgeCheckpointSchema>;
 function isFileNotFound(error: unknown): boolean {
   return Boolean(
     error &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: string }).code === "ENOENT"
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "ENOENT"
   );
 }
-
-// Prose stage in test mode does not write legacy artifacts; checkpoints only.
-
-// Segmentation stage in test mode does not write legacy artifacts; checkpoints only.
-
-// Audio stage in test mode does not write audio files; checkpoints only.
-
-// Image generation stages in test mode do not write assets; checkpoints only.
-
-// no-op legacy writers removed.
 
 function segmentationToMediaSegments(
   segmentation: StorySegmentation
@@ -186,7 +174,10 @@ async function loadStoryFromDisk(outDir: string): Promise<StoredStory> {
 async function loadSegmentationFromDisk(
   outDir: string
 ): Promise<StorySegmentation | undefined> {
-  const jsonPath = path.join(resolveCheckpointsDir(outDir), "segmentation.json");
+  const jsonPath = path.join(
+    resolveCheckpointsDir(outDir),
+    "segmentation.json"
+  );
   try {
     const raw = await readFile(jsonPath, { encoding: "utf8" });
     const parsed = JSON.parse(raw);
@@ -326,25 +317,26 @@ async function main(): Promise<void> {
         return segmentationDraft;
       };
 
-      const ensureCorrectedSegmentation = async (): Promise<StorySegmentation> => {
-        if (correctedSegmentation) {
+      const ensureCorrectedSegmentation =
+        async (): Promise<StorySegmentation> => {
+          if (correctedSegmentation) {
+            return correctedSegmentation;
+          }
+          const loaded = await loadCorrectedSegmentationFromDisk(outDir);
+          if (!loaded) {
+            throw new Error(
+              "Cannot continue without corrected segmentation. Run stage 'segmentation_correction' first."
+            );
+          }
+          if (!correctedSegmentationLoadedFromDisk) {
+            progress.log(
+              "[story] loaded existing corrected segmentation from checkpoints/segmentation_correction.json"
+            );
+            correctedSegmentationLoadedFromDisk = true;
+          }
+          correctedSegmentation = loaded;
           return correctedSegmentation;
-        }
-        const loaded = await loadCorrectedSegmentationFromDisk(outDir);
-        if (!loaded) {
-          throw new Error(
-            "Cannot continue without corrected segmentation. Run stage 'segmentation_correction' first."
-          );
-        }
-        if (!correctedSegmentationLoadedFromDisk) {
-          progress.log(
-            "[story] loaded existing corrected segmentation from checkpoints/segmentation_correction.json"
-          );
-          correctedSegmentationLoadedFromDisk = true;
-        }
-        correctedSegmentation = loaded;
-        return correctedSegmentation;
-      };
+        };
 
       const ensureImageSets = async (): Promise<SerialisedStoryImageSet[]> => {
         if (imageSetsSerialised) {
@@ -371,7 +363,11 @@ async function main(): Promise<void> {
         progress.log(`[story] stage: ${stage}`);
         switch (stage) {
           case "prose": {
-            const storyResult = await generateProseStory(options.topic, progress, { debugRootDir });
+            const storyResult = await generateProseStory(
+              options.topic,
+              progress,
+              { debugRootDir }
+            );
             currentStory = {
               topic: options.topic,
               text: storyResult.text,
@@ -383,7 +379,11 @@ async function main(): Promise<void> {
             imageSetsSerialised = undefined;
             imageSetsLoadedFromDisk = false;
             const proseCheckpoint = currentStory;
-            const saved = await writeCheckpoint(outDir, "prose", proseCheckpoint);
+            const saved = await writeCheckpoint(
+              outDir,
+              "prose",
+              proseCheckpoint
+            );
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
@@ -401,7 +401,11 @@ async function main(): Promise<void> {
               imageSetsSerialised = undefined;
               imageSetsLoadedFromDisk = false;
               const segCheckpoint = segmentationDraft;
-              const saved = await writeCheckpoint(outDir, "segmentation", segCheckpoint);
+              const saved = await writeCheckpoint(
+                outDir,
+                "segmentation",
+                segCheckpoint
+              );
               progress.log(`[story] wrote checkpoint ${saved}`);
             } catch (error) {
               throw error;
@@ -438,7 +442,11 @@ async function main(): Promise<void> {
               correctedSegmentation ?? (await ensureCorrectedSegmentation());
             const mediaSegments = segmentationToMediaSegments(segments);
             const audioCheckpoint = { inputSegments: mediaSegments };
-            const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
+            const saved = await writeCheckpoint(
+              outDir,
+              "audio",
+              audioCheckpoint
+            );
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
@@ -454,7 +462,11 @@ async function main(): Promise<void> {
               imageSets: imageSetsSerialised,
             };
             ImageSetsCheckpointSchema.parse(imageSetsCheckpoint);
-            const saved = await writeCheckpoint(outDir, "image-sets", imageSetsCheckpoint);
+            const saved = await writeCheckpoint(
+              outDir,
+              "image-sets",
+              imageSetsCheckpoint
+            );
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
@@ -464,22 +476,30 @@ async function main(): Promise<void> {
             const serialisedSets = await ensureImageSets();
             const imageSets: StoryImageSet[] =
               deserialiseStoryImageSets(serialisedSets);
-            const judgement = await judgeImageSets(imageSets, segments, progress, {
-              debugRootDir,
-            });
+            const judgement = await judgeImageSets(
+              imageSets,
+              segments,
+              progress,
+              {
+                debugRootDir,
+              }
+            );
             const judgeCheckpoint: ImageJudgeCheckpoint = {
               selectedSet: judgement.winningImageSetLabel,
             };
             ImageJudgeCheckpointSchema.parse(judgeCheckpoint);
-            const saved = await writeCheckpoint(outDir, "images-judge", judgeCheckpoint);
+            const saved = await writeCheckpoint(
+              outDir,
+              "images-judge",
+              judgeCheckpoint
+            );
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
           }
-          default:
-            {
-              const exhaustiveCheck: never = stage;
-              throw new Error(`Unknown stage encountered: ${exhaustiveCheck}`);
-            }
+          default: {
+            const exhaustiveCheck: never = stage;
+            throw new Error(`Unknown stage encountered: ${exhaustiveCheck}`);
+          }
         }
       }
 

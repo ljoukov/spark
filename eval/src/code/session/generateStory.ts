@@ -28,7 +28,7 @@ export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
 export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
-  "A beautiful and engaging vintage cartoon illustration.",
+  "A beautiful and engaging high quality classic cartoon illustration.",
   "Use a high-positivity tone, high quality, bright colors, and a clear composition.",
 ];
 
@@ -382,7 +382,6 @@ function buildSegmentationCorrectorPrompt(
     "",
     "Check for:",
     "- Each prompt grounds the scene in time and place (decade, location, or workplace details).",
-    '- Every prompt includes consistent style anchors such as "Vintage cartoon style", "muted colors", and "clear composition".',
     "- One clear action, at most two characters, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
     '- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
     "- Poster (index 11) reads like a high-impact cover: stunning, captivating, interesting, and intriguing. It explicitly mentions the protagonist by name (or a concise moniker) while keeping any visible text within four words.",
@@ -565,14 +564,6 @@ export async function correctStorySegmentation(
   );
 }
 
-// =====================
-// Image judging helpers (set comparison)
-// =====================
-
-// ===============================
-// Image set comparison and assets
-// ===============================
-
 const ImageSetJudgeResponseSchema = z.object({
   reasoning: z.string().trim().min(1),
   verdict: z.enum(["set_a", "set_b"]),
@@ -661,10 +652,6 @@ export async function generateImageSets(
   const buildSetPrompt = (): string => {
     const headerLines: string[] = [
       "Please make a total of 12 images:",
-      "- 1-10 story images",
-      '- "the end" image (should be a memorable hint at the core idea, morale, or legacy)',
-      '- the "movie poster" image for the whole story (hook), poster should feature happy characters, bright colors and be engaging, positive and exciting',
-      "Make high quality, high positivity cartoon style.",
       "",
       "Follow the style:",
       ...styleLines,
@@ -679,7 +666,7 @@ export async function generateImageSets(
       } else if (index === posterIndex) {
         label = `Image ${index} (poster)`;
       }
-      lines.push(`${label}: ${prompt}`);
+      lines.push(`\n${label}: ${prompt}`);
     }
     return lines.join("\n");
   };
@@ -698,6 +685,7 @@ export async function generateImageSets(
       modelId: IMAGE_MODEL_ID,
       parts: promptParts,
       numImages: entries.length,
+      maxAttempts: 4,
       imageAspectRatio: "16:9",
       debug: options?.debugRootDir
         ? {
@@ -782,7 +770,7 @@ export async function judgeImageSets(
   addSet(setB);
   parts.push({
     type: "text",
-    text: 'Compare Set A and Set B. Return strict JSON: { reasoning: string, verdict: "set_a" | "set_b" }. Provide the reasoning first, then the verdict. Respond with JSON only.',
+    text: "Compare Set A and Set B. Provide the reasoning first, then the verdict.",
   });
 
   adapter.log(`[story/images-judge] set comparison request prepared`);
