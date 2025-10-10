@@ -545,8 +545,7 @@ export async function correctStorySegmentation(
         debug: options?.debugRootDir
           ? {
               rootDir: options.debugRootDir,
-              stage: "segmentation",
-              subStage: "corrector",
+              stage: "segmentation_correction",
               attempt,
             }
           : undefined,
@@ -554,13 +553,13 @@ export async function correctStorySegmentation(
 
       if (response.issuesSummary) {
         adapter.log(
-          `[story/segments/corrector] attempt ${attempt} issues summary: ${response.issuesSummary}`
+          `[story/segmentation_correction] attempt ${attempt} issues summary: ${response.issuesSummary}`
         );
       }
 
       if (response.corrections.length === 0) {
         adapter.log(
-          `[story/segments/corrector] attempt ${attempt} returned no corrections`
+          `[story/segmentation_correction] attempt ${attempt} returned no corrections`
         );
         return workingSegmentation;
       }
@@ -570,21 +569,19 @@ export async function correctStorySegmentation(
           workingSegmentation,
           response.corrections
         );
-        adapter.log(
-          `[story/segments/corrector] attempt ${attempt} applied ${response.corrections.length} correction(s)`
-        );
+        adapter.log(`[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`);
         return workingSegmentation;
       } catch (error) {
         const message =
           error instanceof Error ? error.message : String(error);
         adapter.log(
-          `[story/segments/corrector] attempt ${attempt} failed to apply corrections (${message}); retrying...`
+          `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       adapter.log(
-        `[story/segments/corrector] attempt ${attempt} failed (${message}); retrying...`
+        `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`
       );
     }
   }
