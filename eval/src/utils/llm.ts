@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // NOTE: Keep eval/src/utils/LLM.md in sync with any API changes to this file.
@@ -249,6 +249,13 @@ async function ensureDebugDir(debugDir?: string): Promise<void> {
   await mkdir(debugDir, { recursive: true });
 }
 
+async function resetDebugDir(debugDir?: string): Promise<void> {
+  if (!debugDir) {
+    return;
+  }
+  await rm(debugDir, { recursive: true, force: true });
+}
+
 function resolveDebugDir(
   debug: LlmDebugOptions | undefined,
   attemptLabel?: number | string,
@@ -431,6 +438,7 @@ async function runLlmStream({
     config.tools = geminiTools;
   }
 
+  await resetDebugDir(stage.debugDir);
   await ensureDebugDir(stage.debugDir);
   if (stage.debugDir) {
     await writePromptSnapshot(path.join(stage.debugDir, "prompt.txt"), options.parts);

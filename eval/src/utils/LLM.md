@@ -69,6 +69,7 @@ If `debug.rootDir` is provided, each call writes snapshots under:
 
 - `stage` defaults to the `modelId` unless explicitly set via `debug.stage`.
 - `attempt` is appended if provided; for `runLlmJsonCall`, the attempt number (1-based) is automatically passed to the underlying stream.
+- The target directory is cleared (recursively) before writing new snapshots so stale files from earlier runs never linger.
 
 Generated files:
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
