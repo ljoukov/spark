@@ -132,7 +132,7 @@ type LlmToolConfig = {
 };
 
 type GeminiCallConfig = {
-  thinkingConfig: {
+  thinkingConfig?: {
     includeThoughts: true;
     thinkingBudget: number;
   };
@@ -331,6 +331,7 @@ async function writeTextResponseSnapshot({
   if (chunkLog.length > 0) {
     sections.push("===== Chunks =====", ...chunkLog, "");
   }
+  await mkdir(path.dirname(pathname), { recursive: true });
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
 }
 
@@ -395,12 +396,23 @@ async function runLlmStream({
       parts: options.parts.map(toGooglePart),
     },
   ];
-  const config: GeminiCallConfig = {
-    thinkingConfig: {
+  const config: GeminiCallConfig = {};
+  // Enable thinking only when supported. Image models (e.g. gemini-2.5-flash-image)
+  // do not support thinking and will fail with INVALID_ARGUMENT if requested.
+  const responseModalities = options.responseModalities;
+  const isImageCall = Boolean(
+    options.imageAspectRatio ||
+      (Array.isArray(responseModalities) &&
+        responseModalities.some((m) => String(m).toUpperCase() === "IMAGE")),
+  );
+  const isImageModel = options.modelId === "gemini-2.5-flash-image";
+  const supportsThinking = !isImageCall && !isImageModel;
+  if (supportsThinking) {
+    config.thinkingConfig = {
       includeThoughts: true,
       thinkingBudget: 32_768,
-    },
-  };
+    };
+  }
   if (options.responseMimeType) {
     config.responseMimeType = options.responseMimeType;
   }
@@ -659,7 +671,7 @@ export type LlmJsonCallOptions<T> = LlmTextCallOptions & {
   readonly maxAttempts?: number;
 };
 
-export class LlmJsonCallError<T> extends Error {
+export class LlmJsonCallError extends Error {
   constructor(
     message: string,
     readonly attempts: ReadonlyArray<{
@@ -701,7 +713,7 @@ export async function runLlmJsonCall<T>(
       const handledError = error instanceof Error ? error : new Error(String(error));
       failures.push({ attempt, rawText, error: handledError });
       if (attempt >= totalAttempts) {
-        throw new LlmJsonCallError<T>(
+        throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
           failures,
         );
@@ -709,7 +721,7 @@ export async function runLlmJsonCall<T>(
     }
   }
 
-  throw new LlmJsonCallError<T>("LLM JSON call failed", failures);
+  throw new LlmJsonCallError("LLM JSON call failed", failures);
 }
 function toGooglePart(part: LlmContentPart): Part {
   switch (part.type) {

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command, Option } from "commander";
@@ -10,30 +10,14 @@ import {
   generateStoryImages,
   generateStorySegmentation,
   SegmentationValidationError,
-  SegmentationReviewError,
-  ART_STYLE_VINTAGE_CARTOON,
-  type StoryImagesResult,
-  type StoryProseResult,
+  SegmentationCorrectionError,
   type StorySegmentation,
   type StorySegmentationResult,
-  type SegmentationAttemptSnapshot,
-  type SegmentationReviewAttempt,
   StorySegmentationSchema,
 } from "./generateStory";
-import {
-  generateSessionAudio,
-  type MediaSegment,
-} from "@spark/llm";
-import {
-  runJobsWithConcurrency,
-  type JobProgressReporter,
-} from "../../utils/concurrency";
+import { type MediaSegment } from "@spark/llm";
+import { runJobsWithConcurrency } from "../../utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
-import {
-  formatByteSize,
-  formatDurationSeconds,
-} from "../../utils/format";
-import { createConsoleProgress } from "./narration";
 
 ensureEvalEnvLoaded();
 
@@ -113,6 +97,21 @@ const StoryJsonSchema = z.object({
 
 type StoredStory = z.infer<typeof StoryJsonSchema>;
 
+const SegmentationCheckpointSchema = z
+  .union([
+    StorySegmentationSchema,
+    z.object({
+      modelVersion: z.string().trim().min(1),
+      segmentation: StorySegmentationSchema,
+    }),
+  ])
+  .transform((value) => {
+    if ("segments" in value) {
+      return value;
+    }
+    return value.segmentation;
+  });
+
 function isFileNotFound(error: unknown): boolean {
   return Boolean(
     error &&
@@ -120,42 +119,6 @@ function isFileNotFound(error: unknown): boolean {
     "code" in error &&
     (error as { code?: string }).code === "ENOENT"
   );
-}
-
-function formatAttemptLabel(attempt: number): string {
-  return `attempt-${String(attempt).padStart(2, "0")}`;
-}
-
-async function removeArtifacts(paths: string[]): Promise<void> {
-  await Promise.all(
-    paths.map(async (target) => {
-      await rm(target, { recursive: true, force: true });
-    })
-  );
-}
-
-async function writeTextSnapshot(targetPath: string, contents: string): Promise<void> {
-  await mkdir(path.dirname(targetPath), { recursive: true });
-  await writeFile(targetPath, contents, { encoding: "utf8" });
-}
-
-async function writeJsonSnapshot(targetPath: string, payload: unknown): Promise<void> {
-  await writeTextSnapshot(targetPath, JSON.stringify(payload, null, 2));
-}
-
-function buildImagesPromptSnapshot(segmentation: StorySegmentation): string {
-  const lines: string[] = [
-    "Style Requirements:",
-    ...ART_STYLE_VINTAGE_CARTOON,
-    "",
-  ];
-  lines.push(`Image 1: ${segmentation.posterPrompt.trim()}`);
-  segmentation.segments.forEach((segment, index) => {
-    lines.push(`Image ${index + 2}: ${segment.imagePrompt.trim()}`);
-  });
-  const endingIndex = segmentation.segments.length + 2;
-  lines.push(`Image ${endingIndex}: ${segmentation.endingPrompt.trim()}`);
-  return lines.join("\n");
 }
 
 // Prose stage in test mode does not write legacy artifacts; checkpoints only.
@@ -168,216 +131,6 @@ function buildImagesPromptSnapshot(segmentation: StorySegmentation): string {
 
 // no-op legacy writers removed.
 
-async function saveStoryArtifacts(
-  result: StoryProseResult,
-  topic: string,
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-
-  const storyPath = path.join(outDir, "story.txt");
-  const header = `modelVersion: ${result.modelVersion}\ntopic: ${topic}\n\n`;
-  await writeFile(storyPath, header + result.text, { encoding: "utf8" });
-  progress.log(`[story] saved prose to ${storyPath}`);
-
-  const storyJsonPath = path.join(outDir, "story.json");
-  const storyPayload = {
-    modelVersion: result.modelVersion,
-    topic,
-    text: result.text,
-    prompt: result.prompt,
-    thoughts: result.thoughts,
-  };
-  await writeFile(storyJsonPath, JSON.stringify(storyPayload, null, 2), {
-    encoding: "utf8",
-  });
-  progress.log(`[story] saved prose JSON to ${storyJsonPath}`);
-
-  const promptPath = path.join(outDir, "prompt.txt");
-  await writeFile(promptPath, result.prompt, { encoding: "utf8" });
-  progress.log(`[story] saved prompt snapshot to ${promptPath}`);
-
-  if (result.thoughts && result.thoughts.length > 0) {
-    const thoughtsPath = path.join(outDir, "story-thoughts.txt");
-    const thoughtHeader = `modelVersion: ${result.modelVersion}\nthoughtCount: ${result.thoughts.length}\n\n`;
-    await writeFile(
-      thoughtsPath,
-      thoughtHeader + result.thoughts.join("\n---\n"),
-      { encoding: "utf8" }
-    );
-    progress.log(`[story] saved model thoughts to ${thoughtsPath}`);
-  }
-}
-
-async function saveSegmentationSnapshotArtifacts(
-  snapshot: SegmentationAttemptSnapshot,
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  const attemptLabel = formatAttemptLabel(snapshot.attempt);
-  const prefix =
-    snapshot.phase === "judge" ? "segmentation-judge" : "segmentation";
-  const promptPath = path.join(
-    outDir,
-    `${prefix}-prompt-${attemptLabel}.txt`
-  );
-  const responsePath = path.join(
-    outDir,
-    `${prefix}-response-${attemptLabel}.txt`
-  );
-
-  await writeTextSnapshot(promptPath, snapshot.prompt);
-  await writeTextSnapshot(responsePath, snapshot.response);
-
-  if (snapshot.thoughts && snapshot.thoughts.length > 0) {
-    const thoughtsPath = path.join(
-      outDir,
-      `${prefix}-thoughts-${attemptLabel}.txt`
-    );
-    await writeTextSnapshot(thoughtsPath, snapshot.thoughts.join("\n---\n"));
-  }
-
-  progress.log(
-    `[story] saved ${snapshot.phase} attempt ${snapshot.attempt} response to ${responsePath}`
-  );
-}
-
-async function saveSegmentationJudgeArtifacts(
-  attempts: readonly SegmentationReviewAttempt[] | undefined,
-  baseDir: string
-): Promise<void> {
-  if (!attempts || attempts.length === 0) {
-    return;
-  }
-
-  await mkdir(baseDir, { recursive: true });
-
-  for (const attempt of attempts) {
-    const attemptLabel = formatAttemptLabel(attempt.attempt);
-    const attemptDir = path.join(baseDir, attemptLabel);
-    await mkdir(attemptDir, { recursive: true });
-    await writeTextSnapshot(
-      path.join(attemptDir, `prompt-${attemptLabel}.txt`),
-      attempt.prompt
-    );
-    await writeTextSnapshot(
-      path.join(attemptDir, `response-${attemptLabel}.txt`),
-      attempt.rawResponse
-    );
-    if (attempt.response) {
-      await writeJsonSnapshot(
-        path.join(attemptDir, `parsed-${attemptLabel}.json`),
-        attempt.response
-      );
-    }
-    const metaPayload = {
-      attempt: attempt.attempt,
-      modelVersion: attempt.modelVersion,
-      charCount: attempt.charCount ?? undefined,
-      parseError: attempt.parseError ?? undefined,
-    };
-    await writeJsonSnapshot(
-      path.join(attemptDir, `meta-${attemptLabel}.json`),
-      metaPayload
-    );
-    if (attempt.parseError) {
-      await writeTextSnapshot(
-        path.join(attemptDir, `parse-error-${attemptLabel}.txt`),
-        attempt.parseError
-      );
-    }
-    if (attempt.thoughts && attempt.thoughts.length > 0) {
-      await writeTextSnapshot(
-        path.join(attemptDir, `thoughts-${attemptLabel}.txt`),
-        attempt.thoughts.join("\n---\n")
-      );
-    }
-  }
-}
-
-async function saveSegmentationArtifacts(
-  result: StorySegmentationResult,
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  const payload = {
-    modelVersion: result.modelVersion,
-    ...result.segmentation,
-  };
-
-  const jsonPath = path.join(outDir, "segments.json");
-  await writeJsonSnapshot(jsonPath, payload);
-  progress.log(`[story] saved segmentation JSON to ${jsonPath} (attempt ${result.attempt})`);
-
-  const attemptLabel = formatAttemptLabel(result.attempt);
-  const responseDir = path.join(outDir, "segmentation", "responses", attemptLabel);
-  await writeJsonSnapshot(path.join(responseDir, `segments-${attemptLabel}.json`), payload);
-
-  const promptPath = path.join(outDir, "segmentation-prompt.txt");
-  await writeTextSnapshot(promptPath, result.prompt);
-  const promptAttemptPath = path.join(outDir, `segmentation-prompt-${attemptLabel}.txt`);
-  await writeTextSnapshot(promptAttemptPath, result.prompt);
-  progress.log(`[story] saved segmentation prompt snapshot to ${promptPath} (attempt ${result.attempt})`);
-
-  const judgeDir = path.join(outDir, "segmentation", "judge");
-  await saveSegmentationJudgeArtifacts(result.reviewAttempts, judgeDir);
-  if (result.reviewAttempts && result.reviewAttempts.length > 0) {
-    progress.log(`[story] saved segmentation judge artifacts to ${judgeDir}`);
-  }
-}
-
-async function saveSegmentationFailureArtifacts(
-  failure: SegmentationValidationError | SegmentationReviewError,
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  if (failure instanceof SegmentationReviewError) {
-    const judgeDir = path.join(outDir, "segmentation", "judge");
-    await saveSegmentationJudgeArtifacts(failure.attempts, judgeDir);
-    await mkdir(judgeDir, { recursive: true });
-    const summaryPath = path.join(judgeDir, "failure-summary.json");
-    const summaryPayload = {
-      message: failure.message,
-      attemptCount: failure.attempts.length,
-    };
-    await writeJsonSnapshot(summaryPath, summaryPayload);
-    const rejectedPath = path.join(judgeDir, "rejected-segmentation.json");
-    await writeJsonSnapshot(rejectedPath, failure.segmentation);
-    progress.log(`[story] saved segmentation judge failure artifacts to ${judgeDir}`);
-    return;
-  }
-
-  const attemptsDir = path.join(outDir, "segmentation-attempts");
-  await mkdir(attemptsDir, { recursive: true });
-
-  for (const attempt of failure.attempts) {
-    const attemptLabel = formatAttemptLabel(attempt.attempt);
-    const attemptDir = path.join(attemptsDir, attemptLabel);
-    await mkdir(attemptDir, { recursive: true });
-    await writeTextSnapshot(path.join(attemptDir, `prompt-${attemptLabel}.txt`), failure.prompt);
-    await writeTextSnapshot(path.join(attemptDir, `response-${attemptLabel}.txt`), attempt.rawText);
-    const payload = {
-      attempt: attempt.attempt,
-      modelVersion: attempt.modelVersion,
-      errorMessage: attempt.errorMessage,
-      zodIssues: attempt.zodIssues ?? undefined,
-      thoughts: attempt.thoughts ?? undefined,
-      elapsedMs: attempt.elapsedMs ?? undefined,
-      charCount: attempt.charCount ?? undefined,
-    };
-    await writeJsonSnapshot(path.join(attemptDir, `meta-${attemptLabel}.json`), payload);
-    if (attempt.thoughts && attempt.thoughts.length > 0) {
-      await writeTextSnapshot(
-        path.join(attemptDir, `thoughts-${attemptLabel}.txt`),
-        attempt.thoughts.join("\n---\n"),
-      );
-    }
-  }
-
-  progress.log(`[story] saved invalid segmentation attempts to ${attemptsDir}`);
-}
-
 function segmentationToMediaSegments(
   segmentation: StorySegmentation
 ): MediaSegment[] {
@@ -388,128 +141,6 @@ function segmentationToMediaSegments(
       text: line.text.trim(),
     })),
   }));
-}
-
-async function saveAudioArtifacts(
-  segmentation: StorySegmentation,
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  const audioDir = path.join(outDir, "audio");
-  await mkdir(audioDir, { recursive: true });
-  const audioPath = path.join(audioDir, "story.mp3");
-
-  const segments = segmentationToMediaSegments(segmentation);
-  const audioResult = await generateSessionAudio({
-    segments,
-    outputFilePath: audioPath,
-    progress: createConsoleProgress("Story audio"),
-  });
-
-  const metadataPath = path.join(audioDir, "story.json");
-  const metadata = {
-    mimeType: audioResult.outputMimeType,
-    durationSec: audioResult.totalDurationSec,
-    totalBytes: audioResult.totalBytes,
-    slideOffsets: audioResult.slideOffsets,
-    slideDurations: audioResult.slideDurations,
-    lineOffsets: audioResult.lineOffsets,
-    lineDurations: audioResult.lineDurations,
-  };
-  await writeFile(metadataPath, JSON.stringify(metadata, null, 2), {
-    encoding: "utf8",
-  });
-
-  progress.log(
-    `[story] saved audio to ${audioPath} (${formatDurationSeconds(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)})`,
-  );
-}
-
-function extensionFromMime(mimeType?: string): string {
-  if (!mimeType) {
-    return "png";
-  }
-  const lower = mimeType.toLowerCase();
-  if (lower === "image/jpeg" || lower === "image/jpg") {
-    return "jpg";
-  }
-  if (lower === "image/png") {
-    return "png";
-  }
-  if (lower === "image/webp") {
-    return "webp";
-  }
-  if (lower === "image/gif") {
-    return "gif";
-  }
-  return "png";
-}
-
-async function saveImageArtifacts(
-  result: StoryImagesResult & { artifacts?: { style: readonly string[]; batches: Array<{ batchIndex: number; promptParts: unknown[]; judge: Array<{ attempt: number; requestPartsCount: number; requestPartsSanitised: unknown[]; responseText: string; responseJson: unknown; modelVersion: string; thoughts?: string[] }> }> } },
-  outDir: string,
-  progress: JobProgressReporter
-): Promise<void> {
-  const assetsDir = path.join(outDir, "images");
-  await mkdir(assetsDir, { recursive: true });
-
-  const promptPath = path.join(assetsDir, "prompt.txt");
-  await writeFile(promptPath, result.prompt, { encoding: "utf8" });
-  progress.log(`[story] saved image prompt to ${promptPath}`);
-
-  for (const image of result.images) {
-    const ext = extensionFromMime(image.mimeType);
-    const padded = String(image.index).padStart(3, "0");
-    const filePath = path.join(assetsDir, `image_${padded}.${ext}`);
-    await writeFile(filePath, image.data);
-    progress.log(`[story] saved asset ${filePath}`);
-  }
-
-  if (result.captions) {
-    const captionsPath = path.join(assetsDir, "captions.txt");
-    const header = `modelVersion: ${result.modelVersion}\nimages: ${result.images.length}\n\n`;
-    await writeFile(captionsPath, header + result.captions, {
-      encoding: "utf8",
-    });
-    progress.log(`[story] saved image captions to ${captionsPath}`);
-  }
-
-  // Extra artifacts: per-batch prompts and judge outcomes
-  if (result.artifacts) {
-    const batchesDir = path.join(assetsDir, "batches");
-    await mkdir(batchesDir, { recursive: true });
-    // Save style
-    const stylePath = path.join(batchesDir, "style.txt");
-    await writeFile(stylePath, result.artifacts.style.join("\n"), { encoding: "utf8" });
-    for (const batch of result.artifacts.batches) {
-      const bd = path.join(batchesDir, `batch-${batch.batchIndex}`);
-      await mkdir(bd, { recursive: true });
-      // Save prompt parts as a single text snapshot
-      const promptText = (batch.promptParts as Array<{ text?: string }>).map((p) => p?.text ?? "").filter(Boolean).join("\n");
-      await writeFile(path.join(bd, "prompt.txt"), promptText, { encoding: "utf8" });
-      // Judge iterations
-      if (batch.judge.length > 0) {
-        const jd = path.join(bd, "judge");
-        for (const j of batch.judge) {
-          const attemptLabel = formatAttemptLabel(j.attempt);
-          const rd = path.join(jd, attemptLabel);
-          await writeTextSnapshot(path.join(rd, `response-${attemptLabel}.txt`), j.responseText);
-          await writeJsonSnapshot(path.join(rd, `response-${attemptLabel}.json`), j.responseJson);
-          await writeJsonSnapshot(
-            path.join(rd, `request-${attemptLabel}.json`),
-            { parts: j.requestPartsSanitised, count: j.requestPartsCount },
-          );
-          if (j.thoughts && j.thoughts.length > 0) {
-            await writeTextSnapshot(
-              path.join(rd, `thoughts-${attemptLabel}.txt`),
-              j.thoughts.join("\n---\n"),
-            );
-          }
-        }
-      }
-    }
-    progress.log(`[story] saved image batch artifacts under ${batchesDir}`);
-  }
 }
 
 async function loadStoryFromDisk(outDir: string): Promise<StoredStory> {
@@ -535,7 +166,7 @@ async function loadSegmentationFromDisk(
   try {
     const raw = await readFile(jsonPath, { encoding: "utf8" });
     const parsed = JSON.parse(raw);
-    return StorySegmentationSchema.parse(parsed);
+    return SegmentationCheckpointSchema.parse(parsed);
   } catch (error: unknown) {
     if (isFileNotFound(error)) {
       return undefined;
@@ -675,7 +306,7 @@ async function main(): Promise<void> {
             } catch (error) {
               if (
                 error instanceof SegmentationValidationError ||
-                error instanceof SegmentationReviewError
+                error instanceof SegmentationCorrectionError
               ) {
                 // Keep failure visible in console for test mode; no artifact writes.
               }
