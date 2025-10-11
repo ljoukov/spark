@@ -315,7 +315,7 @@ export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
   readonly contents?: never;
   readonly imageAspectRatio?: string;
   readonly stylePrompt: string;
-  readonly styleImages: readonly LlmImageData[];
+  readonly styleImages?: readonly LlmImageData[];
   readonly imagePrompts: readonly string[];
   readonly maxAttempts?: number;
 };
@@ -424,7 +424,9 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
         const header = `Part ${partIndex + 1}`;
         switch (part.type) {
           case "text":
-            lines.push(`${header} (text):`);
+            lines.push(
+              `${header} (${part.thought === true ? "thought" : "text"}):`
+            );
             lines.push(part.text);
             break;
           case "inlineData": {
@@ -889,22 +891,35 @@ export async function generateImages(
     return [];
   }
 
+  const addText = (parts: LlmContentPart[], text: string) => {
+    const lastPart = parts[parts.length - 1];
+    if (lastPart !== undefined && lastPart.type === "text") {
+      lastPart.text = `${lastPart.text}\n${text}`;
+    } else {
+      parts.push({ type: "text", text });
+    }
+  };
+
   const buildInitialPrompt = (): LlmContentPart[] => {
     const parts: LlmContentPart[] = [];
-    parts.push({
-      type: "text",
-      text: [
-        "Please make all requested images:",
+    addText(
+      parts,
+      [
+        `Please make all ${numImages} requested images:`,
         "",
         "Follow the style:",
         stylePrompt,
-      ].join("\n"),
-    });
-    if (styleImages.length > 0) {
+      ].join("\n")
+    );
+    if (styleImages !== undefined && styleImages.length > 0) {
+      addText(
+        parts,
+        "\nFollow the visual style, composition and the characters from these images:"
+      );
       for (const styleImage of styleImages) {
         parts.push({
           type: "inlineData",
-          data: "",
+          data: styleImage.data.toString("base64"),
           mimeType: styleImage.mimeType,
         });
       }
@@ -913,16 +928,8 @@ export async function generateImages(
     for (const entry of promptEntries) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
-    const text = lines.join("\n");
-    const lastPart = parts[parts.length - 1];
-    if (lastPart?.type === "text") {
-      lastPart.text = `${lastPart.text}\n${text}`;
-    } else {
-      parts.push({
-        type: "text",
-        text,
-      });
-    }
+    const linesText = lines.join("\n");
+    addText(parts, linesText);
     return parts;
   };
 
@@ -992,4 +999,10 @@ export async function generateImages(
   }
 
   return collectedImages.slice(0, numImages);
+}
+
+export async function generateImageInBatches(
+  options: LlmGenerateImagesOptions & { batchSize: number; overlapSize: number }
+): Promise<LlmImageData[]> {
+  // TODO: use generateImages to generate at most batchSize each time supplying overlapSize previously generated images as (additional) style images (always keep original style imags), of course set debug.attempt suffix to batchIndex (1-based)
 }

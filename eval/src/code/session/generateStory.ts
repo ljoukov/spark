@@ -6,8 +6,8 @@ import { z } from "zod";
 
 import {
   generateImages,
-  runLlmJsonCall,
-  runLlmTextCall,
+  generateText,
+  generateJson,
   type LlmContentPart,
 } from "../../utils/llm";
 import type {
@@ -30,6 +30,9 @@ export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
   "A beautiful and engaging high quality classic cartoon illustration.",
   "Use a high-positivity tone, high quality, bright colors, and a clear composition.",
+  "Do NOT add borders",
+  "Do NOT produce multi-panel images",
+  "Single scene per image",
 ];
 
 export type StoryProgress = JobProgressReporter | undefined;
@@ -355,12 +358,11 @@ export async function generateProseStory(
     `[story] generating prose with web-search-enabled ${TEXT_MODEL_ID}`
   );
   const prompt = buildStoryPrompt(topic);
-  const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
   adapter.log("[story/prose] prompt prepared");
-  const text = await runLlmTextCall({
+  const text = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
-    parts,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     tools: [{ type: "web-search" }],
     debug: options?.debugRootDir
       ? { rootDir: options.debugRootDir, stage: "prose" }
@@ -472,12 +474,10 @@ export async function generateStorySegmentation(
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
   const prompt = buildSegmentationPrompt(storyText);
-  const parts: LlmContentPart[] = [{ type: "text", text: prompt }];
-
-  const segmentation = await runLlmJsonCall<StorySegmentation>({
+  const segmentation = await generateJson<StorySegmentation>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
-    parts,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
     schema: StorySegmentationSchema,
     debug: options?.debugRootDir
@@ -511,10 +511,15 @@ export async function correctStorySegmentation(
       generationPrompt
     );
     try {
-      const response = await runLlmJsonCall<SegmentationCorrectorResponse>({
+      const response = await generateJson<SegmentationCorrectorResponse>({
         progress: adapter,
         modelId: TEXT_MODEL_ID,
-        parts: [{ type: "text", text: reviewPrompt }],
+        contents: [
+          {
+            role: "user",
+            parts: [{ type: "text", text: reviewPrompt }],
+          },
+        ],
         responseSchema: SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA,
         schema: SegmentationCorrectorResponseSchema,
         debug: options?.debugRootDir
@@ -679,11 +684,11 @@ export async function generateImageSets(
     const mainImageParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
-      stylePrompt: styleLines,
+      stylePrompt: styleLines.join("\n"),
       imagePrompts: panelEntries.map((entry) => entry.prompt),
       maxAttempts: 4,
       imageAspectRatio: "16:9",
-      batchSize: 5,
+      //batchSize: 5,
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,
@@ -715,12 +720,12 @@ export async function generateImageSets(
     const posterParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
-      stylePrompt: styleLines,
+      stylePrompt: styleLines.join("\n"),
       imagePrompts: [`Poster illustration: ${posterEntry.prompt}`],
       maxAttempts: 4,
       imageAspectRatio: "16:9",
-      batchSize: 1,
-      referenceImages: posterReferences,
+      //batchSize: 1,
+      styleImages: posterReferences,
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,
@@ -749,12 +754,12 @@ export async function generateImageSets(
     const endingParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
-      stylePrompt: styleLines,
+      stylePrompt: styleLines.join("\n"),
       imagePrompts: [`The end card: ${endingEntry.prompt}`],
       maxAttempts: 4,
       imageAspectRatio: "16:9",
-      batchSize: 1,
-      referenceImages: endingReferences,
+      //batchSize: 1,
+      styleImages: endingReferences,
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,
@@ -854,10 +859,10 @@ export async function judgeImageSets(
 
   adapter.log(`[story/images-judge] set comparison request prepared`);
 
-  const response = await runLlmJsonCall<ImageSetJudgeResponse>({
+  const response = await generateJson<ImageSetJudgeResponse>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
-    parts,
+    contents: [{ role: "user", parts }],
     responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
     maxAttempts: 1,
