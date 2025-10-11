@@ -74,7 +74,7 @@ const ttsClient = new GoogleTextToSpeechClient();
 const DEFAULT_LANGUAGE_CODE = "en-GB";
 const DEFAULT_AUDIO_ENCODING: SynthesizeAudioEncoding = "MP3";
 const DEFAULT_VOICE_MAP: Record<SpeakerCode, string> = {
-  m: "en-GB-Chirp3-HD-Sadaltager",
+  m: "en-GB-Chirp3-HD-Fenfir",
   f: "en-GB-Chirp3-HD-Leda",
 };
 
@@ -156,6 +156,7 @@ async function synthesiseSegment(
       },
       audioConfig: {
         audioEncoding: options.audioEncoding,
+        speakingRate: 0.85,
       },
     });
 

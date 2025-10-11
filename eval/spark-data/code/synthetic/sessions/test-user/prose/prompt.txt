@@ -1,0 +1,63 @@
+=== Message 1 (user) ===
+Part 1 (text):
+Please carefully ideate on critical parts.
+Use web search tool to double check if anything requires verification.
+
+Goal: Canonical Origin Story (audio-friendly).
+
+**Task**
+Write a single-voice, audio-friendly historical story that introduces **dynamic programming** to **advanced maths school students** in **UK**. It must be factual, vivid, and memorable.
+
+**Internal workflow**
+
+**Part A — Choose the discoverer and the canonical event**
+
+* Select **one documented originator** of **dynamic programming** (or its defining method) and **one specific, sourced event** where the idea was introduced (talk, memo, paper, demo, funding review, crisis, competition).
+* Give **time, place, and stakes** for that moment (why the room cared that day).
+* Prefer a **classical origin episode** recognised by insiders but likely new to the audience.
+* **Hard rules:** do not relocate the event; do not centre a later adopter; no invented scenes or quotes.
+* Include a one-line **terminology/naming clarification** if the term is confusing or politically shaped.
+
+**Part A.1 — Introduce the figure (why this person, why now)**
+
+* In **one to two sentences**, establish **who the person is in relation to this exact problem**, their **authority or constraint** (role, remit, pressure), and **why they are the right lens** for this concept **today**.
+* Keep the colour **brief and professional**; avoid casual descriptors. The intro should make the audience think: *this person is exactly where this idea had to be born.*
+
+**Part B — Frame the problem so listeners “see it” immediately**
+
+* Open with **one concrete, urgent, easy-to-picture question** from the real domain of the event. Use **material nouns/verbs**; avoid abstractions. Make the **constraint** obvious on first hearing (time, fuel, memory, risk, cost).
+* State the **essence of the concept in one plain sentence**.
+* Provide **one precise, historically plausible mental model or analogy** rooted in the same domain.
+* **Do not** give a step-by-step algorithm. If numbers are unavoidable, use **at most one** tiny calculation with **distinct values** and **no chained arithmetic**.
+
+**Terminology for learners (mandatory)**
+
+* **Expand acronyms on first use.**
+* **Briefly gloss any term likely unfamiliar to advanced maths school students** at first mention (about 3-10 words), in-line and concrete.
+* If a term's meaning has shifted over time, give the **period-correct meaning** in one line.
+
+**Story constraints**
+
+* **Historical fidelity:** real setting, roles, pressures; no localisation to the audience's city or era.
+* **Contrast (one line):** name a common alternative and why it fails under the stated constraint.
+* **Close:** end with a **memorable, single-line takeaway** that captures the “direction of thought”; then one factual line on **what happened next** (publication, adoption, impact).
+
+**Style & length**
+
+* Single narrator; **paragraphs only** (no bullets, dialogue, or footnotes).
+* Short-to-medium sentences; TED-style momentum; vivid but restrained.
+* Prefer **spelled-out years** for listening.
+* Length: **2-3 minutes**.
+
+**Output format**
+
+* 2-4 word title
+* Story paragraphs
+
+**Safeguards (hard rules)**
+
+* **Discoverer-first** and **classical-anchor** required.
+* **No adopter-stories**, no fiction, no relocation.
+* **Term-glossing is compulsory.**
+* **Character relevance test:** if swapping the figure for another would barely change the story, choose a better anchor.
+

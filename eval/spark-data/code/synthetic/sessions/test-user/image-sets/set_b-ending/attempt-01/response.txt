@@ -1,0 +1,9 @@
+Model: gemini-2.5-flash-image
+Elapsed: 12.2s
+
+===== Response =====
+
+
+===== Content =====
+=== Message 1 (model) ===
+Part 1 (inline image/png, 514795 bytes)

@@ -924,6 +924,7 @@ type GenerateStoryOptions = {
   storagePrefix?: string;
   progress?: StoryProgress;
   audioProgressLabel?: string;
+  debugRootDir?: string;
 };
 
 export type GenerateStoryResult = {
@@ -975,17 +976,23 @@ function toMediaSegments(
 export async function generateStory(
   options: GenerateStoryOptions
 ): Promise<GenerateStoryResult> {
-  const story = await generateProseStory(options.topic, options.progress);
+  const story = await generateProseStory(options.topic, options.progress, {
+    debugRootDir: options.debugRootDir,
+  });
   const initialSegmentation = await generateStorySegmentation(
     story.text,
-    options.progress
+    options.progress,
+    { debugRootDir: options.debugRootDir }
   );
   const segmentation = await correctStorySegmentation(
     story.text,
     initialSegmentation,
-    options.progress
+    options.progress,
+    { debugRootDir: options.debugRootDir }
   );
-  const images = await generateStoryImages(segmentation, options.progress);
+  const images = await generateStoryImages(segmentation, options.progress, {
+    debugRootDir: options.debugRootDir,
+  });
   // We now generate 12 images total: 10 story panels, 1 ending card, 1 poster.
   // For media segments we only use the 10 interior images (indices 1..10).
   const interior = images.images.filter(

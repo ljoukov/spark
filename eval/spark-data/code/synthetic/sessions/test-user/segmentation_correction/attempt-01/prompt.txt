@@ -1,0 +1,75 @@
+=== Message 1 (user) ===
+Part 1 (text):
+You are the image prompt corrector for illustrated historical stories.
+Assess whether the illustration prompts comply with the brief and rewrite only the prompts that violate the rules.
+
+Only include entries under `corrections` for prompts that must be updated.
+
+Check for:
+- Each prompt grounds the scene in time and place (decade, location, or workplace details).
+- One clear action, at most two characters, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.
+- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.
+- Characters are not expected to hold a paper, book or poster
+- No formulas or diagrams or tables are requested
+- Main characters appear in every image
+
+===== Segmentation generation brief =====
+Convert the provided historical story into a structured narration and illustration plan.
+
+Requirements:
+1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
+   This yields 12 total illustration prompts: poster + 10 story beats + ending card.
+2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Keep any visible text within four words.
+3. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.
+4. For each of the ten `segments`:
+   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.
+   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.
+   • Provide `imagePrompt`, a clear visual prompt that captures the same moment as the narration slice(s). Focus on subject, action, setting, and lighting cues. Do not include stylistic descriptors (lighting adjectives are fine, but no references to media franchises or rendering engines).
+5. Keep each `imagePrompt` drawable as a single vintage cartoon panel: emphasise one main action, at most two characters, simple props, and broad composition notes. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.
+6. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.
+7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.
+8. No formulas or diagrams or tables are requested
+9. Main characters appear in every image
+
+================ Story to segment ================
+### Working Backwards
+
+In the early nineteen-fifties, inside the RAND Corporation—an American think-tank advising the US military—a mathematician named Richard Bellman faced a monumental task. His job was to figure out how to solve hugely complex planning problems for the United States Air Force, known as multi-stage decision processes. These were problems where you have to make a sequence of choices, but every choice you make influences the options that follow. Bellman was the perfect person to tackle this, not only for his mathematical ability but because of the unique political pressures of the time.
+
+Imagine the core question he faced: how do you plot the single most efficient route for a missile, considering fuel, time, and target accuracy, when there is a dizzying number of possible trajectories? The common method, trying to calculate every single possible path from start to finish, was computationally impossible. This "brute force" approach would overwhelm even the best machines of the Cold War era. Bellman needed a new way of thinking.
+
+His breakthrough was to break a complicated problem into smaller, simpler sub-problems and then solve it by working backwards from the final goal. This is the essence of dynamic programming. Instead of starting at the beginning, you start at the end. Consider planning a multi-stop journey across the country. To find the best route, you don't start by mapping every path from your front door. Instead, you first find the best path from every single one of the second-to-last towns to your final destination. Once you know those optimal short hops, you step back and calculate the best path from the towns *before that* to those second-to-last towns. Any optimal path is always made up of shorter optimal paths—an idea he called the "Principle of Optimality".
+
+Bellman even had to be strategic with the name. The US Secretary of Defense at the time, Charles Wilson, was famously hostile to the very word "research". To secure funding and avoid political trouble, Bellman invented a name that was deliberately impressive and difficult to criticise: "dynamic programming". He chose "dynamic" because it captured the time-varying nature of the problems, and "programming" not in the sense of computer code, but from the military term for planning and logistics.
+
+The core idea is to solve a complex problem by starting from the end and working your way back to the beginning. This method, born from Cold War necessity, was formalised in Bellman's nineteen fifty-seven book, *Dynamic Programming*, and is now used in fields from aerospace engineering to economics and artificial intelligence.
+==================================================
+
+segmentation prompt:
+------------------
+Convert the story into alternating-voice narration segments with illustration prompts plus poster and ending prompts, following all rules above.
+===== End brief =====
+
+Indexed prompts (0-9 story panels, 10 = ending card labelled "the end", 11 = poster):
+Prompt 0 (story panel 1) image prompt: Richard Bellman sits at a mid-century desk inside an office. A sign on the wall reads 'RAND Corporation'. He looks thoughtfully at a complex diagram on a paper, surrounded by books and calculation tools.
+Prompt 0 narration: M: In the early 1950s, within the RAND Corporation think-tank, mathematician Richard Bellman was given a monumental task by the US Air Force: solve their most complex planning problems.
+Prompt 1 (story panel 2) image prompt: Richard Bellman looks at a large map on a wall showing a starting point and a target. Numerous faint, dotted lines arc between the two points, creating a confusing web of potential paths.
+Prompt 1 narration: F: The core question was how to plot the single most efficient route for a missile, considering fuel, time, and accuracy, when there were a dizzying number of possible trajectories.
+Prompt 2 (story panel 3) image prompt: A vintage mainframe computer with spinning tape reels has smoke and sparks coming out of it. Richard Bellman stands beside it, looking frustrated at the machine's failure.
+Prompt 2 narration: M: The common method of calculating every single path, known as 'brute force,' would overwhelm even the most powerful computers of the Cold War era.
+Prompt 3 (story panel 4) image prompt: A lightbulb glows above Richard Bellman's head. He is looking at the confusing web of paths on the map again, but now he is using his hands to frame a small section of the paths near the target.
+Prompt 3 narration: F: Bellman's breakthrough was to stop thinking from start to finish. He realized he could break a massive problem into a series of smaller, simpler sub-problems.
+Prompt 4 (story panel 5) image prompt: Richard Bellman stands before a simplified map of a country with a final destination city marked on the far right. He points not at the start, but at the final city.
+Prompt 4 narration: M: His new approach was like planning a multi-stop journey across the country. Instead of starting from your front door, you start at the end and work backwards.
+Prompt 5 (story panel 6) image prompt: On the country map, several towns near the destination now have single, clear arrows pointing from them to the final city. Richard Bellman looks on with a confident expression.
+Prompt 5 narration: F: First, you find the best path from every one of the second-to-last towns to the final destination. Once you know those optimal short hops, you have a set of simpler problems to solve.
+Prompt 6 (story panel 7) image prompt: The map now shows a single, clear, optimal route being chained together from the short hops, going backwards from the destination. Richard Bellman gestures to the completed path.
+Prompt 6 narration: M: He called this the 'Principle of Optimality': any optimal path is always made up of shorter optimal paths.
+Prompt 7 (story panel 8) image prompt: An imposing, silhouetted government official slams his fist on a desk in a dark office. A newspaper on the desk has a headline: 'WILSON AGAINST RESEARCH'. Richard Bellman looks on, worried.
+Prompt 7 narration: F: But Bellman faced a political obstacle. The Secretary of Defense at the time was famously hostile to the very word 'research' and might defund any project with that name.
+Prompt 8 (story panel 9) image prompt: Richard Bellman stands confidently in front of military officials, pointing to an easel with the words 'Dynamic Programming' written in bold letters. The officials look impressed.
+Prompt 8 narration: M: To secure funding, Bellman invented a name that sounded impressive and practical: 'dynamic programming.' 'Dynamic' for the time-varying nature, and 'programming' from military planning.
+Prompt 9 (story panel 10) image prompt: Richard Bellman holds his book, titled 'Dynamic Programming'. Behind him, a montage of modern applications glows faintly: a space shuttle, a stock market graph, and a simple robot.
+Prompt 9 narration: F: Formalized in his 1957 book, this method of working backwards is now essential in fields from aerospace engineering to economics and artificial intelligence, all born from a Cold War challenge.
+Prompt 10 ("the end" card) image prompt: A graceful 'The End' card. Below the text, a simple motif shows a single, elegant line arcing from a target point back to a starting point.
+Prompt 11 (poster) image prompt: A dynamic scene showing mathematician Richard Bellman in front of a giant, complex chalkboard filled with tangled, branching paths. Bellman draws a single, glowing line that cuts cleanly through the chaos, starting from a target and moving backwards. The stylized text 'Working Backwards' is visible.

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import {
@@ -28,12 +29,13 @@ import {
   OUTRO_PLAN_ITEM_ID,
   STORY_TOPIC,
 } from "./constants";
-import { ensureEvalEnvLoaded } from "../../utils/paths";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
 import { generateStory } from "./generateStory";
+import { runJobsWithConcurrency } from "../../utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
 const DEFAULT_MEDIA_IMAGE =
@@ -873,6 +875,14 @@ function buildPlan(storyTitle: string): PlanItem[] {
   ];
 }
 
+function resolveDebugRootDir(): string {
+  return path.join(
+    WORKSPACE_PATHS.codeSyntheticDir,
+    "sessions",
+    "test-user"
+  );
+}
+
 function normalizeBucketName(raw: string | undefined): string {
   if (!raw) {
     return "";
@@ -970,13 +980,24 @@ async function main(): Promise<void> {
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
   const storageBucket = resolveStorageBucket();
+  const debugRootDir = resolveDebugRootDir();
 
-  const storyResult = await generateStory({
-    topic: STORY_TOPIC,
-    userId,
-    sessionId,
-    planItemId: STORY_PLAN_ITEM_ID,
-    storageBucket,
+  const [storyResult] = await runJobsWithConcurrency({
+    items: ["story"],
+    concurrency: 1,
+    getId: () => "story",
+    label: "[test-session/story]",
+    handler: async (_item, { progress }) => {
+      return generateStory({
+        topic: STORY_TOPIC,
+        userId,
+        sessionId,
+        planItemId: STORY_PLAN_ITEM_ID,
+        storageBucket,
+        progress,
+        debugRootDir,
+      });
+    },
   });
 
   const sessionData = {

@@ -1,0 +1,36 @@
+=== Message 1 (user) ===
+Part 1 (text):
+Convert the provided historical story into a structured narration and illustration plan.
+
+Requirements:
+1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
+   This yields 12 total illustration prompts: poster + 10 story beats + ending card.
+2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Keep any visible text within four words.
+3. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.
+4. For each of the ten `segments`:
+   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.
+   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.
+   • Provide `imagePrompt`, a clear visual prompt that captures the same moment as the narration slice(s). Focus on subject, action, setting, and lighting cues. Do not include stylistic descriptors (lighting adjectives are fine, but no references to media franchises or rendering engines).
+5. Keep each `imagePrompt` drawable as a single vintage cartoon panel: emphasise one main action, at most two characters, simple props, and broad composition notes. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.
+6. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.
+7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.
+8. No formulas or diagrams or tables are requested
+9. Main characters appear in every image
+
+================ Story to segment ================
+### Working Backwards
+
+In the early nineteen-fifties, inside the RAND Corporation—an American think-tank advising the US military—a mathematician named Richard Bellman faced a monumental task. His job was to figure out how to solve hugely complex planning problems for the United States Air Force, known as multi-stage decision processes. These were problems where you have to make a sequence of choices, but every choice you make influences the options that follow. Bellman was the perfect person to tackle this, not only for his mathematical ability but because of the unique political pressures of the time.
+
+Imagine the core question he faced: how do you plot the single most efficient route for a missile, considering fuel, time, and target accuracy, when there is a dizzying number of possible trajectories? The common method, trying to calculate every single possible path from start to finish, was computationally impossible. This "brute force" approach would overwhelm even the best machines of the Cold War era. Bellman needed a new way of thinking.
+
+His breakthrough was to break a complicated problem into smaller, simpler sub-problems and then solve it by working backwards from the final goal. This is the essence of dynamic programming. Instead of starting at the beginning, you start at the end. Consider planning a multi-stop journey across the country. To find the best route, you don't start by mapping every path from your front door. Instead, you first find the best path from every single one of the second-to-last towns to your final destination. Once you know those optimal short hops, you step back and calculate the best path from the towns *before that* to those second-to-last towns. Any optimal path is always made up of shorter optimal paths—an idea he called the "Principle of Optimality".
+
+Bellman even had to be strategic with the name. The US Secretary of Defense at the time, Charles Wilson, was famously hostile to the very word "research". To secure funding and avoid political trouble, Bellman invented a name that was deliberately impressive and difficult to criticise: "dynamic programming". He chose "dynamic" because it captured the time-varying nature of the problems, and "programming" not in the sense of computer code, but from the military term for planning and logistics.
+
+The core idea is to solve a complex problem by starting from the end and working your way back to the beginning. This method, born from Cold War necessity, was formalised in Bellman's nineteen fifty-seven book, *Dynamic Programming*, and is now used in fields from aerospace engineering to economics and artificial intelligence.
+==================================================
+
+segmentation prompt:
+------------------
+Convert the story into alternating-voice narration segments with illustration prompts plus poster and ending prompts, following all rules above.

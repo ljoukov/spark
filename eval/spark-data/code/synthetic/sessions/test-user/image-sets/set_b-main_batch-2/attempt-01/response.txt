@@ -1,0 +1,15 @@
+Model: gemini-2.5-flash-image
+Elapsed: 43.6s
+
+===== Response =====
+Here are the 5 images you requested, following the specified style, composition, and character consistency:
+
+===== Content =====
+=== Message 1 (model) ===
+Part 1 (text):
+Here are the 5 images you requested, following the specified style, composition, and character consistency:
+
+
+Part 2 (inline image/png, 1117882 bytes)
+Part 3 (inline image/png, 1227508 bytes)
+Part 4 (inline image/png, 811429 bytes)

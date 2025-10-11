@@ -1,0 +1,24 @@
+=== Message 1 (user) ===
+Part 1 (text):
+Please make all 5 requested images:
+
+Follow the style:
+A beautiful and engaging high quality classic cartoon illustration.
+Use a high-positivity tone, high quality, bright colors, and a clear composition.
+Do NOT add borders
+Do NOT produce multi-panel images
+Single scene per image
+
+Image descriptions:
+
+Image 1: Richard Bellman sits at a mid-century desk inside an office. A sign on the wall reads 'RAND Corporation'. He looks thoughtfully at a complex diagram spread across his desk, surrounded by books and calculation tools.
+
+Image 2: Richard Bellman looks at a large map on a wall showing a starting point and a target. Numerous faint, dotted lines arc between the two points, creating a confusing web of potential paths.
+
+Image 3: A vintage mainframe computer with spinning tape reels has smoke and sparks coming out of it. Richard Bellman stands beside it, looking frustrated at the machine's failure.
+
+Image 4: Richard Bellman's face is illuminated by the light of the map on the wall. His expression shifts from confused to determined as he looks at the confusing web of paths, using his hands to frame a small section of the paths near the target.
+
+Image 5: Richard Bellman stands before a simplified map of a country with a final destination city marked on the far right. He points not at the start, but at the final city.
+
+Please make all 5 images.
