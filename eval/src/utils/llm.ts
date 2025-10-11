@@ -1004,5 +1004,66 @@ export async function generateImages(
 export async function generateImageInBatches(
   options: LlmGenerateImagesOptions & { batchSize: number; overlapSize: number }
 ): Promise<LlmImageData[]> {
-  // TODO: use generateImages to generate at most batchSize each time supplying overlapSize previously generated images as (additional) style images (always keep original style imags), of course set debug.attempt suffix to batchIndex (1-based)
+  const {
+    batchSize,
+    overlapSize,
+    imagePrompts,
+    styleImages: baseStyleImagesInput,
+    debug: baseDebug,
+    ...restOptions
+  } = options;
+
+  if (batchSize <= 0) {
+    throw new Error("batchSize must be greater than 0");
+  }
+  if (imagePrompts.length === 0) {
+    return [];
+  }
+
+  const baseStyleImages = baseStyleImagesInput
+    ? [...baseStyleImagesInput]
+    : [];
+  const generatedImages: LlmImageData[] = [];
+  const totalPrompts = imagePrompts.length;
+
+  for (
+    let startIndex = 0, batchIndex = 0;
+    startIndex < totalPrompts;
+    startIndex += batchSize, batchIndex += 1
+  ) {
+    const endIndex = Math.min(startIndex + batchSize, totalPrompts);
+    const batchPrompts = imagePrompts.slice(startIndex, endIndex);
+
+    let styleImagesForBatch: readonly LlmImageData[] = baseStyleImages;
+    if (overlapSize > 0 && generatedImages.length > 0) {
+      const overlapImages = generatedImages.slice(
+        Math.max(0, generatedImages.length - overlapSize)
+      );
+      if (overlapImages.length > 0) {
+        styleImagesForBatch = [...baseStyleImages, ...overlapImages];
+      }
+    }
+
+    const batchDebug =
+      baseDebug !== undefined
+        ? {
+            ...baseDebug,
+            attempt:
+              baseDebug.attempt !== undefined
+                ? `${String(baseDebug.attempt)}.${batchIndex + 1}`
+                : String(batchIndex + 1),
+          }
+        : undefined;
+
+    const batchImages = await generateImages({
+      ...restOptions,
+      styleImages: styleImagesForBatch,
+      imagePrompts: batchPrompts,
+      debug: batchDebug,
+    });
+
+    generatedImages.push(...batchImages);
+  }
+
+  return generatedImages;
 }
