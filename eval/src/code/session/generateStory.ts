@@ -5,6 +5,7 @@ import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
 import {
+  generateImageInBatches,
   generateImages,
   generateText,
   generateJson,
@@ -681,14 +682,15 @@ export async function generateImageSets(
     adapter.log(
       `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`
     );
-    const mainImageParts = await generateImages({
+    const mainImageParts = await generateImageInBatches({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
       stylePrompt: styleLines.join("\n"),
       imagePrompts: panelEntries.map((entry) => entry.prompt),
       maxAttempts: 4,
       imageAspectRatio: "16:9",
-      //batchSize: 5,
+      batchSize: 5,
+      overlapSize: 3,
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,

@@ -407,6 +407,7 @@ function resolveDebugDir(
         : String(attemptValue);
     segments.push(normalisePathSegment(attemptSegment));
   }
+  console.log(`outputdir=${path.join(...segments)}`);
   return path.join(...segments);
 }
 
@@ -928,6 +929,8 @@ export async function generateImages(
     for (const entry of promptEntries) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
+    lines.push("");
+    lines.push(`Please make all ${numImages} images.`);
     const linesText = lines.join("\n");
     addText(parts, linesText);
     return parts;
@@ -945,7 +948,8 @@ export async function generateImages(
     for (const entry of pending) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
-    lines.join("\n");
+    lines.join("");
+    lines.push(`\nPlease make all ${pendingIds.length} remaining images.`);
     return [
       {
         type: "text",
@@ -1020,9 +1024,7 @@ export async function generateImageInBatches(
     return [];
   }
 
-  const baseStyleImages = baseStyleImagesInput
-    ? [...baseStyleImagesInput]
-    : [];
+  const baseStyleImages = baseStyleImagesInput ? [...baseStyleImagesInput] : [];
   const generatedImages: LlmImageData[] = [];
   const totalPrompts = imagePrompts.length;
 
@@ -1048,10 +1050,9 @@ export async function generateImageInBatches(
       baseDebug !== undefined
         ? {
             ...baseDebug,
-            attempt:
-              baseDebug.attempt !== undefined
-                ? `${String(baseDebug.attempt)}.${batchIndex + 1}`
-                : String(batchIndex + 1),
+            subStage: baseDebug.subStage
+              ? `${baseDebug.subStage}_batch-${batchIndex + 1}`
+              : `batch-${batchIndex + 1}`,
           }
         : undefined;
 
