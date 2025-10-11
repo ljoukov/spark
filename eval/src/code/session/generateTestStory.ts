@@ -49,23 +49,13 @@ type StageName = z.infer<typeof StageEnum>;
 const STAGE_ORDER: StageName[] = StageEnum.options;
 
 const optionsSchema = z.object({
-  prose: z.boolean(),
-  images: z.boolean(),
   topic: z.string().trim().min(1, "topic cannot be empty"),
-  output: z.string().trim().min(1, "output path cannot be empty").optional(),
   stages: z.array(StageEnum).default([]),
 });
 
 type CliOptions = z.infer<typeof optionsSchema>;
 
-function resolveOutputDir(rawOptions: CliOptions): string {
-  const provided = rawOptions.output;
-  if (provided) {
-    const absolute = path.isAbsolute(provided)
-      ? provided
-      : path.join(WORKSPACE_PATHS.codeSyntheticDir, provided);
-    return absolute;
-  }
+function resolveOutputDir(): string {
   return path.join(WORKSPACE_PATHS.codeSyntheticDir, "stories", "test-story");
 }
 
@@ -89,21 +79,6 @@ async function writeCheckpoint(
 
 function resolveStageSequence(options: CliOptions): StageName[] {
   const requested = new Set<StageName>(options.stages);
-
-  if (options.prose) {
-    requested.add("prose");
-    requested.add("segmentation");
-    requested.add("segmentation_correction");
-    requested.add("audio");
-  }
-
-  if (options.images) {
-    requested.add("image-sets");
-    requested.add("images-judge");
-    requested.add("segmentation");
-    requested.add("segmentation_correction");
-    requested.add("audio");
-  }
 
   if (requested.size === 0) {
     return STAGE_ORDER.filter((stage) => stage !== "publish");
@@ -363,38 +338,23 @@ async function main(): Promise<void> {
   ensureEvalEnvLoaded();
   const program = new Command();
   program
-    .option("--prose", "Generate the narrated story", false)
-    .option("--images", "Generate companion illustration panels", false)
     .option("--topic <topic>", "Topic for the story", STORY_TOPIC)
-    .option(
-      "--output <dir>",
-      "Output directory (absolute or relative to spark-data/code/synthetic)"
-    )
     .addOption(
-      new Option(
-        "--stage <stage...>",
-        "Stages to run (prose, segmentation, segmentation_correction, audio, image-sets, images-judge, publish)"
-      ).choices(STAGE_ORDER)
+      new Option("--stage <stage...>", "Stages to run").choices(STAGE_ORDER)
     );
 
   program.parse(process.argv);
   const rawOptions = program.opts<{
-    prose?: boolean;
-    images?: boolean;
     topic?: string;
-    output?: string;
     stage?: string[];
   }>();
 
   const parsed = optionsSchema.parse({
-    prose: Boolean(rawOptions.prose),
-    images: Boolean(rawOptions.images),
     topic: rawOptions.topic ?? STORY_TOPIC,
-    output: rawOptions.output,
     stages: (rawOptions.stage ?? []).map((value) => value.toLowerCase()),
   });
 
-  const outDir = resolveOutputDir(parsed);
+  const outDir = resolveOutputDir();
   console.log(`[story] output directory: ${outDir}`);
 
   await runJobsWithConcurrency({
