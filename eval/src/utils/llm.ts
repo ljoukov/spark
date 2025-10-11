@@ -407,7 +407,6 @@ function resolveDebugDir(
         : String(attemptValue);
     segments.push(normalisePathSegment(attemptSegment));
   }
-  console.log(`outputdir=${path.join(...segments)}`);
   return path.join(...segments);
 }
 
