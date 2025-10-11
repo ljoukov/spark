@@ -333,6 +333,7 @@ export function buildSegmentationPrompt(storyText: string): string {
     '6. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
     "7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.",
     "8. No formulas or diagrams or tables are requested",
+    "9. Main characters appear in every image",
     "",
     "================ Story to segment ================",
     storyText,
@@ -387,7 +388,7 @@ function buildSegmentationCorrectorPrompt(
     '- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
     "- Characters are not expected to hold a paper, book or poster",
     "- No formulas or diagrams or tables are requested",
-    "- Poster (index 11) reads like a high-impact cover: stunning, captivating, interesting, and intriguing. It explicitly mentions the protagonist by name (or a concise moniker) while keeping any visible text within four words.",
+    "- Main characters appear in every image",
     "",
     "===== Segmentation generation brief =====",
     generationPrompt,
@@ -672,58 +673,126 @@ export async function generateImageSets(
   const runImageSet = async (
     imageSetLabel: "set_a" | "set_b"
   ): Promise<StoryImageSet> => {
-    adapter.log(`[story/image-sets/${imageSetLabel}] request prepared`);
-    const requestEntries: SegmentationImageEntry[] = [
-      posterEntry,
-      ...panelEntries,
-      endingEntry,
-    ];
-    const imagePrompts = requestEntries.map(({ index, prompt }) => {
-      if (index === posterIndex) {
-        return `Poster illustration: ${prompt}`;
-      }
-      if (index === endingIndex) {
-        return `The end card: ${prompt}`;
-      }
-      return prompt;
-    });
-    const images: GeneratedStoryImage[] = [];
-    const imageParts = await generateImages({
+    adapter.log(
+      `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`
+    );
+    const mainImageParts = await generateImages({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
       stylePrompt: styleLines,
-      imagePrompts,
+      imagePrompts: panelEntries.map((entry) => entry.prompt),
       maxAttempts: 4,
       imageAspectRatio: "16:9",
+      batchSize: 5,
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,
             stage: "image-sets",
-            subStage: imageSetLabel,
+            subStage: `${imageSetLabel}-main`,
           }
         : undefined,
     });
 
-    let assignCursor = 0;
-    for (const inlineImage of imageParts) {
-      const target =
-        requestEntries[assignCursor] ?? requestEntries.at(-1);
-      if (target) {
-        images.push({
-          index: target.index,
-          mimeType: inlineImage.mimeType ?? "image/png",
-          data: inlineImage.data,
-        });
-        adapter.log(
-          `[story/image-sets/${imageSetLabel}] received image ${target.index} (${inlineImage.data.length} bytes)`
-        );
-        assignCursor += 1;
+    const imagesByIndex = new Map<number, GeneratedStoryImage>();
+    for (let index = 0; index < panelEntries.length; index += 1) {
+      const entry = panelEntries[index];
+      const part = mainImageParts[index];
+      if (!part) {
+        continue;
       }
+      imagesByIndex.set(entry.index, {
+        index: entry.index,
+        mimeType: part.mimeType ?? "image/png",
+        data: part.data,
+      });
+      adapter.log(
+        `[story/image-sets/${imageSetLabel}] received image ${entry.index} (${part.data.length} bytes)`
+      );
     }
+
+    const posterReferences = mainImageParts.slice(0, 4);
+    adapter.log(`[story/image-sets/${imageSetLabel}] generating poster`);
+    const posterParts = await generateImages({
+      progress: adapter,
+      modelId: IMAGE_MODEL_ID,
+      stylePrompt: styleLines,
+      imagePrompts: [`Poster illustration: ${posterEntry.prompt}`],
+      maxAttempts: 4,
+      imageAspectRatio: "16:9",
+      batchSize: 1,
+      referenceImages: posterReferences,
+      debug: options?.debugRootDir
+        ? {
+            rootDir: options.debugRootDir,
+            stage: "image-sets",
+            subStage: `${imageSetLabel}-poster`,
+          }
+        : undefined,
+    });
+
+    const posterPart = posterParts[0];
+    if (posterPart) {
+      imagesByIndex.set(posterIndex, {
+        index: posterIndex,
+        mimeType: posterPart.mimeType ?? "image/png",
+        data: posterPart.data,
+      });
+      adapter.log(
+        `[story/image-sets/${imageSetLabel}] received poster image ${posterIndex} (${posterPart.data.length} bytes)`
+      );
+    }
+
+    const endingReferences = mainImageParts.slice(
+      Math.max(mainImageParts.length - 4, 0)
+    );
+    adapter.log(`[story/image-sets/${imageSetLabel}] generating end card`);
+    const endingParts = await generateImages({
+      progress: adapter,
+      modelId: IMAGE_MODEL_ID,
+      stylePrompt: styleLines,
+      imagePrompts: [`The end card: ${endingEntry.prompt}`],
+      maxAttempts: 4,
+      imageAspectRatio: "16:9",
+      batchSize: 1,
+      referenceImages: endingReferences,
+      debug: options?.debugRootDir
+        ? {
+            rootDir: options.debugRootDir,
+            stage: "image-sets",
+            subStage: `${imageSetLabel}-ending`,
+          }
+        : undefined,
+    });
+
+    const endingPart = endingParts[0];
+    if (endingPart) {
+      imagesByIndex.set(endingIndex, {
+        index: endingIndex,
+        mimeType: endingPart.mimeType ?? "image/png",
+        data: endingPart.data,
+      });
+      adapter.log(
+        `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`
+      );
+    }
+
+    const orderedImages: GeneratedStoryImage[] = [];
+    const appendImageIfPresent = (targetIndex: number) => {
+      const image = imagesByIndex.get(targetIndex);
+      if (image) {
+        orderedImages.push(image);
+      }
+    };
+
+    appendImageIfPresent(posterIndex);
+    for (const entry of panelEntries) {
+      appendImageIfPresent(entry.index);
+    }
+    appendImageIfPresent(endingIndex);
 
     return {
       imageSetLabel,
-      images,
+      images: orderedImages,
     };
   };
 
@@ -753,6 +822,7 @@ export async function judgeImageSets(
     "Criteria: prompt fidelity, clear single action, grounded historical setting, readable composition, and accurate vintage cartoon style (ink outlines, muted palette, subtle paper texture).",
     "If any writing appears, ensure it is four words or fewer, spelled correctly, and period-appropriate.",
     "Make sure that the images do not carry wrong meaning, e.g. the poster should NOT say 'The End' and similar obviously wrong artefacts.",
+    "Main characters appear in every image",
   ];
 
   const parts: LlmContentPart[] = [

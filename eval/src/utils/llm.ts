@@ -6,9 +6,7 @@ import path from "node:path";
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
   FinishReason,
-  type Candidate,
   type Content,
-  type GenerateContentResponse,
   type Part,
   type Schema,
   type Tool,
@@ -69,34 +67,6 @@ function estimateContentsUploadBytes(contents: readonly LlmContent[]): number {
     total += estimateUploadBytes(content.parts);
   }
   return total;
-}
-
-function clonePart(part: Part): Part {
-  const cloned: Part = { ...part };
-  if (part.inlineData) {
-    cloned.inlineData = { ...part.inlineData };
-  }
-  if (part.fileData) {
-    cloned.fileData = { ...part.fileData };
-  }
-  if (part.functionCall) {
-    cloned.functionCall = { ...part.functionCall };
-  }
-  if (part.functionResponse) {
-    cloned.functionResponse = { ...part.functionResponse };
-  }
-  return cloned;
-}
-
-function cloneContent(content: Content): Content {
-  const cloned: Content = {
-    ...content,
-  };
-  const originalParts = content.parts;
-  if (originalParts !== undefined) {
-    cloned.parts = originalParts.map(clonePart);
-  }
-  return cloned;
 }
 
 const MODERATION_FINISH_REASONS = new Set<FinishReason>([
@@ -263,6 +233,41 @@ function convertLlmContentToGoogleContent(content: LlmContent): Content {
     role: content.role,
     parts: content.parts.map(toGooglePart),
   };
+}
+
+function extractVisibleText(content: LlmContent | undefined): string {
+  if (!content) {
+    return "";
+  }
+  let text = "";
+  for (const part of content.parts) {
+    if (part.type === "text" && part.thought !== true) {
+      text += part.text;
+    }
+  }
+  return text.trim();
+}
+
+function collectImagePartsFromContent(
+  content: LlmContent | undefined
+): LlmImagePart[] {
+  if (!content) {
+    return [];
+  }
+  const images: LlmImagePart[] = [];
+  for (const part of content.parts) {
+    if (part.type !== "inlineData") {
+      continue;
+    }
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(part.data, "base64");
+    } catch {
+      buffer = Buffer.from(part.data, "base64url");
+    }
+    images.push({ mimeType: part.mimeType, data: buffer });
+  }
+  return images;
 }
 
 function cloneLlmPart(part: LlmContentPart): LlmContentPart {
@@ -475,78 +480,6 @@ async function writeTextResponseSnapshot({
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
 }
 
-async function writeImageDebugArtifacts({
-  stage,
-  modelVersion,
-  elapsedMs,
-  charCount,
-  chunkLog,
-  thoughts,
-  text,
-  images,
-  contents,
-}: {
-  stage: LlmCallStage;
-  modelVersion: string;
-  elapsedMs: number;
-  charCount: number;
-  chunkLog: string[];
-  thoughts: string[];
-  text: string;
-  images: readonly LlmImagePart[];
-  contents?: readonly LlmContent[];
-}): Promise<void> {
-  const { debugDir } = stage;
-  if (!debugDir) {
-    return;
-  }
-  const responsePath = path.join(debugDir, "response.txt");
-  // Build a snapshot-friendly view of the response content. The GenAI streaming
-  // API may expose only the latest candidate parts at the end of the stream,
-  // which can omit earlier inline images. Prefer reconstructing content from
-  // the collected images to ensure all generated images are listed in the
-  // snapshot. Fall back to provided contents when no images were collected.
-  const contentsForSnapshot: readonly LlmContent[] | undefined =
-    images.length > 0
-      ? (() => {
-          const generatedParts: LlmContentPart[] = [];
-          for (const image of images) {
-            generatedParts.push({
-              type: "inlineData",
-              mimeType: image.mimeType,
-              data: image.data.toString("base64"),
-            });
-          }
-          return [
-            {
-              role: "model",
-              parts: generatedParts,
-            },
-          ];
-        })()
-      : contents;
-  await writeTextResponseSnapshot({
-    pathname: responsePath,
-    summary: [
-      `Model: ${modelVersion}`,
-      `Elapsed: ${formatMillis(elapsedMs)}`,
-      `Characters: ${formatInteger(charCount)}`,
-      `Images: ${images.length}`,
-    ],
-    thoughts,
-    text,
-    chunkLog,
-    contents: contentsForSnapshot,
-  });
-  const writeTasks: Array<Promise<void>> = [];
-  for (const [index, image] of images.entries()) {
-    const extension = image.mimeType?.split("/")[1] ?? "bin";
-    const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
-    writeTasks.push(writeFile(path.join(debugDir, filename), image.data));
-  }
-  await Promise.all(writeTasks);
-}
-
 function buildCallStage({
   modelId,
   debug,
@@ -557,7 +490,7 @@ function buildCallStage({
   attemptLabel?: number | string;
 }): LlmCallStage {
   const labelParts: string[] = [debug?.stage ?? modelId];
-  if (typeof attemptLabel !== "undefined") {
+  if (attemptLabel !== undefined) {
     labelParts.push(`attempt ${attemptLabel}`);
   }
   const debugDir = resolveDebugDir(debug, attemptLabel);
@@ -601,13 +534,11 @@ export type LlmStreamResult = {
   readonly feedback: LlmStreamFeedback;
 };
 
-export async function llmStream({
+async function llmStream({
   options,
-  handleChunk,
   attemptLabel,
 }: {
   readonly options: LlmStreamCallOptions;
-  readonly handleChunk?: (content: LlmContent) => void;
   readonly attemptLabel?: number | string;
 }): Promise<LlmStreamResult> {
   const stage = buildCallStage({
@@ -623,13 +554,8 @@ export async function llmStream({
   if (options.contents.length === 0) {
     throw new Error("LLM call received an empty prompt");
   }
-  const promptContents: LlmContent[] = [];
-  const googlePromptContents: Content[] = [];
-  for (const content of options.contents) {
-    const cloned = cloneLlmContent(content);
-    promptContents.push(cloned);
-    googlePromptContents.push(convertLlmContentToGoogleContent(cloned));
-  }
+  const promptContents = options.contents.map(cloneLlmContent);
+  const googlePromptContents = promptContents.map(convertLlmContentToGoogleContent);
   const config: GeminiCallConfig = {};
   // Enable thinking only when supported. Image models and image responses do
   // not support thinking and will fail if requested.
@@ -695,6 +621,8 @@ export async function llmStream({
   const responseParts: LlmContentPart[] = [];
   let responseRole: LlmRole | undefined;
   let blocked = false;
+  const debugWriteTasks: Array<Promise<void>> = [];
+  let imageCounter = 0;
 
   const appendTextPart = (text: string, isThought: boolean): void => {
     if (text.length === 0) {
@@ -716,6 +644,23 @@ export async function llmStream({
       data,
       mimeType,
     });
+    if (stage.debugDir && typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/")) {
+      const debugDir = stage.debugDir;
+      const index = ++imageCounter;
+      debugWriteTasks.push(
+        (async () => {
+          let buffer: Buffer;
+          try {
+            buffer = Buffer.from(data, "base64");
+          } catch {
+            buffer = Buffer.from(data, "base64url");
+          }
+          const extension = mimeType.split("/")[1] ?? "bin";
+          const filename = `image-${String(index).padStart(2, "0")}.${extension}`;
+          await writeFile(path.join(debugDir, filename), buffer);
+        })()
+      );
+    }
   };
 
   const accumulateContent = (content: LlmContent): { charDelta: number; byteDelta: number } => {
@@ -724,8 +669,7 @@ export async function llmStream({
     if (!responseRole) {
       responseRole = content.role;
     }
-    for (let index = 0; index < content.parts.length; index += 1) {
-      const part = content.parts[index];
+    for (const part of content.parts) {
       if (part.type === "text") {
         const text = part.text;
         appendTextPart(text, part.thought === true);
@@ -763,8 +707,7 @@ export async function llmStream({
           if (isModerationFinish(primary.finishReason)) {
             blocked = true;
           }
-          for (let index = 0; index < candidates.length; index += 1) {
-            const candidate = candidates[index];
+          for (const candidate of candidates) {
             const candidateContent = candidate.content;
             if (!candidateContent) {
               continue;
@@ -774,7 +717,6 @@ export async function llmStream({
               const deltas = accumulateContent(content);
               chunkCharDelta += deltas.charDelta;
               chunkByteDelta += deltas.byteDelta;
-              handleChunk?.(content);
             } catch (error) {
               log(
                 `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
@@ -817,6 +759,24 @@ export async function llmStream({
         }
       : undefined;
 
+  if (stage.debugDir) {
+    await Promise.all(debugWriteTasks);
+    const trimmedResponseText = extractVisibleText(responseContent);
+    await writeTextResponseSnapshot({
+      pathname: path.join(stage.debugDir, "response.txt"),
+      summary: [
+        `Model: ${resolvedModelVersion}`,
+        `Elapsed: ${formatMillis(elapsedMs)}`,
+        `Characters: ${formatInteger(totalChars)}`,
+        `Bytes: ${formatByteSize(totalBytes)}`,
+      ],
+      thoughts,
+      text: trimmedResponseText,
+      chunkLog,
+      contents: responseContent ? [responseContent] : undefined,
+    });
+  }
+
   return {
     stats: {
       elapsedMs,
@@ -842,8 +802,7 @@ function mergeConsecutiveTextParts(
     return [];
   }
   const merged: LlmContentPart[] = [];
-  for (let index = 0; index < parts.length; index += 1) {
-    const part = parts[index];
+  for (const part of parts) {
     if (part.type !== "text") {
       merged.push({
         type: "inlineData",
@@ -880,76 +839,41 @@ type LlmTextCallMeta = {
   readonly elapsedMs: number;
   readonly chunkLog: string[];
   readonly stage: LlmCallStage;
+  readonly content?: LlmContent;
 };
 
 async function executeLlmText(
   options: LlmTextCallOptions,
   attemptLabel?: number | string
 ): Promise<LlmTextCallMeta> {
-  const {
-    elapsedMs,
-    modelVersion,
-    charCount,
-    chunkLog,
-    thoughts,
-    textAggregator,
-    stage,
-    latestCandidateParts,
-    latestCandidateRole,
-  } = await runLlmStream({
-    options: {
-      ...options,
-      responseMimeType: options.responseMimeType,
-      responseSchema: options.responseSchema,
-    },
-    handleChunk: () => {
-      /* noop for text */
-    },
+  const result = await llmStream({
+    options,
     attemptLabel,
   });
 
-  const resolvedText = textAggregator.value.trim();
+  const resolvedText = extractVisibleText(result.content);
   if (!resolvedText) {
     throw new Error("LLM response did not include any text output");
   }
 
-  const { debugDir } = stage;
-
-  if (debugDir) {
-    await writeTextResponseSnapshot({
-      pathname: path.join(debugDir, "response.txt"),
-      summary: [
-        `Model: ${modelVersion}`,
-        `Elapsed: ${formatMillis(elapsedMs)}`,
-        `Characters: ${formatInteger(charCount)}`,
-      ],
-      thoughts,
-      text: resolvedText,
-      chunkLog,
-      contents:
-        latestCandidateParts && latestCandidateParts.length > 0
-          ? [
-              {
-                role: latestCandidateRole ?? "model",
-                parts: latestCandidateParts.map(clonePart),
-              },
-            ]
-          : undefined,
-    });
-  }
+  const stage: LlmCallStage = {
+    label: result.debug.label,
+    debugDir: result.debug.directory,
+  };
 
   return {
     text: resolvedText,
-    charCount,
-    thoughts,
-    modelVersion,
-    elapsedMs,
-    chunkLog,
+    charCount: result.stats.charCount,
+    thoughts: [...result.debug.thoughts],
+    modelVersion: result.stats.modelVersion,
+    elapsedMs: result.stats.elapsedMs,
+    chunkLog: [...result.debug.chunkLog],
     stage,
+    content: result.content ? cloneLlmContent(result.content) : undefined,
   };
 }
 
-export async function runLlmTextCall(
+export async function generateText(
   options: LlmTextCallOptions
 ): Promise<string> {
   const { text } = await executeLlmText(options);
@@ -959,63 +883,18 @@ export async function runLlmTextCall(
 export async function runLlmImageCall(
   options: LlmImageCallOptions
 ): Promise<LlmImagePart[]> {
-  const images: LlmImagePart[] = [];
-
-  const {
-    elapsedMs,
-    modelVersion,
-    charCount,
-    chunkLog,
-    thoughts,
-    textAggregator,
-    stage,
-    latestCandidateParts,
-    latestCandidateRole,
-  } = await runLlmStream({
+  const result = await llmStream({
     options: {
       ...options,
       responseModalities: options.responseModalities ?? ["IMAGE", "TEXT"],
     },
-    handleChunk: (_chunk, data) => {
-      for (const inline of data.inlineData) {
-        let buffer: Buffer;
-        try {
-          buffer = Buffer.from(inline.data, "base64");
-        } catch {
-          buffer = Buffer.from(inline.data, "base64url");
-        }
-        images.push({
-          mimeType: inline.mimeType,
-          data: buffer,
-        });
-      }
-    },
   });
 
-  await writeImageDebugArtifacts({
-    stage,
-    modelVersion,
-    elapsedMs,
-    charCount,
-    chunkLog,
-    thoughts,
-    text: textAggregator.value,
-    images,
-    contents:
-      latestCandidateParts && latestCandidateParts.length > 0
-        ? [
-            {
-              role: latestCandidateRole ?? "model",
-              parts: latestCandidateParts.map(clonePart),
-            },
-          ]
-        : undefined,
-  });
-
-  return images;
+  return collectImagePartsFromContent(result.content);
 }
 
-export type GenerateImagesOptions = Omit<LlmImageCallOptions, "parts"> & {
+export type GenerateImagesOptions = Omit<LlmImageCallOptions, "contents"> & {
+  readonly contents?: never;
   readonly stylePrompt: readonly string[];
   readonly imagePrompts: readonly string[];
   readonly maxAttempts?: number;
@@ -1028,17 +907,12 @@ export async function generateImages(
     stylePrompt,
     imagePrompts,
     maxAttempts = 4,
-    contents,
     progress,
     modelId,
     debug,
     responseModalities,
     imageAspectRatio,
   } = options;
-
-  if (contents && contents.length > 0) {
-    throw new Error("generateImages does not support pre-seeded contents");
-  }
 
   const styleLines = Array.from(stylePrompt);
   const cleanedStyle = styleLines
@@ -1131,95 +1005,53 @@ export async function generateImages(
       ? responseModalities
       : ["IMAGE", "TEXT"];
 
-  const promptContent: Content = {
+  const basePromptContent: LlmContent = {
     role: "user",
-    parts: promptParts.map(toGooglePart),
+    parts: promptParts,
   };
 
-  const sharedStreamOptions = {
+  const sharedStreamOptions: Omit<LlmImageCallOptions, "contents"> = {
     progress,
     modelId,
     debug,
     responseModalities: resolvedResponseModalities,
     imageAspectRatio,
-  } satisfies Omit<LlmImageCallOptions, "parts" | "contents">;
+  };
 
   const collectedImages: LlmImagePart[] = [];
-  let pendingContents: Content[] | undefined;
-  let historyContent: Content | undefined;
+  let pendingContents: LlmContent[] | undefined;
+  let historyContent: LlmContent | undefined;
 
   const totalAttempts = Math.max(1, maxAttempts);
 
   const runImageAttempt = async (
     attempt: number,
-    contentsOverride?: readonly Content[]
+    contentsOverride?: readonly LlmContent[]
   ) => {
-    const attemptImages: LlmImagePart[] = [];
-    const streamOptions =
+    const requestContents =
       contentsOverride && contentsOverride.length > 0
-        ? {
-            ...sharedStreamOptions,
-            contents: contentsOverride,
-          }
-        : {
-            ...sharedStreamOptions,
-            parts: promptParts,
-          };
-    const result = await runLlmStream({
-      options: streamOptions,
-      handleChunk: (_chunk, data) => {
-        for (const inline of data.inlineData) {
-          let buffer: Buffer;
-          try {
-            buffer = Buffer.from(inline.data, "base64");
-          } catch {
-            buffer = Buffer.from(inline.data, "base64url");
-          }
-          attemptImages.push({
-            mimeType: inline.mimeType,
-            data: buffer,
-          });
-        }
+        ? contentsOverride.map(cloneLlmContent)
+        : [cloneLlmContent(basePromptContent)];
+
+    const result = await llmStream({
+      options: {
+        ...sharedStreamOptions,
+        contents: requestContents,
       },
       attemptLabel: attempt,
     });
 
-    await writeImageDebugArtifacts({
-      stage: result.stage,
-      modelVersion: result.modelVersion,
-      elapsedMs: result.elapsedMs,
-      charCount: result.charCount,
-      chunkLog: result.chunkLog,
-      thoughts: result.thoughts,
-      text: result.textAggregator.value,
-      images: attemptImages,
-      contents:
-        result.latestCandidateParts && result.latestCandidateParts.length > 0
-          ? [
-              {
-                role: result.latestCandidateRole ?? "model",
-                parts: result.latestCandidateParts.map(clonePart),
-              },
-            ]
-          : undefined,
-    });
-
     return {
-      images: attemptImages,
-      lastCandidates: result.lastCandidates,
-      promptFeedback: result.promptFeedback,
-      latestCandidateParts: result.latestCandidateParts,
-      latestCandidateRole: result.latestCandidateRole,
-    };
+      images: collectImagePartsFromContent(result.content),
+      blocked: result.feedback.blockedReason === "blocked",
+      content: result.content ? cloneLlmContent(result.content) : undefined,
+    } as const;
   };
 
   for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
     const attemptResult = await runImageAttempt(attempt, pendingContents);
     let attemptImages = attemptResult.images;
-    const candidate = attemptResult.lastCandidates?.[0];
-    const moderationFailure =
-      isModerationFinish(candidate?.finishReason) ||
-      Boolean(attemptResult.promptFeedback?.blockReason);
+    const moderationFailure = attemptResult.blocked;
 
     if (moderationFailure && attemptImages.length > 0) {
       attemptImages = attemptImages.slice(0, -1);
@@ -1239,38 +1071,34 @@ export async function generateImages(
     // Relying on the last candidate's parts can drop earlier images since
     // candidates often only include the latest chunk. Using collected images
     // guarantees we preserve the full attempt output in the conversation.
-    let continuationParts: Part[] | undefined;
+    let continuationParts: LlmContentPart[] | undefined;
     if (attemptImages.length > 0) {
       continuationParts = attemptImages.map((img) => ({
-        inlineData: {
-          data: img.data.toString("base64"),
-          mimeType: img.mimeType,
-        },
+        type: "inlineData",
+        data: img.data.toString("base64"),
+        mimeType: img.mimeType,
       }));
-    } else if (candidate?.content) {
-      // Fallback to candidate content when no images were collected (e.g. text-only)
-      const responseClone = cloneContent(candidate.content);
-      const sourceParts = responseClone.parts;
-      const responseParts = sourceParts !== undefined ? sourceParts.slice() : [];
+    } else if (attemptResult.content) {
+      const responseParts = attemptResult.content.parts.map(toGooglePart);
       trimPartsForContinuation(responseParts, moderationFailure);
-      continuationParts = responseParts;
+      continuationParts = convertGooglePartsToLlmParts(responseParts);
     } else {
+      break;
+    }
+
+    if (!continuationParts || continuationParts.length === 0) {
       break;
     }
 
     if (!historyContent) {
       historyContent = {
         role: "model",
-        parts: continuationParts,
+        parts: continuationParts.map(cloneLlmPart),
       };
     } else {
-      const aggregatedParts = [
-        ...(historyContent.parts ?? []),
-        ...(continuationParts ?? []),
-      ];
       historyContent = {
-        role: historyContent.role ?? "model",
-        parts: aggregatedParts,
+        role: historyContent.role,
+        parts: [...historyContent.parts.map(cloneLlmPart), ...continuationParts.map(cloneLlmPart)],
       };
     }
 
@@ -1290,13 +1118,13 @@ export async function generateImages(
     }
 
     const instruction = buildContinuationPrompt(pendingEntries);
-    const continuation: Content[] = [promptContent];
-    if (historyContent) {
-      continuation.push(historyContent);
+    const continuation: LlmContent[] = [cloneLlmContent(basePromptContent)];
+    if (historyContent && historyContent.parts.length > 0) {
+      continuation.push(cloneLlmContent(historyContent));
     }
     continuation.push({
       role: "user",
-      parts: [{ text: instruction }],
+      parts: [{ type: "text", text: instruction }],
     });
     pendingContents = continuation;
   }
@@ -1327,7 +1155,7 @@ export class LlmJsonCallError extends Error {
   }
 }
 
-export async function runLlmJsonCall<T>(
+export async function generateJson<T>(
   options: LlmJsonCallOptions<T>
 ): Promise<T> {
   const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
