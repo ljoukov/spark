@@ -3,9 +3,9 @@ import path from "node:path";
 
 import { Command, Option } from "commander";
 import { z } from "zod";
+import sharp from "sharp";
 
 import {
-  DEFAULT_TOPIC,
   generateProseStory,
   correctStorySegmentation,
   generateStorySegmentation,
@@ -19,11 +19,20 @@ import {
   type StorySegmentation,
   StorySegmentationSchema,
 } from "./generateStory";
-import { generateSessionAudio, type MediaSegment } from "@spark/llm";
+import {
+  generateSessionAudio,
+  getFirebaseAdminStorage,
+  getGoogleServiceAccount,
+  getTestUserId,
+  publishSessionMediaClip,
+  type MediaSegment,
+  type SessionAudioResult,
+} from "@spark/llm";
 import { runJobsWithConcurrency } from "../../utils/concurrency";
 import { formatByteSize, formatDurationSeconds } from "../../utils/format";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
 import { createConsoleProgress } from "./narration";
+import { STORY_PLAN_ITEM_ID, STORY_TOPIC, TEST_SESSION_ID } from "./constants";
 
 ensureEvalEnvLoaded();
 
@@ -34,9 +43,10 @@ const StageEnum = z.enum([
   "audio",
   "image-sets",
   "images-judge",
+  "publish",
 ]);
 type StageName = z.infer<typeof StageEnum>;
-const STAGE_ORDER = StageEnum.options;
+const STAGE_ORDER: StageName[] = StageEnum.options;
 
 const optionsSchema = z.object({
   prose: z.boolean(),
@@ -96,7 +106,7 @@ function resolveStageSequence(options: CliOptions): StageName[] {
   }
 
   if (requested.size === 0) {
-    return [...STAGE_ORDER];
+    return STAGE_ORDER.filter((stage) => stage !== "publish");
   }
 
   return STAGE_ORDER.filter((stage) => requested.has(stage));
@@ -136,6 +146,35 @@ const ImageJudgeCheckpointSchema = z.object({
 
 type ImageJudgeCheckpoint = z.infer<typeof ImageJudgeCheckpointSchema>;
 
+const AudioNarrationLineSchema = z.object({
+  speaker: z.union([z.literal("m"), z.literal("f")]),
+  text: z.string().trim().min(1),
+});
+
+const AudioSegmentSchema = z.object({
+  image: z.string().trim().min(1),
+  narration: z.array(AudioNarrationLineSchema).min(1),
+});
+
+const AudioCheckpointSchema = z.object({
+  inputSegments: z.array(AudioSegmentSchema).min(1),
+  output: z.object({
+    file: z.string().trim().min(1),
+    durationSec: z.number().positive(),
+    totalBytes: z.number().int().nonnegative(),
+    mimeType: z.string().trim().min(1),
+    sampleRate: z.number().int().positive(),
+    channels: z.union([z.literal(1), z.literal(2)]),
+    slideOffsets: z.array(z.number()),
+    slideDurations: z.array(z.number()),
+    lineOffsets: z.array(z.number()),
+    lineDurations: z.array(z.number()),
+  }),
+  segmentFiles: z.array(z.string().trim().min(1)).default([]),
+});
+
+type AudioCheckpoint = z.infer<typeof AudioCheckpointSchema>;
+
 function isFileNotFound(error: unknown): boolean {
   return Boolean(
     error &&
@@ -146,10 +185,13 @@ function isFileNotFound(error: unknown): boolean {
 }
 
 function segmentationToMediaSegments(
-  segmentation: StorySegmentation
+  segmentation: StorySegmentation,
+  imagePaths?: readonly string[]
 ): MediaSegment[] {
   return segmentation.segments.map((segment, index) => ({
-    image: `/story/local/${String(index + 1).padStart(3, "0")}`,
+    image:
+      imagePaths?.[index] ??
+      `/story/local/${String(index + 1).padStart(3, "0")}`,
     narration: segment.narration.map((line) => ({
       speaker: line.voice === "F" ? "f" : "m",
       text: line.text.trim(),
@@ -228,12 +270,102 @@ async function loadImageSetsFromDisk(
   }
 }
 
+async function loadImageJudgeSelectionFromDisk(
+  outDir: string
+): Promise<ImageJudgeCheckpoint | undefined> {
+  const jsonPath = path.join(
+    resolveCheckpointsDir(outDir),
+    "images-judge.json"
+  );
+  try {
+    const raw = await readFile(jsonPath, { encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return ImageJudgeCheckpointSchema.parse(parsed);
+  } catch (error: unknown) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function loadAudioCheckpointFromDisk(
+  outDir: string
+): Promise<AudioCheckpoint | undefined> {
+  const jsonPath = path.join(resolveCheckpointsDir(outDir), "audio.json");
+  try {
+    const raw = await readFile(jsonPath, { encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return AudioCheckpointSchema.parse(parsed);
+  } catch (error: unknown) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function normalizeBucketName(raw: string | undefined): string {
+  if (!raw) {
+    return "";
+  }
+  return raw
+    .trim()
+    .replace(/^gs:\/\//i, "")
+    .replace(/^https:\/\/storage\.googleapis\.com\//i, "")
+    .replace(/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i, "")
+    .replace(/\/.*$/, "");
+}
+
+function resolveStorageBucket(): string {
+  const sources = [
+    process.env.FIREBASE_STORAGE_BUCKET,
+    process.env.STORAGE_BUCKET,
+    process.env.GCLOUD_STORAGE_BUCKET,
+  ];
+  const bucketFromEnv = sources
+    .map((candidate) => normalizeBucketName(candidate))
+    .find((value) => value.length > 0);
+  if (bucketFromEnv) {
+    return bucketFromEnv;
+  }
+
+  try {
+    const serviceAccount = getGoogleServiceAccount();
+    return `${serviceAccount.projectId}.firebasestorage.app`;
+  } catch (error) {
+    throw new Error(
+      "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
+      { cause: error instanceof Error ? error : undefined }
+    );
+  }
+}
+
+function buildImageStoragePath(
+  userId: string,
+  sessionId: string,
+  planItemId: string,
+  index: number
+): string {
+  return path
+    .join(
+      "spark",
+      userId,
+      "sessions",
+      sessionId,
+      planItemId,
+      `image_${String(index).padStart(3, "0")}.jpg`
+    )
+    .replace(/\\/g, "/");
+}
+
 async function main(): Promise<void> {
+  ensureEvalEnvLoaded();
   const program = new Command();
   program
     .option("--prose", "Generate the narrated story", false)
     .option("--images", "Generate companion illustration panels", false)
-    .option("--topic <topic>", "Topic for the story", DEFAULT_TOPIC)
+    .option("--topic <topic>", "Topic for the story", STORY_TOPIC)
     .option(
       "--output <dir>",
       "Output directory (absolute or relative to spark-data/code/synthetic)"
@@ -241,7 +373,7 @@ async function main(): Promise<void> {
     .addOption(
       new Option(
         "--stage <stage...>",
-        "Stages to run (prose, segmentation, segmentation_correction, audio, image-sets, images-judge)"
+        "Stages to run (prose, segmentation, segmentation_correction, audio, image-sets, images-judge, publish)"
       ).choices(STAGE_ORDER)
     );
 
@@ -257,7 +389,7 @@ async function main(): Promise<void> {
   const parsed = optionsSchema.parse({
     prose: Boolean(rawOptions.prose),
     images: Boolean(rawOptions.images),
-    topic: rawOptions.topic ?? DEFAULT_TOPIC,
+    topic: rawOptions.topic ?? STORY_TOPIC,
     output: rawOptions.output,
     stages: (rawOptions.stage ?? []).map((value) => value.toLowerCase()),
   });
@@ -285,6 +417,10 @@ async function main(): Promise<void> {
       let correctedSegmentationLoadedFromDisk = false;
       let imageSetsSerialised: SerialisedStoryImageSet[] | undefined;
       let imageSetsLoadedFromDisk = false;
+      let imageJudgeSelection: ImageJudgeCheckpoint | undefined;
+      let imageJudgeSelectionLoadedFromDisk = false;
+      let audioCheckpointData: AudioCheckpoint | undefined;
+      let audioCheckpointLoadedFromDisk = false;
 
       const ensureStory = async (): Promise<StoredStory> => {
         if (currentStory) {
@@ -358,6 +494,46 @@ async function main(): Promise<void> {
         }
         imageSetsSerialised = loaded;
         return imageSetsSerialised;
+      };
+
+      const ensureImageJudge = async (): Promise<ImageJudgeCheckpoint> => {
+        if (imageJudgeSelection) {
+          return imageJudgeSelection;
+        }
+        const loaded = await loadImageJudgeSelectionFromDisk(outDir);
+        if (!loaded) {
+          throw new Error(
+            "Cannot continue without image judgement. Run stage 'images-judge' first."
+          );
+        }
+        if (!imageJudgeSelectionLoadedFromDisk) {
+          progress.log(
+            "[story] loaded existing image judgement from checkpoints/images-judge.json"
+          );
+          imageJudgeSelectionLoadedFromDisk = true;
+        }
+        imageJudgeSelection = loaded;
+        return imageJudgeSelection;
+      };
+
+      const ensureAudioCheckpoint = async (): Promise<AudioCheckpoint> => {
+        if (audioCheckpointData) {
+          return audioCheckpointData;
+        }
+        const loaded = await loadAudioCheckpointFromDisk(outDir);
+        if (!loaded) {
+          throw new Error(
+            "Cannot continue without audio checkpoint. Run stage 'audio' first."
+          );
+        }
+        if (!audioCheckpointLoadedFromDisk) {
+          progress.log(
+            "[story] loaded existing audio checkpoint from checkpoints/audio.json"
+          );
+          audioCheckpointLoadedFromDisk = true;
+        }
+        audioCheckpointData = loaded;
+        return audioCheckpointData;
       };
 
       const debugRootDir = path.join(outDir, "debug");
@@ -455,10 +631,9 @@ async function main(): Promise<void> {
             const persistSegmentsDir = path.join(audioOutputDir, "segments");
             await rm(persistSegmentsDir, { recursive: true, force: true });
 
-            const audioRelativePath = path.join("audio", "story.mp3").replace(
-              /\\/g,
-              "/"
-            );
+            const audioRelativePath = path
+              .join("audio", "story.mp3")
+              .replace(/\\/g, "/");
             const audioOutputPath = path.join(outDir, audioRelativePath);
 
             const audioResult = await generateSessionAudio({
@@ -497,7 +672,11 @@ async function main(): Promise<void> {
               segmentFiles: audioResult.segmentFiles.map(toRelative),
             };
 
-            const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
+            const saved = await writeCheckpoint(
+              outDir,
+              "audio",
+              audioCheckpoint
+            );
             const durationLabel = formatDurationSeconds(
               audioResult.totalDurationSec
             );
@@ -506,6 +685,8 @@ async function main(): Promise<void> {
               `[story] audio ready at ${audioRelativePath} (${durationLabel}, ${sizeLabel})`
             );
             progress.log(`[story] wrote checkpoint ${saved}`);
+            audioCheckpointData = AudioCheckpointSchema.parse(audioCheckpoint);
+            audioCheckpointLoadedFromDisk = false;
             break;
           }
           case "image-sets": {
@@ -516,6 +697,8 @@ async function main(): Promise<void> {
             });
             imageSetsSerialised = serialiseStoryImageSets(imageSets);
             imageSetsLoadedFromDisk = false;
+            imageJudgeSelection = undefined;
+            imageJudgeSelectionLoadedFromDisk = false;
             const imageSetsCheckpoint: ImageSetsCheckpoint = {
               imageSets: imageSetsSerialised,
             };
@@ -552,6 +735,139 @@ async function main(): Promise<void> {
               judgeCheckpoint
             );
             progress.log(`[story] wrote checkpoint ${saved}`);
+            imageJudgeSelection = judgeCheckpoint;
+            imageJudgeSelectionLoadedFromDisk = false;
+            break;
+          }
+          case "publish": {
+            const userId = getTestUserId();
+            const sessionId = TEST_SESSION_ID;
+            const planItemId = STORY_PLAN_ITEM_ID;
+            const storageBucket = resolveStorageBucket();
+            progress.log(
+              `[story] publishing for user ${userId} session ${sessionId} (bucket ${storageBucket})`
+            );
+
+            const segmentation =
+              correctedSegmentation ?? (await ensureCorrectedSegmentation());
+            const serialisedSets = await ensureImageSets();
+            const judgement = await ensureImageJudge();
+
+            const allSets = deserialiseStoryImageSets(serialisedSets);
+            const winningSet = allSets.find(
+              (set) => set.imageSetLabel === judgement.selectedSet
+            );
+            if (!winningSet) {
+              throw new Error(
+                `Winning image set ${judgement.selectedSet} not found in checkpoints/image-sets.json`
+              );
+            }
+
+            const interiorImages = winningSet.images
+              .filter((image) => image.index >= 1)
+              .filter((image) => image.index <= segmentation.segments.length)
+              .sort((a, b) => a.index - b.index);
+
+            if (interiorImages.length !== segmentation.segments.length) {
+              throw new Error(
+                `Winning image set must include ${segmentation.segments.length} interior images, found ${interiorImages.length}`
+              );
+            }
+
+            const storage = getFirebaseAdminStorage(undefined, {
+              storageBucket,
+            });
+            const bucket = storage.bucket(storageBucket);
+
+            const storagePaths: string[] = [];
+            for (let index = 0; index < interiorImages.length; index += 1) {
+              const image = interiorImages[index];
+              const jpegBuffer = await sharp(image.data)
+                .jpeg({
+                  quality: 92,
+                  progressive: true,
+                  chromaSubsampling: "4:4:4",
+                })
+                .toBuffer();
+              const storagePath = buildImageStoragePath(
+                userId,
+                sessionId,
+                planItemId,
+                index + 1
+              );
+              const file = bucket.file(storagePath);
+              await file.save(jpegBuffer, {
+                resumable: false,
+                metadata: {
+                  contentType: "image/jpeg",
+                  cacheControl: "public, max-age=0",
+                },
+              });
+              storagePaths.push(`/${storagePath}`);
+            }
+            progress.log(
+              `[story] uploaded ${storagePaths.length} story images to gs://${storageBucket}`
+            );
+
+            const audioCheckpoint = await ensureAudioCheckpoint();
+            const segmentsForPublish: MediaSegment[] =
+              audioCheckpoint.inputSegments.map((segment, index) => {
+                const imagePath = storagePaths[index];
+                if (!imagePath) {
+                  throw new Error(
+                    `Missing uploaded image path for segment ${index + 1}`
+                  );
+                }
+                return {
+                  image: imagePath,
+                  narration: segment.narration.map((line) => ({
+                    speaker: line.speaker === "f" ? "f" : "m",
+                    text: line.text.trim(),
+                  })),
+                };
+              });
+
+            if (segmentsForPublish.length !== segmentation.segments.length) {
+              throw new Error(
+                `Audio checkpoint includes ${segmentsForPublish.length} segments but corrected segmentation has ${segmentation.segments.length}`
+              );
+            }
+
+            const audioFilePath = path.isAbsolute(audioCheckpoint.output.file)
+              ? audioCheckpoint.output.file
+              : path.join(outDir, audioCheckpoint.output.file);
+            const audioResult: SessionAudioResult = {
+              outputFilePath: audioFilePath,
+              outputMimeType: audioCheckpoint.output.mimeType,
+              totalDurationSec: audioCheckpoint.output.durationSec,
+              segmentOffsets: audioCheckpoint.output.lineOffsets,
+              segmentDurations: audioCheckpoint.output.lineDurations,
+              sampleRate: audioCheckpoint.output.sampleRate,
+              channels: audioCheckpoint.output.channels === 2 ? 2 : 1,
+              totalBytes: audioCheckpoint.output.totalBytes,
+              segmentFiles: audioCheckpoint.segmentFiles.map((filePath) =>
+                path.isAbsolute(filePath)
+                  ? filePath
+                  : path.join(outDir, filePath)
+              ),
+              slideOffsets: audioCheckpoint.output.slideOffsets,
+              slideDurations: audioCheckpoint.output.slideDurations,
+              lineOffsets: audioCheckpoint.output.lineOffsets,
+              lineDurations: audioCheckpoint.output.lineDurations,
+            };
+
+            const publishResult = await publishSessionMediaClip({
+              userId,
+              sessionId,
+              planItemId,
+              segments: segmentsForPublish,
+              audio: audioResult,
+              storageBucket,
+            });
+
+            progress.log(
+              `[story] published media to ${publishResult.storagePath} (doc ${publishResult.documentPath})`
+            );
             break;
           }
           default: {

@@ -24,7 +24,6 @@ import {
   synthesizeAndPublishNarration,
 } from "./narration";
 
-export const DEFAULT_TOPIC = "xor bitwise operations" as const;
 export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
 export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 
