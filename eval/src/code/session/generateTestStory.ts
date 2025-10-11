@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { Command, Option } from "commander";
@@ -19,9 +19,11 @@ import {
   type StorySegmentation,
   StorySegmentationSchema,
 } from "./generateStory";
-import { type MediaSegment } from "@spark/llm";
+import { generateSessionAudio, type MediaSegment } from "@spark/llm";
 import { runJobsWithConcurrency } from "../../utils/concurrency";
+import { formatByteSize, formatDurationSeconds } from "../../utils/format";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { createConsoleProgress } from "./narration";
 
 ensureEvalEnvLoaded();
 
@@ -441,11 +443,67 @@ async function main(): Promise<void> {
             const segments =
               correctedSegmentation ?? (await ensureCorrectedSegmentation());
             const mediaSegments = segmentationToMediaSegments(segments);
-            const audioCheckpoint = { inputSegments: mediaSegments };
-            const saved = await writeCheckpoint(
-              outDir,
-              "audio",
-              audioCheckpoint
+            if (mediaSegments.length === 0) {
+              throw new Error(
+                "Cannot generate narration audio without at least one segment."
+              );
+            }
+
+            const audioOutputDir = path.join(outDir, "audio");
+            await mkdir(audioOutputDir, { recursive: true });
+
+            const persistSegmentsDir = path.join(audioOutputDir, "segments");
+            await rm(persistSegmentsDir, { recursive: true, force: true });
+
+            const audioRelativePath = path.join("audio", "story.mp3").replace(
+              /\\/g,
+              "/"
+            );
+            const audioOutputPath = path.join(outDir, audioRelativePath);
+
+            const audioResult = await generateSessionAudio({
+              segments: mediaSegments,
+              outputFilePath: audioOutputPath,
+              persistSegmentsDir,
+              progress: createConsoleProgress("story/audio"),
+            });
+
+            const toRelative = (filePath: string): string => {
+              const relative = path.relative(outDir, filePath);
+              if (
+                !relative ||
+                relative.startsWith("..") ||
+                path.isAbsolute(relative)
+              ) {
+                return filePath.replace(/\\/g, "/");
+              }
+              return relative.replace(/\\/g, "/");
+            };
+
+            const audioCheckpoint = {
+              inputSegments: mediaSegments,
+              output: {
+                file: audioRelativePath,
+                durationSec: audioResult.totalDurationSec,
+                totalBytes: audioResult.totalBytes,
+                mimeType: audioResult.outputMimeType,
+                sampleRate: audioResult.sampleRate,
+                channels: audioResult.channels,
+                slideOffsets: audioResult.slideOffsets,
+                slideDurations: audioResult.slideDurations,
+                lineOffsets: audioResult.lineOffsets,
+                lineDurations: audioResult.lineDurations,
+              },
+              segmentFiles: audioResult.segmentFiles.map(toRelative),
+            };
+
+            const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
+            const durationLabel = formatDurationSeconds(
+              audioResult.totalDurationSec
+            );
+            const sizeLabel = formatByteSize(audioResult.totalBytes);
+            progress.log(
+              `[story] audio ready at ${audioRelativePath} (${durationLabel}, ${sizeLabel})`
             );
             progress.log(`[story] wrote checkpoint ${saved}`);
             break;
