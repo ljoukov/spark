@@ -76,9 +76,8 @@ If `debug.rootDir` is provided, each call writes snapshots under:
 Generated files:
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
 - `response.txt`: Summary header followed by:
-  - “===== Thoughts =====” with streamed thinking (if any)
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
-  - “===== Chunks =====” with lines like `chunk 3: +512 chars, +0 bytes`
+  - “===== Content =====” with a structured dump of the final parts when available
 - For image calls, one file per image: `image-01.<ext>`, `image-02.<ext>`, …
 
 Example layout:

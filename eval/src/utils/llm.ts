@@ -15,7 +15,7 @@ import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
 import { z } from "zod";
 
 import type { JobProgressReporter } from "./concurrency";
-import { formatByteSize, formatInteger, formatMillis } from "./format";
+import { formatMillis } from "./format";
 
 function estimateUploadBytes(parts: readonly LlmContentPart[]): number {
   return parts.reduce((total, part) => {
@@ -235,6 +235,25 @@ function convertLlmContentToGoogleContent(content: LlmContent): Content {
   };
 }
 
+function toGooglePart(part: LlmContentPart): Part {
+  switch (part.type) {
+    case "text":
+      return {
+        text: part.text,
+        thought: part.thought === true ? true : undefined,
+      };
+    case "inlineData":
+      return {
+        inlineData: {
+          data: part.data,
+          mimeType: part.mimeType,
+        },
+      };
+    default:
+      throw new Error("Unsupported LLM content part");
+  }
+}
+
 function extractVisibleText(content: LlmContent | undefined): string {
   if (!content) {
     return "";
@@ -412,16 +431,18 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
           case "text":
             lines.push(`${header} (text):`);
             lines.push(part.text);
-          break;
-        case "inlineData": {
-          const bytes = estimateInlineBytes(part.data);
-          lines.push(
-            `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
-          );
-          break;
+            break;
+          case "inlineData": {
+            const bytes = estimateInlineBytes(part.data);
+            lines.push(
+              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
+            );
+            break;
+          }
+          default:
+            lines.push(`${header}: [unknown part]`);
         }
-        default:
-          lines.push(`${header}: [unknown part]`);
+        partIndex += 1;
       }
       lines.push("");
     }
@@ -440,30 +461,20 @@ async function writePromptSnapshot(
 
 async function writeTextResponseSnapshot({
   pathname,
-  summary,
-  thoughts,
+  summary = [],
   text,
-  chunkLog,
   contents,
 }: {
   pathname: string;
-  summary: string[];
-  thoughts: readonly string[];
+  summary?: readonly string[];
   text: string;
-  chunkLog: readonly string[];
   contents?: readonly LlmContent[];
 }): Promise<void> {
   const sections: string[] = [];
   if (summary.length > 0) {
     sections.push(...summary, "");
   }
-  sections.push("===== Thoughts =====");
-  if (thoughts.length === 0) {
-    sections.push("(none)");
-  } else {
-    sections.push(...thoughts);
-  }
-  sections.push("", "===== Response =====");
+  sections.push("===== Response =====");
   sections.push(text, "");
   if (contents && contents.length > 0) {
     sections.push("===== Content =====");
@@ -472,9 +483,6 @@ async function writeTextResponseSnapshot({
     if (sections[sections.length - 1] !== "") {
       sections.push("");
     }
-  }
-  if (chunkLog.length > 0) {
-    sections.push("===== Chunks =====", ...chunkLog, "");
   }
   await mkdir(path.dirname(pathname), { recursive: true });
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
@@ -505,20 +513,6 @@ type LlmStreamCallOptions = LlmCallBaseOptions & {
   readonly tools?: readonly LlmToolConfig[];
 };
 
-export type LlmStreamStats = {
-  readonly elapsedMs: number;
-  readonly modelVersion: string;
-  readonly charCount: number;
-  readonly totalBytes: number;
-};
-
-export type LlmStreamDebug = {
-  readonly label: string;
-  readonly directory?: string;
-  readonly chunkLog: readonly string[];
-  readonly thoughts: readonly string[];
-};
-
 export type LlmStreamContent = LlmContent;
 
 export type LlmBlockedReason = "blocked";
@@ -528,8 +522,6 @@ export type LlmStreamFeedback = {
 };
 
 export type LlmStreamResult = {
-  readonly stats: LlmStreamStats;
-  readonly debug: LlmStreamDebug;
   readonly content?: LlmStreamContent;
   readonly feedback: LlmStreamFeedback;
 };
@@ -555,7 +547,9 @@ async function llmStream({
     throw new Error("LLM call received an empty prompt");
   }
   const promptContents = options.contents.map(cloneLlmContent);
-  const googlePromptContents = promptContents.map(convertLlmContentToGoogleContent);
+  const googlePromptContents = promptContents.map(
+    convertLlmContentToGoogleContent
+  );
   const config: GeminiCallConfig = {};
   // Enable thinking only when supported. Image models and image responses do
   // not support thinking and will fail if requested.
@@ -613,11 +607,6 @@ async function llmStream({
 
   const startedAt = Date.now();
   let resolvedModelVersion: string = options.modelId;
-  let totalChars = 0;
-  let totalBytes = 0;
-  let chunkIndex = 0;
-  const thoughts: string[] = [];
-  const chunkLog: string[] = [];
   const responseParts: LlmContentPart[] = [];
   let responseRole: LlmRole | undefined;
   let blocked = false;
@@ -635,7 +624,10 @@ async function llmStream({
     });
   };
 
-  const appendInlinePart = (data: string, mimeType: string | undefined): void => {
+  const appendInlinePart = (
+    data: string,
+    mimeType: string | undefined
+  ): void => {
     if (data.length === 0) {
       return;
     }
@@ -644,7 +636,11 @@ async function llmStream({
       data,
       mimeType,
     });
-    if (stage.debugDir && typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/")) {
+    if (
+      stage.debugDir &&
+      mimeType &&
+      mimeType.toLowerCase().startsWith("image/")
+    ) {
       const debugDir = stage.debugDir;
       const index = ++imageCounter;
       debugWriteTasks.push(
@@ -663,7 +659,9 @@ async function llmStream({
     }
   };
 
-  const accumulateContent = (content: LlmContent): { charDelta: number; byteDelta: number } => {
+  const accumulateContent = (
+    content: LlmContent
+  ): { charDelta: number; byteDelta: number } => {
     let charDelta = 0;
     let byteDelta = 0;
     if (!responseRole) {
@@ -674,9 +672,6 @@ async function llmStream({
         const text = part.text;
         appendTextPart(text, part.thought === true);
         charDelta += text.length;
-        if (part.thought === true) {
-          thoughts.push(text);
-        }
       } else {
         appendInlinePart(part.data, part.mimeType);
         byteDelta += estimateInlineBytes(part.data);
@@ -713,7 +708,8 @@ async function llmStream({
               continue;
             }
             try {
-              const content = convertGoogleContentToLlmContent(candidateContent);
+              const content =
+                convertGoogleContentToLlmContent(candidateContent);
               const deltas = accumulateContent(content);
               chunkCharDelta += deltas.charDelta;
               chunkByteDelta += deltas.byteDelta;
@@ -731,14 +727,6 @@ async function llmStream({
             outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
           });
         }
-        totalChars += chunkCharDelta;
-        totalBytes += chunkByteDelta;
-        chunkIndex += 1;
-        chunkLog.push(
-          `chunk ${chunkIndex}: +${chunkCharDelta} chars, +${formatByteSize(chunkByteDelta)} bytes`
-        );
-        // Do not emit per-model periodic progress logs; aggregate display handles this.
-        // Keep tracking for snapshots and final completion log.
       }
     });
   } finally {
@@ -746,9 +734,7 @@ async function llmStream({
   }
 
   const elapsedMs = Date.now() - startedAt;
-  log(
-    `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)} (${formatInteger(totalChars)} chars, ${formatByteSize(totalBytes)} down)`
-  );
+  log(`completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`);
 
   const mergedParts = mergeConsecutiveTextParts(responseParts);
   const responseContent =
@@ -767,29 +753,13 @@ async function llmStream({
       summary: [
         `Model: ${resolvedModelVersion}`,
         `Elapsed: ${formatMillis(elapsedMs)}`,
-        `Characters: ${formatInteger(totalChars)}`,
-        `Bytes: ${formatByteSize(totalBytes)}`,
       ],
-      thoughts,
       text: trimmedResponseText,
-      chunkLog,
       contents: responseContent ? [responseContent] : undefined,
     });
   }
 
   return {
-    stats: {
-      elapsedMs,
-      modelVersion: resolvedModelVersion,
-      charCount: totalChars,
-      totalBytes,
-    },
-    debug: {
-      label: stage.label,
-      directory: stage.debugDir,
-      chunkLog,
-      thoughts,
-    },
     content: responseContent,
     feedback: blocked ? { blockedReason: "blocked" } : {},
   };
@@ -813,11 +783,7 @@ function mergeConsecutiveTextParts(
     }
     const isThought = part.thought === true;
     const last = merged[merged.length - 1];
-    if (
-      last &&
-      last.type === "text" &&
-      (last.thought === true) === isThought
-    ) {
+    if (last && last.type === "text" && (last.thought === true) === isThought) {
       last.text += part.text;
       last.thought = isThought ? true : undefined;
     } else {
@@ -831,53 +797,88 @@ function mergeConsecutiveTextParts(
   return merged;
 }
 
-type LlmTextCallMeta = {
-  readonly text: string;
-  readonly charCount: number;
-  readonly thoughts: string[];
-  readonly modelVersion: string;
-  readonly elapsedMs: number;
-  readonly chunkLog: string[];
-  readonly stage: LlmCallStage;
-  readonly content?: LlmContent;
-};
-
-async function executeLlmText(
+export async function generateText(
   options: LlmTextCallOptions,
   attemptLabel?: number | string
-): Promise<LlmTextCallMeta> {
+): Promise<string> {
   const result = await llmStream({
     options,
     attemptLabel,
   });
-
   const resolvedText = extractVisibleText(result.content);
   if (!resolvedText) {
     throw new Error("LLM response did not include any text output");
   }
-
-  const stage: LlmCallStage = {
-    label: result.debug.label,
-    debugDir: result.debug.directory,
-  };
-
-  return {
-    text: resolvedText,
-    charCount: result.stats.charCount,
-    thoughts: [...result.debug.thoughts],
-    modelVersion: result.stats.modelVersion,
-    elapsedMs: result.stats.elapsedMs,
-    chunkLog: [...result.debug.chunkLog],
-    stage,
-    content: result.content ? cloneLlmContent(result.content) : undefined,
-  };
+  return resolvedText;
 }
 
-export async function generateText(
-  options: LlmTextCallOptions
-): Promise<string> {
-  const { text } = await executeLlmText(options);
-  return text;
+export type LlmJsonCallOptions<T> = Omit<
+  LlmTextCallOptions,
+  "responseSchema"
+> & {
+  readonly schema: z.ZodSchema<T>;
+  readonly responseSchema: Schema;
+  readonly maxAttempts?: number;
+};
+
+export class LlmJsonCallError extends Error {
+  constructor(
+    message: string,
+    readonly attempts: ReadonlyArray<{
+      readonly attempt: number;
+      readonly rawText: string;
+      readonly error: unknown;
+    }>
+  ) {
+    super(message);
+    this.name = "LlmJsonCallError";
+  }
+}
+
+export async function generateJson<T>(
+  options: LlmJsonCallOptions<T>
+): Promise<T> {
+  const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
+  const textOptions: LlmTextCallOptions = {
+    ...rest,
+    responseSchema,
+    responseMimeType: rest.responseMimeType ?? "application/json",
+  };
+
+  const totalAttempts = Math.max(1, maxAttempts);
+  const failures: Array<{
+    attempt: number;
+    rawText: string;
+    error: unknown;
+  }> = [];
+
+  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+    const attemptOptions: LlmTextCallOptions =
+      textOptions.debug !== undefined
+        ? {
+            ...textOptions,
+            debug: { ...textOptions.debug, attempt },
+          }
+        : textOptions;
+    const rawText = await generateText(attemptOptions, attempt);
+    try {
+      const payload = JSON.parse(rawText);
+      const parsed = schema.parse(payload);
+      return parsed;
+    } catch (error) {
+      const handledError =
+        error instanceof Error ? error : new Error(String(error));
+      failures.push({ attempt, rawText, error: handledError });
+      if (attempt >= totalAttempts) {
+        throw new LlmJsonCallError(
+          `LLM JSON call failed after ${attempt} attempt(s)`,
+          failures
+        );
+      }
+    }
+  }
+
+  throw new LlmJsonCallError("LLM JSON call failed", failures);
 }
 
 export async function runLlmImageCall(
@@ -998,7 +999,9 @@ export async function generateImages(
   };
 
   const generationPrompt = buildInitialPrompt();
-  const promptParts: LlmContentPart[] = [{ type: "text", text: generationPrompt }];
+  const promptParts: LlmContentPart[] = [
+    { type: "text", text: generationPrompt },
+  ];
 
   const resolvedResponseModalities =
     responseModalities && responseModalities.length > 0
@@ -1098,7 +1101,10 @@ export async function generateImages(
     } else {
       historyContent = {
         role: historyContent.role,
-        parts: [...historyContent.parts.map(cloneLlmPart), ...continuationParts.map(cloneLlmPart)],
+        parts: [
+          ...historyContent.parts.map(cloneLlmPart),
+          ...continuationParts.map(cloneLlmPart),
+        ],
       };
     }
 
@@ -1130,85 +1136,4 @@ export async function generateImages(
   }
 
   return collectedImages.slice(0, numImages);
-}
-
-export type LlmJsonCallOptions<T> = Omit<
-  LlmTextCallOptions,
-  "responseSchema"
-> & {
-  readonly schema: z.ZodSchema<T>;
-  readonly responseSchema: Schema;
-  readonly maxAttempts?: number;
-};
-
-export class LlmJsonCallError extends Error {
-  constructor(
-    message: string,
-    readonly attempts: ReadonlyArray<{
-      readonly attempt: number;
-      readonly rawText: string;
-      readonly error: unknown;
-    }>
-  ) {
-    super(message);
-    this.name = "LlmJsonCallError";
-  }
-}
-
-export async function generateJson<T>(
-  options: LlmJsonCallOptions<T>
-): Promise<T> {
-  const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
-  const textOptions: LlmTextCallOptions = {
-    ...rest,
-    responseSchema,
-    responseMimeType: rest.responseMimeType ?? "application/json",
-  };
-
-  const totalAttempts = Math.max(1, maxAttempts);
-  const failures: Array<{
-    attempt: number;
-    rawText: string;
-    error: unknown;
-  }> = [];
-
-  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-    const meta = await executeLlmText(textOptions, attempt);
-    const rawText = meta.text;
-    try {
-      const payload = JSON.parse(rawText);
-      const parsed = schema.parse(payload);
-      return parsed;
-    } catch (error) {
-      const handledError =
-        error instanceof Error ? error : new Error(String(error));
-      failures.push({ attempt, rawText, error: handledError });
-      if (attempt >= totalAttempts) {
-        throw new LlmJsonCallError(
-          `LLM JSON call failed after ${attempt} attempt(s)`,
-          failures
-        );
-      }
-    }
-  }
-
-  throw new LlmJsonCallError("LLM JSON call failed", failures);
-}
-function toGooglePart(part: LlmContentPart): Part {
-  switch (part.type) {
-    case "text":
-      return {
-        text: part.text,
-        thought: part.thought === true ? true : undefined,
-      };
-    case "inlineData":
-      return {
-        inlineData: {
-          data: part.data,
-          mimeType: part.mimeType,
-        },
-      };
-    default:
-      throw new Error("Unsupported LLM content part");
-  }
 }
