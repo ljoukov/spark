@@ -40,7 +40,11 @@ function estimateUploadBytes(parts: readonly LlmContentPart[]): number {
 export function sanitisePartForLogging(part: LlmContentPart): unknown {
   switch (part.type) {
     case "text":
-      return { type: "text", preview: part.text.slice(0, 200) };
+      return {
+        type: "text",
+        thought: part.thought === true ? true : undefined,
+        preview: part.text.slice(0, 200),
+      };
     case "inlineData": {
       let omittedBytes: number;
       try {
@@ -59,56 +63,12 @@ export function sanitisePartForLogging(part: LlmContentPart): unknown {
   }
 }
 
-type LlmInlineData = {
-  readonly mimeType?: string;
-  readonly data: string;
-};
-
-type LlmChunkData = {
-  readonly textParts: string[];
-  readonly thoughtParts: string[];
-  readonly inlineData: LlmInlineData[];
-};
-
-function extractLlmChunkData(chunk: GenerateContentResponse): LlmChunkData {
-  const textParts: string[] = [];
-  const thoughtParts: string[] = [];
-  const inlineData: LlmInlineData[] = [];
-  const partsFromCandidate = (parts: readonly Part[] = []): void => {
-    for (const part of parts) {
-      if (typeof part.text === "string") {
-        if (part.thought) {
-          thoughtParts.push(part.text);
-        } else {
-          textParts.push(part.text);
-        }
-      }
-      const inlinePayload = part.inlineData?.data;
-      if (typeof inlinePayload === "string" && inlinePayload.length > 0) {
-        inlineData.push({
-          mimeType: part.inlineData?.mimeType,
-          data: inlinePayload,
-        });
-      }
-    }
-  };
-  if (Array.isArray(chunk.candidates)) {
-    for (const candidate of chunk.candidates) {
-      const parts = candidate.content?.parts ?? [];
-      partsFromCandidate(parts);
-    }
+function estimateContentsUploadBytes(contents: readonly LlmContent[]): number {
+  let total = 0;
+  for (const content of contents) {
+    total += estimateUploadBytes(content.parts);
   }
-  if (!chunk.candidates && typeof chunk.text === "string") {
-    textParts.push(chunk.text);
-  }
-  return { textParts, thoughtParts, inlineData };
-}
-
-function estimateContentsUploadBytes(contents: readonly Content[]): number {
-  return contents.reduce((total, content) => {
-    const parts = content.parts ?? [];
-    return total + estimateUploadBytes(convertGooglePartsToLlmParts(parts));
-  }, 0);
+  return total;
 }
 
 function clonePart(part: Part): Part {
@@ -132,17 +92,11 @@ function cloneContent(content: Content): Content {
   const cloned: Content = {
     ...content,
   };
-  if (Array.isArray(content.parts)) {
-    cloned.parts = content.parts.map(clonePart);
+  const originalParts = content.parts;
+  if (originalParts !== undefined) {
+    cloned.parts = originalParts.map(clonePart);
   }
   return cloned;
-}
-
-function countInlineParts(parts: readonly Part[]): number {
-  return parts.reduce((total, part) => {
-    const data = part.inlineData?.data;
-    return typeof data === "string" && data.length > 0 ? total + 1 : total;
-  }, 0);
 }
 
 const MODERATION_FINISH_REASONS = new Set<FinishReason>([
@@ -162,7 +116,7 @@ function isModerationFinish(reason: FinishReason | undefined): boolean {
 function findLastInlineDataIndex(parts: readonly Part[]): number {
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const inlineData = parts[index].inlineData?.data;
-    if (typeof inlineData === "string" && inlineData.length > 0) {
+    if (inlineData !== undefined && inlineData.length > 0) {
       return index;
     }
   }
@@ -186,7 +140,7 @@ function trimPartsForContinuation(
   if (moderationFailure) {
     parts.splice(lastImageIndex, 1);
     const precedingIndex = lastImageIndex - 1;
-    if (precedingIndex >= 0 && typeof parts[precedingIndex].text === "string") {
+    if (precedingIndex >= 0 && parts[precedingIndex].text !== undefined) {
       parts.splice(precedingIndex, 1);
     }
   }
@@ -196,7 +150,7 @@ function trimPartsForContinuation(
     index > trimmedLastImageIndex;
     index -= 1
   ) {
-    if (typeof parts[index].text === "string") {
+    if (parts[index].text !== undefined) {
       parts.splice(index, 1);
     }
   }
@@ -246,16 +200,27 @@ export type LlmImageModelId = "gemini-2.5-flash-image";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 
 export type LlmContentPart =
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; thought?: boolean }
   | { type: "inlineData"; data: string; mimeType?: string };
+
+export type LlmRole = "user" | "model" | "system" | "tool";
+
+export type LlmContent = {
+  readonly role: LlmRole;
+  readonly parts: readonly LlmContentPart[];
+};
 
 export function convertGooglePartsToLlmParts(
   parts: readonly Part[]
 ): LlmContentPart[] {
   const result: LlmContentPart[] = [];
   for (const part of parts) {
-    if (typeof part.text === "string") {
-      result.push({ type: "text", text: part.text });
+    if (part.text !== undefined) {
+      result.push({
+        type: "text",
+        text: part.text,
+        thought: part.thought ? true : undefined,
+      });
       continue;
     }
     const inline = part.inlineData;
@@ -274,16 +239,70 @@ export function convertGooglePartsToLlmParts(
   return result;
 }
 
-type LlmCallBaseOptions = {
+function assertLlmRole(value: string | undefined): LlmRole {
+  switch (value) {
+    case "user":
+    case "model":
+    case "system":
+    case "tool":
+      return value;
+    default:
+      throw new Error(`Unsupported LLM role: ${String(value)}`);
+  }
+}
+
+function convertGoogleContentToLlmContent(content: Content): LlmContent {
+  return {
+    role: assertLlmRole(content.role),
+    parts: convertGooglePartsToLlmParts(content.parts ?? []),
+  };
+}
+
+function convertLlmContentToGoogleContent(content: LlmContent): Content {
+  return {
+    role: content.role,
+    parts: content.parts.map(toGooglePart),
+  };
+}
+
+function cloneLlmPart(part: LlmContentPart): LlmContentPart {
+  switch (part.type) {
+    case "text":
+      return {
+        type: "text",
+        text: part.text,
+        thought: part.thought ? true : undefined,
+      };
+    case "inlineData":
+      return {
+        type: "inlineData",
+        data: part.data,
+        mimeType: part.mimeType,
+      };
+    default:
+      return part;
+  }
+}
+
+function cloneLlmContent(content: LlmContent): LlmContent {
+  const clonedParts: LlmContentPart[] = [];
+  for (const part of content.parts) {
+    clonedParts.push(cloneLlmPart(part));
+  }
+  return {
+    role: content.role,
+    parts: clonedParts,
+  };
+}
+
+export type LlmCallBaseOptions = {
   readonly progress?: JobProgressReporter;
   readonly modelId: LlmModelId;
-  readonly parts?: readonly LlmContentPart[];
-  readonly contents?: readonly Content[];
+  readonly contents: readonly LlmContent[];
   readonly debug?: LlmDebugOptions;
 };
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
-  readonly parts: readonly LlmContentPart[];
   readonly responseMimeType?: string;
   readonly responseSchema?: Schema;
   readonly tools?: readonly LlmToolConfig[];
@@ -295,7 +314,6 @@ export type LlmImagePart = {
 };
 
 export type LlmImageCallOptions = LlmCallBaseOptions & {
-  readonly parts: readonly LlmContentPart[];
   readonly responseModalities?: readonly string[];
   readonly imageAspectRatio?: string;
 };
@@ -373,27 +391,22 @@ function resolveDebugDir(
   return path.join(...segments);
 }
 
-function formatContentsForSnapshot(contents: readonly Content[]): string {
+function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
   const lines: string[] = [];
-  contents.forEach((content, contentIndex) => {
-    const role = content.role ?? "unspecified";
-    lines.push(`=== Message ${contentIndex + 1} (${role}) ===`);
-    const parts = content.parts ?? [];
+  let contentIndex = 0;
+  for (const content of contents) {
+    lines.push(`=== Message ${contentIndex + 1} (${content.role}) ===`);
+    const parts = content.parts;
     if (parts.length === 0) {
       lines.push("(no parts)", "");
-      return;
-    }
-    const llmParts = convertGooglePartsToLlmParts(parts);
-    if (llmParts.length === 0) {
-      lines.push("(no serialisable parts)", "");
-      return;
-    }
-    llmParts.forEach((part, partIndex) => {
-      const header = `Part ${partIndex + 1}`;
-      switch (part.type) {
-        case "text":
-          lines.push(`${header} (text):`);
-          lines.push(part.text);
+    } else {
+      let partIndex = 0;
+      for (const part of parts) {
+        const header = `Part ${partIndex + 1}`;
+        switch (part.type) {
+          case "text":
+            lines.push(`${header} (text):`);
+            lines.push(part.text);
           break;
         case "inlineData": {
           const bytes = estimateInlineBytes(part.data);
@@ -406,14 +419,15 @@ function formatContentsForSnapshot(contents: readonly Content[]): string {
           lines.push(`${header}: [unknown part]`);
       }
       lines.push("");
-    });
-  });
+    }
+    contentIndex += 1;
+  }
   return lines.join("\n");
 }
 
 async function writePromptSnapshot(
   pathname: string,
-  contents: readonly Content[]
+  contents: readonly LlmContent[]
 ): Promise<void> {
   const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
@@ -432,7 +446,7 @@ async function writeTextResponseSnapshot({
   thoughts: readonly string[];
   text: string;
   chunkLog: readonly string[];
-  contents?: readonly Content[];
+  contents?: readonly LlmContent[];
 }): Promise<void> {
   const sections: string[] = [];
   if (summary.length > 0) {
@@ -480,7 +494,7 @@ async function writeImageDebugArtifacts({
   thoughts: string[];
   text: string;
   images: readonly LlmImagePart[];
-  contents?: readonly Content[];
+  contents?: readonly LlmContent[];
 }): Promise<void> {
   const { debugDir } = stage;
   if (!debugDir) {
@@ -492,20 +506,24 @@ async function writeImageDebugArtifacts({
   // which can omit earlier inline images. Prefer reconstructing content from
   // the collected images to ensure all generated images are listed in the
   // snapshot. Fall back to provided contents when no images were collected.
-  const contentsForSnapshot: readonly Content[] | undefined =
+  const contentsForSnapshot: readonly LlmContent[] | undefined =
     images.length > 0
-      ? [
-          {
-            role: "model",
-            parts: images.map((img) => ({
-              inlineData: {
-                // Default to binary when mime type is undefined for logging.
-                mimeType: img.mimeType,
-                data: img.data.toString("base64"),
-              },
-            })),
-          },
-        ]
+      ? (() => {
+          const generatedParts: LlmContentPart[] = [];
+          for (const image of images) {
+            generatedParts.push({
+              type: "inlineData",
+              mimeType: image.mimeType,
+              data: image.data.toString("base64"),
+            });
+          }
+          return [
+            {
+              role: "model",
+              parts: generatedParts,
+            },
+          ];
+        })()
       : contents;
   await writeTextResponseSnapshot({
     pathname: responsePath,
@@ -520,13 +538,13 @@ async function writeImageDebugArtifacts({
     chunkLog,
     contents: contentsForSnapshot,
   });
-  await Promise.all(
-    images.map(async (image, index) => {
-      const extension = image.mimeType?.split("/")[1] ?? "bin";
-      const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
-      await writeFile(path.join(debugDir, filename), image.data);
-    })
-  );
+  const writeTasks: Array<Promise<void>> = [];
+  for (const [index, image] of images.entries()) {
+    const extension = image.mimeType?.split("/")[1] ?? "bin";
+    const filename = `image-${String(index + 1).padStart(2, "0")}.${extension}`;
+    writeTasks.push(writeFile(path.join(debugDir, filename), image.data));
+  }
+  await Promise.all(writeTasks);
 }
 
 function buildCallStage({
@@ -546,34 +564,52 @@ function buildCallStage({
   return { label: labelParts.join("/"), debugDir };
 }
 
-async function runLlmStream({
+type LlmStreamCallOptions = LlmCallBaseOptions & {
+  readonly responseMimeType?: string;
+  readonly responseSchema?: Schema;
+  readonly responseModalities?: readonly string[];
+  readonly imageAspectRatio?: string;
+  readonly tools?: readonly LlmToolConfig[];
+};
+
+export type LlmStreamStats = {
+  readonly elapsedMs: number;
+  readonly modelVersion: string;
+  readonly charCount: number;
+  readonly totalBytes: number;
+};
+
+export type LlmStreamDebug = {
+  readonly label: string;
+  readonly directory?: string;
+  readonly chunkLog: readonly string[];
+  readonly thoughts: readonly string[];
+};
+
+export type LlmStreamContent = LlmContent;
+
+export type LlmBlockedReason = "blocked";
+
+export type LlmStreamFeedback = {
+  readonly blockedReason?: LlmBlockedReason;
+};
+
+export type LlmStreamResult = {
+  readonly stats: LlmStreamStats;
+  readonly debug: LlmStreamDebug;
+  readonly content?: LlmStreamContent;
+  readonly feedback: LlmStreamFeedback;
+};
+
+export async function llmStream({
   options,
   handleChunk,
   attemptLabel,
 }: {
-  options: LlmCallBaseOptions & {
-    readonly responseMimeType?: string;
-    readonly responseSchema?: Schema;
-    readonly responseModalities?: readonly string[];
-    readonly imageAspectRatio?: string;
-    readonly tools?: readonly LlmToolConfig[];
-  };
-  handleChunk: (chunk: GenerateContentResponse, data: LlmChunkData) => void;
-  attemptLabel?: number | string;
-}): Promise<{
-  elapsedMs: number;
-  modelVersion: string;
-  charCount: number;
-  totalBytes: number;
-  chunkLog: string[];
-  thoughts: string[];
-  textAggregator: { value: string };
-  stage: LlmCallStage;
-  lastCandidates?: Candidate[];
-  promptFeedback?: GenerateContentResponse["promptFeedback"];
-  latestCandidateParts?: Part[];
-  latestCandidateRole?: string;
-}> {
+  readonly options: LlmStreamCallOptions;
+  readonly handleChunk?: (content: LlmContent) => void;
+  readonly attemptLabel?: number | string;
+}): Promise<LlmStreamResult> {
   const stage = buildCallStage({
     modelId: options.modelId,
     debug: options.debug,
@@ -584,34 +620,30 @@ async function runLlmStream({
     reporter.log(`[${stage.label}] ${message}`);
   };
 
-  if (!options.contents && (!options.parts || options.parts.length === 0)) {
-    throw new Error("LLM call requires parts or contents");
-  }
-
-  const contentsSource: readonly Content[] | undefined =
-    options.contents && options.contents.length > 0
-      ? options.contents
-      : options.parts
-        ? [
-            {
-              role: "user",
-              parts: options.parts.map(toGooglePart),
-            },
-          ]
-        : undefined;
-  if (!contentsSource || contentsSource.length === 0) {
+  if (options.contents.length === 0) {
     throw new Error("LLM call received an empty prompt");
   }
-  const contents = contentsSource.map(cloneContent);
+  const promptContents: LlmContent[] = [];
+  const googlePromptContents: Content[] = [];
+  for (const content of options.contents) {
+    const cloned = cloneLlmContent(content);
+    promptContents.push(cloned);
+    googlePromptContents.push(convertLlmContentToGoogleContent(cloned));
+  }
   const config: GeminiCallConfig = {};
   // Enable thinking only when supported. Image models and image responses do
   // not support thinking and will fail if requested.
   const responseModalities = options.responseModalities;
-  const isImageCall = Boolean(
-    options.imageAspectRatio ||
-      (Array.isArray(responseModalities) &&
-        responseModalities.some((m) => String(m).toUpperCase() === "IMAGE"))
-  );
+  let hasImageModality = false;
+  if (responseModalities !== undefined) {
+    for (const modality of responseModalities) {
+      if (String(modality).toUpperCase() === "IMAGE") {
+        hasImageModality = true;
+        break;
+      }
+    }
+  }
+  const isImageCall = Boolean(options.imageAspectRatio || hasImageModality);
   const isImageModel = options.modelId === "gemini-2.5-flash-image";
   const supportsThinking = !isImageCall && !isImageModel;
   if (supportsThinking) {
@@ -643,11 +675,11 @@ async function runLlmStream({
   if (stage.debugDir) {
     await writePromptSnapshot(
       path.join(stage.debugDir, "prompt.txt"),
-      contents
+      promptContents
     );
   }
 
-  const uploadBytes = estimateContentsUploadBytes(contents);
+  const uploadBytes = estimateContentsUploadBytes(promptContents);
   const callHandle = reporter.startModelCall({
     modelId: options.modelId,
     uploadBytes,
@@ -660,40 +692,52 @@ async function runLlmStream({
   let chunkIndex = 0;
   const thoughts: string[] = [];
   const chunkLog: string[] = [];
-  const textAggregator = { value: "" };
-  let lastCandidates: Candidate[] | undefined;
-  let promptFeedback: GenerateContentResponse["promptFeedback"] | undefined;
-  let latestCandidateParts: Part[] | undefined;
-  let latestCandidateRole: string | undefined;
-  let latestInlineCount = 0;
-  let latestPartCount = 0;
+  const responseParts: LlmContentPart[] = [];
+  let responseRole: LlmRole | undefined;
+  let blocked = false;
 
-  const summariseChunk = (
-    data: LlmChunkData,
-    chunk: GenerateContentResponse
-  ): { charDelta: number; byteDelta: number } => {
-    let charDelta = 0;
-    // Count visible response text
-    for (const text of data.textParts) {
-      charDelta += text.length;
-      textAggregator.value += text;
+  const appendTextPart = (text: string, isThought: boolean): void => {
+    if (text.length === 0) {
+      return;
     }
-    // Include thinking tokens in char counts/speed metrics
-    for (const thought of data.thoughtParts) {
-      charDelta += thought.length;
-    }
-    let byteDelta = 0;
-    for (const inline of data.inlineData) {
-      byteDelta += estimateInlineBytes(inline.data);
-    }
-    if (data.thoughtParts.length > 0) {
-      thoughts.push(...data.thoughtParts);
-    }
-    reporter.recordModelUsage(callHandle, {
-      modelVersion: chunk.modelVersion,
-      outputCharsDelta: charDelta > 0 ? charDelta : undefined,
-      outputBytesDelta: byteDelta > 0 ? byteDelta : undefined,
+    responseParts.push({
+      type: "text",
+      text,
+      thought: isThought ? true : undefined,
     });
+  };
+
+  const appendInlinePart = (data: string, mimeType: string | undefined): void => {
+    if (data.length === 0) {
+      return;
+    }
+    responseParts.push({
+      type: "inlineData",
+      data,
+      mimeType,
+    });
+  };
+
+  const accumulateContent = (content: LlmContent): { charDelta: number; byteDelta: number } => {
+    let charDelta = 0;
+    let byteDelta = 0;
+    if (!responseRole) {
+      responseRole = content.role;
+    }
+    for (let index = 0; index < content.parts.length; index += 1) {
+      const part = content.parts[index];
+      if (part.type === "text") {
+        const text = part.text;
+        appendTextPart(text, part.thought === true);
+        charDelta += text.length;
+        if (part.thought === true) {
+          thoughts.push(text);
+        }
+      } else {
+        appendInlinePart(part.data, part.mimeType);
+        byteDelta += estimateInlineBytes(part.data);
+      }
+    }
     return { charDelta, byteDelta };
   };
 
@@ -701,83 +745,131 @@ async function runLlmStream({
     await runGeminiCall(async (client) => {
       const stream = await client.models.generateContentStream({
         model: options.modelId,
-        contents,
+        contents: googlePromptContents,
         config,
       });
-      let lastLog = startedAt;
       for await (const chunk of stream) {
         if (chunk.modelVersion) {
           resolvedModelVersion = chunk.modelVersion;
         }
-        if (chunk.promptFeedback) {
-          promptFeedback = chunk.promptFeedback;
+        if (chunk.promptFeedback?.blockReason) {
+          blocked = true;
         }
-        if (Array.isArray(chunk.candidates) && chunk.candidates.length > 0) {
-          lastCandidates = chunk.candidates;
-          const primary = chunk.candidates[0];
-          const primaryParts = primary.content?.parts ?? [];
-          if (primaryParts.length > 0) {
-            const candidateInlineCount = countInlineParts(primaryParts);
-            if (
-              candidateInlineCount > latestInlineCount ||
-              (candidateInlineCount === latestInlineCount &&
-                primaryParts.length >= latestPartCount)
-            ) {
-              latestInlineCount = candidateInlineCount;
-              latestPartCount = primaryParts.length;
-              latestCandidateParts = primaryParts.map(clonePart);
-              latestCandidateRole = primary.content?.role;
+        const candidates = chunk.candidates;
+        let chunkCharDelta = 0;
+        let chunkByteDelta = 0;
+        if (candidates !== undefined && candidates.length > 0) {
+          const primary = candidates[0];
+          if (isModerationFinish(primary.finishReason)) {
+            blocked = true;
+          }
+          for (let index = 0; index < candidates.length; index += 1) {
+            const candidate = candidates[index];
+            const candidateContent = candidate.content;
+            if (!candidateContent) {
+              continue;
+            }
+            try {
+              const content = convertGoogleContentToLlmContent(candidateContent);
+              const deltas = accumulateContent(content);
+              chunkCharDelta += deltas.charDelta;
+              chunkByteDelta += deltas.byteDelta;
+              handleChunk?.(content);
+            } catch (error) {
+              log(
+                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
+              );
             }
           }
         }
-        const data = extractLlmChunkData(chunk);
-        const { charDelta, byteDelta } = summariseChunk(data, chunk);
-        totalChars += charDelta;
-        totalBytes += byteDelta;
+        if (chunkCharDelta > 0 || chunkByteDelta > 0) {
+          reporter.recordModelUsage(callHandle, {
+            modelVersion: chunk.modelVersion,
+            outputCharsDelta: chunkCharDelta > 0 ? chunkCharDelta : undefined,
+            outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
+          });
+        }
+        totalChars += chunkCharDelta;
+        totalBytes += chunkByteDelta;
         chunkIndex += 1;
         chunkLog.push(
-          `chunk ${chunkIndex}: +${charDelta} chars, +${formatByteSize(byteDelta)} bytes`
+          `chunk ${chunkIndex}: +${chunkCharDelta} chars, +${formatByteSize(chunkByteDelta)} bytes`
         );
         // Do not emit per-model periodic progress logs; aggregate display handles this.
         // Keep tracking for snapshots and final completion log.
-        const now = Date.now();
-        if (now - lastLog >= 1_000) {
-          lastLog = now;
-        }
-        handleChunk(chunk, data);
       }
     });
   } finally {
     reporter.finishModelCall(callHandle);
   }
 
-  const finalSanitisedParts =
-    latestCandidateParts && latestCandidateParts.length > 0
-      ? convertGooglePartsToLlmParts(latestCandidateParts).map((part) =>
-          sanitisePartForLogging(part)
-        )
-      : [];
-  log(`final candidate parts: ${JSON.stringify(finalSanitisedParts)}`);
-
   const elapsedMs = Date.now() - startedAt;
   log(
     `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)} (${formatInteger(totalChars)} chars, ${formatByteSize(totalBytes)} down)`
   );
 
+  const mergedParts = mergeConsecutiveTextParts(responseParts);
+  const responseContent =
+    mergedParts.length > 0
+      ? {
+          role: responseRole ?? "model",
+          parts: mergedParts,
+        }
+      : undefined;
+
   return {
-    elapsedMs,
-    modelVersion: resolvedModelVersion,
-    charCount: totalChars,
-    totalBytes,
-    chunkLog,
-    thoughts,
-    textAggregator,
-    stage,
-    lastCandidates,
-    promptFeedback,
-    latestCandidateParts,
-    latestCandidateRole,
+    stats: {
+      elapsedMs,
+      modelVersion: resolvedModelVersion,
+      charCount: totalChars,
+      totalBytes,
+    },
+    debug: {
+      label: stage.label,
+      directory: stage.debugDir,
+      chunkLog,
+      thoughts,
+    },
+    content: responseContent,
+    feedback: blocked ? { blockedReason: "blocked" } : {},
   };
+}
+
+function mergeConsecutiveTextParts(
+  parts: readonly LlmContentPart[]
+): LlmContentPart[] {
+  if (parts.length === 0) {
+    return [];
+  }
+  const merged: LlmContentPart[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (part.type !== "text") {
+      merged.push({
+        type: "inlineData",
+        data: part.data,
+        mimeType: part.mimeType,
+      });
+      continue;
+    }
+    const isThought = part.thought === true;
+    const last = merged[merged.length - 1];
+    if (
+      last &&
+      last.type === "text" &&
+      (last.thought === true) === isThought
+    ) {
+      last.text += part.text;
+      last.thought = isThought ? true : undefined;
+    } else {
+      merged.push({
+        type: "text",
+        text: part.text,
+        thought: isThought ? true : undefined,
+      });
+    }
+  }
+  return merged;
 }
 
 type LlmTextCallMeta = {
@@ -1158,9 +1250,8 @@ export async function generateImages(
     } else if (candidate?.content) {
       // Fallback to candidate content when no images were collected (e.g. text-only)
       const responseClone = cloneContent(candidate.content);
-      const responseParts = Array.isArray(responseClone.parts)
-        ? responseClone.parts.slice()
-        : [];
+      const sourceParts = responseClone.parts;
+      const responseParts = sourceParts !== undefined ? sourceParts.slice() : [];
       trimPartsForContinuation(responseParts, moderationFailure);
       continuationParts = responseParts;
     } else {
@@ -1278,7 +1369,10 @@ export async function runLlmJsonCall<T>(
 function toGooglePart(part: LlmContentPart): Part {
   switch (part.type) {
     case "text":
-      return { text: part.text };
+      return {
+        text: part.text,
+        thought: part.thought === true ? true : undefined,
+      };
     case "inlineData":
       return {
         inlineData: {
