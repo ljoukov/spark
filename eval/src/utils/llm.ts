@@ -13,6 +13,7 @@ import {
 } from "@google/genai";
 import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
 import { z } from "zod";
+import sharp from "sharp";
 
 import type { JobProgressReporter } from "./concurrency";
 import { formatMillis } from "./format";
@@ -648,9 +649,35 @@ async function llmStream({
           } catch {
             buffer = Buffer.from(data, "base64url");
           }
-          const extension = mimeType.split("/")[1] ?? "bin";
-          const filename = `image-${String(index).padStart(2, "0")}.${extension}`;
-          await writeFile(path.join(debugDir, filename), buffer);
+          const extensionSegment = mimeType
+            ?.split(";")[0]
+            ?.split("/")[1];
+          let outputBuffer = buffer;
+          let outputExtension = extensionSegment ?? "bin";
+          if (mimeType?.toLowerCase().startsWith("image/")) {
+            try {
+              const jpegBuffer = await sharp(buffer)
+                .jpeg({
+                  quality: 92,
+                  progressive: true,
+                  chromaSubsampling: "4:4:4",
+                })
+                .toBuffer();
+              outputBuffer = jpegBuffer;
+              outputExtension = "jpg";
+            } catch (error) {
+              log(
+                `failed to convert debug image to JPEG: ${
+                  error instanceof Error ? error.message : String(error)
+                }`
+              );
+            }
+          }
+          const filename = `image-${String(index).padStart(
+            2,
+            "0"
+          )}.${outputExtension}`;
+          await writeFile(path.join(debugDir, filename), outputBuffer);
         })()
       );
     }
