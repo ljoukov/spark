@@ -134,18 +134,6 @@ function estimateInlineBytes(data: string): number {
   }
 }
 
-type LlmDebugOptions = {
-  readonly rootDir: string;
-  readonly stage?: string;
-  readonly subStage?: string;
-  readonly attempt?: number | string;
-  readonly enabled?: boolean;
-};
-
-type LlmToolConfig = {
-  readonly type: "web-search";
-};
-
 type GeminiCallConfig = {
   thinkingConfig?: {
     includeThoughts: true;
@@ -320,9 +308,9 @@ function cloneLlmContent(content: LlmContent): LlmContent {
 }
 
 export type LlmCallBaseOptions = {
-  readonly progress?: JobProgressReporter;
   readonly modelId: LlmModelId;
   readonly contents: readonly LlmContent[];
+  readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
 };
 
@@ -332,6 +320,29 @@ export type LlmTextCallOptions = LlmCallBaseOptions & {
   readonly tools?: readonly LlmToolConfig[];
 };
 
+export type LlmJsonCallOptions<T> = Omit<
+  LlmTextCallOptions,
+  "responseSchema"
+> & {
+  readonly schema: z.ZodSchema<T>;
+  readonly responseSchema: Schema;
+  readonly maxAttempts?: number;
+};
+
+export class LlmJsonCallError extends Error {
+  constructor(
+    message: string,
+    readonly attempts: ReadonlyArray<{
+      readonly attempt: number;
+      readonly rawText: string;
+      readonly error: unknown;
+    }>
+  ) {
+    super(message);
+    this.name = "LlmJsonCallError";
+  }
+}
+
 export type LlmImagePart = {
   readonly mimeType?: string;
   readonly data: Buffer;
@@ -340,6 +351,18 @@ export type LlmImagePart = {
 export type LlmImageCallOptions = LlmCallBaseOptions & {
   readonly responseModalities?: readonly string[];
   readonly imageAspectRatio?: string;
+};
+
+export type LlmDebugOptions = {
+  readonly rootDir: string;
+  readonly stage?: string;
+  readonly subStage?: string;
+  readonly attempt?: number | string;
+  readonly enabled?: boolean;
+};
+
+export type LlmToolConfig = {
+  readonly type: "web-search";
 };
 
 function createFallbackProgress(label: string): JobProgressReporter {
@@ -810,29 +833,6 @@ export async function generateText(
     throw new Error("LLM response did not include any text output");
   }
   return resolvedText;
-}
-
-export type LlmJsonCallOptions<T> = Omit<
-  LlmTextCallOptions,
-  "responseSchema"
-> & {
-  readonly schema: z.ZodSchema<T>;
-  readonly responseSchema: Schema;
-  readonly maxAttempts?: number;
-};
-
-export class LlmJsonCallError extends Error {
-  constructor(
-    message: string,
-    readonly attempts: ReadonlyArray<{
-      readonly attempt: number;
-      readonly rawText: string;
-      readonly error: unknown;
-    }>
-  ) {
-    super(message);
-    this.name = "LlmJsonCallError";
-  }
 }
 
 export async function generateJson<T>(
