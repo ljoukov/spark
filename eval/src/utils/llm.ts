@@ -255,13 +255,11 @@ function extractVisibleText(content: LlmContent | undefined): string {
   return text.trim();
 }
 
-function collectImagePartsFromContent(
-  content: LlmContent | undefined
-): LlmImagePart[] {
+function extractImages(content: LlmContent | undefined): LlmImageData[] {
   if (!content) {
     return [];
   }
-  const images: LlmImagePart[] = [];
+  const images: LlmImageData[] = [];
   for (const part of content.parts) {
     if (part.type !== "inlineData") {
       continue;
@@ -275,36 +273,6 @@ function collectImagePartsFromContent(
     images.push({ mimeType: part.mimeType, data: buffer });
   }
   return images;
-}
-
-function cloneLlmPart(part: LlmContentPart): LlmContentPart {
-  switch (part.type) {
-    case "text":
-      return {
-        type: "text",
-        text: part.text,
-        thought: part.thought ? true : undefined,
-      };
-    case "inlineData":
-      return {
-        type: "inlineData",
-        data: part.data,
-        mimeType: part.mimeType,
-      };
-    default:
-      return part;
-  }
-}
-
-function cloneLlmContent(content: LlmContent): LlmContent {
-  const clonedParts: LlmContentPart[] = [];
-  for (const part of content.parts) {
-    clonedParts.push(cloneLlmPart(part));
-  }
-  return {
-    role: content.role,
-    parts: clonedParts,
-  };
 }
 
 export type LlmCallBaseOptions = {
@@ -343,14 +311,18 @@ export class LlmJsonCallError extends Error {
   }
 }
 
-export type LlmImagePart = {
-  readonly mimeType?: string;
-  readonly data: Buffer;
+export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
+  readonly contents?: never;
+  readonly imageAspectRatio?: string;
+  readonly stylePrompt: string;
+  readonly styleImages: readonly LlmImageData[];
+  readonly imagePrompts: readonly string[];
+  readonly maxAttempts?: number;
 };
 
-export type LlmImageCallOptions = LlmCallBaseOptions & {
-  readonly responseModalities?: readonly string[];
-  readonly imageAspectRatio?: string;
+export type LlmImageData = {
+  readonly mimeType?: string;
+  readonly data: Buffer;
 };
 
 export type LlmDebugOptions = {
@@ -541,12 +513,12 @@ export type LlmStreamContent = LlmContent;
 export type LlmBlockedReason = "blocked";
 
 export type LlmStreamFeedback = {
-  readonly blockedReason?: LlmBlockedReason;
+  readonly blockedReason: LlmBlockedReason;
 };
 
 export type LlmStreamResult = {
   readonly content?: LlmStreamContent;
-  readonly feedback: LlmStreamFeedback;
+  readonly feedback?: LlmStreamFeedback;
 };
 
 async function llmStream({
@@ -569,7 +541,7 @@ async function llmStream({
   if (options.contents.length === 0) {
     throw new Error("LLM call received an empty prompt");
   }
-  const promptContents = options.contents.map(cloneLlmContent);
+  const promptContents = options.contents;
   const googlePromptContents = promptContents.map(
     convertLlmContentToGoogleContent
   );
@@ -784,7 +756,7 @@ async function llmStream({
 
   return {
     content: responseContent,
-    feedback: blocked ? { blockedReason: "blocked" } : {},
+    feedback: blocked ? { blockedReason: "blocked" } : undefined,
   };
 }
 
@@ -881,44 +853,19 @@ export async function generateJson<T>(
   throw new LlmJsonCallError("LLM JSON call failed", failures);
 }
 
-export async function runLlmImageCall(
-  options: LlmImageCallOptions
-): Promise<LlmImagePart[]> {
-  const result = await llmStream({
-    options: {
-      ...options,
-      responseModalities: options.responseModalities ?? ["IMAGE", "TEXT"],
-    },
-  });
-
-  return collectImagePartsFromContent(result.content);
-}
-
-export type GenerateImagesOptions = Omit<LlmImageCallOptions, "contents"> & {
-  readonly contents?: never;
-  readonly stylePrompt: readonly string[];
-  readonly imagePrompts: readonly string[];
-  readonly maxAttempts?: number;
-};
-
 export async function generateImages(
-  options: GenerateImagesOptions
-): Promise<LlmImagePart[]> {
+  options: LlmGenerateImagesOptions
+): Promise<LlmImageData[]> {
   const {
     stylePrompt,
+    styleImages,
     imagePrompts,
     maxAttempts = 4,
     progress,
     modelId,
     debug,
-    responseModalities,
     imageAspectRatio,
   } = options;
-
-  const styleLines = Array.from(stylePrompt);
-  const cleanedStyle = styleLines
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
 
   type PromptEntry = { index: number; prompt: string };
   const promptList = Array.from(imagePrompts);
@@ -942,197 +889,106 @@ export async function generateImages(
     return [];
   }
 
-  const entryByIndex = new Map<number, PromptEntry>();
-  for (const entry of promptEntries) {
-    entryByIndex.set(entry.index, entry);
-  }
-
-  const buildOutputFormatLines = (entries: PromptEntry[]): string[] => {
-    const formatLines: string[] = [];
-    for (const entry of entries) {
-      formatLines.push(
-        `${entry.index}. <repeat prompt for image ${entry.index}>`
-      );
-      formatLines.push("<image>");
+  const buildInitialPrompt = (): LlmContentPart[] => {
+    const parts: LlmContentPart[] = [];
+    parts.push({
+      type: "text",
+      text: [
+        "Please make all requested images:",
+        "",
+        "Follow the style:",
+        stylePrompt,
+      ].join("\n"),
+    });
+    if (styleImages.length > 0) {
+      for (const styleImage of styleImages) {
+        parts.push({
+          type: "inlineData",
+          data: "",
+          mimeType: styleImage.mimeType,
+        });
+      }
     }
-    return formatLines;
-  };
-
-  const buildInitialPrompt = (): string => {
-    const headerLines: string[] = [
-      `Please make a total of ${numImages} images:`,
-      "",
-      "Follow the style:",
-      ...cleanedStyle,
-      "",
-      "Image descriptions:",
-    ];
-    const lines = [...headerLines];
+    const lines: string[] = ["", "Image descriptions:"];
     for (const entry of promptEntries) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
-    lines.push("");
-    lines.push("Output format:");
-    lines.push(...buildOutputFormatLines(promptEntries));
-    return lines.join("\n");
+    const text = lines.join("\n");
+    const lastPart = parts[parts.length - 1];
+    if (lastPart?.type === "text") {
+      lastPart.text = `${lastPart.text}\n${text}`;
+    } else {
+      parts.push({
+        type: "text",
+        text,
+      });
+    }
+    return parts;
   };
 
-  const buildContinuationPrompt = (pending: PromptEntry[]): string => {
+  const buildContinuationPrompt = (
+    pending: PromptEntry[]
+  ): LlmContentPart[] => {
     const pendingIds = pending.map((entry) => entry.index).join(", ");
     const lines: string[] = [
       `Please continue generating the remaining images: ${pendingIds}.`,
     ];
-    if (cleanedStyle.length > 0) {
-      lines.push("");
-      lines.push("Follow the style:");
-      lines.push(...cleanedStyle);
-    }
     lines.push("");
     lines.push("Image descriptions:");
     for (const entry of pending) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
-    lines.push("");
-    lines.push("Output format:");
-    lines.push(...buildOutputFormatLines(pending));
-    return lines.join("\n");
+    lines.join("\n");
+    return [
+      {
+        type: "text",
+        text: lines.join("\n"),
+      },
+    ];
   };
 
-  const generationPrompt = buildInitialPrompt();
-  const promptParts: LlmContentPart[] = [
-    { type: "text", text: generationPrompt },
-  ];
-
-  const resolvedResponseModalities =
-    responseModalities && responseModalities.length > 0
-      ? responseModalities
-      : ["IMAGE", "TEXT"];
-
-  const basePromptContent: LlmContent = {
-    role: "user",
-    parts: promptParts,
-  };
-
-  const sharedStreamOptions: Omit<LlmImageCallOptions, "contents"> = {
-    progress,
-    modelId,
-    debug,
-    responseModalities: resolvedResponseModalities,
-    imageAspectRatio,
-  };
-
-  const collectedImages: LlmImagePart[] = [];
-  let pendingContents: LlmContent[] | undefined;
-  let historyContent: LlmContent | undefined;
+  const collectedImages: LlmImageData[] = [];
 
   const totalAttempts = Math.max(1, maxAttempts);
 
-  const runImageAttempt = async (
-    attempt: number,
-    contentsOverride?: readonly LlmContent[]
-  ) => {
-    const requestContents =
-      contentsOverride && contentsOverride.length > 0
-        ? contentsOverride.map(cloneLlmContent)
-        : [cloneLlmContent(basePromptContent)];
-
+  const contents: LlmContent[] = [
+    {
+      role: "user",
+      parts: buildInitialPrompt(),
+    },
+  ];
+  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
     const result = await llmStream({
       options: {
-        ...sharedStreamOptions,
-        contents: requestContents,
+        modelId,
+        contents,
+        progress,
+        debug,
+        responseModalities: ["IMAGE", "TEXT"],
+        imageAspectRatio,
       },
       attemptLabel: attempt,
     });
-
-    return {
-      images: collectImagePartsFromContent(result.content),
-      blocked: result.feedback.blockedReason === "blocked",
-      content: result.content ? cloneLlmContent(result.content) : undefined,
-    } as const;
-  };
-
-  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-    const attemptResult = await runImageAttempt(attempt, pendingContents);
-    let attemptImages = attemptResult.images;
-    const moderationFailure = attemptResult.blocked;
-
-    if (moderationFailure && attemptImages.length > 0) {
-      attemptImages = attemptImages.slice(0, -1);
+    const { content } = result;
+    if (result.feedback !== undefined || content === undefined) {
+      continue;
     }
-
-    if (attemptImages.length > 0) {
-      collectedImages.push(...attemptImages);
+    const images = extractImages(content);
+    if (images.length > 0) {
+      collectedImages.push(...images);
+      const completedCount = Math.min(images.length, promptEntries.length);
+      if (completedCount > 0) {
+        promptEntries.splice(0, completedCount);
+      }
     }
-    const generatedSoFar = collectedImages.length;
-    if (generatedSoFar >= numImages) {
+    if (promptEntries.length === 0) {
       break;
     }
-    if (attempt === totalAttempts) {
-      break;
-    }
-    // Build continuation content from all images produced in this attempt.
-    // Relying on the last candidate's parts can drop earlier images since
-    // candidates often only include the latest chunk. Using collected images
-    // guarantees we preserve the full attempt output in the conversation.
-    let continuationParts: LlmContentPart[] | undefined;
-    if (attemptImages.length > 0) {
-      continuationParts = attemptImages.map((img) => ({
-        type: "inlineData",
-        data: img.data.toString("base64"),
-        mimeType: img.mimeType,
-      }));
-    } else if (attemptResult.content) {
-      const responseParts = attemptResult.content.parts.map(toGooglePart);
-      trimPartsForContinuation(responseParts, moderationFailure);
-      continuationParts = convertGooglePartsToLlmParts(responseParts);
-    } else {
-      break;
-    }
-
-    if (!continuationParts || continuationParts.length === 0) {
-      break;
-    }
-
-    if (!historyContent) {
-      historyContent = {
-        role: "model",
-        parts: continuationParts.map(cloneLlmPart),
-      };
-    } else {
-      historyContent = {
-        role: historyContent.role,
-        parts: [
-          ...historyContent.parts.map(cloneLlmPart),
-          ...continuationParts.map(cloneLlmPart),
-        ],
-      };
-    }
-
-    const pendingIndices: number[] = [];
-    for (let index = generatedSoFar + 1; index <= numImages; index += 1) {
-      pendingIndices.push(index);
-    }
-    if (pendingIndices.length === 0) {
-      break;
-    }
-
-    const pendingEntries = pendingIndices
-      .map((index) => entryByIndex.get(index))
-      .filter((entry): entry is PromptEntry => Boolean(entry));
-    if (pendingEntries.length === 0) {
-      break;
-    }
-
-    const instruction = buildContinuationPrompt(pendingEntries);
-    const continuation: LlmContent[] = [cloneLlmContent(basePromptContent)];
-    if (historyContent && historyContent.parts.length > 0) {
-      continuation.push(cloneLlmContent(historyContent));
-    }
-    continuation.push({
+    contents.push(content);
+    contents.push({
       role: "user",
-      parts: [{ type: "text", text: instruction }],
+      parts: buildContinuationPrompt(promptEntries),
     });
-    pendingContents = continuation;
   }
 
   return collectedImages.slice(0, numImages);
