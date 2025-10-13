@@ -18,8 +18,9 @@
   },
   "dependencies": {
     "@google/genai": "^1.21.0",
-    "google-auth-library": "^9.15.1",
     "execa": "^9.6.0",
+    "google-auth-library": "^9.15.1",
+    "openai": "^6.3.0",
     "zod": "^4.1.11"
   },
   "devDependencies": {

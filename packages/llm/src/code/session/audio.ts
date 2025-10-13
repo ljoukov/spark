@@ -6,7 +6,7 @@ import {
   type SpeakerCode,
   type AudioGenerationProgress,
 } from "../../utils/audio";
-import type { SynthesizeAudioEncoding } from "../../utils/googleTextToSpeechClient";
+import type { SynthesizeAudioEncoding } from "../../utils/googleTTS";
 import { errorAsString } from "../../utils/error";
 import { MediaSegmentSchema, type MediaSegment } from "./schemas";
 

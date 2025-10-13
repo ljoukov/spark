@@ -12,6 +12,7 @@
 - After cloning, sync submodule URLs with `git submodule sync --recursive`.
 - Initialize and update all submodules with `git submodule update --init --recursive`.
 - Re-run the update command if new submodules are added or refs change.
+- All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 
 ## spark-data Submodule
@@ -75,6 +76,8 @@ Notes
 ## Code Style
 
 - Braces: ALWAYS use `{}` for all control statements (`if/else`, `for`, `while`, `do`, `try/catch`), even when there is a single statement; do not write one‑liners without braces.
+- Prefer compile-time exhaustiveness checks for discriminated unions and enums. NEVER paper over missing cases with runtime fallbacks like `throw new Error("Unsupported ...")`; instead structure logic (e.g. local IIFE pattern) so the type system forces every variant to compile.
+- Avoid unnecessary wrappers or indirection. Prefer the simplest structure that keeps types safe (e.g. drop redundant async lambdas once exhaustiveness is enforced).
 
 ## Validation
 

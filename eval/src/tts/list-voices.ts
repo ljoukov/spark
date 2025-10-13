@@ -1,4 +1,4 @@
-import { GoogleTextToSpeechClient } from "@spark/llm/utils/googleTextToSpeechClient";
+import { GoogleTextToSpeechClient } from "@spark/llm/utils/googleTTS";
 import { z } from "zod";
 
 import { createCliCommand } from "../utils/cli";

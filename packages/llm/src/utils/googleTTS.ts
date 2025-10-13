@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { ReadableStream } from "node:stream/web";
 
 import { z } from "zod";
 
@@ -81,6 +82,18 @@ export type SynthesizeResult = {
   audio: Uint8Array;
   audioConfig?: z.infer<typeof SynthesizeResponseSchema>["audioConfig"];
 };
+
+export const googleVoices = [
+  "en-GB-Chirp3-HD-Sadaltager",
+  "en-GB-Chirp3-HD-Leda",
+  "en-GB-Chirp3-HD-Achernar",
+] as const;
+
+export type GoogleVoice = (typeof googleVoices)[number];
+
+export function isGoogleVoice(voice: string): voice is GoogleVoice {
+  return (googleVoices as readonly string[]).includes(voice);
+}
 
 export class GoogleTextToSpeechClient {
   private readonly auth = getGoogleAuth(CLOUD_PLATFORM_SCOPE);
@@ -194,4 +207,44 @@ export class GoogleTextToSpeechClient {
     }
     return token;
   }
+}
+
+const defaultGoogleTtsClient = new GoogleTextToSpeechClient();
+
+function deriveLanguageCode(voice: GoogleVoice): string {
+  const parts = voice.split("-");
+  if (parts.length >= 2) {
+    return `${parts[0]}-${parts[1]}`;
+  }
+  return "en-US";
+}
+
+function toReadableStream(data: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(data);
+      controller.close();
+    },
+  });
+}
+
+export async function googleTts({
+  voice,
+  input,
+}: {
+  voice: GoogleVoice;
+  input: string;
+}): Promise<ReadableStream<Uint8Array>> {
+  const { audio } = await defaultGoogleTtsClient.synthesize({
+    text: input,
+    voice: {
+      languageCode: deriveLanguageCode(voice),
+      name: voice,
+    },
+    audioConfig: {
+      audioEncoding: "MP3",
+    },
+  });
+
+  return toReadableStream(audio);
 }

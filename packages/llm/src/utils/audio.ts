@@ -8,7 +8,7 @@ import { concatAudio, getAudioDetails } from "./ffmpeg";
 import {
   GoogleTextToSpeechClient,
   type SynthesizeAudioEncoding,
-} from "./googleTextToSpeechClient";
+} from "./googleTTS";
 import { errorAsString } from "./error";
 import { getTempFilePath } from "./file";
 
