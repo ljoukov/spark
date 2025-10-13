@@ -1,4 +1,3 @@
-import { GOOGLE_SERVICE_ACCOUNT_JSON } from '$env/static/private';
 import type { Bucket } from '@google-cloud/storage';
 import type { App } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';

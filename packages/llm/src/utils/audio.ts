@@ -221,8 +221,9 @@ export async function generateAudioFromSegments({
   const totalSegments = parsedSegments.length;
   progress?.onStart?.({ totalSegments });
 
-  const tempArtifacts: (SegmentArtifact | undefined)[] = new Array(
-    totalSegments
+  const tempArtifacts: (SegmentArtifact | undefined)[] = Array.from(
+    { length: totalSegments },
+    () => undefined
   );
   const extraTempFiles: string[] = [];
   let totalBytesAll = 0;

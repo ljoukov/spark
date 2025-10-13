@@ -65,9 +65,9 @@ export async function responseErrorAsString(resp: Response): Promise<string> {
     try {
       const text = await resp.text();
       try {
-        const json = JSON.parse(text);
-        return JSON.stringify(json, null, 2);
-      } catch (syntaxError) {
+        const parsed: unknown = JSON.parse(text);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
         return text;
       }
     } catch (e) {
