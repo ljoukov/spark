@@ -5,7 +5,6 @@ import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
 import {
-  generateImageInBatches,
   generateImages,
   generateText,
   generateJson,
@@ -23,9 +22,24 @@ import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
+import { generateStoryFrames } from "./generateFrames";
 
 export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
 export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
+
+const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
+  "- Wrong medium (e.g. photographic instead of illustrated, monochrome sketches, or heavy text-on-canvas posters).",
+  "- Missing the named protagonist or key action entirely.",
+  "- Obvious content collapse: distorted limbs/faces, unreadable scene, blank or abstract output.",
+  "- Layout that breaks requirements: multi-panel compositions, tall/vertical aspect look, or heavy borders.",
+  "- Catastrophic continuity break with provided style references.",
+].join("\n");
+
+const STORYBOARD_REVIEW_DESCRIPTION = [
+  "Only flag frames that obviously break the brief or continuity.",
+  "Explain the reason in one short sentence per frame.",
+  "If a frame merely has small stylistic drift, leave it as-is.",
+].join("\n");
 
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
   "A beautiful and engaging high quality classic cartoon illustration.",
@@ -681,20 +695,22 @@ export async function generateImageSets(
     adapter.log(
       `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`
     );
-    const mainImageParts = await generateImageInBatches({
+    const mainImageParts = await generateStoryFrames({
       progress: adapter,
-      modelId: IMAGE_MODEL_ID,
+      imageModelId: IMAGE_MODEL_ID,
+      gradingModelId: TEXT_MODEL_ID,
       stylePrompt: styleLines.join("\n"),
       imagePrompts: panelEntries.map((entry) => entry.prompt),
-      maxAttempts: 4,
-      imageAspectRatio: "16:9",
       batchSize: 5,
       overlapSize: 3,
+      gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
+      storyboardReviewDescription: STORYBOARD_REVIEW_DESCRIPTION,
+      imageAspectRatio: "16:9",
       debug: options?.debugRootDir
         ? {
             rootDir: options.debugRootDir,
             stage: "image-sets",
-            subStage: `${imageSetLabel}-main`,
+            subStage: `${imageSetLabel}/main`,
           }
         : undefined,
     });
@@ -731,7 +747,7 @@ export async function generateImageSets(
         ? {
             rootDir: options.debugRootDir,
             stage: "image-sets",
-            subStage: `${imageSetLabel}-poster`,
+            subStage: `${imageSetLabel}/poster`,
           }
         : undefined,
     });
@@ -765,7 +781,7 @@ export async function generateImageSets(
         ? {
             rootDir: options.debugRootDir,
             stage: "image-sets",
-            subStage: `${imageSetLabel}-ending`,
+            subStage: `${imageSetLabel}/ending`,
           }
         : undefined,
     });
