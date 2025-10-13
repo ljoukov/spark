@@ -21,6 +21,7 @@ export const voices = [
 export const ttsVoiceSchema = z.enum(voices);
 
 export type TTSVoice = (typeof voices)[number];
+export type Voice = TTSVoice;
 
 export const ttsRequestSchema = z.object({
   input: z.string(),

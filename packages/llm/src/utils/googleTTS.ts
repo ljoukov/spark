@@ -61,6 +61,9 @@ export type ListVoicesOptions = {
 
 export type SynthesizeAudioEncoding = "MP3" | "OGG_OPUS" | "LINEAR16";
 
+const DEFAULT_AUDIO_ENCODING: SynthesizeAudioEncoding = "MP3";
+const DEFAULT_SPEAKING_RATE = 0.93; // keep a slightly slower cadence for narration
+
 export type SynthesizeOptions = {
   text: string;
   voice: {
@@ -242,7 +245,8 @@ export async function googleTts({
       name: voice,
     },
     audioConfig: {
-      audioEncoding: "MP3",
+      audioEncoding: DEFAULT_AUDIO_ENCODING,
+      speakingRate: DEFAULT_SPEAKING_RATE,
     },
   });
 
