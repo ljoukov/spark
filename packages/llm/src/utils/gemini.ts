@@ -101,7 +101,7 @@ function resolveLocation(): string {
 
 async function getGeminiClient(): Promise<GoogleGenAI> {
   if (!clientPromise) {
-    clientPromise = (async () => {
+    clientPromise = Promise.resolve().then(() => {
       const projectId = resolveProjectId();
       const location = resolveLocation();
       return new GoogleGenAI({
@@ -110,7 +110,7 @@ async function getGeminiClient(): Promise<GoogleGenAI> {
         location,
         googleAuthOptions: getGoogleAuthOptions(CLOUD_PLATFORM_SCOPE),
       });
-    })();
+    });
   }
   return clientPromise;
 }
