@@ -60,7 +60,7 @@ import { readJson, writeJson } from "../utils/fs";
 import {
   LlmJsonCallError,
   convertGooglePartsToLlmParts,
-  runLlmJsonCall,
+  generateJson,
   sanitisePartForLogging,
   type LlmContentPart,
 } from "../utils/llm";
@@ -621,10 +621,15 @@ async function callModel<T>({
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const parsed = await runLlmJsonCall<T>({
+      const parsed = await generateJson<T>({
         progress,
         modelId: model,
-        parts,
+        contents: [
+          {
+            role: "user",
+            parts,
+          },
+        ],
         responseSchema,
         schema,
         maxAttempts: 1,

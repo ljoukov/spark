@@ -876,11 +876,7 @@ function buildPlan(storyTitle: string): PlanItem[] {
 }
 
 function resolveDebugRootDir(): string {
-  return path.join(
-    WORKSPACE_PATHS.codeSyntheticDir,
-    "sessions",
-    "test-user"
-  );
+  return path.join(WORKSPACE_PATHS.codeSyntheticDir, "sessions", "test-user");
 }
 
 function normalizeBucketName(raw: string | undefined): string {
@@ -914,7 +910,7 @@ function resolveStorageBucket(): string {
   } catch (error) {
     throw new Error(
       "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-      { cause: error instanceof Error ? error : undefined }
+      { cause: error instanceof Error ? error : undefined },
     );
   }
 }
@@ -922,7 +918,7 @@ function resolveStorageBucket(): string {
 async function publishMediaAssets(
   userId: string,
   sessionId: string,
-  storageBucket: string
+  storageBucket: string,
 ): Promise<void> {
   for (const source of MEDIA_SOURCES) {
     const consoleLabel =
@@ -951,7 +947,7 @@ async function seedContent(userId: string, session: Session) {
         acc[item.id] = { status: "not_started" };
         return acc;
       },
-      {} as Record<string, SessionState["items"][string]>
+      {} as Record<string, SessionState["items"][string]>,
     ),
     lastUpdatedAt: Timestamp.now(),
   });
@@ -962,14 +958,14 @@ async function seedContent(userId: string, session: Session) {
     QUIZZES.map(async (quiz) => {
       const parsed = QuizDefinitionSchema.parse(quiz);
       await sessionRef.collection("quiz").doc(parsed.id).set(parsed);
-    })
+    }),
   );
 
   await Promise.all(
     PROBLEMS.map(async (problem) => {
       const parsed = CodeProblemSchema.parse(problem);
       await sessionRef.collection("code").doc(parsed.slug).set(parsed);
-    })
+    }),
   );
 
   return userRef;

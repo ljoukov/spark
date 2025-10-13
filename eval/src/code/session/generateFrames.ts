@@ -48,7 +48,7 @@ const BatchGradeResponseSchema = z
         z.object({
           frame_index: z.number().int().min(1),
           reason: z.string().trim().min(1),
-        })
+        }),
       )
       .default([]),
     summary: z.string().trim().optional(),
@@ -103,7 +103,7 @@ const StoryboardGradeResponseSchema = z
         z.object({
           frame_index: z.number().int().min(1),
           reason: z.string().trim().min(1),
-        })
+        }),
       )
       .default([]),
     summary: z.string().trim().optional(),
@@ -164,7 +164,7 @@ type GenerateBatchParams = {
 function extendDebug(
   debug: LlmDebugOptions | undefined,
   suffix: string,
-  attempt?: number | string
+  attempt?: number | string,
 ): LlmDebugOptions | undefined {
   if (!debug) {
     return undefined;
@@ -236,12 +236,12 @@ function buildBatchGradeContents(params: {
       buildCatastrophicChecklist(catDescription),
       "",
       `Style prompt (for reference):\n${stylePrompt}`,
-    ].join("\n")
+    ].join("\n"),
   );
   if (styleImages.length > 0) {
     addTextPart(
       parts,
-      "\nStyle reference images (follow their palette, rendering style, and character appearance):"
+      "\nStyle reference images (follow their palette, rendering style, and character appearance):",
     );
     for (const image of styleImages) {
       parts.push(toInlinePart(image));
@@ -264,7 +264,7 @@ function buildBatchGradeContents(params: {
       "- Frame number (1-based index across the storyboard).",
       "- Illustration prompt.",
       "- The rendered image (inline).",
-    ].join("\n")
+    ].join("\n"),
   );
   for (const entry of items) {
     addTextPart(parts, `\nFrame ${entry.frameIndex}: ${entry.prompt}`);
@@ -278,7 +278,7 @@ function buildBatchGradeContents(params: {
       'If only some frames fail, set `"outcome":"redo_frames"` and list the frames to redo.',
       'If the entire batch collapses (for example split panels, hard borders, inconsistent characters), return `"outcome":"redo_batch"` and explain briefly.',
       'Otherwise set `"outcome":"accept"`.',
-    ].join("\n")
+    ].join("\n"),
   );
   return [
     {
@@ -307,7 +307,7 @@ function buildStoryboardGradeContents(params: {
       summaryInstructions,
       "",
       `Style prompt (for reference):\n${stylePrompt}`,
-    ].join("\n")
+    ].join("\n"),
   );
   if (styleImages.length > 0) {
     addTextPart(parts, "\nBaseline style references:");
@@ -321,7 +321,7 @@ function buildStoryboardGradeContents(params: {
       "",
       "Storyboard frames follow. For each frame, consider whether it must be regenerated.",
       "Only flag frames that clearly fail the catastrophic checklist; otherwise leave them untouched.",
-    ].join("\n")
+    ].join("\n"),
   );
   for (const frame of frames) {
     addTextPart(parts, `\nFrame ${frame.frameIndex}: ${frame.prompt}`);
@@ -333,7 +333,7 @@ function buildStoryboardGradeContents(params: {
       "",
       "Respond in JSON. List only the frames that require redo under `frames_to_redo` with reasons.",
       "If everything looks usable, return an empty list.",
-    ].join("\n")
+    ].join("\n"),
   );
   return [
     {
@@ -395,7 +395,7 @@ async function gradeStoryboard(params: {
     debug: extendDebug(
       options.debug,
       `storyboard/grade-${padNumber(attempt)}`,
-      attempt
+      attempt,
     ),
     contents: buildStoryboardGradeContents({
       summaryInstructions: options.storyboardReviewDescription,
@@ -448,7 +448,7 @@ function collectFrameStyleImages(params: {
 }
 
 export async function generateStoryFrames(
-  options: GenerateStoryFramesOptions
+  options: GenerateStoryFramesOptions,
 ): Promise<LlmImageData[]> {
   const {
     imagePrompts,
@@ -479,7 +479,7 @@ export async function generateStoryFrames(
     const prompts = imagePrompts.slice(startIndex, endIndex);
     const globalIndices = Array.from(
       { length: prompts.length },
-      (_, offset) => startIndex + offset
+      (_, offset) => startIndex + offset,
     );
     const styleImagesForBatch = collectBatchStyleImages({
       baseStyleImages,
@@ -502,7 +502,7 @@ export async function generateStoryFrames(
       attempt += 1
     ) {
       progress.log(
-        `[story/frames] Generating batch ${batchIndex + 1}/${totalBatches} (attempt ${attempt})`
+        `[story/frames] Generating batch ${batchIndex + 1}/${totalBatches} (attempt ${attempt})`,
       );
 
       try {
@@ -517,16 +517,16 @@ export async function generateStoryFrames(
           debug: extendDebug(
             debug,
             `batch-${padNumber(batchIndex + 1)}/generate-${padNumber(attempt)}`,
-            attempt
+            attempt,
           ),
         });
 
         if (generatedImages.length < batch.prompts.length) {
           lastError = new Error(
-            `Batch ${batchIndex + 1} returned ${generatedImages.length} images, expected ${batch.prompts.length}`
+            `Batch ${batchIndex + 1} returned ${generatedImages.length} images, expected ${batch.prompts.length}`,
           );
           progress.log(
-            `[story/frames] Incomplete batch ${batchIndex + 1}, retrying`
+            `[story/frames] Incomplete batch ${batchIndex + 1}, retrying`,
           );
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw lastError;
@@ -539,7 +539,7 @@ export async function generateStoryFrames(
             frameIndex: batch.globalIndices[index] + 1,
             prompt: batch.prompts[index],
             image,
-          })
+          }),
         );
         const frameIndexToLocal = new Map<number, number>();
         for (let index = 0; index < batchItems.length; index += 1) {
@@ -551,7 +551,7 @@ export async function generateStoryFrames(
             progress.log(
               `[story/frames] Batch ${batchIndex + 1} grade summary: ${
                 grade.summary
-              }`
+              }`,
             );
           }
         };
@@ -564,7 +564,7 @@ export async function generateStoryFrames(
             .map((finding) => `frame ${finding.frameIndex}: ${finding.reason}`)
             .join("; ");
           progress.log(
-            `[story/frames] Batch ${batchIndex + 1} frames flagged: ${details}`
+            `[story/frames] Batch ${batchIndex + 1} frames flagged: ${details}`,
           );
         };
 
@@ -577,7 +577,7 @@ export async function generateStoryFrames(
             attemptLabel: attempt,
             checkNewOnly: batchIndex > 0,
             debugSuffix: `batch-${padNumber(
-              batchIndex + 1
+              batchIndex + 1,
             )}/grade-${padNumber(attempt)}`,
           });
           logGradeSummary(grade);
@@ -585,14 +585,14 @@ export async function generateStoryFrames(
           lastError = error;
           progress.log(
             `[story/frames] Batch ${batchIndex + 1} grading failed: ${String(
-              error instanceof Error ? error.message : error
-            )}`
+              error instanceof Error ? error.message : error,
+            )}`,
           );
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw error instanceof Error ? error : new Error(String(error));
           }
           progress.log(
-            "[story/frames] Retrying batch generation after grade failure"
+            "[story/frames] Retrying batch generation after grade failure",
           );
           continue;
         }
@@ -604,10 +604,10 @@ export async function generateStoryFrames(
           lastError = new Error(
             grade.batchReason
               ? `Batch ${batchIndex + 1} rejected: ${grade.batchReason}`
-              : `Batch ${batchIndex + 1} rejected by grader`
+              : `Batch ${batchIndex + 1} rejected by grader`,
           );
           progress.log(
-            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`
+            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`,
           );
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw lastError instanceof Error
@@ -622,13 +622,13 @@ export async function generateStoryFrames(
         }
 
         const computeAcceptedStyleImages = (
-          findings: readonly CatastrophicFinding[]
+          findings: readonly CatastrophicFinding[],
         ): LlmImageData[] => {
           if (findings.length === 0) {
             return batchItems.map((item) => item.image);
           }
           const flaggedSet = new Set(
-            findings.map((finding) => finding.frameIndex)
+            findings.map((finding) => finding.frameIndex),
           );
           return batchItems
             .filter((item) => !flaggedSet.has(item.frameIndex))
@@ -639,13 +639,13 @@ export async function generateStoryFrames(
           partialIteration += 1;
           if (partialIteration > BATCH_GENERATE_MAX_ATTEMPTS) {
             throw new Error(
-              `Batch ${batchIndex + 1} frame redo exceeded ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
+              `Batch ${batchIndex + 1} frame redo exceeded ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`,
             );
           }
           if (grade.findings.length === 0) {
             rejectBatch = true;
             lastError = new Error(
-              `Batch ${batchIndex + 1} requested frame redo without targets`
+              `Batch ${batchIndex + 1} requested frame redo without targets`,
             );
             break;
           }
@@ -657,7 +657,7 @@ export async function generateStoryFrames(
             const localIndex = frameIndexToLocal.get(finding.frameIndex);
             if (localIndex === undefined) {
               throw new Error(
-                `Batch grader referenced unknown frame ${finding.frameIndex}`
+                `Batch grader referenced unknown frame ${finding.frameIndex}`,
               );
             }
             let replacement: LlmImageData | undefined;
@@ -669,7 +669,7 @@ export async function generateStoryFrames(
               progress.log(
                 `[story/frames] Regenerating frame ${finding.frameIndex} (batch ${
                   batchIndex + 1
-                }, redo ${partialIteration}, attempt ${frameAttempt})`
+                }, redo ${partialIteration}, attempt ${frameAttempt})`,
               );
               const regen = await generateImages({
                 progress,
@@ -682,19 +682,19 @@ export async function generateStoryFrames(
                 debug: extendDebug(
                   debug,
                   `batch-${padNumber(
-                    batchIndex + 1
+                    batchIndex + 1,
                   )}/redo-${padNumber(partialIteration)}/frame-${padNumber(
-                    finding.frameIndex
+                    finding.frameIndex,
                   )}/generate-${padNumber(frameAttempt)}`,
                   `redo-${padNumber(partialIteration)}-${padNumber(
-                    frameAttempt
-                  )}`
+                    frameAttempt,
+                  )}`,
                 ),
               });
               if (regen.length === 0) {
                 if (frameAttempt === BATCH_GENERATE_MAX_ATTEMPTS) {
                   throw new Error(
-                    `Failed to regenerate frame ${finding.frameIndex}: model returned no image`
+                    `Failed to regenerate frame ${finding.frameIndex}: model returned no image`,
                   );
                 }
                 continue;
@@ -704,7 +704,7 @@ export async function generateStoryFrames(
             }
             if (!replacement) {
               throw new Error(
-                `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
+                `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`,
               );
             }
             batchItems[localIndex] = {
@@ -718,7 +718,7 @@ export async function generateStoryFrames(
               const localIndex = frameIndexToLocal.get(finding.frameIndex);
               if (localIndex === undefined) {
                 throw new Error(
-                  `Batch grader referenced unknown frame ${finding.frameIndex}`
+                  `Batch grader referenced unknown frame ${finding.frameIndex}`,
                 );
               }
               return batchItems[localIndex];
@@ -730,7 +730,7 @@ export async function generateStoryFrames(
               attemptLabel: `redo-${padNumber(partialIteration)}`,
               checkNewOnly: true,
               debugSuffix: `batch-${padNumber(
-                batchIndex + 1
+                batchIndex + 1,
               )}/redo-${padNumber(partialIteration)}/grade`,
             });
             logGradeSummary(grade);
@@ -741,8 +741,8 @@ export async function generateStoryFrames(
             lastError = error;
             progress.log(
               `[story/frames] Batch ${batchIndex + 1} redo grading failed: ${String(
-                error instanceof Error ? error.message : error
-              )}`
+                error instanceof Error ? error.message : error,
+              )}`,
             );
             if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
               throw error instanceof Error ? error : new Error(String(error));
@@ -756,7 +756,7 @@ export async function generateStoryFrames(
             lastError = new Error(
               grade.batchReason
                 ? `Batch ${batchIndex + 1} rejected: ${grade.batchReason}`
-                : `Batch ${batchIndex + 1} rejected by grader`
+                : `Batch ${batchIndex + 1} rejected by grader`,
             );
             break;
           }
@@ -764,7 +764,7 @@ export async function generateStoryFrames(
 
         if (rejectBatch) {
           progress.log(
-            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`
+            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`,
           );
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw lastError instanceof Error
@@ -801,7 +801,7 @@ export async function generateStoryFrames(
     });
     if (review.summary) {
       progress.log(
-        `[story/frames] Storyboard review ${attemptNumber}: ${review.summary}`
+        `[story/frames] Storyboard review ${attemptNumber}: ${review.summary}`,
       );
     }
     if (review.framesToRedo.length === 0) {
@@ -812,7 +812,7 @@ export async function generateStoryFrames(
         .map((finding) => `frame ${finding.frameIndex}: ${finding.reason}`)
         .join("; ");
       throw new Error(
-        `Storyboard review failed after ${STORYBOARD_REDO_MAX_CYCLES} redo cycles: ${reasons}`
+        `Storyboard review failed after ${STORYBOARD_REDO_MAX_CYCLES} redo cycles: ${reasons}`,
       );
     }
 
@@ -820,14 +820,14 @@ export async function generateStoryFrames(
     progress.log(
       `[story/frames] Redo cycle ${redoCycles}: regenerating frames ${review.framesToRedo
         .map((item) => item.frameIndex)
-        .join(", ")}`
+        .join(", ")}`,
     );
 
     for (const finding of review.framesToRedo) {
       const targetIndex = finding.frameIndex - 1;
       if (targetIndex < 0 || targetIndex >= generated.length) {
         throw new Error(
-          `Storyboard grader requested invalid frame index ${finding.frameIndex}`
+          `Storyboard grader requested invalid frame index ${finding.frameIndex}`,
         );
       }
       let replacement: LlmImageData | undefined;
@@ -837,7 +837,7 @@ export async function generateStoryFrames(
         attempt += 1
       ) {
         progress.log(
-          `[story/frames] Regenerating frame ${finding.frameIndex} (cycle ${redoCycles}, attempt ${attempt})`
+          `[story/frames] Regenerating frame ${finding.frameIndex} (cycle ${redoCycles}, attempt ${attempt})`,
         );
         const styleForFrame = collectFrameStyleImages({
           baseStyleImages,
@@ -856,15 +856,15 @@ export async function generateStoryFrames(
           debug: extendDebug(
             debug,
             `redo-cycle-${padNumber(redoCycles)}/frame-${padNumber(
-              finding.frameIndex
+              finding.frameIndex,
             )}`,
-            attempt
+            attempt,
           ),
         });
         if (regen.length === 0) {
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw new Error(
-              `Failed to regenerate frame ${finding.frameIndex}: model returned no image`
+              `Failed to regenerate frame ${finding.frameIndex}: model returned no image`,
             );
           }
           continue;
@@ -874,7 +874,7 @@ export async function generateStoryFrames(
       }
       if (!replacement) {
         throw new Error(
-          `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
+          `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`,
         );
       }
       generated[targetIndex] = replacement;

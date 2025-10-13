@@ -84,49 +84,6 @@ function isModerationFinish(reason: FinishReason | undefined): boolean {
   return MODERATION_FINISH_REASONS.has(reason);
 }
 
-function findLastInlineDataIndex(parts: readonly Part[]): number {
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    const inlineData = parts[index].inlineData?.data;
-    if (inlineData !== undefined && inlineData.length > 0) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function trimPartsForContinuation(
-  parts: Part[],
-  moderationFailure: boolean
-): void {
-  if (parts.length === 0) {
-    return;
-  }
-  const lastImageIndex = findLastInlineDataIndex(parts);
-  if (lastImageIndex === -1) {
-    if (moderationFailure) {
-      parts.length = 0;
-    }
-    return;
-  }
-  if (moderationFailure) {
-    parts.splice(lastImageIndex, 1);
-    const precedingIndex = lastImageIndex - 1;
-    if (precedingIndex >= 0 && parts[precedingIndex].text !== undefined) {
-      parts.splice(precedingIndex, 1);
-    }
-  }
-  const trimmedLastImageIndex = findLastInlineDataIndex(parts);
-  for (
-    let index = parts.length - 1;
-    index > trimmedLastImageIndex;
-    index -= 1
-  ) {
-    if (parts[index].text !== undefined) {
-      parts.splice(index, 1);
-    }
-  }
-}
-
 function estimateInlineBytes(data: string): number {
   try {
     return Buffer.from(data, "base64").byteLength;
@@ -170,7 +127,7 @@ export type LlmContent = {
 };
 
 export function convertGooglePartsToLlmParts(
-  parts: readonly Part[]
+  parts: readonly Part[],
 ): LlmContentPart[] {
   const result: LlmContentPart[] = [];
   for (const part of parts) {
@@ -305,7 +262,7 @@ export class LlmJsonCallError extends Error {
       readonly attempt: number;
       readonly rawText: string;
       readonly error: unknown;
-    }>
+    }>,
   ) {
     super(message);
     this.name = "LlmJsonCallError";
@@ -359,7 +316,7 @@ function normalisePathSegment(value: string): string {
 }
 
 function toGeminiTools(
-  tools: readonly LlmToolConfig[] | undefined
+  tools: readonly LlmToolConfig[] | undefined,
 ): Tool[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
@@ -390,7 +347,7 @@ async function resetDebugDir(debugDir?: string): Promise<void> {
 
 function resolveDebugDir(
   debug: LlmDebugOptions | undefined,
-  attemptLabel?: number | string
+  attemptLabel?: number | string,
 ): string | undefined {
   if (!debug || !debug.rootDir || debug.enabled === false) {
     return undefined;
@@ -426,14 +383,14 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
         switch (part.type) {
           case "text":
             lines.push(
-              `${header} (${part.thought === true ? "thought" : "text"}):`
+              `${header} (${part.thought === true ? "thought" : "text"}):`,
             );
             lines.push(part.text);
             break;
           case "inlineData": {
             const bytes = estimateInlineBytes(part.data);
             lines.push(
-              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
+              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`,
             );
             break;
           }
@@ -451,7 +408,7 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
 
 async function writePromptSnapshot(
   pathname: string,
-  contents: readonly LlmContent[]
+  contents: readonly LlmContent[],
 ): Promise<void> {
   const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
@@ -546,7 +503,7 @@ async function llmStream({
   }
   const promptContents = options.contents;
   const googlePromptContents = promptContents.map(
-    convertLlmContentToGoogleContent
+    convertLlmContentToGoogleContent,
   );
   const config: GeminiCallConfig = {};
   // Enable thinking only when supported. Image models and image responses do
@@ -593,7 +550,7 @@ async function llmStream({
   if (stage.debugDir) {
     await writePromptSnapshot(
       path.join(stage.debugDir, "prompt.txt"),
-      promptContents
+      promptContents,
     );
   }
 
@@ -624,7 +581,7 @@ async function llmStream({
 
   const appendInlinePart = (
     data: string,
-    mimeType: string | undefined
+    mimeType: string | undefined,
   ): void => {
     if (data.length === 0) {
       return;
@@ -649,9 +606,7 @@ async function llmStream({
           } catch {
             buffer = Buffer.from(data, "base64url");
           }
-          const extensionSegment = mimeType
-            ?.split(";")[0]
-            ?.split("/")[1];
+          const extensionSegment = mimeType?.split(";")[0]?.split("/")[1];
           let outputBuffer = buffer;
           let outputExtension = extensionSegment ?? "bin";
           if (mimeType?.toLowerCase().startsWith("image/")) {
@@ -669,22 +624,22 @@ async function llmStream({
               log(
                 `failed to convert debug image to JPEG: ${
                   error instanceof Error ? error.message : String(error)
-                }`
+                }`,
               );
             }
           }
           const filename = `image-${String(index).padStart(
             2,
-            "0"
+            "0",
           )}.${outputExtension}`;
           await writeFile(path.join(debugDir, filename), outputBuffer);
-        })()
+        })(),
       );
     }
   };
 
   const accumulateContent = (
-    content: LlmContent
+    content: LlmContent,
   ): { charDelta: number; byteDelta: number } => {
     let charDelta = 0;
     let byteDelta = 0;
@@ -739,7 +694,7 @@ async function llmStream({
               chunkByteDelta += deltas.byteDelta;
             } catch (error) {
               log(
-                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
+                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
               );
             }
           }
@@ -790,7 +745,7 @@ async function llmStream({
 }
 
 function mergeConsecutiveTextParts(
-  parts: readonly LlmContentPart[]
+  parts: readonly LlmContentPart[],
 ): LlmContentPart[] {
   if (parts.length === 0) {
     return [];
@@ -823,7 +778,7 @@ function mergeConsecutiveTextParts(
 
 export async function generateText(
   options: LlmTextCallOptions,
-  attemptLabel?: number | string
+  attemptLabel?: number | string,
 ): Promise<string> {
   const result = await llmStream({
     options,
@@ -837,7 +792,7 @@ export async function generateText(
 }
 
 export async function generateJson<T>(
-  options: LlmJsonCallOptions<T>
+  options: LlmJsonCallOptions<T>,
 ): Promise<T> {
   const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
   const textOptions: LlmTextCallOptions = {
@@ -873,7 +828,7 @@ export async function generateJson<T>(
       if (attempt >= totalAttempts) {
         throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
-          failures
+          failures,
         );
       }
     }
@@ -883,7 +838,7 @@ export async function generateJson<T>(
 }
 
 export async function generateImages(
-  options: LlmGenerateImagesOptions
+  options: LlmGenerateImagesOptions,
 ): Promise<LlmImageData[]> {
   const {
     stylePrompt,
@@ -903,14 +858,14 @@ export async function generateImages(
       const trimmedPrompt = rawPrompt.trim();
       if (!trimmedPrompt) {
         throw new Error(
-          `imagePrompts[${arrayIndex}] must be a non-empty string`
+          `imagePrompts[${arrayIndex}] must be a non-empty string`,
         );
       }
       return {
         index: arrayIndex + 1,
         prompt: trimmedPrompt,
       };
-    }
+    },
   );
 
   const numImages = promptEntries.length;
@@ -936,12 +891,12 @@ export async function generateImages(
         "",
         "Follow the style:",
         stylePrompt,
-      ].join("\n")
+      ].join("\n"),
     );
     if (styleImages !== undefined && styleImages.length > 0) {
       addText(
         parts,
-        "\nFollow the visual style, composition and the characters from these images:"
+        "\nFollow the visual style, composition and the characters from these images:",
       );
       for (const styleImage of styleImages) {
         parts.push({
@@ -963,7 +918,7 @@ export async function generateImages(
   };
 
   const buildContinuationPrompt = (
-    pending: PromptEntry[]
+    pending: PromptEntry[],
   ): LlmContentPart[] => {
     const pendingIds = pending.map((entry) => entry.index).join(", ");
     const lines: string[] = [
@@ -1032,7 +987,10 @@ export async function generateImages(
 }
 
 export async function generateImageInBatches(
-  options: LlmGenerateImagesOptions & { batchSize: number; overlapSize: number }
+  options: LlmGenerateImagesOptions & {
+    batchSize: number;
+    overlapSize: number;
+  },
 ): Promise<LlmImageData[]> {
   const {
     batchSize,
@@ -1065,7 +1023,7 @@ export async function generateImageInBatches(
     let styleImagesForBatch: readonly LlmImageData[] = baseStyleImages;
     if (overlapSize > 0 && generatedImages.length > 0) {
       const overlapImages = generatedImages.slice(
-        Math.max(0, generatedImages.length - overlapSize)
+        Math.max(0, generatedImages.length - overlapSize),
       );
       if (overlapImages.length > 0) {
         styleImagesForBatch = [...baseStyleImages, ...overlapImages];

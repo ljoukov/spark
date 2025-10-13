@@ -5,7 +5,7 @@ import path from "node:path";
 import {
   GoogleTextToSpeechClient,
   type SynthesizeAudioEncoding,
-} from "@spark/llm/utils/googleTextToSpeechClient";
+} from "@spark/llm/utils/googleTTS";
 import { z } from "zod";
 
 import { createCliCommand } from "../utils/cli";
@@ -34,7 +34,10 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
   );
 
   program
-    .requiredOption("-v, --voice <name>", "Voice name (e.g. en-GB-Chirp3-HD-Achernar)")
+    .requiredOption(
+      "-v, --voice <name>",
+      "Voice name (e.g. en-GB-Chirp3-HD-Achernar)",
+    )
     .option("-l, --locale <code>", "Voice locale/language code", "en-GB")
     .option(
       "-e, --encoding <encoding>",
@@ -49,7 +52,10 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     locale: string;
     encoding: string;
   }>();
-  const text = parsed.args.map((arg) => String(arg)).join(" ").trim();
+  const text = parsed.args
+    .map((arg) => String(arg))
+    .join(" ")
+    .trim();
 
   return CliOptionsSchema.parse({
     voice: opts.voice,
@@ -86,8 +92,16 @@ function buildOutputPath({
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
     .replace(/-+$/, "");
-  const timestamp = now.toISOString().replaceAll(":", "").replaceAll("-", "").replaceAll(".", "");
-  const outputDir = path.join(WORKSPACE_PATHS.sparkDataRoot, "tts", "synthetic");
+  const timestamp = now
+    .toISOString()
+    .replaceAll(":", "")
+    .replaceAll("-", "")
+    .replaceAll(".", "");
+  const outputDir = path.join(
+    WORKSPACE_PATHS.sparkDataRoot,
+    "tts",
+    "synthetic",
+  );
   const fileName = `${normalisedVoice}-${hash}-${timestamp}.${extension}`;
   const absolutePath = path.join(outputDir, fileName);
   const relativePath = path.relative(process.cwd(), absolutePath);
