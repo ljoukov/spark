@@ -6,4 +6,7 @@ export * from "./utils/testUser";
 export * from "./utils/firebaseAdmin";
 export * from "./utils/audio";
 export * from "./utils/googleAuth";
-export * from "./utils/googleTextToSpeechClient";
+export * from "./utils/googleTTS";
+export * from "./utils/openai";
+export * from "./utils/openaiTTS";
+export * from "./utils/tts";

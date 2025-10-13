@@ -5,7 +5,7 @@ import path from "node:path";
 import {
   GoogleTextToSpeechClient,
   type SynthesizeAudioEncoding,
-} from "@spark/llm/utils/googleTextToSpeechClient";
+} from "@spark/llm/utils/googleTTS";
 import { z } from "zod";
 
 import { createCliCommand } from "../utils/cli";
