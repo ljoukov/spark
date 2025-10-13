@@ -6,12 +6,9 @@ import type {
   AudioGenerationProgress,
   MediaSegment,
   SpeakerCode,
-  SynthesizeAudioEncoding,
+  Voice,
 } from "@spark/llm";
-import {
-  generateSessionAudio,
-  publishSessionMediaClip,
-} from "@spark/llm";
+import { generateSessionAudio, publishSessionMediaClip } from "@spark/llm";
 
 import {
   formatByteSize,
@@ -32,8 +29,15 @@ export function createConsoleProgress(label: string): AudioGenerationProgress {
         `[${label}] Starting audio generation for ${totalSegments} segments (parallel launch)`,
       );
     },
-    onSegmentStart({ index, totalSegments, speaker, activeCount, textPreview }) {
-      const preview = textPreview.length > 60 ? `${textPreview.slice(0, 57)}…` : textPreview;
+    onSegmentStart({
+      index,
+      totalSegments,
+      speaker,
+      activeCount,
+      textPreview,
+    }) {
+      const preview =
+        textPreview.length > 60 ? `${textPreview.slice(0, 57)}…` : textPreview;
       console.log(
         `[${label}] ▶ Segment ${index + 1}/${totalSegments} (${speaker}) started • active ${activeCount}`,
       );
@@ -41,12 +45,24 @@ export function createConsoleProgress(label: string): AudioGenerationProgress {
         console.log(`[${label}]    text preview: ${preview}`);
       }
     },
-    onSegmentChunk({ index, totalSegments, chunkBytes, totalBytes, activeCount }) {
+    onSegmentChunk({
+      index,
+      totalSegments,
+      chunkBytes,
+      totalBytes,
+      activeCount,
+    }) {
       console.log(
         `[${label}]    segment ${index + 1}/${totalSegments} +${formatByteSize(chunkBytes)} (cum ${formatByteSize(totalBytes)}) • active ${activeCount}`,
       );
     },
-    onSegmentComplete({ index, totalSegments, durationSec, totalBytes, activeCount }) {
+    onSegmentComplete({
+      index,
+      totalSegments,
+      durationSec,
+      totalBytes,
+      activeCount,
+    }) {
       console.log(
         `[${label}] ✔ Segment ${index + 1}/${totalSegments} finished ${formatTimestamp(durationSec)} (${formatByteSize(totalBytes)}) • active now ${activeCount}`,
       );
@@ -66,9 +82,7 @@ export type NarrationJob = {
   planItemId: string;
   segments: readonly MediaSegment[];
   storageBucket: string;
-  languageCode?: string;
-  audioEncoding?: SynthesizeAudioEncoding;
-  voiceMap?: Partial<Record<SpeakerCode, string>>;
+  voiceMap?: Partial<Record<SpeakerCode, Voice>>;
   progress?: AudioGenerationProgress;
 };
 
@@ -80,10 +94,14 @@ export async function synthesizeAndPublishNarration(
   job: NarrationJob,
 ): Promise<NarrationJobResult> {
   if (job.segments.length === 0) {
-    throw new Error("At least one media segment is required to synthesise audio");
+    throw new Error(
+      "At least one media segment is required to synthesise audio",
+    );
   }
 
-  const flattenedNarration = job.segments.flatMap((segment) => segment.narration);
+  const flattenedNarration = job.segments.flatMap(
+    (segment) => segment.narration,
+  );
   const segmentCount = flattenedNarration.length;
   const totalTextChars = flattenedNarration.reduce(
     (acc, line) => acc + line.text.length,
@@ -100,8 +118,6 @@ export async function synthesizeAndPublishNarration(
   const audioResult = await generateSessionAudio({
     segments: job.segments,
     outputFilePath: tmpPath,
-    languageCode: job.languageCode,
-    audioEncoding: job.audioEncoding,
     voiceMap: job.voiceMap,
     progress: job.progress ?? createConsoleProgress(job.planItemId),
   });
@@ -112,9 +128,7 @@ export async function synthesizeAndPublishNarration(
     `text ${formatInteger(totalTextChars)} chars`,
     `audio ${formatTimestamp(audioResult.totalDurationSec)} • ${formatByteSize(audioResult.totalBytes)}`,
   ].join(" | ");
-  console.log(
-    `[${label}] ${notes} | elapsed ${formatMillis(elapsedMs)}`,
-  );
+  console.log(`[${label}] ${notes} | elapsed ${formatMillis(elapsedMs)}`);
 
   const publishResult = await publishSessionMediaClip({
     userId: job.userId,

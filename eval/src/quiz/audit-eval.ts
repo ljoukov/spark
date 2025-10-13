@@ -15,7 +15,7 @@ import {
 } from "@spark/llm/quiz/prompts";
 import { runJobsWithConcurrency } from "../utils/concurrency";
 import type { JobProgressReporter } from "../utils/concurrency";
-import { runLlmTextCall } from "../utils/llm";
+import { generateText } from "../utils/llm";
 import { createCliCommand, splitCommaSeparated } from "../utils/cli";
 import {
   AUDIT_CHECKPOINT_PATH,
@@ -376,10 +376,15 @@ async function callModel(
   prompt: string,
   progress: JobProgressReporter,
 ): Promise<string> {
-  const text = await runLlmTextCall({
+  const text = await generateText({
     progress,
     modelId: QUIZ_EVAL_MODEL_ID,
-    parts: [{ type: "text", text: prompt }],
+    contents: [
+      {
+        role: "user",
+        parts: [{ type: "text", text: prompt }],
+      },
+    ],
     responseMimeType: "text/plain",
   });
   return text;

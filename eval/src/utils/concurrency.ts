@@ -73,19 +73,18 @@ class MetricsTracker {
     { readonly modelId: string; modelVersion?: string }
   >();
   private readonly charWindow: Array<{ timestamp: number; chars: number }> = [];
-  private readonly downloadWindow: Array<{ timestamp: number; bytes: number }> = [];
+  private readonly downloadWindow: Array<{ timestamp: number; bytes: number }> =
+    [];
 
   startCall(modelId: string, uploadBytes: number): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("model-call");
     this.callInfo.set(handle, { modelId });
     this.activeCalls += 1;
-    const metrics =
-      this.perModel.get(modelId) ??
-      {
-        uploadBytes: 0,
-        downloadBytes: 0,
-        outputChars: 0,
-      };
+    const metrics = this.perModel.get(modelId) ?? {
+      uploadBytes: 0,
+      downloadBytes: 0,
+      outputChars: 0,
+    };
     this.perModel.set(modelId, metrics);
     if (uploadBytes > 0) {
       this.totalUploadBytes += uploadBytes;
@@ -99,13 +98,11 @@ class MetricsTracker {
     if (!info) {
       return;
     }
-    const metrics =
-      this.perModel.get(info.modelId) ??
-      {
-        uploadBytes: 0,
-        downloadBytes: 0,
-        outputChars: 0,
-      };
+    const metrics = this.perModel.get(info.modelId) ?? {
+      uploadBytes: 0,
+      downloadBytes: 0,
+      outputChars: 0,
+    };
     this.perModel.set(info.modelId, metrics);
     const timestamp = Date.now();
     const charDelta = Math.max(0, chunk.outputCharsDelta ?? 0);
@@ -153,10 +150,7 @@ class MetricsTracker {
       this.charWindow.length > 0 ? this.charWindow[0].timestamp : now;
     const downloadWindowStart =
       this.downloadWindow.length > 0 ? this.downloadWindow[0].timestamp : now;
-    const charsElapsedSeconds = Math.max(
-      (now - charWindowStart) / 1000,
-      1,
-    );
+    const charsElapsedSeconds = Math.max((now - charWindowStart) / 1000, 1);
     const downloadElapsedSeconds = Math.max(
       (now - downloadWindowStart) / 1000,
       1,

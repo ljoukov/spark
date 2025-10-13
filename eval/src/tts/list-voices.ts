@@ -36,7 +36,11 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
       "BCP-47 language code used to filter voices",
       "en-GB",
     )
-    .option("--filter <text>", "Substring filter applied to voice names", "Chirp3-HD")
+    .option(
+      "--filter <text>",
+      "Substring filter applied to voice names",
+      "Chirp3-HD",
+    )
     .option("--json", "Output the raw response as JSON");
 
   const parsed = program.parse(argv, { from: "node" }).opts<{

@@ -24,7 +24,7 @@ import {
 } from "../utils/concurrency";
 import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
 import { detectMimeType } from "../utils/mime";
-import { convertGooglePartsToLlmParts, runLlmJsonCall } from "../utils/llm";
+import { convertGooglePartsToLlmParts, generateJson } from "../utils/llm";
 import { createCliCommand, createIntegerParser } from "../utils/cli";
 
 ensureEvalEnvLoaded();
@@ -412,10 +412,15 @@ async function callGeminiJson({
   progress: JobProgressReporter;
 }): Promise<RawClassification> {
   const llmParts = convertGooglePartsToLlmParts(parts);
-  return runLlmJsonCall<RawClassification>({
+  return generateJson<RawClassification>({
     progress,
     modelId: GEMINI_MODEL_ID,
-    parts: llmParts,
+    contents: [
+      {
+        role: "user",
+        parts: llmParts,
+      },
+    ],
     responseSchema: RAW_CLASSIFICATION_SCHEMA,
     schema: RawClassificationSchema,
     maxAttempts: 1,
@@ -505,7 +510,11 @@ async function classifyBatch({
           };
           scheduleCacheWrite();
         }
-        return { file, classification, modelVersion: GEMINI_MODEL_ID } satisfies JobResult;
+        return {
+          file,
+          classification,
+          modelVersion: GEMINI_MODEL_ID,
+        } satisfies JobResult;
       } catch (error) {
         const message = formatError(error);
         context.progress.log(`Failed ${file.relativePath}: ${message}`);
