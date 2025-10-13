@@ -1,3 +1,4 @@
+import type { ReadableStream } from "node:stream/web";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import * as fs from "node:fs/promises";
@@ -5,12 +6,9 @@ import * as path from "node:path";
 import { z } from "zod";
 
 import { concatAudio, getAudioDetails } from "./ffmpeg";
-import {
-  GoogleTextToSpeechClient,
-  type SynthesizeAudioEncoding,
-} from "./googleTextToSpeechClient";
 import { errorAsString } from "./error";
 import { getTempFilePath } from "./file";
+import { tts, type Voice } from "./tts";
 
 export type SpeakerCode = "m" | "f";
 
@@ -69,23 +67,20 @@ export type SynthesisedAudioResult = {
   segmentFiles: string[];
 };
 
-const ttsClient = new GoogleTextToSpeechClient();
-
-const DEFAULT_LANGUAGE_CODE = "en-GB";
-const DEFAULT_AUDIO_ENCODING: SynthesizeAudioEncoding = "MP3";
-const DEFAULT_VOICE_MAP: Record<SpeakerCode, string> = {
-  m: "en-GB-Chirp3-HD-Fenfir",
-  f: "en-GB-Chirp3-HD-Leda",
+const DEFAULT_VOICE_MAP: Record<SpeakerCode, Voice> = {
+  m: "echo",
+  f: "shimmer",
 };
+
+const DEFAULT_OUTPUT_EXTENSION = "mp3";
+const DEFAULT_OUTPUT_MIME_TYPE = "audio/mpeg";
 
 type GenerateAudioOptions = {
   segments: readonly TtsSegmentInput[];
   outputFilePath: string;
-  voiceMap?: Partial<Record<SpeakerCode, string>>;
+  voiceMap?: Partial<Record<SpeakerCode, Voice>>;
   progress?: AudioGenerationProgress;
   persistSegmentsDir?: string;
-  languageCode?: string;
-  audioEncoding?: SynthesizeAudioEncoding;
 };
 
 type SegmentArtifact = {
@@ -98,70 +93,78 @@ type SegmentArtifact = {
   persisted: boolean;
 };
 
-function mimeTypeFromEncoding(encoding: SynthesizeAudioEncoding): string {
-  switch (encoding) {
-    case "MP3":
-      return "audio/mpeg";
-    case "OGG_OPUS":
-      return "audio/ogg";
-    case "LINEAR16":
-      return "audio/wav";
-  }
-}
-
-function extensionFromEncoding(encoding: SynthesizeAudioEncoding): string {
-  switch (encoding) {
-    case "MP3":
-      return "mp3";
-    case "OGG_OPUS":
-      return "ogg";
-    case "LINEAR16":
-      return "wav";
-  }
-}
-
-function getVoiceName(
+function resolveVoicePreference(
   speaker: SpeakerCode,
-  overrides: Partial<Record<SpeakerCode, string>> | undefined
-): string | undefined {
-  const raw = overrides?.[speaker] ?? DEFAULT_VOICE_MAP[speaker];
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed : undefined;
+  overrides: Partial<Record<SpeakerCode, Voice>> | undefined
+): { primary: Voice; fallback?: Voice } {
+  const defaultVoice = DEFAULT_VOICE_MAP[speaker];
+  const override = overrides?.[speaker];
+  if (!override || override === defaultVoice) {
+    return { primary: defaultVoice };
+  }
+  return { primary: override, fallback: defaultVoice };
+}
+
+async function readStreamToBuffer(
+  stream: ReadableStream<Uint8Array>
+): Promise<{ buffer: Buffer; totalBytes: number }> {
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      const chunk = Buffer.from(value);
+      chunks.push(chunk);
+      totalBytes += chunk.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (chunks.length === 0) {
+    return { buffer: Buffer.alloc(0), totalBytes: 0 };
+  }
+
+  if (chunks.length === 1) {
+    return { buffer: chunks[0], totalBytes };
+  }
+
+  return {
+    buffer: Buffer.concat(chunks, totalBytes),
+    totalBytes,
+  };
 }
 
 async function synthesiseSegment(
   segment: z.infer<typeof SegmentSchema>,
   options: {
-    voiceName?: string;
-    languageCode: string;
-    audioEncoding: SynthesizeAudioEncoding;
+    voice: Voice;
+    fallbackVoice?: Voice;
     progress?: AudioGenerationProgress;
     index: number;
     totalSegments: number;
     getActiveCount: () => number;
   }
 ): Promise<{
-  data: Uint8Array;
+  data: Buffer;
   mimeType: string;
   totalBytes: number;
-  sampleRate?: number;
-  channels?: 1 | 2;
 }> {
-  const runAttempt = async (voiceName?: string) => {
-    const { audio, audioConfig } = await ttsClient.synthesize({
-      text: segment.text,
-      voice: {
-        languageCode: options.languageCode,
-        ...(voiceName ? { name: voiceName } : {}),
-      },
-      audioConfig: {
-        audioEncoding: options.audioEncoding,
-        speakingRate: 0.85,
-      },
+  const runAttempt = async (voice: Voice) => {
+    const stream = await tts({
+      voice,
+      input: segment.text,
     });
+    const { buffer, totalBytes } = await readStreamToBuffer(stream);
 
-    const buffer = Buffer.from(audio);
-    const totalBytes = buffer.byteLength;
     options.progress?.onSegmentChunk?.({
       index: options.index,
       totalSegments: options.totalSegments,
@@ -172,23 +175,21 @@ async function synthesiseSegment(
 
     return {
       data: buffer,
-      mimeType: mimeTypeFromEncoding(options.audioEncoding),
+      mimeType: DEFAULT_OUTPUT_MIME_TYPE,
       totalBytes,
-      sampleRate: audioConfig?.sampleRateHertz,
-      channels: undefined,
     };
   };
 
   try {
-    return await runAttempt(options.voiceName);
+    return await runAttempt(options.voice);
   } catch (error) {
-    if (!options.voiceName) {
+    if (!options.fallbackVoice || options.fallbackVoice === options.voice) {
       throw error;
     }
     console.warn(
-      `[tts] voice "${options.voiceName}" failed (${errorAsString(error)}); retrying with default voice`
+      `[tts] voice "${options.voice}" failed (${errorAsString(error)}); retrying with fallback "${options.fallbackVoice}"`
     );
-    return runAttempt(undefined);
+    return runAttempt(options.fallbackVoice);
   }
 }
 
@@ -202,8 +203,6 @@ export async function generateAudioFromSegments({
   voiceMap,
   progress,
   persistSegmentsDir,
-  languageCode = DEFAULT_LANGUAGE_CODE,
-  audioEncoding = DEFAULT_AUDIO_ENCODING,
 }: GenerateAudioOptions): Promise<SynthesisedAudioResult> {
   if (!Array.isArray(segments) || segments.length === 0) {
     throw new Error("At least one narration segment is required");
@@ -232,7 +231,10 @@ export async function generateAudioFromSegments({
   try {
     await Promise.all(
       parsedSegments.map(async (segment, index) => {
-        const voiceName = getVoiceName(segment.speaker, voiceMap);
+        const { primary: voice, fallback: fallbackVoice } = resolveVoicePreference(
+          segment.speaker,
+          voiceMap
+        );
         activeCount += 1;
         progress?.onSegmentStart?.({
           index,
@@ -247,17 +249,15 @@ export async function generateAudioFromSegments({
 
         try {
           const { data, totalBytes } = await synthesiseSegment(segment, {
-            voiceName,
-            languageCode,
-            audioEncoding,
+            voice,
+            fallbackVoice,
             progress,
             index,
             totalSegments,
             getActiveCount: () => activeCount,
           });
           byteLength = totalBytes;
-          const extension = extensionFromEncoding(audioEncoding);
-          const tempFileName = `tts-segment-${index}-${randomUUID()}.${extension}`;
+          const tempFileName = `tts-segment-${index}-${randomUUID()}.${DEFAULT_OUTPUT_EXTENSION}`;
           let tempFilePath: string;
           let persisted = false;
           if (persistSegmentsDir) {
@@ -361,7 +361,7 @@ export async function generateAudioFromSegments({
 
     return {
       outputFilePath,
-      outputMimeType: mimeTypeFromEncoding(audioEncoding),
+      outputMimeType: DEFAULT_OUTPUT_MIME_TYPE,
       totalDurationSec,
       segmentOffsets,
       segmentDurations,
