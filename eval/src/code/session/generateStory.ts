@@ -818,7 +818,10 @@ export async function generateImageSets(
     };
   };
 
-  return Promise.all([runImageSet("set_a"), runImageSet("set_b")]);
+  const setA = await runImageSet("set_a");
+  const setB = await runImageSet("set_b");
+  return [setA, setB];
+  // TODO: restore parallel generation: return Promise.all([runImageSet("set_a"), runImageSet("set_b")]);
 }
 
 export async function judgeImageSets(

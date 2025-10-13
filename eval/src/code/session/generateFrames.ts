@@ -12,8 +12,10 @@ import {
 } from "../../utils/llm";
 import type { JobProgressReporter } from "../../utils/concurrency";
 
+const IMAGE_GENERATION_MAX_ATTEMPTS = 4;
 const BATCH_GENERATE_MAX_ATTEMPTS = 3;
-const STORYBOARD_REDO_MAX_CYCLES = 2;
+const STORYBOARD_REDO_MAX_CYCLES = 4;
+const REDO_CYCLE_IMAGE_GENERATION_MAX_ATTEMPTS = 3;
 
 type CatastrophicFinding = {
   frameIndex: number;
@@ -266,10 +268,7 @@ function buildBatchGradeContents(params: {
     ].join("\n")
   );
   for (const entry of items) {
-    addTextPart(
-      parts,
-      `\nFrame ${entry.frameIndex}: ${entry.prompt}`
-    );
+    addTextPart(parts, `\nFrame ${entry.frameIndex}: ${entry.prompt}`);
     parts.push(toInlinePart(entry.image));
   }
   addTextPart(
@@ -277,9 +276,9 @@ function buildBatchGradeContents(params: {
     [
       "",
       "Respond in JSON using the provided schema.",
-      "If only some frames fail, set `\"outcome\":\"redo_frames\"` and list the frames to redo.",
-      "If the entire batch collapses (for example split panels, hard borders, inconsistent characters), return `\"outcome\":\"redo_batch\"` and explain briefly.",
-      "Otherwise set `\"outcome\":\"accept\"`.",
+      'If only some frames fail, set `"outcome":"redo_frames"` and list the frames to redo.',
+      'If the entire batch collapses (for example split panels, hard borders, inconsistent characters), return `"outcome":"redo_batch"` and explain briefly.',
+      'Otherwise set `"outcome":"accept"`.',
     ].join("\n")
   );
   return [
@@ -312,10 +311,7 @@ function buildStoryboardGradeContents(params: {
     ].join("\n")
   );
   if (styleImages.length > 0) {
-    addTextPart(
-      parts,
-      "\nBaseline style references:"
-    );
+    addTextPart(parts, "\nBaseline style references:");
     for (const image of styleImages) {
       parts.push(toInlinePart(image));
     }
@@ -329,10 +325,7 @@ function buildStoryboardGradeContents(params: {
     ].join("\n")
   );
   for (const frame of frames) {
-    addTextPart(
-      parts,
-      `\nFrame ${frame.frameIndex}: ${frame.prompt}`
-    );
+    addTextPart(parts, `\nFrame ${frame.frameIndex}: ${frame.prompt}`);
     parts.push(toInlinePart(frame.image));
   }
   addTextPart(
@@ -359,18 +352,20 @@ async function gradeBatch(params: {
   checkNewOnly: boolean;
   debugSuffix: string;
 }): Promise<BatchGradeOutcome> {
-  const { options, styleImages, items, attemptLabel, checkNewOnly, debugSuffix } =
-    params;
+  const {
+    options,
+    styleImages,
+    items,
+    attemptLabel,
+    checkNewOnly,
+    debugSuffix,
+  } = params;
   const payload: BatchGradeResponse = await generateJson({
     modelId: options.gradingModelId,
     progress: options.progress,
     schema: BatchGradeResponseSchema,
     responseSchema: BATCH_GRADE_RESPONSE_SCHEMA,
-    debug: extendDebug(
-      options.debug,
-      debugSuffix,
-      attemptLabel
-    ),
+    debug: extendDebug(options.debug, debugSuffix, attemptLabel),
     contents: buildBatchGradeContents({
       catDescription: options.gradeCatastrophicDescription,
       stylePrompt: options.stylePrompt,
@@ -430,10 +425,7 @@ function collectBatchStyleImages(params: {
     return baseStyleImages;
   }
   const overlapStart = Math.max(generatedSoFar.length - overlapSize, 0);
-  return [
-    ...baseStyleImages,
-    ...generatedSoFar.slice(overlapStart),
-  ];
+  return [...baseStyleImages, ...generatedSoFar.slice(overlapStart)];
 }
 
 function collectFrameStyleImages(params: {
@@ -521,7 +513,7 @@ export async function generateStoryFrames(
           stylePrompt,
           styleImages: batch.styleImages,
           imagePrompts: batch.prompts,
-          maxAttempts: 1,
+          maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
           imageAspectRatio,
           debug: extendDebug(
             debug,
@@ -570,10 +562,7 @@ export async function generateStoryFrames(
             return;
           }
           const details = grade.findings
-            .map(
-              (finding) =>
-                `frame ${finding.frameIndex}: ${finding.reason}`
-            )
+            .map((finding) => `frame ${finding.frameIndex}: ${finding.reason}`)
             .join("; ");
           progress.log(
             `[story/frames] Batch ${batchIndex + 1} frames flagged: ${details}`
@@ -603,7 +592,9 @@ export async function generateStoryFrames(
           if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
             throw error instanceof Error ? error : new Error(String(error));
           }
-          progress.log("[story/frames] Retrying batch generation after grade failure");
+          progress.log(
+            "[story/frames] Retrying batch generation after grade failure"
+          );
           continue;
         }
 
@@ -661,10 +652,7 @@ export async function generateStoryFrames(
           }
 
           const acceptedImages = computeAcceptedStyleImages(grade.findings);
-          const styleImagesForRedo = [
-            ...batch.styleImages,
-            ...acceptedImages,
-          ];
+          const styleImagesForRedo = [...batch.styleImages, ...acceptedImages];
 
           for (const finding of grade.findings) {
             const localIndex = frameIndexToLocal.get(finding.frameIndex);
@@ -822,10 +810,7 @@ export async function generateStoryFrames(
     }
     if (redoCycles >= STORYBOARD_REDO_MAX_CYCLES) {
       const reasons = review.framesToRedo
-        .map(
-          (finding) =>
-            `frame ${finding.frameIndex}: ${finding.reason}`
-        )
+        .map((finding) => `frame ${finding.frameIndex}: ${finding.reason}`)
         .join("; ");
       throw new Error(
         `Storyboard review failed after ${STORYBOARD_REDO_MAX_CYCLES} redo cycles: ${reasons}`
@@ -867,7 +852,7 @@ export async function generateStoryFrames(
           stylePrompt,
           styleImages: styleForFrame,
           imagePrompts: [imagePrompts[targetIndex]],
-          maxAttempts: 1,
+          maxAttempts: REDO_CYCLE_IMAGE_GENERATION_MAX_ATTEMPTS,
           imageAspectRatio,
           debug: extendDebug(
             debug,
