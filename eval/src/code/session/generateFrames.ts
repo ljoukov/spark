@@ -15,7 +15,6 @@ import type { JobProgressReporter } from "../../utils/concurrency";
 const IMAGE_GENERATION_MAX_ATTEMPTS = 4;
 const BATCH_GENERATE_MAX_ATTEMPTS = 3;
 const STORYBOARD_REDO_MAX_CYCLES = 4;
-const REDO_CYCLE_IMAGE_GENERATION_MAX_ATTEMPTS = 3;
 
 type CatastrophicFinding = {
   frameIndex: number;
@@ -678,7 +677,7 @@ export async function generateStoryFrames(
                 stylePrompt,
                 styleImages: styleImagesForRedo,
                 imagePrompts: [batch.prompts[localIndex]],
-                maxAttempts: 1,
+                maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
                 imageAspectRatio,
                 debug: extendDebug(
                   debug,
@@ -852,7 +851,7 @@ export async function generateStoryFrames(
           stylePrompt,
           styleImages: styleForFrame,
           imagePrompts: [imagePrompts[targetIndex]],
-          maxAttempts: REDO_CYCLE_IMAGE_GENERATION_MAX_ATTEMPTS,
+          maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
           imageAspectRatio,
           debug: extendDebug(
             debug,
