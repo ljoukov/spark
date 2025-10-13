@@ -114,7 +114,7 @@ const SegmentationCorrectorResponseSchema = z
           prompt_index: z.number().int().min(0).max(11),
           critique: z.string().trim().min(1),
           updatedPrompt: z.string().trim().min(1),
-        })
+        }),
       )
       .default([]),
   })
@@ -192,7 +192,7 @@ export type SerialisedStoryImageSet = z.infer<
 >;
 
 export function serialiseStoryImageSets(
-  imageSets: readonly StoryImageSet[]
+  imageSets: readonly StoryImageSet[],
 ): SerialisedStoryImageSet[] {
   return imageSets.map((set) => ({
     imageSetLabel: set.imageSetLabel,
@@ -205,7 +205,7 @@ export function serialiseStoryImageSets(
 }
 
 export function deserialiseStoryImageSets(
-  serialised: readonly SerialisedStoryImageSet[]
+  serialised: readonly SerialisedStoryImageSet[],
 ): StoryImageSet[] {
   return serialised.map((set) => ({
     imageSetLabel: set.imageSetLabel,
@@ -220,7 +220,7 @@ export function deserialiseStoryImageSets(
 export class SegmentationCorrectionError extends Error {
   constructor(
     message: string,
-    readonly segmentation: StorySegmentation
+    readonly segmentation: StorySegmentation,
   ) {
     super(message);
     this.name = "SegmentationCorrectionError";
@@ -365,11 +365,11 @@ export function buildSegmentationPrompt(storyText: string): string {
 export async function generateProseStory(
   topic: string,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string }
+  options?: { debugRootDir?: string },
 ): Promise<StoryProseResult> {
   const adapter = useProgress(progress);
   adapter.log(
-    `[story] generating prose with web-search-enabled ${TEXT_MODEL_ID}`
+    `[story] generating prose with web-search-enabled ${TEXT_MODEL_ID}`,
   );
   const prompt = buildStoryPrompt(topic);
   adapter.log("[story/prose] prompt prepared");
@@ -390,7 +390,7 @@ const SEGMENTATION_CORRECTION_ATTEMPTS = 3;
 
 function buildSegmentationCorrectorPrompt(
   segmentation: StorySegmentation,
-  generationPrompt: string
+  generationPrompt: string,
 ): string {
   const lines: string[] = [
     "You are the image prompt corrector for illustrated historical stories.",
@@ -416,7 +416,7 @@ function buildSegmentationCorrectorPrompt(
   segmentation.segments.forEach((segment, idx) => {
     const promptIndex = idx;
     lines.push(
-      `Prompt ${promptIndex} (story panel ${idx + 1}) image prompt: ${segment.imagePrompt}`
+      `Prompt ${promptIndex} (story panel ${idx + 1}) image prompt: ${segment.imagePrompt}`,
     );
     const narrationSummary = segment.narration
       .map((line) => `${line.voice}: ${line.text}`)
@@ -428,12 +428,12 @@ function buildSegmentationCorrectorPrompt(
 
   const endingIndex = segmentation.segments.length;
   lines.push(
-    `Prompt ${endingIndex} ("the end" card) image prompt: ${segmentation.endingPrompt}`
+    `Prompt ${endingIndex} ("the end" card) image prompt: ${segmentation.endingPrompt}`,
   );
 
   const posterIndex = segmentation.segments.length + 1;
   lines.push(
-    `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`
+    `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`,
   );
 
   return lines.join("\n");
@@ -441,7 +441,7 @@ function buildSegmentationCorrectorPrompt(
 
 function applySegmentationCorrections(
   segmentation: StorySegmentation,
-  corrections: readonly SegmentationPromptCorrection[]
+  corrections: readonly SegmentationPromptCorrection[],
 ): StorySegmentation {
   if (!corrections.length) {
     return segmentation;
@@ -471,7 +471,7 @@ function applySegmentationCorrections(
       return;
     }
     throw new Error(
-      `Segmentation corrector returned invalid prompt index ${targetIndex}`
+      `Segmentation corrector returned invalid prompt index ${targetIndex}`,
     );
   });
 
@@ -483,7 +483,7 @@ export async function generateStorySegmentation(
   progress?: StoryProgress,
   options?: {
     debugRootDir?: string;
-  }
+  },
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
@@ -508,7 +508,7 @@ export async function correctStorySegmentation(
   progress?: StoryProgress,
   options?: {
     debugRootDir?: string;
-  }
+  },
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   const generationPrompt = buildSegmentationPrompt(storyText);
@@ -522,7 +522,7 @@ export async function correctStorySegmentation(
   ) {
     const reviewPrompt = buildSegmentationCorrectorPrompt(
       workingSegmentation,
-      generationPrompt
+      generationPrompt,
     );
     try {
       const response = await generateJson<SegmentationCorrectorResponse>({
@@ -547,13 +547,13 @@ export async function correctStorySegmentation(
 
       if (response.issuesSummary) {
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} issues summary: ${response.issuesSummary}`
+          `[story/segmentation_correction] attempt ${attempt} issues summary: ${response.issuesSummary}`,
         );
       }
 
       if (response.corrections.length === 0) {
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} returned no corrections`
+          `[story/segmentation_correction] attempt ${attempt} returned no corrections`,
         );
         return workingSegmentation;
       }
@@ -561,29 +561,29 @@ export async function correctStorySegmentation(
       try {
         workingSegmentation = applySegmentationCorrections(
           workingSegmentation,
-          response.corrections
+          response.corrections,
         );
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`
+          `[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`,
         );
         return workingSegmentation;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`
+          `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`,
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       adapter.log(
-        `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`
+        `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`,
       );
     }
   }
 
   throw new SegmentationCorrectionError(
     `Segmentation correction failed after ${SEGMENTATION_CORRECTION_ATTEMPTS} attempt(s).`,
-    workingSegmentation
+    workingSegmentation,
   );
 }
 
@@ -616,7 +616,7 @@ type SegmentationImageContext = {
 };
 
 function collectSegmentationImageContext(
-  segmentation: StorySegmentation
+  segmentation: StorySegmentation,
 ): SegmentationImageContext {
   const posterPrompt = segmentation.posterPrompt.trim();
   const endingPrompt = segmentation.endingPrompt.trim();
@@ -638,7 +638,7 @@ function collectSegmentationImageContext(
     const segmentPrompt = segment.imagePrompt.trim();
     if (!segmentPrompt) {
       throw new Error(
-        `Segmentation segment ${i + 1} is missing an imagePrompt`
+        `Segmentation segment ${i + 1} is missing an imagePrompt`,
       );
     }
     const index = i + 1;
@@ -665,7 +665,7 @@ function collectSegmentationImageContext(
 export async function generateImageSets(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string }
+  options?: { debugRootDir?: string },
 ): Promise<StoryImageSet[]> {
   const adapter = useProgress(progress);
   const { entries, endingIndex, posterIndex } =
@@ -675,25 +675,25 @@ export async function generateImageSets(
   const endingEntry = entries.find((entry) => entry.index === endingIndex);
   if (!posterEntry) {
     throw new Error(
-      `Segmentation image context is missing the poster entry (index ${posterIndex})`
+      `Segmentation image context is missing the poster entry (index ${posterIndex})`,
     );
   }
   if (!endingEntry) {
     throw new Error(
-      `Segmentation image context is missing the ending entry (index ${endingIndex})`
+      `Segmentation image context is missing the ending entry (index ${endingIndex})`,
     );
   }
   const panelEntries = entries
     .filter(
-      (entry) => entry.index !== posterIndex && entry.index !== endingIndex
+      (entry) => entry.index !== posterIndex && entry.index !== endingIndex,
     )
     .sort((a, b) => a.index - b.index);
 
   const runImageSet = async (
-    imageSetLabel: "set_a" | "set_b"
+    imageSetLabel: "set_a" | "set_b",
   ): Promise<StoryImageSet> => {
     adapter.log(
-      `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`
+      `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`,
     );
     const mainImageParts = await generateStoryFrames({
       progress: adapter,
@@ -728,7 +728,7 @@ export async function generateImageSets(
         data: part.data,
       });
       adapter.log(
-        `[story/image-sets/${imageSetLabel}] received image ${entry.index} (${part.data.length} bytes)`
+        `[story/image-sets/${imageSetLabel}] received image ${entry.index} (${part.data.length} bytes)`,
       );
     }
 
@@ -760,12 +760,12 @@ export async function generateImageSets(
         data: posterPart.data,
       });
       adapter.log(
-        `[story/image-sets/${imageSetLabel}] received poster image ${posterIndex} (${posterPart.data.length} bytes)`
+        `[story/image-sets/${imageSetLabel}] received poster image ${posterIndex} (${posterPart.data.length} bytes)`,
       );
     }
 
     const endingReferences = mainImageParts.slice(
-      Math.max(mainImageParts.length - 4, 0)
+      Math.max(mainImageParts.length - 4, 0),
     );
     adapter.log(`[story/image-sets/${imageSetLabel}] generating end card`);
     const endingParts = await generateImages({
@@ -794,7 +794,7 @@ export async function generateImageSets(
         data: endingPart.data,
       });
       adapter.log(
-        `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`
+        `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
       );
     }
 
@@ -828,7 +828,7 @@ export async function judgeImageSets(
   imageSets: readonly StoryImageSet[],
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string }
+  options?: { debugRootDir?: string },
 ): Promise<{
   winningImageSetLabel: "set_a" | "set_b";
 }> {
@@ -900,7 +900,7 @@ export async function judgeImageSets(
 export async function generateStoryImages(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string }
+  options?: { debugRootDir?: string },
 ): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
   adapter.log("[story] generating 12 images via dual-set comparison workflow");
@@ -912,11 +912,11 @@ export async function generateStoryImages(
   const imageSets = await generateImageSets(segmentation, adapter, options);
   const judge = await judgeImageSets(imageSets, segmentation, adapter, options);
   const winner = imageSets.find(
-    (set) => set.imageSetLabel === judge.winningImageSetLabel
+    (set) => set.imageSetLabel === judge.winningImageSetLabel,
   );
   if (!winner) {
     throw new Error(
-      `Winning image set ${judge.winningImageSetLabel} not found in generated sets`
+      `Winning image set ${judge.winningImageSetLabel} not found in generated sets`,
     );
   }
 
@@ -963,7 +963,7 @@ function buildImageStoragePath(
   planItemId: string,
   index: number,
   extension: string,
-  prefix?: string
+  prefix?: string,
 ): string {
   const folder = prefix
     ? path.join(prefix, userId, "sessions", sessionId, planItemId)
@@ -975,11 +975,11 @@ function buildImageStoragePath(
 
 function toMediaSegments(
   segmentation: StorySegmentation,
-  imagePaths: readonly string[]
+  imagePaths: readonly string[],
 ): MediaSegment[] {
   if (segmentation.segments.length !== imagePaths.length) {
     throw new Error(
-      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`
+      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`,
     );
   }
 
@@ -993,7 +993,7 @@ function toMediaSegments(
 }
 
 export async function generateStory(
-  options: GenerateStoryOptions
+  options: GenerateStoryOptions,
 ): Promise<GenerateStoryResult> {
   const story = await generateProseStory(options.topic, options.progress, {
     debugRootDir: options.debugRootDir,
@@ -1001,13 +1001,13 @@ export async function generateStory(
   const initialSegmentation = await generateStorySegmentation(
     story.text,
     options.progress,
-    { debugRootDir: options.debugRootDir }
+    { debugRootDir: options.debugRootDir },
   );
   const segmentation = await correctStorySegmentation(
     story.text,
     initialSegmentation,
     options.progress,
-    { debugRootDir: options.debugRootDir }
+    { debugRootDir: options.debugRootDir },
   );
   const images = await generateStoryImages(segmentation, options.progress, {
     debugRootDir: options.debugRootDir,
@@ -1015,11 +1015,11 @@ export async function generateStory(
   // We now generate 12 images total: 10 story panels, 1 ending card, 1 poster.
   // For media segments we only use the 10 interior images (indices 1..10).
   const interior = images.images.filter(
-    (im) => im.index >= 1 && im.index <= 10
+    (im) => im.index >= 1 && im.index <= 10,
   );
   if (interior.length !== segmentation.segments.length) {
     throw new Error(
-      `Expected ${segmentation.segments.length} interior images (1..10), received ${interior.length}`
+      `Expected ${segmentation.segments.length} interior images (1..10), received ${interior.length}`,
     );
   }
 
@@ -1049,7 +1049,7 @@ export async function generateStory(
       options.planItemId,
       seqIndex,
       extension,
-      options.storagePrefix
+      options.storagePrefix,
     );
     const file = bucket.file(storagePath);
     await file.save(jpegBuffer, {
@@ -1072,7 +1072,7 @@ export async function generateStory(
     segments,
     storageBucket: options.storageBucket,
     progress: createConsoleProgress(
-      options.audioProgressLabel ?? options.planItemId
+      options.audioProgressLabel ?? options.planItemId,
     ),
   });
 
