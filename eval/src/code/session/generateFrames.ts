@@ -21,9 +21,10 @@ type CatastrophicFinding = {
 };
 
 type BatchGradeOutcome = {
-  outcome: "accept" | "redo";
+  outcome: "accept" | "redo_batch" | "redo_frames";
   findings: CatastrophicFinding[];
   summary: string;
+  batchReason?: string;
 };
 
 type StoryboardGradeOutcome = {
@@ -31,10 +32,17 @@ type StoryboardGradeOutcome = {
   summary: string;
 };
 
+type BatchGradeItem = {
+  frameIndex: number;
+  prompt: string;
+  image: LlmImageData;
+};
+
 const BatchGradeResponseSchema = z
   .object({
-    outcome: z.enum(["accept", "redo"]),
-    catastrophic_findings: z
+    outcome: z.enum(["accept", "redo_batch", "redo_frames"]),
+    catastrophic_batch_reason: z.string().trim().optional(),
+    frames_to_redo: z
       .array(
         z.object({
           frame_index: z.number().int().min(1),
@@ -46,7 +54,8 @@ const BatchGradeResponseSchema = z
   })
   .transform((raw) => ({
     outcome: raw.outcome,
-    findings: raw.catastrophic_findings.map((item) => ({
+    batchReason: raw.catastrophic_batch_reason ?? "",
+    findings: raw.frames_to_redo.map((item) => ({
       frameIndex: item.frame_index,
       reason: item.reason,
     })),
@@ -57,15 +66,21 @@ type BatchGradeResponse = z.infer<typeof BatchGradeResponseSchema>;
 
 const BATCH_GRADE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["outcome", "catastrophic_findings"],
-  propertyOrdering: ["outcome", "summary", "catastrophic_findings"],
+  required: ["outcome", "frames_to_redo"],
+  propertyOrdering: [
+    "outcome",
+    "summary",
+    "catastrophic_batch_reason",
+    "frames_to_redo",
+  ],
   properties: {
     outcome: {
       type: Type.STRING,
-      enum: ["accept", "redo"],
+      enum: ["accept", "redo_batch", "redo_frames"],
     },
+    catastrophic_batch_reason: { type: Type.STRING },
     summary: { type: Type.STRING },
-    catastrophic_findings: {
+    frames_to_redo: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
@@ -148,7 +163,7 @@ type GenerateBatchParams = {
 function extendDebug(
   debug: LlmDebugOptions | undefined,
   suffix: string,
-  attempt?: number
+  attempt?: number | string
 ): LlmDebugOptions | undefined {
   if (!debug) {
     return undefined;
@@ -207,14 +222,10 @@ function buildBatchGradeContents(params: {
   catDescription: string;
   stylePrompt: string;
   styleImages: readonly LlmImageData[];
-  generatedImages: readonly {
-    frameIndex: number;
-    prompt: string;
-    image: LlmImageData;
-  }[];
+  items: readonly BatchGradeItem[];
   checkNewOnly: boolean;
 }): { role: "user"; parts: LlmContentPart[] }[] {
-  const { catDescription, stylePrompt, styleImages, generatedImages, checkNewOnly } =
+  const { catDescription, stylePrompt, styleImages, items, checkNewOnly } =
     params;
   const parts: LlmContentPart[] = [];
   addTextPart(
@@ -240,8 +251,13 @@ function buildBatchGradeContents(params: {
     [
       "",
       checkNewOnly
-        ? "Evaluate ONLY the new frames below. Ignore the style references except to check consistency."
-        : "Evaluate each frame below for catastrophic failures.",
+        ? "Evaluate ONLY the resubmitted frames below. Ignore the style references except to confirm they remain consistent."
+        : "Evaluate each frame in this batch for catastrophic failures or consistency issues.",
+      "",
+      "Possible outcomes:",
+      '- `"accept"` if everything is usable.',
+      '- `"redo_frames"` when only specific frames must be regenerated. List them under `frames_to_redo`.',
+      '- `"redo_batch"` if the entire batch must be regenerated from scratch. Provide a short `catastrophic_batch_reason`.',
       "",
       "For every frame include:",
       "- Frame number (1-based index across the storyboard).",
@@ -249,7 +265,7 @@ function buildBatchGradeContents(params: {
       "- The rendered image (inline).",
     ].join("\n")
   );
-  for (const entry of generatedImages) {
+  for (const entry of items) {
     addTextPart(
       parts,
       `\nFrame ${entry.frameIndex}: ${entry.prompt}`
@@ -261,9 +277,9 @@ function buildBatchGradeContents(params: {
     [
       "",
       "Respond in JSON using the provided schema.",
-      'Set `"outcome":"redo"` only when a catastrophic failure is present.',
+      "If only some frames fail, set `\"outcome\":\"redo_frames\"` and list the frames to redo.",
+      "If the entire batch collapses (for example split panels, hard borders, inconsistent characters), return `\"outcome\":\"redo_batch\"` and explain briefly.",
       "Otherwise set `\"outcome\":\"accept\"`.",
-      "If you red-flag a frame include it in `catastrophic_findings` with a short reason.",
     ].join("\n")
   );
   return [
@@ -337,12 +353,14 @@ function buildStoryboardGradeContents(params: {
 
 async function gradeBatch(params: {
   options: GenerateStoryFramesOptions;
-  batch: GenerateBatchParams;
-  generated: readonly LlmImageData[];
-  attempt: number;
+  styleImages: readonly LlmImageData[];
+  items: readonly BatchGradeItem[];
+  attemptLabel: number | string;
   checkNewOnly: boolean;
+  debugSuffix: string;
 }): Promise<BatchGradeOutcome> {
-  const { options, batch, generated, attempt, checkNewOnly } = params;
+  const { options, styleImages, items, attemptLabel, checkNewOnly, debugSuffix } =
+    params;
   const payload: BatchGradeResponse = await generateJson({
     modelId: options.gradingModelId,
     progress: options.progress,
@@ -350,18 +368,14 @@ async function gradeBatch(params: {
     responseSchema: BATCH_GRADE_RESPONSE_SCHEMA,
     debug: extendDebug(
       options.debug,
-      `batch-${padNumber(batch.batchIndex + 1)}/grade-${padNumber(attempt)}`,
-      attempt
+      debugSuffix,
+      attemptLabel
     ),
     contents: buildBatchGradeContents({
       catDescription: options.gradeCatastrophicDescription,
       stylePrompt: options.stylePrompt,
-      styleImages: batch.styleImages,
-      generatedImages: generated.map((image, index) => ({
-        frameIndex: batch.globalIndices[index] + 1,
-        prompt: batch.prompts[index],
-        image,
-      })),
+      styleImages,
+      items,
       checkNewOnly,
     }),
   });
@@ -369,6 +383,7 @@ async function gradeBatch(params: {
     outcome: payload.outcome,
     findings: payload.findings,
     summary: payload.summary,
+    batchReason: payload.batchReason || undefined,
   };
 }
 
@@ -528,15 +543,56 @@ export async function generateStoryFrames(
           continue;
         }
 
+        const batchItems: BatchGradeItem[] = generatedImages.map(
+          (image, index) => ({
+            frameIndex: batch.globalIndices[index] + 1,
+            prompt: batch.prompts[index],
+            image,
+          })
+        );
+        const frameIndexToLocal = new Map<number, number>();
+        for (let index = 0; index < batchItems.length; index += 1) {
+          frameIndexToLocal.set(batchItems[index].frameIndex, index);
+        }
+
+        const logGradeSummary = (grade: BatchGradeOutcome) => {
+          if (grade.summary) {
+            progress.log(
+              `[story/frames] Batch ${batchIndex + 1} grade summary: ${
+                grade.summary
+              }`
+            );
+          }
+        };
+
+        const logFrameFindings = (grade: BatchGradeOutcome) => {
+          if (grade.findings.length === 0) {
+            return;
+          }
+          const details = grade.findings
+            .map(
+              (finding) =>
+                `frame ${finding.frameIndex}: ${finding.reason}`
+            )
+            .join("; ");
+          progress.log(
+            `[story/frames] Batch ${batchIndex + 1} frames flagged: ${details}`
+          );
+        };
+
         let grade: BatchGradeOutcome;
         try {
           grade = await gradeBatch({
             options,
-            batch,
-            generated: generatedImages,
-            attempt,
+            styleImages: batch.styleImages,
+            items: batchItems,
+            attemptLabel: attempt,
             checkNewOnly: batchIndex > 0,
+            debugSuffix: `batch-${padNumber(
+              batchIndex + 1
+            )}/grade-${padNumber(attempt)}`,
           });
+          logGradeSummary(grade);
         } catch (error) {
           lastError = error;
           progress.log(
@@ -551,18 +607,15 @@ export async function generateStoryFrames(
           continue;
         }
 
-        if (grade.outcome === "redo") {
-          lastError =
-            grade.findings.length > 0
-              ? new Error(
-                  `Batch ${batchIndex + 1} rejected: ${grade.findings
-                    .map(
-                      (finding) =>
-                        `frame ${finding.frameIndex}: ${finding.reason}`
-                    )
-                    .join("; ")}`
-                )
-              : new Error(`Batch ${batchIndex + 1} rejected by grader`);
+        let rejectBatch = false;
+        let partialIteration = 0;
+
+        if (grade.outcome === "redo_batch") {
+          lastError = new Error(
+            grade.batchReason
+              ? `Batch ${batchIndex + 1} rejected: ${grade.batchReason}`
+              : `Batch ${batchIndex + 1} rejected by grader`
+          );
           progress.log(
             `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`
           );
@@ -574,13 +627,167 @@ export async function generateStoryFrames(
           continue;
         }
 
-        if (grade.summary) {
-          progress.log(
-            `[story/frames] Batch ${batchIndex + 1} grade summary: ${grade.summary}`
-          );
+        if (grade.outcome === "redo_frames") {
+          logFrameFindings(grade);
         }
 
-        generated.push(...generatedImages.slice(0, batch.prompts.length));
+        const computeAcceptedStyleImages = (
+          findings: readonly CatastrophicFinding[]
+        ): LlmImageData[] => {
+          if (findings.length === 0) {
+            return batchItems.map((item) => item.image);
+          }
+          const flaggedSet = new Set(
+            findings.map((finding) => finding.frameIndex)
+          );
+          return batchItems
+            .filter((item) => !flaggedSet.has(item.frameIndex))
+            .map((item) => item.image);
+        };
+
+        while (grade.outcome === "redo_frames") {
+          partialIteration += 1;
+          if (partialIteration > BATCH_GENERATE_MAX_ATTEMPTS) {
+            throw new Error(
+              `Batch ${batchIndex + 1} frame redo exceeded ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
+            );
+          }
+          if (grade.findings.length === 0) {
+            rejectBatch = true;
+            lastError = new Error(
+              `Batch ${batchIndex + 1} requested frame redo without targets`
+            );
+            break;
+          }
+
+          const acceptedImages = computeAcceptedStyleImages(grade.findings);
+          const styleImagesForRedo = [
+            ...batch.styleImages,
+            ...acceptedImages,
+          ];
+
+          for (const finding of grade.findings) {
+            const localIndex = frameIndexToLocal.get(finding.frameIndex);
+            if (localIndex === undefined) {
+              throw new Error(
+                `Batch grader referenced unknown frame ${finding.frameIndex}`
+              );
+            }
+            let replacement: LlmImageData | undefined;
+            for (
+              let frameAttempt = 1;
+              frameAttempt <= BATCH_GENERATE_MAX_ATTEMPTS;
+              frameAttempt += 1
+            ) {
+              progress.log(
+                `[story/frames] Regenerating frame ${finding.frameIndex} (batch ${
+                  batchIndex + 1
+                }, redo ${partialIteration}, attempt ${frameAttempt})`
+              );
+              const regen = await generateImages({
+                progress,
+                modelId: imageModelId,
+                stylePrompt,
+                styleImages: styleImagesForRedo,
+                imagePrompts: [batch.prompts[localIndex]],
+                maxAttempts: 1,
+                imageAspectRatio,
+                debug: extendDebug(
+                  debug,
+                  `batch-${padNumber(
+                    batchIndex + 1
+                  )}/redo-${padNumber(partialIteration)}/frame-${padNumber(
+                    finding.frameIndex
+                  )}/generate-${padNumber(frameAttempt)}`,
+                  `redo-${padNumber(partialIteration)}-${padNumber(
+                    frameAttempt
+                  )}`
+                ),
+              });
+              if (regen.length === 0) {
+                if (frameAttempt === BATCH_GENERATE_MAX_ATTEMPTS) {
+                  throw new Error(
+                    `Failed to regenerate frame ${finding.frameIndex}: model returned no image`
+                  );
+                }
+                continue;
+              }
+              replacement = regen[0];
+              break;
+            }
+            if (!replacement) {
+              throw new Error(
+                `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
+              );
+            }
+            batchItems[localIndex] = {
+              ...batchItems[localIndex],
+              image: replacement,
+            };
+          }
+
+          try {
+            const redoItems = grade.findings.map((finding) => {
+              const localIndex = frameIndexToLocal.get(finding.frameIndex);
+              if (localIndex === undefined) {
+                throw new Error(
+                  `Batch grader referenced unknown frame ${finding.frameIndex}`
+                );
+              }
+              return batchItems[localIndex];
+            });
+            grade = await gradeBatch({
+              options,
+              styleImages: styleImagesForRedo,
+              items: redoItems,
+              attemptLabel: `redo-${padNumber(partialIteration)}`,
+              checkNewOnly: true,
+              debugSuffix: `batch-${padNumber(
+                batchIndex + 1
+              )}/redo-${padNumber(partialIteration)}/grade`,
+            });
+            logGradeSummary(grade);
+            if (grade.outcome === "redo_frames") {
+              logFrameFindings(grade);
+            }
+          } catch (error) {
+            lastError = error;
+            progress.log(
+              `[story/frames] Batch ${batchIndex + 1} redo grading failed: ${String(
+                error instanceof Error ? error.message : error
+              )}`
+            );
+            if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
+              throw error instanceof Error ? error : new Error(String(error));
+            }
+            rejectBatch = true;
+            break;
+          }
+
+          if (grade.outcome === "redo_batch") {
+            rejectBatch = true;
+            lastError = new Error(
+              grade.batchReason
+                ? `Batch ${batchIndex + 1} rejected: ${grade.batchReason}`
+                : `Batch ${batchIndex + 1} rejected by grader`
+            );
+            break;
+          }
+        }
+
+        if (rejectBatch) {
+          progress.log(
+            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`
+          );
+          if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
+            throw lastError instanceof Error
+              ? lastError
+              : new Error(String(lastError));
+          }
+          continue;
+        }
+
+        generated.push(...batchItems.map((item) => item.image));
         batchSuccess = true;
         break;
       } catch (error) {
