@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getSessionMedia } from '$lib/server/media/repo';
+import type { SessionMediaImageWithUrl } from '$lib/server/media/repo';
 import type { PageServerLoad } from './$types';
 
 const paramsSchema = z.object({
@@ -25,14 +26,15 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		.slice()
 		.sort((a, b) => a.startSec - b.startSec || a.index - b.index)
 		.map((image, order) => {
+			const withUrl = image as SessionMediaImageWithUrl;
 			return {
 				order,
 				index: image.index,
 				startSec: image.startSec,
 				durationSec: image.durationSec,
-				url: image.url,
+				url: withUrl.url,
 				storagePath: image.storagePath ?? null,
-				signedUrlExpiresAt: image.signedUrlExpiresAt?.toISOString() ?? null
+				signedUrlExpiresAt: withUrl.signedUrlExpiresAt?.toISOString() ?? null
 			};
 		});
 
