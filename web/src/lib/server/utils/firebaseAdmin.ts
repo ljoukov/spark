@@ -12,17 +12,7 @@ import {
 	type GoogleServiceAccount
 } from '@spark/llm';
 
-function loadServiceAccount(): GoogleServiceAccount {
-	try {
-		return getGoogleServiceAccount();
-	} catch (error) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON must be set', {
-			cause: error instanceof Error ? error : undefined
-		});
-	}
-}
-
-const serviceAccountConfig: GoogleServiceAccount = Object.freeze(loadServiceAccount());
+const serviceAccountConfig: GoogleServiceAccount = Object.freeze(getGoogleServiceAccount());
 
 const adminOptions: FirebaseAdminOptions = Object.freeze({
 	storageBucket: clientFirebaseConfig.storageBucket
