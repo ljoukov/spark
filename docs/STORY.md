@@ -64,20 +64,35 @@ Single scene per image.
 
 ```mermaid
 flowchart TD
-  A["Split prompts into batches"] --> B["generateImages (<=4 attempts each)"]
-  B --> C["gradeBatch (Gemini text model)"]
-  C --> D{Outcome}
-  D -->|redo_batch| B
-  D -->|redo_frames| E["Regenerate flagged frames\nwith accepted images as style context"]
-  E --> C
-  D -->|accept| F["Append frames to generated[]"]
-  F --> G{More batches?}
-  G -->|Yes| B
-  G -->|No| H["gradeStoryboard"]
-  H --> I{frames_to_redo empty?}
-  I -->|No| J["Per-frame regen loop (<=4 cycles)"]
-  J --> H
-  I -->|Yes| K["Return storyboard frames"]
+  S["generateStoryFrames(options)"] --> P["buildBatches(prompts, batchSize, overlapSize)"]
+  P --> B{"More batches remaining?"}
+  B -->|No| H["prepareStoryboardReview(generated)"]
+  H --> R{"Any frames pending review?"}
+  R -->|No| BU["Return storyboard frames"]
+  R -->|Yes| GS["gradeStoryboard(reviewFrames, lockedFrames)"]
+  GS --> GV{frames_to_redo empty?}
+  GV -->|Yes| BU
+  GV -->|No & cycles < storyboardMax| RJ["Regenerate requested frames\n(update style context)"]
+  RJ --> H
+  GV -->|No & cycles == storyboardMax| BX["Throw FrameGenerationError"]
+  B -->|Yes| BC["Assemble batch style context\n(sliding window + accepted frames)"]
+  BC --> ATT["attempt = 1"]
+  ATT --> GI["generateImages(batchPrompts, context)"]
+  GI --> GS2{All frames succeeded?}
+  GS2 -->|No & attempt < maxFrameAttempts| NA["attempt++"]
+  NA --> GI
+  GS2 -->|No & attempt == maxFrameAttempts| BX
+  GS2 -->|Yes| GB["gradeBatch(resultFrames)"]
+  GB --> GD{grader verdict}
+  GD -->|redo_batch| RB["Reset batch state\nincrement batchRetry"]
+  RB --> RC{batchRetry <= maxBatchRetries?}
+  RC -->|No| BX
+  RC -->|Yes| ATT
+  GD -->|redo_frames| RF["Regenerate flagged frames\n(keep accepted subset)"]
+  RF --> SC["Update style context with\naccepted frames"]
+  SC --> ATT
+  GD -->|accept| AC["Append frames to acceptedFrames"]
+  AC --> B
 ```
 
 Key concepts:
@@ -85,6 +100,7 @@ Key concepts:
 - **Style propagation:** Each batch carries forward a sliding window of prior frames (`overlapSize`) so characters remain consistent. Accepted images augment the style reference set for any partial redos.
 - **Catastrophic grading:** The grader schema enforces explicit outcomes (`accept`, `redo_frames`, `redo_batch`) and collects frame indices plus short reasons. This prevents silent drift.
 - **Storyboard audit:** After batches pass, a whole-board review can request targeted regenerations, capped at four cycles to avoid infinite loops.
+- **Locked storyboard frames:** Once a frame clears review it becomes a context-only reference during future audits, so the grader cannot re-flag panels that have not changed.
 
 ### Poster and Ending
 
