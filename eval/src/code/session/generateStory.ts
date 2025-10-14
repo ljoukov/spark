@@ -35,12 +35,6 @@ const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
   "- Catastrophic continuity break with provided style references.",
 ].join("\n");
 
-const STORYBOARD_REVIEW_DESCRIPTION = [
-  "Only flag frames that obviously break the brief or continuity.",
-  "Explain the reason in one short sentence per frame.",
-  "If a frame merely has small stylistic drift, leave it as-is.",
-].join("\n");
-
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
   "A beautiful and engaging high quality classic cartoon illustration.",
   "Use a high-positivity tone, high quality, bright colors, and a clear composition.",
@@ -703,7 +697,6 @@ export async function generateImageSets(
       batchSize: 5,
       overlapSize: 3,
       gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
-      storyboardReviewDescription: STORYBOARD_REVIEW_DESCRIPTION,
       imageAspectRatio: "16:9",
       debug: options?.debugRootDir
         ? {
