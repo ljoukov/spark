@@ -506,26 +506,25 @@ async function llmStream({
     convertLlmContentToGoogleContent,
   );
   const config: GeminiCallConfig = {};
-  // Enable thinking only when supported. Image models and image responses do
-  // not support thinking and will fail if requested.
-  const responseModalities = options.responseModalities;
-  let hasImageModality = false;
-  if (responseModalities !== undefined) {
-    for (const modality of responseModalities) {
-      if (String(modality).toUpperCase() === "IMAGE") {
-        hasImageModality = true;
-        break;
-      }
+  const thinkingConfig = (() => {
+    switch (options.modelId) {
+      case "gemini-2.5-pro":
+        return {
+          includeThoughts: true,
+          thinkingBudget: 32_768,
+        } as const;
+      case "gemini-flash-latest":
+      case "gemini-flash-lite-latest":
+        return {
+          includeThoughts: true,
+          thinkingBudget: 24_576,
+        } as const;
+      case "gemini-2.5-flash-image":
+        return undefined;
     }
-  }
-  const isImageCall = Boolean(options.imageAspectRatio || hasImageModality);
-  const isImageModel = options.modelId === "gemini-2.5-flash-image";
-  const supportsThinking = !isImageCall && !isImageModel;
-  if (supportsThinking) {
-    config.thinkingConfig = {
-      includeThoughts: true,
-      thinkingBudget: 32_768,
-    };
+  })();
+  if (thinkingConfig) {
+    config.thinkingConfig = thinkingConfig;
   }
   if (options.responseMimeType) {
     config.responseMimeType = options.responseMimeType;

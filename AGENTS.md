@@ -77,6 +77,7 @@ Notes
 
 - Braces: ALWAYS use `{}` for all control statements (`if/else`, `for`, `while`, `do`, `try/catch`), even when there is a single statement; do not write one‑liners without braces.
 - Prefer compile-time exhaustiveness checks for discriminated unions and enums. NEVER paper over missing cases with runtime fallbacks like `throw new Error("Unsupported ...")`; instead structure logic (e.g. local IIFE pattern) so the type system forces every variant to compile.
+- When writing `switch`es over union types, list every variant explicitly and avoid unreachable `const x: never = value` guard blocks — missing cases should remain TypeScript errors without relying on runtime throws.
 - Avoid unnecessary wrappers or indirection. Prefer the simplest structure that keeps types safe (e.g. drop redundant async lambdas once exhaustiveness is enforced).
 
 ## Validation
