@@ -967,6 +967,7 @@ async function llmStream({
   const elapsedMs = Date.now() - startedAt;
   log(`completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`);
 
+  await Promise.all(debugWriteTasks);
   const mergedParts = mergeConsecutiveTextParts(responseParts);
   const responseContent =
     mergedParts.length > 0
@@ -977,7 +978,6 @@ async function llmStream({
       : undefined;
 
   if (stage.debugDir || debugLogDir) {
-    await Promise.all(debugWriteTasks);
     const trimmedResponseText = extractVisibleText(responseContent);
     const snapshotSummary: readonly string[] = [
       `Model: ${resolvedModelVersion}`,
