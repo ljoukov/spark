@@ -24,9 +24,7 @@ import type { MediaSegment } from "@spark/llm";
 import {
   TEST_SESSION_ID,
   TEST_SESSION_TITLE,
-  INTRO_PLAN_ITEM_ID,
   STORY_PLAN_ITEM_ID,
-  OUTRO_PLAN_ITEM_ID,
   STORY_TOPIC,
 } from "./constants";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
@@ -38,839 +36,767 @@ import { generateStory } from "./generateStory";
 import { runJobsWithConcurrency } from "../../utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
-const DEFAULT_MEDIA_IMAGE =
-  "/spark/test-admin-0Rr2rEBRAg3T3SYk/sessions/dp-coin-change-decode/intro.jpeg";
-
-const INTRO_MEDIA_SEGMENTS: MediaSegment[] = [
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "It’s September 2, 1954, in Laramie, Wyoming. Richard Bellman, a mathematician from the RAND Corporation, is at the American Mathematical Society’s summer meeting. He’s there to introduce a new method for making a series of decisions. He calls it ‘dynamic programming’ and unveils a core idea now known as the ‘principle of optimality’.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "f",
-        text: "That name, ‘dynamic programming,’ wasn’t for show. His boss back in Washington, Secretary of Defense Charles Wilson, had a visceral dislike for the word ‘research’. Bellman needed to keep the funding flowing for his work at RAND, a military think tank. So, he chose his words carefully: ‘dynamic’ sounded powerful, and ‘programming’ was just a synonym for planning. It was a clever disguise for some very serious math.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "The problem Bellman was tackling wasn’t about getting from one town to another. It was about much higher stakes: figuring out the best way to manage Air Force logistics. Imagine deciding how many spare engines to stock for bomber fleets across the country to keep them ready, without wasting millions on parts that just sit in a warehouse. This was a real issue RAND was working on in the 1950s.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "f",
-        text: "Think about it like this: if you order too few spare parts, a bomber is grounded. If you order too many, you’ve wasted a fortune that could have been used elsewhere. And the decision you make this month affects what you’ll need next month, and the month after that. A greedy approach—just ordering the cheapest parts now—could lead to disaster later. Bellman’s breakthrough was to solve the problem backward. Start from the end goal—total fleet readiness at the lowest cost—and work your way back, making the optimal decision at each step. By solving these smaller, overlapping problems just once and remembering the answers, you build the perfect plan.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "The essence of dynamic programming is this: solve a complex problem by breaking it down into simpler, overlapping subproblems. You find the optimal solution to each subproblem once and store it. The key insight, Bellman’s ‘principle of optimality,’ is that any optimal plan must be built from optimal smaller plans.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "f",
-        text: "Bellman’s deliberately blandly named method went on to be used in everything from economics to aerospace engineering. He even coined the phrase ‘curse of dimensionality’ to describe the explosion of possibilities in complex problems. That day in Wyoming, with a name designed to fly under the radar, he gave the world a powerful new way to think about the future.",
-      },
-    ],
-  },
-];
-
-const OUTRO_MEDIA_SEGMENTS: MediaSegment[] = [
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "DP is about naming the state, anchoring with base cases, and reusing computed answers via a memo or table. Today you applied that to Coin Change and Decode Ways.",
-      },
-      {
-        speaker: "f",
-        text: "Keep the mental checklist: What’s the state? What’s the tiniest known answer? How do small answers compose into the next one?",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "Spot overlapping subproblems early. Prefer clear states and minimal memory. Choose memoization or tabulation for clarity—both are valid.",
-      },
-      {
-        speaker: "f",
-        text: "Like organizing tools in a small box: only keep what you reach for. The structure makes the next fix faster.",
-      },
-    ],
-  },
-  {
-    image: DEFAULT_MEDIA_IMAGE,
-    narration: [
-      {
-        speaker: "m",
-        text: "When you’re ready, try more DP patterns—stairs and grids, LIS, or knapsack. Short, focused reps will cement the skill.",
-      },
-      {
-        speaker: "f",
-        text: "One more small session now beats a long one later. See you in the next lesson.",
-      },
-    ],
-  },
-];
-
 const MEDIA_SOURCES: Array<{
   planItemId: string;
   segments: MediaSegment[];
 }> = [
-  {
-    planItemId: INTRO_PLAN_ITEM_ID,
-    segments: INTRO_MEDIA_SEGMENTS,
-  },
-  {
-    planItemId: OUTRO_PLAN_ITEM_ID,
-    segments: OUTRO_MEDIA_SEGMENTS,
-  },
 ];
 
 const QUIZZES: QuizDefinition[] = [
   {
-    id: "dp-warmup-quiz",
-    title: "DP Warm-up: Basics",
-    topic: "Dynamic Programming",
-    estimatedMinutes: 3,
-    progressKey: "warmup",
+    id: "bfs-primer-quiz",
+    title: "Level Quest: Start Here",
+    topic: "Breadth-first Search",
+    estimatedMinutes: 6,
+    progressKey: "primer",
     description:
-      "Three very short questions to build intuition—no formulas needed.",
-    questions: [
-      {
-        kind: "multiple-choice",
-        id: "dp-warmup-overlap",
-        prompt: "What is the big idea behind dynamic programming (DP)?",
-        hint: "Think “break, solve small, remember, reuse”.",
-        explanation:
-          "DP means breaking a problem into smaller pieces, solving those small pieces once, saving the answers, and reusing them so you do not repeat work.",
-        options: [
-          {
-            id: "A",
-            label: "A",
-            text: "Try everything randomly and hope for the best",
-          },
-          {
-            id: "B",
-            label: "B",
-            text: "Break problems into smaller parts and reuse saved answers",
-          },
-          { id: "C", label: "C", text: "Sort the input to make it faster" },
-          { id: "D", label: "D", text: "Draw a graph and do BFS every time" },
-        ],
-        correctOptionId: "B",
-        correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Breaking a problem down and reusing solved pieces is the heart of DP.",
-        },
-      },
-      {
-        kind: "multiple-choice",
-        id: "dp-warmup-base-case",
-        prompt: "What is a “base case” in DP?",
-        hint: "Start from something you already know.",
-        explanation:
-          "A base case is a tiny version of the problem with an answer you already know. It anchors everything else you build.",
-        options: [
-          {
-            id: "A",
-            label: "A",
-            text: "A fancy optimization that makes code faster",
-          },
-          {
-            id: "B",
-            label: "B",
-            text: "A simple starting situation with a known answer",
-          },
-          { id: "C", label: "C", text: "The biggest input you plan to test" },
-          {
-            id: "D",
-            label: "D",
-            text: "A sign that the problem has no solution",
-          },
-        ],
-        correctOptionId: "B",
-        correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Anchoring the table with a tiny, known answer is exactly how base cases work.",
-        },
-      },
-      {
-        kind: "multiple-choice",
-        id: "dp-warmup-order",
-        prompt: "Why do DP solutions keep a table/array/map of results?",
-        hint: "Think about not solving the same thing twice.",
-        explanation:
-          "The table stores answers you have already computed so later steps can reuse them instead of recomputing.",
-        options: [
-          { id: "A", label: "A", text: "To print the results in a nice grid" },
-          {
-            id: "B",
-            label: "B",
-            text: "To store answers we have already computed so we can reuse them",
-          },
-          {
-            id: "C",
-            label: "C",
-            text: "To make the code longer and more complex",
-          },
-          {
-            id: "D",
-            label: "D",
-            text: "To use more memory because memory is cheap",
-          },
-        ],
-        correctOptionId: "B",
-        correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Keeping a table of solved states is exactly how DP avoids recomputing work.",
-        },
-      },
-    ],
-  },
-  {
-    id: "dp-topic-deck",
-    title: "DP Basics: Break · Store · Reuse",
-    topic: "Dynamic Programming",
-    estimatedMinutes: 5,
-    progressKey: "topic",
-    description:
-      "Two simple idea cards, then three easy checks to confirm understanding.",
+      "Ten gentle steps that introduce level-by-level searching and give quick practice for the problems.",
     questions: [
       {
         kind: "info-card",
-        id: "dp-topic-card-1",
-        prompt: "What DP tries to do",
-        eyebrow: "Concept",
-        body: "Solve a problem by building from small, easy cases. Save answers as you go so you can reuse them later instead of redoing work.",
+        id: "bfs-primer-card-1",
+        prompt: "A Calm Explorer",
+        eyebrow: "Story",
+        body: [
+          "Imagine a park filled with rope bridges between treehouses. You start in the Clubhouse and every bridge takes the same time to cross.",
+          "",
+          "Breadth-first Search explores every treehouse one step away, then every treehouse two steps away. That way the first time you reach the Snack Shack you know it was the shortest hop count.",
+        ].join("\\n"),
         continueLabel: "Next idea",
       },
       {
         kind: "info-card",
-        id: "dp-topic-card-2",
-        prompt: "Two friendly styles",
-        eyebrow: "Modes",
-        body: "Memoization (top‑down): write a recursive function and remember results. Tabulation (bottom‑up): fill a small table from simple to harder cases. Both do the same thing: reuse answers.",
-        continueLabel: "Let's practice",
+        id: "bfs-primer-card-2",
+        prompt: "Levels Keep Us Oriented",
+        eyebrow: "Levels",
+        body: [
+          "Think of each wave as a level. Level 0 is the starting spot. Level 1 holds every room one step away, level 2 holds rooms two steps away, and so on.",
+          "",
+          "We finish the current level before touching the next one. This steady rhythm is how we protect the shortest-path promise.",
+        ].join("\\n"),
+        continueLabel: "Got it",
+      },
+      {
+        kind: "info-card",
+        id: "bfs-primer-card-3",
+        prompt: "Queues = Fair Lines",
+        eyebrow: "Tool",
+        body: [
+          "A queue acts like a fair line at a theme park: whoever joins first gets served first.",
+          "",
+          "Whenever we discover new neighbours, we add them to the back of the queue. We take the next place from the front, keeping the levels tidy without extra effort.",
+        ].join("\\n"),
+        continueLabel: "Let's try it",
       },
       {
         kind: "multiple-choice",
-        id: "dp-topic-question-1",
-        prompt: "Which sentence best describes memoization?",
-        hint: "Think “remember answers to function calls”.",
-        explanation:
-          "Memoization means caching the result for a given input so future calls with that input can return immediately.",
-        options: [
-          { id: "A", label: "A", text: "Run your code twice to be extra sure" },
-          {
-            id: "B",
-            label: "B",
-            text: "Remember results of function calls so you can reuse them",
-          },
-          {
-            id: "C",
-            label: "C",
-            text: "Sort the input before any computation",
-          },
-          { id: "D", label: "D", text: "Avoid loops and only use recursion" },
-        ],
-        correctOptionId: "B",
-        correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Caching function results so later calls return instantly is exactly memoization.",
-        },
-      },
-      {
-        kind: "multiple-choice",
-        id: "dp-topic-question-2",
-        prompt: "What is a good first step when starting a DP problem?",
-        hint: "Describe the state and start tiny.",
-        explanation:
-          "Define the “state” in plain words (what a subproblem means) and set a tiny base case. That gives you a solid, simple starting point.",
-        options: [
-          {
-            id: "A",
-            label: "A",
-            text: "Write the final formula before doing examples",
-          },
-          {
-            id: "B",
-            label: "B",
-            text: "Define the state in words and set a small base case",
-          },
-          { id: "C", label: "C", text: "Code 100 lines and refactor later" },
-          { id: "D", label: "D", text: "Guess an answer and move on" },
-        ],
-        correctOptionId: "B",
-        correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Starting with a clear state and tiny base case sets up every DP solution.",
-        },
-      },
-      {
-        kind: "multiple-choice",
-        id: "dp-topic-question-3",
+        id: "bfs-primer-promise",
         prompt:
-          "If you notice the same small question being asked many times, what should you do?",
-        hint: "Reuse beats redo.",
+          "What promise does Breadth-first Search keep when every bridge takes the same time?",
+        hint: "Think about how we finish one distance before moving to the next.",
         explanation:
-          "Save that small answer (cache/table) and reuse it whenever you need it again. That is the whole point of DP.",
+          "Because we explore level by level, the first time we reach the goal is after the fewest possible steps.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "Ignore duplicates and recompute to be safe",
+            text: "It always visits every room before stopping",
           },
           {
             id: "B",
             label: "B",
-            text: "Store the answer once and reuse it later",
+            text: "It reaches the goal using the fewest steps possible",
           },
           {
             id: "C",
             label: "C",
-            text: "Increase recursion depth to explore more",
+            text: "It chooses the room with the biggest number first",
           },
           {
             id: "D",
             label: "D",
-            text: "Switch to a completely different algorithm immediately",
+            text: "It skips any room that has more than two bridges",
           },
         ],
         correctOptionId: "B",
         correctFeedback: {
           heading: "Nice work",
           message:
-            "Spotting repeated subproblems and caching them is the core DP habit.",
+            "Exploring level by level guarantees the very first path to the goal is one of the shortest ones.",
+        },
+      },
+      {
+        kind: "type-answer",
+        id: "bfs-primer-queue",
+        prompt:
+          "Name the data structure we use to keep the next places to visit lined up in Breadth-first Search.",
+        hint: "It behaves like a line at a theme park: first in, first out.",
+        explanation:
+          "We use a queue so the earliest discoveries get explored first, keeping the levels in order.",
+        answer: "queue",
+        acceptableAnswers: ["Queue", "a queue"],
+        correctFeedback: {
+          heading: "You got it",
+          message: "A queue keeps the exploration fair and level by level.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-primer-neighbours",
+        prompt:
+          "You visit room 4 and discover new neighbours 6 and 7 that were never seen before. What should you do next?",
+        hint: "Remember how the queue grows.",
+        explanation:
+          "Mark the neighbours as visited, enqueue them, and later explore them when they reach the front.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text: "Visit them right away even if the queue has other rooms",
+          },
+          {
+            id: "B",
+            label: "B",
+            text: "Ignore them until every other room has been processed",
+          },
+          {
+            id: "C",
+            label: "C",
+            text: "Add them to the back of the queue and keep going",
+          },
+          {
+            id: "D",
+            label: "D",
+            text: "Delete room 4 so it cannot appear again",
+          },
+        ],
+        correctOptionId: "C",
+        correctFeedback: {
+          heading: "Exactly",
+          message:
+            "Adding new neighbours to the back of the queue keeps the exploration neat and level based.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-primer-order",
+        prompt: [
+          "Rooms are connected like this:",
+          "• 1 connects to 2 and 3 (in that order).",
+          "• 2 connects to 4.",
+          "• 3 connects to 5.",
+          "",
+          "Starting from room 1 and adding neighbours in ascending order, what visiting order does Breadth-first Search produce?",
+        ].join("\\n"),
+        hint: "Follow the queue: start with 1, then its neighbours, then their neighbours.",
+        explanation:
+          "We visit 1 first, then 2 and 3, then 4 from 2, then 5 from 3, so the order is 1, 2, 3, 4, 5.",
+        options: [
+          { id: "A", label: "A", text: "1 → 2 → 4 → 3 → 5" },
+          { id: "B", label: "B", text: "1 → 3 → 2 → 5 → 4" },
+          { id: "C", label: "C", text: "1 → 2 → 3 → 4 → 5" },
+          { id: "D", label: "D", text: "1 → 4 → 2 → 3 → 5" },
+        ],
+        correctOptionId: "C",
+        correctFeedback: {
+          heading: "Queue power",
+          message:
+            "Level 1 has rooms 2 and 3, so we finish them before moving deeper to 4 and 5.",
+        },
+      },
+      {
+        kind: "type-answer",
+        id: "bfs-primer-level-word",
+        prompt:
+          "What word do we use for the group of rooms that are the same number of steps away from the start?",
+        hint: "We number them 0, 1, 2, … as we explore.",
+        explanation:
+          "Breadth-first Search organises the map into levels that measure distance from the start.",
+        answer: "level",
+        acceptableAnswers: ["levels", "Layer", "layer", "layers"],
+        correctFeedback: {
+          heading: "Nice vocabulary",
+          message:
+            "Calling them levels helps us explain how far each room is from the start.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-primer-distance",
+        prompt:
+          "Using the room map from the previous question, how many steps does Breadth-first Search need to reach room 5 from room 1?",
+        hint: "Count the edges along the first path that reaches room 5.",
+        explanation:
+          "The first path to room 5 is 1 → 3 → 5, which is 2 steps.",
+        options: [
+          { id: "A", label: "A", text: "1" },
+          { id: "B", label: "B", text: "2" },
+          { id: "C", label: "C", text: "3" },
+          { id: "D", label: "D", text: "4" },
+        ],
+        correctOptionId: "B",
+        correctFeedback: {
+          heading: "Shortest path found",
+          message:
+            "Level 2 holds room 5, so the shortest distance from room 1 is 2 steps.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-primer-grid",
+        prompt: [
+          "Consider this 3×3 map (S = start, T = goal, # = wall):",
+          "S . .",
+          ". # #",
+          ". . T",
+          "",
+          "Moving only up, down, left, or right, how many steps does Breadth-first Search count along the shortest path from S to T?",
+        ].join("\\n"),
+        hint: "Wave outwards from S while skipping the walls.",
+        explanation:
+          "The best route is S → (1,0) → (2,0) → (2,1) → T, which is 4 steps.",
+        options: [
+          { id: "A", label: "A", text: "2" },
+          { id: "B", label: "B", text: "3" },
+          { id: "C", label: "C", text: "4" },
+          { id: "D", label: "D", text: "5" },
+        ],
+        correctOptionId: "C",
+        correctFeedback: {
+          heading: "Nicely mapped",
+          message:
+            "Breadth-first Search reaches the goal after four moves once it travels around the walls.",
         },
       },
     ],
   },
   {
-    id: "dp-review-quiz",
-    title: "DP Review: Ready to Start",
-    topic: "Dynamic Programming",
+    id: "bfs-wrapup-quiz",
+    title: "Level Quest Wrap-up",
+    topic: "Breadth-first Search",
     estimatedMinutes: 4,
-    progressKey: "review",
-    description: "Three friendly checkups using everyday DP thinking.",
+    progressKey: "wrap",
+    description:
+      "Seven quick moments to confirm you can steer Breadth-first Search on graphs and grids.",
     questions: [
       {
         kind: "multiple-choice",
-        id: "dp-review-stairs",
+        id: "bfs-wrap-marking",
         prompt:
-          "You can climb stairs by taking 1 or 2 steps at a time. How can you think about the ways to reach a step n?",
-        hint: "Consider how you could arrive at step n.",
+          "When should you mark a room as visited during Breadth-first Search?",
+        hint: "Decide whether to mark on enqueue or dequeue.",
         explanation:
-          "To stand on step n you either came from n−1 with a 1‑step or from n−2 with a 2‑step, so you add those counts together.",
+          "Marking a room as visited as soon as you enqueue it stops duplicates from being added later.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "Double the number of ways to reach step n−1",
+            text: "Only after removing it from the queue",
           },
           {
             id: "B",
             label: "B",
-            text: "Add the ways to reach steps n−1 and n−2",
+            text: "As soon as you add it to the queue",
           },
           {
             id: "C",
             label: "C",
-            text: "Subtract the ways to reach step n−2 from n−1",
+            text: "Only after all of its neighbours are processed",
           },
           {
             id: "D",
             label: "D",
-            text: "Multiply the ways to reach steps n−1 and n−2",
+            text: "Never—marks are not needed",
           },
         ],
         correctOptionId: "B",
         correctFeedback: {
-          heading: "Nice work",
+          heading: "Perfect timing",
           message:
-            "Combining the n−1 and n−2 paths is exactly how the stair DP recurrence works.",
+            "Marking on enqueue prevents a room from being added twice, keeping the queue slim.",
         },
       },
       {
         kind: "multiple-choice",
-        id: "dp-review-grid",
+        id: "bfs-wrap-distance",
         prompt:
-          "In a grid where you can move only right or down, what is true about the top row and the left column?",
-        hint: "Think about how many choices you have along an edge.",
+          "You dequeue the goal room with distance 5. What does that number mean?",
+        hint: "Think about the levels we counted.",
         explanation:
-          "Along the top row and left column there is only one way forward, so each of those cells has exactly one path to it.",
+          "The distance equals the length of the shortest path from the start to the goal.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "There are zero ways to move along them.",
+            text: "The total number of rooms in the entire map",
           },
           {
             id: "B",
             label: "B",
-            text: "Each cell on those edges has exactly one way to reach it.",
+            text: "The fewest steps from the start to the goal",
           },
           {
             id: "C",
             label: "C",
-            text: "You must always start from the bottom-right corner.",
+            text: "How many neighbours the goal has",
           },
           {
             id: "D",
             label: "D",
-            text: "They require a special formula for every cell.",
+            text: "A random counter that keeps increasing",
           },
         ],
         correctOptionId: "B",
         correctFeedback: {
-          heading: "Nice work",
+          heading: "Shortest confirmed",
           message:
-            "Recognising the single-path edges sets up the grid DP base cases perfectly.",
+            "As soon as the goal leaves the queue we know its recorded distance is the shortest route.",
+        },
+      },
+      {
+        kind: "type-answer",
+        id: "bfs-wrap-impossible",
+        prompt:
+          "If Breadth-first Search never reaches the treasure, what number should the program print to show it is impossible?",
+        hint: "Use the value promised in both practice problems.",
+        explanation:
+          "Both practice tasks use -1 to mean the goal cannot be reached.",
+        answer: "-1",
+        acceptableAnswers: ["-1"],
+        correctFeedback: {
+          heading: "Clear signal",
+          message: "Printing -1 tells the reader instantly that no path exists.",
         },
       },
       {
         kind: "multiple-choice",
-        id: "dp-review-memo",
+        id: "bfs-wrap-grid-walls",
         prompt:
-          "When should you save an answer in a memoized (remembering) solution?",
-        hint: "Save it once; reuse many times.",
+          "On a grid map, what should you do when the next cell is a wall (#)?",
+        hint: "Decide whether walls belong in the queue.",
         explanation:
-          "Right after you compute a subproblem’s answer, store it so the next time you see the same input you can return it immediately.",
+          "Walls block movement, so we skip them and never place them in the queue.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "Before recursing, even if you have no answer yet",
+            text: "Treat it like an open cell and enqueue it",
           },
           {
             id: "B",
             label: "B",
-            text: "After computing a subproblem so repeated calls can reuse it",
+            text: "Skip it and look at the next direction",
           },
           {
             id: "C",
             label: "C",
-            text: "Only if the answer happens to be zero",
+            text: "Turn it into the new start location",
           },
           {
             id: "D",
             label: "D",
-            text: "Never—just recompute every time for clarity",
+            text: "Erase the wall and keep exploring through it",
           },
         ],
         correctOptionId: "B",
         correctFeedback: {
-          heading: "Nice work",
-          message:
-            "Storing the answer right after you compute it is what makes memoization shine.",
+          heading: "Right choice",
+          message: "Only open cells get enqueued, so walls are simply ignored.",
         },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-wrap-track",
+        prompt:
+          "Which simple plan keeps track of how many steps it took to reach each room?",
+        hint: "Think about using an array or storing pairs.",
+        explanation:
+          "Store a distance array and set distance[neighbour] = distance[current] + 1 when you enqueue the neighbour.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text: "Keep a single global counter that increases every loop turn",
+          },
+          {
+            id: "B",
+            label: "B",
+            text: "Store a distance array updated when neighbours are enqueued",
+          },
+          {
+            id: "C",
+            label: "C",
+            text: "Only count the rooms on level 0",
+          },
+          {
+            id: "D",
+            label: "D",
+            text: "Guess the distance after the search ends",
+          },
+        ],
+        correctOptionId: "B",
+        correctFeedback: {
+          heading: "Distance locked in",
+          message:
+            "Updating the distance as you enqueue each neighbour keeps the steps accurate.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "bfs-wrap-setup",
+        prompt:
+          "Before starting Breadth-first Search on rooms numbered 1…N, what setup keeps the algorithm steady?",
+        hint: "Think about the queue and visited arrays.",
+        explanation:
+          "Place the start room in the queue, set its distance to 0, and mark it visited before the loop begins.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text: "Leave the queue empty and hope neighbours appear later",
+          },
+          {
+            id: "B",
+            label: "B",
+            text: "Enqueue the start room, mark it visited, and set distance 0",
+          },
+          {
+            id: "C",
+            label: "C",
+            text: "Fill the queue with every room at once",
+          },
+          {
+            id: "D",
+            label: "D",
+            text: "Only mark the goal as visited at the beginning",
+          },
+        ],
+        correctOptionId: "B",
+        correctFeedback: {
+          heading: "Ready to explore",
+          message:
+            "With the start room enqueued and marked, the loop can expand outward safely.",
+        },
+      },
+      {
+        kind: "info-card",
+        id: "bfs-wrap-summary",
+        prompt: "Great work!",
+        eyebrow: "Recap",
+        body: [
+          "Breadth-first Search wins by exploring in levels: queue up neighbours, mark them as soon as you add them, and record their distances.",
+          "",
+          "Those habits let you solve both of today’s practice problems—maps of rooms and grids—without ever getting lost.",
+        ].join("\\n"),
+        continueLabel: "Ready for more",
       },
     ],
   },
 ];
 
-const coinChangeExampleOne = {
-  title: "Example 1",
-  input: ["5", "3", "1 2 5"].join("\n"),
-  output: "4",
-  explanation:
-    "Four combinations: 5; 2 + 2 + 1; 2 + 1 + 1 + 1; 1 + 1 + 1 + 1 + 1.",
-};
-
-const coinChangeExampleTwo = {
-  title: "Example 2",
-  input: ["3", "1", "2"].join("\n"),
-  output: "0",
-  explanation:
-    "Coin value 2 never sums to 3, so there are no valid combinations.",
-};
-
-const coinChangeExampleThree = {
-  title: "Example 3",
-  input: ["10", "4", "1 3 4 5"].join("\n"),
-  output: "12",
-  explanation:
-    "Using {1, 3, 4, 5} there are 12 combinations, including 5 + 5, 4 + 4 + 1 + 1, 4 + 3 + 3, and 3 + 3 + 3 + 1.",
-};
-
-const COIN_CHANGE_EXAMPLES = [
-  coinChangeExampleOne,
-  coinChangeExampleTwo,
-  coinChangeExampleThree,
+const PARK_STEPS_EXAMPLES = [
+  {
+    title: "Example 1",
+    input: ["5 5", "1 2", "1 3", "2 4", "3 4", "4 5", "1 5"].join("\\n"),
+    output: "3",
+    explanation:
+      "One shortest walk is 1 → 3 → 4 → 5, which uses 3 bridges.",
+  },
+  {
+    title: "Example 2",
+    input: ["4 2", "1 2", "3 4", "1 4"].join("\\n"),
+    output: "-1",
+    explanation:
+      "Spot 4 is cut off from spot 1, so there is no route and we print -1.",
+  },
+  {
+    title: "Example 3",
+    input: ["3 2", "1 2", "2 3", "2 2"].join("\\n"),
+    output: "0",
+    explanation:
+      "The start and goal are the same spot, so the answer is 0 steps.",
+  },
 ];
 
-const COIN_CHANGE_TESTS = [
+const PARK_STEPS_TESTS = [
   {
-    input: coinChangeExampleOne.input,
-    output: coinChangeExampleOne.output,
-    explanation: coinChangeExampleOne.explanation,
+    input: ["1 0", "1 1"].join("\\n"),
+    output: "0",
   },
   {
-    input: coinChangeExampleTwo.input,
-    output: coinChangeExampleTwo.output,
-    explanation: coinChangeExampleTwo.explanation,
-  },
-  {
-    input: coinChangeExampleThree.input,
-    output: coinChangeExampleThree.output,
-    explanation: coinChangeExampleThree.explanation,
-  },
-  {
-    input: ["0", "3", "2 3 5"].join("\n"),
+    input: ["2 1", "1 2", "1 2"].join("\\n"),
     output: "1",
   },
   {
-    input: ["7", "4", "2 3 4 7"].join("\n"),
+    input: ["5 4", "1 2", "2 3", "3 4", "4 5", "2 5"].join("\\n"),
     output: "3",
   },
   {
-    input: ["9", "3", "2 3 4"].join("\n"),
+    input: ["6 5", "1 2", "1 3", "2 4", "3 5", "5 6", "4 6"].join("\\n"),
+    output: "5",
+  },
+  {
+    input: ["5 6", "1 2", "2 3", "3 4", "4 5", "1 3", "2 4", "1 5"].join("\\n"),
     output: "3",
   },
   {
-    input: ["12", "3", "3 4 6"].join("\n"),
+    input: ["5 3", "1 2", "2 3", "4 5", "3 5"].join("\\n"),
+    output: "-1",
+  },
+  {
+    input: ["7 6", "1 2", "2 3", "3 4", "4 5", "5 6", "6 7", "4 4"].join("\\n"),
+    output: "0",
+  },
+];
+
+const MAZE_SCOUT_EXAMPLES = [
+  {
+    title: "Example 1",
+    input: ["3 3", "S..", ".##", "..T"].join("\\n"),
+    output: "4",
+    explanation:
+      "One shortest walk is S → (1,0) → (2,0) → (2,1) → T.",
+  },
+  {
+    title: "Example 2",
+    input: ["3 3", "S#T", "###", "..."].join("\\n"),
+    output: "-1",
+    explanation:
+      "Walls block every route to T, so the answer is -1.",
+  },
+  {
+    title: "Example 3",
+    input: ["4 5", "S...#", ".#.#.", ".#..T", "....."].join("\\n"),
+    output: "6",
+    explanation:
+      "Breadth-first Search weaves through the open cells and reaches T in 6 steps.",
+  },
+];
+
+const MAZE_SCOUT_TESTS = [
+  {
+    input: ["1 2", "ST"].join("\\n"),
+    output: "1",
+  },
+  {
+    input: ["2 2", "S#", "#T"].join("\\n"),
+    output: "-1",
+  },
+  {
+    input: ["3 3", "S..", ".##", "..T"].join("\\n"),
     output: "4",
   },
   {
-    input: ["12", "2", "5 7"].join("\n"),
-    output: "1",
-  },
-  {
-    input: ["30", "3", "2 5 10"].join("\n"),
-    output: "10",
-  },
-  {
-    input: ["18", "3", "1 5 9"].join("\n"),
-    output: "7",
-  },
-  {
-    input: ["100", "4", "1 5 10 25"].join("\n"),
-    output: "242",
-  },
-  {
-    input: ["25", "3", "3 7 11"].join("\n"),
-    output: "3",
-  },
-  {
-    input: ["50", "6", "1 2 5 10 20 50"].join("\n"),
-    output: "451",
-  },
-  {
-    input: ["63", "4", "3 5 9 21"].join("\n"),
-    output: "38",
-  },
-  {
-    input: ["200", "8", "1 2 5 10 20 50 100 200"].join("\n"),
-    output: "73682",
-  },
-];
-
-const decodeExampleOne = {
-  title: "Example 1",
-  input: "12",
-  output: "2",
-  explanation: 'Two decodings: "AB" (1|2) and "L" (12).',
-};
-
-const decodeExampleTwo = {
-  title: "Example 2",
-  input: "226",
-  output: "3",
-  explanation: 'Three decodings: "BZ" (2|26), "VF" (22|6), and "BBF" (2|2|6).',
-};
-
-const decodeExampleThree = {
-  title: "Example 3",
-  input: "101",
-  output: "1",
-  explanation: 'Only "JA" (10|1) is valid because "01" is not a letter.',
-};
-
-const DECODE_EXAMPLES = [
-  decodeExampleOne,
-  decodeExampleTwo,
-  decodeExampleThree,
-];
-
-const DECODE_TESTS = [
-  {
-    input: decodeExampleOne.input,
-    output: decodeExampleOne.output,
-    explanation: decodeExampleOne.explanation,
-  },
-  {
-    input: decodeExampleTwo.input,
-    output: decodeExampleTwo.output,
-    explanation: decodeExampleTwo.explanation,
-  },
-  {
-    input: decodeExampleThree.input,
-    output: decodeExampleThree.output,
-    explanation: decodeExampleThree.explanation,
-  },
-  {
-    input: "06",
-    output: "0",
-  },
-  {
-    input: "0",
-    output: "0",
-  },
-  {
-    input: "27",
-    output: "1",
-  },
-  {
-    input: "2101",
-    output: "1",
-  },
-  {
-    input: "111111",
-    output: "13",
-  },
-  {
-    input: "2611055971756562",
+    input: ["3 4", "S..#", ".#..", "..T."].join("\\n"),
     output: "4",
   },
   {
-    input: "123123123",
-    output: "27",
+    input: ["4 4", "S.#T", ".#.#", "...#", "...."].join("\\n"),
+    output: "5",
   },
   {
-    input: "100",
-    output: "0",
+    input: ["4 5", "S...#", ".#.#.", ".#..T", "....."].join("\\n"),
+    output: "6",
   },
   {
-    input: "301",
-    output: "0",
-  },
-  {
-    input: "1",
-    output: "1",
-  },
-  {
-    input: "3015",
-    output: "0",
+    input: ["5 5", "S....", "#####", "....#", "#..#.", "..T.."].join("\\n"),
+    output: "-1",
   },
 ];
 
 const PROBLEMS: CodeProblem[] = [
   {
-    slug: "coin-change-ways",
-    title: "Coin Change Ways",
+    slug: "park-steps",
+    title: "Park Steps",
     difficulty: "easy",
-    topics: ["Dynamic Programming", "Combinatorics"],
+    topics: ["Breadth-first Search", "Graphs"],
     description: [
-      "You are stocking a kiosk with unlimited copies of several coin denominations. Given a target amount, count how many unique combinations of these coins sum to the target. Order does not matter—3 + 2 + 2 is the same as 2 + 3 + 2.",
+      "You are planning a mini treasure hunt around the park. There are N numbered meeting spots connected by M two-way paths of equal length.",
       "",
-      "Write a program that reads the amount, the number of distinct coin values, and the coin values themselves from standard input. Print only the number of combinations.",
-    ].join("\n"),
+      "Starting at spot s, print the fewest paths needed to reach spot t. If the goal is unreachable, print -1.",
+    ].join("\\n"),
     inputFormat: [
-      "- Line 1: integer A — the target amount.",
-      "- Line 2: integer K — the number of distinct coin values provided.",
-      "- Line 3: K space-separated integers listing each coin value. Duplicate numbers should be treated as the same coin.",
-    ].join("\n"),
+      "- Line 1: integers N and M — the number of spots and the number of paths.",
+      "- Lines 2..(M+1): each line has two integers u v describing a two-way path between spots u and v.",
+      "- Line M+2: integers s and t — the start and goal spots.",
+    ].join("\\n"),
     constraints: [
-      "0 ≤ A ≤ 5000",
-      "1 ≤ K ≤ 60",
-      "1 ≤ coin value ≤ 5000",
-      "The answer fits in a 64-bit signed integer",
+      "1 ≤ N ≤ 10_000",
+      "0 ≤ M ≤ 20_000",
+      "1 ≤ u, v, s, t ≤ N",
     ],
-    examples: COIN_CHANGE_EXAMPLES,
-    tests: COIN_CHANGE_TESTS,
+    examples: PARK_STEPS_EXAMPLES,
+    tests: PARK_STEPS_TESTS,
     hints: [
-      "Sort and deduplicate the coin values, then think about building amounts from 0 up to A.",
-      "Let dp[x] be the number of ways to make amount x. Iterate coins on the outside so different orders of the same coins are not counted twice.",
-      "Set dp[0] = 1 and for each coin add dp[x - coin] into dp[x] for every x ≥ coin. The final dp[A] is the answer.",
+      "Build an adjacency list so you can see every neighbour quickly.",
+      "Run Breadth-first Search from the start spot while storing distances in an array.",
+      "If the goal never receives a distance, output -1; otherwise output its distance.",
     ],
     solution: {
       language: "python",
       code: [
         "import sys",
+        "from collections import deque",
         "",
         "data = sys.stdin.read().strip().split()",
         "if not data:",
         "    sys.exit(0)",
         "it = iter(data)",
-        "amount = int(next(it))",
-        "coin_count = int(next(it))",
-        "coins = [int(next(it)) for _ in range(coin_count)]",
-        "coins = sorted(set(coins))",
+        "n = int(next(it))",
+        "m = int(next(it))",
+        "adjacency = [[] for _ in range(n + 1)]",
+        "for _ in range(m):",
+        "    u = int(next(it))",
+        "    v = int(next(it))",
+        "    adjacency[u].append(v)",
+        "    adjacency[v].append(u)",
+        "start = int(next(it))",
+        "goal = int(next(it))",
+        "for neighbours in adjacency:",
+        "    neighbours.sort()",
         "",
-        "dp = [0] * (amount + 1)",
-        "dp[0] = 1",
-        "for coin in coins:",
-        "    for value in range(coin, amount + 1):",
-        "        dp[value] += dp[value - coin]",
+        "distance = [-1] * (n + 1)",
+        "queue = deque([start])",
+        "distance[start] = 0",
+        "while queue:",
+        "    current = queue.popleft()",
+        "    if current == goal:",
+        "        break",
+        "    for neighbour in adjacency[current]:",
+        "        if distance[neighbour] == -1:",
+        "            distance[neighbour] = distance[current] + 1",
+        "            queue.append(neighbour)",
         "",
-        "print(dp[amount])",
-      ].join("\n"),
+        "print(distance[goal])",
+      ].join("\\n"),
     },
     metadataVersion: 2,
   },
   {
-    slug: "decode-ways",
-    title: "Decode Ways",
+    slug: "maze-scout",
+    title: "Maze Scout",
     difficulty: "easy",
-    topics: ["Dynamic Programming", "Strings"],
+    topics: ["Breadth-first Search", "Grids"],
     description: [
-      'Digits 1 through 26 map to uppercase letters A through Z. Given a digit string with no separators, count how many different letter sequences it can represent. For example, "226" can decode to "BBF", "BZ", or "VF".',
+      "You are holding a simple map with R rows and C columns. 'S' marks your starting square, 'T' marks the treasure, '.' is open ground, and '#' is a wall.",
       "",
-      "Write a program that reads the digit string from standard input and prints the number of distinct decodings. The program must read from stdin and write only the integer count.",
-    ].join("\n"),
-    inputFormat: ["- A single line containing the digit string s."].join("\n"),
+      "Move up, down, left, or right. Print the fewest moves needed to reach T. If the treasure cannot be reached, print -1.",
+    ].join("\\n"),
+    inputFormat: [
+      "- Line 1: integers R and C — the number of rows and columns.",
+      "- Lines 2..(R+1): each line is a string of length C containing characters '.', '#', 'S', or 'T'.",
+    ].join("\\n"),
     constraints: [
-      "1 ≤ |s| ≤ 100",
-      "s consists only of characters '0'–'9'",
-      "The answer fits in a 32-bit signed integer",
+      "1 ≤ R, C ≤ 200",
+      "Exactly one 'S' and one 'T' appear in the grid.",
     ],
-    examples: DECODE_EXAMPLES,
-    tests: DECODE_TESTS,
+    examples: MAZE_SCOUT_EXAMPLES,
+    tests: MAZE_SCOUT_TESTS,
     hints: [
-      "Process the string left to right and consider how many ways each prefix can be decoded.",
-      "At position i, you can extend with s[i] when it is 1–9 and with s[i-1:i+1] when it forms a number 10–26.",
-      "Maintain two rolling counts: ways up to i-2 and ways up to i-1. Combine them to produce the current count.",
+      "Start Breadth-first Search at the square marked 'S'.",
+      "Track visited squares in a 2D array so each open cell joins the queue at most once.",
+      "Store the distance with each square (or keep a distance grid) and add 1 for every step to a neighbour.",
     ],
     solution: {
       language: "python",
       code: [
         "import sys",
+        "from collections import deque",
         "",
-        "",
-        "def count_decodings(s: str) -> int:",
-        '    if not s or s[0] == "0":',
-        "        return 0",
-        "",
-        "    prev2 = 1",
-        "    prev1 = 1",
-        "    for index in range(1, len(s)):",
-        "        current = 0",
-        '        if s[index] != "0":',
-        "            current += prev1",
-        "        pair = int(s[index - 1 : index + 1])",
-        "        if 10 <= pair <= 26:",
-        "            current += prev2",
-        "        if current == 0:",
-        "            return 0",
-        "        prev2, prev1 = prev1, current",
-        "",
-        "    return prev1",
-        "data = sys.stdin.read().strip()",
-        "if not data:",
+        "lines = sys.stdin.read().splitlines()",
+        "if not lines:",
         "    sys.exit(0)",
-        "s = data.split()[0]",
-        "print(count_decodings(s))",
-      ].join("\n"),
+        "rows, cols = map(int, lines[0].split())",
+        "grid = [list(line.strip()) for line in lines[1 : rows + 1]]",
+        "",
+        "start = None",
+        "goal = None",
+        "for r in range(rows):",
+        "    for c in range(cols):",
+        "        if grid[r][c] == 'S':",
+        "            start = (r, c)",
+        "        elif grid[r][c] == 'T':",
+        "            goal = (r, c)",
+        "",
+        "if start is None or goal is None:",
+        "    print(-1)",
+        "    sys.exit(0)",
+        "",
+        "directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]",
+        "queue = deque([start])",
+        "visited = [[False] * cols for _ in range(rows)]",
+        "distance = [[-1] * cols for _ in range(rows)]",
+        "sr, sc = start",
+        "visited[sr][sc] = True",
+        "distance[sr][sc] = 0",
+        "",
+        "while queue:",
+        "    r, c = queue.popleft()",
+        "    if (r, c) == goal:",
+        "        break",
+        "    for dr, dc in directions:",
+        "        nr, nc = r + dr, c + dc",
+        "        if 0 <= nr < rows and 0 <= nc < cols:",
+        "            if not visited[nr][nc] and grid[nr][nc] != '#':",
+        "                visited[nr][nc] = True",
+        "                distance[nr][nc] = distance[r][c] + 1",
+        "                queue.append((nr, nc))",
+        "",
+        "gr, gc = goal",
+        "print(distance[gr][gc])",
+      ].join("\\n"),
     },
     metadataVersion: 2,
   },
 ];
 
+
 function buildPlan(storyTitle: string): PlanItem[] {
   return [
-    {
-      id: INTRO_PLAN_ITEM_ID,
-      kind: "media",
-      title: "Kick-off briefing",
-      icon: "🎧",
-      meta: "Start here",
-      summary:
-        "Preview the journey and set the rhythm before the quizzes and drills.",
-    },
     {
       id: STORY_PLAN_ITEM_ID,
       kind: "media",
       title: storyTitle,
       icon: "📖",
-      meta: "Origin story",
+      meta: "Story",
       summary:
-        "Listen for the historical moment when dynamic programming first took flight.",
+        "Hear a level-by-level adventure that sets up today’s Breadth-first Search practice.",
     },
     {
-      id: "dp-warmup-quiz",
+      id: "bfs-primer-quiz",
       kind: "quiz",
-      title: "Warm-up quiz",
-      icon: "🔥",
-      meta: "3 quick checks",
+      title: "Level Quest Primer",
+      icon: "🧭",
+      meta: "10 steps",
       summary:
-        "Prime your DP mindset with three quick conceptual prompts before diving in.",
+        "Learn the Breadth-first Search rhythm and try tiny checks before you code.",
     },
     {
-      id: "dp-topic-deck",
-      kind: "quiz",
-      title: "Topic deck",
-      icon: "🧠",
-      meta: "5 guided steps",
-      summary:
-        "Explore memoization vs. tabulation with a friendly mixture of info cards and micro-quizzes.",
-    },
-    {
-      id: "coin-change-ways",
+      id: "park-steps",
       kind: "problem",
-      title: "Practice · Coin Change Ways",
-      icon: "🪙",
-      meta: "DP • Easy",
+      title: "Practice · Park Steps",
+      icon: "🌲",
+      meta: "Graphs • Easy",
       summary:
-        "Count the combinations to reach a target amount when coins are unlimited.",
+        "Use Breadth-first Search to count the shortest hop count between park spots.",
     },
     {
-      id: "decode-ways",
+      id: "maze-scout",
       kind: "problem",
-      title: "Challenge · Decode Ways",
-      icon: "🔐",
-      meta: "DP • Easy",
+      title: "Challenge · Maze Scout",
+      icon: "🧩",
+      meta: "Grids • Easy",
       summary:
-        "Turn digit strings into letter counts with a memoized recursion pattern.",
+        "Guide a scout through a grid maze by exploring layers in order.",
     },
     {
-      id: "dp-review-quiz",
+      id: "bfs-wrapup-quiz",
       kind: "quiz",
-      title: "Final review quiz",
-      icon: "✅",
-      meta: "3 questions",
+      title: "Level Quest Wrap-up",
+      icon: "🏁",
+      meta: "7 checks",
       summary:
-        "Confirm the DP transition sticks with a final three-question review.",
-    },
-    {
-      id: OUTRO_PLAN_ITEM_ID,
-      kind: "media",
-      title: "Cool-down recap",
-      icon: "🎧",
-      meta: "Wrap-up",
-      summary:
-        "Wind down with the key habits to carry into your next dynamic programming session.",
+        "Lock in the queue habits, wall handling, and distance tracking you just practised.",
     },
   ];
 }
@@ -921,15 +847,13 @@ async function publishMediaAssets(
   storageBucket: string,
 ): Promise<void> {
   for (const source of MEDIA_SOURCES) {
-    const consoleLabel =
-      source.planItemId === INTRO_PLAN_ITEM_ID ? "Intro" : "Outro";
     await synthesizeAndPublishNarration({
       userId,
       sessionId,
       planItemId: source.planItemId,
       segments: source.segments,
       storageBucket,
-      progress: createConsoleProgress(consoleLabel),
+      progress: createConsoleProgress(source.planItemId),
     });
   }
 }
