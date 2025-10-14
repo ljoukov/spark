@@ -288,17 +288,26 @@ function buildBatchGradeContents(params: {
   ];
 }
 
+type StoryboardGradeItem = {
+  frameIndex: number;
+  prompt: string;
+  image: LlmImageData;
+};
+
 function buildStoryboardGradeContents(params: {
   summaryInstructions: string;
   stylePrompt: string;
   styleImages: readonly LlmImageData[];
-  frames: readonly {
-    frameIndex: number;
-    prompt: string;
-    image: LlmImageData;
-  }[];
+  reviewFrames: readonly StoryboardGradeItem[];
+  lockedFrames: readonly StoryboardGradeItem[];
 }): { role: "user"; parts: LlmContentPart[] }[] {
-  const { summaryInstructions, stylePrompt, styleImages, frames } = params;
+  const {
+    summaryInstructions,
+    stylePrompt,
+    styleImages,
+    reviewFrames,
+    lockedFrames,
+  } = params;
   const parts: LlmContentPart[] = [];
   addTextPart(
     parts,
@@ -323,9 +332,42 @@ function buildStoryboardGradeContents(params: {
       "Only flag frames that clearly fail the catastrophic checklist; otherwise leave them untouched.",
     ].join("\n"),
   );
-  for (const frame of frames) {
-    addTextPart(parts, `\nFrame ${frame.frameIndex}: ${frame.prompt}`);
-    parts.push(toInlinePart(frame.image));
+  if (lockedFrames.length > 0) {
+    addTextPart(
+      parts,
+      [
+        "",
+        "Context-only frames (already accepted, do NOT request redo for these):",
+      ].join("\n"),
+    );
+    for (const frame of lockedFrames) {
+      addTextPart(
+        parts,
+        `\nLocked frame ${frame.frameIndex} (for context only): ${frame.prompt}`,
+      );
+      parts.push(toInlinePart(frame.image));
+    }
+  }
+  if (reviewFrames.length > 0) {
+    addTextPart(
+      parts,
+      [
+        "",
+        "Updated frames (changed since your last review). Only list catastrophic failures under `frames_to_redo`.",
+      ].join("\n"),
+    );
+    for (const frame of reviewFrames) {
+      addTextPart(parts, `\nFrame ${frame.frameIndex}: ${frame.prompt}`);
+      parts.push(toInlinePart(frame.image));
+    }
+  } else {
+    addTextPart(
+      parts,
+      [
+        "",
+        "No frames have changed since your last review; respond with an empty `frames_to_redo` array.",
+      ].join("\n"),
+    );
   }
   addTextPart(
     parts,
@@ -385,8 +427,30 @@ async function gradeStoryboard(params: {
   options: GenerateStoryFramesOptions;
   frames: readonly LlmImageData[];
   attempt: number;
+  reviewTargets: readonly number[];
+  lockedTargets: readonly number[];
 }): Promise<StoryboardGradeOutcome> {
-  const { options, frames, attempt } = params;
+  const { options, frames, attempt, reviewTargets, lockedTargets } = params;
+  const toStoryboardItems = (targets: readonly number[]): StoryboardGradeItem[] =>
+    targets.map((targetIndex) => {
+      const image = frames[targetIndex];
+      const prompt = options.imagePrompts[targetIndex];
+      if (!image) {
+        throw new Error(
+          `Missing frame data for storyboard index ${targetIndex + 1}`,
+        );
+      }
+      if (!prompt) {
+        throw new Error(
+          `Missing prompt for storyboard index ${targetIndex + 1}`,
+        );
+      }
+      return {
+        frameIndex: targetIndex + 1,
+        prompt,
+        image,
+      };
+    });
   const payload: StoryboardGradeResponse = await generateJson({
     modelId: options.gradingModelId,
     progress: options.progress,
@@ -401,11 +465,8 @@ async function gradeStoryboard(params: {
       summaryInstructions: options.storyboardReviewDescription,
       stylePrompt: options.stylePrompt,
       styleImages: options.styleImages ?? [],
-      frames: frames.map((image, index) => ({
-        frameIndex: index + 1,
-        prompt: options.imagePrompts[index],
-        image,
-      })),
+      reviewFrames: toStoryboardItems(reviewTargets),
+      lockedFrames: toStoryboardItems(lockedTargets),
     }),
   });
   return {
@@ -791,20 +852,75 @@ export async function generateStoryFrames(
     }
   }
 
+  if (generated.length !== imagePrompts.length) {
+    throw new Error(
+      `Storyboard generation produced ${generated.length} frames, expected ${imagePrompts.length}`,
+    );
+  }
+
+  const storyboardAccepted = new Array<boolean>(imagePrompts.length).fill(
+    false,
+  );
+
   let redoCycles = 0;
   while (true) {
+    const reviewTargets: number[] = [];
+    const lockedTargets: number[] = [];
+    for (let index = 0; index < generated.length; index += 1) {
+      const frame = generated[index];
+      if (!frame) {
+        throw new Error(
+          `Storyboard frame ${index + 1} is missing after generation`,
+        );
+      }
+      if (storyboardAccepted[index]) {
+        lockedTargets.push(index);
+      } else {
+        reviewTargets.push(index);
+      }
+    }
+
+    if (reviewTargets.length === 0) {
+      break;
+    }
+
     const attemptNumber = redoCycles + 1;
     const review = await gradeStoryboard({
       options,
       frames: generated,
       attempt: attemptNumber,
+      reviewTargets,
+      lockedTargets,
     });
     if (review.summary) {
       progress.log(
         `[story/frames] Storyboard review ${attemptNumber}: ${review.summary}`,
       );
     }
-    if (review.framesToRedo.length === 0) {
+
+    const redoFrameIndices = new Set(
+      review.framesToRedo.map((finding) => finding.frameIndex),
+    );
+    const validReviewFrameIndices = new Set(
+      reviewTargets.map((index) => index + 1),
+    );
+    for (const frameIndex of redoFrameIndices) {
+      if (!validReviewFrameIndices.has(frameIndex)) {
+        throw new Error(
+          `Storyboard grader referenced frame ${frameIndex} that was not part of the review batch`,
+        );
+      }
+    }
+    for (const reviewIndex of reviewTargets) {
+      const frameNumber = reviewIndex + 1;
+      if (redoFrameIndices.has(frameNumber)) {
+        storyboardAccepted[reviewIndex] = false;
+      } else {
+        storyboardAccepted[reviewIndex] = true;
+      }
+    }
+
+    if (redoFrameIndices.size === 0) {
       break;
     }
     if (redoCycles >= STORYBOARD_REDO_MAX_CYCLES) {
@@ -830,6 +946,7 @@ export async function generateStoryFrames(
           `Storyboard grader requested invalid frame index ${finding.frameIndex}`,
         );
       }
+      storyboardAccepted[targetIndex] = false;
       let replacement: LlmImageData | undefined;
       for (
         let attempt = 1;
