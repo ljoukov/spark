@@ -9,6 +9,8 @@ import {
   generateText,
   generateJson,
   type LlmContentPart,
+  type LlmImageData,
+  type LlmDebugOptions,
 } from "../../utils/llm";
 import type {
   JobProgressReporter,
@@ -655,6 +657,184 @@ function collectSegmentationImageContext(
   };
 }
 
+type SingleImageGenerationOptions = {
+  prompt: string;
+  stylePrompt: string;
+  styleImages?: readonly LlmImageData[];
+  maxAttempts?: number;
+  imageAspectRatio?: string;
+  progress: JobProgressReporter;
+  modelId: typeof IMAGE_MODEL_ID;
+  debug?: LlmDebugOptions;
+};
+
+async function generateSingleImage(
+  options: SingleImageGenerationOptions
+): Promise<LlmImageData> {
+  const trimmedPrompt = options.prompt.trim();
+  if (!trimmedPrompt) {
+    throw new Error("Single image prompt must be a non-empty string");
+  }
+  const parts = await generateImages({
+    progress: options.progress,
+    modelId: options.modelId,
+    stylePrompt: options.stylePrompt,
+    styleImages: options.styleImages,
+    imagePrompts: [trimmedPrompt],
+    maxAttempts: options.maxAttempts ?? 4,
+    imageAspectRatio: options.imageAspectRatio,
+    debug: options.debug,
+  });
+  const image = parts[0];
+  if (!image) {
+    throw new Error("Single image generation returned no image data");
+  }
+  return image;
+}
+
+type PosterCandidate = {
+  candidateIndex: number;
+  image: LlmImageData;
+};
+
+type PosterCatastrophicFinding = {
+  candidateIndex: number;
+  reason: string;
+};
+
+type PosterSelection = {
+  winnerCandidateIndex: number;
+  reasoning: string;
+  catastrophicFindings: PosterCatastrophicFinding[];
+};
+
+const PosterSelectionSchema = z
+  .object({
+    winner_index: z.number().int().min(1),
+    reasoning: z.string().trim().min(1),
+    catastrophic_candidates: z
+      .array(
+        z.object({
+          index: z.number().int().min(1),
+          reason: z.string().trim().min(1),
+        })
+      )
+      .default([]),
+  })
+  .transform((raw) => ({
+    winnerCandidateIndex: raw.winner_index,
+    reasoning: raw.reasoning,
+    catastrophicFindings: raw.catastrophic_candidates.map((entry) => ({
+      candidateIndex: entry.index,
+      reason: entry.reason,
+    })),
+  }));
+
+type PosterSelectionResponse = z.infer<typeof PosterSelectionSchema>;
+
+const POSTER_SELECTION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["reasoning", "winner_index"],
+  propertyOrdering: ["reasoning", "catastrophic_candidates", "winner_index"],
+  properties: {
+    reasoning: { type: Type.STRING, minLength: "1" },
+    catastrophic_candidates: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["index", "reason"],
+        propertyOrdering: ["index", "reason"],
+        properties: {
+          index: { type: Type.NUMBER, minimum: 1 },
+          reason: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+    winner_index: { type: Type.NUMBER, minimum: 1 },
+  },
+};
+
+async function selectPosterCandidate(options: {
+  prompt: string;
+  stylePrompt: string;
+  styleReferences: readonly LlmImageData[];
+  candidates: readonly PosterCandidate[];
+  catastrophicDescription: string;
+  progress: JobProgressReporter;
+  gradingModelId: typeof TEXT_MODEL_ID;
+  debug?: LlmDebugOptions;
+}): Promise<PosterSelection> {
+  if (options.candidates.length === 0) {
+    throw new Error("Poster selection requires at least one candidate image");
+  }
+
+  const headerLines: string[] = [
+    "You are selecting the best poster illustration candidate for a vintage cartoon story.",
+    "The winning candidate must be the most stunning, engaging, and attractive option that faithfully follows the protagonist references.",
+    "Disqualify any candidate with catastrophic failures such as extra limbs, missing faces, severe distortions, or the wrong medium.",
+    "",
+    `Original poster prompt:\n${options.prompt}`,
+    "",
+    "Style guidance:",
+    options.stylePrompt,
+    "",
+    "Catastrophic checklist:",
+    options.catastrophicDescription,
+  ];
+
+  const parts: LlmContentPart[] = [
+    { type: "text", text: headerLines.join("\n") },
+  ];
+
+  if (options.styleReferences.length > 0) {
+    parts.push({
+      type: "text",
+      text: "\nStyle reference images (ensure protagonist continuity and palette):",
+    });
+    for (const reference of options.styleReferences) {
+      parts.push({
+        type: "inlineData",
+        data: reference.data.toString("base64"),
+        mimeType: reference.mimeType ?? "image/png",
+      });
+    }
+  }
+
+  for (const candidate of options.candidates) {
+    parts.push({
+      type: "text",
+      text: `\nCandidate ${candidate.candidateIndex} for prompt: ${options.prompt}`,
+    });
+    parts.push({
+      type: "inlineData",
+      data: candidate.image.data.toString("base64"),
+      mimeType: candidate.image.mimeType ?? "image/png",
+    });
+  }
+
+  parts.push({
+    type: "text",
+    text: [
+      "",
+      "Evaluate every candidate. If a candidate is catastrophic, list it under `catastrophic_candidates` with a short reason.",
+      "Pick the most stunning acceptable candidate. If every option is flawed, choose the least harmful image but clearly explain all issues.",
+      "Respond in JSON following the provided schema with `winner_index`, `reasoning`, and optional `catastrophic_candidates`.",
+    ].join("\n"),
+  });
+
+  const response = await generateJson<PosterSelectionResponse>({
+    progress: options.progress,
+    modelId: options.gradingModelId,
+    contents: [{ role: "user", parts }],
+    schema: PosterSelectionSchema,
+    responseSchema: POSTER_SELECTION_RESPONSE_SCHEMA,
+    maxAttempts: 1,
+    debug: options.debug,
+  });
+
+  return response;
+}
+
 export async function generateImageSets(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
@@ -664,6 +844,24 @@ export async function generateImageSets(
   const { entries, endingIndex, posterIndex } =
     collectSegmentationImageContext(segmentation);
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
+  const stylePrompt = styleLines.join("\n");
+  const baseDebug: LlmDebugOptions | undefined = options?.debugRootDir
+    ? { rootDir: options.debugRootDir, stage: "image-sets" }
+    : undefined;
+  const buildDebug = (subStage: string): LlmDebugOptions | undefined => {
+    if (!baseDebug) {
+      return undefined;
+    }
+    const cleaned = subStage
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+      .join("/");
+    return {
+      ...baseDebug,
+      subStage: cleaned,
+    };
+  };
   const posterEntry = entries.find((entry) => entry.index === posterIndex);
   const endingEntry = entries.find((entry) => entry.index === endingIndex);
   if (!posterEntry) {
@@ -692,19 +890,13 @@ export async function generateImageSets(
       progress: adapter,
       imageModelId: IMAGE_MODEL_ID,
       gradingModelId: TEXT_MODEL_ID,
-      stylePrompt: styleLines.join("\n"),
+      stylePrompt,
       imagePrompts: panelEntries.map((entry) => entry.prompt),
       batchSize: 5,
       overlapSize: 3,
       gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
       imageAspectRatio: "16:9",
-      debug: options?.debugRootDir
-        ? {
-            rootDir: options.debugRootDir,
-            stage: "image-sets",
-            subStage: `${imageSetLabel}/main`,
-          }
-        : undefined,
+      debug: buildDebug(`${imageSetLabel}/main`),
     });
 
     const imagesByIndex = new Map<number, GeneratedStoryImage>();
@@ -725,34 +917,61 @@ export async function generateImageSets(
     }
 
     const posterReferences = mainImageParts.slice(0, 4);
-    adapter.log(`[story/image-sets/${imageSetLabel}] generating poster`);
-    const posterParts = await generateImages({
+    adapter.log(
+      `[story/image-sets/${imageSetLabel}] generating poster candidates (4 variants)`
+    );
+    const posterCandidatePromises = Array.from({ length: 4 }).map(
+      async (_, offset) => {
+        const candidateIndex = offset + 1;
+        const image = await generateSingleImage({
+          progress: adapter,
+          modelId: IMAGE_MODEL_ID,
+          stylePrompt,
+          styleImages: posterReferences,
+          prompt: posterEntry.prompt,
+          maxAttempts: 4,
+          imageAspectRatio: "16:9",
+          debug: buildDebug(
+            `${imageSetLabel}/poster/candidate_${candidateIndex}`
+          ),
+        });
+        adapter.log(
+          `[story/image-sets/${imageSetLabel}] poster candidate ${candidateIndex} (${image.data.length} bytes)`
+        );
+        return { candidateIndex, image };
+      }
+    );
+    const posterCandidates = await Promise.all(posterCandidatePromises);
+    const posterSelection = await selectPosterCandidate({
+      prompt: posterEntry.prompt,
+      stylePrompt,
+      styleReferences: posterReferences,
+      candidates: posterCandidates,
+      catastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
       progress: adapter,
-      modelId: IMAGE_MODEL_ID,
-      stylePrompt: styleLines.join("\n"),
-      imagePrompts: [`Poster illustration: ${posterEntry.prompt}`],
-      maxAttempts: 4,
-      imageAspectRatio: "16:9",
-      //batchSize: 1,
-      styleImages: posterReferences,
-      debug: options?.debugRootDir
-        ? {
-            rootDir: options.debugRootDir,
-            stage: "image-sets",
-            subStage: `${imageSetLabel}/poster`,
-          }
-        : undefined,
+      gradingModelId: TEXT_MODEL_ID,
+      debug: buildDebug(`${imageSetLabel}/poster/select`),
     });
-
-    const posterPart = posterParts[0];
-    if (posterPart) {
-      imagesByIndex.set(posterIndex, {
-        index: posterIndex,
-        mimeType: posterPart.mimeType ?? "image/png",
-        data: posterPart.data,
-      });
+    const winningPoster = posterCandidates.find(
+      (candidate) =>
+        candidate.candidateIndex === posterSelection.winnerCandidateIndex
+    );
+    if (!winningPoster) {
+      throw new Error(
+        `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`
+      );
+    }
+    imagesByIndex.set(posterIndex, {
+      index: posterIndex,
+      mimeType: winningPoster.image.mimeType ?? "image/png",
+      data: winningPoster.image.data,
+    });
+    adapter.log(
+      `[story/image-sets/${imageSetLabel}] selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`
+    );
+    for (const finding of posterSelection.catastrophicFindings) {
       adapter.log(
-        `[story/image-sets/${imageSetLabel}] received poster image ${posterIndex} (${posterPart.data.length} bytes)`
+        `[story/image-sets/${imageSetLabel}] poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`
       );
     }
 
@@ -760,35 +979,24 @@ export async function generateImageSets(
       Math.max(mainImageParts.length - 4, 0)
     );
     adapter.log(`[story/image-sets/${imageSetLabel}] generating end card`);
-    const endingParts = await generateImages({
+    const endingPart = await generateSingleImage({
       progress: adapter,
       modelId: IMAGE_MODEL_ID,
-      stylePrompt: styleLines.join("\n"),
-      imagePrompts: [`The end card: ${endingEntry.prompt}`],
+      stylePrompt,
+      styleImages: endingReferences,
+      prompt: endingEntry.prompt,
       maxAttempts: 4,
       imageAspectRatio: "16:9",
-      //batchSize: 1,
-      styleImages: endingReferences,
-      debug: options?.debugRootDir
-        ? {
-            rootDir: options.debugRootDir,
-            stage: "image-sets",
-            subStage: `${imageSetLabel}/ending`,
-          }
-        : undefined,
+      debug: buildDebug(`${imageSetLabel}/ending`),
     });
-
-    const endingPart = endingParts[0];
-    if (endingPart) {
-      imagesByIndex.set(endingIndex, {
-        index: endingIndex,
-        mimeType: endingPart.mimeType ?? "image/png",
-        data: endingPart.data,
-      });
-      adapter.log(
-        `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`
-      );
-    }
+    imagesByIndex.set(endingIndex, {
+      index: endingIndex,
+      mimeType: endingPart.mimeType ?? "image/png",
+      data: endingPart.data,
+    });
+    adapter.log(
+      `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`
+    );
 
     const orderedImages: GeneratedStoryImage[] = [];
     const appendImageIfPresent = (targetIndex: number) => {
