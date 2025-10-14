@@ -77,8 +77,11 @@ Generated files:
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
 - `response.txt`: Summary header followed by:
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
-  - “===== Content =====” with a structured dump of the final parts when available
-- For image calls, one file per image: `image-01.<ext>`, `image-02.<ext>`, …
+  - “===== Content =====” with a structured dump of the final parts when available. Inline image entries now include a short six-character SHA in the header so you can match parts with filenames.
+- Prompt inline images are exported as JPEGs when possible, saved as `prompt-image-001-<sha6>.jpg`, `prompt-image-002-<sha6>.jpg`, … (`<sha6>` matches the hash in `prompt.txt`).
+- For image calls, each file is converted to JPEG when possible and saved as `image-001-<sha6>.jpg`, `image-002-<sha6>.jpg`, … (`<sha6>` is the same value recorded in `response.txt`). If JPEG conversion fails, the original extension is used instead.
+- `conversation.html`: A lightweight viewer showing the prompt and response sequence (roles, text, and `<img>` tags that point to the saved image files in the same directory).
+- When debugging is enabled, an immutable copy of the prompt, response, and any image files is also written to `{rootDir}/log/{iso-timestamp}/` (the timestamp is generated when the call starts).
 
 Example layout:
 
@@ -86,11 +89,19 @@ Example layout:
 /tmp/llm-debug/gemini-2.5-pro/attempt-01/
   prompt.txt
   response.txt
+  prompt-image-001-abc123.jpg
 /tmp/llm-debug/gemini-2.5-flash-image/
   prompt.txt
   response.txt
-  image-01.png
-  image-02.png
+  image-001-abc123.jpg
+  image-002-def456.jpg
+  conversation.html
+/tmp/llm-debug/log/2025-10-14T12-34-56-789Z/
+  prompt.txt
+  response.txt
+  image-001-abc123.jpg
+  prompt-image-001-abc123.jpg
+  conversation.html
 ```
 
 ## Usage Examples

@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -115,9 +116,17 @@ export type LlmTextModelId = GeminiModelId;
 export type LlmImageModelId = "gemini-2.5-flash-image";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 
+type LlmInlineDataPart = {
+  type: "inlineData";
+  data: string;
+  mimeType?: string;
+  debugImageHash?: string;
+  debugImageFilename?: string;
+};
+
 export type LlmContentPart =
   | { type: "text"; text: string; thought?: boolean }
-  | { type: "inlineData"; data: string; mimeType?: string };
+  | LlmInlineDataPart;
 
 export type LlmRole = "user" | "model" | "system" | "tool";
 
@@ -314,6 +323,94 @@ function normalisePathSegment(value: string): string {
   return cleaned.length > 0 ? cleaned : "segment";
 }
 
+function isInlineImageMime(mimeType: string | undefined): boolean {
+  return typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/");
+}
+
+function decodeInlineDataBuffer(data: string): Buffer {
+  try {
+    return Buffer.from(data, "base64");
+  } catch {
+    return Buffer.from(data, "base64url");
+  }
+}
+
+function deriveExtensionFromMime(mimeType: string | undefined): string {
+  const candidate = mimeType?.split(";")[0]?.split("/")[1];
+  return candidate && candidate.trim().length > 0 ? candidate.trim() : "bin";
+}
+
+async function createDebugImageArtifact({
+  base64Data,
+  mimeType,
+  index,
+  prefix,
+  targetDirs,
+  log,
+}: {
+  base64Data: string;
+  mimeType?: string;
+  index: number;
+  prefix: string;
+  targetDirs: readonly string[];
+  log: (message: string) => void;
+}): Promise<{ hash: string; filename: string }> {
+  const buffer = decodeInlineDataBuffer(base64Data);
+  let outputBuffer = buffer;
+  let outputExtension = deriveExtensionFromMime(mimeType);
+  if (isInlineImageMime(mimeType)) {
+    try {
+      outputBuffer = await sharp(buffer)
+        .jpeg({
+          quality: 92,
+          progressive: true,
+          chromaSubsampling: "4:4:4",
+        })
+        .toBuffer();
+      outputExtension = "jpg";
+    } catch (error) {
+      log(
+        `failed to convert debug image to JPEG: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      outputBuffer = buffer;
+      outputExtension = deriveExtensionFromMime(mimeType);
+    }
+  }
+  const hash = createHash("sha256").update(outputBuffer).digest("hex").slice(0, 6);
+  const filename = `${prefix}-${String(index).padStart(3, "0")}-${hash}.${outputExtension}`;
+  if (targetDirs.length > 0) {
+    await Promise.all(
+      targetDirs.map(async (dir) =>
+        writeFile(path.join(dir, filename), outputBuffer)
+      )
+    );
+  }
+  return { hash, filename };
+}
+
+function cloneContentForDebug(content: LlmContent): LlmContent {
+  const parts: LlmContentPart[] = content.parts.map((part) => {
+    if (part.type === "text") {
+      return {
+        type: "text",
+        text: part.text,
+        thought: part.thought === true ? true : undefined,
+      };
+    }
+    return {
+      type: "inlineData",
+      data: part.data,
+      mimeType: part.mimeType,
+    };
+  });
+  return {
+    role: content.role,
+    parts,
+  };
+}
+
 function toGeminiTools(
   tools: readonly LlmToolConfig[] | undefined
 ): Tool[] | undefined {
@@ -385,8 +482,10 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
             break;
           case "inlineData": {
             const bytes = estimateInlineBytes(part.data);
+            const hashLabel =
+              part.debugImageHash !== undefined ? `, ${part.debugImageHash}` : "";
             lines.push(
-              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
+              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes${hashLabel})`
             );
             break;
           }
@@ -437,6 +536,131 @@ async function writeTextResponseSnapshot({
   }
   await mkdir(path.dirname(pathname), { recursive: true });
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+function formatRoleLabel(role: LlmRole): string {
+  switch (role) {
+    case "user":
+      return "User";
+    case "model":
+      return "Model";
+    case "system":
+      return "System";
+    case "tool":
+      return "Tool";
+    default:
+      return "Message";
+  }
+}
+
+function buildConversationHtml({
+  promptContents,
+  responseContent,
+}: {
+  promptContents: readonly LlmContent[];
+  responseContent?: LlmContent;
+}): string {
+  const messages: LlmContent[] = [
+    ...promptContents,
+    ...(responseContent ? [responseContent] : []),
+  ];
+  const html: string[] = [
+    "<!DOCTYPE html>",
+    '<html lang="en">',
+    "<head>",
+    '  <meta charset="utf-8" />',
+    "  <title>LLM Conversation</title>",
+    "  <style>",
+    "    body { font-family: system-ui, sans-serif; margin: 24px; background: #f9fafb; color: #111827; }",
+    "    .message { border: 1px solid #d1d5db; border-radius: 8px; margin-bottom: 20px; padding: 16px; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }",
+    "    .message h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em; color: #374151; }",
+    "    .parts { display: flex; flex-direction: column; gap: 12px; }",
+    "    .part { padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f8fafc; }",
+    "    .part-label { font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 8px; }",
+    "    .part-text pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: ui-monospace, SFMono-Regular, \"SFMono-Regular\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; background: #fff; padding: 12px; border-radius: 4px; border: 1px solid #e5e7eb; }",
+    "    .part-image img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #d1d5db; background: #fff; }",
+    "  </style>",
+    "</head>",
+    "<body>",
+  ];
+  messages.forEach((message, messageIndex) => {
+    html.push(
+      `  <section class="message role-${escapeAttribute(message.role)}">`
+    );
+    html.push(
+      `    <h2>${escapeHtml(formatRoleLabel(message.role))} #${
+        messageIndex + 1
+      }</h2>`
+    );
+    html.push('    <div class="parts">');
+    message.parts.forEach((part, partIndex) => {
+      if (part.type === "text") {
+        const flavour = part.thought === true ? "thought" : "text";
+        html.push('      <div class="part part-text">');
+        html.push(
+          `        <div class="part-label">Part ${partIndex + 1} (${escapeHtml(
+            flavour
+          )})</div>`
+        );
+        html.push(
+          `        <pre>${escapeHtml(part.text)}</pre>`
+        );
+        html.push("      </div>");
+        return;
+      }
+      const bytes = estimateInlineBytes(part.data);
+      const hashLabel =
+        part.debugImageHash !== undefined ? `, ${part.debugImageHash}` : "";
+      const isImage = isInlineImageMime(part.mimeType);
+      html.push('      <div class="part part-image">');
+      html.push(
+        `        <div class="part-label">Part ${partIndex + 1} (inline ${escapeHtml(
+          part.mimeType ?? "binary"
+        )}, ${bytes} bytes${hashLabel})</div>`
+      );
+      if (isImage && part.debugImageFilename) {
+        html.push(
+          `        <img src="${escapeAttribute(
+            part.debugImageFilename
+          )}" alt="Part ${partIndex + 1} image" />`
+        );
+      } else if (isImage) {
+        html.push(
+          "        <div>Image bytes omitted (debug file not available).</div>"
+        );
+      } else {
+        html.push(
+          "        <div>Inline data omitted from snapshot.</div>"
+        );
+      }
+      html.push("      </div>");
+    });
+    html.push("    </div>");
+    html.push("  </section>");
+  });
+  html.push("</body>", "</html>");
+  return html.join("\n");
 }
 
 function buildCallStage({
@@ -498,11 +722,29 @@ async function llmStream({
   const log = (message: string) => {
     reporter.log(`[${stage.label}] ${message}`);
   };
+  const debugLogSegment =
+    options.debug && options.debug.rootDir && options.debug.enabled !== false
+      ? normalisePathSegment(
+          new Date().toISOString().replace(/[:]/g, "-")
+        )
+      : undefined;
+  const debugLogDir =
+    debugLogSegment !== undefined && options.debug?.rootDir
+      ? path.join(options.debug.rootDir, "log", debugLogSegment)
+      : undefined;
+  const debugOutputDirs = Array.from(
+    new Set(
+      [stage.debugDir, debugLogDir].filter(
+        (dir): dir is string => typeof dir === "string"
+      )
+    )
+  );
 
   if (options.contents.length === 0) {
     throw new Error("LLM call received an empty prompt");
   }
   const promptContents = options.contents;
+  const promptDebugContents = promptContents.map(cloneContentForDebug);
   const googlePromptContents = promptContents.map(
     convertLlmContentToGoogleContent
   );
@@ -547,10 +789,46 @@ async function llmStream({
 
   await resetDebugDir(stage.debugDir);
   await ensureDebugDir(stage.debugDir);
+  await ensureDebugDir(debugLogDir);
+  if (debugOutputDirs.length > 0) {
+    let promptImageCounter = 0;
+    const promptImageTasks: Array<Promise<void>> = [];
+    for (const content of promptDebugContents) {
+      for (const part of content.parts) {
+        if (part.type !== "inlineData") {
+          continue;
+        }
+        if (!isInlineImageMime(part.mimeType)) {
+          continue;
+        }
+        const index = ++promptImageCounter;
+        const task = (async () => {
+          const { hash, filename } = await createDebugImageArtifact({
+            base64Data: part.data,
+            mimeType: part.mimeType,
+            index,
+            prefix: "prompt-image",
+            targetDirs: debugOutputDirs,
+            log,
+          });
+          part.debugImageHash = hash;
+          part.debugImageFilename = filename;
+        })();
+        promptImageTasks.push(task);
+      }
+    }
+    await Promise.all(promptImageTasks);
+  }
   if (stage.debugDir) {
     await writePromptSnapshot(
       path.join(stage.debugDir, "prompt.txt"),
-      promptContents
+      promptDebugContents
+    );
+  }
+  if (debugLogDir) {
+    await writePromptSnapshot(
+      path.join(debugLogDir, "prompt.txt"),
+      promptDebugContents
     );
   }
 
@@ -586,56 +864,30 @@ async function llmStream({
     if (data.length === 0) {
       return;
     }
-    responseParts.push({
+    const inlinePart: LlmInlineDataPart = {
       type: "inlineData",
       data,
       mimeType,
-    });
-    if (
-      stage.debugDir &&
-      mimeType &&
-      mimeType.toLowerCase().startsWith("image/")
-    ) {
-      const debugDir = stage.debugDir;
-      const index = ++imageCounter;
-      debugWriteTasks.push(
-        (async () => {
-          let buffer: Buffer;
-          try {
-            buffer = Buffer.from(data, "base64");
-          } catch {
-            buffer = Buffer.from(data, "base64url");
-          }
-          const extensionSegment = mimeType?.split(";")[0]?.split("/")[1];
-          let outputBuffer = buffer;
-          let outputExtension = extensionSegment ?? "bin";
-          if (mimeType?.toLowerCase().startsWith("image/")) {
-            try {
-              const jpegBuffer = await sharp(buffer)
-                .jpeg({
-                  quality: 92,
-                  progressive: true,
-                  chromaSubsampling: "4:4:4",
-                })
-                .toBuffer();
-              outputBuffer = jpegBuffer;
-              outputExtension = "jpg";
-            } catch (error) {
-              log(
-                `failed to convert debug image to JPEG: ${
-                  error instanceof Error ? error.message : String(error)
-                }`
-              );
-            }
-          }
-          const filename = `image-${String(index).padStart(
-            2,
-            "0"
-          )}.${outputExtension}`;
-          await writeFile(path.join(debugDir, filename), outputBuffer);
-        })()
-      );
+    };
+    responseParts.push(inlinePart);
+    if (!isInlineImageMime(mimeType) || debugOutputDirs.length === 0) {
+      return;
     }
+    const index = ++imageCounter;
+    debugWriteTasks.push(
+      (async () => {
+        const { hash, filename } = await createDebugImageArtifact({
+          base64Data: data,
+          mimeType,
+          index,
+          prefix: "image",
+          targetDirs: debugOutputDirs,
+          log,
+        });
+        inlinePart.debugImageHash = hash;
+        inlinePart.debugImageFilename = filename;
+      })()
+    );
   };
 
   const accumulateContent = (
@@ -724,18 +976,43 @@ async function llmStream({
         }
       : undefined;
 
-  if (stage.debugDir) {
+  if (stage.debugDir || debugLogDir) {
     await Promise.all(debugWriteTasks);
     const trimmedResponseText = extractVisibleText(responseContent);
-    await writeTextResponseSnapshot({
-      pathname: path.join(stage.debugDir, "response.txt"),
-      summary: [
-        `Model: ${resolvedModelVersion}`,
-        `Elapsed: ${formatMillis(elapsedMs)}`,
-      ],
-      text: trimmedResponseText,
-      contents: responseContent ? [responseContent] : undefined,
-    });
+    const snapshotSummary: readonly string[] = [
+      `Model: ${resolvedModelVersion}`,
+      `Elapsed: ${formatMillis(elapsedMs)}`,
+    ];
+    const snapshotContents = responseContent ? [responseContent] : undefined;
+    if (stage.debugDir) {
+      await writeTextResponseSnapshot({
+        pathname: path.join(stage.debugDir, "response.txt"),
+        summary: snapshotSummary,
+        text: trimmedResponseText,
+        contents: snapshotContents,
+      });
+    }
+    if (debugLogDir) {
+      await writeTextResponseSnapshot({
+        pathname: path.join(debugLogDir, "response.txt"),
+        summary: snapshotSummary,
+        text: trimmedResponseText,
+        contents: snapshotContents,
+      });
+    }
+    if (debugOutputDirs.length > 0) {
+      const conversationHtml = buildConversationHtml({
+        promptContents: promptDebugContents,
+        responseContent,
+      });
+      await Promise.all(
+        debugOutputDirs.map(async (dir) =>
+          writeFile(path.join(dir, "conversation.html"), conversationHtml, {
+            encoding: "utf8",
+          })
+        )
+      );
+    }
   }
 
   return {
@@ -757,6 +1034,8 @@ function mergeConsecutiveTextParts(
         type: "inlineData",
         data: part.data,
         mimeType: part.mimeType,
+        debugImageHash: part.debugImageHash,
+        debugImageFilename: part.debugImageFilename,
       });
       continue;
     }
