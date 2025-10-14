@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { inspect } from "node:util";
 
 // NOTE: Keep eval/src/utils/LLM.md in sync with any API changes to this file.
 // The markdown doc explains the public wrapper API and debug snapshot layout.
@@ -501,6 +502,84 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
   return lines.join("\n");
 }
 
+async function writeDebugTextFile({
+  dirs,
+  filename,
+  contents,
+}: {
+  dirs: readonly string[];
+  filename: string;
+  contents: string;
+}): Promise<void> {
+  if (dirs.length === 0) {
+    return;
+  }
+  await Promise.all(
+    dirs.map(async (dir) =>
+      writeFile(path.join(dir, filename), contents, { encoding: "utf8" })
+    )
+  );
+}
+
+function buildRequestSnapshot({
+  modelId,
+  stageLabel,
+  attempt,
+  maxAttempts,
+  uploadBytes,
+  config,
+}: {
+  modelId: LlmModelId;
+  stageLabel: string;
+  attempt: number;
+  maxAttempts: number;
+  uploadBytes: number;
+  config: GeminiCallConfig;
+}): string {
+  const timestamp = new Date().toISOString();
+  const lines: string[] = [
+    `Timestamp: ${timestamp}`,
+    `Stage: ${stageLabel}`,
+    `Model ID: ${modelId}`,
+    `Attempt: ${attempt} of ${maxAttempts}`,
+    `Estimated Upload Bytes: ${uploadBytes}`,
+  ];
+  const configSummary = JSON.stringify(config, null, 2);
+  lines.push("", "Gemini Call Config:", configSummary ?? "{}");
+  return lines.join("\n");
+}
+
+function buildExceptionSnapshot({
+  error,
+  modelId,
+  stageLabel,
+  attempt,
+  maxAttempts,
+}: {
+  error: unknown;
+  modelId: LlmModelId;
+  stageLabel: string;
+  attempt: number;
+  maxAttempts: number;
+}): string {
+  const timestamp = new Date().toISOString();
+  const lines: string[] = [
+    `Timestamp: ${timestamp}`,
+    `Stage: ${stageLabel}`,
+    `Model ID: ${modelId}`,
+    `Attempt: ${attempt} of ${maxAttempts}`,
+  ];
+  const message =
+    error instanceof Error ? error.message : error ? String(error) : "Unknown error";
+  lines.push("", "Error Message:", message);
+  if (error instanceof Error && typeof error.stack === "string") {
+    lines.push("", "Stack Trace:", error.stack);
+  }
+  const inspected = inspect(error, { depth: null });
+  lines.push("", "Error Details:", inspected);
+  return lines.join("\n");
+}
+
 async function writePromptSnapshot(
   pathname: string,
   contents: readonly LlmContent[]
@@ -739,10 +818,6 @@ async function llmStream({
       )
     )
   );
-
-  if (options.contents.length === 0) {
-    throw new Error("LLM call received an empty prompt");
-  }
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
   const googlePromptContents = promptContents.map(
@@ -787,238 +862,293 @@ async function llmStream({
     config.tools = geminiTools;
   }
 
-  await resetDebugDir(stage.debugDir);
-  await ensureDebugDir(stage.debugDir);
-  await ensureDebugDir(debugLogDir);
-  if (debugOutputDirs.length > 0) {
-    let promptImageCounter = 0;
-    const promptImageTasks: Array<Promise<void>> = [];
-    for (const content of promptDebugContents) {
-      for (const part of content.parts) {
-        if (part.type !== "inlineData") {
-          continue;
+  const debugWriteTasks: Array<Promise<void>> = [];
+
+  try {
+    if (promptContents.length === 0) {
+      throw new Error("LLM call received an empty prompt");
+    }
+
+    await resetDebugDir(stage.debugDir);
+    await ensureDebugDir(stage.debugDir);
+    await ensureDebugDir(debugLogDir);
+
+    if (debugOutputDirs.length > 0) {
+      let promptImageCounter = 0;
+      const promptImageTasks: Array<Promise<void>> = [];
+      for (const content of promptDebugContents) {
+        for (const part of content.parts) {
+          if (part.type !== "inlineData") {
+            continue;
+          }
+          if (!isInlineImageMime(part.mimeType)) {
+            continue;
+          }
+          const index = ++promptImageCounter;
+          const task = (async () => {
+            const { hash, filename } = await createDebugImageArtifact({
+              base64Data: part.data,
+              mimeType: part.mimeType,
+              index,
+              prefix: "prompt-image",
+              targetDirs: debugOutputDirs,
+              log,
+            });
+            part.debugImageHash = hash;
+            part.debugImageFilename = filename;
+          })();
+          promptImageTasks.push(task);
         }
-        if (!isInlineImageMime(part.mimeType)) {
-          continue;
-        }
-        const index = ++promptImageCounter;
-        const task = (async () => {
+      }
+      await Promise.all(promptImageTasks);
+    }
+
+    if (stage.debugDir) {
+      await writePromptSnapshot(
+        path.join(stage.debugDir, "prompt.txt"),
+        promptDebugContents
+      );
+    }
+    if (debugLogDir) {
+      await writePromptSnapshot(
+        path.join(debugLogDir, "prompt.txt"),
+        promptDebugContents
+      );
+    }
+
+    const uploadBytes = estimateContentsUploadBytes(promptContents);
+    if (debugOutputDirs.length > 0) {
+      const requestSnapshot = buildRequestSnapshot({
+        modelId: options.modelId,
+        stageLabel: stage.label,
+        attempt,
+        maxAttempts,
+        uploadBytes,
+        config,
+      });
+      await writeDebugTextFile({
+        dirs: debugOutputDirs,
+        filename: "request.txt",
+        contents: requestSnapshot,
+      });
+    }
+
+    const callHandle = reporter.startModelCall({
+      modelId: options.modelId,
+      uploadBytes,
+    });
+
+    const startedAt = Date.now();
+    let resolvedModelVersion: string = options.modelId;
+    const responseParts: LlmContentPart[] = [];
+    let responseRole: LlmRole | undefined;
+    let blocked = false;
+    let imageCounter = 0;
+
+    const appendTextPart = (text: string, isThought: boolean): void => {
+      if (text.length === 0) {
+        return;
+      }
+      responseParts.push({
+        type: "text",
+        text,
+        thought: isThought ? true : undefined,
+      });
+    };
+
+    const appendInlinePart = (
+      data: string,
+      mimeType: string | undefined
+    ): void => {
+      if (data.length === 0) {
+        return;
+      }
+      const inlinePart: LlmInlineDataPart = {
+        type: "inlineData",
+        data,
+        mimeType,
+      };
+      responseParts.push(inlinePart);
+      if (!isInlineImageMime(mimeType) || debugOutputDirs.length === 0) {
+        return;
+      }
+      const index = ++imageCounter;
+      debugWriteTasks.push(
+        (async () => {
           const { hash, filename } = await createDebugImageArtifact({
-            base64Data: part.data,
-            mimeType: part.mimeType,
+            base64Data: data,
+            mimeType,
             index,
-            prefix: "prompt-image",
+            prefix: "image",
             targetDirs: debugOutputDirs,
             log,
           });
-          part.debugImageHash = hash;
-          part.debugImageFilename = filename;
-        })();
-        promptImageTasks.push(task);
-      }
-    }
-    await Promise.all(promptImageTasks);
-  }
-  if (stage.debugDir) {
-    await writePromptSnapshot(
-      path.join(stage.debugDir, "prompt.txt"),
-      promptDebugContents
-    );
-  }
-  if (debugLogDir) {
-    await writePromptSnapshot(
-      path.join(debugLogDir, "prompt.txt"),
-      promptDebugContents
-    );
-  }
-
-  const uploadBytes = estimateContentsUploadBytes(promptContents);
-  const callHandle = reporter.startModelCall({
-    modelId: options.modelId,
-    uploadBytes,
-  });
-
-  const startedAt = Date.now();
-  let resolvedModelVersion: string = options.modelId;
-  const responseParts: LlmContentPart[] = [];
-  let responseRole: LlmRole | undefined;
-  let blocked = false;
-  const debugWriteTasks: Array<Promise<void>> = [];
-  let imageCounter = 0;
-
-  const appendTextPart = (text: string, isThought: boolean): void => {
-    if (text.length === 0) {
-      return;
-    }
-    responseParts.push({
-      type: "text",
-      text,
-      thought: isThought ? true : undefined,
-    });
-  };
-
-  const appendInlinePart = (
-    data: string,
-    mimeType: string | undefined
-  ): void => {
-    if (data.length === 0) {
-      return;
-    }
-    const inlinePart: LlmInlineDataPart = {
-      type: "inlineData",
-      data,
-      mimeType,
+          inlinePart.debugImageHash = hash;
+          inlinePart.debugImageFilename = filename;
+        })()
+      );
     };
-    responseParts.push(inlinePart);
-    if (!isInlineImageMime(mimeType) || debugOutputDirs.length === 0) {
-      return;
-    }
-    const index = ++imageCounter;
-    debugWriteTasks.push(
-      (async () => {
-        const { hash, filename } = await createDebugImageArtifact({
-          base64Data: data,
-          mimeType,
-          index,
-          prefix: "image",
-          targetDirs: debugOutputDirs,
-          log,
-        });
-        inlinePart.debugImageHash = hash;
-        inlinePart.debugImageFilename = filename;
-      })()
-    );
-  };
 
-  const accumulateContent = (
-    content: LlmContent
-  ): { charDelta: number; byteDelta: number } => {
-    let charDelta = 0;
-    let byteDelta = 0;
-    if (!responseRole) {
-      responseRole = content.role;
-    }
-    for (const part of content.parts) {
-      if (part.type === "text") {
-        const text = part.text;
-        appendTextPart(text, part.thought === true);
-        charDelta += text.length;
-      } else {
-        appendInlinePart(part.data, part.mimeType);
-        byteDelta += estimateInlineBytes(part.data);
+    const accumulateContent = (
+      content: LlmContent
+    ): { charDelta: number; byteDelta: number } => {
+      let charDelta = 0;
+      let byteDelta = 0;
+      if (!responseRole) {
+        responseRole = content.role;
       }
-    }
-    return { charDelta, byteDelta };
-  };
+      for (const part of content.parts) {
+        if (part.type === "text") {
+          const text = part.text;
+          appendTextPart(text, part.thought === true);
+          charDelta += text.length;
+        } else {
+          appendInlinePart(part.data, part.mimeType);
+          byteDelta += estimateInlineBytes(part.data);
+        }
+      }
+      return { charDelta, byteDelta };
+    };
 
-  try {
-    await runGeminiCall(async (client) => {
-      const stream = await client.models.generateContentStream({
-        model: options.modelId,
-        contents: googlePromptContents,
-        config,
-      });
-      for await (const chunk of stream) {
-        if (chunk.modelVersion) {
-          resolvedModelVersion = chunk.modelVersion;
-        }
-        if (chunk.promptFeedback?.blockReason) {
-          blocked = true;
-        }
-        const candidates = chunk.candidates;
-        let chunkCharDelta = 0;
-        let chunkByteDelta = 0;
-        if (candidates !== undefined && candidates.length > 0) {
-          const primary = candidates[0];
-          if (isModerationFinish(primary.finishReason)) {
+    try {
+      await runGeminiCall(async (client) => {
+        const stream = await client.models.generateContentStream({
+          model: options.modelId,
+          contents: googlePromptContents,
+          config,
+        });
+        for await (const chunk of stream) {
+          if (chunk.modelVersion) {
+            resolvedModelVersion = chunk.modelVersion;
+          }
+          if (chunk.promptFeedback?.blockReason) {
             blocked = true;
           }
-          for (const candidate of candidates) {
-            const candidateContent = candidate.content;
-            if (!candidateContent) {
-              continue;
+          const candidates = chunk.candidates;
+          let chunkCharDelta = 0;
+          let chunkByteDelta = 0;
+          if (candidates !== undefined && candidates.length > 0) {
+            const primary = candidates[0];
+            if (isModerationFinish(primary.finishReason)) {
+              blocked = true;
             }
-            try {
-              const content =
-                convertGoogleContentToLlmContent(candidateContent);
-              const deltas = accumulateContent(content);
-              chunkCharDelta += deltas.charDelta;
-              chunkByteDelta += deltas.byteDelta;
-            } catch (error) {
-              log(
-                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
-              );
+            for (const candidate of candidates) {
+              const candidateContent = candidate.content;
+              if (!candidateContent) {
+                continue;
+              }
+              try {
+                const content =
+                  convertGoogleContentToLlmContent(candidateContent);
+                const deltas = accumulateContent(content);
+                chunkCharDelta += deltas.charDelta;
+                chunkByteDelta += deltas.byteDelta;
+              } catch (error) {
+                log(
+                  `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
+                );
+              }
             }
           }
+          if (chunkCharDelta > 0 || chunkByteDelta > 0) {
+            reporter.recordModelUsage(callHandle, {
+              modelVersion: chunk.modelVersion,
+              outputCharsDelta: chunkCharDelta > 0 ? chunkCharDelta : undefined,
+              outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
+            });
+          }
         }
-        if (chunkCharDelta > 0 || chunkByteDelta > 0) {
-          reporter.recordModelUsage(callHandle, {
-            modelVersion: chunk.modelVersion,
-            outputCharsDelta: chunkCharDelta > 0 ? chunkCharDelta : undefined,
-            outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
-          });
-        }
+      });
+    } finally {
+      reporter.finishModelCall(callHandle);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    log(`completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`);
+
+    await Promise.all(debugWriteTasks);
+    const mergedParts = mergeConsecutiveTextParts(responseParts);
+    const responseContent =
+      mergedParts.length > 0
+        ? {
+            role: responseRole ?? "model",
+            parts: mergedParts,
+          }
+        : undefined;
+
+    if (stage.debugDir || debugLogDir) {
+      const trimmedResponseText = extractVisibleText(responseContent);
+      const snapshotSummary: readonly string[] = [
+        `Model: ${resolvedModelVersion}`,
+        `Elapsed: ${formatMillis(elapsedMs)}`,
+      ];
+      const snapshotContents = responseContent ? [responseContent] : undefined;
+      if (stage.debugDir) {
+        await writeTextResponseSnapshot({
+          pathname: path.join(stage.debugDir, "response.txt"),
+          summary: snapshotSummary,
+          text: trimmedResponseText,
+          contents: snapshotContents,
+        });
       }
-    });
-  } finally {
-    reporter.finishModelCall(callHandle);
-  }
-
-  const elapsedMs = Date.now() - startedAt;
-  log(`completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`);
-
-  await Promise.all(debugWriteTasks);
-  const mergedParts = mergeConsecutiveTextParts(responseParts);
-  const responseContent =
-    mergedParts.length > 0
-      ? {
-          role: responseRole ?? "model",
-          parts: mergedParts,
-        }
-      : undefined;
-
-  if (stage.debugDir || debugLogDir) {
-    const trimmedResponseText = extractVisibleText(responseContent);
-    const snapshotSummary: readonly string[] = [
-      `Model: ${resolvedModelVersion}`,
-      `Elapsed: ${formatMillis(elapsedMs)}`,
-    ];
-    const snapshotContents = responseContent ? [responseContent] : undefined;
-    if (stage.debugDir) {
-      await writeTextResponseSnapshot({
-        pathname: path.join(stage.debugDir, "response.txt"),
-        summary: snapshotSummary,
-        text: trimmedResponseText,
-        contents: snapshotContents,
-      });
+      if (debugLogDir) {
+        await writeTextResponseSnapshot({
+          pathname: path.join(debugLogDir, "response.txt"),
+          summary: snapshotSummary,
+          text: trimmedResponseText,
+          contents: snapshotContents,
+        });
+      }
+      if (debugOutputDirs.length > 0) {
+        const conversationHtml = buildConversationHtml({
+          promptContents: promptDebugContents,
+          responseContent,
+        });
+        await Promise.all(
+          debugOutputDirs.map(async (dir) =>
+            writeFile(path.join(dir, "conversation.html"), conversationHtml, {
+              encoding: "utf8",
+            })
+          )
+        );
+      }
     }
-    if (debugLogDir) {
-      await writeTextResponseSnapshot({
-        pathname: path.join(debugLogDir, "response.txt"),
-        summary: snapshotSummary,
-        text: trimmedResponseText,
-        contents: snapshotContents,
-      });
-    }
+
+    return {
+      content: responseContent,
+      feedback: blocked ? { blockedReason: "blocked" } : undefined,
+    };
+  } catch (error) {
+    await Promise.allSettled(debugWriteTasks);
     if (debugOutputDirs.length > 0) {
-      const conversationHtml = buildConversationHtml({
-        promptContents: promptDebugContents,
-        responseContent,
+      const exceptionSnapshot = buildExceptionSnapshot({
+        error,
+        modelId: options.modelId,
+        stageLabel: stage.label,
+        attempt,
+        maxAttempts,
       });
       await Promise.all(
-        debugOutputDirs.map(async (dir) =>
-          writeFile(path.join(dir, "conversation.html"), conversationHtml, {
-            encoding: "utf8",
-          })
-        )
+        debugOutputDirs.map(async (dir) => {
+          try {
+            await ensureDebugDir(dir);
+            await writeFile(path.join(dir, "exception.txt"), exceptionSnapshot, {
+              encoding: "utf8",
+            });
+          } catch (writeError) {
+            log(
+              `failed to write exception snapshot to ${dir}: ${
+                writeError instanceof Error
+                  ? writeError.message
+                  : String(writeError)
+              }`
+            );
+          }
+        })
       );
     }
+    throw error;
   }
-
-  return {
-    content: responseContent,
-    feedback: blocked ? { blockedReason: "blocked" } : undefined,
-  };
 }
 
 function mergeConsecutiveTextParts(
