@@ -12,13 +12,26 @@ flowchart TD
   D -->|Yes| E["correctStorySegmentation"]
   E --> C
   D -->|No| F["generateStoryImages"]
-  F --> G["generateImageSets (set_a/set_b)"]
-  G --> H["generateStoryFrames (panels)"]
-  H --> I["Poster candidates (4x)"]
-  I --> J["grade & select poster"]
-  J --> K["Generate ending card"]
-  K --> L["judgeImageSets"]
-  L --> M["Persist winner\nimages + narration"]
+  F --> G["generateImageSets"]
+  G --> SA1
+  G --> SB1
+
+  subgraph SA["set_a pipeline"]
+    SA1["generateStoryFrames (set_a)"] --> SA2["Poster candidates (4x)"]
+    SA2 --> SA3["grade & select poster"]
+    SA3 --> SA4["Generate ending card"]
+  end
+
+  subgraph SB["set_b pipeline"]
+    SB1["generateStoryFrames (set_b)"] --> SB2["Poster candidates (4x)"]
+    SB2 --> SB3["grade & select poster"]
+    SB3 --> SB4["Generate ending card"]
+  end
+
+  SA4 --> J["judgeImageSets"]
+  SB4 --> J
+  J --> K["generateNarration (winner)"]
+  K --> L["Persist winner\nimages + narration"]
 ```
 
 ### Prose Ideation
@@ -112,6 +125,6 @@ Only the winning set is kept for downstream storage.
 
 - **Filtering:** Frames 1–10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly.
 - **JPEG normalisation:** Images are re-encoded (quality 92, 4:4:4) prior to upload.
-- **Narration synthesis:** The alternating `M` / `F` segments are passed to the narration pipeline, keeping the same order as the frames.
+- **Narration synthesis (post-judging):** The alternating `M` / `F` segments from the winning set are passed to the narration pipeline, keeping the same order as the frames.
 
 The result bundle contains the story text, accepted segmentation, storage paths for the ten canonical frames, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.
