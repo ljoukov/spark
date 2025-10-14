@@ -51,9 +51,10 @@ function parseCliOptions(
         ])
         .optional(),
     })
-    .transform(({ model }) => ({
-      modelId: (model ?? "gemini-flash-latest") as LlmTextModelId,
-    }));
+    .transform(({ model }) => {
+      const modelId: LlmTextModelId = model ?? "gemini-flash-latest";
+      return { modelId };
+    });
 
   const raw: { model?: string } = {};
   for (const arg of args) {

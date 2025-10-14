@@ -570,7 +570,13 @@ function buildExceptionSnapshot({
     `Attempt: ${attempt} of ${maxAttempts}`,
   ];
   const message =
-    error instanceof Error ? error.message : error ? String(error) : "Unknown error";
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : error
+          ? inspect(error, { depth: 0 })
+          : "Unknown error";
   lines.push("", "Error Message:", message);
   if (error instanceof Error && typeof error.stack === "string") {
     lines.push("", "Stack Trace:", error.stack);
