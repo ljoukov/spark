@@ -31,7 +31,7 @@ const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
   "- Wrong medium (e.g. photographic instead of illustrated, monochrome sketches, or heavy text-on-canvas posters).",
   "- Missing the named protagonist or key action entirely.",
   "- Obvious content collapse: distorted limbs/faces, unreadable scene, blank or abstract output.",
-  "- Layout that breaks requirements: multi-panel compositions, tall/vertical aspect look, or heavy borders.",
+  "- Layout that breaks requirements: multi-panel compositions, tall/vertical aspect look, or very thick heavy borders.",
   "- Catastrophic continuity break with provided style references.",
 ].join("\n");
 

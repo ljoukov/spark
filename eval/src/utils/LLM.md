@@ -74,6 +74,7 @@ If `debug.rootDir` is provided, each call writes snapshots under:
 - The target directory is cleared (recursively) before writing new snapshots so stale files from earlier runs never linger.
 
 Generated files:
+- `request.txt`: A metadata snapshot of the outbound request (model ID, attempt counters, estimated upload bytes, and the Gemini config JSON).
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
 - `response.txt`: Summary header followed by:
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
@@ -81,6 +82,7 @@ Generated files:
 - Prompt inline images are exported as JPEGs when possible, saved as `prompt-image-001-<sha6>.jpg`, `prompt-image-002-<sha6>.jpg`, … (`<sha6>` matches the hash in `prompt.txt`).
 - For image calls, each file is converted to JPEG when possible and saved as `image-001-<sha6>.jpg`, `image-002-<sha6>.jpg`, … (`<sha6>` is the same value recorded in `response.txt`). If JPEG conversion fails, the original extension is used instead.
 - `conversation.html`: A lightweight viewer showing the prompt and response sequence (roles, text, and `<img>` tags that point to the saved image files in the same directory).
+- `exception.txt`: Written only when a call throws. Includes the error message, stack trace, timestamp, attempt counters, and model ID for the failed request.
 - When debugging is enabled, an immutable copy of the prompt, response, and any image files is also written to `{rootDir}/log/{iso-timestamp}/` (the timestamp is generated when the call starts).
 
 Example layout:
