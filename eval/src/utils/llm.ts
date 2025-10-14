@@ -127,7 +127,7 @@ export type LlmContent = {
 };
 
 export function convertGooglePartsToLlmParts(
-  parts: readonly Part[],
+  parts: readonly Part[]
 ): LlmContentPart[] {
   const result: LlmContentPart[] = [];
   for (const part of parts) {
@@ -262,7 +262,7 @@ export class LlmJsonCallError extends Error {
       readonly attempt: number;
       readonly rawText: string;
       readonly error: unknown;
-    }>,
+    }>
   ) {
     super(message);
     this.name = "LlmJsonCallError";
@@ -287,7 +287,6 @@ export type LlmDebugOptions = {
   readonly rootDir: string;
   readonly stage?: string;
   readonly subStage?: string;
-  readonly attempt?: number | string;
   readonly enabled?: boolean;
 };
 
@@ -316,7 +315,7 @@ function normalisePathSegment(value: string): string {
 }
 
 function toGeminiTools(
-  tools: readonly LlmToolConfig[] | undefined,
+  tools: readonly LlmToolConfig[] | undefined
 ): Tool[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
@@ -347,7 +346,7 @@ async function resetDebugDir(debugDir?: string): Promise<void> {
 
 function resolveDebugDir(
   debug: LlmDebugOptions | undefined,
-  attemptLabel?: number | string,
+  { attempt, maxAttempts }: { attempt: number; maxAttempts: number }
 ): string | undefined {
   if (!debug || !debug.rootDir || debug.enabled === false) {
     return undefined;
@@ -357,14 +356,11 @@ function resolveDebugDir(
   if (debug.subStage) {
     segments.push(normalisePathSegment(debug.subStage));
   }
-  const attemptValue = debug.attempt ?? attemptLabel;
-  if (attemptValue !== undefined) {
-    const attemptSegment =
-      typeof attemptValue === "number"
-        ? `attempt-${String(attemptValue).padStart(2, "0")}`
-        : String(attemptValue);
-    segments.push(normalisePathSegment(attemptSegment));
-  }
+  segments.push(
+    normalisePathSegment(
+      `attempt-${String(attempt).padStart(2, "0")}-of-${String(maxAttempts).padStart(2, "0")}`
+    )
+  );
   return path.join(...segments);
 }
 
@@ -383,14 +379,14 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
         switch (part.type) {
           case "text":
             lines.push(
-              `${header} (${part.thought === true ? "thought" : "text"}):`,
+              `${header} (${part.thought === true ? "thought" : "text"}):`
             );
             lines.push(part.text);
             break;
           case "inlineData": {
             const bytes = estimateInlineBytes(part.data);
             lines.push(
-              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`,
+              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes)`
             );
             break;
           }
@@ -408,7 +404,7 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
 
 async function writePromptSnapshot(
   pathname: string,
-  contents: readonly LlmContent[],
+  contents: readonly LlmContent[]
 ): Promise<void> {
   const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
@@ -446,17 +442,19 @@ async function writeTextResponseSnapshot({
 function buildCallStage({
   modelId,
   debug,
-  attemptLabel,
+  attempt,
+  maxAttempts,
 }: {
   modelId: LlmModelId;
   debug?: LlmDebugOptions;
-  attemptLabel?: number | string;
+  attempt: number;
+  maxAttempts: number;
 }): LlmCallStage {
   const labelParts: string[] = [debug?.stage ?? modelId];
-  if (attemptLabel !== undefined) {
-    labelParts.push(`attempt ${attemptLabel}`);
+  if (attempt !== undefined) {
+    labelParts.push(`attempt ${attempt} / ${maxAttempts}`);
   }
-  const debugDir = resolveDebugDir(debug, attemptLabel);
+  const debugDir = resolveDebugDir(debug, { attempt, maxAttempts });
   return { label: labelParts.join("/"), debugDir };
 }
 
@@ -483,15 +481,18 @@ export type LlmStreamResult = {
 
 async function llmStream({
   options,
-  attemptLabel,
+  attempt,
+  maxAttempts,
 }: {
   readonly options: LlmStreamCallOptions;
-  readonly attemptLabel?: number | string;
+  readonly attempt: number;
+  readonly maxAttempts: number;
 }): Promise<LlmStreamResult> {
   const stage = buildCallStage({
     modelId: options.modelId,
     debug: options.debug,
-    attemptLabel,
+    attempt,
+    maxAttempts,
   });
   const reporter = options.progress ?? createFallbackProgress(stage.label);
   const log = (message: string) => {
@@ -503,7 +504,7 @@ async function llmStream({
   }
   const promptContents = options.contents;
   const googlePromptContents = promptContents.map(
-    convertLlmContentToGoogleContent,
+    convertLlmContentToGoogleContent
   );
   const config: GeminiCallConfig = {};
   const thinkingConfig = (() => {
@@ -549,7 +550,7 @@ async function llmStream({
   if (stage.debugDir) {
     await writePromptSnapshot(
       path.join(stage.debugDir, "prompt.txt"),
-      promptContents,
+      promptContents
     );
   }
 
@@ -580,7 +581,7 @@ async function llmStream({
 
   const appendInlinePart = (
     data: string,
-    mimeType: string | undefined,
+    mimeType: string | undefined
   ): void => {
     if (data.length === 0) {
       return;
@@ -623,22 +624,22 @@ async function llmStream({
               log(
                 `failed to convert debug image to JPEG: ${
                   error instanceof Error ? error.message : String(error)
-                }`,
+                }`
               );
             }
           }
           const filename = `image-${String(index).padStart(
             2,
-            "0",
+            "0"
           )}.${outputExtension}`;
           await writeFile(path.join(debugDir, filename), outputBuffer);
-        })(),
+        })()
       );
     }
   };
 
   const accumulateContent = (
-    content: LlmContent,
+    content: LlmContent
   ): { charDelta: number; byteDelta: number } => {
     let charDelta = 0;
     let byteDelta = 0;
@@ -693,7 +694,7 @@ async function llmStream({
               chunkByteDelta += deltas.byteDelta;
             } catch (error) {
               log(
-                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
+                `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
               );
             }
           }
@@ -744,7 +745,7 @@ async function llmStream({
 }
 
 function mergeConsecutiveTextParts(
-  parts: readonly LlmContentPart[],
+  parts: readonly LlmContentPart[]
 ): LlmContentPart[] {
   if (parts.length === 0) {
     return [];
@@ -775,13 +776,14 @@ function mergeConsecutiveTextParts(
   return merged;
 }
 
-export async function generateText(
+async function generateTextWithAttempts(
   options: LlmTextCallOptions,
-  attemptLabel?: number | string,
+  { attempt, maxAttempts }: { attempt: number; maxAttempts: number }
 ): Promise<string> {
   const result = await llmStream({
     options,
-    attemptLabel,
+    attempt,
+    maxAttempts,
   });
   const resolvedText = extractVisibleText(result.content);
   if (!resolvedText) {
@@ -790,8 +792,17 @@ export async function generateText(
   return resolvedText;
 }
 
+export async function generateText(
+  options: LlmTextCallOptions
+): Promise<string> {
+  return await generateTextWithAttempts(options, {
+    attempt: 1,
+    maxAttempts: 1,
+  });
+}
+
 export async function generateJson<T>(
-  options: LlmJsonCallOptions<T>,
+  options: LlmJsonCallOptions<T>
 ): Promise<T> {
   const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
   const textOptions: LlmTextCallOptions = {
@@ -800,22 +811,17 @@ export async function generateJson<T>(
     responseMimeType: rest.responseMimeType ?? "application/json",
   };
 
-  const totalAttempts = Math.max(1, maxAttempts);
   const failures: Array<{
     attempt: number;
     rawText: string;
     error: unknown;
   }> = [];
 
-  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-    const attemptOptions: LlmTextCallOptions =
-      textOptions.debug !== undefined
-        ? {
-            ...textOptions,
-            debug: { ...textOptions.debug, attempt },
-          }
-        : textOptions;
-    const rawText = await generateText(attemptOptions, attempt);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const rawText = await generateTextWithAttempts(textOptions, {
+      attempt,
+      maxAttempts,
+    });
     try {
       const payload = JSON.parse(rawText);
       const parsed = schema.parse(payload);
@@ -824,10 +830,10 @@ export async function generateJson<T>(
       const handledError =
         error instanceof Error ? error : new Error(String(error));
       failures.push({ attempt, rawText, error: handledError });
-      if (attempt >= totalAttempts) {
+      if (attempt >= maxAttempts) {
         throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
-          failures,
+          failures
         );
       }
     }
@@ -837,7 +843,7 @@ export async function generateJson<T>(
 }
 
 export async function generateImages(
-  options: LlmGenerateImagesOptions,
+  options: LlmGenerateImagesOptions
 ): Promise<LlmImageData[]> {
   const {
     stylePrompt,
@@ -857,14 +863,14 @@ export async function generateImages(
       const trimmedPrompt = rawPrompt.trim();
       if (!trimmedPrompt) {
         throw new Error(
-          `imagePrompts[${arrayIndex}] must be a non-empty string`,
+          `imagePrompts[${arrayIndex}] must be a non-empty string`
         );
       }
       return {
         index: arrayIndex + 1,
         prompt: trimmedPrompt,
       };
-    },
+    }
   );
 
   const numImages = promptEntries.length;
@@ -890,12 +896,12 @@ export async function generateImages(
         "",
         "Follow the style:",
         stylePrompt,
-      ].join("\n"),
+      ].join("\n")
     );
     if (styleImages !== undefined && styleImages.length > 0) {
       addText(
         parts,
-        "\nFollow the visual style, composition and the characters from these images:",
+        "\nFollow the visual style, composition and the characters from these images:"
       );
       for (const styleImage of styleImages) {
         parts.push({
@@ -917,7 +923,7 @@ export async function generateImages(
   };
 
   const buildContinuationPrompt = (
-    pending: PromptEntry[],
+    pending: PromptEntry[]
   ): LlmContentPart[] => {
     const pendingIds = pending.map((entry) => entry.index).join(", ");
     const lines: string[] = [
@@ -940,15 +946,13 @@ export async function generateImages(
 
   const collectedImages: LlmImageData[] = [];
 
-  const totalAttempts = Math.max(1, maxAttempts);
-
   const contents: LlmContent[] = [
     {
       role: "user",
       parts: buildInitialPrompt(),
     },
   ];
-  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const result = await llmStream({
       options: {
         modelId,
@@ -958,7 +962,8 @@ export async function generateImages(
         responseModalities: ["IMAGE", "TEXT"],
         imageAspectRatio,
       },
-      attemptLabel: attempt,
+      attempt,
+      maxAttempts,
     });
     const { content } = result;
     if (result.feedback !== undefined || content === undefined) {
@@ -989,7 +994,7 @@ export async function generateImageInBatches(
   options: LlmGenerateImagesOptions & {
     batchSize: number;
     overlapSize: number;
-  },
+  }
 ): Promise<LlmImageData[]> {
   const {
     batchSize,
@@ -1022,7 +1027,7 @@ export async function generateImageInBatches(
     let styleImagesForBatch: readonly LlmImageData[] = baseStyleImages;
     if (overlapSize > 0 && generatedImages.length > 0) {
       const overlapImages = generatedImages.slice(
-        Math.max(0, generatedImages.length - overlapSize),
+        Math.max(0, generatedImages.length - overlapSize)
       );
       if (overlapImages.length > 0) {
         styleImagesForBatch = [...baseStyleImages, ...overlapImages];
