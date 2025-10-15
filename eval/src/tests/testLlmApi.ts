@@ -7,7 +7,9 @@ ensureEvalEnvLoaded();
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
   if (!options.success) {
-    console.error(options.error.issues.map((issue) => issue.message).join("\n"));
+    console.error(
+      options.error.issues.map((issue) => issue.message).join("\n"),
+    );
     process.exitCode = 1;
     return;
   }
@@ -35,12 +37,12 @@ void main().catch((error) => {
   process.exitCode = 1;
 });
 
-function parseCliOptions(
-  args: readonly string[],
-): { success: true; data: { modelId: LlmTextModelId } } | {
-  success: false;
-  error: z.ZodError;
-} {
+function parseCliOptions(args: readonly string[]):
+  | { success: true; data: { modelId: LlmTextModelId } }
+  | {
+      success: false;
+      error: z.ZodError;
+    } {
   const schema = z
     .object({
       model: z
