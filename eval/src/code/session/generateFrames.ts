@@ -33,6 +33,66 @@ type BatchGradeItem = {
   image: LlmImageData;
 };
 
+type FrameComparisonCandidate = {
+  candidateIndex: number;
+  image: LlmImageData;
+};
+
+type FrameComparisonResult = {
+  winnerCandidateIndex: number;
+  reasoning: string;
+  catastrophicCandidates: {
+    candidateIndex: number;
+    reason: string;
+  }[];
+};
+
+const FrameComparisonSchema = z
+  .object({
+    winner_index: z.number().int().min(1),
+    reasoning: z.string().trim().min(1),
+    catastrophic_candidates: z
+      .array(
+        z.object({
+          index: z.number().int().min(1),
+          reason: z.string().trim().min(1),
+        })
+      )
+      .default([]),
+  })
+  .transform((raw) => ({
+    winnerCandidateIndex: raw.winner_index,
+    reasoning: raw.reasoning,
+    catastrophicCandidates: raw.catastrophic_candidates.map((entry) => ({
+      candidateIndex: entry.index,
+      reason: entry.reason,
+    })),
+  }));
+
+type FrameComparisonResponse = z.infer<typeof FrameComparisonSchema>;
+
+const FRAME_COMPARISON_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["reasoning", "winner_index"],
+  propertyOrdering: ["reasoning", "catastrophic_candidates", "winner_index"],
+  properties: {
+    reasoning: { type: Type.STRING, minLength: "1" },
+    catastrophic_candidates: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["index", "reason"],
+        propertyOrdering: ["index", "reason"],
+        properties: {
+          index: { type: Type.NUMBER, minimum: 1 },
+          reason: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+    winner_index: { type: Type.NUMBER, minimum: 1 },
+  },
+};
+
 const BatchGradeResponseSchema = z
   .object({
     outcome: z.enum(["accept", "redo_batch", "redo_frames"]),
@@ -266,6 +326,95 @@ async function gradeBatch(params: {
   };
 }
 
+async function selectBestRedoFrameCandidate(params: {
+  progress: JobProgressReporter;
+  gradingModelId: LlmTextModelId;
+  stylePrompt: string;
+  styleImages: readonly LlmImageData[];
+  catastrophicDescription: string;
+  prompt: string;
+  frameIndex: number;
+  candidates: readonly FrameComparisonCandidate[];
+  debug?: LlmDebugOptions;
+}): Promise<FrameComparisonResult> {
+  const {
+    progress,
+    gradingModelId,
+    stylePrompt,
+    styleImages,
+    catastrophicDescription,
+    prompt,
+    frameIndex,
+    candidates,
+    debug,
+  } = params;
+  if (candidates.length < 2) {
+    throw new Error(
+      `Frame ${frameIndex} comparison requires at least two candidates`
+    );
+  }
+
+  const parts: LlmContentPart[] = [];
+  addTextPart(
+    parts,
+    [
+      "You are adjudicating a storyboard frame after a redo attempt still showed issues.",
+      `Frame ${frameIndex} prompt:\n${prompt}`,
+      "",
+      "Compare the candidates and pick the image we should keep.",
+      "Candidate 1 is the previous frame image; Candidate 2 is the latest redo attempt.",
+      "Prioritise the one that best fits the prompt, preserves character continuity, and avoids catastrophic failures.",
+      "If both are flawed, choose the least harmful option and explain the trade-off.",
+      "",
+      "Catastrophic checklist:",
+      catastrophicDescription,
+      "",
+      `Style prompt reference:\n${stylePrompt}`,
+    ].join("\n")
+  );
+
+  if (styleImages.length > 0) {
+    addTextPart(
+      parts,
+      "\nStyle references (ensure palette, medium, and protagonist consistency):"
+    );
+    for (const image of styleImages) {
+      parts.push(toInlinePart(image));
+    }
+  }
+
+  for (const candidate of candidates) {
+    addTextPart(
+      parts,
+      `\nCandidate ${candidate.candidateIndex}: consider whether this image should be kept.`
+    );
+    parts.push(toInlinePart(candidate.image));
+  }
+
+  addTextPart(
+    parts,
+    [
+      "",
+      "Respond in JSON using the provided schema.",
+      'Set `"winner_index"` to the winning candidate number (1-based).',
+      'Explain your decision in `"reasoning"` with a short paragraph.',
+      'List any disqualified candidates under `"catastrophic_candidates"`.',
+    ].join("\n")
+  );
+
+  const response = await generateJson<FrameComparisonResponse>({
+    progress,
+    modelId: gradingModelId,
+    contents: [{ role: "user", parts }],
+    schema: FrameComparisonSchema,
+    responseSchema: FRAME_COMPARISON_RESPONSE_SCHEMA,
+    debug,
+    maxAttempts: 1,
+  });
+
+  return response;
+}
+
 function collectBatchStyleImages(params: {
   baseStyleImages: readonly LlmImageData[];
   generatedSoFar: readonly LlmImageData[];
@@ -376,6 +525,10 @@ export async function generateStoryFrames(
         for (let index = 0; index < batchItems.length; index += 1) {
           frameIndexToLocal.set(batchItems[index].frameIndex, index);
         }
+        const frameCandidateHistories = new Map<number, LlmImageData[]>();
+        for (const item of batchItems) {
+          frameCandidateHistories.set(item.frameIndex, [item.image]);
+        }
 
         const logGradeSummary = (grade: BatchGradeOutcome) => {
           if (grade.summary) {
@@ -483,6 +636,87 @@ export async function generateStoryFrames(
           const acceptedImages = computeAcceptedStyleImages(grade.findings);
           const styleImagesForRedo = [...batch.styleImages, ...acceptedImages];
 
+          if (partialIteration >= 2) {
+            const comparisonSummaries: string[] = [];
+            for (const finding of grade.findings) {
+              const localIndex = frameIndexToLocal.get(finding.frameIndex);
+              if (localIndex === undefined) {
+                throw new Error(
+                  `Batch grader referenced unknown frame ${finding.frameIndex}`
+                );
+              }
+              const history = frameCandidateHistories.get(finding.frameIndex);
+              if (!history || history.length < 2) {
+                throw new Error(
+                  `Frame ${finding.frameIndex} redo fallback is missing candidate history`
+                );
+              }
+              const recentCandidates = history.slice(-2);
+              const candidatePayload: FrameComparisonCandidate[] =
+                recentCandidates.map((image, offset) => ({
+                  candidateIndex: offset + 1,
+                  image,
+                }));
+              const comparison = await selectBestRedoFrameCandidate({
+                progress,
+                gradingModelId: options.gradingModelId,
+                stylePrompt,
+                styleImages: styleImagesForRedo,
+                catastrophicDescription: options.gradeCatastrophicDescription,
+                prompt: batch.prompts[localIndex],
+                frameIndex: finding.frameIndex,
+                candidates: candidatePayload,
+                debug: extendDebug(
+                  debug,
+                  `batch-${padNumber(
+                    batchIndex + 1
+                  )}/redo-${padNumber(partialIteration)}/compare-frame-${padNumber(
+                    finding.frameIndex
+                  )}`
+                ),
+              });
+              const winner =
+                candidatePayload[comparison.winnerCandidateIndex - 1];
+              if (!winner) {
+                throw new Error(
+                  `Frame ${finding.frameIndex} comparison selected invalid candidate ${comparison.winnerCandidateIndex}`
+                );
+              }
+              batchItems[localIndex] = {
+                ...batchItems[localIndex],
+                image: winner.image,
+              };
+              frameCandidateHistories.set(finding.frameIndex, [winner.image]);
+              const details: string[] = [
+                `winner candidate ${comparison.winnerCandidateIndex}: ${comparison.reasoning}`,
+              ];
+              if (comparison.catastrophicCandidates.length > 0) {
+                const catastrophic = comparison.catastrophicCandidates
+                  .map(
+                    (entry) => `candidate ${entry.candidateIndex}: ${entry.reason}`
+                  )
+                  .join(", ");
+                details.push(`catastrophic: ${catastrophic}`);
+              }
+              comparisonSummaries.push(
+                `frame ${finding.frameIndex} – ${details.join("; ")}`
+              );
+            }
+            if (comparisonSummaries.length > 0) {
+              progress.log(
+                `[story/frames] Batch ${batchIndex + 1} fallback comparison accepted redo frames (${comparisonSummaries.join(
+                  "; "
+                )})`
+              );
+            }
+            grade = {
+              outcome: "accept",
+              findings: [],
+              summary: "Accepted after fallback comparison",
+            };
+            break;
+          }
+
           for (const finding of grade.findings) {
             const localIndex = frameIndexToLocal.get(finding.frameIndex);
             if (localIndex === undefined) {
@@ -534,6 +768,15 @@ export async function generateStoryFrames(
                 `Failed to regenerate frame ${finding.frameIndex} after ${BATCH_GENERATE_MAX_ATTEMPTS} attempts`
               );
             }
+            const previousImage = batchItems[localIndex].image;
+            let history = frameCandidateHistories.get(finding.frameIndex);
+            if (!history || history.length === 0) {
+              history = [previousImage];
+              frameCandidateHistories.set(finding.frameIndex, history);
+            } else if (history[history.length - 1] !== previousImage) {
+              history.push(previousImage);
+            }
+            history.push(replacement);
             batchItems[localIndex] = {
               ...batchItems[localIndex],
               image: replacement,

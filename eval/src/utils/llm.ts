@@ -1233,18 +1233,24 @@ export async function generateJson<T>(
   }> = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const rawText = await generateTextWithAttempts(textOptions, {
-      attempt,
-      maxAttempts,
-    });
+    let rawText: string | undefined;
     try {
+      rawText = await generateTextWithAttempts(textOptions, {
+        attempt,
+        maxAttempts,
+      });
       const payload = JSON.parse(rawText);
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {
       const handledError =
         error instanceof Error ? error : new Error(String(error));
-      failures.push({ attempt, rawText, error: handledError });
+      failures.push({
+        attempt,
+        rawText:
+          typeof rawText === "string" && rawText.length > 0 ? rawText : "",
+        error: handledError,
+      });
       if (attempt >= maxAttempts) {
         throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
