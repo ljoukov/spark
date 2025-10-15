@@ -39,8 +39,7 @@ import { runJobsWithConcurrency } from "../../utils/concurrency";
 const MEDIA_SOURCES: Array<{
   planItemId: string;
   segments: MediaSegment[];
-}> = [
-];
+}> = [];
 
 const QUIZZES: QuizDefinition[] = [
   {
@@ -226,8 +225,7 @@ const QUIZZES: QuizDefinition[] = [
         prompt:
           "Using the room map from the previous question, how many steps does Breadth-first Search need to reach room 5 from room 1?",
         hint: "Count the edges along the first path that reaches room 5.",
-        explanation:
-          "The first path to room 5 is 1 → 3 → 5, which is 2 steps.",
+        explanation: "The first path to room 5 is 1 → 3 → 5, which is 2 steps.",
         options: [
           { id: "A", label: "A", text: "1" },
           { id: "B", label: "B", text: "2" },
@@ -365,7 +363,8 @@ const QUIZZES: QuizDefinition[] = [
         acceptableAnswers: ["-1"],
         correctFeedback: {
           heading: "Clear signal",
-          message: "Printing -1 tells the reader instantly that no path exists.",
+          message:
+            "Printing -1 tells the reader instantly that no path exists.",
         },
       },
       {
@@ -499,8 +498,7 @@ const PARK_STEPS_EXAMPLES = [
     title: "Example 1",
     input: ["5 5", "1 2", "1 3", "2 4", "3 4", "4 5", "1 5"].join("\\n"),
     output: "3",
-    explanation:
-      "One shortest walk is 1 → 3 → 4 → 5, which uses 3 bridges.",
+    explanation: "One shortest walk is 1 → 3 → 4 → 5, which uses 3 bridges.",
   },
   {
     title: "Example 2",
@@ -554,15 +552,13 @@ const MAZE_SCOUT_EXAMPLES = [
     title: "Example 1",
     input: ["3 3", "S..", ".##", "..T"].join("\\n"),
     output: "4",
-    explanation:
-      "One shortest walk is S → (1,0) → (2,0) → (2,1) → T.",
+    explanation: "One shortest walk is S → (1,0) → (2,0) → (2,1) → T.",
   },
   {
     title: "Example 2",
     input: ["3 3", "S#T", "###", "..."].join("\\n"),
     output: "-1",
-    explanation:
-      "Walls block every route to T, so the answer is -1.",
+    explanation: "Walls block every route to T, so the answer is -1.",
   },
   {
     title: "Example 3",
@@ -620,11 +616,7 @@ const PROBLEMS: CodeProblem[] = [
       "- Lines 2..(M+1): each line has two integers u v describing a two-way path between spots u and v.",
       "- Line M+2: integers s and t — the start and goal spots.",
     ].join("\\n"),
-    constraints: [
-      "1 ≤ N ≤ 10_000",
-      "0 ≤ M ≤ 20_000",
-      "1 ≤ u, v, s, t ≤ N",
-    ],
+    constraints: ["1 ≤ N ≤ 10_000", "0 ≤ M ≤ 20_000", "1 ≤ u, v, s, t ≤ N"],
     examples: PARK_STEPS_EXAMPLES,
     tests: PARK_STEPS_TESTS,
     hints: [
@@ -750,7 +742,6 @@ const PROBLEMS: CodeProblem[] = [
   },
 ];
 
-
 function buildPlan(storyTitle: string): PlanItem[] {
   return [
     {
@@ -803,6 +794,14 @@ function buildPlan(storyTitle: string): PlanItem[] {
 
 function resolveDebugRootDir(): string {
   return path.join(WORKSPACE_PATHS.codeSyntheticDir, "sessions", "test-user");
+}
+
+function resolveStoryCheckpointDir(
+  debugRootDir: string,
+  sessionId: string,
+  planItemId: string,
+): string {
+  return path.join(debugRootDir, "checkpoints", sessionId, planItemId);
 }
 
 function normalizeBucketName(raw: string | undefined): string {
@@ -901,6 +900,11 @@ async function main(): Promise<void> {
   const sessionId = TEST_SESSION_ID;
   const storageBucket = resolveStorageBucket();
   const debugRootDir = resolveDebugRootDir();
+  const storyCheckpointDir = resolveStoryCheckpointDir(
+    debugRootDir,
+    sessionId,
+    STORY_PLAN_ITEM_ID,
+  );
 
   const [storyResult] = await runJobsWithConcurrency({
     items: ["story"],
@@ -916,6 +920,7 @@ async function main(): Promise<void> {
         storageBucket,
         progress,
         debugRootDir,
+        checkpointDir: storyCheckpointDir,
       });
     },
   });
