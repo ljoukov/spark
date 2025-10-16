@@ -23,6 +23,7 @@
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
     "@spark/schemas": "file:../packages/schemas",
+    "pyodide": "^0.28.3",
     "commander": "^14.0.1",
     "firebase-admin": "^13.5.0",
     "sharp": "^0.33.5"

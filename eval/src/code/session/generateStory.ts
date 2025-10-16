@@ -17,7 +17,7 @@ import type {
   JobProgressReporter,
   LlmUsageChunk,
 } from "../../utils/concurrency";
-import { getFirebaseAdminStorage } from "@spark/llm";
+import { getFirebaseAdminStorage, getFirebaseAdminFirestore } from "@spark/llm";
 import type { MediaSegment } from "@spark/llm";
 import sharp from "sharp";
 
@@ -1745,17 +1745,17 @@ export class StoryGenerationPipeline {
       return this.caches.narration;
     }
     const checkpoint = await this.readNarrationCheckpoint();
+    let restoredCheckpointPath: string | undefined;
     if (checkpoint) {
-      const entry: StageCacheEntry<NarrationStageValue> = {
-        value: checkpoint.value,
-        source: "checkpoint",
-        checkpointPath: checkpoint.filePath,
-      };
-      this.caches.narration = entry;
+      restoredCheckpointPath = checkpoint.filePath;
       this.logger.log(
         `[story/checkpoint] restored 'narration' from ${checkpoint.filePath}`,
       );
-      return entry;
+      const cachedPath =
+        checkpoint.value.publishResult?.documentPath ?? "unknown";
+      this.logger.log(
+        `[story/narration] republishing using cached media references at ${cachedPath}`,
+      );
     }
 
     const { value: segmentation } = await this.ensureSegmentationCorrection();
@@ -1781,38 +1781,99 @@ export class StoryGenerationPipeline {
     });
     const bucket = storage.bucket(storageBucket);
 
-    const storagePaths: string[] = [];
-    for (let i = 0; i < interiorImages.length; i += 1) {
-      const image = interiorImages[i];
-      const jpegBuffer = await sharp(image.data)
-        .jpeg({
-          quality: 92,
-          progressive: true,
-          chromaSubsampling: "4:4:4",
-        })
-        .toBuffer();
-      const storagePath = buildImageStoragePath(
-        userId,
-        sessionId,
-        planItemId,
-        i + 1,
-        "jpg",
-        this.options.storagePrefix,
-      );
-      const file = bucket.file(storagePath);
-      await file.save(jpegBuffer, {
-        resumable: false,
-        metadata: {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=0",
-        },
-      });
-      storagePaths.push(normaliseStoragePath(storagePath));
-    }
+    const totalImages = interiorImages.length;
+    const uploadConcurrency = Math.min(8, totalImages);
+    this.logger.log(
+      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
+    );
+    const storagePaths: string[] = new Array(totalImages);
+
+    let nextImageIndex = 0;
+    const uploadWorker = async (workerId: number): Promise<void> => {
+      // Sequentially claim the next image index; JavaScript's single-threaded model keeps this safe.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const currentIndex = nextImageIndex;
+        nextImageIndex += 1;
+        if (currentIndex >= totalImages) {
+          return;
+        }
+        const image = interiorImages[currentIndex];
+        const jpegBuffer = await sharp(image.data)
+          .jpeg({
+            quality: 92,
+            progressive: true,
+            chromaSubsampling: "4:4:4",
+          })
+          .toBuffer();
+        const storagePath = buildImageStoragePath(
+          userId,
+          sessionId,
+          planItemId,
+          currentIndex + 1,
+          "jpg",
+          this.options.storagePrefix,
+        );
+        const file = bucket.file(storagePath);
+        await file.save(jpegBuffer, {
+          resumable: false,
+          metadata: {
+            contentType: "image/jpeg",
+            cacheControl: "public, max-age=0",
+          },
+        });
+        storagePaths[currentIndex] = normaliseStoragePath(storagePath);
+        this.logger.log(
+          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
+        );
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: uploadConcurrency }, (_, workerId) =>
+        uploadWorker(workerId),
+      ),
+    );
 
     const segments = toMediaSegments(segmentation, storagePaths);
     const narrationProgressLabel =
       this.options.audioProgressLabel ?? planItemId;
+    const cachedPublishResult = checkpoint?.value.publishResult;
+
+    if (cachedPublishResult) {
+      const firestore = getFirebaseAdminFirestore();
+      const docRef = firestore.doc(cachedPublishResult.documentPath);
+      const docSnapshot = await docRef.get();
+      if (docSnapshot.exists) {
+        this.logger.log(
+          `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,
+        );
+        const stageValue: NarrationStageValue = {
+          publishResult: cachedPublishResult,
+          storagePaths,
+        };
+        const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
+        const entry: StageCacheEntry<NarrationStageValue> = {
+          value: stageValue,
+          source: "checkpoint",
+          checkpointPath,
+        };
+        this.caches.narration = entry;
+        if (checkpointPath) {
+          this.logger.log(
+            `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
+          );
+        }
+        return entry;
+      }
+      this.logger.log(
+        `[story/narration] cached media document ${cachedPublishResult.documentPath} missing; regenerating audio`,
+      );
+    }
+
+    this.logger.log(
+      `[story/narration] publishing ${segments.length} segments to storage bucket ${storageBucket}`,
+    );
     const publishResult = await synthesizeAndPublishNarration({
       userId,
       sessionId,
@@ -1829,7 +1890,7 @@ export class StoryGenerationPipeline {
     const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
     const entry: StageCacheEntry<NarrationStageValue> = {
       value: stageValue,
-      source: "generated",
+      source: restoredCheckpointPath ? "checkpoint" : "generated",
       checkpointPath,
     };
     this.caches.narration = entry;
@@ -1838,6 +1899,9 @@ export class StoryGenerationPipeline {
         `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
       );
     }
+    this.logger.log(
+      `[story/narration] ensured media doc ${stageValue.publishResult.documentPath}`,
+    );
     return entry;
   }
 }
