@@ -32,18 +32,19 @@ export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 
 const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
   "- Wrong medium (e.g. photographic instead of illustrated, monochrome sketches, or heavy text-on-canvas posters).",
-  "- Missing the named protagonist or key action entirely.",
+  "- Missing the named protagonist when the prompt or narration centres them; environmental cutaways are fine when explicitly requested.",
   "- Obvious content collapse: distorted limbs/faces, unreadable scene, blank or abstract output.",
   "- Layout that breaks requirements: multi-panel compositions, tall/vertical aspect look, or very thick heavy borders.",
   "- Catastrophic continuity break with provided style references.",
 ].join("\n");
 
+// Legacy constant name preserved; prompt now emphasises a cinematic storyboard illustration style.
 export const ART_STYLE_VINTAGE_CARTOON: readonly string[] = [
-  "A beautiful and engaging high quality classic cartoon illustration.",
-  "Use a high-positivity tone, high quality, bright colors, and a clear composition.",
-  "Do NOT add borders",
-  "Do NOT produce multi-panel images",
-  "Single scene per image",
+  "A cinematic, high-quality illustrated storyboard frame with modern graphic-novel energy.",
+  "Use expressive lighting, cohesive colour palettes, and period-aware details across the sequence.",
+  "Balance the protagonist with supporting context when the narrative calls for it while keeping the key action obvious.",
+  "Avoid photorealism, collage looks, thick borders, or multi-panel layouts.",
+  "Single scene per image.",
 ];
 
 export type StoryProgress = JobProgressReporter | undefined;
@@ -365,17 +366,17 @@ export function buildSegmentationPrompt(storyText: string): string {
     "Requirements:",
     "1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
-    "2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Keep any visible text within four words.",
+    "2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Include a bold 2-4 word title and, when it elevates the concept, one short supporting detail such as a date, location, or rallying phrase (each supporting text element under six words).",
     '3. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.',
     "4. For each of the ten `segments`:",
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
     "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
     "   • Provide `imagePrompt`, a clear visual prompt that captures the same moment as the narration slice(s). Focus on subject, action, setting, and lighting cues. Do not include stylistic descriptors (lighting adjectives are fine, but no references to media franchises or rendering engines).",
-    "5. Keep each `imagePrompt` drawable as a single vintage cartoon panel: emphasise one main action, at most two characters, simple props, and broad composition notes. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.",
-    '6. If text must appear in the scene, keep it to four words or fewer and prefer period-appropriate signage. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
+    "5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy: emphasise the key action, allow supporting characters or environment to share focus when the narration does, and call out expressive lighting. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.",
+    '6. Any visible text should stay purposeful: headlines stay within four words, auxiliary elements (dates, mottos, signage) within six words, all period-appropriate. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
     "7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.",
     "8. No formulas or diagrams or tables are requested",
-    "9. Main characters appear in every image",
+    "9. Ensure the named protagonist appears whenever the narration centres on them; otherwise spotlight the setting, consequences, or supporting cast to keep the beat clear.",
     "",
     "================ Story to segment ================",
     storyText,
@@ -425,11 +426,12 @@ function buildSegmentationCorrectorPrompt(
     "",
     "Check for:",
     "- Each prompt grounds the scene in time and place (decade, location, or workplace details).",
-    "- One clear action, at most two characters, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
-    '- Optional writing stays within four words and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
+    "- One clear action with focal characters or environment cues, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
+    '- Poster prompts include a bold 2-4 word title and, when present, supporting text (dates, mottos, locations) under six words, all period-appropriate.',
+    '- Other optional writing stays concise and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
     "- Characters are not expected to hold a paper, book or poster",
     "- No formulas or diagrams or tables are requested",
-    "- Main characters appear in every image",
+    "- Ensure the protagonist is present when the narration or prompt centres on them; environmental cutaways are fine when explicitly described.",
     "",
     "===== Segmentation generation brief =====",
     generationPrompt,
@@ -798,8 +800,9 @@ async function selectPosterCandidate(options: {
   }
 
   const headerLines: string[] = [
-    "You are selecting the best poster illustration candidate for a vintage cartoon story.",
+    "You are selecting the best poster illustration candidate for a cinematic illustrated historical story.",
     "The winning candidate must be the most stunning, engaging, and attractive option that faithfully follows the protagonist references.",
+    "Respect the prompt's typography guidance: a bold 2-4 word title and, when present, one concise supporting detail such as a date or location (each supporting element under six words).",
     "Disqualify any candidate with catastrophic failures such as extra limbs, missing faces, severe distortions, or the wrong medium.",
     "",
     `Original poster prompt:\n${options.prompt}`,
@@ -1072,10 +1075,10 @@ export async function judgeImageSets(
     "You are the image quality judge for illustrated historical stories.",
     'Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a "the end" card, and a poster.',
     "Evaluate which set better satisfies the prompts and style requirements.",
-    "Criteria: prompt fidelity, clear single action, grounded historical setting, readable composition, and accurate vintage cartoon style (ink outlines, muted palette, subtle paper texture).",
-    "If any writing appears, ensure it is four words or fewer, spelled correctly, and period-appropriate.",
+    "Criteria: prompt fidelity, cinematic single-scene composition, grounded historical setting, expressive yet cohesive style, and strong character continuity.",
+    "Typography check: poster titles stay bold (2-4 words) with optional supporting detail (dates, locations, mottos) under six words; any other visible text remains concise, spelled correctly, and period-appropriate.",
     "Make sure that the images do not carry wrong meaning, e.g. the poster should NOT say 'The End' and similar obviously wrong artefacts.",
-    "Main characters appear in every image",
+    "Confirm the protagonist appears whenever the narration centres on them; environmental or consequence-focused frames are acceptable when explicitly prompted.",
   ];
 
   const parts: LlmContentPart[] = [
