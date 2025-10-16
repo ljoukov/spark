@@ -78,14 +78,22 @@ ctx.addEventListener('message', async (event: MessageEvent<PythonRunnerRequest>)
 		const stdinQueue = [...stdin];
 
 		pyodide.setStdout({
-			batched: (text: string) => {
-				postMessageToClient({ type: 'stdout', text, requestId });
+			raw: (charCode: number) => {
+				postMessageToClient({
+					type: 'stdout',
+					text: String.fromCharCode(charCode),
+					requestId
+				});
 			}
 		});
 
 		pyodide.setStderr({
-			batched: (text: string) => {
-				postMessageToClient({ type: 'stderr', text, requestId });
+			raw: (charCode: number) => {
+				postMessageToClient({
+					type: 'stderr',
+					text: String.fromCharCode(charCode),
+					requestId
+				});
 			}
 		});
 
