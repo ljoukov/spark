@@ -1,5 +1,6 @@
 import path from "node:path";
-import { Timestamp } from "firebase-admin/firestore";
+import { Command, Option } from "commander";
+import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { z } from "zod";
 import {
   getTestUserId,
@@ -32,7 +33,8 @@ import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
-import { generateStory } from "./generateStory";
+import { generateStory, type GenerateStoryResult } from "./generateStory";
+import { validateProblems, ProblemValidationError } from "./problemValidation";
 import { runJobsWithConcurrency } from "../../utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
@@ -518,32 +520,82 @@ const PARK_STEPS_EXAMPLES = [
 
 const PARK_STEPS_TESTS = [
   {
+    input: PARK_STEPS_EXAMPLES[0].input,
+    output: PARK_STEPS_EXAMPLES[0].output,
+    explanation: PARK_STEPS_EXAMPLES[0].explanation,
+  },
+  {
+    input: PARK_STEPS_EXAMPLES[1].input,
+    output: PARK_STEPS_EXAMPLES[1].output,
+    explanation: PARK_STEPS_EXAMPLES[1].explanation,
+  },
+  {
+    input: PARK_STEPS_EXAMPLES[2].input,
+    output: PARK_STEPS_EXAMPLES[2].output,
+    explanation: PARK_STEPS_EXAMPLES[2].explanation,
+  },
+  {
     input: ["1 0", "1 1"].join("\\n"),
     output: "0",
+    explanation: "Only one spot exists, so staying put takes 0 bridges.",
   },
   {
     input: ["2 1", "1 2", "1 2"].join("\\n"),
     output: "1",
+    explanation: "A single bridge links spot 1 to spot 2.",
   },
   {
-    input: ["5 4", "1 2", "2 3", "3 4", "4 5", "2 5"].join("\\n"),
-    output: "3",
+    input: ["5 4", "1 2", "2 3", "3 4", "4 5", "1 5"].join("\\n"),
+    output: "4",
+    explanation: "The only route is the chain 1 → 2 → 3 → 4 → 5.",
   },
   {
-    input: ["6 5", "1 2", "1 3", "2 4", "3 5", "5 6", "4 6"].join("\\n"),
-    output: "5",
+    input: [
+      "5 6",
+      "1 2",
+      "2 3",
+      "3 4",
+      "4 5",
+      "1 3",
+      "2 5",
+      "1 5",
+    ].join("\\n"),
+    output: "2",
+    explanation: "Breadth-first Search finds the shortcut 1 → 2 → 5.",
   },
   {
-    input: ["5 6", "1 2", "2 3", "3 4", "4 5", "1 3", "2 4", "1 5"].join("\\n"),
-    output: "3",
-  },
-  {
-    input: ["5 3", "1 2", "2 3", "4 5", "3 5"].join("\\n"),
+    input: ["5 3", "1 2", "2 3", "4 5", "1 5"].join("\\n"),
     output: "-1",
+    explanation:
+      "Spots 1–3 form a component that never reaches spot 5.",
   },
   {
-    input: ["7 6", "1 2", "2 3", "3 4", "4 5", "5 6", "6 7", "4 4"].join("\\n"),
+    input: [
+      "6 6",
+      "1 2",
+      "1 3",
+      "2 4",
+      "3 5",
+      "4 6",
+      "5 6",
+      "1 6",
+    ].join("\\n"),
+    output: "3",
+    explanation: "Shortest path is 1 → 2 → 4 → 6 (three bridges).",
+  },
+  {
+    input: [
+      "7 6",
+      "1 2",
+      "2 3",
+      "3 4",
+      "4 5",
+      "5 6",
+      "6 7",
+      "4 4",
+    ].join("\\n"),
     output: "0",
+    explanation: "Start and goal are the same numbered spot.",
   },
 ];
 
@@ -571,32 +623,61 @@ const MAZE_SCOUT_EXAMPLES = [
 
 const MAZE_SCOUT_TESTS = [
   {
+    input: MAZE_SCOUT_EXAMPLES[0].input,
+    output: MAZE_SCOUT_EXAMPLES[0].output,
+    explanation: MAZE_SCOUT_EXAMPLES[0].explanation,
+  },
+  {
+    input: MAZE_SCOUT_EXAMPLES[1].input,
+    output: MAZE_SCOUT_EXAMPLES[1].output,
+    explanation: MAZE_SCOUT_EXAMPLES[1].explanation,
+  },
+  {
+    input: MAZE_SCOUT_EXAMPLES[2].input,
+    output: MAZE_SCOUT_EXAMPLES[2].output,
+    explanation: MAZE_SCOUT_EXAMPLES[2].explanation,
+  },
+  {
     input: ["1 2", "ST"].join("\\n"),
     output: "1",
+    explanation: "Moving right once reaches the treasure immediately.",
   },
   {
     input: ["2 2", "S#", "#T"].join("\\n"),
     output: "-1",
-  },
-  {
-    input: ["3 3", "S..", ".##", "..T"].join("\\n"),
-    output: "4",
+    explanation: "Walls block every possible move toward T.",
   },
   {
     input: ["3 4", "S..#", ".#..", "..T."].join("\\n"),
     output: "4",
+    explanation: "We weave around the walls in four moves.",
   },
   {
-    input: ["4 4", "S.#T", ".#.#", "...#", "...."].join("\\n"),
+    input: ["4 4", "S..#", ".#.#", "...#", "..T."].join("\\n"),
     output: "5",
-  },
-  {
-    input: ["4 5", "S...#", ".#.#.", ".#..T", "....."].join("\\n"),
-    output: "6",
+    explanation: "A narrow corridor guides the scout to T in five steps.",
   },
   {
     input: ["5 5", "S....", "#####", "....#", "#..#.", "..T.."].join("\\n"),
     output: "-1",
+    explanation: "The solid wall row traps S away from T.",
+  },
+  {
+    input: ["4 3", "S..", ".#.", ".#.", "..T"].join("\\n"),
+    output: "5",
+    explanation: "The scout must detour down the left column before turning.",
+  },
+  {
+    input: [
+      "5 5",
+      "S#...",
+      ".#.#.",
+      "..#..",
+      ".##.#",
+      "...T.",
+    ].join("\\n"),
+    output: "7",
+    explanation: "Seven careful moves wind through the maze to reach T.",
   },
 ];
 
@@ -845,6 +926,13 @@ async function publishMediaAssets(
   sessionId: string,
   storageBucket: string,
 ): Promise<void> {
+  if (MEDIA_SOURCES.length === 0) {
+    console.log(
+      `[test-session/publish] no additional media sources configured; skipping extra narration uploads`,
+    );
+    return;
+  }
+
   for (const source of MEDIA_SOURCES) {
     await synthesizeAndPublishNarration({
       userId,
@@ -857,7 +945,11 @@ async function publishMediaAssets(
   }
 }
 
-async function seedContent(userId: string, session: Session) {
+async function seedContent(
+  userId: string,
+  session: Session,
+  problems: readonly CodeProblem[],
+): Promise<DocumentReference> {
   const firestore = getFirebaseAdminFirestore();
   const userRef = firestore.collection("spark").doc(userId);
   const stateRef = userRef.collection("state").doc(session.id);
@@ -885,7 +977,7 @@ async function seedContent(userId: string, session: Session) {
   );
 
   await Promise.all(
-    PROBLEMS.map(async (problem) => {
+    problems.map(async (problem) => {
       const parsed = CodeProblemSchema.parse(problem);
       await sessionRef.collection("code").doc(parsed.slug).set(parsed);
     }),
@@ -894,8 +986,192 @@ async function seedContent(userId: string, session: Session) {
   return userRef;
 }
 
+const StageEnum = z.enum(["validate", "story", "seed", "publish"]);
+type StageName = z.infer<typeof StageEnum>;
+const STAGE_ORDER: StageName[] = StageEnum.options;
+
+const optionsSchema = z.object({
+  stages: z.array(StageEnum).default([]),
+  pyodideIndexUrl: z
+    .string()
+    .transform((value) => value.trim())
+    .refine((value) => value.length > 0, "pyodide index url cannot be empty")
+    .optional(),
+});
+
+type CliOptions = z.infer<typeof optionsSchema>;
+
+type RuntimeConfig = {
+  userId: string;
+  sessionId: string;
+  storageBucket: string;
+  debugRootDir: string;
+  storyCheckpointDir: string;
+};
+
+type StageContext = {
+  storyResult?: GenerateStoryResult;
+  problems?: CodeProblem[];
+  session?: Session;
+  sessionData?: z.input<typeof SessionSchema>;
+  userRef?: DocumentReference;
+};
+
+function resolveStageSequence(options: CliOptions): StageName[] {
+  if (options.stages.length === 0) {
+    return STAGE_ORDER;
+  }
+  const requested = new Set<StageName>(options.stages);
+  return STAGE_ORDER.filter((stage) => requested.has(stage));
+}
+
+async function ensureStoryResult(
+  context: StageContext,
+  runtime: RuntimeConfig,
+): Promise<GenerateStoryResult> {
+  if (context.storyResult) {
+    return context.storyResult;
+  }
+
+  const [storyResult] = await runJobsWithConcurrency({
+    items: ["story"],
+    concurrency: 1,
+    getId: () => "story",
+    label: "[test-session/story]",
+    handler: async (_item, { progress }) => {
+      return generateStory({
+        topic: STORY_TOPIC,
+        userId: runtime.userId,
+        sessionId: runtime.sessionId,
+        planItemId: STORY_PLAN_ITEM_ID,
+        storageBucket: runtime.storageBucket,
+        progress,
+        debugRootDir: runtime.debugRootDir,
+        checkpointDir: runtime.storyCheckpointDir,
+      });
+    },
+  });
+
+  context.storyResult = storyResult;
+  return storyResult;
+}
+
+async function ensureProblems(context: StageContext): Promise<CodeProblem[]> {
+  if (context.problems) {
+    return context.problems;
+  }
+  const parsedProblems = PROBLEMS.map((problem) =>
+    CodeProblemSchema.parse(problem),
+  );
+  context.problems = parsedProblems;
+  return parsedProblems;
+}
+
+async function runStoryStage(
+  context: StageContext,
+  runtime: RuntimeConfig,
+): Promise<void> {
+  await ensureStoryResult(context, runtime);
+}
+
+async function runValidateStage(
+  context: StageContext,
+  _runtime: RuntimeConfig,
+  options: CliOptions,
+): Promise<void> {
+  const problems = await ensureProblems(context);
+  await validateProblems(problems, {
+    logger: (message) => {
+      console.log(message);
+    },
+    indexURL: options.pyodideIndexUrl,
+  });
+}
+
+async function runSeedStage(
+  context: StageContext,
+  runtime: RuntimeConfig,
+): Promise<void> {
+  const storyResult = await ensureStoryResult(context, runtime);
+  const problems = await ensureProblems(context);
+
+  const sessionData = {
+    id: runtime.sessionId,
+    title: TEST_SESSION_TITLE,
+    createdAt: Timestamp.now(),
+    plan: buildPlan(storyResult.title),
+  } satisfies z.input<typeof SessionSchema>;
+
+  const session = SessionSchema.parse(sessionData);
+
+  const userRef = await seedContent(runtime.userId, session, problems);
+
+  await userRef.collection("sessions").doc(session.id).set(sessionData);
+  await userRef.set({ currentSessionId: session.id }, { merge: true });
+
+  context.session = session;
+  context.sessionData = sessionData;
+  context.userRef = userRef;
+
+  console.log(
+    `[test-session] Seeded session '${session.id}' for user '${runtime.userId}'`,
+  );
+}
+
+async function runPublishStage(
+  context: StageContext,
+  runtime: RuntimeConfig,
+): Promise<void> {
+  if (!context.session) {
+    throw new Error(
+      "Cannot publish media assets before seeding the session. Run the 'seed' stage first.",
+    );
+  }
+
+  await publishMediaAssets(
+    runtime.userId,
+    context.session.id,
+    runtime.storageBucket,
+  );
+
+  console.log(
+    `[test-session] Published media assets for session '${context.session.id}'`,
+  );
+}
+
 async function main(): Promise<void> {
   ensureEvalEnvLoaded();
+
+  const program = new Command();
+  const stagesOption = new Option(
+    "--stages <stage...>",
+    "Run only the selected stages",
+  ).choices(StageEnum.options);
+  const pyodideOption = new Option(
+    "--pyodide-index-url <url>",
+    "Override the Pyodide index URL",
+  ).env("PYODIDE_INDEX_URL");
+
+  program.addOption(stagesOption);
+  program.addOption(pyodideOption);
+  program.parse(process.argv);
+
+  const rawOptions = program.opts<{
+    stages?: StageName[];
+    pyodideIndexUrl?: string;
+  }>();
+
+  const options = optionsSchema.parse({
+    stages: rawOptions.stages ?? [],
+    pyodideIndexUrl: rawOptions.pyodideIndexUrl,
+  });
+
+  const stageSequence = resolveStageSequence(options);
+  if (stageSequence.length === 0) {
+    console.log("No stages selected; exiting.");
+    return;
+  }
+
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
   const storageBucket = resolveStorageBucket();
@@ -906,44 +1182,52 @@ async function main(): Promise<void> {
     STORY_PLAN_ITEM_ID,
   );
 
-  const [storyResult] = await runJobsWithConcurrency({
-    items: ["story"],
-    concurrency: 1,
-    getId: () => "story",
-    label: "[test-session/story]",
-    handler: async (_item, { progress }) => {
-      return generateStory({
-        topic: STORY_TOPIC,
-        userId,
-        sessionId,
-        planItemId: STORY_PLAN_ITEM_ID,
-        storageBucket,
-        progress,
-        debugRootDir,
-        checkpointDir: storyCheckpointDir,
-      });
-    },
-  });
+  const runtime: RuntimeConfig = {
+    userId,
+    sessionId,
+    storageBucket,
+    debugRootDir,
+    storyCheckpointDir,
+  };
 
-  const sessionData = {
-    id: sessionId,
-    title: TEST_SESSION_TITLE,
-    createdAt: Timestamp.now(),
-    plan: buildPlan(storyResult.title),
-  } satisfies z.input<typeof SessionSchema>;
+  const context: StageContext = {};
 
-  const session = SessionSchema.parse(sessionData);
+  for (const stage of stageSequence) {
+    switch (stage) {
+      case "validate":
+        await runValidateStage(context, runtime, options);
+        break;
+      case "story":
+        await runStoryStage(context, runtime);
+        break;
+      case "seed":
+        await runSeedStage(context, runtime);
+        break;
+      case "publish":
+        await runPublishStage(context, runtime);
+        break;
+      default:
+        throw new Error(`Unsupported stage '${stage}'`);
+    }
+  }
 
-  const userRef = await seedContent(userId, session);
-
-  await userRef.collection("sessions").doc(session.id).set(sessionData);
-  await publishMediaAssets(userId, session.id, storageBucket);
-  await userRef.set({ currentSessionId: session.id }, { merge: true });
-
-  console.log(`Created session ${session.id} for test user ${userId}`);
+  console.log(
+    `[test-session] Completed stages: ${stageSequence.join(
+      ", ",
+    )} for session '${sessionId}'`,
+  );
 }
 
 main().catch((error) => {
-  console.error("Failed to generate test session", error);
+  if (error instanceof ProblemValidationError) {
+    console.error("Canonical solution validation failed:");
+    for (const issue of error.issues) {
+      const label =
+        issue.testIndex >= 0 ? `test ${issue.testIndex + 1}` : "validation";
+      console.error(`- ${issue.slug} (${label}): ${issue.message}`);
+    }
+  } else {
+    console.error("Failed to generate test session", error);
+  }
   process.exit(1);
 });
