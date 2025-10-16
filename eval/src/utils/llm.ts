@@ -263,6 +263,7 @@ export type LlmJsonCallOptions<T> = Omit<
   readonly schema: z.ZodSchema<T>;
   readonly responseSchema: Schema;
   readonly maxAttempts?: number;
+  readonly maxRetries?: number;
 };
 
 export class LlmJsonCallError extends Error {
@@ -1226,7 +1227,32 @@ export async function generateText(
 export async function generateJson<T>(
   options: LlmJsonCallOptions<T>,
 ): Promise<T> {
-  const { schema, responseSchema, maxAttempts = 2, ...rest } = options;
+  const {
+    schema,
+    responseSchema,
+    maxAttempts: maxAttemptsOption,
+    maxRetries,
+    ...rest
+  } = options;
+  const normaliseAttempts = (
+    value: number | undefined,
+  ): number | undefined => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    const floored = Math.floor(value);
+    if (floored <= 0) {
+      return undefined;
+    }
+    return floored;
+  };
+  const maxAttempts =
+    normaliseAttempts(maxAttemptsOption) ??
+    normaliseAttempts(maxRetries) ??
+    2;
   const textOptions: LlmTextCallOptions = {
     ...rest,
     responseSchema,

@@ -409,7 +409,6 @@ async function selectBestRedoFrameCandidate(params: {
     schema: FrameComparisonSchema,
     responseSchema: FRAME_COMPARISON_RESPONSE_SCHEMA,
     debug,
-    maxAttempts: 1,
   });
 
   return response;
