@@ -53,10 +53,15 @@ Segmentation restructures the prose into narration slices and illustration promp
 Requirements:
 1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
 …
+2. `posterPrompt` … Include a bold 2-4 word title and, when it elevates the concept, one short supporting detail (date, location, motto) under six words.
+…
 4. For each of the ten `segments`:
    • Provide `narration` … Alternate between the `M` and `F` voices whenever the flow allows.
    • Provide `imagePrompt` … Focus on subject, action, setting, and lighting cues.
-5. Keep each `imagePrompt` drawable as a single vintage cartoon panel …
+5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy; avoid multi-panel layouts, mirrored halves, or overly technical camera jargon.
+6. Any visible text stays purposeful: headlines <=4 words, supporting elements <=6, all period appropriate.
+…
+9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
 ```
 
 ### Prompt Correction Loop
@@ -65,13 +70,7 @@ The segmentation is checked up to three times by a correction prompt that only r
 
 ## Frame Generation Workflow
 
-Poster, story panels, and ending card are produced twice (Set A and Set B). Each set shares the same style prompt derived from `ART_STYLE_VINTAGE_CARTOON`.
-
-```text
-A beautiful and engaging high quality classic cartoon illustration.
-Use a high-positivity tone … Do NOT add borders. Do NOT produce multi-panel images.
-Single scene per image.
-```
+Poster, story panels, and ending card are produced twice (Set A and Set B). Each set shares the same style prompt (currently `ART_STYLE_VINTAGE_CARTOON`) which now pushes for cinematic, modern graphic-novel energy while still banning photorealism, collage artefacts, heavy borders, or multi-panel layouts.
 
 ### Batch Grading Loop
 
@@ -106,6 +105,7 @@ Key concepts:
 After the ten interior frames are locked:
 
 - **Poster candidates:** Each image set spins four concurrent poster renders against the same style prompt and leading frame references. A text-grade pass evaluates all candidates, flags catastrophic artefacts, and selects the most stunning acceptable poster.
+- **Poster typography:** The selector enforces the bold 2-4 word title plus optional <=6 word supporting detail when the prompt calls for text.
 - **Ending card:** The last few interior frames seed the style references for a single ending-card render, generated through the same single-image helper that trims prompts and handles retries.
 
 ## Dual-Set Comparison
@@ -119,7 +119,7 @@ Each run produces two full sets (`set_a`, `set_b`). A Gemini text judge receives
 }
 ```
 
-Only the winning set is kept for downstream storage.
+Only the winning set is kept for downstream storage. The judge weighs prompt fidelity, cinematic single-scene composition, typography limits, and whether the protagonist appears whenever the narration centres on them (environmental cutaways are fine when prompted).
 
 ## Media Packaging
 
