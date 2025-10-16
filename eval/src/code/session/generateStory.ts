@@ -857,7 +857,6 @@ async function selectPosterCandidate(options: {
     contents: [{ role: "user", parts }],
     schema: PosterSelectionSchema,
     responseSchema: POSTER_SELECTION_RESPONSE_SCHEMA,
-    maxAttempts: 1,
     debug: options.debug,
   });
 
@@ -1114,7 +1113,6 @@ export async function judgeImageSets(
     contents: [{ role: "user", parts }],
     responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
-    maxAttempts: 1,
     debug: options?.debugRootDir
       ? { rootDir: options.debugRootDir, stage: "images-judge" }
       : undefined,
