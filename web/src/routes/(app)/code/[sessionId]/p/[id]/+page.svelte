@@ -357,7 +357,28 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 	}
 
 	function normalizeOutputChunk(text: string): string {
-		return text.replace(/\r\n?/g, '\n');
+		return String(text ?? '').replace(/\r\n?/g, '\n');
+	}
+
+	function normalizeMultilineForDisplay(value: string): string {
+		if (typeof value !== 'string' || value.length === 0) {
+			return value;
+		}
+		const normalized = value.replace(/\r\n?/g, '\n').replace(/\u2028|\u2029/g, '\n');
+		if (normalized.includes('\n')) {
+			return normalized;
+		}
+		if (normalized.includes('\\n') || normalized.includes('\\r')) {
+			return normalized.replace(/\\r\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\n/g, '\n');
+		}
+		return normalized;
+	}
+
+	function formatPreText(value: string | null | undefined): string {
+		if (value === null || value === undefined) {
+			return '';
+		}
+		return normalizeMultilineForDisplay(value);
 	}
 
 	function generateWorkerRequestId(): string {
@@ -829,7 +850,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 		if (result.stdout.length === 0) {
 			return result.errorMessage ? '' : '∅ (empty)';
 		}
-		return result.stdout;
+		return normalizeMultilineForDisplay(result.stdout);
 	}
 
 	function getChipClasses(result: TestRunResult, isSelected: boolean): string {
@@ -1126,7 +1147,10 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 		}
 		celebrationClosingViaHandler = true;
 		celebrationOpen = false;
-		void goto(`/code/${data.sessionId}`).finally(() => {
+		void goto(`/code/${data.sessionId}`, {
+			replaceState: true,
+			invalidateAll: true
+		}).finally(() => {
 			celebrationClosingViaHandler = false;
 		});
 	}
@@ -1134,7 +1158,10 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 	function handleCelebrationOpenChange(open: boolean) {
 		celebrationOpen = open;
 		if (!open && !celebrationClosingViaHandler) {
-			void goto(`/code/${data.sessionId}`);
+			void goto(`/code/${data.sessionId}`, {
+				replaceState: true,
+				invalidateAll: true
+			});
 		}
 	}
 
@@ -1609,7 +1636,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 													</div>
 													<pre
 														class="rounded bg-background/80 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">
-{example.input}</pre>
+{formatPreText(example.input) || '—'}</pre>
 												</div>
 												<div>
 													<div class="text-xs font-medium text-muted-foreground uppercase">
@@ -1617,7 +1644,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 													</div>
 													<pre
 														class="rounded bg-background/80 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">
-{example.output}</pre>
+{formatPreText(example.output) || '—'}</pre>
 												</div>
 												<div class="markdown space-y-2 text-xs text-muted-foreground">
 													{@html example.explanationHtml}
@@ -1876,7 +1903,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 															Input
 														</h4>
 														<pre
-															class="mt-1 rounded bg-muted/30 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{selectedResult.input ||
+															class="mt-1 rounded bg-muted/30 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(selectedResult.input) ||
 																'—'}</pre>
 													</div>
 													<div class="grid gap-3 md:grid-cols-2">
@@ -1885,7 +1912,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 																Expected Output
 															</h4>
 															<pre
-																class="mt-1 rounded bg-muted/100 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{selectedResult.expectedOutput ||
+																class="mt-1 rounded bg-muted/100 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(selectedResult.expectedOutput) ||
 																	'—'}</pre>
 														</div>
 														<div>
@@ -1910,7 +1937,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 															</h4>
 															<pre
 																class="mt-1 rounded bg-destructive/10 p-2 font-mono text-xs leading-snug whitespace-pre-wrap text-destructive">
-{selectedResult.stderr}</pre>
+{formatPreText(selectedResult.stderr)}</pre>
 														</div>
 													{:else if selectedResult.errorMessage}
 														<div class="rounded bg-destructive/10 p-2 text-xs text-destructive">
