@@ -704,7 +704,10 @@ async function retryFinalize(): Promise<void> {
 			return;
 		}
 		try {
-			await goto(`/code/${data.sessionId}`, { replaceState: true });
+			await goto(`/code/${data.sessionId}`, {
+				replaceState: true,
+				invalidateAll: true
+			});
 		} catch (error) {
 			console.error('Navigation to session dashboard failed', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
