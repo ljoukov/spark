@@ -18,6 +18,7 @@
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run",
     "session:generate": "FORCE_TEST_USER=true tsx src/code/session/generateTestSession.ts",
+    "session:generateWelcome": "tsx src/code/session/generateWelcomeSessions.ts",
     "session:story": "tsx src/code/session/generateTestStory.ts"
   },
   "dependencies": {
