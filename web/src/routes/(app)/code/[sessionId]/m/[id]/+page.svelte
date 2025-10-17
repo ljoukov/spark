@@ -291,6 +291,35 @@
 		goToImage(currentImageOrder + 1);
 	}
 
+	function handleGlobalKeydown(event: KeyboardEvent) {
+		if (event.defaultPrevented) {
+			return;
+		}
+		if (event.metaKey || event.ctrlKey || event.altKey) {
+			return;
+		}
+		const target = event.target as HTMLElement | null;
+		if (target) {
+			const tagName = target.tagName;
+			if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+				return;
+			}
+			if (target.isContentEditable) {
+				return;
+			}
+		}
+		if (quitDialogOpen || imageCount === 0) {
+			return;
+		}
+		if (event.key === 'ArrowLeft') {
+			event.preventDefault();
+			handlePrevImage();
+		} else if (event.key === 'ArrowRight') {
+			event.preventDefault();
+			handleNextImage();
+		}
+	}
+
 	function openQuitDialog() {
 		if (exitPending) {
 			return;
@@ -364,6 +393,8 @@
 	<title>Spark Code · {data.planItem.title}</title>
 </svelte:head>
 
+<svelte:window on:keydown={handleGlobalKeydown} />
+
 <section class="media-page">
 	<header class="media-header">
 		<h1>{data.planItem.title}</h1>
@@ -422,26 +453,6 @@
 		</button>
 	</div>
 
-	<div
-		class="subtitle-strip"
-		class:has-error={Boolean(playbackError)}
-		aria-live="polite"
-		aria-label="Subtitles"
-	>
-		{#if playbackError}
-			<div class="error-banner">
-				<AlertCircle aria-hidden="true" />
-				<span>{playbackError}</span>
-			</div>
-		{:else if !isReady}
-			<p class="subtitle-placeholder">Loading clip…</p>
-		{:else if activeNarrationLine}
-			<p class="subtitle-active">{activeNarrationLine.text}</p>
-		{:else}
-			<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
-		{/if}
-	</div>
-
 	<div class="transport-bar">
 		<button
 			class={playControlClass}
@@ -488,6 +499,26 @@
 				disabled={!audioInfo.url}
 			/>
 		</div>
+	</div>
+
+	<div
+		class="subtitle-strip"
+		class:has-error={Boolean(playbackError)}
+		aria-live="polite"
+		aria-label="Subtitles"
+	>
+		{#if playbackError}
+			<div class="error-banner">
+				<AlertCircle aria-hidden="true" />
+				<span>{playbackError}</span>
+			</div>
+		{:else if !isReady}
+			<p class="subtitle-placeholder">Loading clip…</p>
+		{:else if activeNarrationLine}
+			<p class="subtitle-active">{activeNarrationLine.text}</p>
+		{:else}
+			<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
+		{/if}
 	</div>
 
 	<audio
@@ -574,37 +605,6 @@
 		position: absolute;
 		top: -0.75rem;
 		right: -0.75rem;
-	}
-
-	.status-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.75rem;
-	}
-
-	.status-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.9rem;
-		border-radius: 999px;
-		font-size: 0.8rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.16em;
-		background: rgba(59, 130, 246, 0.1);
-		color: rgba(37, 99, 235, 0.9);
-	}
-
-	.status-chip[data-status='in-progress'] {
-		background: rgba(249, 115, 22, 0.15);
-		color: rgba(234, 88, 12, 0.9);
-	}
-
-	.status-chip[data-status='completed'] {
-		background: rgba(16, 185, 129, 0.2);
-		color: rgba(5, 122, 85, 0.95);
 	}
 
 	.image-stage {
@@ -731,11 +731,9 @@
 
 	.subtitle-strip {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: center;
-		height: 4.75rem;
-		min-height: 4.75rem;
-		max-height: 4.75rem;
+		min-height: calc(2 * 1.1rem * 1.4);
 		padding: 0.85rem 1.75rem;
 		border-radius: 1.5rem;
 		background: rgba(59, 130, 246, 0.08);
@@ -799,10 +797,10 @@
 	}
 
 	.transport-bar {
-		display: grid;
-		grid-template-columns: auto auto auto minmax(0, 1fr);
+		display: flex;
 		align-items: center;
-		gap: 1.25rem;
+		gap: 1rem;
+		flex-wrap: nowrap;
 		padding: 1.25rem 1.5rem;
 		border-radius: 1.5rem;
 		border: 1px solid rgba(59, 130, 246, 0.16);
@@ -866,7 +864,8 @@
 	}
 
 	.transport-slider {
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
 	}
@@ -941,6 +940,16 @@
 		justify-content: flex-end;
 	}
 
+	@media (max-width: 960px) {
+		.image-stage {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.image-nav-button {
+			display: none;
+		}
+	}
+
 	@media (max-width: 768px) {
 		.media-page {
 			padding: 2rem 1.25rem 3rem;
@@ -972,23 +981,7 @@
 		}
 
 		.transport-bar {
-			grid-template-columns: auto auto;
-			grid-template-rows: auto auto;
-			row-gap: 0.75rem;
-		}
-
-		.transport-timestamp {
-			grid-column: 1 / -1;
-			text-align: center;
-		}
-
-		.transport-slider {
-			grid-column: 1 / -1;
-		}
-
-		.status-row {
-			flex-direction: column;
-			align-items: flex-start;
+			gap: 0.5rem;
 		}
 
 		.actions-row {
