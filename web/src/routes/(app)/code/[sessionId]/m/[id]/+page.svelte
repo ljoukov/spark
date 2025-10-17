@@ -747,9 +747,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 3.25rem;
+		height: 4.75rem;
+		min-height: 4.75rem;
+		max-height: 4.75rem;
 		padding: 0.85rem 1.75rem;
-		border-radius: 999px;
+		border-radius: 1.5rem;
 		background: rgba(59, 130, 246, 0.08);
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 	}
@@ -758,21 +760,26 @@
 		padding: 0;
 		background: transparent;
 		box-shadow: none;
+		height: auto;
 		min-height: auto;
+		max-height: none;
 	}
 
 	.subtitle-active {
 		margin: 0;
 		font-size: 1.1rem;
-		font-weight: 600;
-		color: rgba(15, 23, 42, 0.9);
+		font-weight: 500;
+		line-height: 1.4;
+		color: rgba(15, 23, 42, 0.82);
 		text-align: center;
 	}
 
 	.subtitle-placeholder {
 		margin: 0;
 		font-size: 0.95rem;
-		color: rgba(100, 116, 139, 0.85);
+		font-weight: 400;
+		line-height: 1.45;
+		color: rgba(100, 116, 139, 0.82);
 		text-align: center;
 	}
 
@@ -784,12 +791,12 @@
 
 	:global([data-theme='dark'] .subtitle-active),
 	:global(:root:not([data-theme='light']) .subtitle-active) {
-		color: rgba(226, 232, 240, 0.94);
+		color: rgba(226, 232, 240, 0.9);
 	}
 
 	:global([data-theme='dark'] .subtitle-placeholder),
 	:global(:root:not([data-theme='light']) .subtitle-placeholder) {
-		color: rgba(148, 163, 184, 0.82);
+		color: rgba(148, 163, 184, 0.78);
 	}
 
 	.error-banner {
