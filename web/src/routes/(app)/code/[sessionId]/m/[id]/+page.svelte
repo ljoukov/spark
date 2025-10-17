@@ -333,6 +333,8 @@
 						<img
 							src={activeImage.url}
 							alt={`Session illustration ${currentImageOrder + 1}`}
+							width="1600"
+							height="900"
 							loading="lazy"
 						/>
 					</div>
@@ -463,7 +465,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
-		max-width: 960px;
+		width: min(100%, 960px);
 		margin: 0 auto;
 		padding: 2.5rem 1.5rem 4rem;
 	}
