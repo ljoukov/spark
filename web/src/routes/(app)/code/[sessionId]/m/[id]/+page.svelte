@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Play from '@lucide/svelte/icons/play';
 	import Pause from '@lucide/svelte/icons/pause';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
@@ -9,6 +11,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import { createSessionStateStore } from '$lib/client/sessionState';
+	import TakeBreakDialogContent from '$lib/components/dialog/take-break-dialog-content.svelte';
 	import type { PageData } from './$types';
 	import type { PlanItemState } from '@spark/schemas';
 
@@ -51,12 +54,20 @@
 	let currentImageOrder = 0;
 	let currentNarrationIndex = -1;
 	let playbackError: string | null = audioInfo.url ? null : 'Clip is not available right now.';
+	let exitPending = false;
+	let hasFinishedPlayback = false;
+	let showDoneButton = false;
+	let quitDialogOpen = false;
 
 	const imageCount = images.length;
 
 	$: sliderMax = Math.max(duration, baseTimelineEnd);
 	$: hasStarted = planItemState?.status !== 'not_started';
 	$: hasCompleted = planItemState?.status === 'completed';
+	$: showDoneButton = hasCompleted || hasFinishedPlayback;
+	$: if (showDoneButton && quitDialogOpen) {
+		quitDialogOpen = false;
+	}
 	$: activeImage = images[currentImageOrder] ?? null;
 	$: activeNarrationLine =
 		currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
@@ -192,6 +203,7 @@
 		isPlaying = false;
 		currentTime = sliderMax;
 		updateTimelineState(currentTime);
+		hasFinishedPlayback = true;
 		void markCompleted();
 	}
 
@@ -279,13 +291,71 @@
 		goToImage(currentImageOrder + 1);
 	}
 
-	function handleManualComplete() {
-		void markCompleted();
+	function openQuitDialog() {
+		if (exitPending) {
+			return;
+		}
+		quitDialogOpen = true;
+	}
+
+	function closeQuitDialog() {
+		if (exitPending) {
+			return;
+		}
+		quitDialogOpen = false;
+	}
+
+	function handleQuitDialogChange(open: boolean) {
+		if (exitPending) {
+			return;
+		}
+		quitDialogOpen = open;
+	}
+
+	async function navigateToSessionDashboard(): Promise<void> {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		await goto(`/code/${data.sessionId}`, {
+			replaceState: true,
+			invalidateAll: true
+		});
+	}
+
+	async function handleQuitNow(): Promise<void> {
+		if (exitPending) {
+			return;
+		}
+		exitPending = true;
+		try {
+			await navigateToSessionDashboard();
+		} catch (error) {
+			console.error('Navigation to session dashboard failed', error);
+		} finally {
+			exitPending = false;
+		}
+	}
+
+	async function handleDone(): Promise<void> {
+		if (exitPending) {
+			return;
+		}
+		exitPending = true;
+		try {
+			await markCompleted();
+			await navigateToSessionDashboard();
+		} catch (error) {
+			console.error('Finishing media clip failed', error);
+		} finally {
+			exitPending = false;
+		}
 	}
 
 	const playControlClass = buttonVariants({ variant: 'secondary', size: 'icon' });
 	const navButtonClass = buttonVariants({ variant: 'outline', size: 'icon' });
 	const muteControlClass = buttonVariants({ variant: 'ghost', size: 'icon' });
+	const exitButtonClass =
+		'media-exit-button flex size-8 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30';
 
 	updateTimelineState(0);
 </script>
@@ -299,6 +369,11 @@
 		<h1>{data.planItem.title}</h1>
 		{#if data.planItem.summary}
 			<p class="summary">{data.planItem.summary}</p>
+		{/if}
+		{#if !showDoneButton}
+			<button type="button" class={exitButtonClass} onclick={openQuitDialog} aria-label="Quit clip">
+				×
+			</button>
 		{/if}
 	</header>
 
@@ -432,12 +507,30 @@
 		onerror={handleAudioError}
 	></audio>
 
-	<div class="actions-row">
-		{#if !hasCompleted}
-			<Button variant="secondary" onclick={handleManualComplete}>Mark complete</Button>
-		{/if}
-	</div>
+	{#if showDoneButton}
+		<div class="actions-row">
+			<Button size="lg" disabled={exitPending} onclick={() => void handleDone()}>
+				Done
+			</Button>
+		</div>
+	{/if}
 </section>
+
+<Dialog.Root open={quitDialogOpen} onOpenChange={handleQuitDialogChange}>
+	<Dialog.Content
+		class="finish-dialog max-w-lg overflow-hidden rounded-3xl bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
+		hideClose
+	>
+		<TakeBreakDialogContent
+			description="You're partway through this story. Keep watching to mark it complete, or quit now and return later."
+			keepLabel="Keep watching"
+			quitLabel="Quit now"
+			quitDisabled={exitPending}
+			on:keep={closeQuitDialog}
+			on:quit={() => void handleQuitNow()}
+		/>
+	</Dialog.Content>
+</Dialog.Root>
 
 <style lang="postcss">
 	:global(body) {
@@ -455,6 +548,7 @@
 	}
 
 	.media-header {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
@@ -490,6 +584,12 @@
 	:global([data-theme='dark'] .media-header .summary),
 	:global(:root:not([data-theme='light']) .media-header .summary) {
 		color: rgba(226, 232, 240, 0.72);
+	}
+
+	.media-exit-button {
+		position: absolute;
+		top: -0.75rem;
+		right: -0.75rem;
 	}
 
 	.status-row {
