@@ -7,6 +7,7 @@
 	} from '$lib/components/quiz/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import TakeBreakDialogContent from '$lib/components/dialog/take-break-dialog-content.svelte';
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
@@ -839,35 +840,16 @@ async function retryFinalize(): Promise<void> {
             </div>
         </div>
     {:else if finishMode === 'quit'}
-        <div
-            class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 text-center dark:from-primary/12"
-        >
-            <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-                Take a break?
-            </h2>
-            <p class="text-sm leading-relaxed text-muted-foreground">
-                You still have {remainingCount} unanswered {remainingCount === 1
-                    ? 'question'
-                    : 'questions'}. Your progress is saved — hop back in whenever you're ready.
-            </p>
-        </div>
-        <div
-            class="finish-footer flex flex-col items-center gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-center"
-        >
-            <Button
-                class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]"
-                onclick={() => closeFinishDialog()}
-            >
-                Keep practicing
-            </Button>
-            <Button
-                class="finish-continue w-full sm:w-auto sm:min-w-[9rem]"
-                disabled={quitPending}
-                onclick={() => void handleQuit()}
-            >
-                Quit now
-            </Button>
-        </div>
+        <TakeBreakDialogContent
+            description={`You still have ${remainingCount} unanswered ${
+                remainingCount === 1 ? 'question' : 'questions'
+            }. Your progress is saved — hop back in whenever you're ready.`}
+            keepLabel="Keep practicing"
+            quitLabel="Quit now"
+            quitDisabled={quitPending}
+            on:keep={() => closeFinishDialog()}
+            on:quit={() => void handleQuit()}
+        />
     {:else}
         <!-- no content -->
     {/if}
@@ -875,47 +857,6 @@ async function retryFinalize(): Promise<void> {
 </Dialog.Root>
 
 <style>
-	/* Dialog container: strong, theme-aware border for clarity */
-	:global(.finish-dialog) {
-		--finish-border: rgba(15, 23, 42, 0.18);
-		border-radius: 1.5rem;
-		background: color-mix(in srgb, hsl(var(--background)) 98%, transparent 2%);
-		/* crisp outer ring + soft elevation */
-		box-shadow:
-			0 0 0 1px var(--finish-border),
-			0 35px 90px -40px rgba(15, 23, 42, 0.45);
-	}
-
-	/* Dark theme border contrast */
-	:global([data-theme='dark'] .finish-dialog) {
-		--finish-border: rgba(148, 163, 184, 0.38);
-		box-shadow:
-			0 0 0 1px var(--finish-border),
-			0 35px 90px -40px rgba(2, 6, 23, 0.75);
-	}
-
-	:global(.finish-cancel) {
-		background: #0284c7 !important;
-		color: #ffffff !important;
-		justify-content: center;
-		box-shadow: 0 18px 40px rgba(14, 165, 233, 0.35);
-	}
-
-	:global(.finish-cancel:hover) {
-		background: #0ea5e9 !important;
-	}
-
-	:global(.finish-continue) {
-		background: #f97316 !important;
-		color: #ffffff !important;
-		justify-content: center;
-		box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
-	}
-
-	:global(.finish-continue:hover) {
-		background: #fb923c !important;
-	}
-
 	.finish-saving {
 		background: color-mix(in srgb, hsl(var(--background)) 96%, transparent 4%);
 	}
@@ -948,10 +889,4 @@ async function retryFinalize(): Promise<void> {
 		}
 	}
 
-	@media (min-width: 40rem) {
-		:global(.finish-footer) {
-			flex-direction: row;
-			align-items: center;
-		}
-	}
 </style>
