@@ -296,22 +296,10 @@
 
 <section class="media-page">
 	<header class="media-header">
-		<p class="eyebrow">Session clip</p>
 		<h1>{data.planItem.title}</h1>
 		{#if data.planItem.summary}
 			<p class="summary">{data.planItem.summary}</p>
 		{/if}
-		<div class="status-row">
-			<span class="status-chip" data-status={hasCompleted ? 'completed' : hasStarted ? 'in-progress' : 'idle'}>
-				{#if hasCompleted}
-					Completed
-				{:else if hasStarted}
-					In progress
-				{:else}
-					Not started
-				{/if}
-			</span>
-		</div>
 	</header>
 
 	<div class="image-stage">
@@ -343,10 +331,6 @@
 						<p>Image unavailable for this moment.</p>
 					</div>
 				{/if}
-				<div class="image-meta">
-					<span>Image {currentImageOrder + 1} of {imageCount}</span>
-					<span>At {formatTime(activeImage.startSec)}</span>
-				</div>
 			{:else}
 				<div class="image-card-empty">
 					<p>No images available for this clip yet.</p>
