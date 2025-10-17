@@ -1064,6 +1064,7 @@ async function ensureProblems(context: StageContext): Promise<CodeProblem[]> {
     CodeProblemSchema.parse(problem),
   );
   context.problems = parsedProblems;
+  await Promise.resolve();
   return parsedProblems;
 }
 

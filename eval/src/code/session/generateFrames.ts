@@ -150,6 +150,60 @@ const BATCH_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+type FramePromptRevision = {
+  frameIndex: number;
+  rationale: string;
+  updatedPrompt: string;
+};
+
+const FramePromptRevisionResponseSchema = z
+  .object({
+    summary: z.string().trim().optional(),
+    replacements: z
+      .array(
+        z.object({
+          frame_index: z.number().int().min(1),
+          rationale: z.string().trim().min(1),
+          updated_prompt: z.string().trim().min(1),
+        }),
+      )
+      .min(1),
+  })
+  .transform((raw) => ({
+    summary: raw.summary ?? "",
+    replacements: raw.replacements.map((entry) => ({
+      frameIndex: entry.frame_index,
+      rationale: entry.rationale,
+      updatedPrompt: entry.updated_prompt,
+    })),
+  }));
+
+type FramePromptRevisionResponse = z.infer<
+  typeof FramePromptRevisionResponseSchema
+>;
+
+const FRAME_PROMPT_REVISION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["replacements"],
+  propertyOrdering: ["summary", "replacements"],
+  properties: {
+    summary: { type: Type.STRING },
+    replacements: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["frame_index", "updated_prompt", "rationale"],
+        propertyOrdering: ["frame_index", "updated_prompt", "rationale"],
+        properties: {
+          frame_index: { type: Type.NUMBER, minimum: 1 },
+          updated_prompt: { type: Type.STRING, minLength: "1" },
+          rationale: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+  },
+};
+
 type GenerateStoryFramesOptions = {
   imageModelId: LlmImageModelId;
   gradingModelId: LlmTextModelId;
@@ -162,12 +216,13 @@ type GenerateStoryFramesOptions = {
   progress: JobProgressReporter;
   debug?: LlmDebugOptions;
   imageAspectRatio?: string;
+  frameNarrationByIndex?: ReadonlyMap<number, readonly string[]>;
 };
 
 type GenerateBatchParams = {
   batchIndex: number;
   globalIndices: readonly number[];
-  prompts: readonly string[];
+  prompts: string[];
   styleImages: readonly LlmImageData[];
 };
 
@@ -427,6 +482,116 @@ function collectBatchStyleImages(params: {
   return [...baseStyleImages, ...generatedSoFar.slice(overlapStart)];
 }
 
+function buildFramePromptRevisionContents(params: {
+  stylePrompt: string;
+  catastrophicDescription: string;
+  failureSummaries: readonly string[];
+  frameIndices: readonly number[];
+  prompts: readonly string[];
+  frameNarrationByIndex: ReadonlyMap<number, readonly string[]>;
+}): { role: "user"; parts: LlmContentPart[] }[] {
+  const {
+    stylePrompt,
+    catastrophicDescription,
+    failureSummaries,
+    frameIndices,
+    prompts,
+    frameNarrationByIndex,
+  } = params;
+  const parts: LlmContentPart[] = [];
+  addTextPart(
+    parts,
+    [
+      "You are revising storyboard illustration prompts after the image renderer collapsed on multiple attempts.",
+      "The goal is to keep the same narrative beats while rewriting each prompt so the image model can produce a grounded, distinct scene.",
+      "Rules:",
+      "- Keep the spirit of the narration, but adjust the staging or focus to something recognisable and easy to depict.",
+      "- Prefer simpler, specific actions or settings drawn from everyday environments.",
+      "- Describe one focal action, avoid mirrored/split scenes, and limit supporting details to what the narration requires.",
+      "- Use fresh phrasing so the renderer does not default to the prior collapsed composition.",
+      "",
+      "Catastrophic checklist to avoid:",
+      catastrophicDescription,
+      "",
+      "Style reference (do not repeat verbatim, but keep consistency in mind):",
+      stylePrompt,
+    ].join("\n"),
+  );
+  if (failureSummaries.length > 0) {
+    addTextPart(parts, "\nJudge feedback from failed attempts:");
+    failureSummaries.forEach((summary, index) => {
+      const label = `Attempt ${index + 1}`;
+      addTextPart(parts, `${label}: ${summary}`);
+    });
+  }
+  addTextPart(
+    parts,
+    [
+      "",
+      "Rewrite every frame prompt listed below.",
+      "For each frame provide an updated prompt that keeps the narration intact but changes the scene, simplifies staging, or grounds the action so the renderer avoids collapsing.",
+      "Return JSON using the provided schema with `replacements`. Each entry must include:",
+      '- `frame_index` — 1-based index matching the frame number below.',
+      '- `updated_prompt` — the new illustration prompt.',
+      '- `rationale` — brief explanation of how the change prevents collapse.',
+    ].join("\n"),
+  );
+  frameIndices.forEach((frameIndex, idx) => {
+    const prompt = prompts[idx] ?? "";
+    const narrationLines = frameNarrationByIndex.get(frameIndex) ?? [];
+    addTextPart(
+      parts,
+      [
+        "",
+        `Frame ${frameIndex}`,
+        narrationLines.length > 0
+          ? `Narration context:\n${narrationLines
+              .map((line) => `- ${line}`)
+              .join("\n")}`
+          : "Narration context: (not provided)",
+        `Previous illustration prompt:\n${prompt}`,
+      ].join("\n"),
+    );
+  });
+  addTextPart(
+    parts,
+    [
+      "",
+      "Respond only with JSON conforming to the schema. Include a concise `summary` when the replacements share a theme.",
+    ].join("\n"),
+  );
+  return [{ role: "user" as const, parts }];
+}
+
+async function requestFramePromptRevisions(params: {
+  gradingModelId: LlmTextModelId;
+  progress: JobProgressReporter;
+  debug: LlmDebugOptions | undefined;
+  stylePrompt: string;
+  catastrophicDescription: string;
+  batch: GenerateBatchParams;
+  failureSummaries: readonly string[];
+  frameNarrationByIndex: ReadonlyMap<number, readonly string[]>;
+}): Promise<FramePromptRevisionResponse> {
+  const frameIndices = params.batch.globalIndices.map((index) => index + 1);
+  const contents = buildFramePromptRevisionContents({
+    stylePrompt: params.stylePrompt,
+    catastrophicDescription: params.catastrophicDescription,
+    failureSummaries: params.failureSummaries,
+    frameIndices,
+    prompts: params.batch.prompts,
+    frameNarrationByIndex: params.frameNarrationByIndex,
+  });
+  return generateJson<FramePromptRevisionResponse>({
+    modelId: params.gradingModelId,
+    progress: params.progress,
+    contents,
+    schema: FramePromptRevisionResponseSchema,
+    responseSchema: FRAME_PROMPT_REVISION_RESPONSE_SCHEMA,
+    debug: params.debug,
+  });
+}
+
 export async function generateStoryFrames(
   options: GenerateStoryFramesOptions,
 ): Promise<LlmImageData[]> {
@@ -440,6 +605,7 @@ export async function generateStoryFrames(
     styleImages,
     debug,
     imageAspectRatio,
+    frameNarrationByIndex,
   } = options;
 
   if (batchSize <= 0) {
@@ -449,6 +615,10 @@ export async function generateStoryFrames(
     return [];
   }
 
+  const narrationLookup =
+    frameNarrationByIndex ?? new Map<number, readonly string[]>();
+  const workingImagePrompts = [...imagePrompts];
+
   const baseStyleImages = styleImages ? [...styleImages] : [];
   const generated: LlmImageData[] = [];
   const totalBatches = Math.ceil(imagePrompts.length / batchSize);
@@ -456,11 +626,22 @@ export async function generateStoryFrames(
   for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
     const startIndex = batchIndex * batchSize;
     const endIndex = Math.min(startIndex + batchSize, imagePrompts.length);
-    const prompts = imagePrompts.slice(startIndex, endIndex);
+    const batchLength = endIndex - startIndex;
     const globalIndices = Array.from(
-      { length: prompts.length },
+      { length: batchLength },
       (_, offset) => startIndex + offset,
     );
+    const prompts = globalIndices.map((globalIndex) => {
+      const prompt = workingImagePrompts[globalIndex];
+      if (prompt === undefined) {
+        throw new Error(
+          `Storyboard prompt ${globalIndex + 1} is undefined for batch ${
+            batchIndex + 1
+          }`,
+        );
+      }
+      return prompt;
+    });
     const styleImagesForBatch = collectBatchStyleImages({
       baseStyleImages,
       generatedSoFar: generated,
@@ -469,9 +650,11 @@ export async function generateStoryFrames(
     const batch: GenerateBatchParams = {
       batchIndex,
       globalIndices,
-      prompts,
+      prompts: [...prompts],
       styleImages: styleImagesForBatch,
     };
+    const batchFeedbackLog: string[] = [];
+    let framePromptRevisionApplied = false;
 
     let batchSuccess = false;
     let lastError: unknown;
@@ -551,7 +734,7 @@ export async function generateStoryFrames(
           );
         };
 
-        let grade: BatchGradeOutcome;
+        let grade: BatchGradeOutcome | undefined;
         try {
           grade = await gradeBatch({
             options,
@@ -578,28 +761,45 @@ export async function generateStoryFrames(
           );
           continue;
         }
+        if (!grade) {
+          throw new Error(
+            `Batch ${batchIndex + 1} grading did not return an outcome`,
+          );
+        }
 
         let rejectBatch = false;
         let partialIteration = 0;
 
         if (grade.outcome === "redo_batch") {
+          const reasonParts: string[] = [];
+          if (grade.batchReason) {
+            reasonParts.push(grade.batchReason);
+          }
+          if (grade.summary) {
+            reasonParts.push(grade.summary);
+          }
+          if (grade.findings.length > 0) {
+            reasonParts.push(
+              grade.findings
+                .map(
+                  (finding) =>
+                    `frame ${finding.frameIndex}: ${finding.reason}`,
+                )
+                .join("; "),
+            );
+          }
+          batchFeedbackLog.push(
+            reasonParts.length > 0
+              ? `Attempt ${attempt}: ${reasonParts.join(" | ")}`
+              : `Attempt ${attempt}: grader requested redo_batch without additional explanation.`,
+          );
           lastError = new Error(
             grade.batchReason
               ? `Batch ${batchIndex + 1} rejected: ${grade.batchReason}`
               : `Batch ${batchIndex + 1} rejected by grader`,
           );
-          progress.log(
-            `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`,
-          );
-          if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
-            throw lastError instanceof Error
-              ? lastError
-              : new Error(String(lastError));
-          }
-          continue;
-        }
-
-        if (grade.outcome === "redo_frames") {
+          rejectBatch = true;
+        } else if (grade.outcome === "redo_frames") {
           logFrameFindings(grade);
         }
 
@@ -821,6 +1021,28 @@ export async function generateStoryFrames(
           }
 
           if (grade.outcome === "redo_batch") {
+            const redoReasonParts: string[] = [];
+            if (grade.batchReason) {
+              redoReasonParts.push(grade.batchReason);
+            }
+            if (grade.summary) {
+              redoReasonParts.push(grade.summary);
+            }
+            if (grade.findings.length > 0) {
+              redoReasonParts.push(
+                grade.findings
+                  .map(
+                    (finding) =>
+                      `frame ${finding.frameIndex}: ${finding.reason}`,
+                  )
+                  .join("; "),
+              );
+            }
+            batchFeedbackLog.push(
+              redoReasonParts.length > 0
+                ? `Attempt ${attempt} redo ${partialIteration}: ${redoReasonParts.join(" | ")}`
+                : `Attempt ${attempt} redo ${partialIteration}: grader escalated to redo_batch without explanation.`,
+            );
             rejectBatch = true;
             lastError = new Error(
               grade.batchReason
@@ -832,6 +1054,67 @@ export async function generateStoryFrames(
         }
 
         if (rejectBatch) {
+          if (
+            !framePromptRevisionApplied &&
+            grade.outcome === "redo_batch" &&
+            attempt >= 2
+          ) {
+            try {
+              const revision = await requestFramePromptRevisions({
+                gradingModelId: options.gradingModelId,
+                progress,
+                debug: extendDebug(
+                  debug,
+                  `batch-${padNumber(
+                    batchIndex + 1,
+                  )}/prompt-feedback-${padNumber(attempt)}`,
+                ),
+                stylePrompt,
+                catastrophicDescription: options.gradeCatastrophicDescription,
+                batch,
+                failureSummaries: [...batchFeedbackLog],
+                frameNarrationByIndex: narrationLookup,
+              });
+              framePromptRevisionApplied = true;
+              const updatedFrameNumbers: number[] = [];
+              for (const replacement of revision.replacements) {
+                const zeroBasedIndex = replacement.frameIndex - 1;
+                const localIndex = batch.globalIndices.findIndex(
+                  (value) => value === zeroBasedIndex,
+                );
+                if (localIndex === -1) {
+                  progress.log(
+                    `[story/frames] Prompt feedback returned frame ${replacement.frameIndex} which is outside batch ${batchIndex + 1}; ignoring`,
+                  );
+                  continue;
+                }
+                workingImagePrompts[zeroBasedIndex] =
+                  replacement.updatedPrompt;
+                batch.prompts[localIndex] = replacement.updatedPrompt;
+                updatedFrameNumbers.push(replacement.frameIndex);
+              }
+              if (updatedFrameNumbers.length > 0) {
+                const summarySuffix =
+                  revision.summary.trim().length > 0
+                    ? ` (${revision.summary})`
+                    : "";
+                progress.log(
+                  `[story/frames] Batch ${batchIndex + 1} prompt feedback updated frames ${updatedFrameNumbers.join(", ")}${summarySuffix}`,
+                );
+              } else {
+                progress.log(
+                  `[story/frames] Batch ${batchIndex + 1} prompt feedback returned no applicable replacements`,
+                );
+              }
+            } catch (error) {
+              framePromptRevisionApplied = true;
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.log(
+                `[story/frames] Batch ${batchIndex + 1} prompt feedback failed: ${message}`,
+              );
+            }
+          }
           progress.log(
             `[story/frames] Batch ${batchIndex + 1} rejected by grader, retrying`,
           );

@@ -632,11 +632,13 @@ const IMAGE_SET_JUDGE_RESPONSE_SCHEMA: Schema = {
 type SegmentationImageEntry = {
   index: number;
   prompt: string;
+  narration: readonly string[];
 };
 
 type SegmentationImageContext = {
   entries: SegmentationImageEntry[];
   promptsByIndex: Map<number, string>;
+  narrationsByIndex: Map<number, readonly string[]>;
   endingIndex: number;
   posterIndex: number;
 };
@@ -655,6 +657,7 @@ function collectSegmentationImageContext(
 
   const entries: SegmentationImageEntry[] = [];
   const promptsByIndex = new Map<number, string>();
+  const narrationsByIndex = new Map<number, readonly string[]>();
 
   for (let i = 0; i < segmentation.segments.length; i++) {
     const segment = segmentation.segments[i];
@@ -668,21 +671,28 @@ function collectSegmentationImageContext(
       );
     }
     const index = i + 1;
-    entries.push({ index, prompt: segmentPrompt });
+    const narrationLines = segment.narration.map(
+      (line) => `${line.voice}: ${line.text}`,
+    );
+    entries.push({ index, prompt: segmentPrompt, narration: narrationLines });
     promptsByIndex.set(index, segmentPrompt);
+    narrationsByIndex.set(index, narrationLines);
   }
 
   const endingIndex = segmentation.segments.length + 1;
-  entries.push({ index: endingIndex, prompt: endingPrompt });
+  entries.push({ index: endingIndex, prompt: endingPrompt, narration: [] });
   promptsByIndex.set(endingIndex, endingPrompt);
+  narrationsByIndex.set(endingIndex, []);
 
   const posterIndex = segmentation.segments.length + 2;
-  entries.push({ index: posterIndex, prompt: posterPrompt });
+  entries.push({ index: posterIndex, prompt: posterPrompt, narration: [] });
   promptsByIndex.set(posterIndex, posterPrompt);
+  narrationsByIndex.set(posterIndex, []);
 
   return {
     entries,
     promptsByIndex,
+    narrationsByIndex,
     endingIndex,
     posterIndex,
   };
@@ -872,7 +882,7 @@ export async function generateImageSets(
   options?: { debugRootDir?: string },
 ): Promise<StoryImageSet[]> {
   const adapter = useProgress(progress);
-  const { entries, endingIndex, posterIndex } =
+  const { entries, endingIndex, posterIndex, narrationsByIndex } =
     collectSegmentationImageContext(segmentation);
   const styleLines = ART_STYLE_VINTAGE_CARTOON;
   const stylePrompt = styleLines.join("\n");
@@ -917,6 +927,12 @@ export async function generateImageSets(
     adapter.log(
       `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`,
     );
+    const frameNarrationByIndex = new Map<number, readonly string[]>();
+    for (const entry of panelEntries) {
+      const narrationLines =
+        narrationsByIndex.get(entry.index) ?? entry.narration ?? [];
+      frameNarrationByIndex.set(entry.index, narrationLines);
+    }
     const mainImageParts = await generateStoryFrames({
       progress: adapter,
       imageModelId: IMAGE_MODEL_ID,
@@ -927,6 +943,7 @@ export async function generateImageSets(
       overlapSize: 3,
       gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
       imageAspectRatio: "16:9",
+      frameNarrationByIndex,
       debug: buildDebug(`${imageSetLabel}/main`),
     });
 
