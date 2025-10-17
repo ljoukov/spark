@@ -4,6 +4,8 @@ import path from "node:path";
 
 import type { CodeProblem } from "@spark/schemas";
 
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
+
 const PYODIDE_VERSION = "0.28.3";
 const require = createRequire(import.meta.url);
 const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
@@ -93,12 +95,12 @@ function resolveIndexUrl(explicit?: string): string {
 function ensureGlobalEnvironment(indexURL: string): void {
   const globalObject = globalThis as MutableGlobal;
   if (!globalObject.location) {
-    globalObject.location = { href: indexURL };
+    globalObject.location = { href: indexURL } as unknown as Location;
   } else if (!globalObject.location.href) {
     globalObject.location.href = indexURL;
   }
   if (!globalObject.self) {
-    globalObject.self = globalThis;
+    globalObject.self = globalThis as unknown as Window & typeof globalThis;
   }
 }
 

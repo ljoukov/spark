@@ -64,6 +64,8 @@ Requirements:
 9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
 ```
 
+The narration sentences generated here are now preserved verbatim through the image pipeline. Each frame’s narration bundle is attached to later grading and prompt-revision calls so the models can re-ground revisions without drifting from the original story beat.
+
 ### Prompt Correction Loop
 
 The segmentation is checked up to three times by a correction prompt that only rewrites offending images. It lists every panel with narration context and reminds the grader about catastrophic issues (missing protagonist, floating abstractions, etc.). If corrections are returned they are applied immediately; otherwise the segmentation is accepted.
@@ -98,7 +100,19 @@ Key concepts:
 - **Style propagation:** Each batch carries forward a sliding window of prior frames (`overlapSize`) so characters remain consistent; accepted images join the reference pool for partial redos.
 - **Catastrophic grading:** The grader schema enforces explicit outcomes (`accept`, `redo_frames`, `redo_batch`) and collects frame indices plus reasons to keep failures explainable.
 - **Targeted redos:** When only specific frames fail, they are regenerated individually—each with up to four image attempts—before being re-graded in isolation. Batch retries are capped by `BATCH_GENERATE_MAX_ATTEMPTS`.
+- **Narration awareness:** The narration lines for each frame (voice + text) travel with the prompts and are surfaced to graders and prompt revisers so replacements stay faithful to the authored script.
 - **Deterministic failure:** Exhausting batch retries or frame redo attempts throws immediately, surfacing fatal quality issues to the caller.
+
+### Prompt Revision Assist
+
+When the grader escalates to `redo_batch` on the second attempt or later, the pipeline now consults a text model to rewrite the problematic prompts instead of blindly reusing the same wording. The request bundles:
+
+- the global style prompt and catastrophic checklist,
+- the accumulated feedback log across all failed attempts,
+- narration excerpts per frame, and
+- the previous illustration prompts.
+
+The model must return JSON `replacements` where each entry includes a 1-based frame index, a rationale, and the revised prompt. Accepted revisions overwrite both the working prompt list and the batch-local prompts before the next retry. If the revision service fails or returns no applicable changes, the batch continues with the existing prompts, but the attempt is still counted towards the retry limit.
 
 ### Poster Selection and Ending
 
