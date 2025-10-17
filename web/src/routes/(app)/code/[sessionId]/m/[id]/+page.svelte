@@ -48,7 +48,8 @@
 	let isPlaying = false;
 	let isMuted = false;
 	let currentTime = 0;
-	let duration = audioInfo.durationSec && audioInfo.durationSec > 0 ? audioInfo.durationSec : baseTimelineEnd;
+	let duration =
+		audioInfo.durationSec && audioInfo.durationSec > 0 ? audioInfo.durationSec : baseTimelineEnd;
 	let manualSeeking = false;
 	let pendingSeek = 0;
 	let currentImageOrder = 0;
@@ -69,8 +70,7 @@
 		quitDialogOpen = false;
 	}
 	$: activeImage = images[currentImageOrder] ?? null;
-	$: activeNarrationLine =
-		currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
+	$: activeNarrationLine = currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 
@@ -367,9 +367,6 @@
 <section class="media-page">
 	<header class="media-header">
 		<h1>{data.planItem.title}</h1>
-		{#if data.planItem.summary}
-			<p class="summary">{data.planItem.summary}</p>
-		{/if}
 		{#if !showDoneButton}
 			<button type="button" class={exitButtonClass} onclick={openQuitDialog} aria-label="Quit clip">
 				×
@@ -509,9 +506,7 @@
 
 	{#if showDoneButton}
 		<div class="actions-row">
-			<Button size="lg" disabled={exitPending} onclick={() => void handleDone()}>
-				Done
-			</Button>
+			<Button size="lg" disabled={exitPending} onclick={() => void handleDone()}>Done</Button>
 		</div>
 	{/if}
 </section>
@@ -534,17 +529,18 @@
 
 <style lang="postcss">
 	:global(body) {
-		background: radial-gradient(120% 120% at 15% 0%, rgba(59, 130, 246, 0.12), transparent),
+		background:
+			radial-gradient(120% 120% at 15% 0%, rgba(59, 130, 246, 0.12), transparent),
 			radial-gradient(120% 120% at 85% 0%, rgba(249, 115, 22, 0.08), transparent);
 	}
 
 	.media-page {
 		display: flex;
 		flex-direction: column;
-		gap: 2rem;
+		gap: 1.2rem;
 		width: min(100%, 960px);
 		margin: 0 auto;
-		padding: 2.5rem 1.5rem 4rem;
+		padding: 1.5rem 1.5rem 4rem;
 	}
 
 	.media-header {
@@ -572,18 +568,6 @@
 		line-height: 1.15;
 		font-weight: 700;
 		color: var(--foreground, #0f172a);
-	}
-
-	.media-header .summary {
-		font-size: 1rem;
-		line-height: 1.6;
-		color: rgba(15, 23, 42, 0.78);
-		max-width: 720px;
-	}
-
-	:global([data-theme='dark'] .media-header .summary),
-	:global(:root:not([data-theme='light']) .media-header .summary) {
-		color: rgba(226, 232, 240, 0.72);
 	}
 
 	.media-exit-button {
@@ -653,7 +637,9 @@
 		box-shadow: 0 22px 55px -35px rgba(59, 130, 246, 0.45);
 		background: rgba(255, 255, 255, 0.72);
 		color: rgba(37, 99, 235, 0.92);
-		transition: transform 0.2s ease, box-shadow 0.2s ease;
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease;
 	}
 
 	.image-nav-button:hover {
@@ -865,7 +851,8 @@
 	}
 
 	.transport-timestamp {
-		font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+		font-family:
+			'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
 			'Courier New', monospace;
 		font-size: 0.9rem;
 		color: rgba(15, 23, 42, 0.7);
