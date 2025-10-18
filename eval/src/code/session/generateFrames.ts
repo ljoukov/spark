@@ -1,5 +1,6 @@
 import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
+import sharp from "sharp";
 
 import {
   generateImages,
@@ -14,6 +15,10 @@ import type { JobProgressReporter } from "../../utils/concurrency";
 
 const IMAGE_GENERATION_MAX_ATTEMPTS = 4;
 const BATCH_GENERATE_MAX_ATTEMPTS = 3;
+const PROMPT_REVISION_MIN_ATTEMPT_FOR_REDO_BATCH = 1;
+const PROMPT_REVISION_MAX_PER_BATCH = 1;
+const PROMPT_REVISION_MAX_EVIDENCE_FRAMES = 5;
+const PROMPT_REVISION_THUMBNAIL_WIDTH = 480;
 
 type CatastrophicFinding = {
   frameIndex: number;
@@ -150,12 +155,6 @@ const BATCH_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-type FramePromptRevision = {
-  frameIndex: number;
-  rationale: string;
-  updatedPrompt: string;
-};
-
 const FramePromptRevisionResponseSchema = z
   .object({
     summary: z.string().trim().optional(),
@@ -202,6 +201,92 @@ const FRAME_PROMPT_REVISION_RESPONSE_SCHEMA: Schema = {
       },
     },
   },
+};
+
+type FrameSemanticScores = {
+  promptAlignment: number;
+  narrationAlignment: number;
+  subjectPresence: number;
+  compositionRisk: number;
+  textArtifactRisk: number;
+};
+
+type FrameSemanticAssessment = {
+  caption: string;
+  issues: string[];
+  scores: FrameSemanticScores;
+};
+
+const FrameSemanticAssessmentSchema = z
+  .object({
+    caption: z.string().trim().min(1),
+    issues: z.array(z.string().trim().min(1)).default([]),
+    scores: z.object({
+      prompt_alignment: z.number().min(0).max(1),
+      narration_alignment: z.number().min(0).max(1),
+      subject_presence: z.number().min(0).max(1),
+      composition_risk: z.number().min(0).max(1),
+      text_artifact_risk: z.number().min(0).max(1),
+    }),
+  })
+  .transform((raw) => ({
+    caption: raw.caption,
+    issues: raw.issues,
+    scores: {
+      promptAlignment: raw.scores.prompt_alignment,
+      narrationAlignment: raw.scores.narration_alignment,
+      subjectPresence: raw.scores.subject_presence,
+      compositionRisk: raw.scores.composition_risk,
+      textArtifactRisk: raw.scores.text_artifact_risk,
+    },
+  }));
+
+type FrameSemanticAssessmentResponse = z.infer<
+  typeof FrameSemanticAssessmentSchema
+>;
+
+const FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["caption", "scores"],
+  propertyOrdering: ["caption", "issues", "scores"],
+  properties: {
+    caption: { type: Type.STRING, minLength: "1" },
+    issues: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    scores: {
+      type: Type.OBJECT,
+      required: [
+        "prompt_alignment",
+        "narration_alignment",
+        "subject_presence",
+        "composition_risk",
+        "text_artifact_risk",
+      ],
+      propertyOrdering: [
+        "prompt_alignment",
+        "narration_alignment",
+        "subject_presence",
+        "composition_risk",
+        "text_artifact_risk",
+      ],
+      properties: {
+        prompt_alignment: { type: Type.NUMBER, minimum: 0, maximum: 1 },
+        narration_alignment: { type: Type.NUMBER, minimum: 0, maximum: 1 },
+        subject_presence: { type: Type.NUMBER, minimum: 0, maximum: 1 },
+        composition_risk: { type: Type.NUMBER, minimum: 0, maximum: 1 },
+        text_artifact_risk: { type: Type.NUMBER, minimum: 0, maximum: 1 },
+      },
+    },
+  },
+};
+
+type FramePromptRevisionEvidence = {
+  frameIndex: number;
+  graderFinding?: string;
+  semantic?: FrameSemanticAssessment;
+  thumbnail?: LlmImageData;
 };
 
 type GenerateStoryFramesOptions = {
@@ -482,6 +567,213 @@ function collectBatchStyleImages(params: {
   return [...baseStyleImages, ...generatedSoFar.slice(overlapStart)];
 }
 
+function buildFrameSemanticAssessmentContents(params: {
+  prompt: string;
+  narrationLines: readonly string[];
+  image: LlmImageData;
+}): { role: "user"; parts: LlmContentPart[] }[] {
+  const { prompt, narrationLines, image } = params;
+  const parts: LlmContentPart[] = [];
+  addTextPart(
+    parts,
+    [
+      "You are the captioner and alignment rater for storyboard illustration attempts.",
+      "Describe exactly what is visible, then evaluate how well it matches the intended prompt and narration.",
+      "",
+      "Return JSON only, following the provided schema.",
+    ].join("\n"),
+  );
+  addTextPart(
+    parts,
+    [
+      "",
+      "Original illustration prompt:",
+      prompt,
+    ].join("\n"),
+  );
+  if (narrationLines.length > 0) {
+    addTextPart(
+      parts,
+      [
+        "",
+        "Narration context (what must remain true):",
+        ...narrationLines.map((line) => `- ${line}`),
+      ].join("\n"),
+    );
+  }
+  addTextPart(parts, "\nRendered image under review:");
+  parts.push(toInlinePart(image));
+  addTextPart(
+    parts,
+    [
+      "",
+      "Scoring guidance:",
+      "- `prompt_alignment`, `narration_alignment`, and `subject_presence` range from 0 (missing) to 1 (perfect).",
+      "- `composition_risk` and `text_artifact_risk` also range 0-1, where higher means more risk.",
+      "- Keep `caption` neutral and factual. Do not speculate.",
+      "- Add short `issues` when any score falls below 0.7; each issue must be a concise fragment.",
+      "",
+      "Respond strictly in JSON with `caption`, `scores`, and optional `issues`.",
+    ].join("\n"),
+  );
+  return [{ role: "user" as const, parts }];
+}
+
+async function assessFrameSemantic(params: {
+  progress: JobProgressReporter;
+  gradingModelId: LlmTextModelId;
+  prompt: string;
+  narrationLines: readonly string[];
+  image: LlmImageData;
+  debug: LlmDebugOptions | undefined;
+}): Promise<FrameSemanticAssessment> {
+  const { progress, gradingModelId, prompt, narrationLines, image, debug } =
+    params;
+  const contents = buildFrameSemanticAssessmentContents({
+    prompt,
+    narrationLines,
+    image,
+  });
+  const response = await generateJson<FrameSemanticAssessmentResponse>({
+    progress,
+    modelId: gradingModelId,
+    contents,
+    schema: FrameSemanticAssessmentSchema,
+    responseSchema: FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA,
+    debug,
+  });
+  return response;
+}
+
+async function makePromptRevisionThumbnail(
+  image: LlmImageData,
+): Promise<LlmImageData | undefined> {
+  try {
+    const buffer = await sharp(image.data)
+      .resize({
+        width: PROMPT_REVISION_THUMBNAIL_WIDTH,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+    return {
+      data: buffer,
+      mimeType: "image/jpeg",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function collectPromptRevisionEvidence(params: {
+  batchItems: readonly BatchGradeItem[];
+  grade: BatchGradeOutcome;
+  batch: GenerateBatchParams;
+  batchAttempt: number;
+  frameNarrationByIndex: ReadonlyMap<number, readonly string[]>;
+  progress: JobProgressReporter;
+  gradingModelId: LlmTextModelId;
+  debug: LlmDebugOptions | undefined;
+}): Promise<FramePromptRevisionEvidence[]> {
+  const {
+    batchItems,
+    grade,
+    batch,
+    batchAttempt,
+    frameNarrationByIndex,
+    progress,
+    gradingModelId,
+    debug,
+  } = params;
+  const evidence: FramePromptRevisionEvidence[] = [];
+  const findingsByFrame = new Map<number, string>();
+  for (const finding of grade.findings) {
+    if (!findingsByFrame.has(finding.frameIndex)) {
+      findingsByFrame.set(finding.frameIndex, finding.reason);
+    }
+  }
+  const frameIndices = batchItems.map((item) => item.frameIndex);
+  const targetSet = new Set<number>();
+  for (const finding of grade.findings) {
+    if (
+      targetSet.size >= PROMPT_REVISION_MAX_EVIDENCE_FRAMES ||
+      !frameIndices.includes(finding.frameIndex)
+    ) {
+      continue;
+    }
+    targetSet.add(finding.frameIndex);
+  }
+  if (
+    targetSet.size <
+    Math.min(frameIndices.length, PROMPT_REVISION_MAX_EVIDENCE_FRAMES)
+  ) {
+    for (const frameIndex of frameIndices) {
+      if (targetSet.size >= PROMPT_REVISION_MAX_EVIDENCE_FRAMES) {
+        break;
+      }
+      targetSet.add(frameIndex);
+    }
+  }
+  const selectedFrameIndices = frameIndices.filter((index) =>
+    targetSet.has(index),
+  );
+  for (const frameIndex of selectedFrameIndices) {
+    const item = batchItems.find((entry) => entry.frameIndex === frameIndex);
+    if (!item) {
+      continue;
+    }
+    const entry: FramePromptRevisionEvidence = {
+      frameIndex,
+    };
+    const finding = findingsByFrame.get(frameIndex);
+    if (finding) {
+      entry.graderFinding = finding;
+    }
+    try {
+      const thumbnail = await makePromptRevisionThumbnail(item.image);
+      if (thumbnail) {
+        entry.thumbnail = thumbnail;
+      }
+    } catch {
+      progress.log(
+        `[story/frames] Failed to generate thumbnail for frame ${frameIndex}`,
+      );
+    }
+    try {
+      const debugForFrame = extendDebug(
+        debug,
+        `semantic-frame-${padNumber(frameIndex)}`,
+      );
+      const narrationLines = frameNarrationByIndex.get(frameIndex) ?? [];
+      const semantic = await assessFrameSemantic({
+        progress,
+        gradingModelId,
+        prompt: item.prompt,
+        narrationLines,
+        image: item.image,
+        debug: debugForFrame,
+      });
+      entry.semantic = semantic;
+      const issuesSuffix =
+        semantic.issues.length > 0
+          ? ` issues: ${semantic.issues.join("; ")}`
+          : "";
+      const { scores } = semantic;
+      progress.log(
+        `[story/frames] Batch ${batch.batchIndex + 1} attempt ${batchAttempt} semantic frame ${frameIndex} pa=${scores.promptAlignment.toFixed(2)} na=${scores.narrationAlignment.toFixed(2)} sp=${scores.subjectPresence.toFixed(2)} comp=${scores.compositionRisk.toFixed(2)} text=${scores.textArtifactRisk.toFixed(2)}${issuesSuffix ? ` (${issuesSuffix})` : ""}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      progress.log(
+        `[story/frames] Semantic scoring failed for frame ${frameIndex}: ${message}`,
+      );
+    }
+    evidence.push(entry);
+  }
+  return evidence;
+}
+
 function buildFramePromptRevisionContents(params: {
   stylePrompt: string;
   catastrophicDescription: string;
@@ -489,6 +781,7 @@ function buildFramePromptRevisionContents(params: {
   frameIndices: readonly number[];
   prompts: readonly string[];
   frameNarrationByIndex: ReadonlyMap<number, readonly string[]>;
+  evidenceByFrame: ReadonlyMap<number, FramePromptRevisionEvidence>;
 }): { role: "user"; parts: LlmContentPart[] }[] {
   const {
     stylePrompt,
@@ -497,6 +790,7 @@ function buildFramePromptRevisionContents(params: {
     frameIndices,
     prompts,
     frameNarrationByIndex,
+    evidenceByFrame,
   } = params;
   const parts: LlmContentPart[] = [];
   addTextPart(
@@ -509,6 +803,12 @@ function buildFramePromptRevisionContents(params: {
       "- Prefer simpler, specific actions or settings drawn from everyday environments.",
       "- Describe one focal action, avoid mirrored/split scenes, and limit supporting details to what the narration requires.",
       "- Use fresh phrasing so the renderer does not default to the prior collapsed composition.",
+      "",
+      "Camera & focus flexibility:",
+      "- Change the camera angle or focal subject when it helps break repeated protagonist close-ups.",
+      "- Highlight props or documents when narration allows it (for example: parchment, instruments, chalkboard workings).",
+      "- Exclude the protagonist entirely if the narration still makes sense; be explicit when doing so.",
+      "- Keep single-scene compositions; avoid multi-panel layouts, mirrored staging, or heavy borders.",
       "",
       "Catastrophic checklist to avoid:",
       catastrophicDescription,
@@ -552,6 +852,41 @@ function buildFramePromptRevisionContents(params: {
         `Previous illustration prompt:\n${prompt}`,
       ].join("\n"),
     );
+    const evidence = evidenceByFrame.get(frameIndex);
+    if (evidence?.thumbnail) {
+      addTextPart(
+        parts,
+        "\nRendered attempt thumbnail (for reference):",
+      );
+      parts.push(toInlinePart(evidence.thumbnail));
+    }
+    if (evidence?.graderFinding) {
+      addTextPart(parts, `\nGrader finding: ${evidence.graderFinding}`);
+    }
+    if (evidence?.semantic) {
+      const { caption, scores, issues } = evidence.semantic;
+      const scoreLine = [
+        `prompt_alignment=${scores.promptAlignment.toFixed(2)}`,
+        `narration_alignment=${scores.narrationAlignment.toFixed(2)}`,
+        `subject_presence=${scores.subjectPresence.toFixed(2)}`,
+        `composition_risk=${scores.compositionRisk.toFixed(2)}`,
+        `text_artifact_risk=${scores.textArtifactRisk.toFixed(2)}`,
+      ].join(", ");
+      const issueLines =
+        issues.length > 0
+          ? `- Semantic issues: ${issues.join("; ")}`
+          : undefined;
+      addTextPart(
+        parts,
+        [
+          "",
+          "Semantic check:",
+          `- Caption: ${caption}`,
+          `- Scores (0-1): ${scoreLine}`,
+          ...(issueLines ? [issueLines] : []),
+        ].join("\n"),
+      );
+    }
   });
   addTextPart(
     parts,
@@ -572,8 +907,15 @@ async function requestFramePromptRevisions(params: {
   batch: GenerateBatchParams;
   failureSummaries: readonly string[];
   frameNarrationByIndex: ReadonlyMap<number, readonly string[]>;
+  evidence: readonly FramePromptRevisionEvidence[];
 }): Promise<FramePromptRevisionResponse> {
   const frameIndices = params.batch.globalIndices.map((index) => index + 1);
+  const evidenceByFrame = new Map<number, FramePromptRevisionEvidence>();
+  for (const entry of params.evidence) {
+    if (!evidenceByFrame.has(entry.frameIndex)) {
+      evidenceByFrame.set(entry.frameIndex, entry);
+    }
+  }
   const contents = buildFramePromptRevisionContents({
     stylePrompt: params.stylePrompt,
     catastrophicDescription: params.catastrophicDescription,
@@ -581,6 +923,7 @@ async function requestFramePromptRevisions(params: {
     frameIndices,
     prompts: params.batch.prompts,
     frameNarrationByIndex: params.frameNarrationByIndex,
+    evidenceByFrame,
   });
   return generateJson<FramePromptRevisionResponse>({
     modelId: params.gradingModelId,
@@ -654,7 +997,7 @@ export async function generateStoryFrames(
       styleImages: styleImagesForBatch,
     };
     const batchFeedbackLog: string[] = [];
-    let framePromptRevisionApplied = false;
+    let promptRevisionRequests = 0;
 
     let batchSuccess = false;
     let lastError: unknown;
@@ -1055,27 +1398,46 @@ export async function generateStoryFrames(
 
         if (rejectBatch) {
           if (
-            !framePromptRevisionApplied &&
+            promptRevisionRequests < PROMPT_REVISION_MAX_PER_BATCH &&
             grade.outcome === "redo_batch" &&
-            attempt >= 2
+            attempt >= PROMPT_REVISION_MIN_ATTEMPT_FOR_REDO_BATCH
           ) {
+            const promptFeedbackDebug = extendDebug(
+              debug,
+              `batch-${padNumber(batchIndex + 1)}/prompt-feedback-${padNumber(attempt)}`,
+            );
+            let evidence: FramePromptRevisionEvidence[] = [];
+            try {
+              evidence = await collectPromptRevisionEvidence({
+                batchItems,
+                grade,
+                batch,
+                batchAttempt: attempt,
+                frameNarrationByIndex: narrationLookup,
+                progress,
+                gradingModelId: options.gradingModelId,
+                debug: promptFeedbackDebug,
+              });
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              progress.log(
+                `[story/frames] Batch ${batchIndex + 1} evidence collection failed: ${message}`,
+              );
+            }
+            promptRevisionRequests += 1;
             try {
               const revision = await requestFramePromptRevisions({
                 gradingModelId: options.gradingModelId,
                 progress,
-                debug: extendDebug(
-                  debug,
-                  `batch-${padNumber(
-                    batchIndex + 1,
-                  )}/prompt-feedback-${padNumber(attempt)}`,
-                ),
+                debug: promptFeedbackDebug,
                 stylePrompt,
                 catastrophicDescription: options.gradeCatastrophicDescription,
                 batch,
                 failureSummaries: [...batchFeedbackLog],
                 frameNarrationByIndex: narrationLookup,
+                evidence,
               });
-              framePromptRevisionApplied = true;
               const updatedFrameNumbers: number[] = [];
               for (const replacement of revision.replacements) {
                 const zeroBasedIndex = replacement.frameIndex - 1;
@@ -1107,7 +1469,6 @@ export async function generateStoryFrames(
                 );
               }
             } catch (error) {
-              framePromptRevisionApplied = true;
               const message =
                 error instanceof Error ? error.message : String(error);
               progress.log(
