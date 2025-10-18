@@ -167,6 +167,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Extraction prompt: preserve original wording; label low-confidence items; ensure per-question metadata includes source page reference.
 - Generation prompt: board + subject aware; include numeric tolerance, significant figures instructions; produce rationale snippet.
 - Grading prompt: strict rubric enforcement; respond with canonical enum {correct, partial, incorrect}, required units, and 1-line rationale.
+- Story image pipeline: as soon as the batch grader returns a `redo_batch`, we request prompt revisions on the first attempt and feed the reviser concrete evidence (grader findings, semantic alignment scores, and thumbnails). The prompt explicitly allows camera/focus changes while anchoring replacements to the narration lines surfaced via `frameNarrationByIndex`.
 - Summaries: produce ≤3 bullets covering strengths/gaps with topic references; limit to 160 chars each.
 - Safety: run outputs through moderation filter; redact PII before storing. All prompts tracked with versioned ids.
 
