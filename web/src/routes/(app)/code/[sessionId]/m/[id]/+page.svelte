@@ -19,6 +19,8 @@
 	const EPSILON = 0.15;
 	const MIN_KEN_BURNS_DURATION = 10;
 	const DEFAULT_KEN_BURNS_DURATION = 14;
+	const POSTER_DURATION_SEC = 0.05; // 50ms
+	const END_CARD_DURATION_SEC = 0.05; // 50ms
 
 	export let data: PageData;
 
@@ -82,17 +84,40 @@
 		quitDialogOpen = false;
 	}
 	$: activeImage = images[currentImageOrder] ?? null;
+	$: isPosterPhase = Boolean(posterImage?.url) && sliderMax > 0 && currentTime < POSTER_DURATION_SEC;
+	$: isEndCardPhase = Boolean(endingImage?.url) && sliderMax > 0 && sliderMax - currentTime <= END_CARD_DURATION_SEC;
+	$: activeVisualKind = isPosterPhase ? 'poster' : isEndCardPhase ? 'ending' : 'image';
+	$: activeVisualUrl =
+		activeVisualKind === 'poster'
+			? posterImage?.url ?? null
+			: activeVisualKind === 'ending'
+				? endingImage?.url ?? null
+				: activeImage?.url ?? null;
+	$: activeVisualAlt =
+		activeVisualKind === 'poster'
+			? 'Story poster'
+			: activeVisualKind === 'ending'
+				? 'Ending card'
+				: `Session illustration ${currentImageOrder + 1}`;
+	$: activeVisualKey =
+		activeVisualKind === 'image' ? `image-${currentImageOrder}` : activeVisualKind;
 	$: activeNarrationLine = currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 	$: areImagesReady = imageLoadState === 'ready';
-	$: kenBurnsDurationSec =
-		activeImage?.durationSec && activeImage.durationSec > 0
+	$: kenBurnsEnabled = activeVisualKind === 'image';
+	$: kenBurnsDurationSec = kenBurnsEnabled
+		? activeImage?.durationSec && activeImage.durationSec > 0
 			? Math.max(activeImage.durationSec, MIN_KEN_BURNS_DURATION)
-			: DEFAULT_KEN_BURNS_DURATION;
-	$: kenBurnsDirectionClass =
-		currentImageOrder % 2 === 0 ? 'kenburns-forward' : 'kenburns-reverse';
-	$: kenBurnsPlayState = isPlaying ? 'running' : 'paused';
+			: DEFAULT_KEN_BURNS_DURATION
+		: 0.05; // minimal, but animation is disabled below
+	$: kenBurnsDirectionClass = kenBurnsEnabled
+		? currentImageOrder % 2 === 0
+			? 'kenburns-forward'
+			: 'kenburns-reverse'
+		: '';
+	$: kenBurnsClass = kenBurnsEnabled ? kenBurnsDirectionClass : 'no-kenburns';
+	$: kenBurnsPlayState = kenBurnsEnabled && isPlaying ? 'running' : 'paused';
 
 	async function startImagePreload(): Promise<void> {
 		if (typeof window === 'undefined') {
@@ -105,8 +130,11 @@
 			imageLoadError = null;
 			return;
 		}
-		const urls = images
-			.map((image) => image.url)
+		const urls = [
+			...images.map((image) => image.url),
+			posterImage?.url ?? null,
+			endingImage?.url ?? null
+		]
 			.filter((url): url is string => Boolean(url));
 		if (urls.length === 0) {
 			imageLoadState = 'ready';
@@ -347,6 +375,10 @@
 		if (!areImagesReady) {
 			return;
 		}
+		if (isEndCardPhase && imageCount > 0) {
+			goToImage(imageCount - 1);
+			return;
+		}
 		if (currentImageOrder <= 0) {
 			seekTo(0);
 			return;
@@ -356,6 +388,10 @@
 
 	function handleNextImage() {
 		if (!areImagesReady) {
+			return;
+		}
+		if (isPosterPhase) {
+			goToImage(0);
 			return;
 		}
 		if (currentImageOrder >= imageCount - 1) {
@@ -496,7 +532,7 @@
 
 		<div class="image-card">
 			<div class="image-frame">
-				{#if imageCount === 0}
+				{#if imageCount === 0 && !activeVisualUrl}
 					<div class="image-frame-message image-card-empty">
 						<p>No images available for this clip yet.</p>
 					</div>
@@ -512,16 +548,16 @@
 						<div class="image-spinner" aria-hidden="true"></div>
 						<p>Loading visuals…</p>
 					</div>
-				{:else if activeImage?.url}
+				{:else if activeVisualUrl}
 					<div class="image-frame-visual">
-						{#key currentImageOrder}
+						{#key activeVisualKey}
 							<img
-								src={activeImage.url}
-								alt={`Session illustration ${currentImageOrder + 1}`}
+								src={activeVisualUrl}
+								alt={activeVisualAlt}
 								width="1600"
 								height="900"
 								loading="lazy"
-								class={`image-visual ${kenBurnsDirectionClass}`}
+								class={`image-visual ${kenBurnsClass}`}
 								style={`--kenburns-duration: ${kenBurnsDurationSec}s; --kenburns-play-state: ${kenBurnsPlayState};`}
 								in:fade={{ duration: 420 }}
 								out:fade={{ duration: 420 }}
@@ -602,52 +638,21 @@
 		aria-live="polite"
 		aria-label="Subtitles"
 	>
-		{#if playbackError}
-			<div class="error-banner">
-				<AlertCircle aria-hidden="true" />
-				<span>{playbackError}</span>
-			</div>
-		{:else if !isReady}
-			<p class="subtitle-placeholder">Loading clip…</p>
-		{:else if activeNarrationLine}
-			<p class="subtitle-active">{activeNarrationLine.text}</p>
-		{:else}
-			<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
-		{/if}
-	</div>
-
-	{#if (posterImage?.url ?? null) || (endingImage?.url ?? null)}
-		<div class="supplementary-gallery" aria-label="Story artwork">
-			{#if posterImage?.url}
-				<figure class="supplementary-card">
-					<img
-						src={posterImage.url}
-						alt="Story poster"
-						width="1280"
-						height="720"
-						loading="lazy"
-						decoding="async"
-					/>
-					<figcaption>Poster</figcaption>
-				</figure>
-			{/if}
-			{#if endingImage?.url}
-				<figure class="supplementary-card">
-					<img
-						src={endingImage.url}
-						alt="Ending card"
-						width="1280"
-						height="720"
-						loading="lazy"
-						decoding="async"
-					/>
-					<figcaption>Ending card</figcaption>
-				</figure>
-			{/if}
+	{#if playbackError}
+		<div class="error-banner">
+			<AlertCircle aria-hidden="true" />
+			<span>{playbackError}</span>
 		</div>
+	{:else if !isReady}
+		<p class="subtitle-placeholder">Loading clip…</p>
+	{:else if activeNarrationLine}
+		<p class="subtitle-active">{activeNarrationLine.text}</p>
+	{:else}
+		<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
 	{/if}
+</div>
 
-	<audio
+<audio
 		bind:this={audioElement}
 		src={audioInfo.url ?? undefined}
 		preload="auto"
@@ -821,6 +826,10 @@
 		animation-timing-function: ease-in-out;
 		animation-fill-mode: forwards;
 		animation-play-state: var(--kenburns-play-state, running);
+	}
+
+	.image-visual.no-kenburns {
+		animation-name: none !important;
 	}
 
 	.image-frame-message {
@@ -1146,53 +1155,6 @@
 		justify-content: flex-end;
 	}
 
-	.supplementary-gallery {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-		gap: 1.25rem;
-	}
-
-	.supplementary-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.65rem;
-		padding: 1rem;
-		border-radius: 1.5rem;
-		border: 1px solid rgba(59, 130, 246, 0.16);
-		background: linear-gradient(135deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.92));
-		box-shadow: 0 20px 50px -40px rgba(59, 130, 246, 0.45);
-	}
-
-	.supplementary-card img {
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		object-fit: cover;
-		border-radius: 1rem;
-		border: 1px solid rgba(59, 130, 246, 0.14);
-		background: rgba(15, 23, 42, 0.05);
-	}
-
-	.supplementary-card figcaption {
-		margin: 0;
-		font-size: 0.78rem;
-		font-weight: 600;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: rgba(37, 99, 235, 0.82);
-	}
-
-	:global([data-theme='dark'] .supplementary-card),
-	:global(:root:not([data-theme='light']) .supplementary-card) {
-		border-color: rgba(96, 165, 250, 0.18);
-		background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.9));
-		box-shadow: 0 20px 50px -40px rgba(14, 165, 233, 0.45);
-	}
-
-	:global([data-theme='dark'] .supplementary-card figcaption),
-	:global(:root:not([data-theme='light']) .supplementary-card figcaption) {
-		color: rgba(191, 219, 254, 0.82);
-	}
-
 	@media (max-width: 960px) {
 		.image-stage {
 			grid-template-columns: minmax(0, 1fr);
@@ -1216,10 +1178,6 @@
 
 		.image-frame {
 			width: 100%;
-		}
-
-		.supplementary-gallery {
-			grid-template-columns: minmax(0, 1fr);
 		}
 
 		.image-nav-button {
