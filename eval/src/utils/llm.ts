@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { inspect } from "node:util";
 
@@ -339,9 +339,52 @@ function decodeInlineDataBuffer(data: string): Buffer {
   }
 }
 
-function deriveExtensionFromMime(mimeType: string | undefined): string {
-  const candidate = mimeType?.split(";")[0]?.split("/")[1];
-  return candidate && candidate.trim().length > 0 ? candidate.trim() : "bin";
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    error instanceof Error &&
+    typeof (error as NodeJS.ErrnoException).code === "string"
+  );
+}
+
+async function writeImageOncePerDir({
+  dir,
+  filename,
+  buffer,
+}: {
+  dir: string;
+  filename: string;
+  buffer: Buffer;
+}): Promise<void> {
+  const mediaDir = path.join(dir, "media");
+  await mkdir(mediaDir, { recursive: true });
+  const finalPath = path.join(mediaDir, filename);
+  try {
+    await stat(finalPath);
+    return;
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      // File does not exist yet; proceed with write.
+    } else {
+      throw error;
+    }
+  }
+  const tempPath = path.join(
+    mediaDir,
+    `${filename}.${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2)}.tmp`,
+  );
+  await writeFile(tempPath, buffer);
+  try {
+    await rename(tempPath, finalPath);
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "EEXIST") {
+      await rm(tempPath, { force: true });
+      return;
+    }
+    await rm(tempPath, { force: true });
+    throw error;
+  }
 }
 
 async function createDebugImageArtifact({
@@ -360,8 +403,8 @@ async function createDebugImageArtifact({
   log: (message: string) => void;
 }): Promise<{ hash: string; filename: string }> {
   const buffer = decodeInlineDataBuffer(base64Data);
+  const originalHash = createHash("sha256").update(buffer).digest("hex");
   let outputBuffer = buffer;
-  let outputExtension = deriveExtensionFromMime(mimeType);
   if (isInlineImageMime(mimeType)) {
     try {
       outputBuffer = await sharp(buffer)
@@ -371,30 +414,29 @@ async function createDebugImageArtifact({
           chromaSubsampling: "4:4:4",
         })
         .toBuffer();
-      outputExtension = "jpg";
     } catch (error) {
       log(
         `failed to convert debug image to JPEG: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      outputBuffer = buffer;
-      outputExtension = deriveExtensionFromMime(mimeType);
     }
   }
-  const hash = createHash("sha256")
-    .update(outputBuffer)
-    .digest("hex")
-    .slice(0, 6);
-  const filename = `${prefix}-${String(index).padStart(3, "0")}-${hash}.${outputExtension}`;
+  const filename = `${originalHash}.jpg`;
+  const relativeFilename = path.posix.join("media", filename);
   if (targetDirs.length > 0) {
     await Promise.all(
       targetDirs.map(async (dir) =>
-        writeFile(path.join(dir, filename), outputBuffer),
+        writeImageOncePerDir({
+          dir,
+          filename,
+          buffer: outputBuffer,
+        }),
       ),
     );
   }
-  return { hash, filename };
+  const shortHash = `${prefix}-${String(index).padStart(3, "0")}-${originalHash.slice(0, 6)}`;
+  return { hash: shortHash, filename: relativeFilename };
 }
 
 function cloneContentForDebug(content: LlmContent): LlmContent {
