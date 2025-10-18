@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { mkdir, rm, writeFile, rename, stat } from "node:fs/promises";
+import { mkdir, rm, writeFile, rename, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { inspect } from "node:util";
 
@@ -430,21 +430,73 @@ async function createDebugImageArtifact({
       );
     }
   }
-  const filename = `${originalHash}.jpg`;
-  const mediaDirs =
-    sharedMediaDir !== undefined
-      ? [sharedMediaDir]
-      : targetDirs.map((dir) => path.join(dir, "media"));
-  if (mediaDirs.length > 0) {
+  const mediaFilename = `${originalHash}.jpg`;
+  if (sharedMediaDir !== undefined) {
+    await writeImageToMediaDir({
+      mediaDir: sharedMediaDir,
+      filename: mediaFilename,
+      buffer: outputBuffer,
+    });
+  } else {
     await Promise.all(
-      mediaDirs.map(async (dir) =>
-        writeImageToMediaDir({ mediaDir: dir, filename, buffer: outputBuffer }),
+      targetDirs.map(async (dir) =>
+        writeImageToMediaDir({
+          mediaDir: path.join(dir, "media"),
+          filename: mediaFilename,
+          buffer: outputBuffer,
+        }),
       ),
     );
   }
-  const shortHash = `${prefix}-${String(index).padStart(3, "0")}-${originalHash.slice(0, 6)}`;
-  const relativeFilename = path.posix.join("media", filename);
-  return { hash: shortHash, filename: relativeFilename };
+  const shortHash = `${prefix}-${String(index).padStart(3, "0")}-${originalHash.slice(
+    0,
+    6,
+  )}`;
+  const symlinkFilename = `${prefix}-${String(index).padStart(3, "0")}.jpg`;
+  await Promise.all(
+    targetDirs.map(async (dir) => {
+      const linkPath = path.join(dir, symlinkFilename);
+      const mediaBaseDir =
+        sharedMediaDir !== undefined
+          ? sharedMediaDir
+          : path.join(dir, "media");
+      const absoluteTarget = path.join(mediaBaseDir, mediaFilename);
+      let relativeTarget = path.relative(dir, absoluteTarget);
+      if (relativeTarget.length === 0) {
+        relativeTarget = path.basename(absoluteTarget);
+      }
+      try {
+        await rm(linkPath, { force: true });
+      } catch (error) {
+        log(
+          `failed to remove existing link at ${linkPath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      try {
+        await symlink(relativeTarget, linkPath, "file");
+      } catch (error) {
+        log(
+          `failed to create symlink ${linkPath} -> ${relativeTarget}: ${
+            error instanceof Error ? error.message : String(error)
+          } (falling back to copy)`,
+        );
+        try {
+          await writeFile(linkPath, outputBuffer);
+        } catch (fallbackError) {
+          log(
+            `failed to write image copy to ${linkPath}: ${
+              fallbackError instanceof Error
+                ? fallbackError.message
+                : String(fallbackError)
+            }`,
+          );
+        }
+      }
+    }),
+  );
+  return { hash: shortHash, filename: symlinkFilename };
 }
 
 function cloneContentForDebug(content: LlmContent): LlmContent {
@@ -1183,6 +1235,9 @@ async function llmStream({
                 if (!filename) {
                   return undefined;
                 }
+                if (!filename.includes("/") && !filename.includes("\\")) {
+                  return toPosixRelativePath(filename);
+                }
                 if (debugRootDir) {
                   const absolutePath = path.join(debugRootDir, filename);
                   let relativePath = path.relative(dir, absolutePath);
@@ -1191,7 +1246,7 @@ async function llmStream({
                   }
                   return toPosixRelativePath(relativePath);
                 }
-                return filename;
+                return toPosixRelativePath(filename);
               },
             });
             await writeFile(path.join(dir, "conversation.html"), conversationHtml, {
