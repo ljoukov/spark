@@ -346,16 +346,15 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   );
 }
 
-async function writeImageOncePerDir({
-  dir,
+async function writeImageToMediaDir({
+  mediaDir,
   filename,
   buffer,
 }: {
-  dir: string;
+  mediaDir: string;
   filename: string;
   buffer: Buffer;
 }): Promise<void> {
-  const mediaDir = path.join(dir, "media");
   await mkdir(mediaDir, { recursive: true });
   const finalPath = path.join(mediaDir, filename);
   try {
@@ -387,11 +386,19 @@ async function writeImageOncePerDir({
   }
 }
 
+function toPosixRelativePath(value: string): string {
+  if (path.sep === "/") {
+    return value;
+  }
+  return value.replace(/\\/g, "/");
+}
+
 async function createDebugImageArtifact({
   base64Data,
   mimeType,
   index,
   prefix,
+  sharedMediaDir,
   targetDirs,
   log,
 }: {
@@ -399,6 +406,7 @@ async function createDebugImageArtifact({
   mimeType?: string;
   index: number;
   prefix: string;
+  sharedMediaDir?: string;
   targetDirs: readonly string[];
   log: (message: string) => void;
 }): Promise<{ hash: string; filename: string }> {
@@ -423,19 +431,19 @@ async function createDebugImageArtifact({
     }
   }
   const filename = `${originalHash}.jpg`;
-  const relativeFilename = path.posix.join("media", filename);
-  if (targetDirs.length > 0) {
+  const mediaDirs =
+    sharedMediaDir !== undefined
+      ? [sharedMediaDir]
+      : targetDirs.map((dir) => path.join(dir, "media"));
+  if (mediaDirs.length > 0) {
     await Promise.all(
-      targetDirs.map(async (dir) =>
-        writeImageOncePerDir({
-          dir,
-          filename,
-          buffer: outputBuffer,
-        }),
+      mediaDirs.map(async (dir) =>
+        writeImageToMediaDir({ mediaDir: dir, filename, buffer: outputBuffer }),
       ),
     );
   }
   const shortHash = `${prefix}-${String(index).padStart(3, "0")}-${originalHash.slice(0, 6)}`;
+  const relativeFilename = path.posix.join("media", filename);
   return { hash: shortHash, filename: relativeFilename };
 }
 
@@ -712,9 +720,11 @@ function formatRoleLabel(role: LlmRole): string {
 function buildConversationHtml({
   promptContents,
   responseContent,
+  resolveImageHref,
 }: {
   promptContents: readonly LlmContent[];
   responseContent?: LlmContent;
+  resolveImageHref?: (filename: string | undefined) => string | undefined;
 }): string {
   const messages: LlmContent[] = [
     ...promptContents,
@@ -766,16 +776,20 @@ function buildConversationHtml({
       const hashLabel =
         part.debugImageHash !== undefined ? `, ${part.debugImageHash}` : "";
       const isImage = isInlineImageMime(part.mimeType);
+      const resolvedSrc =
+        isImage && resolveImageHref
+          ? resolveImageHref(part.debugImageFilename)
+          : part.debugImageFilename;
       html.push('      <div class="part part-image">');
       html.push(
         `        <div class="part-label">Part ${partIndex + 1} (inline ${escapeHtml(
           part.mimeType ?? "binary",
         )}, ${bytes} bytes${hashLabel})</div>`,
       );
-      if (isImage && part.debugImageFilename) {
+      if (isImage && resolvedSrc) {
         html.push(
           `        <img src="${escapeAttribute(
-            part.debugImageFilename,
+            resolvedSrc,
           )}" alt="Part ${partIndex + 1} image" />`,
         );
       } else if (isImage) {
@@ -853,13 +867,17 @@ async function llmStream({
   const log = (message: string) => {
     reporter.log(`[${stage.label}] ${message}`);
   };
-  const debugLogSegment =
+  const debugRootDir =
     options.debug && options.debug.rootDir && options.debug.enabled !== false
+      ? options.debug.rootDir
+      : undefined;
+  const debugLogSegment =
+    debugRootDir !== undefined
       ? normalisePathSegment(new Date().toISOString().replace(/[:]/g, "-"))
       : undefined;
   const debugLogDir =
-    debugLogSegment !== undefined && options.debug?.rootDir
-      ? path.join(options.debug.rootDir, "log", debugLogSegment)
+    debugLogSegment !== undefined && debugRootDir !== undefined
+      ? path.join(debugRootDir, "log", debugLogSegment)
       : undefined;
   const debugOutputDirs = Array.from(
     new Set(
@@ -868,6 +886,8 @@ async function llmStream({
       ),
     ),
   );
+  const sharedMediaDir =
+    debugRootDir !== undefined ? path.join(debugRootDir, "media") : undefined;
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
   const googlePromptContents = promptContents.map(
@@ -941,6 +961,7 @@ async function llmStream({
               mimeType: part.mimeType,
               index,
               prefix: "prompt-image",
+              sharedMediaDir,
               targetDirs: debugOutputDirs,
               log,
             });
@@ -1030,6 +1051,7 @@ async function llmStream({
             mimeType,
             index,
             prefix: "image",
+            sharedMediaDir,
             targetDirs: debugOutputDirs,
             log,
           });
@@ -1152,16 +1174,30 @@ async function llmStream({
         });
       }
       if (debugOutputDirs.length > 0) {
-        const conversationHtml = buildConversationHtml({
-          promptContents: promptDebugContents,
-          responseContent,
-        });
         await Promise.all(
-          debugOutputDirs.map(async (dir) =>
-            writeFile(path.join(dir, "conversation.html"), conversationHtml, {
+          debugOutputDirs.map(async (dir) => {
+            const conversationHtml = buildConversationHtml({
+              promptContents: promptDebugContents,
+              responseContent,
+              resolveImageHref: (filename) => {
+                if (!filename) {
+                  return undefined;
+                }
+                if (debugRootDir) {
+                  const absolutePath = path.join(debugRootDir, filename);
+                  let relativePath = path.relative(dir, absolutePath);
+                  if (relativePath.length === 0) {
+                    relativePath = path.basename(absolutePath);
+                  }
+                  return toPosixRelativePath(relativePath);
+                }
+                return filename;
+              },
+            });
+            await writeFile(path.join(dir, "conversation.html"), conversationHtml, {
               encoding: "utf8",
-            }),
-          ),
+            });
+          }),
         );
       }
     }
