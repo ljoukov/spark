@@ -8,13 +8,13 @@ export function getTempFilePath(fileName: string) {
 
 export async function writeUint8ArrayToTempFile(
   data: Uint8Array,
-  fileName: string
+  fileName: string,
 ) {
   await fs.writeFile(getTempFilePath(fileName), data);
 }
 
 export async function readUint8ArrayFromTempFile(
-  fileName: string
+  fileName: string,
 ): Promise<Uint8Array> {
   return new Uint8Array(await fs.readFile(getTempFilePath(fileName)));
 }

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { FirestoreTimestampSchema } from "./firestore";
 
-const trimmed = z
-  .string()
-  .trim()
-  .min(1, "Expected a non-empty value");
+const trimmed = z.string().trim().min(1, "Expected a non-empty value");
 
-const nonNegativeNumber = z.number().finite().min(0, "Value must be non-negative");
+const nonNegativeNumber = z
+  .number()
+  .finite()
+  .min(0, "Value must be non-negative");
 
 const NarrationSpeakerSchema = z.union([z.literal("m"), z.literal("f")]);
 
@@ -19,13 +19,12 @@ export const SessionMediaNarrationSchema = z.object({
 
 export type SessionMediaNarration = z.infer<typeof SessionMediaNarrationSchema>;
 
-export const SessionMediaImageSchema = z
-  .object({
-    index: z.number().int().min(0, "Image index must be non-negative"),
-    storagePath: trimmed,
-    startSec: nonNegativeNumber,
-    durationSec: nonNegativeNumber,
-  });
+export const SessionMediaImageSchema = z.object({
+  index: z.number().int().min(0, "Image index must be non-negative"),
+  storagePath: trimmed,
+  startSec: nonNegativeNumber,
+  durationSec: nonNegativeNumber,
+});
 
 export type SessionMediaImage = z.infer<typeof SessionMediaImageSchema>;
 
@@ -47,21 +46,23 @@ export const SessionMediaDocSchema = z
       durationSec: nonNegativeNumber,
       mimeType: trimmed.optional(),
     }),
-    images: z.array(SessionMediaImageSchema).min(1, "At least one image required"),
-    narration: z.array(SessionMediaNarrationSchema).min(1, "At least one narration line required"),
+    images: z
+      .array(SessionMediaImageSchema)
+      .min(1, "At least one image required"),
+    narration: z
+      .array(SessionMediaNarrationSchema)
+      .min(1, "At least one narration line required"),
     posterImage: SessionMediaSupplementaryImageSchema.optional(),
     endingImage: SessionMediaSupplementaryImageSchema.optional(),
     createdAt: FirestoreTimestampSchema,
     updatedAt: FirestoreTimestampSchema,
     metadataVersion: z.number().int().min(1).default(3),
   })
-  .transform(
-    ({ createdAt, updatedAt, metadataVersion, ...rest }) => ({
-      ...rest,
-      metadataVersion,
-      createdAt,
-      updatedAt,
-    }),
-  );
+  .transform(({ createdAt, updatedAt, metadataVersion, ...rest }) => ({
+    ...rest,
+    metadataVersion,
+    createdAt,
+    updatedAt,
+  }));
 
 export type SessionMediaDoc = z.infer<typeof SessionMediaDocSchema>;

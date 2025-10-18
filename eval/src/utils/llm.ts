@@ -457,9 +457,7 @@ async function createDebugImageArtifact({
     targetDirs.map(async (dir) => {
       const linkPath = path.join(dir, symlinkFilename);
       const mediaBaseDir =
-        sharedMediaDir !== undefined
-          ? sharedMediaDir
-          : path.join(dir, "media");
+        sharedMediaDir !== undefined ? sharedMediaDir : path.join(dir, "media");
       const absoluteTarget = path.join(mediaBaseDir, mediaFilename);
       let relativeTarget = path.relative(dir, absoluteTarget);
       if (relativeTarget.length === 0) {
@@ -1249,9 +1247,13 @@ async function llmStream({
                 return toPosixRelativePath(filename);
               },
             });
-            await writeFile(path.join(dir, "conversation.html"), conversationHtml, {
-              encoding: "utf8",
-            });
+            await writeFile(
+              path.join(dir, "conversation.html"),
+              conversationHtml,
+              {
+                encoding: "utf8",
+              },
+            );
           }),
         );
       }
@@ -1367,9 +1369,7 @@ export async function generateJson<T>(
     maxRetries,
     ...rest
   } = options;
-  const normaliseAttempts = (
-    value: number | undefined,
-  ): number | undefined => {
+  const normaliseAttempts = (value: number | undefined): number | undefined => {
     if (value === undefined) {
       return undefined;
     }
@@ -1383,9 +1383,7 @@ export async function generateJson<T>(
     return floored;
   };
   const maxAttempts =
-    normaliseAttempts(maxAttemptsOption) ??
-    normaliseAttempts(maxRetries) ??
-    2;
+    normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
   const textOptions: LlmTextCallOptions = {
     ...rest,
     responseSchema,

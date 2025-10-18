@@ -28,9 +28,7 @@ let cachedServiceAccount: GoogleServiceAccount | null = null;
 
 const authClientCache = new Map<string, GoogleAuth>();
 
-export function parseGoogleServiceAccount(
-  input: string,
-): GoogleServiceAccount {
+export function parseGoogleServiceAccount(input: string): GoogleServiceAccount {
   let parsed: unknown;
   try {
     parsed = JSON.parse(input);
@@ -90,9 +88,7 @@ export function getGoogleAuthOptions(
   };
 }
 
-export function getGoogleAuth(
-  scopes?: string | readonly string[],
-): GoogleAuth {
+export function getGoogleAuth(scopes?: string | readonly string[]): GoogleAuth {
   const normalised = normaliseScopes(scopes);
   const key = (normalised ?? []).join(" ");
   const cached = authClientCache.get(key);

@@ -5,7 +5,8 @@ export const handleFetch: HandleFetch = async ({ request, fetch }) => {
 	if (typeof window !== 'undefined') {
 		try {
 			const target = new URL(request.url);
-			const isInternalApi = target.origin === window.location.origin && target.pathname.startsWith('/api/');
+			const isInternalApi =
+				target.origin === window.location.origin && target.pathname.startsWith('/api/');
 			if (isInternalApi) {
 				await ensureFreshIdToken();
 			}

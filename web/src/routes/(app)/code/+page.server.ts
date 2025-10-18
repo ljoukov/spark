@@ -8,10 +8,7 @@ import {
 import type { PageServerLoad, Actions } from './$types';
 
 const selectionSchema = z.object({
-	topic: z
-		.string()
-		.trim()
-		.min(1, 'Please choose a topic to begin.')
+	topic: z.string().trim().min(1, 'Please choose a topic to begin.')
 });
 
 export const load: PageServerLoad = async ({ locals }) => {

@@ -156,7 +156,7 @@ export async function getSessionMedia(
 				}
 			}
 
-				const url = signedUrl;
+			const url = signedUrl;
 
 			return {
 				...image,

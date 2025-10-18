@@ -91,11 +91,9 @@
 	const baseTimeline = $derived(
 		sessionPlan.map<TimelineStep>((item) => {
 			const icon =
-				item.icon ??
-				(item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
+				item.icon ?? (item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
 			const meta =
-				item.meta ??
-				(item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
+				item.meta ?? (item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
 			const description = item.summary ?? item.description ?? '';
 			const href =
 				item.kind === 'quiz'
@@ -223,15 +221,11 @@
 			{/each}
 		</div>
 		<div class="plan-footer">
-			<a
-				class="plan-start"
-				href={startHref}
-				data-state={ctaState}
-				aria-label={ctaAria}
-			>
-				{ctaIcon} {ctaLabel}
+			<a class="plan-start" href={startHref} data-state={ctaState} aria-label={ctaAria}>
+				{ctaIcon}
+				{ctaLabel}
 			</a>
-			</div>
+		</div>
 	</div>
 </section>
 
@@ -679,7 +673,7 @@
 		border: 1px solid transparent;
 	}
 
-    /* removed unused .plan-start__icon and __label wrappers */
+	/* removed unused .plan-start__icon and __label wrappers */
 
 	.plan-start[data-state='completed'] {
 		background: rgba(34, 197, 94, 0.16);

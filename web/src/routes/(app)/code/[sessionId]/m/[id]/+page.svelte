@@ -71,8 +71,7 @@
 	let showRedoControl = false;
 
 	const imageCount = images.length;
-	let imageLoadState: 'idle' | 'loading' | 'ready' | 'error' =
-		imageCount === 0 ? 'ready' : 'idle';
+	let imageLoadState: 'idle' | 'loading' | 'ready' | 'error' = imageCount === 0 ? 'ready' : 'idle';
 	let imageLoadError: string | null = null;
 	let imagePreloadToken = 0;
 	let componentDestroyed = false;
@@ -85,15 +84,17 @@
 		quitDialogOpen = false;
 	}
 	$: activeImage = images[currentImageOrder] ?? null;
-	$: isPosterPhase = Boolean(posterImage?.url) && sliderMax > 0 && currentTime < POSTER_DURATION_SEC;
-	$: isEndCardPhase = Boolean(endingImage?.url) && sliderMax > 0 && sliderMax - currentTime <= END_CARD_DURATION_SEC;
+	$: isPosterPhase =
+		Boolean(posterImage?.url) && sliderMax > 0 && currentTime < POSTER_DURATION_SEC;
+	$: isEndCardPhase =
+		Boolean(endingImage?.url) && sliderMax > 0 && sliderMax - currentTime <= END_CARD_DURATION_SEC;
 	$: activeVisualKind = isPosterPhase ? 'poster' : isEndCardPhase ? 'ending' : 'image';
 	$: activeVisualUrl =
 		activeVisualKind === 'poster'
-			? posterImage?.url ?? null
+			? (posterImage?.url ?? null)
 			: activeVisualKind === 'ending'
-				? endingImage?.url ?? null
-				: activeImage?.url ?? null;
+				? (endingImage?.url ?? null)
+				: (activeImage?.url ?? null);
 	$: activeVisualAlt =
 		activeVisualKind === 'poster'
 			? 'Story poster'
@@ -142,8 +143,7 @@
 			...images.map((image) => image.url),
 			posterImage?.url ?? null,
 			endingImage?.url ?? null
-		]
-			.filter((url): url is string => Boolean(url));
+		].filter((url): url is string => Boolean(url));
 		if (urls.length === 0) {
 			imageLoadState = 'ready';
 			imageLoadError = null;
@@ -646,7 +646,7 @@
 		</div>
 	{/if}
 
-<audio
+	<audio
 		bind:this={audioElement}
 		src={audioInfo.url ?? undefined}
 		preload="auto"
@@ -659,7 +659,6 @@
 		onvolumechange={handleVolumeChange}
 		onerror={handleAudioError}
 	></audio>
-
 </section>
 
 <Dialog.Root open={quitDialogOpen} onOpenChange={handleQuitDialogChange}>

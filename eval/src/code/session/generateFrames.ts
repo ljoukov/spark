@@ -583,14 +583,7 @@ function buildFrameSemanticAssessmentContents(params: {
       "Return JSON only, following the provided schema.",
     ].join("\n"),
   );
-  addTextPart(
-    parts,
-    [
-      "",
-      "Original illustration prompt:",
-      prompt,
-    ].join("\n"),
-  );
+  addTextPart(parts, ["", "Original illustration prompt:", prompt].join("\n"));
   if (narrationLines.length > 0) {
     addTextPart(
       parts,
@@ -831,9 +824,9 @@ function buildFramePromptRevisionContents(params: {
       "Rewrite every frame prompt listed below.",
       "For each frame provide an updated prompt that keeps the narration intact but changes the scene, simplifies staging, or grounds the action so the renderer avoids collapsing.",
       "Return JSON using the provided schema with `replacements`. Each entry must include:",
-      '- `frame_index` — 1-based index matching the frame number below.',
-      '- `updated_prompt` — the new illustration prompt.',
-      '- `rationale` — brief explanation of how the change prevents collapse.',
+      "- `frame_index` — 1-based index matching the frame number below.",
+      "- `updated_prompt` — the new illustration prompt.",
+      "- `rationale` — brief explanation of how the change prevents collapse.",
     ].join("\n"),
   );
   frameIndices.forEach((frameIndex, idx) => {
@@ -854,10 +847,7 @@ function buildFramePromptRevisionContents(params: {
     );
     const evidence = evidenceByFrame.get(frameIndex);
     if (evidence?.thumbnail) {
-      addTextPart(
-        parts,
-        "\nRendered attempt thumbnail (for reference):",
-      );
+      addTextPart(parts, "\nRendered attempt thumbnail (for reference):");
       parts.push(toInlinePart(evidence.thumbnail));
     }
     if (evidence?.graderFinding) {
@@ -1067,7 +1057,10 @@ export async function generateStoryFrames(
 
         if (generatedImages.length < batch.prompts.length) {
           // On final attempt, try filling the remainder one-by-one to avoid aborting.
-          if (attempt === BATCH_GENERATE_MAX_ATTEMPTS && !forceSingleFrameMode) {
+          if (
+            attempt === BATCH_GENERATE_MAX_ATTEMPTS &&
+            !forceSingleFrameMode
+          ) {
             progress.log(
               `[story/frames] Incomplete batch ${batchIndex + 1}, filling remaining frames individually`,
             );
@@ -1194,8 +1187,7 @@ export async function generateStoryFrames(
             reasonParts.push(
               grade.findings
                 .map(
-                  (finding) =>
-                    `frame ${finding.frameIndex}: ${finding.reason}`,
+                  (finding) => `frame ${finding.frameIndex}: ${finding.reason}`,
                 )
                 .join("; "),
             );
@@ -1523,8 +1515,7 @@ export async function generateStoryFrames(
                   );
                   continue;
                 }
-                workingImagePrompts[zeroBasedIndex] =
-                  replacement.updatedPrompt;
+                workingImagePrompts[zeroBasedIndex] = replacement.updatedPrompt;
                 batch.prompts[localIndex] = replacement.updatedPrompt;
                 updatedFrameNumbers.push(replacement.frameIndex);
               }

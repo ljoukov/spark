@@ -29,7 +29,7 @@ function assertId(label: string, value: string): string {
 function buildStoragePath(
   userId: string,
   sessionId: string,
-  planItemId: string
+  planItemId: string,
 ): string {
   return path
     .join("spark", userId, "sessions", sessionId, `${planItemId}.mp3`)
@@ -53,7 +53,7 @@ function normaliseImageStoragePath(imagePath: string): string {
 }
 
 function normaliseSupplementaryImage(
-  image: SessionMediaSupplementaryImage | undefined
+  image: SessionMediaSupplementaryImage | undefined,
 ): SessionMediaSupplementaryImage | undefined {
   if (!image) {
     return undefined;
@@ -65,7 +65,7 @@ function normaliseSupplementaryImage(
 
 function buildImages(
   segments: readonly MediaSegment[],
-  audio: SessionAudioResult
+  audio: SessionAudioResult,
 ): SessionMediaImage[] {
   return segments.map((segment, index) => ({
     index,
@@ -77,7 +77,7 @@ function buildImages(
 
 function buildNarration(
   segments: readonly MediaSegment[],
-  audio: SessionAudioResult
+  audio: SessionAudioResult,
 ): SessionMediaNarration[] {
   const narration: SessionMediaNarration[] = [];
   let offsetIndex = 0;
@@ -116,7 +116,7 @@ export type PublishSessionMediaResult = {
 };
 
 export async function publishSessionMediaClip(
-  input: PublishSessionMediaInput
+  input: PublishSessionMediaInput,
 ): Promise<PublishSessionMediaResult> {
   const userId = assertId("userId", input.userId);
   const sessionId = assertId("sessionId", input.sessionId);

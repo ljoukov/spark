@@ -1,9 +1,6 @@
 import type { Part } from "@google/genai";
 
-import {
-  streamGeminiTextResponse,
-  type GeminiModelId,
-} from "../utils/gemini";
+import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
 import {
   CodeProblemExtractionSchema,
   CODE_PROBLEM_RESPONSE_SCHEMA,

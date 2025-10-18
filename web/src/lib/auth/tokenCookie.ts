@@ -70,13 +70,20 @@ function updateTokenMetadata(token: string): void {
 	}
 }
 
-function scheduleProactiveRefresh(user: User, token: string, setTimer: (timer: number | null) => void) {
+function scheduleProactiveRefresh(
+	user: User,
+	token: string,
+	setTimer: (timer: number | null) => void
+) {
 	if (typeof window === 'undefined') {
 		return;
 	}
 	const payload = decodeJwtPayload(token);
 	const expSeconds =
-		payload && typeof payload === 'object' && 'exp' in payload && typeof (payload as { exp: unknown }).exp === 'number'
+		payload &&
+		typeof payload === 'object' &&
+		'exp' in payload &&
+		typeof (payload as { exp: unknown }).exp === 'number'
 			? (payload as { exp: number }).exp
 			: null;
 	if (!expSeconds) {

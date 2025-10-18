@@ -1,9 +1,6 @@
 import { Type, type Schema } from "@google/genai";
 import type { Part } from "@google/genai";
-import {
-  streamGeminiTextResponse,
-  type GeminiModelId,
-} from "../utils/gemini";
+import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
 import {
   JudgeAuditSchema,
   JudgeVerdictSchema,

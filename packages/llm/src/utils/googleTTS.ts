@@ -101,7 +101,9 @@ export function isGoogleVoice(voice: string): voice is GoogleVoice {
 export class GoogleTextToSpeechClient {
   private readonly auth = getGoogleAuth(CLOUD_PLATFORM_SCOPE);
 
-  async listVoices(options: ListVoicesOptions = {}): Promise<GoogleTextToSpeechVoice[]> {
+  async listVoices(
+    options: ListVoicesOptions = {},
+  ): Promise<GoogleTextToSpeechVoice[]> {
     const accessToken = await this.getAccessToken();
     const url = new URL(GOOGLE_TTS_VOICES_ENDPOINT);
     if (options.languageCode && options.languageCode.trim().length > 0) {
@@ -146,7 +148,9 @@ export class GoogleTextToSpeechClient {
       voice: {
         languageCode: options.voice.languageCode,
         ...(options.voice.name ? { name: options.voice.name } : {}),
-        ...(options.voice.ssmlGender ? { ssmlGender: options.voice.ssmlGender } : {}),
+        ...(options.voice.ssmlGender
+          ? { ssmlGender: options.voice.ssmlGender }
+          : {}),
       },
       audioConfig: {
         audioEncoding,
@@ -206,7 +210,9 @@ export class GoogleTextToSpeechClient {
   private async getAccessToken(): Promise<string> {
     const token = await this.auth.getAccessToken();
     if (!token) {
-      throw new Error("Failed to obtain Google access token for Text-to-Speech.");
+      throw new Error(
+        "Failed to obtain Google access token for Text-to-Speech.",
+      );
     }
     return token;
   }

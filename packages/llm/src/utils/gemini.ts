@@ -1,10 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Content, GenerateContentResponse, Part } from "@google/genai";
 
-import {
-  getGoogleAuthOptions,
-  getGoogleServiceAccount,
-} from "./googleAuth";
+import { getGoogleAuthOptions, getGoogleServiceAccount } from "./googleAuth";
 
 const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
@@ -69,9 +66,7 @@ export function configureGemini(options: GeminiConfiguration = {}): void {
         ? nextProjectId
         : geminiConfiguration.projectId,
     location:
-      nextLocation !== undefined
-        ? nextLocation
-        : geminiConfiguration.location,
+      nextLocation !== undefined ? nextLocation : geminiConfiguration.location,
   };
   clientPromise = undefined;
 }
@@ -264,7 +259,9 @@ function getRetryAfterMs(error: unknown): number | undefined {
     return undefined;
   }
 
-  const infoFromDetails = parseRetryInfo((error as { errorDetails?: unknown }).errorDetails);
+  const infoFromDetails = parseRetryInfo(
+    (error as { errorDetails?: unknown }).errorDetails,
+  );
   if (infoFromDetails !== undefined) {
     return infoFromDetails;
   }
@@ -443,14 +440,12 @@ export async function streamGeminiTextResponse({
   readonly config?: Record<string, unknown>;
   readonly trimOutput?: boolean;
 }): Promise<{ text: string; modelVersion: string }> {
-  const effectiveContents =
-    contents ??
-    [
-      {
-        role: "user",
-        parts: parts ?? [],
-      },
-    ];
+  const effectiveContents = contents ?? [
+    {
+      role: "user",
+      parts: parts ?? [],
+    },
+  ];
   let aggregated = "";
   let resolvedModelVersion = model;
   await runGeminiCall(async (client) => {

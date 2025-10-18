@@ -95,7 +95,7 @@ type SegmentArtifact = {
 
 function resolveVoicePreference(
   speaker: SpeakerCode,
-  overrides: Partial<Record<SpeakerCode, Voice>> | undefined
+  overrides: Partial<Record<SpeakerCode, Voice>> | undefined,
 ): { primary: Voice; fallback?: Voice } {
   const defaultVoice = DEFAULT_VOICE_MAP[speaker];
   const override = overrides?.[speaker];
@@ -106,7 +106,7 @@ function resolveVoicePreference(
 }
 
 async function readStreamToBuffer(
-  stream: ReadableStream<Uint8Array>
+  stream: ReadableStream<Uint8Array>,
 ): Promise<{ buffer: Buffer; totalBytes: number }> {
   const reader = stream.getReader();
   const chunks: Buffer[] = [];
@@ -152,7 +152,7 @@ async function synthesiseSegment(
     index: number;
     totalSegments: number;
     getActiveCount: () => number;
-  }
+  },
 ): Promise<{
   data: Buffer;
   mimeType: string;
@@ -187,7 +187,7 @@ async function synthesiseSegment(
       throw error;
     }
     console.warn(
-      `[tts] voice "${options.voice}" failed (${errorAsString(error)}); retrying with fallback "${options.fallbackVoice}"`
+      `[tts] voice "${options.voice}" failed (${errorAsString(error)}); retrying with fallback "${options.fallbackVoice}"`,
     );
     return runAttempt(options.fallbackVoice);
   }
@@ -213,7 +213,7 @@ export async function generateAudioFromSegments({
       return SegmentSchema.parse(segment);
     } catch (error) {
       throw new Error(
-        `Invalid segment at index ${index}: ${errorAsString(error)}`
+        `Invalid segment at index ${index}: ${errorAsString(error)}`,
       );
     }
   });
@@ -223,7 +223,7 @@ export async function generateAudioFromSegments({
 
   const tempArtifacts: (SegmentArtifact | undefined)[] = Array.from(
     { length: totalSegments },
-    () => undefined
+    () => undefined,
   );
   const extraTempFiles: string[] = [];
   let totalBytesAll = 0;
@@ -232,10 +232,8 @@ export async function generateAudioFromSegments({
   try {
     await Promise.all(
       parsedSegments.map(async (segment, index) => {
-        const { primary: voice, fallback: fallbackVoice } = resolveVoicePreference(
-          segment.speaker,
-          voiceMap
-        );
+        const { primary: voice, fallback: fallbackVoice } =
+          resolveVoicePreference(segment.speaker, voiceMap);
         activeCount += 1;
         progress?.onSegmentStart?.({
           index,
@@ -293,7 +291,7 @@ export async function generateAudioFromSegments({
             });
           }
         }
-      })
+      }),
     );
 
     const artifacts = tempArtifacts.map((artifact, index) => {
@@ -312,12 +310,12 @@ export async function generateAudioFromSegments({
     for (const artifact of artifacts) {
       if (artifact.sampleRate !== sampleRate) {
         throw new Error(
-          `Inconsistent sample rate detected: expected ${sampleRate}, got ${artifact.sampleRate}`
+          `Inconsistent sample rate detected: expected ${sampleRate}, got ${artifact.sampleRate}`,
         );
       }
       if (artifact.channels !== channels) {
         throw new Error(
-          `Inconsistent channel count detected: expected ${channels}, got ${artifact.channels}`
+          `Inconsistent channel count detected: expected ${channels}, got ${artifact.channels}`,
         );
       }
     }
@@ -326,7 +324,7 @@ export async function generateAudioFromSegments({
     const concatListPath = getTempFilePath(concatListFileName);
     const concatListContent = artifacts
       .map(
-        (artifact) => `file '${escapeForFfmpegConcat(artifact.tempFilePath)}'`
+        (artifact) => `file '${escapeForFfmpegConcat(artifact.tempFilePath)}'`,
       )
       .join("\n");
     await fs.writeFile(concatListPath, concatListContent, "utf8");
@@ -351,7 +349,7 @@ export async function generateAudioFromSegments({
 
     const totalDurationSec = segmentDurations.reduce(
       (acc, value) => acc + value,
-      0
+      0,
     );
 
     progress?.onComplete?.({
@@ -383,10 +381,10 @@ export async function generateAudioFromSegments({
           }
         } catch (error) {
           console.warn(
-            `[tts] Failed to remove temp file ${artifact.tempFilePath}: ${errorAsString(error)}`
+            `[tts] Failed to remove temp file ${artifact.tempFilePath}: ${errorAsString(error)}`,
           );
         }
-      })
+      }),
     );
     await Promise.all(
       extraTempFiles.map(async (filePath) => {
@@ -394,10 +392,10 @@ export async function generateAudioFromSegments({
           await fs.rm(filePath, { force: true });
         } catch (error) {
           console.warn(
-            `[tts] Failed to remove temp file ${filePath}: ${errorAsString(error)}`
+            `[tts] Failed to remove temp file ${filePath}: ${errorAsString(error)}`,
           );
         }
-      })
+      }),
     );
   }
 }

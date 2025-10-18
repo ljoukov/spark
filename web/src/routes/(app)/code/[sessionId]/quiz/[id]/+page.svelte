@@ -31,7 +31,7 @@
 		answeredAt: Date | null;
 	};
 
-type FinishState = 'confirm' | 'saving';
+	type FinishState = 'confirm' | 'saving';
 
 	let { data }: { data: PageData } = $props();
 	const quiz = data.quiz;
@@ -666,15 +666,15 @@ type FinishState = 'confirm' | 'saving';
 		return false;
 	}
 
-async function retryFinalize(): Promise<void> {
-    completionSyncError = null;
-    const synced = await finalizeCompletion('manual');
-    if (synced && typeof window !== 'undefined') {
-        await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
-    } else {
-        completionSyncError = SYNC_ERROR_MESSAGE;
-    }
-}
+	async function retryFinalize(): Promise<void> {
+		completionSyncError = null;
+		const synced = await finalizeCompletion('manual');
+		if (synced && typeof window !== 'undefined') {
+			await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+		} else {
+			completionSyncError = SYNC_ERROR_MESSAGE;
+		}
+	}
 
 	async function handleAdvanceFromAttempt() {
 		const index = currentIndex;
@@ -827,32 +827,32 @@ async function retryFinalize(): Promise<void> {
 		class="finish-dialog max-w-lg overflow-hidden rounded-3xl bg-background/98 p-0 shadow-[0_35px_90px_-40px_rgba(15,23,42,0.45)] dark:shadow-[0_35px_90px_-40px_rgba(2,6,23,0.75)]"
 		hideClose
 	>
-    {#if finishState === 'saving' || finishMode === 'finalize'}
-        <div class="finish-saving flex flex-col items-center gap-6 px-6 py-10 text-center">
-            <div class="finish-spinner" aria-hidden="true"></div>
-            <div class="finish-saving-copy space-y-2" role="status" aria-live="polite">
-                <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-                    Saving your progress…
-                </h2>
-                <p class="text-sm leading-relaxed text-muted-foreground">
-                    Hang tight while we sync your latest answers.
-                </p>
-            </div>
-        </div>
-    {:else if finishMode === 'quit'}
-        <TakeBreakDialogContent
-            description={`You still have ${remainingCount} unanswered ${
-                remainingCount === 1 ? 'question' : 'questions'
-            }. Your progress is saved — hop back in whenever you're ready.`}
-            keepLabel="Keep practicing"
-            quitLabel="Quit now"
-            quitDisabled={quitPending}
-            on:keep={() => closeFinishDialog()}
-            on:quit={() => void handleQuit()}
-        />
-    {:else}
-        <!-- no content -->
-    {/if}
+		{#if finishState === 'saving' || finishMode === 'finalize'}
+			<div class="finish-saving flex flex-col items-center gap-6 px-6 py-10 text-center">
+				<div class="finish-spinner" aria-hidden="true"></div>
+				<div class="finish-saving-copy space-y-2" role="status" aria-live="polite">
+					<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+						Saving your progress…
+					</h2>
+					<p class="text-sm leading-relaxed text-muted-foreground">
+						Hang tight while we sync your latest answers.
+					</p>
+				</div>
+			</div>
+		{:else if finishMode === 'quit'}
+			<TakeBreakDialogContent
+				description={`You still have ${remainingCount} unanswered ${
+					remainingCount === 1 ? 'question' : 'questions'
+				}. Your progress is saved — hop back in whenever you're ready.`}
+				keepLabel="Keep practicing"
+				quitLabel="Quit now"
+				quitDisabled={quitPending}
+				on:keep={() => closeFinishDialog()}
+				on:quit={() => void handleQuit()}
+			/>
+		{:else}
+			<!-- no content -->
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -878,8 +878,6 @@ async function retryFinalize(): Promise<void> {
 		margin: 0;
 	}
 
-
-
 	@keyframes finish-spin {
 		from {
 			transform: rotate(0deg);
@@ -888,5 +886,4 @@ async function retryFinalize(): Promise<void> {
 			transform: rotate(360deg);
 		}
 	}
-
 </style>
