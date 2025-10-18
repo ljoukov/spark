@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Play from '@lucide/svelte/icons/play';
@@ -16,6 +17,8 @@
 	import type { PlanItemState } from '@spark/schemas';
 
 	const EPSILON = 0.15;
+	const MIN_KEN_BURNS_DURATION = 10;
+	const DEFAULT_KEN_BURNS_DURATION = 14;
 
 	export let data: PageData;
 
@@ -81,6 +84,13 @@
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 	$: areImagesReady = imageLoadState === 'ready';
+	$: kenBurnsDurationSec =
+		activeImage?.durationSec && activeImage.durationSec > 0
+			? Math.max(activeImage.durationSec, MIN_KEN_BURNS_DURATION)
+			: DEFAULT_KEN_BURNS_DURATION;
+	$: kenBurnsDirectionClass =
+		currentImageOrder % 2 === 0 ? 'kenburns-forward' : 'kenburns-reverse';
+	$: kenBurnsPlayState = isPlaying ? 'running' : 'paused';
 
 	async function startImagePreload(): Promise<void> {
 		if (typeof window === 'undefined') {
@@ -501,13 +511,21 @@
 						<p>Loading visuals…</p>
 					</div>
 				{:else if activeImage?.url}
-					<img
-						src={activeImage.url}
-						alt={`Session illustration ${currentImageOrder + 1}`}
-						width="1600"
-						height="900"
-						loading="lazy"
-					/>
+					<div class="image-frame-visual">
+						{#key currentImageOrder}
+							<img
+								src={activeImage.url}
+								alt={`Session illustration ${currentImageOrder + 1}`}
+								width="1600"
+								height="900"
+								loading="lazy"
+								class={`image-visual ${kenBurnsDirectionClass}`}
+								style={`--kenburns-duration: ${kenBurnsDurationSec}s; --kenburns-play-state: ${kenBurnsPlayState};`}
+								in:fade={{ duration: 420 }}
+								out:fade={{ duration: 420 }}
+							/>
+						{/key}
+					</div>
 				{:else}
 					<div class="image-frame-message image-card-empty">
 						<p>Image unavailable for this moment.</p>
@@ -753,11 +771,23 @@
 		box-shadow: 0 28px 60px -48px rgba(59, 130, 246, 0.4);
 	}
 
-	.image-frame img {
+	.image-frame-visual {
+		position: absolute;
+		inset: 0;
+	}
+
+	.image-visual {
+		position: absolute;
+		inset: 0;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 		display: block;
+		will-change: transform;
+		animation-duration: var(--kenburns-duration, 14s);
+		animation-timing-function: ease-in-out;
+		animation-fill-mode: forwards;
+		animation-play-state: var(--kenburns-play-state, running);
 	}
 
 	.image-frame-message {
@@ -777,6 +807,14 @@
 		background: rgba(255, 255, 255, 0.82);
 		color: rgba(30, 41, 59, 0.85);
 		backdrop-filter: blur(6px);
+	}
+
+	.image-visual.kenburns-forward {
+		animation-name: kenburns-forward;
+	}
+
+	.image-visual.kenburns-reverse {
+		animation-name: kenburns-reverse;
 	}
 
 	:global([data-theme='dark'] .image-card-feedback),
@@ -826,6 +864,24 @@
 		}
 		to {
 			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes kenburns-forward {
+		0% {
+			transform: scale(1.05) translate3d(-2%, -2%, 0);
+		}
+		100% {
+			transform: scale(1.12) translate3d(2%, 2%, 0);
+		}
+	}
+
+	@keyframes kenburns-reverse {
+		0% {
+			transform: scale(1.12) translate3d(2%, 2%, 0);
+		}
+		100% {
+			transform: scale(1.05) translate3d(-2%, -2%, 0);
 		}
 	}
 
