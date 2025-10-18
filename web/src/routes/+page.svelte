@@ -219,7 +219,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.page::before {
+		:global(:root:not([data-theme='light']) .page::before) {
 			background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
 		}
 	}
@@ -229,7 +229,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.page::after {
+		:global(:root:not([data-theme='light']) .page::after) {
 			background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
 		}
 	}
@@ -309,7 +309,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.slogan__primary {
+		:global(:root:not([data-theme='light']) .slogan__primary) {
 			color: rgba(248, 250, 252, 0.92);
 		}
 	}
@@ -327,7 +327,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.slogan__secondary {
+		:global(:root:not([data-theme='light']) .slogan__secondary) {
 			color: rgba(203, 213, 245, 0.78);
 		}
 	}
@@ -392,7 +392,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.video-shell {
+		:global(:root:not([data-theme='light']) .video-shell) {
 			background: linear-gradient(150deg, rgba(88, 28, 135, 0.5), rgba(2, 6, 23, 0.95));
 			border-color: rgba(148, 163, 184, 0.26);
 			box-shadow: 0 32px 84px rgba(8, 11, 21, 0.88);
@@ -419,7 +419,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.video-shell__halo {
+		:global(:root:not([data-theme='light']) .video-shell__halo) {
 			background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
 			opacity: 0.6;
 		}
@@ -455,7 +455,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.video-shell__inner {
+		:global(:root:not([data-theme='light']) .video-shell__inner) {
 			background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.88));
 			border-color: rgba(148, 163, 184, 0.18);
 			opacity: 0.52;
@@ -537,7 +537,7 @@
 	}
 
 	@media (prefers-color-scheme: dark) {
-		.sound-toggle {
+		:global(:root:not([data-theme='light']) .sound-toggle) {
 			border-color: rgba(148, 163, 184, 0.24);
 			background: var(--sound-toggle-bg);
 			color: var(--sound-toggle-foreground);
