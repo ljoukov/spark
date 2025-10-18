@@ -218,12 +218,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			[`items.${parsedBody.planItemId}`]: incomingState
 		});
 
-		if (
-			awardingContext &&
-			awardingContext.xpAvailable > 0 &&
-			progressDocRef &&
-			!alreadyCompleted
-		) {
+		if (awardingContext && awardingContext.xpAvailable > 0 && progressDocRef && !alreadyCompleted) {
 			xpAwarded = awardingContext.xpAvailable;
 			const baseProgressPayload = {
 				sessionId,
@@ -239,7 +234,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				});
 			} else {
 				const problemDifficulty =
-					planItem.kind === 'problem' ? planItem.difficulty ?? null : null;
+					planItem.kind === 'problem' ? (planItem.difficulty ?? null) : null;
 				tx.set(progressDocRef, {
 					...baseProgressPayload,
 					problemId: planItem.id,

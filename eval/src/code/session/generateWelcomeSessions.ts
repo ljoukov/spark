@@ -3,10 +3,7 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import {
-  getFirebaseAdminFirestore,
-  getGoogleServiceAccount,
-} from "@spark/llm";
+import { getFirebaseAdminFirestore, getGoogleServiceAccount } from "@spark/llm";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -524,7 +521,6 @@ const BFS_QUIZZES: QuizDefinition[] = [
   },
 ];
 
-
 const BFS_PARK_STEPS_EXAMPLES = [
   {
     title: "Example 1",
@@ -580,50 +576,22 @@ const BFS_PARK_STEPS_TESTS = [
     explanation: "The only route is the chain 1 → 2 → 3 → 4 → 5.",
   },
   {
-    input: [
-      "5 6",
-      "1 2",
-      "2 3",
-      "3 4",
-      "4 5",
-      "1 3",
-      "2 5",
-      "1 5",
-    ].join("\\n"),
+    input: ["5 6", "1 2", "2 3", "3 4", "4 5", "1 3", "2 5", "1 5"].join("\\n"),
     output: "2",
     explanation: "Breadth-first Search finds the shortcut 1 → 2 → 5.",
   },
   {
     input: ["5 3", "1 2", "2 3", "4 5", "1 5"].join("\\n"),
     output: "-1",
-    explanation:
-      "Spots 1–3 form a component that never reaches spot 5.",
+    explanation: "Spots 1–3 form a component that never reaches spot 5.",
   },
   {
-    input: [
-      "6 6",
-      "1 2",
-      "1 3",
-      "2 4",
-      "3 5",
-      "4 6",
-      "5 6",
-      "1 6",
-    ].join("\\n"),
+    input: ["6 6", "1 2", "1 3", "2 4", "3 5", "4 6", "5 6", "1 6"].join("\\n"),
     output: "3",
     explanation: "Shortest path is 1 → 2 → 4 → 6 (three bridges).",
   },
   {
-    input: [
-      "7 6",
-      "1 2",
-      "2 3",
-      "3 4",
-      "4 5",
-      "5 6",
-      "6 7",
-      "4 4",
-    ].join("\\n"),
+    input: ["7 6", "1 2", "2 3", "3 4", "4 5", "5 6", "6 7", "4 4"].join("\\n"),
     output: "0",
     explanation: "Start and goal are the same numbered spot.",
   },
@@ -698,14 +666,7 @@ const BFS_MAZE_SCOUT_TESTS = [
     explanation: "The scout must detour down the left column before turning.",
   },
   {
-    input: [
-      "5 5",
-      "S#...",
-      ".#.#.",
-      "..#..",
-      ".##.#",
-      "...T.",
-    ].join("\\n"),
+    input: ["5 5", "S#...", ".#.#.", "..#..", ".##.#", "...T."].join("\\n"),
     output: "7",
     explanation: "Seven careful moves wind through the maze to reach T.",
   },
@@ -853,8 +814,6 @@ const BFS_PROBLEMS: CodeProblem[] = [
   },
 ];
 
-
-
 const DP_QUIZZES: QuizDefinition[] = [
   {
     id: "dp-primer-quiz",
@@ -905,7 +864,7 @@ const DP_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "dp-primer-overlap",
         prompt:
-          "Which task screams \"overlapping subproblems\" and begs for dynamic programming?",
+          'Which task screams "overlapping subproblems" and begs for dynamic programming?',
         hint: "Pick the one where smaller questions repeat over and over.",
         explanation:
           "Counting ways to climb many stairs reuses the same smaller stair counts for every larger step.",
@@ -1013,7 +972,7 @@ const DP_QUIZZES: QuizDefinition[] = [
         id: "dp-primer-tabulation",
         prompt:
           "What do we call the technique where we fill the DP table from the smallest state upward without recursion?",
-        hint: "It rhymes with \"calculation\" and starts with a t.",
+        hint: 'It rhymes with "calculation" and starts with a t.',
         explanation:
           "Tabulation fills the table iteratively, always using answers that were already written.",
         answer: "tabulation",
@@ -1346,11 +1305,7 @@ const DP_PROBLEMS: CodeProblem[] = [
       "- Line 1: integers n and k (0 ≤ n ≤ 50, 1 ≤ k ≤ 5) — stair height and number of jump sizes.",
       "- Line 2: k distinct positive integers giving the allowed jump sizes in any order.",
     ].join("\\n"),
-    constraints: [
-      "0 ≤ n ≤ 50",
-      "1 ≤ k ≤ 5",
-      "1 ≤ jump ≤ 10",
-    ],
+    constraints: ["0 ≤ n ≤ 50", "1 ≤ k ≤ 5", "1 ≤ jump ≤ 10"],
     examples: DP_STAIR_SPRINT_EXAMPLES,
     tests: DP_STAIR_SPRINT_TESTS,
     hints: [
@@ -1398,10 +1353,7 @@ const DP_PROBLEMS: CodeProblem[] = [
       "- Line 1: integer n (1 ≤ n ≤ 200_000) — number of rooms.",
       "- Line 2: n integers value_i (−10^6 ≤ value_i ≤ 10^6) for each room.",
     ].join("\\n"),
-    constraints: [
-      "1 ≤ n ≤ 200_000",
-      "−1_000_000 ≤ value ≤ 1_000_000",
-    ],
+    constraints: ["1 ≤ n ≤ 200_000", "−1_000_000 ≤ value ≤ 1_000_000"],
     examples: DP_MUSEUM_GUARD_EXAMPLES,
     tests: DP_MUSEUM_GUARD_TESTS,
     hints: [
@@ -1431,7 +1383,6 @@ const DP_PROBLEMS: CodeProblem[] = [
   },
 ];
 
-
 const FLT_QUIZZES: QuizDefinition[] = [
   {
     id: "flt-primer-quiz",
@@ -1450,7 +1401,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
         body: [
           "A vault opens only when you turn a wheel with numbers 0…p-1 where p is prime.",
           "",
-          "Every spin is really \"take the remainder mod p\". Drop huge numbers and the lock only cares about their remainders.",
+          'Every spin is really "take the remainder mod p". Drop huge numbers and the lock only cares about their remainders.',
         ].join("\\n"),
         continueLabel: "Next idea",
       },
@@ -1482,7 +1433,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "flt-primer-naive",
         prompt:
-          "Why is \"multiply a by itself b times\" a terrible plan when computing a^b mod p for huge b?",
+          'Why is "multiply a by itself b times" a terrible plan when computing a^b mod p for huge b?',
         hint: "Think about how big the intermediate numbers become.",
         explanation:
           "Intermediate products explode far beyond what fits in native integers; taking mod each step keeps numbers tame.",
@@ -1518,11 +1469,9 @@ const FLT_QUIZZES: QuizDefinition[] = [
       {
         kind: "multiple-choice",
         id: "flt-primer-value",
-        prompt:
-          "If p is prime and gcd(a, p) = 1, what is a^(p-1) mod p?",
+        prompt: "If p is prime and gcd(a, p) = 1, what is a^(p-1) mod p?",
         hint: "This is the headline of Fermat's little theorem.",
-        explanation:
-          "Fermat's little theorem states a^(p-1) ≡ 1 (mod p).",
+        explanation: "Fermat's little theorem states a^(p-1) ≡ 1 (mod p).",
         options: [
           { id: "A", label: "A", text: "0" },
           { id: "B", label: "B", text: "1" },
@@ -1593,7 +1542,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
         id: "flt-primer-binary",
         prompt:
           "Name the fast algorithm that squares the base and halves the exponent to compute powers quickly.",
-        hint: "Two words: starts with \"binary\".",
+        hint: 'Two words: starts with "binary".',
         explanation:
           "Binary exponentiation (a.k.a. exponentiation by squaring) computes large powers in O(log b).",
         answer: "binary exponentiation",
@@ -1753,7 +1702,8 @@ const FLT_QUIZZES: QuizDefinition[] = [
         acceptableAnswers: ["modulo", "take mod"],
         correctFeedback: {
           heading: "Exactly",
-          message: "Reduce after every multiply to avoid overflow and stay in range.",
+          message:
+            "Reduce after every multiply to avoid overflow and stay in range.",
         },
       },
       {
@@ -1783,7 +1733,8 @@ const FLT_PRIME_POWER_EXAMPLES = [
     title: "Example 2",
     input: ["13 8 100"].join("\\n"),
     output: "1",
-    explanation: "Fermat shrinks the exponent: 8^(12) ≡ 1 mod 13, so 8^100 collapses to 1.",
+    explanation:
+      "Fermat shrinks the exponent: 8^(12) ≡ 1 mod 13, so 8^100 collapses to 1.",
   },
   {
     title: "Example 3",
@@ -1861,7 +1812,10 @@ const FLT_MODULAR_KEYSMITH_TESTS = [
   { input: ["29 5", "3 10 21 28 29"].join("\\n"), output: "10 3 18 28 -1" },
   { input: ["101 4", "1 50 75 100"].join("\\n"), output: "1 99 66 100" },
   { input: ["43 5", "7 14 21 28 35"].join("\\n"), output: "37 40 41 20 16" },
-  { input: ["97 6", "12 24 36 48 60 72"].join("\\n"), output: "89 93 62 95 76 31" },
+  {
+    input: ["97 6", "12 24 36 48 60 72"].join("\\n"),
+    output: "89 93 62 95 76 31",
+  },
   { input: ["11 5", "0 1 2 3 4"].join("\\n"), output: "-1 1 6 4 3" },
   { input: ["13 1", "1"].join("\\n"), output: "1" },
 ];
@@ -1880,11 +1834,7 @@ const FLT_PROBLEMS: CodeProblem[] = [
     inputFormat: [
       "- Line 1: integers p, a, b with p prime (2 ≤ p ≤ 1_000_000_007), 0 ≤ a < p, 0 ≤ b ≤ 10^18.",
     ].join("\\n"),
-    constraints: [
-      "2 ≤ p ≤ 1_000_000_007",
-      "0 ≤ a < p",
-      "0 ≤ b ≤ 10^18",
-    ],
+    constraints: ["2 ≤ p ≤ 1_000_000_007", "0 ≤ a < p", "0 ≤ b ≤ 10^18"],
     examples: FLT_PRIME_POWER_EXAMPLES,
     tests: FLT_PRIME_POWER_TESTS,
     hints: [
@@ -1967,7 +1917,6 @@ const FLT_PROBLEMS: CodeProblem[] = [
   },
 ];
 
-
 const BFS_SESSION_ID = "welcome-bfs-explorer";
 const BFS_STORY_PLAN_ITEM_ID = "welcome-bfs-story";
 
@@ -1997,8 +1946,7 @@ function buildBfsPlan(storyTitle: string): PlanItem[] {
       title: "Practice · Park Steps",
       icon: "🌲",
       meta: "Graphs · Easy",
-      summary:
-        "Use BFS to count the shortest hop count between park spots.",
+      summary: "Use BFS to count the shortest hop count between park spots.",
     },
     {
       id: "maze-scout",
@@ -2103,8 +2051,7 @@ function buildFermatPlan(storyTitle: string): PlanItem[] {
       title: "Practice · Prime Power Pulse",
       icon: "⚡",
       meta: "Exponent · Intro",
-      summary:
-        "Practice fast modular exponentiation with binary squaring.",
+      summary: "Practice fast modular exponentiation with binary squaring.",
     },
     {
       id: "modular-keysmith",
@@ -2112,8 +2059,7 @@ function buildFermatPlan(storyTitle: string): PlanItem[] {
       title: "Challenge · Modular Keysmith",
       icon: "🔑",
       meta: "Inverses · Easy",
-      summary:
-        "Forge modular inverses quickly and flag the numbers with none.",
+      summary: "Forge modular inverses quickly and flag the numbers with none.",
     },
     {
       id: "flt-wrap-quiz",
@@ -2239,7 +2185,10 @@ function resolveSessionRootDir(baseDir: string, sessionId: string): string {
   return path.join(baseDir, sessionId);
 }
 
-function resolveSessionDebugRootDir(baseDir: string, sessionId: string): string {
+function resolveSessionDebugRootDir(
+  baseDir: string,
+  sessionId: string,
+): string {
   return resolveSessionRootDir(baseDir, sessionId);
 }
 
@@ -2332,7 +2281,10 @@ function getTemplateDocRef(sessionId: string) {
     .doc(sessionId);
 }
 
-async function seedSessionState(userId: string, session: Session): Promise<void> {
+async function seedSessionState(
+  userId: string,
+  session: Session,
+): Promise<void> {
   const firestore = getFirebaseAdminFirestore();
   const stateRef = firestore
     .collection("spark")
@@ -2533,7 +2485,9 @@ async function seedTemplateContent(
 
   const codeCollection = templateDoc.collection("code");
   const codeDocs = await codeCollection.listDocuments();
-  const nextProblemIds = new Set(blueprint.problems.map((problem) => problem.slug));
+  const nextProblemIds = new Set(
+    blueprint.problems.map((problem) => problem.slug),
+  );
   await Promise.all(
     codeDocs
       .filter((doc) => !nextProblemIds.has(doc.id))
@@ -2557,7 +2511,10 @@ async function seedUserPreview(
     .collection("spark")
     .doc(TEMPLATE_USER_ID);
 
-  await userRef.collection("sessions").doc(seedData.session.id).set(seedData.session);
+  await userRef
+    .collection("sessions")
+    .doc(seedData.session.id)
+    .set(seedData.session);
 
   await Promise.all(
     blueprint.quizzes.map(async (quiz) => {
@@ -2601,7 +2558,9 @@ async function runSeedStage(
   context.session = seedData.session;
   context.sessionData = seedData.sessionData;
 
-  console.log(`[welcome/${blueprint.sessionId}] Seeded session template and preview data`);
+  console.log(
+    `[welcome/${blueprint.sessionId}] Seeded session template and preview data`,
+  );
 }
 
 async function publishMediaAssets(
@@ -2612,7 +2571,9 @@ async function publishMediaAssets(
     (source) => source.sessionId === blueprint.sessionId,
   );
   if (sources.length === 0) {
-    console.log(`[welcome/${blueprint.sessionId}] no auxiliary media to publish`);
+    console.log(
+      `[welcome/${blueprint.sessionId}] no auxiliary media to publish`,
+    );
     return;
   }
 
@@ -2702,7 +2663,10 @@ async function executeStages(
     }
   }
 
-  logCompletedStages(stageSequence, blueprints.map((item) => item.sessionId));
+  logCompletedStages(
+    stageSequence,
+    blueprints.map((item) => item.sessionId),
+  );
 }
 
 function parseOptions(raw: {

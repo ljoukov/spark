@@ -129,147 +129,146 @@
 		}
 	}
 
-export let data: PageData;
+	export let data: PageData;
 
 	let problem = data.problem;
 	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState: PlanItemState | null = data.sessionState.items[data.planItem.id] ?? null;
-let hasMarkedStart = false;
-let completionRecorded = planItemState?.status === 'completed';
-const CODE_LANGUAGE: PlanItemCodeState['language'] = 'python';
-const DEFAULT_CODE = DEFAULT_CODE_SOURCE;
-const localStorageKey = browser
-	? buildLocalStorageKey(data.userId, data.sessionId, data.planItem.id)
-	: null;
-const initialCodeState: PlanItemCodeState | null = planItemState?.code ?? null;
-let rightText = initialCodeState?.source ?? DEFAULT_CODE;
-let lastSavedSource = rightText;
-let lastSavedAt: Date | null = initialCodeState?.savedAt ?? null;
-let lastRunStatus: PlanItemCodeState['lastRunStatus'] | null =
-	initialCodeState?.lastRunStatus ?? null;
-let lastRunAt: Date | null = initialCodeState?.lastRunAt ?? null;
-let hasPendingChanges = false;
-let isPersistingCode = false;
-let pendingSavePromise: Promise<void> | null = null;
-let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
-let localSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let saveError: string | null = null;
-let isApplyingRemoteSource = false;
-let submitError: string | null = null;
-let isSubmitting = false;
-let celebrationOpen = false;
-let celebrationXpAwarded = 0;
-let celebrationStats: SessionUpdateResult['stats'] = null;
-let celebrationAlreadyCompleted = false;
-let celebrationClosingViaHandler = false;
-let celebrationEmoji = '🎉';
-let celebrationTitle = 'Brilliant job!';
-let celebrationMessage = 'Progress saved - head back to the dashboard for the next challenge.';
-let lastLocalSavedAt = 0;
-let shouldSyncLocalDraft = false;
-let isCodeReadOnly = Boolean(
-	planItemState?.status === 'completed' && planItemState.code?.lastRunStatus === 'passed'
-);
+	let hasMarkedStart = false;
+	let completionRecorded = planItemState?.status === 'completed';
+	const CODE_LANGUAGE: PlanItemCodeState['language'] = 'python';
+	const DEFAULT_CODE = DEFAULT_CODE_SOURCE;
+	const localStorageKey = browser
+		? buildLocalStorageKey(data.userId, data.sessionId, data.planItem.id)
+		: null;
+	const initialCodeState: PlanItemCodeState | null = planItemState?.code ?? null;
+	let rightText = initialCodeState?.source ?? DEFAULT_CODE;
+	let lastSavedSource = rightText;
+	let lastSavedAt: Date | null = initialCodeState?.savedAt ?? null;
+	let lastRunStatus: PlanItemCodeState['lastRunStatus'] | null =
+		initialCodeState?.lastRunStatus ?? null;
+	let lastRunAt: Date | null = initialCodeState?.lastRunAt ?? null;
+	let hasPendingChanges = false;
+	let isPersistingCode = false;
+	let pendingSavePromise: Promise<void> | null = null;
+	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let localSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let saveError: string | null = null;
+	let isApplyingRemoteSource = false;
+	let submitError: string | null = null;
+	let isSubmitting = false;
+	let celebrationOpen = false;
+	let celebrationXpAwarded = 0;
+	let celebrationStats: SessionUpdateResult['stats'] = null;
+	let celebrationAlreadyCompleted = false;
+	let celebrationClosingViaHandler = false;
+	let celebrationEmoji = '🎉';
+	let celebrationTitle = 'Brilliant job!';
+	let celebrationMessage = 'Progress saved - head back to the dashboard for the next challenge.';
+	let lastLocalSavedAt = 0;
+	let shouldSyncLocalDraft = false;
+	let isCodeReadOnly = Boolean(
+		planItemState?.status === 'completed' && planItemState.code?.lastRunStatus === 'passed'
+	);
 
-if (browser && localStorageKey) {
-	const remoteSavedAtMs = lastSavedAt ? lastSavedAt.getTime() : 0;
-	const localDraft = readLocalDraftFromStorage(localStorageKey);
-	if (localDraft) {
-		lastLocalSavedAt = localDraft.savedAt;
-		const hasLocalSource = localDraft.source.trim().length > 0;
-		const localIsNewer =
-			localDraft.savedAt > remoteSavedAtMs + LOCAL_TIMESTAMP_TOLERANCE_MS && hasLocalSource;
-		if (localIsNewer && localDraft.source !== rightText) {
-			rightText = localDraft.source;
-			hasPendingChanges = true;
-			shouldSyncLocalDraft = true;
-		} else if (remoteSavedAtMs > 0) {
+	if (browser && localStorageKey) {
+		const remoteSavedAtMs = lastSavedAt ? lastSavedAt.getTime() : 0;
+		const localDraft = readLocalDraftFromStorage(localStorageKey);
+		if (localDraft) {
+			lastLocalSavedAt = localDraft.savedAt;
+			const hasLocalSource = localDraft.source.trim().length > 0;
+			const localIsNewer =
+				localDraft.savedAt > remoteSavedAtMs + LOCAL_TIMESTAMP_TOLERANCE_MS && hasLocalSource;
+			if (localIsNewer && localDraft.source !== rightText) {
+				rightText = localDraft.source;
+				hasPendingChanges = true;
+				shouldSyncLocalDraft = true;
+			} else if (remoteSavedAtMs > 0) {
+				writeLocalDraftToStorage(localStorageKey, {
+					source: rightText,
+					savedAt: remoteSavedAtMs
+				});
+				lastLocalSavedAt = remoteSavedAtMs;
+			}
+		} else {
+			const fallbackTimestamp = remoteSavedAtMs || Date.now();
 			writeLocalDraftToStorage(localStorageKey, {
 				source: rightText,
-				savedAt: remoteSavedAtMs
+				savedAt: fallbackTimestamp
 			});
-			lastLocalSavedAt = remoteSavedAtMs;
+			lastLocalSavedAt = fallbackTimestamp;
 		}
-	} else {
-		const fallbackTimestamp = remoteSavedAtMs || Date.now();
-		writeLocalDraftToStorage(localStorageKey, {
-			source: rightText,
-			savedAt: fallbackTimestamp
-		});
-		lastLocalSavedAt = fallbackTimestamp;
 	}
-}
 
-if (isCodeReadOnly) {
-	hasPendingChanges = false;
-	shouldSyncLocalDraft = false;
-}
+	if (isCodeReadOnly) {
+		hasPendingChanges = false;
+		shouldSyncLocalDraft = false;
+	}
 
-if (browser && shouldSyncLocalDraft) {
-	queueMicrotask(() => {
-		void persistCode('local-newer', { force: true }).catch(() => {});
-	});
-	shouldSyncLocalDraft = false;
-}
+	if (browser && shouldSyncLocalDraft) {
+		queueMicrotask(() => {
+			void persistCode('local-newer', { force: true }).catch(() => {});
+		});
+		shouldSyncLocalDraft = false;
+	}
 
-const stopSessionState = sessionStateStore.subscribe((value) => {
+	const stopSessionState = sessionStateStore.subscribe((value) => {
 		const nextState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
 		planItemState = nextState ?? null;
 
-	if (planItemState?.status === 'completed') {
-		completionRecorded = true;
-	}
+		if (planItemState?.status === 'completed') {
+			completionRecorded = true;
+		}
 
-	const nextCode = planItemState?.code ?? null;
-	if (!nextCode) {
-		return;
-	}
+		const nextCode = planItemState?.code ?? null;
+		if (!nextCode) {
+			return;
+		}
 
-	isCodeReadOnly = Boolean(
-		planItemState?.status === 'completed' && nextCode.lastRunStatus === 'passed'
-	);
+		isCodeReadOnly = Boolean(
+			planItemState?.status === 'completed' && nextCode.lastRunStatus === 'passed'
+		);
 
-	const savedAt = nextCode.savedAt ?? null;
-	const sourceChanged = nextCode.source !== lastSavedSource;
-		const isNewer =
-			!!savedAt && (!lastSavedAt || savedAt.getTime() > lastSavedAt.getTime() + 5);
+		const savedAt = nextCode.savedAt ?? null;
+		const sourceChanged = nextCode.source !== lastSavedSource;
+		const isNewer = !!savedAt && (!lastSavedAt || savedAt.getTime() > lastSavedAt.getTime() + 5);
 		const shouldApplyRemote = !hasPendingChanges && sourceChanged && (isNewer || !savedAt);
 
-	if (shouldApplyRemote) {
-		lastSavedSource = nextCode.source;
-		lastSavedAt = savedAt;
-		if (monacoEditor) {
-			isApplyingRemoteSource = true;
-			monacoEditor.setValue(nextCode.source);
-			isApplyingRemoteSource = false;
+		if (shouldApplyRemote) {
+			lastSavedSource = nextCode.source;
+			lastSavedAt = savedAt;
+			if (monacoEditor) {
+				isApplyingRemoteSource = true;
+				monacoEditor.setValue(nextCode.source);
+				isApplyingRemoteSource = false;
+			}
+			rightText = nextCode.source;
+			hasPendingChanges = false;
+		} else if (isNewer) {
+			lastSavedSource = nextCode.source;
+			lastSavedAt = savedAt;
 		}
-		rightText = nextCode.source;
-		hasPendingChanges = false;
-	} else if (isNewer) {
-		lastSavedSource = nextCode.source;
-		lastSavedAt = savedAt;
-	}
 
-	if (isNewer || shouldApplyRemote) {
-		saveError = null;
+		if (isNewer || shouldApplyRemote) {
+			saveError = null;
 
-		if (browser && localStorageKey) {
-			const savedAtMs = savedAt ? savedAt.getTime() : Date.now();
-			writeLocalDraftToStorage(localStorageKey, {
-				source: nextCode.source,
-				savedAt: savedAtMs
-			});
-			lastLocalSavedAt = savedAtMs;
+			if (browser && localStorageKey) {
+				const savedAtMs = savedAt ? savedAt.getTime() : Date.now();
+				writeLocalDraftToStorage(localStorageKey, {
+					source: nextCode.source,
+					savedAt: savedAtMs
+				});
+				lastLocalSavedAt = savedAtMs;
+			}
 		}
-	}
 
-	if (nextCode.lastRunStatus) {
-		lastRunStatus = nextCode.lastRunStatus;
-	}
-	if (nextCode.lastRunAt) {
-		lastRunAt = nextCode.lastRunAt;
-	}
-});
+		if (nextCode.lastRunStatus) {
+			lastRunStatus = nextCode.lastRunStatus;
+		}
+		if (nextCode.lastRunAt) {
+			lastRunAt = nextCode.lastRunAt;
+		}
+	});
 	let maximizedPane: PaneSide | null = null;
 	let paneGroup: { setLayout: (layout: number[]) => void; getLayout: () => number[] } | null = null;
 	let currentProblemId = problem.id;
@@ -320,10 +319,10 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 	$: celebrationEmoji = celebrationAlreadyCompleted ? '🌟' : '🎉';
 	$: celebrationTitle = celebrationAlreadyCompleted ? 'Welcome back!' : 'Brilliant job!';
 	$: celebrationMessage = celebrationAlreadyCompleted
-	? 'Your solution was already synced - hop back to the dashboard for the next challenge.'
-	: celebrationXpAwarded > 0
-		? `You earned ${celebrationXpAwarded} XP for solving this problem.`
-		: 'Progress saved - head back to pick the next challenge.';
+		? 'Your solution was already synced - hop back to the dashboard for the next challenge.'
+		: celebrationXpAwarded > 0
+			? `You earned ${celebrationXpAwarded} XP for solving this problem.`
+			: 'Progress saved - head back to pick the next challenge.';
 
 	$: runTooltipLabel = isRunning
 		? STOP_TOOLTIP_LABEL
@@ -369,7 +368,10 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 			return normalized;
 		}
 		if (normalized.includes('\\n') || normalized.includes('\\r')) {
-			return normalized.replace(/\\r\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\n/g, '\n');
+			return normalized
+				.replace(/\\r\\n/g, '\n')
+				.replace(/\\r/g, '\n')
+				.replace(/\\n/g, '\n');
 		}
 		return normalized;
 	}
@@ -467,30 +469,32 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 			}
 		}
 
-	const source = monacoEditor?.getValue() ?? rightText ?? '';
-	const desiredRunStatus = options?.runStatus ?? null;
-	const runStatusChanged =
-		desiredRunStatus !== null && desiredRunStatus !== undefined && desiredRunStatus !== lastRunStatus;
-	const shouldSkip =
+		const source = monacoEditor?.getValue() ?? rightText ?? '';
+		const desiredRunStatus = options?.runStatus ?? null;
+		const runStatusChanged =
+			desiredRunStatus !== null &&
+			desiredRunStatus !== undefined &&
+			desiredRunStatus !== lastRunStatus;
+		const shouldSkip =
 			!options?.force &&
 			!hasPendingChanges &&
 			source === lastSavedSource &&
 			(!runStatusChanged || desiredRunStatus === null || desiredRunStatus === undefined);
-	if (shouldSkip) {
-		return;
-	}
+		if (shouldSkip) {
+			return;
+		}
 
-	const now = new Date();
-	const runAt = options?.runAt ?? (runStatusChanged ? now : null);
-	isPersistingCode = true;
-	clearAutosaveTimer();
-	if (options?.force) {
-		flushLocalDraftImmediate(source);
-	}
+		const now = new Date();
+		const runAt = options?.runAt ?? (runStatusChanged ? now : null);
+		isPersistingCode = true;
+		clearAutosaveTimer();
+		if (options?.force) {
+			flushLocalDraftImmediate(source);
+		}
 
-	const updatePromise = sessionStateStore
-		.updateItem(
-			data.planItem.id,
+		const updatePromise = sessionStateStore
+			.updateItem(
+				data.planItem.id,
 				(current) => {
 					const nextStatus =
 						current.status === 'not_started' && !options?.markCompleted
@@ -547,23 +551,23 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 			.then((result) => {
 				lastSavedSource = source;
 				lastSavedAt = now;
-			hasPendingChanges = false;
-			saveError = null;
-			if (runStatusChanged) {
-				lastRunStatus = desiredRunStatus;
-				lastRunAt = runAt ?? now;
-			} else if (runAt) {
-				lastRunAt = runAt;
-			}
-			if (options?.markCompleted) {
-				completionRecorded = true;
-			}
-			if (!options?.force) {
-				clearLocalSaveTimer();
-			}
-			flushLocalDraftImmediate(source);
-			return result;
-		})
+				hasPendingChanges = false;
+				saveError = null;
+				if (runStatusChanged) {
+					lastRunStatus = desiredRunStatus;
+					lastRunAt = runAt ?? now;
+				} else if (runAt) {
+					lastRunAt = runAt;
+				}
+				if (options?.markCompleted) {
+					completionRecorded = true;
+				}
+				if (!options?.force) {
+					clearLocalSaveTimer();
+				}
+				flushLocalDraftImmediate(source);
+				return result;
+			})
 			.catch((error) => {
 				console.error('Failed to persist code', { reason, error });
 				saveError = SAVE_ERROR_MESSAGE;
@@ -967,7 +971,9 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 		currentWorkerRun = null;
 	}
 
-	async function startRun(reason: 'run' | 'submit'): Promise<PlanItemCodeState['lastRunStatus'] | null> {
+	async function startRun(
+		reason: 'run' | 'submit'
+	): Promise<PlanItemCodeState['lastRunStatus'] | null> {
 		if (!browser) {
 			console.warn('Code execution is only available in the browser runtime.');
 			return null;
@@ -1105,20 +1111,16 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 
 			const submissionAt = new Date();
 			const source = getCurrentSource();
-			const result = await sessionStateStore.markStatus(
-				data.planItem.id,
-				'completed',
-				{
-					completedAt: submissionAt,
-					code: {
-						language: CODE_LANGUAGE,
-						source,
-						savedAt: submissionAt,
-						lastRunStatus: 'passed',
-						lastRunAt: submissionAt
-					}
+			const result = await sessionStateStore.markStatus(data.planItem.id, 'completed', {
+				completedAt: submissionAt,
+				code: {
+					language: CODE_LANGUAGE,
+					source,
+					savedAt: submissionAt,
+					lastRunStatus: 'passed',
+					lastRunAt: submissionAt
 				}
-			);
+			});
 
 			lastSavedSource = source;
 			lastSavedAt = submissionAt;
@@ -1903,8 +1905,9 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 															Input
 														</h4>
 														<pre
-															class="mt-1 rounded bg-muted/30 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(selectedResult.input) ||
-																'—'}</pre>
+															class="mt-1 rounded bg-muted/30 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(
+																selectedResult.input
+															) || '—'}</pre>
 													</div>
 													<div class="grid gap-3 md:grid-cols-2">
 														<div>
@@ -1912,8 +1915,9 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 																Expected Output
 															</h4>
 															<pre
-																class="mt-1 rounded bg-muted/100 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(selectedResult.expectedOutput) ||
-																	'—'}</pre>
+																class="mt-1 rounded bg-muted/100 p-2 font-mono text-xs leading-snug whitespace-pre-wrap">{formatPreText(
+																	selectedResult.expectedOutput
+																) || '—'}</pre>
 														</div>
 														<div>
 															<h4 class="text-xs font-semibold text-muted-foreground uppercase">
@@ -1996,9 +2000,7 @@ const stopSessionState = sessionStateStore.subscribe((value) => {
 					</span>
 				{/if}
 			</div>
-			<Button class="celebration-ok w-full sm:w-auto" onclick={handleCelebrationConfirm}>
-				OK
-			</Button>
+			<Button class="celebration-ok w-full sm:w-auto" onclick={handleCelebrationConfirm}>OK</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

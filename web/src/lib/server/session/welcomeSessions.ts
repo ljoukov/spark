@@ -95,7 +95,9 @@ async function fetchTemplateSnapshot(sessionId: string) {
 	return { docRef, parsed };
 }
 
-async function fetchTemplateQuizzes(docRef: FirebaseFirestore.DocumentReference): Promise<QuizDefinition[]> {
+async function fetchTemplateQuizzes(
+	docRef: FirebaseFirestore.DocumentReference
+): Promise<QuizDefinition[]> {
 	const snapshot = await docRef.collection('quiz').get();
 	const quizzes: QuizDefinition[] = [];
 	for (const doc of snapshot.docs) {
@@ -112,7 +114,9 @@ async function fetchTemplateQuizzes(docRef: FirebaseFirestore.DocumentReference)
 	return quizzes;
 }
 
-async function fetchTemplateProblems(docRef: FirebaseFirestore.DocumentReference): Promise<CodeProblem[]> {
+async function fetchTemplateProblems(
+	docRef: FirebaseFirestore.DocumentReference
+): Promise<CodeProblem[]> {
 	const snapshot = await docRef.collection('code').get();
 	const problems: CodeProblem[] = [];
 	for (const doc of snapshot.docs) {
@@ -186,7 +190,11 @@ async function resolveTemplatePosterUrl(
 		}
 		return await createSignedUrl(storagePath);
 	} catch (error) {
-		console.error('Unable to parse template media document for poster image', mediaSnapshot.id, error);
+		console.error(
+			'Unable to parse template media document for poster image',
+			mediaSnapshot.id,
+			error
+		);
 		return null;
 	}
 }

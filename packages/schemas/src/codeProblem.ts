@@ -65,7 +65,9 @@ export const CodeProblemSchema = z
       .array(trimmedString)
       .min(1)
       .transform((items) => items.map((item) => item.trim())),
-    examples: z.array(exampleSchema).length(3, "Provide exactly three examples"),
+    examples: z
+      .array(exampleSchema)
+      .length(3, "Provide exactly three examples"),
     tests: z
       .array(testCaseSchema)
       .min(10, "Provide at least ten tests")

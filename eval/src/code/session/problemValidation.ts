@@ -72,7 +72,9 @@ function resolveIndexUrl(explicit?: string): string {
     fromEnv,
     DEFAULT_INDEX_URL,
     CDN_INDEX_URL,
-  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+  ].filter((value): value is string =>
+    Boolean(value && value.trim().length > 0),
+  );
 
   for (const candidate of candidates) {
     const trimmed = candidate.trim();
@@ -173,7 +175,9 @@ async function runPythonWithStdIO(
     };
   } catch (error) {
     const message =
-      error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
     return {
       stdout: stdio.stdout.join(""),
       stderr: stdio.stderr.join(""),
