@@ -137,8 +137,8 @@ Only the winning set is kept for downstream storage. The judge weighs prompt fid
 
 ## Media Packaging
 
-- **Filtering:** Frames 1–10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly.
+- **Filtering:** Frames 1–10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly but re-encoded and uploaded as supplementary stills so the client can display them without Ken Burns motion.
 - **JPEG normalisation:** Images are re-encoded (quality 92, 4:4:4) prior to upload.
 - **Narration synthesis (post-judging):** The alternating `M` / `F` segments from the winning set are passed to the narration pipeline, keeping the same order as the frames.
 
-The result bundle contains the story text, accepted segmentation, storage paths for the ten canonical frames, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.
+The result bundle contains the story text, accepted segmentation, storage paths for the ten canonical frames, poster/ending still references, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.

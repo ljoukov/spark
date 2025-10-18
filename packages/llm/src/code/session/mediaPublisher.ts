@@ -11,6 +11,7 @@ import {
   type SessionMediaDoc,
   type SessionMediaImage,
   type SessionMediaNarration,
+  type SessionMediaSupplementaryImage,
 } from "@spark/schemas";
 import type { SessionAudioResult } from "./audio";
 import type { MediaSegment } from "./schemas";
@@ -49,6 +50,17 @@ function normaliseImageStoragePath(imagePath: string): string {
     return path;
   }
   return `/${path}`;
+}
+
+function normaliseSupplementaryImage(
+  image: SessionMediaSupplementaryImage | undefined
+): SessionMediaSupplementaryImage | undefined {
+  if (!image) {
+    return undefined;
+  }
+  return {
+    storagePath: normaliseImageStoragePath(image.storagePath),
+  };
 }
 
 function buildImages(
@@ -92,6 +104,8 @@ export type PublishSessionMediaInput = {
   segments: readonly MediaSegment[];
   audio: SessionAudioResult;
   storageBucket: string;
+  posterImage?: SessionMediaSupplementaryImage;
+  endingImage?: SessionMediaSupplementaryImage;
 };
 
 export type PublishSessionMediaResult = {
@@ -140,6 +154,8 @@ export async function publishSessionMediaClip(
 
   const images = buildImages(input.segments, input.audio);
   const narration = buildNarration(input.segments, input.audio);
+  const posterImage = normaliseSupplementaryImage(input.posterImage);
+  const endingImage = normaliseSupplementaryImage(input.endingImage);
   const now = Timestamp.now();
 
   const existing = await docRef.get();
@@ -159,9 +175,11 @@ export async function publishSessionMediaClip(
     },
     images,
     narration,
+    ...(posterImage ? { posterImage } : {}),
+    ...(endingImage ? { endingImage } : {}),
     createdAt,
     updatedAt: now,
-    metadataVersion: 2,
+    metadataVersion: 3,
   };
 
   // Validate shape before writing (convert timestamps to Date for schema parsing).

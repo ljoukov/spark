@@ -76,12 +76,18 @@ export function createConsoleProgress(label: string): AudioGenerationProgress {
   };
 }
 
+export type NarrationSupplementaryImage = {
+  storagePath: string;
+};
+
 export type NarrationJob = {
   userId: string;
   sessionId: string;
   planItemId: string;
   segments: readonly MediaSegment[];
   storageBucket: string;
+  posterImage?: NarrationSupplementaryImage;
+  endingImage?: NarrationSupplementaryImage;
   voiceMap?: Partial<Record<SpeakerCode, Voice>>;
   progress?: AudioGenerationProgress;
 };
@@ -137,6 +143,8 @@ export async function synthesizeAndPublishNarration(
     segments: job.segments,
     audio: audioResult,
     storageBucket: job.storageBucket,
+    posterImage: job.posterImage,
+    endingImage: job.endingImage,
   });
 
   try {

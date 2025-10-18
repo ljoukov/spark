@@ -231,6 +231,14 @@ const StoryImagesCheckpointSchema = z.object({
 
 type StoryImagesCheckpoint = z.infer<typeof StoryImagesCheckpointSchema>;
 
+const StorySupplementaryImageSchema = z.object({
+  storagePath: z.string().trim().min(1),
+});
+
+export type StorySupplementaryImage = z.infer<
+  typeof StorySupplementaryImageSchema
+>;
+
 const StoryNarrationCheckpointSchema = z.object({
   storagePaths: z.array(z.string().trim().min(1)).min(1),
   publishResult: z.object({
@@ -239,6 +247,8 @@ const StoryNarrationCheckpointSchema = z.object({
     durationSec: z.number().nonnegative(),
     totalBytes: z.number().int().nonnegative(),
   }),
+  posterImage: StorySupplementaryImageSchema.optional(),
+  endingImage: StorySupplementaryImageSchema.optional(),
 });
 
 type StoryNarrationCheckpoint = z.infer<typeof StoryNarrationCheckpointSchema>;
@@ -1201,6 +1211,8 @@ export type GenerateStoryResult = {
   images: {
     storagePaths: string[];
     modelVersion: string;
+    posterImage?: StorySupplementaryImage;
+    endingImage?: StorySupplementaryImage;
   };
   narration: Awaited<ReturnType<typeof synthesizeAndPublishNarration>>;
 };
@@ -1219,6 +1231,20 @@ function buildImageStoragePath(
   return path
     .join(folder, `image_${String(index).padStart(3, "0")}.${extension}`)
     .replace(/\\/g, "/");
+}
+
+function buildSupplementaryImageStoragePath(
+  userId: string,
+  sessionId: string,
+  planItemId: string,
+  kind: "poster" | "ending",
+  prefix?: string,
+): string {
+  const folder = prefix
+    ? path.join(prefix, userId, "sessions", sessionId, planItemId)
+    : path.join("spark", userId, "sessions", sessionId, planItemId);
+  const fileName = kind === "poster" ? "poster.jpg" : "ending.jpg";
+  return path.join(folder, fileName).replace(/\\/g, "/");
 }
 
 function toMediaSegments(
@@ -1277,6 +1303,8 @@ type StageCacheEntry<TValue> = {
 type NarrationStageValue = {
   publishResult: Awaited<ReturnType<typeof synthesizeAndPublishNarration>>;
   storagePaths: string[];
+  posterImage?: StorySupplementaryImage;
+  endingImage?: StorySupplementaryImage;
 };
 
 type StageReadResult<TValue> = {
@@ -1502,11 +1530,27 @@ export class StoryGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw);
       const checkpoint = StoryNarrationCheckpointSchema.parse(parsed);
+      const posterImage = checkpoint.posterImage
+        ? {
+            storagePath: normaliseStoragePath(
+              checkpoint.posterImage.storagePath,
+            ),
+          }
+        : undefined;
+      const endingImage = checkpoint.endingImage
+        ? {
+            storagePath: normaliseStoragePath(
+              checkpoint.endingImage.storagePath,
+            ),
+          }
+        : undefined;
       const value: NarrationStageValue = {
         storagePaths: checkpoint.storagePaths.map((storagePath) =>
           normaliseStoragePath(storagePath),
         ),
         publishResult: checkpoint.publishResult,
+        posterImage,
+        endingImage,
       };
       return { value, filePath };
     } catch (error) {
@@ -1530,6 +1574,8 @@ export class StoryGenerationPipeline {
         normaliseStoragePath(storagePath),
       ),
       publishResult: value.publishResult,
+      posterImage: value.posterImage,
+      endingImage: value.endingImage,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1785,14 +1831,34 @@ export class StoryGenerationPipeline {
     const planItemId = this.requireContext("planItemId");
     const storageBucket = this.requireContext("storageBucket");
 
+    const totalSegments = segmentation.segments.length;
     const interiorImages = images.images
       .filter((image) => image.index >= 1)
-      .filter((image) => image.index <= segmentation.segments.length)
+      .filter((image) => image.index <= totalSegments)
       .sort((a, b) => a.index - b.index);
 
-    if (interiorImages.length !== segmentation.segments.length) {
+    if (interiorImages.length !== totalSegments) {
       throw new Error(
-        `Expected ${segmentation.segments.length} interior images, found ${interiorImages.length}`,
+        `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
+      );
+    }
+
+    const endingImageIndex = totalSegments + 1;
+    const posterImageIndex = totalSegments + 2;
+    const endingImage = images.images.find(
+      (image) => image.index === endingImageIndex,
+    );
+    if (!endingImage) {
+      throw new Error(
+        `Expected ending image at index ${endingImageIndex}, but none was provided`,
+      );
+    }
+    const posterImage = images.images.find(
+      (image) => image.index === posterImageIndex,
+    );
+    if (!posterImage) {
+      throw new Error(
+        `Expected poster image at index ${posterImageIndex}, but none was provided`,
       );
     }
 
@@ -1855,6 +1921,45 @@ export class StoryGenerationPipeline {
       ),
     );
 
+    const uploadSupplementaryImage = async (
+      image: GeneratedStoryImage,
+      kind: "poster" | "ending",
+    ): Promise<StorySupplementaryImage> => {
+      const jpegBuffer = await sharp(image.data)
+        .jpeg({
+          quality: 92,
+          progressive: true,
+          chromaSubsampling: "4:4:4",
+        })
+        .toBuffer();
+      const storagePath = buildSupplementaryImageStoragePath(
+        userId,
+        sessionId,
+        planItemId,
+        kind,
+        this.options.storagePrefix,
+      );
+      const file = bucket.file(storagePath);
+      await file.save(jpegBuffer, {
+        resumable: false,
+        metadata: {
+          contentType: "image/jpeg",
+          cacheControl: "public, max-age=0",
+        },
+      });
+      this.logger.log(
+        `[story/images] saved ${kind} image to /${storagePath}`,
+      );
+      return {
+        storagePath: normaliseStoragePath(storagePath),
+      };
+    };
+
+    const [posterReference, endingReference] = await Promise.all([
+      uploadSupplementaryImage(posterImage, "poster"),
+      uploadSupplementaryImage(endingImage, "ending"),
+    ]);
+
     const segments = toMediaSegments(segmentation, storagePaths);
     const narrationProgressLabel =
       this.options.audioProgressLabel ?? planItemId;
@@ -1871,6 +1976,8 @@ export class StoryGenerationPipeline {
         const stageValue: NarrationStageValue = {
           publishResult: cachedPublishResult,
           storagePaths,
+          posterImage: posterReference,
+          endingImage: endingReference,
         };
         const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
         const entry: StageCacheEntry<NarrationStageValue> = {
@@ -1900,12 +2007,16 @@ export class StoryGenerationPipeline {
       planItemId,
       segments,
       storageBucket,
+      posterImage: posterReference,
+      endingImage: endingReference,
       progress: createConsoleProgress(narrationProgressLabel),
     });
 
     const stageValue: NarrationStageValue = {
       publishResult,
       storagePaths,
+      posterImage: posterReference,
+      endingImage: endingReference,
     };
     const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
     const entry: StageCacheEntry<NarrationStageValue> = {
@@ -1955,6 +2066,8 @@ export async function generateStory(
     images: {
       storagePaths: narration.storagePaths,
       modelVersion: images.modelVersion,
+      posterImage: narration.posterImage,
+      endingImage: narration.endingImage,
     },
     narration: narration.publishResult,
   };

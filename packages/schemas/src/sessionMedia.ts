@@ -29,6 +29,14 @@ export const SessionMediaImageSchema = z
 
 export type SessionMediaImage = z.infer<typeof SessionMediaImageSchema>;
 
+export const SessionMediaSupplementaryImageSchema = z.object({
+  storagePath: trimmed,
+});
+
+export type SessionMediaSupplementaryImage = z.infer<
+  typeof SessionMediaSupplementaryImageSchema
+>;
+
 export const SessionMediaDocSchema = z
   .object({
     id: trimmed,
@@ -41,9 +49,11 @@ export const SessionMediaDocSchema = z
     }),
     images: z.array(SessionMediaImageSchema).min(1, "At least one image required"),
     narration: z.array(SessionMediaNarrationSchema).min(1, "At least one narration line required"),
+    posterImage: SessionMediaSupplementaryImageSchema.optional(),
+    endingImage: SessionMediaSupplementaryImageSchema.optional(),
     createdAt: FirestoreTimestampSchema,
     updatedAt: FirestoreTimestampSchema,
-    metadataVersion: z.number().int().min(1).default(2),
+    metadataVersion: z.number().int().min(1).default(3),
   })
   .transform(
     ({ createdAt, updatedAt, metadataVersion, ...rest }) => ({
