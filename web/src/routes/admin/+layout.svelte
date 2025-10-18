@@ -11,7 +11,6 @@
 	import { invalidateAll, afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 
-	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 	import {
 		getFirebaseApp,
 		startGoogleSignInRedirect,
@@ -155,10 +154,8 @@
 			// ignore client Firestore init errors in preview
 		}
 
-		let stopCookieSync: () => void = () => {};
 		let stopAuth: () => void = () => {};
 		if (!data.authDisabled) {
-			stopCookieSync = startIdTokenCookieSync();
 			const auth = getAuth(getFirebaseApp());
 			let refreshed = false;
 			stopAuth = onIdTokenChanged(auth, (user) => {
@@ -172,7 +169,6 @@
 		}
 		return () => {
 			stopProfile();
-			stopCookieSync();
 			stopAuth();
 		};
 	});

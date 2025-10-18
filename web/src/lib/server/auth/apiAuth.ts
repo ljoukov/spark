@@ -87,7 +87,16 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
 			}
 		};
 	} catch (error) {
-		const message = error instanceof Error ? error.message : 'Invalid Firebase ID token';
+		console.warn('Failed to verify Firebase ID token for API request', error);
+		let message = 'Invalid or expired authentication token';
+		if (typeof error === 'object' && error !== null && 'code' in error) {
+			const code = String((error as { code?: unknown }).code ?? '');
+			if (code === 'ERR_JWT_EXPIRED') {
+				message = 'Your session expired. Please sign in again.';
+			}
+		} else if (error instanceof Error && error.message.includes('JWTExpired')) {
+			message = 'Your session expired. Please sign in again.';
+		}
 		return {
 			ok: false,
 			response: json({ error: 'unauthorized', message }, { status: 401 })

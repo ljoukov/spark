@@ -14,7 +14,6 @@
 	} from '$lib/stores/themePreference';
 	import type { LayoutData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
 
 	type ClientUser = NonNullable<LayoutData['user']>;
@@ -79,7 +78,6 @@
 			theme = value;
 		});
 
-		let stopCookieSync: () => void = () => {};
 		let stopAuthListener: () => void = () => {};
 		let syncingProfile = false;
 		let lastSyncedSignature: string | null = null;
@@ -139,7 +137,6 @@
 		try {
 			const app = getFirebaseApp();
 			const auth = getAuth(app);
-			stopCookieSync = startIdTokenCookieSync(auth);
 			stopAuthListener = onIdTokenChanged(auth, (firebaseUser) => {
 				if (!firebaseUser) {
 					return;
@@ -154,7 +151,6 @@
 		return () => {
 			unsubscribeUser();
 			unsubscribeTheme();
-			stopCookieSync();
 			stopAuthListener();
 		};
 	});

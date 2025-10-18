@@ -47,6 +47,39 @@
 		}
 	}
 
+	type SyncErrorDetails = {
+		status: number;
+		payload: unknown;
+	};
+
+	function normalizeSyncError(details: SyncErrorDetails | null): string {
+		if (!details) {
+			return 'Unexpected error while syncing your account.';
+		}
+		if (details.status === 401) {
+			return 'Your Spark session expired. Please sign in again.';
+		}
+		if (
+			details.payload &&
+			typeof details.payload === 'object' &&
+			details.payload !== null &&
+			'message' in details.payload &&
+			typeof (details.payload as { message?: unknown }).message === 'string'
+		) {
+			const message = (details.payload as { message: string }).message.trim();
+			if (message.length > 0) {
+				return message;
+			}
+		}
+		if (details.payload instanceof Error && typeof details.payload.message === 'string') {
+			const message = details.payload.message.trim();
+			if (message.length > 0) {
+				return message;
+			}
+		}
+		return 'Unexpected error while syncing your account.';
+	}
+
 	async function mirrorCookie(user: User): Promise<boolean> {
 		try {
 			const idToken = await user.getIdToken();
@@ -61,34 +94,58 @@
 
 	async function syncProfile(user: User): Promise<boolean> {
 		ui.syncingProfile = true;
+		let lastError: SyncErrorDetails | null = null;
 		try {
-			const idToken = await user.getIdToken();
-			const response = await fetch('/api/login', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${idToken}`
-				},
-				body: JSON.stringify({
-					name: user.displayName ?? null,
-					email: user.email ?? null,
-					photoUrl: user.photoURL ?? null,
-					isAnonymous: user.isAnonymous
-				})
-			});
+			for (const forceRefresh of [false, true] as const) {
+				let idToken: string;
+				try {
+					idToken = await user.getIdToken(forceRefresh);
+				} catch (error) {
+					lastError = { status: 0, payload: error };
+					continue;
+				}
 
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				const message = payload?.message ?? 'Unable to sync your account. Please try again.';
-				throw new Error(message);
+				try {
+					const response = await fetch('/api/login', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							Authorization: `Bearer ${idToken}`
+						},
+						body: JSON.stringify({
+							name: user.displayName ?? null,
+							email: user.email ?? null,
+							photoUrl: user.photoURL ?? null,
+							isAnonymous: user.isAnonymous
+						})
+					});
+
+					if (response.ok) {
+						lastSyncedUid = user.uid;
+						ui.errorMessage = '';
+						return true;
+					}
+
+					const payload = await response.json().catch(() => null);
+					lastError = { status: response.status, payload };
+					if (response.status === 401 && !forceRefresh) {
+						continue;
+					}
+					if (response.status === 401) {
+						clearIdTokenCookie();
+					}
+					ui.errorMessage = normalizeSyncError(lastError);
+					return false;
+				} catch (error) {
+					lastError = { status: 0, payload: error };
+					// Retry once with a forced refresh.
+				}
 			}
 
-			lastSyncedUid = user.uid;
-			ui.errorMessage = '';
-			return true;
-		} catch (error) {
-			const fallback = 'Unexpected error while syncing your account.';
-			ui.errorMessage = error instanceof Error ? error.message : fallback;
+			if (lastError && lastError.status === 401) {
+				clearIdTokenCookie();
+			}
+			ui.errorMessage = normalizeSyncError(lastError);
 			return false;
 		} finally {
 			ui.syncingProfile = false;
@@ -263,7 +320,7 @@
 			{/if}
 
 			<footer class="auth-footer">
-				<span>Need a quick start?</span>
+				<span class="auth-footer__prompt">Need a quick start?</span>
 				<button type="button" onclick={handleOpenAnonymousConfirm}>Use guest mode</button>
 			</footer>
 		</div>
@@ -441,21 +498,32 @@
 	}
 
 	.auth-alert.error {
-		background: rgba(239, 68, 68, 0.18);
-		border: 1px solid rgba(248, 113, 113, 0.5);
-		color: #fee2e2;
+		background: rgba(248, 113, 113, 0.14);
+		border: 1px solid rgba(220, 38, 38, 0.4);
+		color: #b91c1c;
+	}
+
+	:global([data-theme='dark'] .auth-alert.error) {
+		background: rgba(239, 68, 68, 0.24);
+		border: 1px solid rgba(248, 113, 113, 0.55);
+		color: #fecaca;
 	}
 
 	.auth-footer {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		justify-content: center;
 		border-radius: 1.25rem;
 		background: rgba(148, 163, 184, 0.12);
 		padding: 0.85rem 1.1rem;
 		font-size: 0.8rem;
 		color: var(--app-subtitle-color);
 		font-weight: 500;
+	}
+
+	.auth-footer__prompt {
+		flex: 1;
+		text-align: center;
 	}
 
 	.auth-footer button {
@@ -649,6 +717,12 @@
 				radial-gradient(56% 56% at 24% 78%, var(--blob-yellow-soft), transparent 76%),
 				radial-gradient(60% 60% at 82% 70%, var(--blob-pink), transparent 80%),
 				radial-gradient(70% 70% at 50% 50%, var(--blob-yellow), transparent 82%);
+		}
+
+		:global(:root:not([data-theme='light']) .auth-alert.error) {
+			background: rgba(239, 68, 68, 0.24);
+			border: 1px solid rgba(248, 113, 113, 0.55);
+			color: #fecaca;
 		}
 	}
 </style>
