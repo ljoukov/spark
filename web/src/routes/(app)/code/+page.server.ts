@@ -8,7 +8,10 @@ import {
 import type { PageServerLoad, Actions } from './$types';
 
 const selectionSchema = z.object({
-	topic: z.enum(['modular-magic', 'binary-sparks', 'digital-roots'])
+	topic: z
+		.string()
+		.trim()
+		.min(1, 'Please choose a topic to begin.')
 });
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -23,8 +26,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		throw redirect(302, `/code/${session.id}`);
 	}
 
+	const welcomeOptions = await listWelcomeSessionOptions();
+
 	return {
-		welcomeOptions: listWelcomeSessionOptions(),
+		welcomeOptions,
 		userName: user.name ?? null
 	};
 };
@@ -43,7 +48,14 @@ export const actions: Actions = {
 		}
 
 		try {
-			const session = await provisionWelcomeSession(user.uid, parsed.data.topic);
+			const options = await listWelcomeSessionOptions();
+			const allowedKeys = new Set(options.map((option) => option.key));
+			const topic = parsed.data.topic;
+			if (!allowedKeys.has(topic)) {
+				return fail(400, { error: 'Please choose a topic to begin.' });
+			}
+
+			const session = await provisionWelcomeSession(user.uid, topic);
 			throw redirect(303, `/code/${session.id}`);
 		} catch (error) {
 			console.error('Unable to provision welcome session', error);
