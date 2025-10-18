@@ -37,7 +37,7 @@ export type SessionMediaSupplementaryImageWithUrl = SessionMediaSupplementaryIma
 	url: string | null;
 };
 
-export type SessionMediaWithUrl = SessionMediaDoc & {
+export type SessionMediaWithUrl = Omit<SessionMediaDoc, 'posterImage' | 'endingImage'> & {
 	audio: SessionMediaDoc['audio'] & {
 		signedUrl: string | null;
 		signedUrlExpiresAt: Date | null;

@@ -85,10 +85,15 @@
 				{#each options as option}
 					<form method="POST" action="?/start" class="welcome-card-form">
 						<input type="hidden" name="topic" value={option.key} />
-						<button type="submit" class="welcome-card-button">
-							<div class="topic-block">
-								<span class="topic-title">{option.title}</span>
-								<span class="topic-emoji" aria-hidden="true">{option.emoji}</span>
+						<button type="submit" class="welcome-card-button" aria-label={`Launch ${option.title}`}>
+							<div class="topic-poster" aria-hidden="true">
+								{#if option.posterImageUrl}
+									<img src={option.posterImageUrl} alt="" loading="lazy" />
+								{:else}
+									<span class="topic-emoji" aria-hidden="true">{option.emoji}</span>
+								{/if}
+							</div>
+							<div class="topic-content">
 								<p class="topic-tagline">{option.tagline}</p>
 							</div>
 							<span class="launch-pill">Launch</span>
@@ -197,20 +202,21 @@
 
 	.welcome-card-form {
 		height: 100%;
-		flex: 1 1 18rem;
-		max-width: min(18rem, 100%);
+		flex: 1 1 27rem;
+		max-width: min(27rem, 100%);
 		width: 100%;
 	}
 
 	.welcome-card-button {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		align-items: stretch;
 		justify-content: space-between;
-		gap: 1.2rem;
+		gap: clamp(1.1rem, 1.8vw, 1.6rem);
 		width: 100%;
 		height: 100%;
-		padding: clamp(1.3rem, 2.1vw, 1.8rem);
+		padding: 0;
+		padding-bottom: clamp(1.4rem, 2vw, 1.8rem);
 		border-radius: 1.5rem;
 		border: 1px solid rgba(148, 163, 184, 0.24);
 		background: rgba(248, 250, 252, 0.85);
@@ -221,6 +227,7 @@
 			box-shadow 0.2s ease,
 			border-color 0.2s ease,
 			background 0.2s ease;
+		overflow: hidden;
 	}
 
 	:global([data-theme='dark'] .welcome-card-button),
@@ -253,18 +260,29 @@
 		outline-offset: 4px;
 	}
 
-	.topic-block {
+	.topic-poster {
+		position: relative;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		gap: 0.75rem;
-		text-align: center;
+		justify-content: center;
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		background: rgba(148, 163, 184, 0.18);
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
 	}
 
-	.topic-title {
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: rgba(15, 23, 42, 0.92);
+	:global([data-theme='dark'] .topic-poster),
+	:global(:root:not([data-theme='light']) .topic-poster) {
+		background: rgba(30, 41, 59, 0.36);
+		box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22);
+	}
+
+	.topic-poster img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 
 	.topic-emoji {
@@ -272,16 +290,21 @@
 		line-height: 1;
 	}
 
+	.topic-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		text-align: center;
+		padding: 0 clamp(1.3rem, 2.1vw, 1.8rem);
+		width: 100%;
+	}
+
 	.topic-tagline {
 		margin: 0;
 		font-size: 0.9rem;
 		line-height: 1.5;
 		color: rgba(71, 85, 105, 0.85);
-	}
-
-	:global([data-theme='dark'] .topic-title),
-	:global(:root:not([data-theme='light']) .topic-title) {
-		color: rgba(248, 250, 252, 0.92);
 	}
 
 	:global([data-theme='dark'] .topic-tagline),
@@ -294,6 +317,8 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0.55rem 1.6rem;
+		margin-inline: clamp(1.3rem, 2.1vw, 1.8rem);
+		align-self: center;
 		border-radius: 9999px;
 		font-size: 0.9rem;
 		font-weight: 600;

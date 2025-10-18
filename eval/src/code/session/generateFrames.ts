@@ -999,6 +999,12 @@ export async function generateStoryFrames(
     const batchFeedbackLog: string[] = [];
     let promptRevisionRequests = 0;
 
+    // Adaptive fallback flags per STORY_RELIABLE_GENERATION_IDEAS.md
+    // - Switch to single-frame generation when a batch collapses systemically
+    // - Purge style overlap for the batch after a redo_batch to avoid reinforcing failures
+    let forceSingleFrameMode = false;
+    let purgeStyleReferences = false;
+
     let batchSuccess = false;
     let lastError: unknown;
 
@@ -1012,31 +1018,94 @@ export async function generateStoryFrames(
       );
 
       try {
-        const generatedImages = await generateImages({
-          progress,
-          modelId: imageModelId,
-          stylePrompt,
-          styleImages: batch.styleImages,
-          imagePrompts: batch.prompts,
-          maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
-          imageAspectRatio,
-          debug: extendDebug(
-            debug,
-            `batch-${padNumber(batchIndex + 1)}/generate-${padNumber(attempt)}`,
-          ),
-        });
+        // Decide style context for this attempt
+        const attemptStyleImages = purgeStyleReferences
+          ? [...baseStyleImages]
+          : batch.styleImages;
+
+        // Generate images either in batch-mode or single-frame mode
+        let generatedImages: LlmImageData[] = [];
+        const generateDebugSuffix = `batch-${padNumber(
+          batchIndex + 1,
+        )}/generate-${padNumber(attempt)}${forceSingleFrameMode ? "-single" : ""}`;
+
+        if (!forceSingleFrameMode) {
+          generatedImages = await generateImages({
+            progress,
+            modelId: imageModelId,
+            stylePrompt,
+            styleImages: attemptStyleImages,
+            imagePrompts: batch.prompts,
+            maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+            imageAspectRatio,
+            debug: extendDebug(debug, generateDebugSuffix),
+          });
+        } else {
+          const singles: LlmImageData[] = [];
+          for (let i = 0; i < batch.prompts.length; i += 1) {
+            const single = await generateImages({
+              progress,
+              modelId: imageModelId,
+              stylePrompt,
+              styleImages: attemptStyleImages,
+              imagePrompts: [batch.prompts[i]],
+              maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+              imageAspectRatio,
+              debug: extendDebug(
+                debug,
+                `${generateDebugSuffix}/frame-${padNumber(
+                  batch.globalIndices[i] + 1,
+                )}`,
+              ),
+            });
+            if (single.length > 0) {
+              singles.push(single[0]);
+            }
+          }
+          generatedImages = singles;
+        }
 
         if (generatedImages.length < batch.prompts.length) {
-          lastError = new Error(
-            `Batch ${batchIndex + 1} returned ${generatedImages.length} images, expected ${batch.prompts.length}`,
-          );
-          progress.log(
-            `[story/frames] Incomplete batch ${batchIndex + 1}, retrying`,
-          );
-          if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
-            throw lastError;
+          // On final attempt, try filling the remainder one-by-one to avoid aborting.
+          if (attempt === BATCH_GENERATE_MAX_ATTEMPTS && !forceSingleFrameMode) {
+            progress.log(
+              `[story/frames] Incomplete batch ${batchIndex + 1}, filling remaining frames individually`,
+            );
+            const remainingStart = generatedImages.length;
+            for (let i = remainingStart; i < batch.prompts.length; i += 1) {
+              const single = await generateImages({
+                progress,
+                modelId: imageModelId,
+                stylePrompt,
+                styleImages: attemptStyleImages,
+                imagePrompts: [batch.prompts[i]],
+                maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+                imageAspectRatio,
+                debug: extendDebug(
+                  debug,
+                  `${generateDebugSuffix}/fill-frame-${padNumber(
+                    batch.globalIndices[i] + 1,
+                  )}`,
+                ),
+              });
+              if (single.length > 0) {
+                generatedImages.push(single[0]);
+              }
+            }
           }
-          continue;
+
+          if (generatedImages.length < batch.prompts.length) {
+            lastError = new Error(
+              `Batch ${batchIndex + 1} returned ${generatedImages.length} images, expected ${batch.prompts.length}`,
+            );
+            progress.log(
+              `[story/frames] Incomplete batch ${batchIndex + 1}, retrying`,
+            );
+            if (attempt === BATCH_GENERATE_MAX_ATTEMPTS) {
+              throw lastError;
+            }
+            continue;
+          }
         }
 
         const batchItems: BatchGradeItem[] = generatedImages.map(
@@ -1142,6 +1211,10 @@ export async function generateStoryFrames(
               : `Batch ${batchIndex + 1} rejected by grader`,
           );
           rejectBatch = true;
+          // Adaptive fallback for next attempt: switch to single-frame mode and
+          // purge overlap style references to break systemic collapse.
+          forceSingleFrameMode = true;
+          purgeStyleReferences = true;
         } else if (grade.outcome === "redo_frames") {
           logFrameFindings(grade);
         }
