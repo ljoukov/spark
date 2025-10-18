@@ -79,8 +79,8 @@ Generated files:
 - `response.txt`: Summary header followed by:
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
   - “===== Content =====” with a structured dump of the final parts when available. Inline image entries now include a short six-character SHA in the header so you can match parts with filenames.
-- Prompt inline images are converted to JPEG when possible and stored once under `{rootDir}/media/{sha256}.jpg`. The short label shown in `prompt.txt` (e.g. `prompt-image-001-abc123`) matches the first six characters of the SHA so you can correlate parts with files across stages.
-- For image calls, output images follow the same flow: each converted buffer is written to `{rootDir}/media/{sha256}.jpg`, and the short label recorded in `response.txt` (e.g. `image-001-def456`) references the same hash.
+- Prompt inline images are converted to JPEG when possible and stored once under `{rootDir}/media/{sha256}.jpg`. For convenience, a symlink named `prompt-image-001.jpg` (incrementing per prompt) is placed inside each debug directory pointing back to the shared media file, and the short label recorded in `prompt.txt` (e.g. `prompt-image-001-abc123`) still shows the hash fragment.
+- For image calls, output images follow the same flow: each converted buffer is written to `{rootDir}/media/{sha256}.jpg` with per-directory symlinks like `image-001.jpg`. The short label recorded in `response.txt` (e.g. `image-001-def456`) references the same hash for cross-checking.
 - `conversation.html`: A lightweight viewer showing the prompt and response sequence (roles, text, and `<img>` tags that point to the saved image files in the same directory).
 - `exception.txt`: Written only when a call throws. Includes the error message, stack trace, timestamp, attempt counters, and model ID for the failed request.
 - When debugging is enabled, an immutable copy of the prompt, response, and any image files is also written to `{rootDir}/log/{iso-timestamp}/` (the timestamp is generated when the call starts).
@@ -97,14 +97,18 @@ Example layout:
     prompt.txt
     response.txt
     conversation.html
+    prompt-image-001.jpg -> ../media/5f4dcc3b5aa765d61d8327deb882cf99c6e0e5f2fdc1c84064d8f6f1a2b3c4d.jpg
   gemini-2.5-flash-image/
     prompt.txt
     response.txt
     conversation.html
+    image-001.jpg -> ../media/19b1a5f42d6f98f4c3e2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0.jpg
+    image-002.jpg -> ../media/41e2f3c4d5b6a7980f1e2d3c4b5a6978e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4.jpg
   log/2025-10-14T12-34-56-789Z/
     prompt.txt
     response.txt
     conversation.html
+    image-001.jpg -> ../../media/19b1a5f42d6f98f4c3e2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0.jpg
 ```
 
 ## Usage Examples
