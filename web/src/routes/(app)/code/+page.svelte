@@ -110,7 +110,7 @@
 
 	.welcome-panel {
 		text-align: center;
-		--panel-bg: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
+		--panel-bg: color-mix(in srgb, var(--app-content-bg) 25%, transparent);
 		display: flex;
 		flex-direction: column;
 		gap: clamp(1.4rem, 2vw, 1.8rem);
@@ -119,12 +119,13 @@
 		background: var(--panel-bg);
 		border: 1px solid rgba(148, 163, 184, 0.22);
 		box-shadow: 0 28px 80px -50px rgba(15, 23, 42, 0.42);
+		backdrop-filter: saturate(140%) blur(18px);
 		width: 100%;
 	}
 
 	:global([data-theme='dark'] .welcome-panel),
 	:global(:root:not([data-theme='light']) .welcome-panel) {
-		--panel-bg: rgba(6, 11, 25, 0.82);
+		--panel-bg: rgba(6, 11, 25, 0.6);
 		background: var(--panel-bg);
 		border-color: rgba(148, 163, 184, 0.3);
 	}
@@ -188,13 +189,17 @@
 	}
 
 	.welcome-cards {
-		display: grid;
+		display: flex;
+		flex-wrap: wrap;
 		gap: clamp(1rem, 1.8vw, 1.5rem);
-		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+		justify-content: center;
 	}
 
 	.welcome-card-form {
 		height: 100%;
+		flex: 1 1 18rem;
+		max-width: min(18rem, 100%);
+		width: 100%;
 	}
 
 	.welcome-card-button {
