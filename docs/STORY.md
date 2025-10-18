@@ -36,14 +36,11 @@ flowchart TD
 
 ### Prose Ideation
 
-The story text is produced by prompting a web-enabled Gemini 2.5 Pro model. The prompt enforces historical fidelity, single-narrator pacing, and an origin-story anchor:
+Story drafting now runs as a three-stage chain, with each stage writing its own checkpoint (`idea.json`, `prose.json`, `prose-revision.json`):
 
-```text
-Write a single-voice, audio-friendly historical story that introduces **${topic}** …
-Hard rules: do not relocate the event; do not centre a later adopter; no invented scenes or quotes.
-Terminology for learners (mandatory) … Term-glossing is compulsory.
-Close: end with a memorable, single-line takeaway … then one factual line on what happened next.
-```
+1. **Story Architect's Brief** – a web-search-enabled research pass that identifies the canonical anchor, stakes, conceptual essence, contrasting foil, metaphor candidates, modern pivot, and glossary. The output is a Markdown brief that feeds later stages.
+2. **Narrative Weaver** – consumes the brief and delivers a 250–400 word, single-voice script (title + paragraphs) tuned for advanced UK maths students, following the mandated arc from historical problem to modern relevance.
+3. **Narrative Editor's Cut** – grades the draft against the five-point rubric, then returns revised prose plus the critique in JSON (`analysis`, `revisedStory`, `improvementSummary`). Only the revised story proceeds downstream.
 
 ### Segmentation Blueprint
 

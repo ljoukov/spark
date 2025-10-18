@@ -151,8 +151,38 @@ const SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+export type StoryProseRevisionCriterion = {
+  score: number;
+  justification: string;
+};
+
+export type StoryProseRevisionAnalysis = {
+  metaphoricalIntegrity: StoryProseRevisionCriterion;
+  narrativeMomentum: StoryProseRevisionCriterion;
+  conceptualClarity: StoryProseRevisionCriterion;
+  audienceResonance: StoryProseRevisionCriterion;
+  motivationalPower: StoryProseRevisionCriterion;
+};
+
+export type StoryIdeaResult = {
+  brief: string;
+};
+
 export type StoryProseResult = {
   text: string;
+  metadata?: {
+    ideaBrief: string;
+    draftText: string;
+    analysis: StoryProseRevisionAnalysis;
+    improvementSummary: string;
+  };
+};
+
+export type StoryProseDraftResult = StoryProseResult;
+
+export type StoryProseRevisionResult = StoryProseResult & {
+  analysis: StoryProseRevisionAnalysis;
+  improvementSummary: string;
 };
 
 export type GeneratedStoryImage = {
@@ -215,12 +245,58 @@ export function deserialiseStoryImageSets(
   }));
 }
 
+const StoryIdeaCheckpointSchema = z.object({
+  topic: z.string().trim().min(1),
+  brief: z.string().trim().min(1),
+});
+
+type StoryIdeaCheckpoint = z.infer<typeof StoryIdeaCheckpointSchema>;
+
 const StoryProseCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
   text: z.string().trim().min(1),
 });
 
 type StoryProseCheckpoint = z.infer<typeof StoryProseCheckpointSchema>;
+
+const StoryProseRevisionCriterionSchema = z.object({
+  score: z.number().int().min(1).max(5),
+  justification: z.string().trim().min(1),
+});
+
+const StoryProseRevisionAnalysisSchema = z.object({
+  metaphoricalIntegrity: StoryProseRevisionCriterionSchema,
+  narrativeMomentum: StoryProseRevisionCriterionSchema,
+  conceptualClarity: StoryProseRevisionCriterionSchema,
+  audienceResonance: StoryProseRevisionCriterionSchema,
+  motivationalPower: StoryProseRevisionCriterionSchema,
+});
+
+const StoryProseRevisionCheckpointSchema = z.object({
+  topic: z.string().trim().min(1),
+  text: z.string().trim().min(1),
+  analysis: StoryProseRevisionAnalysisSchema,
+  improvementSummary: z.string().trim().min(1),
+});
+
+type StoryProseRevisionCheckpoint = z.infer<
+  typeof StoryProseRevisionCheckpointSchema
+>;
+
+const StoryProseRevisionRevisedStorySchema = z.object({
+  title: z.string().trim().min(1),
+  paragraphs: z.array(z.string().trim().min(1)).min(1),
+});
+
+const StoryProseRevisionResponseSchema = z.object({
+  analysis: StoryProseRevisionAnalysisSchema,
+  revisedStory: StoryProseRevisionRevisedStorySchema,
+  improvementSummary: z.string().trim().min(1),
+});
+
+type StoryProseRevisionResponse = z.infer<
+  typeof StoryProseRevisionResponseSchema
+>;
 
 const StoryImagesCheckpointSchema = z.object({
   prompt: z.string(),
@@ -300,71 +376,185 @@ const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-export function buildStoryPrompt(topic: string): string {
-  const audienceDesc = "advanced maths school students";
-  const dialect = "UK";
-  const length = "2-3 minutes";
-  return `\
-Please carefully ideate on critical parts.
-Use web search tool to double check if anything requires verification.
+const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["score", "justification"],
+  propertyOrdering: ["score", "justification"],
+  properties: {
+    score: { type: Type.NUMBER, minimum: 1, maximum: 5 },
+    justification: { type: Type.STRING, minLength: "1" },
+  },
+};
 
-Goal: Canonical Origin Story (audio-friendly).
+const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["analysis", "revisedStory", "improvementSummary"],
+  propertyOrdering: ["analysis", "revisedStory", "improvementSummary"],
+  properties: {
+    analysis: {
+      type: Type.OBJECT,
+      required: [
+        "metaphoricalIntegrity",
+        "narrativeMomentum",
+        "conceptualClarity",
+        "audienceResonance",
+        "motivationalPower",
+      ],
+      propertyOrdering: [
+        "metaphoricalIntegrity",
+        "narrativeMomentum",
+        "conceptualClarity",
+        "audienceResonance",
+        "motivationalPower",
+      ],
+      properties: {
+        metaphoricalIntegrity: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
+        narrativeMomentum: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
+        conceptualClarity: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
+        audienceResonance: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
+        motivationalPower: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
+      },
+    },
+    revisedStory: {
+      type: Type.OBJECT,
+      required: ["title", "paragraphs"],
+      propertyOrdering: ["title", "paragraphs"],
+      properties: {
+        title: { type: Type.STRING, minLength: "1" },
+        paragraphs: {
+          type: Type.ARRAY,
+          minItems: "1",
+          items: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+    improvementSummary: { type: Type.STRING, minLength: "1" },
+  },
+};
 
-**Task**
-Write a single-voice, audio-friendly historical story that introduces **${topic}** to **${audienceDesc}** in **${dialect}**. It must be factual, vivid, and memorable.
+export function buildStoryIdeaPrompt(topic: string): string {
+  return `### **Prompt 1: The Story Architect's Brief**
 
-**Internal workflow**
+**(Objective: To perform deep research and strategic planning. The output of this prompt is a structured brief, not a full story.)**
 
-**Part A — Choose the discoverer and the canonical event**
+**Your Role:** You are a historical researcher and a concept strategist for an educational media company. Your task is to analyze a technical concept and create a "Story Brief" for our narrative writers. This brief must identify the perfect historical anchor and a powerful narrative angle to make the concept unforgettable for advanced 12-16 year olds.
 
-* Select **one documented originator** of **${topic}** (or its defining method) and **one specific, sourced event** where the idea was introduced (talk, memo, paper, demo, funding review, crisis, competition).
-* Give **time, place, and stakes** for that moment (why the room cared that day).
-* Prefer a **classical origin episode** recognised by insiders but likely new to the audience.
-* **Hard rules:** do not relocate the event; do not centre a later adopter; no invented scenes or quotes.
-* Include a one-line **terminology/naming clarification** if the term is confusing or politically shaped.
+**The Concept to Analyze:** **${topic}**
 
-**Part A.1 — Introduce the figure (why this person, why now)**
+**Your Process:**
 
-* In **one to two sentences**, establish **who the person is in relation to this exact problem**, their **authority or constraint** (role, remit, pressure), and **why they are the right lens** for this concept **today**.
-* Keep the colour **brief and professional**; avoid casual descriptors. The intro should make the audience think: *this person is exactly where this idea had to be born.*
+1. **Core Discovery:**
+   * Using your knowledge and web search, identify a key originator and a single, documented "canonical event" where the concept was introduced or decisively used (a specific paper, memo, project, or crisis).
+   * Establish the time, place, and the high-stakes problem being addressed. What made this problem urgent and important *at that moment*?
+   * Apply the **Character Relevance Test:** Could the story be told with another figure without significant changes? If so, you have the wrong anchor. Find someone whose personal context is intrinsically linked to the discovery.
 
-**Part B — Frame the problem so listeners “see it” immediately**
+2. **Conceptual Distillation:**
+   * **Essence:** Go beyond the textbook definition. In one sentence, what is the fundamental *idea* or *behavior* of this concept?
+   * **Contrasting Foil:** In one line, name a common alternative approach and state why it was unsuitable for the specific historical problem you've identified.
 
-* Open with **one concrete, urgent, easy-to-picture question** from the real domain of the event. Use **material nouns/verbs**; avoid abstractions. Make the **constraint** obvious on first hearing (time, fuel, memory, risk, cost).
-* State the **essence of the concept in one plain sentence**.
-* Provide **one precise, historically plausible mental model or analogy** rooted in the same domain.
-* **Do not** give a step-by-step algorithm. If numbers are unavoidable, use **at most one** tiny calculation with **distinct values** and **no chained arithmetic**.
+3. **Narrative Angle Ideation:**
+   * **The Human Element:** Based on the discoverer's profession and context, what was their worldview?
+   * **Metaphor Brainstorm:** Propose 2-3 distinct, powerful, and concrete metaphors that embody the concept's essence and resonate with the discoverer's world. For each metaphor, give it a memorable name.
+   * **The Modern Pivot:** Identify the original purpose of the concept and contrast it with a compelling, modern application relevant to the target audience. Frame this as an unexpected evolution of the idea.
 
-**Terminology for learners (mandatory)**
+**Output Format:**
+Produce a structured brief using the following Markdown headings. Be concise and factual.
 
-* **Expand acronyms on first use.**
-* **Briefly gloss any term likely unfamiliar to ${audienceDesc}** at first mention (about 3-10 words), in-line and concrete.
-* If a term's meaning has shifted over time, give the **period-correct meaning** in one line.
+\`\`\`markdown
+### Story Brief: ${topic}
 
-**Story constraints**
+* **Conceptual Essence:**
+* **Historical Anchor:**
+  * **Figure:** [Name, Role/Profession]
+  * **Canonical Event:** [Project/Paper, Place, Year]
+  * **The High-Stakes Problem:**
+* **Narrative Elements:**
+  * **Core Metaphor Candidate(s):** [List 2-3 named metaphors with brief descriptions]
+  * **Contrasting Foil:**
+  * **The Modern Pivot:**
+* **Key Terminology & Gloss:** [List any necessary terms and their period-correct, simple definitions]
+\`\`\`
+`;
+}
 
-* **Historical fidelity:** real setting, roles, pressures; no localisation to the audience's city or era.
-* **Contrast (one line):** name a common alternative and why it fails under the stated constraint.
-* **Close:** end with a **memorable, single-line takeaway** that captures the “direction of thought”; then one factual line on **what happened next** (publication, adoption, impact).
+export function buildStoryDraftPrompt(storyBrief: string): string {
+  return `### **Prompt 2: The Narrative Weaver**
 
-**Style & length**
+**(Objective: To take the structured brief from Prompt 1 and craft a compelling, audio-friendly story.)**
 
-* Single narrator; **paragraphs only** (no bullets, dialogue, or footnotes).
-* Short-to-medium sentences; TED-style momentum; vivid but restrained.
-* Prefer **spelled-out years** for listening.
-* Length: **${length}**.
+**Your Role:** You are a master storyteller for a popular educational podcast. You have just received a "Story Brief" from our research department. Your task is to transform this brief into a captivating, audio-friendly narrative (250-400 words) for an advanced teen audience.
 
-**Output format**
+**Input:**
+================ Story Brief ================
+${storyBrief}
+============================================
 
-* 2-4 word title
-* Story paragraphs
+**Your Mission:**
+Weave the provided elements into a seamless story that makes the concept feel like a powerful secret the listener is about to inherit. The story must flow from a historical problem to a modern-day superpower.
 
-**Safeguards (hard rules)**
+**The Narrative Arc to Follow:**
 
-* **Discoverer-first** and **classical-anchor** required.
-* **No adopter-stories**, no fiction, no relocation.
-* **Term-glossing is compulsory.**
-* **Character relevance test:** if swapping the figure for another would barely change the story, choose a better anchor.
+1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
+2. **The Insight:** Describe the "aha!" moment. Introduce the chosen Central Metaphor as the key to solving the problem. Use the metaphor's name and its inherent logic to explain the breakthrough.
+3. **The Demonstration:** Show, don't just tell. Walk through a small, intuitive example of the concept in action, using *only the language and imagery of your chosen metaphor*. Avoid algorithmic steps and jargon.
+4. **The Pivot:** Execute the "Modern Pivot" from the brief. Create a clear transition that contrasts the concept's original use with its surprising, powerful modern applications. This should be a moment of revelation for the listener.
+5. **The Call to Adventure:** Conclude with a short, memorable, and empowering two-part statement. Frame the historical discovery as the foundation and the upcoming lesson activities as the act of building upon it. Transfer agency to the listener, inviting them to become part of the story.
+
+**Stylistic Requirements:**
+* **Audio-First:** Use clear, concise sentences. Read it aloud in your "mind's ear" to ensure it flows well.
+* **Vivid but Restrained:** Use strong verbs and concrete nouns. Avoid hyperbole.
+* **Tone:** Intelligent, intriguing, and respectful of the audience's curiosity.
+* **Title:** Provide a 2-4 word title for the story.
+
+Respond with the title on its own line followed by the story paragraphs.
+`;
+}
+
+export function buildStoryRevisionPrompt(storyDraft: string): string {
+  return `### **Prompt 3: The Narrative Editor's Cut**
+
+**(Objective: To critically evaluate the story from Prompt 2 against a quality rubric and then perform a final revision to elevate it.)**
+
+**Your Role:** You are the lead editor for our educational content studio. You are responsible for ensuring every story is not just accurate, but exceptionally engaging and effective.
+
+**Input:**
+================ Story Draft ================
+${storyDraft}
+============================================
+
+**Your Two-Part Task:**
+
+**Part A: The Critical Analysis**
+Grade the draft story against our five-point quality rubric. For each point, provide a score (1-5, with 5 being excellent) and a brief justification for your rating. Be honest and critical.
+
+* **1. Metaphorical Integrity:** Is the central metaphor powerful, concrete, and used consistently without mixing ideas?
+* **2. Narrative Momentum:** Does the story flow logically from problem to insight to modern relevance? Is the pacing compelling?
+* **3. Conceptual Clarity:** Could a bright student grasp the essence of the concept from the story alone, without any prior knowledge?
+* **4. Audience Resonance:** Does the tone respect the audience's intelligence? Is the pivot to a modern application genuinely exciting and relevant for a teen?
+* **5. Motivational Power:** Is the final "Call to Adventure" empowering and intriguing, or does it feel cliché? Does it create a genuine purpose for the lesson that follows?
+
+**Part B: The Final Polish**
+Based on your own critical analysis, produce the final, revised version of the story. Address the weaknesses you identified. Your goal is to elevate the story from "good" to "unforgettable." Conclude with one sentence that states the most significant improvement you made.
+
+Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
+
+JSON schema:
+{
+  "analysis": {
+    "metaphoricalIntegrity": { "score": 1-5 integer, "justification": string },
+    "narrativeMomentum": { "score": 1-5 integer, "justification": string },
+    "conceptualClarity": { "score": 1-5 integer, "justification": string },
+    "audienceResonance": { "score": 1-5 integer, "justification": string },
+    "motivationalPower": { "score": 1-5 integer, "justification": string }
+  },
+  "revisedStory": {
+    "title": string (2-4 words),
+    "paragraphs": array of strings (each 1+ sentences, no blank strings)
+  },
+  "improvementSummary": string (single sentence describing the biggest improvement)
+}
+
+Ensure every score is an integer between 1 and 5 inclusive.
 `;
 }
 
@@ -398,28 +588,108 @@ export function buildSegmentationPrompt(storyText: string): string {
   ].join("\n");
 }
 
-export async function generateProseStory(
+export async function generateStoryIdea(
   topic: string,
   progress?: StoryProgress,
   options?: { debugRootDir?: string }
-): Promise<StoryProseResult> {
+): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
-  adapter.log(
-    `[story] generating prose with web-search-enabled ${TEXT_MODEL_ID}`
-  );
-  const prompt = buildStoryPrompt(topic);
-  adapter.log("[story/prose] prompt prepared");
-  const text = await generateText({
+  adapter.log(`[story] generating idea with web-search-enabled ${TEXT_MODEL_ID}`);
+  const prompt = buildStoryIdeaPrompt(topic);
+  const brief = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     tools: [{ type: "web-search" }],
     debug: options?.debugRootDir
+      ? { rootDir: options.debugRootDir, stage: "idea" }
+      : undefined,
+  });
+  adapter.log("[story/idea] brief prepared");
+  return { brief };
+}
+
+export async function generateStoryProseDraft(
+  _topic: string,
+  idea: StoryIdeaResult,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string }
+): Promise<StoryProseDraftResult> {
+  const adapter = useProgress(progress);
+  adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
+  const prompt = buildStoryDraftPrompt(idea.brief);
+  const text = await generateText({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    debug: options?.debugRootDir
       ? { rootDir: options.debugRootDir, stage: "prose" }
       : undefined,
   });
-
+  adapter.log("[story/prose] draft produced");
   return { text };
+}
+
+export async function generateStoryProseRevision(
+  _topic: string,
+  draft: StoryProseDraftResult,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string }
+): Promise<StoryProseRevisionResult> {
+  const adapter = useProgress(progress);
+  adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
+  const prompt = buildStoryRevisionPrompt(draft.text);
+  const response = await generateJson<StoryProseRevisionResponse>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    responseSchema: STORY_PROSE_REVISION_RESPONSE_SCHEMA,
+    schema: StoryProseRevisionResponseSchema,
+    debug: options?.debugRootDir
+      ? { rootDir: options.debugRootDir, stage: "prose-revision" }
+      : undefined,
+  });
+  adapter.log("[story/prose-revision] analysis and revision complete");
+  const title = response.revisedStory.title.trim();
+  const paragraphs = response.revisedStory.paragraphs
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+  if (!title) {
+    throw new Error("Story revision did not include a title");
+  }
+  if (paragraphs.length === 0) {
+    throw new Error("Story revision did not include any paragraphs");
+  }
+  const text = [title, "", ...paragraphs].join("\n");
+  return {
+    text,
+    analysis: response.analysis,
+    improvementSummary: response.improvementSummary.trim(),
+  };
+}
+
+export async function generateProseStory(
+  topic: string,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string }
+): Promise<StoryProseResult> {
+  const idea = await generateStoryIdea(topic, progress, options);
+  const draft = await generateStoryProseDraft(topic, idea, progress, options);
+  const revision = await generateStoryProseRevision(
+    topic,
+    draft,
+    progress,
+    options
+  );
+  return {
+    text: revision.text,
+    metadata: {
+      ideaBrief: idea.brief,
+      draftText: draft.text,
+      analysis: revision.analysis,
+      improvementSummary: revision.improvementSummary,
+    },
+  };
 }
 
 const SEGMENTATION_CORRECTION_ATTEMPTS = 3;
@@ -1269,14 +1539,18 @@ function toMediaSegments(
 }
 
 export type StoryGenerationStageName =
+  | "idea"
   | "prose"
+  | "prose-revision"
   | "segmentation"
   | "segmentation_correction"
   | "images"
   | "narration";
 
 const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
+  "idea",
   "prose",
+  "prose-revision",
   "segmentation",
   "segmentation_correction",
   "images",
@@ -1331,7 +1605,9 @@ function normaliseStoragePath(raw: string): string {
 
 export class StoryGenerationPipeline {
   private readonly caches: {
-    prose?: StageCacheEntry<StoryProseResult>;
+    idea?: StageCacheEntry<StoryIdeaResult>;
+    proseDraft?: StageCacheEntry<StoryProseDraftResult>;
+    prose?: StageCacheEntry<StoryProseRevisionResult>;
     segmentation?: StageCacheEntry<StorySegmentation>;
     segmentationCorrection?: StageCacheEntry<StorySegmentation>;
     images?: StageCacheEntry<StoryImagesResult>;
@@ -1353,6 +1629,50 @@ export class StoryGenerationPipeline {
       return undefined;
     }
     return path.join(this.checkpointDir, `${stage}.json`);
+  }
+
+  private async readIdeaCheckpoint(): Promise<
+    StageReadResult<StoryIdeaResult> | undefined
+  > {
+    const filePath = this.stageFile("idea");
+    if (!filePath) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(filePath, { encoding: "utf8" });
+      const parsed = JSON.parse(raw);
+      const checkpoint = StoryIdeaCheckpointSchema.parse(parsed);
+      if (checkpoint.topic !== this.options.topic) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'idea' checkpoint at ${filePath} (topic mismatch)`
+        );
+        return undefined;
+      }
+      return { value: { brief: checkpoint.brief }, filePath };
+    } catch (error) {
+      if (isEnoent(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async writeIdeaCheckpoint(
+    value: StoryIdeaResult
+  ): Promise<string | undefined> {
+    const filePath = this.stageFile("idea");
+    if (!filePath || !this.checkpointDir) {
+      return undefined;
+    }
+    await mkdir(this.checkpointDir, { recursive: true });
+    const payload: StoryIdeaCheckpoint = {
+      topic: this.options.topic,
+      brief: value.brief,
+    };
+    await writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: "utf8",
+    });
+    return filePath;
   }
 
   private async readProseCheckpoint(): Promise<
@@ -1392,6 +1712,59 @@ export class StoryGenerationPipeline {
     const payload: StoryProseCheckpoint = {
       topic: this.options.topic,
       text: value.text,
+    };
+    await writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: "utf8",
+    });
+    return filePath;
+  }
+
+  private async readProseRevisionCheckpoint(): Promise<
+    StageReadResult<StoryProseRevisionResult> | undefined
+  > {
+    const filePath = this.stageFile("prose-revision");
+    if (!filePath) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(filePath, { encoding: "utf8" });
+      const parsed = JSON.parse(raw);
+      const checkpoint = StoryProseRevisionCheckpointSchema.parse(parsed);
+      if (checkpoint.topic !== this.options.topic) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (topic mismatch)`
+        );
+        return undefined;
+      }
+      return {
+        value: {
+          text: checkpoint.text,
+          analysis: checkpoint.analysis,
+          improvementSummary: checkpoint.improvementSummary,
+        },
+        filePath,
+      };
+    } catch (error) {
+      if (isEnoent(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async writeProseRevisionCheckpoint(
+    value: StoryProseRevisionResult
+  ): Promise<string | undefined> {
+    const filePath = this.stageFile("prose-revision");
+    if (!filePath || !this.checkpointDir) {
+      return undefined;
+    }
+    await mkdir(this.checkpointDir, { recursive: true });
+    const payload: StoryProseRevisionCheckpoint = {
+      topic: this.options.topic,
+      text: value.text,
+      analysis: value.analysis,
+      improvementSummary: value.improvementSummary,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1607,7 +1980,15 @@ export class StoryGenerationPipeline {
 
   private clearStageCache(stage: StoryGenerationStageName): void {
     switch (stage) {
+      case "idea": {
+        this.caches.idea = undefined;
+        break;
+      }
       case "prose": {
+        this.caches.proseDraft = undefined;
+        break;
+      }
+      case "prose-revision": {
         this.caches.prose = undefined;
         break;
       }
@@ -1646,40 +2027,150 @@ export class StoryGenerationPipeline {
     return value;
   }
 
-  async ensureProse(): Promise<StageCacheEntry<StoryProseResult>> {
-    if (this.caches.prose) {
-      return this.caches.prose;
+  private async ensureIdea(): Promise<StageCacheEntry<StoryIdeaResult>> {
+    if (this.caches.idea) {
+      return this.caches.idea;
     }
-    const checkpoint = await this.readProseCheckpoint();
+    const checkpoint = await this.readIdeaCheckpoint();
     if (checkpoint) {
-      const entry: StageCacheEntry<StoryProseResult> = {
+      const entry: StageCacheEntry<StoryIdeaResult> = {
         value: checkpoint.value,
         source: "checkpoint",
         checkpointPath: checkpoint.filePath,
       };
-      this.caches.prose = entry;
+      this.caches.idea = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'prose' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'idea' from ${checkpoint.filePath}`
       );
       return entry;
     }
-    await this.invalidateAfter("prose");
-    const story = await generateProseStory(
+    await this.invalidateAfter("idea");
+    const idea = await generateStoryIdea(
       this.options.topic,
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
       }
     );
-    const checkpointPath = await this.writeProseCheckpoint(story);
-    const entry: StageCacheEntry<StoryProseResult> = {
-      value: story,
+    const checkpointPath = await this.writeIdeaCheckpoint(idea);
+    const entry: StageCacheEntry<StoryIdeaResult> = {
+      value: idea,
+      source: "generated",
+      checkpointPath,
+    };
+    this.caches.idea = entry;
+    if (checkpointPath) {
+      this.logger.log(`[story/checkpoint] wrote 'idea' to ${checkpointPath}`);
+    }
+    return entry;
+  }
+
+  private async ensureProseDraft(): Promise<
+    StageCacheEntry<StoryProseDraftResult>
+  > {
+    if (this.caches.proseDraft) {
+      return this.caches.proseDraft;
+    }
+    const checkpoint = await this.readProseCheckpoint();
+    if (checkpoint) {
+      const entry: StageCacheEntry<StoryProseDraftResult> = {
+        value: checkpoint.value,
+        source: "checkpoint",
+        checkpointPath: checkpoint.filePath,
+      };
+      this.caches.proseDraft = entry;
+      this.logger.log(
+        `[story/checkpoint] restored 'prose' from ${checkpoint.filePath}`
+      );
+      return entry;
+    }
+    await this.invalidateAfter("prose");
+    const { value: idea } = await this.ensureIdea();
+    const draft = await generateStoryProseDraft(
+      this.options.topic,
+      idea,
+      this.options.progress,
+      {
+        debugRootDir: this.options.debugRootDir,
+      }
+    );
+    const checkpointPath = await this.writeProseCheckpoint(draft);
+    const entry: StageCacheEntry<StoryProseDraftResult> = {
+      value: draft,
+      source: "generated",
+      checkpointPath,
+    };
+    this.caches.proseDraft = entry;
+    if (checkpointPath) {
+      this.logger.log(`[story/checkpoint] wrote 'prose' to ${checkpointPath}`);
+    }
+    return entry;
+  }
+
+  async ensureProse(): Promise<StageCacheEntry<StoryProseRevisionResult>> {
+    if (this.caches.prose) {
+      return this.caches.prose;
+    }
+    const checkpoint = await this.readProseRevisionCheckpoint();
+    if (checkpoint) {
+      const idea = this.caches.idea?.value;
+      const draft = this.caches.proseDraft?.value;
+      const value: StoryProseRevisionResult =
+        idea && draft
+          ? {
+              ...checkpoint.value,
+              metadata: {
+                ideaBrief: idea.brief,
+                draftText: draft.text,
+                analysis: checkpoint.value.analysis,
+                improvementSummary: checkpoint.value.improvementSummary,
+              },
+            }
+          : checkpoint.value;
+      const entry: StageCacheEntry<StoryProseRevisionResult> = {
+        value,
+        source: "checkpoint",
+        checkpointPath: checkpoint.filePath,
+      };
+      this.caches.prose = entry;
+      this.logger.log(
+        `[story/checkpoint] restored 'prose-revision' from ${checkpoint.filePath}`
+      );
+      return entry;
+    }
+    await this.invalidateAfter("prose-revision");
+    const { value: draft } = await this.ensureProseDraft();
+    const idea =
+      this.caches.idea?.value ?? (await this.ensureIdea()).value;
+    const revision = await generateStoryProseRevision(
+      this.options.topic,
+      draft,
+      this.options.progress,
+      {
+        debugRootDir: this.options.debugRootDir,
+      }
+    );
+    const revisionWithMetadata: StoryProseRevisionResult = {
+      ...revision,
+      metadata: {
+        ideaBrief: idea.brief,
+        draftText: draft.text,
+        analysis: revision.analysis,
+        improvementSummary: revision.improvementSummary,
+      },
+    };
+    const checkpointPath =
+      await this.writeProseRevisionCheckpoint(revisionWithMetadata);
+    const entry: StageCacheEntry<StoryProseRevisionResult> = {
+      value: revisionWithMetadata,
       source: "generated",
       checkpointPath,
     };
     this.caches.prose = entry;
     if (checkpointPath) {
-      this.logger.log(`[story/checkpoint] wrote 'prose' to ${checkpointPath}`);
+      this.logger.log(
+        `[story/checkpoint] wrote 'prose-revision' to ${checkpointPath}`
+      );
     }
     return entry;
   }
@@ -1879,7 +2370,6 @@ export class StoryGenerationPipeline {
     let nextImageIndex = 0;
     const uploadWorker = async (workerId: number): Promise<void> => {
       // Sequentially claim the next image index; JavaScript's single-threaded model keeps this safe.
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const currentIndex = nextImageIndex;
         nextImageIndex += 1;
