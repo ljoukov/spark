@@ -7,8 +7,7 @@
 	import Pause from '@lucide/svelte/icons/pause';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
 	import VolumeX from '@lucide/svelte/icons/volume-x';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import { createSessionStateStore } from '$lib/client/sessionState';
@@ -21,6 +20,7 @@
 	const DEFAULT_KEN_BURNS_DURATION = 14;
 	const POSTER_DURATION_SEC = 0.05; // 50ms
 	const END_CARD_DURATION_SEC = 0.05; // 50ms
+	const COMPLETION_THRESHOLD_SEC = END_CARD_DURATION_SEC;
 
 	export let data: PageData;
 
@@ -65,8 +65,10 @@
 	let playbackError: string | null = audioInfo.url ? null : 'Clip is not available right now.';
 	let exitPending = false;
 	let hasFinishedPlayback = false;
-	let showDoneButton = false;
 	let quitDialogOpen = false;
+	let redoThresholdTime = 0;
+	let isAtRedoThreshold = false;
+	let showRedoControl = false;
 
 	const imageCount = images.length;
 	let imageLoadState: 'idle' | 'loading' | 'ready' | 'error' =
@@ -79,8 +81,7 @@
 	$: sliderMax = Math.max(duration, baseTimelineEnd);
 	$: hasStarted = planItemState?.status !== 'not_started';
 	$: hasCompleted = planItemState?.status === 'completed';
-	$: showDoneButton = hasCompleted || hasFinishedPlayback;
-	$: if (showDoneButton && quitDialogOpen) {
+	$: if ((hasCompleted || hasFinishedPlayback) && quitDialogOpen) {
 		quitDialogOpen = false;
 	}
 	$: activeImage = images[currentImageOrder] ?? null;
@@ -118,6 +119,12 @@
 		: '';
 	$: kenBurnsClass = kenBurnsEnabled ? kenBurnsDirectionClass : 'no-kenburns';
 	$: kenBurnsPlayState = kenBurnsEnabled && isPlaying ? 'running' : 'paused';
+	$: redoThresholdTime =
+		sliderMax > COMPLETION_THRESHOLD_SEC
+			? sliderMax - COMPLETION_THRESHOLD_SEC
+			: Math.max(sliderMax, 0);
+	$: isAtRedoThreshold = sliderMax > 0 && currentTime >= redoThresholdTime;
+	$: showRedoControl = !isPlaying && isAtRedoThreshold;
 
 	async function startImagePreload(): Promise<void> {
 		if (typeof window === 'undefined') {
@@ -322,6 +329,9 @@
 			audioElement.pause();
 			return;
 		}
+		if (showRedoControl) {
+			seekTo(0);
+		}
 		try {
 			await audioElement.play();
 		} catch (error) {
@@ -434,6 +444,10 @@
 		if (exitPending) {
 			return;
 		}
+		if (hasCompleted || hasFinishedPlayback) {
+			void handleCompletedExit();
+			return;
+		}
 		quitDialogOpen = true;
 	}
 
@@ -475,7 +489,7 @@
 		}
 	}
 
-	async function handleDone(): Promise<void> {
+	async function handleCompletedExit(): Promise<void> {
 		if (exitPending) {
 			return;
 		}
@@ -491,7 +505,6 @@
 	}
 
 	const playControlClass = buttonVariants({ variant: 'secondary', size: 'icon' });
-	const navButtonClass = buttonVariants({ variant: 'outline', size: 'icon' });
 	const muteControlClass = buttonVariants({ variant: 'ghost', size: 'icon' });
 	const exitButtonClass =
 		'media-exit-button flex size-8 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30';
@@ -511,77 +524,51 @@
 <section class="media-page">
 	<header class="media-header">
 		<h1>{data.planItem.title}</h1>
-		{#if !showDoneButton}
-			<button type="button" class={exitButtonClass} onclick={openQuitDialog} aria-label="Quit clip">
-				×
-			</button>
-		{/if}
+		<button type="button" class={exitButtonClass} onclick={openQuitDialog} aria-label="Quit clip">
+			×
+		</button>
 	</header>
 
 	<div class="image-stage">
-		<button
-			class={navButtonClass}
-			class:image-nav-button={true}
-			type="button"
-			onclick={handlePrevImage}
-			aria-label="Go to previous image"
-			disabled={imageCount === 0 || !areImagesReady}
-		>
-			<ChevronLeft aria-hidden="true" size={28} />
-		</button>
-
-		<div class="image-card">
-			<div class="image-frame">
-				{#if imageCount === 0 && !activeVisualUrl}
-					<div class="image-frame-message image-card-empty">
-						<p>No images available for this clip yet.</p>
-					</div>
-				{:else if imageLoadState === 'error'}
-					<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
-						<p>{imageLoadError ?? 'We could not load the visuals for this clip.'}</p>
-						<Button size="sm" variant="secondary" onclick={() => void startImagePreload()}>
-							Retry
-						</Button>
-					</div>
-				{:else if !areImagesReady}
-					<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
-						<div class="image-spinner" aria-hidden="true"></div>
-						<p>Loading visuals…</p>
-					</div>
-				{:else if activeVisualUrl}
-					<div class="image-frame-visual">
-						{#key activeVisualKey}
-							<img
-								src={activeVisualUrl}
-								alt={activeVisualAlt}
-								width="1600"
-								height="900"
-								loading="lazy"
-								class={`image-visual ${kenBurnsClass}`}
-								style={`--kenburns-duration: ${kenBurnsDurationSec}s; --kenburns-play-state: ${kenBurnsPlayState};`}
-								in:fade={{ duration: 420 }}
-								out:fade={{ duration: 420 }}
-							/>
-						{/key}
-					</div>
-				{:else}
-					<div class="image-frame-message image-card-empty">
-						<p>Image unavailable for this moment.</p>
-					</div>
-				{/if}
-			</div>
+		<div class="image-frame">
+			{#if imageCount === 0 && !activeVisualUrl}
+				<div class="image-frame-message image-card-empty">
+					<p>No images available for this clip yet.</p>
+				</div>
+			{:else if imageLoadState === 'error'}
+				<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
+					<p>{imageLoadError ?? 'We could not load the visuals for this clip.'}</p>
+					<Button size="sm" variant="secondary" onclick={() => void startImagePreload()}>
+						Retry
+					</Button>
+				</div>
+			{:else if !areImagesReady}
+				<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
+					<div class="image-spinner" aria-hidden="true"></div>
+					<p>Loading visuals…</p>
+				</div>
+			{:else if activeVisualUrl}
+				<div class="image-frame-visual">
+					{#key activeVisualKey}
+						<img
+							src={activeVisualUrl}
+							alt={activeVisualAlt}
+							width="1600"
+							height="900"
+							loading="lazy"
+							class={`image-visual ${kenBurnsClass}`}
+							style={`--kenburns-duration: ${kenBurnsDurationSec}s; --kenburns-play-state: ${kenBurnsPlayState};`}
+							in:fade={{ duration: 420 }}
+							out:fade={{ duration: 420 }}
+						/>
+					{/key}
+				</div>
+			{:else}
+				<div class="image-frame-message image-card-empty">
+					<p>Image unavailable for this moment.</p>
+				</div>
+			{/if}
 		</div>
-
-		<button
-			class={navButtonClass}
-			class:image-nav-button={true}
-			type="button"
-			onclick={handleNextImage}
-			aria-label="Go to next image"
-			disabled={imageCount === 0 || !areImagesReady}
-		>
-			<ChevronRight aria-hidden="true" size={28} />
-		</button>
 	</div>
 
 	<div class="transport-bar">
@@ -591,9 +578,11 @@
 			type="button"
 			onclick={togglePlay}
 			disabled={!audioInfo.url || !areImagesReady}
-			aria-label={isPlaying ? 'Pause clip' : 'Play clip'}
+			aria-label={showRedoControl ? 'Replay clip' : isPlaying ? 'Pause clip' : 'Play clip'}
 		>
-			{#if isPlaying}
+			{#if showRedoControl}
+				<RotateCcw aria-hidden="true" size={28} />
+			{:else if isPlaying}
 				<Pause aria-hidden="true" size={28} />
 			{:else}
 				<Play aria-hidden="true" size={28} />
@@ -666,11 +655,6 @@
 		onerror={handleAudioError}
 	></audio>
 
-	{#if showDoneButton}
-		<div class="actions-row">
-			<Button size="lg" disabled={exitPending} onclick={() => void handleDone()}>Done</Button>
-		</div>
-	{/if}
 </section>
 
 <Dialog.Root open={quitDialogOpen} onOpenChange={handleQuitDialogChange}>
@@ -739,16 +723,19 @@
 	}
 
 	.image-stage {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
+		display: flex;
+		justify-content: center;
 		align-items: center;
-		gap: 1.25rem;
-		padding: 1.75rem;
+		width: 100%;
+		max-width: 960px;
+		margin: 0 auto;
+		padding: 0;
 		border-radius: 1.75rem;
 		border: 1px solid rgba(59, 130, 246, 0.16);
 		background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.94));
 		box-shadow: 0 28px 60px -48px rgba(59, 130, 246, 0.5);
 		backdrop-filter: blur(18px);
+		overflow: hidden;
 	}
 
 	:global([data-theme='dark'] .image-stage),
@@ -758,54 +745,13 @@
 		box-shadow: 0 28px 60px -48px rgba(14, 165, 233, 0.4);
 	}
 
-	.image-nav-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		height: 3.25rem;
-		width: 3.25rem;
-		border-radius: 999px;
-		box-shadow: 0 22px 55px -35px rgba(59, 130, 246, 0.45);
-		background: rgba(255, 255, 255, 0.72);
-		color: rgba(37, 99, 235, 0.92);
-		transition:
-			transform 0.2s ease,
-			box-shadow 0.2s ease;
-	}
-
-	.image-nav-button:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 28px 60px -34px rgba(59, 130, 246, 0.55);
-	}
-
-	.image-nav-button:disabled {
-		opacity: 0.5;
-		transform: none;
-		box-shadow: none;
-	}
-
-	:global([data-theme='dark'] .image-nav-button),
-	:global(:root:not([data-theme='light']) .image-nav-button) {
-		background: rgba(30, 41, 59, 0.9);
-		color: rgba(191, 219, 254, 0.85);
-		box-shadow: 0 22px 50px -35px rgba(14, 165, 233, 0.4);
-	}
-
-	.image-card {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-	}
-
 	.image-frame {
 		position: relative;
-		width: min(100%, 720px);
+		width: 100%;
 		aspect-ratio: 16 / 9;
 		border-radius: 1.5rem;
 		overflow: hidden;
-		border: 1px solid rgba(59, 130, 246, 0.16);
-		background: rgba(15, 23, 42, 0.05);
+		background: rgba(15, 23, 42, 0.1);
 		box-shadow: 0 28px 60px -48px rgba(59, 130, 246, 0.4);
 	}
 
@@ -1150,18 +1096,9 @@
 		transform: translateY(calc((var(--slider-track-thickness) - var(--slider-thumb-size)) / 2));
 	}
 
-	.actions-row {
-		display: flex;
-		justify-content: flex-end;
-	}
-
 	@media (max-width: 960px) {
 		.image-stage {
-			grid-template-columns: minmax(0, 1fr);
-		}
-
-		.image-nav-button {
-			display: none;
+			max-width: 100%;
 		}
 	}
 
@@ -1172,17 +1109,7 @@
 		}
 
 		.image-stage {
-			padding: 1.25rem;
-			gap: 1rem;
-		}
-
-		.image-frame {
-			width: 100%;
-		}
-
-		.image-nav-button {
-			height: 2.75rem;
-			width: 2.75rem;
+			border-radius: 1.25rem;
 		}
 
 		.play-toggle {
@@ -1197,10 +1124,6 @@
 
 		.transport-bar {
 			gap: 0.5rem;
-		}
-
-		.actions-row {
-			justify-content: flex-start;
 		}
 	}
 </style>
