@@ -28,18 +28,22 @@
 </script>
 
 <div
-		class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 text-center dark:from-primary/12"
+	class="finish-header space-y-3 border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-background px-6 py-6 text-center dark:from-primary/12"
 >
 	<h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl">{heading}</h2>
 	<p class="text-sm leading-relaxed text-muted-foreground">{description}</p>
 </div>
-	<div
-		class="finish-footer flex flex-col items-center gap-3 border-t border-border/60 px-6 py-6 sm:flex-row sm:items-center sm:justify-center"
-	>
+<div
+	class="finish-footer flex flex-col items-center gap-3 border-t border-border/60 bg-background px-6 py-6 sm:flex-row sm:items-center sm:justify-center"
+>
 	<Button class="finish-cancel w-full sm:w-auto sm:min-w-[9rem]" onclick={handleKeep}>
 		{keepLabel}
 	</Button>
-	<Button class="finish-continue w-full sm:w-auto sm:min-w-[9rem]" disabled={quitDisabled} onclick={handleQuit}>
+	<Button
+		class="finish-continue w-full sm:w-auto sm:min-w-[9rem]"
+		disabled={quitDisabled}
+		onclick={handleQuit}
+	>
 		{quitLabel}
 	</Button>
 </div>
@@ -61,14 +65,14 @@
 			0 35px 90px -40px rgba(2, 6, 23, 0.75);
 	}
 
-	.finish-footer {
+	/* .finish-footer {
 		background: color-mix(in srgb, hsl(var(--background)) 96%, transparent 4%);
 	}
 
 	:global([data-theme='dark'] .finish-footer),
 	:global(:root:not([data-theme='light']) .finish-footer) {
 		background: color-mix(in srgb, rgba(15, 23, 42, 0.96) 90%, rgba(30, 41, 59, 0.96) 10%);
-	}
+	} */
 
 	:global(.finish-cancel) {
 		background: #0284c7 !important;
