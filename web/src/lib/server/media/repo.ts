@@ -1,5 +1,9 @@
 import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
-import { SessionMediaDocSchema, type SessionMediaDoc } from '@spark/schemas';
+import {
+	SessionMediaDocSchema,
+	type SessionMediaDoc,
+	type SessionMediaSupplementaryImage
+} from '@spark/schemas';
 import { z } from 'zod';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
@@ -27,6 +31,12 @@ export type SessionMediaImageWithUrl = SessionMediaDoc['images'][number] & {
 	url: string | null;
 };
 
+export type SessionMediaSupplementaryImageWithUrl = SessionMediaSupplementaryImage & {
+	signedUrl: string | null;
+	signedUrlExpiresAt: Date | null;
+	url: string | null;
+};
+
 export type SessionMediaWithUrl = SessionMediaDoc & {
 	audio: SessionMediaDoc['audio'] & {
 		signedUrl: string | null;
@@ -34,6 +44,8 @@ export type SessionMediaWithUrl = SessionMediaDoc & {
 		url: string | null;
 	};
 	images: SessionMediaImageWithUrl[];
+	posterImage: SessionMediaSupplementaryImageWithUrl | null;
+	endingImage: SessionMediaSupplementaryImageWithUrl | null;
 };
 
 export async function getSessionMedia(
@@ -93,6 +105,39 @@ export async function getSessionMedia(
 
 	const audioUrl = audioSignedUrl;
 
+	async function buildSupplementaryImage(
+		image: SessionMediaSupplementaryImage | undefined,
+		kind: 'poster' | 'ending'
+	): Promise<SessionMediaSupplementaryImageWithUrl | null> {
+		if (!image) {
+			return null;
+		}
+		let signedUrl: string | null = null;
+		let signedUrlExpiresAt: Date | null = null;
+
+		if (image.storagePath) {
+			try {
+				const { url, expiresAt } = await createSignedUrl(image.storagePath);
+				signedUrl = url;
+				signedUrlExpiresAt = expiresAt;
+			} catch (error) {
+				console.warn(
+					`Unable to create signed URL for session media ${parsed.id} ${kind} image at ${image.storagePath}`,
+					error
+				);
+			}
+		}
+
+		const url = signedUrl;
+
+		return {
+			...image,
+			signedUrl,
+			signedUrlExpiresAt,
+			url
+		};
+	}
+
 	const images: SessionMediaImageWithUrl[] = await Promise.all(
 		parsed.images.map(async (image) => {
 			let signedUrl: string | null = null;
@@ -122,6 +167,11 @@ export async function getSessionMedia(
 		})
 	);
 
+	const [posterImage, endingImage] = await Promise.all([
+		buildSupplementaryImage(parsed.posterImage, 'poster'),
+		buildSupplementaryImage(parsed.endingImage, 'ending')
+	]);
+
 	return {
 		...parsed,
 		audio: {
@@ -130,6 +180,8 @@ export async function getSessionMedia(
 			signedUrlExpiresAt: audioSignedUrlExpiresAt,
 			url: audioUrl
 		},
-		images
+		images,
+		posterImage,
+		endingImage
 	};
 }

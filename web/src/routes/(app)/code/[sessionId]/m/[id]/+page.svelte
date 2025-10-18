@@ -37,6 +37,8 @@
 	const images = data.media.images;
 	const narration = data.media.narration;
 	const audioInfo = data.media.audio;
+	const posterImage = data.media.posterImage;
+	const endingImage = data.media.endingImage;
 
 	const baseTimelineEnd = (() => {
 		if (images.length === 0) {
@@ -614,6 +616,37 @@
 		{/if}
 	</div>
 
+	{#if (posterImage?.url ?? null) || (endingImage?.url ?? null)}
+		<div class="supplementary-gallery" aria-label="Story artwork">
+			{#if posterImage?.url}
+				<figure class="supplementary-card">
+					<img
+						src={posterImage.url}
+						alt="Story poster"
+						width="1280"
+						height="720"
+						loading="lazy"
+						decoding="async"
+					/>
+					<figcaption>Poster</figcaption>
+				</figure>
+			{/if}
+			{#if endingImage?.url}
+				<figure class="supplementary-card">
+					<img
+						src={endingImage.url}
+						alt="Ending card"
+						width="1280"
+						height="720"
+						loading="lazy"
+						decoding="async"
+					/>
+					<figcaption>Ending card</figcaption>
+				</figure>
+			{/if}
+		</div>
+	{/if}
+
 	<audio
 		bind:this={audioElement}
 		src={audioInfo.url ?? undefined}
@@ -1113,6 +1146,53 @@
 		justify-content: flex-end;
 	}
 
+	.supplementary-gallery {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 1.25rem;
+	}
+
+	.supplementary-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		padding: 1rem;
+		border-radius: 1.5rem;
+		border: 1px solid rgba(59, 130, 246, 0.16);
+		background: linear-gradient(135deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.92));
+		box-shadow: 0 20px 50px -40px rgba(59, 130, 246, 0.45);
+	}
+
+	.supplementary-card img {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		object-fit: cover;
+		border-radius: 1rem;
+		border: 1px solid rgba(59, 130, 246, 0.14);
+		background: rgba(15, 23, 42, 0.05);
+	}
+
+	.supplementary-card figcaption {
+		margin: 0;
+		font-size: 0.78rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: rgba(37, 99, 235, 0.82);
+	}
+
+	:global([data-theme='dark'] .supplementary-card),
+	:global(:root:not([data-theme='light']) .supplementary-card) {
+		border-color: rgba(96, 165, 250, 0.18);
+		background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.9));
+		box-shadow: 0 20px 50px -40px rgba(14, 165, 233, 0.45);
+	}
+
+	:global([data-theme='dark'] .supplementary-card figcaption),
+	:global(:root:not([data-theme='light']) .supplementary-card figcaption) {
+		color: rgba(191, 219, 254, 0.82);
+	}
+
 	@media (max-width: 960px) {
 		.image-stage {
 			grid-template-columns: minmax(0, 1fr);
@@ -1136,6 +1216,10 @@
 
 		.image-frame {
 			width: 100%;
+		}
+
+		.supplementary-gallery {
+			grid-template-columns: minmax(0, 1fr);
 		}
 
 		.image-nav-button {
