@@ -49,6 +49,24 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			durationSec: line.durationSec
 		}));
 
+	const posterImage = media.posterImage
+		? {
+				kind: 'poster' as const,
+				url: media.posterImage.url,
+				storagePath: media.posterImage.storagePath ?? null,
+				signedUrlExpiresAt: media.posterImage.signedUrlExpiresAt?.toISOString() ?? null
+			}
+		: null;
+
+	const endingImage = media.endingImage
+		? {
+				kind: 'ending' as const,
+				url: media.endingImage.url,
+				storagePath: media.endingImage.storagePath ?? null,
+				signedUrlExpiresAt: media.endingImage.signedUrlExpiresAt?.toISOString() ?? null
+			}
+		: null;
+
 	return {
 		sessionId: session.id,
 		planItem,
@@ -63,7 +81,9 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 				expiresAt: media.audio.signedUrlExpiresAt?.toISOString() ?? null
 			},
 			images,
-			narration
+			narration,
+			posterImage,
+			endingImage
 		}
 	};
 };
