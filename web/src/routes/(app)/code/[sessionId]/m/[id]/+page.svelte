@@ -106,6 +106,7 @@
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
 	$: areImagesReady = imageLoadState === 'ready';
+	$: showSubtitleStrip = !isPosterPhase && !isEndCardPhase;
 	$: kenBurnsEnabled = activeVisualKind === 'image';
 	$: kenBurnsDurationSec = kenBurnsEnabled
 		? activeImage?.durationSec && activeImage.durationSec > 0
@@ -621,25 +622,29 @@
 		</div>
 	</div>
 
-	<div
-		class="subtitle-strip"
-		class:has-error={Boolean(playbackError)}
-		aria-live="polite"
-		aria-label="Subtitles"
-	>
-	{#if playbackError}
-		<div class="error-banner">
-			<AlertCircle aria-hidden="true" />
-			<span>{playbackError}</span>
+	{#if showSubtitleStrip}
+		<div
+			class="subtitle-strip"
+			class:has-error={Boolean(playbackError)}
+			aria-live="polite"
+			aria-label="Subtitles"
+			in:fade={{ duration: 200 }}
+			out:fade={{ duration: 140 }}
+		>
+			{#if playbackError}
+				<div class="error-banner">
+					<AlertCircle aria-hidden="true" />
+					<span>{playbackError}</span>
+				</div>
+			{:else if !isReady}
+				<p class="subtitle-placeholder">Loading clip…</p>
+			{:else if activeNarrationLine}
+				<p class="subtitle-active">{activeNarrationLine.text}</p>
+			{:else}
+				<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
+			{/if}
 		</div>
-	{:else if !isReady}
-		<p class="subtitle-placeholder">Loading clip…</p>
-	{:else if activeNarrationLine}
-		<p class="subtitle-active">{activeNarrationLine.text}</p>
-	{:else}
-		<p class="subtitle-placeholder">Captions will appear once the narration begins.</p>
 	{/if}
-</div>
 
 <audio
 		bind:this={audioElement}
@@ -913,9 +918,9 @@
 	.subtitle-active {
 		margin: 0;
 		font-size: 1.1rem;
-		font-weight: 500;
+		font-weight: 400;
 		line-height: 1.4;
-		color: rgba(15, 23, 42, 0.82);
+		color: rgba(15, 23, 42, 0.75);
 		text-align: center;
 	}
 
@@ -936,7 +941,7 @@
 
 	:global([data-theme='dark'] .subtitle-active),
 	:global(:root:not([data-theme='light']) .subtitle-active) {
-		color: rgba(226, 232, 240, 0.9);
+		color: rgba(226, 232, 240, 0.82);
 	}
 
 	:global([data-theme='dark'] .subtitle-placeholder),
