@@ -5,7 +5,12 @@ const trimmedId = z.string().trim().min(1, "id is required");
 
 const sessionStateStatus = z.enum(["not_started", "in_progress", "completed"]);
 
-const quizAttemptStatus = z.enum(["pending", "correct", "incorrect", "skipped"]);
+const quizAttemptStatus = z.enum([
+  "pending",
+  "correct",
+  "incorrect",
+  "skipped",
+]);
 const codeLanguage = z.enum(["python"]);
 const codeRunStatus = z.enum(["passed", "failed", "error"]);
 
@@ -99,28 +104,30 @@ export const PlanItemQuizStateSchema = z
     questions: z.record(trimmedId, QuizQuestionStateSchema).default({}),
     serverCompletedAt: FirestoreTimestampSchema.optional(),
   })
-  .transform(({ lastQuestionIndex, lastQuestionId, questions, serverCompletedAt }) => {
-    const result: {
-      lastQuestionIndex?: number;
-      lastQuestionId?: string;
-      questions: Record<string, z.infer<typeof QuizQuestionStateSchema>>;
-      serverCompletedAt?: Date;
-    } = {
-      questions,
-    };
+  .transform(
+    ({ lastQuestionIndex, lastQuestionId, questions, serverCompletedAt }) => {
+      const result: {
+        lastQuestionIndex?: number;
+        lastQuestionId?: string;
+        questions: Record<string, z.infer<typeof QuizQuestionStateSchema>>;
+        serverCompletedAt?: Date;
+      } = {
+        questions,
+      };
 
-    if (typeof lastQuestionIndex === "number") {
-      result.lastQuestionIndex = lastQuestionIndex;
-    }
-    if (lastQuestionId) {
-      result.lastQuestionId = lastQuestionId;
-    }
-    if (serverCompletedAt) {
-      result.serverCompletedAt = serverCompletedAt;
-    }
+      if (typeof lastQuestionIndex === "number") {
+        result.lastQuestionIndex = lastQuestionIndex;
+      }
+      if (lastQuestionId) {
+        result.lastQuestionId = lastQuestionId;
+      }
+      if (serverCompletedAt) {
+        result.serverCompletedAt = serverCompletedAt;
+      }
 
-    return result;
-  });
+      return result;
+    },
+  );
 
 export type PlanItemQuizState = z.infer<typeof PlanItemQuizStateSchema>;
 

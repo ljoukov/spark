@@ -30,7 +30,9 @@ export async function openAiTts(request: {
 
   const stream = response.body;
   if (!stream) {
-    throw new Error("OpenAI returned an empty body for text-to-speech synthesis.");
+    throw new Error(
+      "OpenAI returned an empty body for text-to-speech synthesis.",
+    );
   }
 
   return stream as ReadableStream<Uint8Array>;
