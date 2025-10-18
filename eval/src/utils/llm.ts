@@ -1521,8 +1521,9 @@ export async function generateImages(
     for (const entry of pending) {
       lines.push(`\nImage ${entry.index}: ${entry.prompt}`);
     }
-    lines.join("");
-    lines.push(`\nPlease make all ${pendingIds.length} remaining images.`);
+    // Ask for the correct remaining count (number of pending prompts),
+    // not the string length of the comma-separated ID list.
+    lines.push(`\nPlease make all ${pending.length} remaining images.`);
     return [
       {
         type: "text",

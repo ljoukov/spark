@@ -16,7 +16,7 @@ import {
 	FirestoreTimestampSchema
 } from '@spark/schemas';
 
-import { getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
+import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
 import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
 import { saveUserProblem } from '../code/problemRepo';
@@ -28,6 +28,7 @@ export type WelcomeSessionOption = {
 	title: string;
 	tagline: string;
 	emoji: string;
+	posterImageUrl: string | null;
 };
 
 type LoadedTemplate = {
@@ -135,6 +136,59 @@ function findStoryPlanItem(plan: readonly PlanItem[]): PlanItem | null {
 		}
 	}
 	return null;
+}
+
+const POSTER_SIGNED_URL_TTL_MS = 60 * 60 * 1000;
+
+function normaliseStoragePath(input: string): string {
+	return input.replace(/^\/+/, '');
+}
+
+async function createSignedUrl(storagePath: string): Promise<string | null> {
+	try {
+		const bucket = getFirebaseAdminBucket();
+		const file = bucket.file(normaliseStoragePath(storagePath));
+		const expiresAt = new Date(Date.now() + POSTER_SIGNED_URL_TTL_MS);
+		const [url] = await file.getSignedUrl({
+			action: 'read',
+			expires: expiresAt
+		});
+		return url;
+	} catch (error) {
+		console.warn('[welcome] Unable to create signed URL for poster image', storagePath, error);
+		return null;
+	}
+}
+
+async function resolveTemplatePosterUrl(
+	docRef: FirebaseFirestore.DocumentReference,
+	plan: readonly PlanItem[]
+): Promise<string | null> {
+	const storyPlanItem = findStoryPlanItem(plan);
+	if (!storyPlanItem) {
+		return null;
+	}
+
+	const mediaSnapshot = await docRef.collection('media').doc(storyPlanItem.id).get();
+	if (!mediaSnapshot.exists) {
+		return null;
+	}
+	const mediaData = mediaSnapshot.data();
+	if (!mediaData) {
+		return null;
+	}
+
+	try {
+		const parsed = SessionMediaDocSchema.parse({ id: mediaSnapshot.id, ...mediaData });
+		const storagePath = parsed.posterImage?.storagePath;
+		if (!storagePath) {
+			return null;
+		}
+		return await createSignedUrl(storagePath);
+	} catch (error) {
+		console.error('Unable to parse template media document for poster image', mediaSnapshot.id, error);
+		return null;
+	}
 }
 
 async function fetchTemplateMedia(
@@ -258,11 +312,14 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				plan: parsed.plan
 			});
 
+			const posterImageUrl = await resolveTemplatePosterUrl(doc.ref, session.plan);
+
 			options.push({
 				key: parsed.key ?? parsed.id,
 				title: session.title,
 				tagline: parsed.tagline,
-				emoji: parsed.emoji
+				emoji: parsed.emoji,
+				posterImageUrl
 			});
 		} catch (error) {
 			console.error('Unable to parse welcome session option', doc.id, error);
