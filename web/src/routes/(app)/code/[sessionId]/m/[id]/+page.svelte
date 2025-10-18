@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Play from '@lucide/svelte/icons/play';
@@ -28,6 +28,7 @@
 	onDestroy(() => {
 		stopSessionState();
 		sessionStateStore.stop();
+		componentDestroyed = true;
 	});
 
 	const images = data.media.images;
@@ -61,6 +62,12 @@
 	let quitDialogOpen = false;
 
 	const imageCount = images.length;
+	let imageLoadState: 'idle' | 'loading' | 'ready' | 'error' =
+		imageCount === 0 ? 'ready' : 'idle';
+	let imageLoadError: string | null = null;
+	let imagePreloadToken = 0;
+	let componentDestroyed = false;
+	let areImagesReady = imageLoadState === 'ready';
 
 	$: sliderMax = Math.max(duration, baseTimelineEnd);
 	$: hasStarted = planItemState?.status !== 'not_started';
@@ -73,6 +80,55 @@
 	$: activeNarrationLine = currentNarrationIndex >= 0 ? narration[currentNarrationIndex] : null;
 	$: timestampLabel = `${formatTime(currentTime)} / ${formatTime(sliderMax)}`;
 	$: isReady = Boolean(audioInfo.url) && metadataLoaded;
+	$: areImagesReady = imageLoadState === 'ready';
+
+	async function startImagePreload(): Promise<void> {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		imagePreloadToken += 1;
+		const token = imagePreloadToken;
+		if (imageCount === 0) {
+			imageLoadState = 'ready';
+			imageLoadError = null;
+			return;
+		}
+		const urls = images
+			.map((image) => image.url)
+			.filter((url): url is string => Boolean(url));
+		if (urls.length === 0) {
+			imageLoadState = 'ready';
+			imageLoadError = null;
+			return;
+		}
+		imageLoadState = 'loading';
+		imageLoadError = null;
+		try {
+			await Promise.all(
+				urls.map(
+					(url) =>
+						new Promise<void>((resolve, reject) => {
+							const preload = new Image();
+							preload.onload = () => resolve();
+							preload.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+							preload.src = url;
+						})
+				)
+			);
+			if (componentDestroyed || token !== imagePreloadToken) {
+				return;
+			}
+			imageLoadState = 'ready';
+		} catch (error) {
+			console.error('Failed to preload media images', error);
+			if (componentDestroyed || token !== imagePreloadToken) {
+				return;
+			}
+			imageLoadState = 'error';
+			imageLoadError =
+				'We could not load the visuals for this clip. Check your connection and try again.';
+		}
+	}
 
 	function clampTime(value: number): number {
 		if (!Number.isFinite(value)) {
@@ -219,7 +275,7 @@
 	}
 
 	async function togglePlay() {
-		if (!audioElement || !audioInfo.url) {
+		if (!audioElement || !audioInfo.url || !areImagesReady) {
 			return;
 		}
 		if (isPlaying) {
@@ -276,6 +332,9 @@
 	}
 
 	function handlePrevImage() {
+		if (!areImagesReady) {
+			return;
+		}
 		if (currentImageOrder <= 0) {
 			seekTo(0);
 			return;
@@ -284,6 +343,9 @@
 	}
 
 	function handleNextImage() {
+		if (!areImagesReady) {
+			return;
+		}
 		if (currentImageOrder >= imageCount - 1) {
 			seekTo(sliderMax);
 			return;
@@ -308,7 +370,7 @@
 				return;
 			}
 		}
-		if (quitDialogOpen || imageCount === 0) {
+		if (quitDialogOpen || imageCount === 0 || !areImagesReady) {
 			return;
 		}
 		if (event.key === 'ArrowLeft') {
@@ -387,6 +449,9 @@
 		'media-exit-button flex size-8 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30';
 
 	updateTimelineState(0);
+	onMount(() => {
+		void startImagePreload();
+	});
 </script>
 
 <svelte:head>
@@ -412,33 +477,43 @@
 			type="button"
 			onclick={handlePrevImage}
 			aria-label="Go to previous image"
-			disabled={imageCount === 0}
+			disabled={imageCount === 0 || !areImagesReady}
 		>
 			<ChevronLeft aria-hidden="true" size={28} />
 		</button>
 
 		<div class="image-card">
-			{#if activeImage}
-				{#if activeImage.url}
-					<div class="image-frame">
-						<img
-							src={activeImage.url}
-							alt={`Session illustration ${currentImageOrder + 1}`}
-							width="1600"
-							height="900"
-							loading="lazy"
-						/>
+			<div class="image-frame">
+				{#if imageCount === 0}
+					<div class="image-frame-message image-card-empty">
+						<p>No images available for this clip yet.</p>
 					</div>
+				{:else if imageLoadState === 'error'}
+					<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
+						<p>{imageLoadError ?? 'We could not load the visuals for this clip.'}</p>
+						<Button size="sm" variant="secondary" onclick={() => void startImagePreload()}>
+							Retry
+						</Button>
+					</div>
+				{:else if !areImagesReady}
+					<div class="image-frame-message image-card-feedback" role="status" aria-live="polite">
+						<div class="image-spinner" aria-hidden="true"></div>
+						<p>Loading visuals…</p>
+					</div>
+				{:else if activeImage?.url}
+					<img
+						src={activeImage.url}
+						alt={`Session illustration ${currentImageOrder + 1}`}
+						width="1600"
+						height="900"
+						loading="lazy"
+					/>
 				{:else}
-					<div class="image-card-empty">
+					<div class="image-frame-message image-card-empty">
 						<p>Image unavailable for this moment.</p>
 					</div>
 				{/if}
-			{:else}
-				<div class="image-card-empty">
-					<p>No images available for this clip yet.</p>
-				</div>
-			{/if}
+			</div>
 		</div>
 
 		<button
@@ -447,7 +522,7 @@
 			type="button"
 			onclick={handleNextImage}
 			aria-label="Go to next image"
-			disabled={imageCount === 0}
+			disabled={imageCount === 0 || !areImagesReady}
 		>
 			<ChevronRight aria-hidden="true" size={28} />
 		</button>
@@ -459,7 +534,7 @@
 			class:play-toggle={true}
 			type="button"
 			onclick={togglePlay}
-			disabled={!audioInfo.url}
+			disabled={!audioInfo.url || !areImagesReady}
 			aria-label={isPlaying ? 'Pause clip' : 'Play clip'}
 		>
 			{#if isPlaying}
@@ -475,7 +550,7 @@
 			type="button"
 			onclick={toggleMute}
 			aria-label={isMuted ? 'Sound off' : 'Sound on'}
-			disabled={!audioInfo.url}
+			disabled={!audioInfo.url || !areImagesReady}
 		>
 			{#if isMuted}
 				<VolumeX aria-hidden="true" size={22} />
@@ -496,7 +571,7 @@
 				oninput={handleSeekInput}
 				onchange={handleSeekCommit}
 				aria-label="Clip progress"
-				disabled={!audioInfo.url}
+				disabled={!audioInfo.url || !areImagesReady}
 			/>
 		</div>
 	</div>
@@ -685,31 +760,73 @@
 		display: block;
 	}
 
-	.image-card-empty {
+	.image-frame-message {
+		position: absolute;
+		inset: 0;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		width: min(100%, 720px);
-		min-height: clamp(280px, 40vh, 340px);
-		padding: 2rem;
-		border-radius: 1.5rem;
-		border: 1px dashed rgba(148, 163, 184, 0.42);
-		background: rgba(255, 255, 255, 0.7);
-		color: rgba(100, 116, 139, 0.85);
+		gap: 1rem;
+		padding: clamp(1.5rem, 3vw, 2.5rem);
 		text-align: center;
+		border-radius: inherit;
+	}
+
+	.image-card-feedback {
+		background: rgba(255, 255, 255, 0.82);
+		color: rgba(30, 41, 59, 0.85);
+		backdrop-filter: blur(6px);
+	}
+
+	:global([data-theme='dark'] .image-card-feedback),
+	:global(:root:not([data-theme='light']) .image-card-feedback) {
+		background: rgba(15, 23, 42, 0.88);
+		color: rgba(226, 232, 240, 0.88);
+	}
+
+	.image-spinner {
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: 999px;
+		border: 0.3rem solid rgba(59, 130, 246, 0.25);
+		border-top-color: rgba(59, 130, 246, 0.9);
+		animation: image-spinner 0.9s linear infinite;
+	}
+
+	:global([data-theme='dark'] .image-spinner),
+	:global(:root:not([data-theme='light']) .image-spinner) {
+		border-color: rgba(148, 163, 184, 0.35);
+		border-top-color: rgba(96, 165, 250, 0.85);
+	}
+
+	.image-card-empty {
+		background: rgba(255, 255, 255, 0.78);
+		color: rgba(100, 116, 139, 0.85);
+		backdrop-filter: blur(6px);
 	}
 
 	:global([data-theme='dark'] .image-card-empty),
 	:global(:root:not([data-theme='light']) .image-card-empty) {
-		background: rgba(30, 41, 59, 0.78);
-		border-color: rgba(148, 163, 184, 0.35);
-		color: rgba(203, 213, 225, 0.78);
+		background: rgba(30, 41, 59, 0.8);
+		color: rgba(203, 213, 225, 0.82);
 	}
 
+	.image-card-feedback p,
 	.image-card-empty p {
 		margin: 0;
 		font-size: 1rem;
-		line-height: 1.6;
+		line-height: 1.5;
+		max-width: 28rem;
+	}
+
+	@keyframes image-spinner {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.image-meta {
