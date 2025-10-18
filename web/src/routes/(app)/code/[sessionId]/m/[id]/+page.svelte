@@ -733,7 +733,7 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
-		min-height: calc(2 * 1.1rem * 1.4);
+		min-height: 5rem;
 		padding: 0.85rem 1.75rem;
 		border-radius: 1.5rem;
 		background: rgba(59, 130, 246, 0.08);
