@@ -1,3 +1,4 @@
+import { mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
@@ -2227,22 +2228,80 @@ function resolveStorageBucket(): string {
 }
 
 function resolveDebugRootBaseDir(): string {
-  return path.join(WORKSPACE_PATHS.codeSyntheticDir, "sessions", TEMPLATE_USER_ID);
-}
-
-function resolveSessionDebugRootDir(baseDir: string, sessionId: string): string {
-  return path.join(baseDir, sessionId);
-}
-
-function resolveStoryCheckpointDir(sessionId: string, planItemId: string): string {
   return path.join(
     WORKSPACE_PATHS.codeSyntheticDir,
     "sessions",
     TEMPLATE_USER_ID,
+  );
+}
+
+function resolveSessionRootDir(baseDir: string, sessionId: string): string {
+  return path.join(baseDir, sessionId);
+}
+
+function resolveSessionDebugRootDir(baseDir: string, sessionId: string): string {
+  return resolveSessionRootDir(baseDir, sessionId);
+}
+
+function resolveStoryCheckpointDir(
+  sessionId: string,
+  planItemId: string,
+): string {
+  const sessionRootDir = resolveSessionRootDir(
+    resolveDebugRootBaseDir(),
+    sessionId,
+  );
+  return path.join(sessionRootDir, "checkpoints", planItemId);
+}
+
+function resolveLegacyStoryCheckpointDir(
+  sessionId: string,
+  planItemId: string,
+): string {
+  return path.join(
+    resolveDebugRootBaseDir(),
     "checkpoints",
     sessionId,
     planItemId,
   );
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "ENOENT"
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function ensureStoryCheckpointDir(
+  sessionId: string,
+  planItemId: string,
+): Promise<string> {
+  const targetDir = resolveStoryCheckpointDir(sessionId, planItemId);
+  if (await pathExists(targetDir)) {
+    return targetDir;
+  }
+
+  const legacyDir = resolveLegacyStoryCheckpointDir(sessionId, planItemId);
+  if (await pathExists(legacyDir)) {
+    await mkdir(path.dirname(targetDir), { recursive: true });
+    await rename(legacyDir, targetDir);
+    console.log(
+      `[welcome/${sessionId}] migrated checkpoints from ${legacyDir} to ${targetDir}`,
+    );
+  }
+
+  return targetDir;
 }
 
 function resolveStageSequence(options: CliOptions): StageName[] {
@@ -2341,6 +2400,11 @@ async function ensureStoryResult(
     return context.storyResult;
   }
 
+  const checkpointDir = await ensureStoryCheckpointDir(
+    blueprint.sessionId,
+    blueprint.storyPlanItemId,
+  );
+
   const [storyResult] = await runJobsWithConcurrency({
     items: [blueprint.sessionId],
     concurrency: 1,
@@ -2358,10 +2422,7 @@ async function ensureStoryResult(
           runtime.debugRootBaseDir,
           blueprint.sessionId,
         ),
-        checkpointDir: resolveStoryCheckpointDir(
-          blueprint.sessionId,
-          blueprint.storyPlanItemId,
-        ),
+        checkpointDir,
       });
     },
   });

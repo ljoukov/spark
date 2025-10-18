@@ -1,3 +1,4 @@
+import { mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
@@ -877,12 +878,70 @@ function resolveDebugRootDir(): string {
   return path.join(WORKSPACE_PATHS.codeSyntheticDir, "sessions", "test-user");
 }
 
+function resolveSessionRootDir(
+  debugRootDir: string,
+  sessionId: string,
+): string {
+  return path.join(debugRootDir, sessionId);
+}
+
 function resolveStoryCheckpointDir(
+  sessionRootDir: string,
+  planItemId: string,
+): string {
+  return path.join(sessionRootDir, "checkpoints", planItemId);
+}
+
+function resolveLegacyStoryCheckpointDir(
   debugRootDir: string,
   sessionId: string,
   planItemId: string,
 ): string {
   return path.join(debugRootDir, "checkpoints", sessionId, planItemId);
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "ENOENT"
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function ensureStoryCheckpointDir(
+  debugRootDir: string,
+  sessionRootDir: string,
+  sessionId: string,
+  planItemId: string,
+): Promise<string> {
+  const targetDir = resolveStoryCheckpointDir(sessionRootDir, planItemId);
+  if (await pathExists(targetDir)) {
+    return targetDir;
+  }
+
+  const legacyDir = resolveLegacyStoryCheckpointDir(
+    debugRootDir,
+    sessionId,
+    planItemId,
+  );
+  if (await pathExists(legacyDir)) {
+    await mkdir(path.dirname(targetDir), { recursive: true });
+    await rename(legacyDir, targetDir);
+    console.log(
+      `[test-session/${sessionId}] migrated checkpoints from ${legacyDir} to ${targetDir}`,
+    );
+  }
+
+  return targetDir;
 }
 
 function normalizeBucketName(raw: string | undefined): string {
@@ -1176,9 +1235,11 @@ async function main(): Promise<void> {
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
   const storageBucket = resolveStorageBucket();
-  const debugRootDir = resolveDebugRootDir();
-  const storyCheckpointDir = resolveStoryCheckpointDir(
-    debugRootDir,
+  const debugRootBaseDir = resolveDebugRootDir();
+  const sessionRootDir = resolveSessionRootDir(debugRootBaseDir, sessionId);
+  const storyCheckpointDir = await ensureStoryCheckpointDir(
+    debugRootBaseDir,
+    sessionRootDir,
     sessionId,
     STORY_PLAN_ITEM_ID,
   );
@@ -1187,7 +1248,7 @@ async function main(): Promise<void> {
     userId,
     sessionId,
     storageBucket,
-    debugRootDir,
+    debugRootDir: sessionRootDir,
     storyCheckpointDir,
   };
 
