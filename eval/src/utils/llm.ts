@@ -558,7 +558,7 @@ function resolveDebugDir(
     return undefined;
   }
   const stageSegment = normalisePathSegment(debug.stage ?? "llm");
-  const segments = [debug.rootDir, stageSegment];
+  const segments = [debug.rootDir, "stages", stageSegment];
   if (debug.subStage) {
     segments.push(normalisePathSegment(debug.subStage));
   }
