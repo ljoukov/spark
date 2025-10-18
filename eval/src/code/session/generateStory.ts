@@ -454,8 +454,8 @@ export function buildStoryIdeaPrompt(topic: string): string {
 
 3. **Narrative Angle Ideation:**
    * **The Human Element:** Based on the discoverer's profession and context, what was their worldview?
-   * **Metaphor Brainstorm:** Propose 2-3 distinct, powerful, and concrete metaphors that embody the concept's essence and resonate with the discoverer's world. For each metaphor, give it a memorable name.
-   * **The Modern Pivot:** Identify the original purpose of the concept and contrast it with a compelling, modern application relevant to the target audience. Frame this as an unexpected evolution of the idea.
+   * **Functional Analogy Brainstorm:** Your most important task. Propose 2-3 functional analogies—active systems with internal rules that mirror the concept's core logic. Each analogy must have a memorable name and a concise description of its governing mechanism.
+   * **The "Invisible Architecture" Pivot:** Identify the concept's original purpose and contrast it with a modern application. Frame the modern use as a hidden, powerful force inside the student's everyday life (apps, games, networks) so they realise the concept is everywhere.
 
 **Output Format:**
 Produce a structured brief using the following Markdown headings. Be concise and factual.
@@ -469,9 +469,9 @@ Produce a structured brief using the following Markdown headings. Be concise and
   * **Canonical Event:** [Project/Paper, Place, Year]
   * **The High-Stakes Problem:**
 * **Narrative Elements:**
-  * **Core Metaphor Candidate(s):** [List 2-3 named metaphors with brief descriptions]
+  * **Functional Analogy Candidate(s):** [List 2-3 named analogies with brief descriptions]
   * **Contrasting Foil:**
-  * **The Modern Pivot:**
+  * **"Invisible Architecture" Pivot:**
 * **Key Terminology & Gloss:** [List any necessary terms and their period-correct, simple definitions]
 \`\`\`
 `;
@@ -489,16 +489,20 @@ export function buildStoryDraftPrompt(storyBrief: string): string {
 ${storyBrief}
 ============================================
 
+**Guiding Ethos:**
+* **Reveal, Don't Just Tell:** Let the listener feel they are being entrusted with a strategic secret.
+* **Transform the Concept into a Superpower:** Frame the knowledge as a powerful tool the listener is about to wield.
+
 **Your Mission:**
 Weave the provided elements into a seamless story that makes the concept feel like a powerful secret the listener is about to inherit. The story must flow from a historical problem to a modern-day superpower.
 
 **The Narrative Arc to Follow:**
 
 1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
-2. **The Insight:** Describe the "aha!" moment. Introduce the chosen Central Metaphor as the key to solving the problem. Use the metaphor's name and its inherent logic to explain the breakthrough.
-3. **The Demonstration:** Show, don't just tell. Walk through a small, intuitive example of the concept in action, using *only the language and imagery of your chosen metaphor*. Avoid algorithmic steps and jargon.
-4. **The Pivot:** Execute the "Modern Pivot" from the brief. Create a clear transition that contrasts the concept's original use with its surprising, powerful modern applications. This should be a moment of revelation for the listener.
-5. **The Call to Adventure:** Conclude with a short, memorable, and empowering two-part statement. Frame the historical discovery as the foundation and the upcoming lesson activities as the act of building upon it. Transfer agency to the listener, inviting them to become part of the story.
+2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic to explain the breakthrough.
+3. **The Demonstration:** Show, don't just tell. Walk through a small, intuitive example of the concept in action using only the vocabulary and logic of the functional analogy. This is where the listener should feel the concept click.
+4. **The Pivot:** Execute the "Invisible Architecture" pivot from the brief. Make the historical secret feel like a surprising force already shaping the listener's apps, games, or networks.
+5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands.
 
 **Stylistic Requirements:**
 * **Audio-First:** Use clear, concise sentences. Read it aloud in your "mind's ear" to ensure it flows well.
@@ -527,14 +531,16 @@ ${storyDraft}
 **Part A: The Critical Analysis**
 Grade the draft story against our five-point quality rubric. For each point, provide a score (1-5, with 5 being excellent) and a brief justification for your rating. Be honest and critical.
 
-* **1. Metaphorical Integrity:** Is the central metaphor powerful, concrete, and used consistently without mixing ideas?
-* **2. Narrative Momentum:** Does the story flow logically from problem to insight to modern relevance? Is the pacing compelling?
-* **3. Conceptual Clarity:** Could a bright student grasp the essence of the concept from the story alone, without any prior knowledge?
-* **4. Audience Resonance:** Does the tone respect the audience's intelligence? Is the pivot to a modern application genuinely exciting and relevant for a teen?
-* **5. Motivational Power:** Is the final "Call to Adventure" empowering and intriguing, or does it feel cliché? Does it create a genuine purpose for the lesson that follows?
+* **1. Metaphorical Power:** How effective is the functional analogy? Is it a complete system that makes the concept intuitive, memorable, and consistently applied?
+* **2. Narrative Momentum:** Does the story build from a compelling problem to a satisfying revelation? Is the pacing tight and engaging?
+* **3. Conceptual Revelation:** Does the story make the listener feel clever—as if a secret has been revealed rather than a lesson delivered?
+* **4. "Invisible Architecture" Impact:** Does the pivot create a true "wow" moment by exposing how the concept already powers the listener's hidden technological world?
+* **5. Empowering Conclusion:** Does the ending avoid cliché? Does it actively empower the student by completing the central analogy and handing them a role in the story?
 
 **Part B: The Final Polish**
-Based on your own critical analysis, produce the final, revised version of the story. Address the weaknesses you identified. Your goal is to elevate the story from "good" to "unforgettable." Conclude with one sentence that states the most significant improvement you made.
+Based on your analysis, produce the final, revised version. Focus your edits on two mission-critical areas:
+1. **Clarify the Analogy:** Make the internal mechanics of the functional analogy crystal clear.
+2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure.
 
 Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
 
