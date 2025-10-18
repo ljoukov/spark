@@ -378,11 +378,11 @@ const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
 
 const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["score", "justification"],
-  propertyOrdering: ["score", "justification"],
+  required: ["justification", "score"],
+  propertyOrdering: ["justification", "score"],
   properties: {
-    score: { type: Type.NUMBER, minimum: 1, maximum: 5 },
     justification: { type: Type.STRING, minLength: "1" },
+    score: { type: Type.NUMBER, minimum: 1, maximum: 5 },
   },
 };
 
@@ -437,7 +437,7 @@ export function buildStoryIdeaPrompt(topic: string): string {
 
 **(Objective: To perform deep research and strategic planning. The output of this prompt is a structured brief, not a full story.)**
 
-**Your Role:** You are a historical researcher and a concept strategist for an educational media company. Your task is to analyze a technical concept and create a "Story Brief" for our narrative writers. This brief must identify the perfect historical anchor and a powerful narrative angle to make the concept unforgettable for advanced 12-16 year olds.
+**Your Role:** You are a historical researcher and a concept strategist for an educational media company. Your task is to analyze a technical concept and create a "Story Brief" for our narrative writers. This brief must identify the perfect historical anchor and a powerful narrative angle to make the concept unforgettable for advanced 12-16 year olds. Always run web-search queries to confirm every historical detail before you commit to the brief.
 
 **The Concept to Analyze:** **${topic}**
 
@@ -594,7 +594,9 @@ export async function generateStoryIdea(
   options?: { debugRootDir?: string }
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
-  adapter.log(`[story] generating idea with web-search-enabled ${TEXT_MODEL_ID}`);
+  adapter.log(
+    `[story] generating idea with web-search-enabled ${TEXT_MODEL_ID}`
+  );
   const prompt = buildStoryIdeaPrompt(topic);
   const brief = await generateText({
     progress: adapter,
@@ -2140,8 +2142,7 @@ export class StoryGenerationPipeline {
     }
     await this.invalidateAfter("prose-revision");
     const { value: draft } = await this.ensureProseDraft();
-    const idea =
-      this.caches.idea?.value ?? (await this.ensureIdea()).value;
+    const idea = this.caches.idea?.value ?? (await this.ensureIdea()).value;
     const revision = await generateStoryProseRevision(
       this.options.topic,
       draft,
