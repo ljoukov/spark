@@ -10,13 +10,13 @@ flowchart TD
   B --> C["ensureProseDraft -> generateStoryProseDraft"]
   C --> D["ensureProse -> generateStoryProseRevision"]
   D --> E{"validateStoryProse pass?"}
-  E -->|No attempts left| D
-  E -->|No (exhausted)| X["abort story run"]
-  E -->|Yes| F["ensureSegmentation -> generateStorySegmentation"]
+  E -->|Retry| D
+  E -->|No retries| X["abort story run"]
+  E -->|Pass| F["ensureSegmentation -> generateStorySegmentation"]
   F --> G{Corrections needed?}
-  G -->|Yes (<=3 passes)| H["correctStorySegmentation"]
+  G -->|Needs fixes| H["correctStorySegmentation"]
   H --> F
-  G -->|No| I["ensureImages -> generateStoryImages"]
+  G -->|Ready| I["ensureImages -> generateStoryImages"]
   I --> J["generateImageSets (set_a & set_b)"]
   J --> SA1
   J --> SB1
@@ -87,19 +87,19 @@ Poster, story panels, and ending card are produced twice (Set A and Set B). Each
 
 ```mermaid
 flowchart TD
-  S["generateStoryFrames(options)"] --> B["iterate batches (prompts + style refs)"]
-  B --> A{"attempt <= BATCH_GENERATE_MAX_ATTEMPTS?"}
+  S["generateStoryFrames(options)"] --> B["iterate batches with prompts and style refs"]
+  B --> A{"attempt within batch limit?"}
   A -->|No| X["throw FrameGenerationError"]
   A -->|Yes| G["generateImages()"]
   G --> V{"gradeBatch outcome"}
   V -->|accept| U["append batch + expand style refs"]
   U --> B
   V -->|redo_frames| RF["regenerate flagged frames"]
-  RF --> PI{"partial iteration <= limit?"}
+  RF --> PI{"partial iteration within limit?"}
   PI -->|No| X
-  PI -->|Yes| CB{"redo iteration > 1?"}
+  PI -->|Yes| CB{"redo iteration beyond first?"}
   CB -->|Yes| CC["selectBestRedoFrameCandidate()"]
-  CC --> RFG["re-grade flagged frames\n(check-new-only)"]
+  CC --> RFG["re-grade flagged frames (check-new-only)"]
   CB -->|No| RFG
   RFG --> V
   V -->|redo_batch| RB["collect evidence + log feedback"]
