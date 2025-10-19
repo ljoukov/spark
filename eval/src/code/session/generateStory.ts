@@ -173,6 +173,28 @@ export type StoryIdeaResult = {
   brief: string;
 };
 
+export type StoryProseVariantLabel = "variant_a" | "variant_b";
+
+export const STORY_PROSE_VARIANT_LABELS: readonly StoryProseVariantLabel[] = [
+  "variant_a",
+  "variant_b",
+] as const;
+
+export type StoryProseVariantsJudgeSummary = {
+  verdict: StoryProseVariantLabel;
+  reasoning: string;
+};
+
+export type StoryProseVariantMetadata = {
+  label: StoryProseVariantLabel;
+  ideaBrief: string;
+  draftText: string;
+  text: string;
+  analysis: StoryProseRevisionAnalysis;
+  improvementSummary: string;
+  validation?: StoryProseValidationResult;
+};
+
 export type StoryProseResult = {
   text: string;
   metadata?: {
@@ -181,10 +203,23 @@ export type StoryProseResult = {
     analysis: StoryProseRevisionAnalysis;
     improvementSummary: string;
     validation?: StoryProseValidationResult;
+    variantLabel?: StoryProseVariantLabel;
+    variants?: StoryProseVariantMetadata[];
+    judge?: StoryProseVariantsJudgeSummary;
   };
 };
 
 export type StoryProseDraftResult = StoryProseResult;
+
+export type StoryProseDraftVariant = {
+  label: StoryProseVariantLabel;
+  idea: StoryIdeaResult;
+  draft: StoryProseDraftResult;
+};
+
+export type StoryProseVariantCandidate = StoryProseDraftVariant & {
+  revision: StoryProseRevisionResult;
+};
 
 export type StoryProseValidationIssue = {
   summary: string;
@@ -279,9 +314,19 @@ const StoryIdeaCheckpointSchema = z.object({
 
 type StoryIdeaCheckpoint = z.infer<typeof StoryIdeaCheckpointSchema>;
 
+const StoryProseCheckpointVariantSchema = z.object({
+  label: z.enum(["variant_a", "variant_b"]),
+  ideaBrief: z.string().trim().min(1),
+  draftText: z.string().trim().min(1),
+});
+
+type StoryProseCheckpointVariant = z.infer<
+  typeof StoryProseCheckpointVariantSchema
+>;
+
 const StoryProseCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
-  text: z.string().trim().min(1),
+  variants: z.array(StoryProseCheckpointVariantSchema).min(1),
 });
 
 type StoryProseCheckpoint = z.infer<typeof StoryProseCheckpointSchema>;
@@ -320,12 +365,32 @@ const StoryProseValidationResultSchema = z.object({
   issues: z.array(StoryProseValidationIssueSchema),
 });
 
+const StoryProseVariantsJudgeSchema = z.object({
+  verdict: z.enum(["variant_a", "variant_b"]),
+  reasoning: z.string().trim().min(1),
+});
+
 const StoryProseRevisionCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
   text: z.string().trim().min(1),
   analysis: StoryProseRevisionAnalysisSchema,
   improvementSummary: z.string().trim().min(1),
   validation: StoryProseValidationResultSchema.optional(),
+  variantLabel: z.enum(["variant_a", "variant_b"]).optional(),
+  variants: z
+    .array(
+      z.object({
+        label: z.enum(["variant_a", "variant_b"]),
+        ideaBrief: z.string().trim().min(1),
+        draftText: z.string().trim().min(1),
+        text: z.string().trim().min(1),
+        analysis: StoryProseRevisionAnalysisSchema,
+        improvementSummary: z.string().trim().min(1),
+        validation: StoryProseValidationResultSchema.optional(),
+      }),
+    )
+    .optional(),
+  judge: StoryProseVariantsJudgeSchema.optional(),
 });
 
 type StoryProseRevisionCheckpoint = z.infer<
@@ -346,6 +411,25 @@ const StoryProseRevisionResponseSchema = z.object({
 type StoryProseRevisionResponse = z.infer<
   typeof StoryProseRevisionResponseSchema
 >;
+
+const ProseVariantJudgeResponseSchema = z.object({
+  reasoning: z.string().trim().min(1),
+  verdict: z.enum(["variant_a", "variant_b"]),
+});
+
+type ProseVariantJudgeResponse = z.infer<
+  typeof ProseVariantJudgeResponseSchema
+>;
+
+const PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["reasoning", "verdict"],
+  propertyOrdering: ["reasoning", "verdict"],
+  properties: {
+    reasoning: { type: Type.STRING, minLength: "1" },
+    verdict: { type: Type.STRING, enum: ["variant_a", "variant_b"] },
+  },
+};
 
 const StoryImagesCheckpointSchema = z.object({
   prompt: z.string(),
@@ -908,10 +992,11 @@ export async function generateStoryProseDraft(
           rootDir: options.debugRootDir,
           stage: "prose",
           subStage: (() => {
-            const parts = ["draft"] as string[];
+            const parts: string[] = [];
             if (options.debugSubStage) {
               parts.push(options.debugSubStage);
             }
+            parts.push("draft");
             return parts.join("/");
           })(),
         }
@@ -1030,8 +1115,6 @@ export async function validateStoryProse(
   return structuralResponse;
 }
 
-const PROSE_REVISION_MAX_ATTEMPTS = 3;
-
 function summariseValidationIssues(
   issues: readonly StoryProseValidationIssue[],
 ): string {
@@ -1065,76 +1148,264 @@ function buildValidationFeedback(
   ].join("\n");
 }
 
-export async function generateProseStory(
+const PROSE_REVISION_MAX_ATTEMPTS = 3;
+
+function combineDebugSegments(
+  ...segments: (string | undefined)[]
+): string | undefined {
+  const cleaned = segments
+    .flatMap((segment) =>
+      typeof segment === "string"
+        ? segment
+            .split("/")
+            .map((part) => part.trim())
+            .filter((part) => part.length > 0)
+        : [],
+    );
+  if (cleaned.length === 0) {
+    return undefined;
+  }
+  return cleaned.join("/");
+}
+
+function buildVariantDebugOptions(
+  base: StoryDebugOptions | undefined,
+  variantLabel: StoryProseVariantLabel,
+  ...extraSegments: string[]
+): StoryDebugOptions | undefined {
+  if (!base?.debugRootDir) {
+    return undefined;
+  }
+  return {
+    debugRootDir: base.debugRootDir,
+    debugSubStage: combineDebugSegments(
+      base.debugSubStage,
+      variantLabel,
+      ...extraSegments,
+    ),
+  };
+}
+
+async function prepareProseVariantDraft(
   topic: string,
+  label: StoryProseVariantLabel,
+  idea: StoryIdeaResult,
   progress?: StoryProgress,
-  options?: StoryDebugOptions,
-): Promise<StoryProseResult> {
-  const idea = await generateStoryIdea(topic, progress, options);
-  const draft = await generateStoryProseDraft(topic, idea, progress, options);
-  let revision: StoryProseRevisionResult | undefined;
+  baseDebug?: StoryDebugOptions,
+): Promise<StoryProseDraftVariant> {
+  const draftOptions = buildVariantDebugOptions(baseDebug, label);
+  const draft = await generateStoryProseDraft(
+    topic,
+    idea,
+    progress,
+    draftOptions,
+  );
+  return { label, idea, draft };
+}
+
+async function reviseProseVariant(
+  topic: string,
+  variant: StoryProseDraftVariant,
+  progress?: StoryProgress,
+  baseDebug?: StoryDebugOptions,
+): Promise<StoryProseVariantCandidate> {
+  const adapter = useProgress(progress);
   let feedback: string | undefined;
+  let revision: StoryProseRevisionResult | undefined;
   for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `revisions/attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_REVISION_MAX_ATTEMPTS).padStart(2, "0")}`;
-    const buildSubStage = (leaf: string): string | undefined => {
-      const segments = [options?.debugSubStage, attemptLabel, leaf]
-        .filter((segment): segment is string => typeof segment === "string" && segment.length > 0);
-      if (segments.length === 0) {
-        return undefined;
-      }
-      return segments.join("/");
-    };
-    const revisionDebugOptions: StoryDebugOptions | undefined = options?.debugRootDir
-      ? {
-          debugRootDir: options.debugRootDir,
-          debugSubStage: buildSubStage("revision"),
-        }
-      : undefined;
-    const validationDebugOptions: StoryDebugOptions | undefined = options?.debugRootDir
-      ? {
-          debugRootDir: options.debugRootDir,
-          debugSubStage: buildSubStage("validation"),
-        }
-      : undefined;
+    adapter.log(
+      `[story/prose/${variant.label}] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`,
+    );
+    const revisionOptions = buildVariantDebugOptions(
+      baseDebug,
+      variant.label,
+      attemptLabel,
+      "revision",
+    );
+    const validationOptions = buildVariantDebugOptions(
+      baseDebug,
+      variant.label,
+      attemptLabel,
+      "validation",
+    );
     const candidate = await generateStoryProseRevision(
       topic,
-      draft,
+      variant.draft,
       progress,
-      revisionDebugOptions,
+      revisionOptions,
       feedback,
     );
     const validation = await validateStoryProse(
       topic,
       candidate,
       progress,
-      validationDebugOptions,
+      validationOptions,
     );
     if (validation.verdict === "pass") {
       revision = { ...candidate, validation };
       break;
     }
+    const summary = validation.issues.length
+      ? summariseValidationIssues(validation.issues)
+      : "Validation failed without reported issues.";
+    adapter.log(
+      `[story/prose-validation/${variant.label}] attempt ${attempt} failed: ${summary}`,
+    );
     if (attempt === PROSE_REVISION_MAX_ATTEMPTS) {
-      const summary = validation.issues.length
-        ? summariseValidationIssues(validation.issues)
-        : "Validation failed without reported issues.";
       throw new Error(
-        `Story prose validation failed after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
+        `Story prose validation failed for ${variant.label} after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
       );
     }
     feedback = buildValidationFeedback(validation.issues);
   }
-
   if (!revision) {
-    throw new Error("Story prose revision did not produce a validated result");
+    throw new Error(
+      `Story prose revision did not produce a validated result for ${variant.label}`,
+    );
   }
   return {
-    text: revision.text,
+    label: variant.label,
+    idea: variant.idea,
+    draft: variant.draft,
+    revision,
+  };
+}
+
+function buildProseVariantsJudgePrompt(
+  topic: string,
+  variants: readonly StoryProseVariantCandidate[],
+): string {
+  const lines: string[] = [
+    "### Prompt 5: Story Variant Judge",
+    "",
+    `Topic: ${topic}`,
+    "",
+    "You are evaluating two fully revised story drafts (Variant A and Variant B) of the same narrative. Choose the version that best fulfils the mission:",
+    "- Delivers a vivid, cinematic explanation that keeps the protagonist central and memorable.",
+    "- Preserves historical accuracy, required beats (concept naming, insight hint, modern tie-in in the ending), and age-appropriate language.",
+    "- Maintains narrative momentum with a crisp reveal and empowering ending tied to the analogy.",
+    "- Uses the strongest imagery, emotional resonance, and clarity while avoiding collapse or confusing detours.",
+    "",
+    "Consider the idea brief, model revision analysis, improvement summary, and the final story text. Prefer the variant that you would ship to learners without further edits.",
+    "",
+  ];
+  const sorted = [...variants].sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+  for (const variant of sorted) {
+    const variantName = variant.label === "variant_a" ? "Variant A" : "Variant B";
+    lines.push(`===== ${variantName} =====`);
+    lines.push(`Idea Brief:\n${variant.idea.brief}`);
+    lines.push(`Improvement Summary:\n${variant.revision.improvementSummary}`);
+    const analysis = variant.revision.analysis;
+    lines.push("Analysis Scores:");
+    lines.push(
+      [
+        `- Metaphorical Power: ${analysis.metaphoricalIntegrity.score}/5 – ${analysis.metaphoricalIntegrity.justification}`,
+        `- Narrative Momentum: ${analysis.narrativeMomentum.score}/5 – ${analysis.narrativeMomentum.justification}`,
+        `- Conceptual Clarity: ${analysis.conceptualClarity.score}/5 – ${analysis.conceptualClarity.justification}`,
+        `- Audience Resonance: ${analysis.audienceResonance.score}/5 – ${analysis.audienceResonance.justification}`,
+        `- Motivational Power: ${analysis.motivationalPower.score}/5 – ${analysis.motivationalPower.justification}`,
+      ].join("\n"),
+    );
+    const validation = variant.revision.validation;
+    if (validation) {
+      lines.push(
+        `Validation Verdict: ${validation.verdict.toUpperCase()}${validation.issues.length ? ` (previously flagged ${validation.issues.length} issue(s))` : ""}`,
+      );
+    }
+    lines.push("Story:");
+    lines.push(variant.revision.text);
+    lines.push("");
+  }
+  lines.push(
+    "Respond in JSON with keys `reasoning` (short paragraph explaining your choice) and `verdict` (`\"variant_a\"` or `\"variant_b\"`).",
+  );
+  return lines.join("\n");
+}
+
+async function judgeProseVariants(
+  topic: string,
+  variants: readonly StoryProseVariantCandidate[],
+  progress?: StoryProgress,
+  baseDebug?: StoryDebugOptions,
+): Promise<StoryProseVariantsJudgeSummary> {
+  if (variants.length !== STORY_PROSE_VARIANT_LABELS.length) {
+    throw new Error(
+      `Expected ${STORY_PROSE_VARIANT_LABELS.length} variants for judging, received ${variants.length}`,
+    );
+  }
+  const adapter = useProgress(progress);
+  adapter.log("[story/prose-variants-judge] evaluating variant_a vs variant_b");
+  const prompt = buildProseVariantsJudgePrompt(topic, variants);
+  const response = await generateJson<ProseVariantJudgeResponse>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    responseSchema: PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA,
+    schema: ProseVariantJudgeResponseSchema,
+    debug: baseDebug?.debugRootDir
+      ? {
+          rootDir: baseDebug.debugRootDir,
+          stage: "prose/variants-judge",
+          subStage: baseDebug.debugSubStage,
+        }
+      : undefined,
+  });
+  adapter.log(
+    `[story/prose-variants-judge] verdict ${response.verdict} – ${response.reasoning}`,
+  );
+  return {
+    verdict: response.verdict,
+    reasoning: response.reasoning.trim(),
+  };
+}
+
+export async function generateProseStory(
+  topic: string,
+  progress?: StoryProgress,
+  options?: StoryDebugOptions,
+): Promise<StoryProseResult> {
+  const idea = await generateStoryIdea(topic, progress, options);
+  const variantDrafts = await Promise.all(
+    STORY_PROSE_VARIANT_LABELS.map((label) =>
+      prepareProseVariantDraft(topic, label, idea, progress, options),
+    ),
+  );
+  const variantResults = await Promise.all(
+    variantDrafts.map((variant) =>
+      reviseProseVariant(topic, variant, progress, options),
+    ),
+  );
+  const judge = await judgeProseVariants(topic, variantResults, progress, options);
+  const winning = variantResults.find(
+    (variant) => variant.label === judge.verdict,
+  );
+  if (!winning) {
+    throw new Error(
+      `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
+    );
+  }
+  return {
+    text: winning.revision.text,
     metadata: {
-      ideaBrief: idea.brief,
-      draftText: draft.text,
-      analysis: revision.analysis,
-      improvementSummary: revision.improvementSummary,
-      validation: revision.validation,
+      ideaBrief: winning.idea.brief,
+      draftText: winning.draft.text,
+      analysis: winning.revision.analysis,
+      improvementSummary: winning.revision.improvementSummary,
+      validation: winning.revision.validation,
+      variantLabel: judge.verdict,
+      variants: variantResults.map((variant) => ({
+        label: variant.label,
+        ideaBrief: variant.idea.brief,
+        draftText: variant.draft.text,
+        text: variant.revision.text,
+        analysis: variant.revision.analysis,
+        improvementSummary: variant.revision.improvementSummary,
+        validation: variant.revision.validation,
+      })),
+      judge,
     },
   };
 }
@@ -2073,7 +2344,7 @@ function normaliseStoragePath(raw: string): string {
 export class StoryGenerationPipeline {
   private readonly caches: {
     idea?: StageCacheEntry<StoryIdeaResult>;
-    proseDraft?: StageCacheEntry<StoryProseDraftResult>;
+    proseDraft?: StageCacheEntry<StoryProseDraftVariant[]>;
     prose?: StageCacheEntry<StoryProseRevisionResult>;
     segmentation?: StageCacheEntry<StorySegmentation>;
     segmentationCorrection?: StageCacheEntry<StorySegmentation>;
@@ -2143,7 +2414,7 @@ export class StoryGenerationPipeline {
   }
 
   private async readProseCheckpoint(): Promise<
-    StageReadResult<StoryProseResult> | undefined
+    StageReadResult<StoryProseDraftVariant[]> | undefined
   > {
     const filePath = this.stageFile("prose");
     if (!filePath) {
@@ -2152,14 +2423,28 @@ export class StoryGenerationPipeline {
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw);
-      const checkpoint = StoryProseCheckpointSchema.parse(parsed);
+      const checkpointResult = StoryProseCheckpointSchema.safeParse(parsed);
+      if (!checkpointResult.success) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      const checkpoint = checkpointResult.data;
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
           `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
-      return { value: { text: checkpoint.text }, filePath };
+      const variants = checkpoint.variants.map<StoryProseDraftVariant>(
+        (variant) => ({
+          label: variant.label,
+          idea: { brief: variant.ideaBrief },
+          draft: { text: variant.draftText },
+        }),
+      );
+      return { value: variants, filePath };
     } catch (error) {
       if (isEnoent(error)) {
         return undefined;
@@ -2169,7 +2454,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeProseCheckpoint(
-    value: StoryProseResult,
+    value: readonly StoryProseDraftVariant[],
   ): Promise<string | undefined> {
     const filePath = this.stageFile("prose");
     if (!filePath || !this.checkpointDir) {
@@ -2178,7 +2463,11 @@ export class StoryGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: StoryProseCheckpoint = {
       topic: this.options.topic,
-      text: value.text,
+      variants: value.map((variant) => ({
+        label: variant.label,
+        ideaBrief: variant.idea.brief,
+        draftText: variant.draft.text,
+      })),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -2196,10 +2485,49 @@ export class StoryGenerationPipeline {
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw);
-      const checkpoint = StoryProseRevisionCheckpointSchema.parse(parsed);
+      const checkpointResult =
+        StoryProseRevisionCheckpointSchema.safeParse(parsed);
+      if (!checkpointResult.success) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      const checkpoint = checkpointResult.data;
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
           `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (topic mismatch)`,
+        );
+        return undefined;
+      }
+      if (
+        !checkpoint.variantLabel ||
+        !checkpoint.variants ||
+        checkpoint.variants.length === 0 ||
+        !checkpoint.judge
+      ) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (missing variant metadata)`,
+        );
+        return undefined;
+      }
+      const variantsMetadata = checkpoint.variants.map<StoryProseVariantMetadata>(
+        (variant) => ({
+          label: variant.label,
+          ideaBrief: variant.ideaBrief,
+          draftText: variant.draftText,
+          text: variant.text,
+          analysis: variant.analysis,
+          improvementSummary: variant.improvementSummary,
+          validation: variant.validation,
+        }),
+      );
+      const winningMetadata = variantsMetadata.find(
+        (variant) => variant.label === checkpoint.variantLabel,
+      );
+      if (!winningMetadata) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (winning variant not found)`,
         );
         return undefined;
       }
@@ -2209,6 +2537,19 @@ export class StoryGenerationPipeline {
           analysis: checkpoint.analysis,
           improvementSummary: checkpoint.improvementSummary,
           validation: checkpoint.validation,
+          metadata: {
+            ideaBrief: winningMetadata.ideaBrief,
+            draftText: winningMetadata.draftText,
+            analysis: checkpoint.analysis,
+            improvementSummary: checkpoint.improvementSummary,
+            validation: checkpoint.validation,
+            variantLabel: checkpoint.variantLabel,
+            variants: variantsMetadata,
+            judge: {
+              verdict: checkpoint.judge.verdict,
+              reasoning: checkpoint.judge.reasoning,
+            },
+          },
         },
         filePath,
       };
@@ -2221,8 +2562,13 @@ export class StoryGenerationPipeline {
   }
 
   private async writeProseRevisionCheckpoint(
-    value: StoryProseRevisionResult,
+    params: {
+      winning: StoryProseVariantCandidate;
+      variants: readonly StoryProseVariantCandidate[];
+      judge: StoryProseVariantsJudgeSummary;
+    },
   ): Promise<string | undefined> {
+    const { winning, variants, judge } = params;
     const filePath = this.stageFile("prose-revision");
     if (!filePath || !this.checkpointDir) {
       return undefined;
@@ -2230,10 +2576,21 @@ export class StoryGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: StoryProseRevisionCheckpoint = {
       topic: this.options.topic,
-      text: value.text,
-      analysis: value.analysis,
-      improvementSummary: value.improvementSummary,
-      validation: value.validation,
+      text: winning.revision.text,
+      analysis: winning.revision.analysis,
+      improvementSummary: winning.revision.improvementSummary,
+      validation: winning.revision.validation,
+      variantLabel: winning.label,
+      variants: variants.map((variant) => ({
+        label: variant.label,
+        ideaBrief: variant.idea.brief,
+        draftText: variant.draft.text,
+        text: variant.revision.text,
+        analysis: variant.revision.analysis,
+        improvementSummary: variant.revision.improvementSummary,
+        validation: variant.revision.validation,
+      })),
+      judge,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -2535,14 +2892,14 @@ export class StoryGenerationPipeline {
   }
 
   private async ensureProseDraft(): Promise<
-    StageCacheEntry<StoryProseDraftResult>
+    StageCacheEntry<StoryProseDraftVariant[]>
   > {
     if (this.caches.proseDraft) {
       return this.caches.proseDraft;
     }
     const checkpoint = await this.readProseCheckpoint();
     if (checkpoint) {
-      const entry: StageCacheEntry<StoryProseDraftResult> = {
+      const entry: StageCacheEntry<StoryProseDraftVariant[]> = {
         value: checkpoint.value,
         source: "checkpoint",
         checkpointPath: checkpoint.filePath,
@@ -2555,17 +2912,23 @@ export class StoryGenerationPipeline {
     }
     await this.invalidateAfter("prose");
     const { value: idea } = await this.ensureIdea();
-    const draft = await generateStoryProseDraft(
-      this.options.topic,
-      idea,
-      this.options.progress,
-      {
-        debugRootDir: this.options.debugRootDir,
-      },
+    const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
+      ? { debugRootDir: this.options.debugRootDir }
+      : undefined;
+    const drafts = await Promise.all(
+      STORY_PROSE_VARIANT_LABELS.map((label) =>
+        prepareProseVariantDraft(
+          this.options.topic,
+          label,
+          idea,
+          this.options.progress,
+          baseDebug,
+        ),
+      ),
     );
-    const checkpointPath = await this.writeProseCheckpoint(draft);
-    const entry: StageCacheEntry<StoryProseDraftResult> = {
-      value: draft,
+    const checkpointPath = await this.writeProseCheckpoint(drafts);
+    const entry: StageCacheEntry<StoryProseDraftVariant[]> = {
+      value: drafts,
       source: "generated",
       checkpointPath,
     };
@@ -2582,21 +2945,7 @@ export class StoryGenerationPipeline {
     }
     const checkpoint = await this.readProseRevisionCheckpoint();
     if (checkpoint) {
-      const idea = this.caches.idea?.value;
-      const draft = this.caches.proseDraft?.value;
-      const value: StoryProseRevisionResult =
-        idea && draft
-          ? {
-              ...checkpoint.value,
-              metadata: {
-                ideaBrief: idea.brief,
-                draftText: draft.text,
-                analysis: checkpoint.value.analysis,
-                improvementSummary: checkpoint.value.improvementSummary,
-                validation: checkpoint.value.validation,
-              },
-            }
-          : checkpoint.value;
+      const value = checkpoint.value;
       const entry: StageCacheEntry<StoryProseRevisionResult> = {
         value,
         source: "checkpoint",
@@ -2609,80 +2958,66 @@ export class StoryGenerationPipeline {
       return entry;
     }
     await this.invalidateAfter("prose-revision");
-    const { value: draft } = await this.ensureProseDraft();
-    const idea = this.caches.idea?.value ?? (await this.ensureIdea()).value;
-    let feedback: string | undefined;
-    let revision: StoryProseRevisionResult | undefined;
-    for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
-      this.logger.log(
-        `[story/prose] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`,
+    const draftEntry = await this.ensureProseDraft();
+    const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
+      ? { debugRootDir: this.options.debugRootDir }
+      : undefined;
+    const variantResults = await Promise.all(
+      draftEntry.value.map((variant) =>
+        reviseProseVariant(
+          this.options.topic,
+          variant,
+          this.options.progress,
+          baseDebug,
+        ),
+      ),
+    );
+    const judge = await judgeProseVariants(
+      this.options.topic,
+      variantResults,
+      this.options.progress,
+      baseDebug,
+    );
+    const winning = variantResults.find(
+      (variant) => variant.label === judge.verdict,
+    );
+    if (!winning) {
+      throw new Error(
+        `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
       );
-      const attemptBase = `revisions/attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_REVISION_MAX_ATTEMPTS).padStart(2, "0")}`;
-      const buildSubStage = (leaf: string): string | undefined => {
-        const segments = [attemptBase, leaf];
-        return segments.join("/");
-      };
-      const revisionOptions: StoryDebugOptions | undefined = this.options.debugRootDir
-        ? {
-            debugRootDir: this.options.debugRootDir,
-            debugSubStage: buildSubStage("revision"),
-          }
-        : undefined;
-      const validationOptions: StoryDebugOptions | undefined = this.options.debugRootDir
-        ? {
-            debugRootDir: this.options.debugRootDir,
-            debugSubStage: buildSubStage("validation"),
-          }
-        : undefined;
-      const candidate = await generateStoryProseRevision(
-        this.options.topic,
-        draft,
-        this.options.progress,
-        revisionOptions,
-        feedback,
-      );
-      const validationResult = await validateStoryProse(
-        this.options.topic,
-        candidate,
-        this.options.progress,
-        validationOptions,
-      );
-      if (validationResult.verdict === "pass") {
-        revision = { ...candidate, validation: validationResult };
-        break;
-      }
-      const summary = validationResult.issues.length
-        ? summariseValidationIssues(validationResult.issues)
-        : "Validation failed without reported issues.";
-      this.logger.log(
-        `[story/prose-validation] attempt ${attempt} failed: ${summary}`,
-      );
-      if (attempt === PROSE_REVISION_MAX_ATTEMPTS) {
-        throw new Error(
-          `Story prose validation failed after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
-        );
-      }
-      feedback = buildValidationFeedback(validationResult.issues);
     }
-
-    if (!revision) {
-      throw new Error("Story prose revision did not produce a validated result");
-    }
-
-    const revisionWithMetadata: StoryProseRevisionResult = {
-      ...revision,
-      metadata: {
-        ideaBrief: idea.brief,
-        draftText: draft.text,
-        analysis: revision.analysis,
-        improvementSummary: revision.improvementSummary,
-        validation: revision.validation,
-      },
+    const metadata: StoryProseResult["metadata"] = {
+      ideaBrief: winning.idea.brief,
+      draftText: winning.draft.text,
+      analysis: winning.revision.analysis,
+      improvementSummary: winning.revision.improvementSummary,
+      validation: winning.revision.validation,
+      variantLabel: judge.verdict,
+      variants: variantResults.map((variant) => ({
+        label: variant.label,
+        ideaBrief: variant.idea.brief,
+        draftText: variant.draft.text,
+        text: variant.revision.text,
+        analysis: variant.revision.analysis,
+        improvementSummary: variant.revision.improvementSummary,
+        validation: variant.revision.validation,
+      })),
+      judge,
     };
-    const checkpointPath =
-      await this.writeProseRevisionCheckpoint(revisionWithMetadata);
+    const value: StoryProseRevisionResult = {
+      text: winning.revision.text,
+      analysis: winning.revision.analysis,
+      improvementSummary: winning.revision.improvementSummary,
+      validation: winning.revision.validation,
+      metadata,
+    };
+    const checkpointPath = await this.writeProseRevisionCheckpoint({
+      winning,
+      variants: variantResults,
+      judge,
+    });
     const entry: StageCacheEntry<StoryProseRevisionResult> = {
-      value: revisionWithMetadata,
+      value,
       source: "generated",
       checkpointPath,
     };
