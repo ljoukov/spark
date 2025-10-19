@@ -573,12 +573,26 @@
 	}
 
 	:global(.anon-dialog) {
+		--anon-surface: rgba(255, 255, 255, 0.92);
+		--anon-border: rgba(15, 23, 42, 0.12);
+		--anon-foreground: #0f172a;
+		--anon-subtitle: rgba(15, 23, 42, 0.72);
+		--anon-shadow: 0 30px 80px rgba(15, 23, 42, 0.55);
 		max-width: 26rem;
 		border-radius: 1.5rem;
-		border: 1px solid var(--auth-dialog-border, rgba(15, 23, 42, 0.12));
-		background: var(--auth-dialog-bg, rgba(255, 255, 255, 0.92));
-		color: var(--auth-dialog-foreground, var(--foreground));
-		box-shadow: var(--auth-dialog-shadow, 0 30px 80px rgba(15, 23, 42, 0.55));
+		border: 1px solid var(--auth-dialog-border, var(--anon-border));
+		background: var(--auth-dialog-bg, var(--anon-surface));
+		color: var(--auth-dialog-foreground, var(--anon-foreground));
+		box-shadow: var(--auth-dialog-shadow, var(--anon-shadow));
+	}
+
+	:global([data-theme='dark'] .anon-dialog),
+	:global(:root:not([data-theme='light']) .anon-dialog) {
+		--anon-surface: rgba(6, 11, 25, 0.86);
+		--anon-border: rgba(148, 163, 184, 0.28);
+		--anon-foreground: #e2e8f0;
+		--anon-subtitle: rgba(226, 232, 240, 0.78);
+		--anon-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
 	}
 
 	:global(.anon-header) {
@@ -595,7 +609,7 @@
 		margin-top: 0.85rem;
 		font-size: 0.95rem;
 		line-height: 1.6;
-		color: var(--auth-dialog-subtitle, rgba(15, 23, 42, 0.72));
+		color: var(--auth-dialog-subtitle, var(--anon-subtitle));
 		font-weight: 500;
 	}
 
