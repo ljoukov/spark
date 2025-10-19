@@ -795,6 +795,8 @@ function buildFramePromptRevisionContents(params: {
       "- Keep the spirit of the narration, but adjust the staging or focus to something recognisable and easy to depict.",
       "- Prefer simpler, specific actions or settings drawn from everyday environments.",
       "- Describe one focal action, avoid mirrored/split scenes, and limit supporting details to what the narration requires.",
+      "- Align with the narration’s intent instead of cherry-picking keywords. Treat metaphors or idioms figuratively unless the story states otherwise.",
+      "- Ensure each replacement creates a noticeably different scene from adjacent panels—do not suggest small pose tweaks or near-duplicate settings.",
       "- Use fresh phrasing so the renderer does not default to the prior collapsed composition.",
       "",
       "Camera & focus flexibility:",
