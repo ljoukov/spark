@@ -27,11 +27,23 @@
 	}
 </script>
 
-<QuizQuestionCard title={question.prompt} status={statusProp} {eyebrow} displayFooter={true}>
+<QuizQuestionCard
+	title={question.prompt}
+	titleHtml={question.promptHtml}
+	status={statusProp}
+	{eyebrow}
+	displayFooter={true}
+>
 	<div class="space-y-4">
-		<p class="text-base leading-relaxed text-foreground/90">
-			{question.body}
-		</p>
+		{#if question.bodyHtml}
+			<div class="info-markdown text-base leading-relaxed text-foreground/90">
+				{@html question.bodyHtml}
+			</div>
+		{:else}
+			<p class="text-base leading-relaxed text-foreground/90">
+				{question.body}
+			</p>
+		{/if}
 	</div>
 
 	{#snippet footer()}
@@ -40,3 +52,35 @@
 		</div>
 	{/snippet}
 </QuizQuestionCard>
+
+<style>
+	.info-markdown :global(p) {
+		margin: 0 0 0.75rem;
+	}
+
+	.info-markdown :global(p:last-child) {
+		margin-bottom: 0;
+	}
+
+	.info-markdown :global(ul),
+	.info-markdown :global(ol) {
+		margin: 0.25rem 0 0.5rem 1.25rem;
+		padding: 0;
+	}
+
+	.info-markdown :global(li + li) {
+		margin-top: 0.35rem;
+	}
+
+	.info-markdown :global(strong) {
+		font-weight: 600;
+	}
+
+	.info-markdown :global(code) {
+		font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+		font-size: 0.95em;
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.35rem;
+		background-color: color-mix(in srgb, currentColor 12%, transparent);
+	}
+</style>

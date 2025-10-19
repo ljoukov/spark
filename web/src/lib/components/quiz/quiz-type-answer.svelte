@@ -88,12 +88,15 @@
 
 <QuizQuestionCard
 	title={question.prompt}
+	titleHtml={question.promptHtml}
 	{eyebrow}
 	status={statusProp}
 	hint={question.hint}
+	hintHtml={question.hintHtml}
 	{showHint}
 	{feedback}
 	explanation={question.explanation}
+	explanationHtml={question.explanationHtml}
 	showExplanation={revealExplanation}
 >
 	<div class="space-y-4">

@@ -439,6 +439,15 @@ export function buildStoryIdeaPrompt(topic: string): string {
 
 **Your Role:** You are a historical researcher and a concept strategist for an educational media company. Your task is to analyze a technical concept and create a "Story Brief" for our narrative writers. This brief must identify the perfect historical anchor and a powerful narrative angle to make the concept unforgettable for advanced 12-16 year olds. Always run web-search queries to confirm every historical detail before you commit to the brief.
 
+Important constraints:
+- Avoid outlining algorithms, procedures, or step-by-step computations. It's fine to mention a few numbers in passing, but do not walk through calculations or variable notation.
+- You may introduce 1–2 terms by name if they help intrigue the listener, but do not provide precise formal definitions.
+- Optionally include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it.
+- We will invite the audience to rediscover methods later in puzzles; hint at this future discovery without writing any explicit call-to-action wording.
+- Historical fidelity for anecdotes: only include famous quotes/stories when tied to the same concept/result and time period. Do not misattribute well-known anecdotes; if relevant contextually, frame as foreshadowing of a later milestone rather than attributing it to the current concept.
+- Fact-checking: when any date, name, or claim is uncertain, run a quick web search to verify before including it. Prefer authoritative sources. Do not guess.
+- Tone: neutral and factual in the brief; avoid charged adjectives and hyperbole.
+
 **The Concept to Analyze:** **${topic}**
 
 **Your Process:**
@@ -452,16 +461,18 @@ export function buildStoryIdeaPrompt(topic: string): string {
    * **Essence:** Go beyond the textbook definition. In one sentence, what is the fundamental *idea* or *behavior* of this concept?
    * **Contrasting Foil:** In one line, name a common alternative approach and state why it was unsuitable for the specific historical problem you've identified.
 
-3. **Narrative Angle Ideation:**
+3. **Narrative Angle Ideation (Explore 3 ideas):** Generate three distinct narrative directions. For each candidate, include:
    * **The Human Element:** Based on the discoverer's profession and context, what was their worldview?
-   * **Functional Analogy Brainstorm:** Your most important task. Propose 2-3 functional analogies—active systems with internal rules that mirror the concept's core logic. Each analogy must have a memorable name and a concise description of its governing mechanism.
-   * **The "Invisible Architecture" Pivot:** Identify the concept's original purpose and contrast it with a modern application. Frame the modern use as a hidden, powerful force inside the student's everyday life (apps, games, networks) so they realise the concept is everywhere.
+   * **Functional Analogy:** One functional analogy—an active system with internal rules that mirrors the concept's core logic—described briefly and without numbers or step sequences.
+   * **Ending Pivot (modern connection, optional):** If a strong, natural link exists to the modern world, describe it concisely as an ending-only move. Otherwise, state "none".
+   * **Puzzle Teaser:** A one-sentence hint that the audience will later get to rediscover the method through puzzles (no explicit call-to-action wording).
+   * (Optional) A short note on naming history if genuinely interesting.
 
 **Output Format:**
-Produce a structured brief using the following Markdown headings. Be concise and factual.
+Produce the research followed by three concise mini-briefs and a recommendation. Be concise and factual.
 
 \`\`\`markdown
-### Story Brief: ${topic}
+### Research Snapshot
 
 * **Conceptual Essence:**
 * **Historical Anchor:**
@@ -473,6 +484,34 @@ Produce a structured brief using the following Markdown headings. Be concise and
   * **Contrasting Foil:**
   * **"Invisible Architecture" Pivot:**
 * **Key Terminology & Gloss:** [List any necessary terms and their period-correct, simple definitions]
+
+### Candidate A
+* **Angle:**
+* **Anchor Event:**
+* **Analogy (no steps):**
+* **Ending Pivot (modern connection, optional):**
+* **Puzzle Teaser:**
+* (Optional) **Naming Note:**
+
+### Candidate B
+* **Angle:**
+* **Anchor Event:**
+* **Analogy (no steps):**
+* **Ending Pivot (modern connection, optional):**
+* **Puzzle Teaser:**
+* (Optional) **Naming Note:**
+
+### Candidate C
+* **Angle:**
+* **Anchor Event:**
+* **Analogy (no steps):**
+* **Ending Pivot (modern connection, optional):**
+* **Puzzle Teaser:**
+* (Optional) **Naming Note:**
+
+### Recommendation
+* **Selected Candidate:** [A/B/C]
+* **Why this choice will spark curiosity without heavy maths:**
 \`\`\`
 `;
 }
@@ -484,6 +523,14 @@ export function buildStoryDraftPrompt(storyBrief: string): string {
 
 **Your Role:** You are a master storyteller for a popular educational podcast. You have just received a "Story Brief" from our research department. Your task is to transform this brief into a captivating, audio-friendly narrative (250-400 words) for an advanced teen audience.
 
+Guardrails:
+- Do not explain algorithms or walk through step-by-step calculations. It's okay to mention a few numbers, but avoid variable notation and sequences like "do X, then Y".
+- You may introduce at most 1–2 terms by name if they elevate intrigue; do not give precise formal definitions.
+- Optionally include a short naming-history aside only if it adds charm and momentum.
+- Gently hint that the listener will get to rediscover the method later through puzzles—do not write any explicit call-to-action wording.
+- Historical accuracy: only reference famous anecdotes/quotes when they are associated with the same concept/result; otherwise omit them or, if helpful, reframe as foreshadowing of a later milestone without attributing it to the current concept.
+ - Fact-checking: if any historical detail (names, dates, places, artifacts) is uncertain, use web search to verify before relying on it. Do not include citations in the story; correct the prose instead.
+
 **Input:**
 ================ Story Brief ================
 ${storyBrief}
@@ -492,21 +539,24 @@ ${storyBrief}
 **Guiding Ethos:**
 * **Reveal, Don't Just Tell:** Let the listener feel they are being entrusted with a strategic secret.
 * **Transform the Concept into a Superpower:** Frame the knowledge as a powerful tool the listener is about to wield.
+* **Excitement Through Motivation:** Create momentum from real historical stakes and human intent—not from exaggerated adjectives.
 
 **Your Mission:**
-Weave the provided elements into a seamless story that makes the concept feel like a powerful secret the listener is about to inherit. The story must flow from a historical problem to a modern-day superpower.
+Weave the provided elements into a seamless story that makes the concept feel like a powerful secret the listener is about to inherit. If multiple candidate briefs are present, use the "Recommendation" section; otherwise, choose the strongest angle. The story must flow from a historical problem to a modern-day superpower without teaching the algorithm. Keep any modern connection (if truly relevant) for the ending only; avoid modern references earlier.
 
 **The Narrative Arc to Follow:**
 
 1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
-2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic to explain the breakthrough.
-3. **The Demonstration:** Show, don't just tell. Walk through a small, intuitive example of the concept in action using only the vocabulary and logic of the functional analogy. This is where the listener should feel the concept click.
-4. **The Pivot:** Execute the "Invisible Architecture" pivot from the brief. Make the historical secret feel like a surprising force already shaping the listener's apps, games, or networks.
-5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands.
+2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic at a high level—no equations or step sequences.
+3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Add a single sentence that clarifies 2–3 correspondences between the analogy and the concept (e.g., "X stands for Y"). Suggest that a later set of puzzles will let the listener rediscover the method firsthand (no explicit wording).
+4. **The Ending Pivot (optional):** If a strong, natural link exists to the modern world, reveal it briefly here at the very end—and only here. If not, end without it.
+5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands. The invitation should naturally suggest exploration without explicit calls to action.
 
 **Stylistic Requirements:**
 * **Audio-First:** Use clear, concise sentences. Read it aloud in your "mind's ear" to ensure it flows well.
-* **Vivid but Restrained:** Use strong verbs and concrete nouns. Avoid hyperbole.
+* **Vivid but Restrained:** Use strong verbs and concrete nouns.
+* **Plain, Natural Language:** Avoid grandiose or emotionally charged adjectives (e.g., colossal, gigantic, revolutionary). Use such adjectives at most 1–2 times across the entire story, and never more than one in a single sentence.
+* **Measured Claims:** Prefer neutral, specific phrasing over sweeping statements. Replace extreme claims (e.g., "could take a lifetime") with grounded context or simple statements of difficulty.
 * **Tone:** Intelligent, intriguing, and respectful of the audience's curiosity.
 * **Title:** Provide a 2-4 word title for the story.
 
@@ -520,6 +570,16 @@ export function buildStoryRevisionPrompt(storyDraft: string): string {
 **(Objective: To critically evaluate the story from Prompt 2 against a quality rubric and then perform a final revision to elevate it.)**
 
 **Your Role:** You are the lead editor for our educational content studio. You are responsible for ensuring every story is not just accurate, but exceptionally engaging and effective.
+
+Non-negotiables for this pass:
+- Remove or rewrite any step-by-step math, equations, variable notation, or algorithmic walkthroughs. Mentions of a few numbers are okay if they are evocative and not procedural.
+- Keep, at most, 1–2 named terms without formal definitions.
+- Where appropriate, include a light-touch hint that future puzzles will allow the listener to rediscover the method; do not craft explicit call-to-action wording.
+- Preserve historical grounding and momentum; include naming-history only if it helps.
+- Correct any historical misattributions: use famous anecdotes or quotations only when linked to the same concept/result and time period. If a well-known story belongs elsewhere, remove it or recast it as foreshadowing of a later milestone, without attributing it to the current concept.
+- Fact-checking: double-check any uncertain dates, names, places, or attributions via web search before revising. Do not add citations to the JSON; revise the prose to be correct and concise.
+- Hyperbole audit: remove charged adjectives and sweeping claims. Allow at most 1–2 emotionally strong adjectives across the entire story, never more than one in a single sentence. Prefer plain, measured language.
+ - Modern-connection placement: ensure any tie-in to the modern world appears only in the ending. Remove or relocate earlier references that make the story feel artificial.
 
 **Input:**
 ================ Story Draft ================
@@ -539,8 +599,8 @@ Grade the draft story against our five-point quality rubric. For each point, pro
 
 **Part B: The Final Polish**
 Based on your analysis, produce the final, revised version. Focus your edits on two mission-critical areas:
-1. **Clarify the Analogy:** Make the internal mechanics of the functional analogy crystal clear.
-2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure.
+1. **Clarify Without Calculus:** Make the analogy intuitive while removing step sequences, equations, or symbol-heavy wording. Keep any numbers minimal and illustrative. If missing, add a one-sentence "Analogy Map" that links 2–3 elements of the analogy to the underlying concept (nouns and plain language only).
+2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure. Place any modern connection here (and only here). If natural, hint that puzzles await their discovery—without writing explicit call-to-action wording.
 
 Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
 
@@ -572,17 +632,21 @@ export function buildSegmentationPrompt(storyText: string): string {
     "Requirements:",
     "1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
-    "2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, interesting, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). Include a bold 2-4 word title and, when it elevates the concept, one short supporting detail such as a date, location, or rallying phrase (each supporting text element under six words).",
+    "2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). As visible text on the poster, include: (a) a bold 2–4 word title, (b) the protagonist’s name, and (c) a single 4-digit year relevant to the story. Keep each supporting element under six words.",
     '3. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.',
     "4. For each of the ten `segments`:",
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
     "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
-    "   • Provide `imagePrompt`, a clear visual prompt that captures the same moment as the narration slice(s). Focus on subject, action, setting, and lighting cues. Do not include stylistic descriptors (lighting adjectives are fine, but no references to media franchises or rendering engines).",
-    "5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy: emphasise the key action, allow supporting characters or environment to share focus when the narration does, and call out expressive lighting. Ground any abstract effects or information (like streams of code or glowing calculations) in a physical source within the scene, and avoid split screens, mirrored halves, perfectly aligned geometry, or overly precise camera directions.",
-    '6. Any visible text should stay purposeful: headlines stay within four words, auxiliary elements (dates, mottos, signage) within six words, all period-appropriate. Describing surfaces as "covered in diagrams" or "filled with formulas" is acceptable so long as you do not spell out the actual symbols or equations. Never request dense paragraphs or precise formula strings.',
-    "7. Do not expect the characters to hold paper or writing and that text to be legible. Writing on whiteboard, posters on the wall, labels etc is fine. For posters stylized text also works.",
-    "8. No formulas or diagrams or tables are requested",
-    "9. Ensure the named protagonist appears whenever the narration centres on them; otherwise spotlight the setting, consequences, or supporting cast to keep the beat clear.",
+    "   • Provide `imagePrompt`, a short, plain description (ideally one sentence) that captures the same moment as the narration slice(s). Focus on who, what, and where. Avoid camera jargon (e.g., close-up, overhead, depth of field) and avoid intricate staging.",
+    "5. Keep each `imagePrompt` drawable as a simple single-scene illustration with cartoon-style clarity: emphasise the key action and allow supporting characters or environment to share focus only when the narration calls for it. Prefer everyday settings. Do not invent elaborate props or contrived arrangements.",
+    '6. Avoid specificity that causes collapse: do not include exact dates, numeric lists, or spelled-out equations/symbols. Phrases like "a chalkboard filled with formulas" are fine, but never write the actual symbols or digits. Exception: on the poster only, include a single 4-digit year along with the title and protagonist’s name. Keep visible text minimal and period-appropriate (headlines ≤ 4 words; signage/mottos ≤ 6 words).',
+    "7. Avoid surreal or magical visualizations (e.g., glowing symbols forming from pens); stay grounded in plausible, physical scenes.",
+    "8. Characters should not be expected to display legible paper text. Posters on walls, labels, or whiteboards are fine; for posters, stylized text works.",
+    "9. Do not request formulas, diagrams, or tables.",
+    "10. Ensure the named protagonist appears whenever the narration centres on them; otherwise spotlight the setting, consequences, or supporting cast to keep the beat clear.",
+    "11. Keep each `imagePrompt` concise: roughly 12–30 words.",
+    "12. Narration tone: plain and natural. Avoid hyperbole or overly dramatic adjectives; keep language straightforward and conversational.",
+    "13. Historical focus only in the ten segments: do not include modern devices or references in the segments. If a modern connection is relevant, reserve it for the `endingPrompt` only and keep it brief.",
     "",
     "================ Story to segment ================",
     storyText,
@@ -651,6 +715,7 @@ export async function generateStoryProseRevision(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    tools: [{ type: "web-search" }],
     responseSchema: STORY_PROSE_REVISION_RESPONSE_SCHEMA,
     schema: StoryProseRevisionResponseSchema,
     debug: options?.debugRootDir
@@ -713,12 +778,16 @@ function buildSegmentationCorrectorPrompt(
     "Only include entries under `corrections` for prompts that must be updated.",
     "",
     "Check for:",
-    "- Each prompt grounds the scene in time and place (decade, location, or workplace details).",
-    "- One clear action with focal characters or environment cues, and abstract elements (code, diagrams, light) emerge from a physical source instead of floating freely.",
-    "- Poster prompts include a bold 2-4 word title and, when present, supporting text (dates, mottos, locations) under six words, all period-appropriate.",
-    '- Other optional writing stays concise and never spells out specific equations; generic phrases like "chalkboard filled with formulas" are acceptable.',
-    "- Characters are not expected to hold a paper, book or poster",
-    "- No formulas or diagrams or tables are requested",
+    "- Prompts are short and plain: one sentence, roughly 12–30 words.",
+    "- Ground the scene loosely in era and place (e.g., '17th‑century study', 'university office'), avoiding exact dates, numbers, or quotations (poster may include a single 4-digit year).",
+    "- One clear action with focal characters or environment cues; avoid camera jargon and contrived staging (no mirrored/split scenes, no elaborate apparatus).",
+    "- Stay grounded: no surreal or ethereal effects (no floating/glowing symbols).",
+    "- Follow the historical beat described; do not invent new artifacts beyond everyday period items.",
+    "- Poster prompts must include a bold 2–4 word title, the historical figure’s name, and a single 4-digit year as visible text (each supporting element under six words).",
+    "- No modern-world references in story panels 1–10; if a modern connection exists, it must appear only in the ending card text and remain brief.",
+    '- Any visible writing is minimal and never spells out equations; digits are allowed only for the single 4-digit year on the poster. Generic phrases like "chalkboard filled with formulas" are acceptable.',
+    "- Characters are not expected to hold a paper, book or poster.",
+    "- No formulas, diagrams, or tables are requested.",
     "- Ensure the protagonist is present when the narration or prompt centres on them; environmental cutaways are fine when explicitly described.",
     "",
     "===== Segmentation generation brief =====",
@@ -1100,7 +1169,8 @@ async function selectPosterCandidate(options: {
   const headerLines: string[] = [
     "You are selecting the best poster illustration candidate for a cinematic illustrated historical story.",
     "The winning candidate must be the most stunning, engaging, and attractive option that faithfully follows the protagonist references.",
-    "Respect the prompt's typography guidance: a bold 2-4 word title and, when present, one concise supporting detail such as a date or location (each supporting element under six words).",
+    "Ensure the poster clearly displays: (a) a bold 2–4 word title, (b) the historical figure’s name, and (c) a single 4-digit year relevant to the story — all as visible text and period-appropriate.",
+    "Respect the prompt's typography guidance and prefer candidates where this text is readable and well-composed (each supporting element under six words).",
     "Disqualify any candidate with catastrophic failures such as extra limbs, missing faces, severe distortions, or the wrong medium.",
     "",
     `Original poster prompt:\n${options.prompt}`,
@@ -1383,7 +1453,7 @@ export async function judgeImageSets(
     'Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a "the end" card, and a poster.',
     "Evaluate which set better satisfies the prompts and style requirements.",
     "Criteria: prompt fidelity, cinematic single-scene composition, grounded historical setting, expressive yet cohesive style, and strong character continuity.",
-    "Typography check: poster titles stay bold (2-4 words) with optional supporting detail (dates, locations, mottos) under six words; any other visible text remains concise, spelled correctly, and period-appropriate.",
+    "Typography check: the poster must clearly display (as visible text) a bold 2–4 word title, the historical figure’s name, and a single 4-digit year; other text stays concise, spelled correctly, and period-appropriate.",
     "Make sure that the images do not carry wrong meaning, e.g. the poster should NOT say 'The End' and similar obviously wrong artefacts.",
     "Confirm the protagonist appears whenever the narration centres on them; environmental or consequence-focused frames are acceptable when explicitly prompted.",
   ];
@@ -1552,8 +1622,8 @@ export type StoryGenerationStageName =
   | "prose-revision"
   | "segmentation"
   | "segmentation_correction"
-  | "images"
-  | "narration";
+  | "narration"
+  | "images";
 
 const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
   "idea",
@@ -1561,8 +1631,8 @@ const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
   "prose-revision",
   "segmentation",
   "segmentation_correction",
-  "images",
   "narration",
+  "images",
 ];
 
 type StoryGenerationPipelineOptions = {
@@ -1637,6 +1707,35 @@ export class StoryGenerationPipeline {
       return undefined;
     }
     return path.join(this.checkpointDir, `${stage}.json`);
+  }
+
+  private buildSegmentImageStoragePath(index: number): string {
+    const userId = this.requireContext("userId");
+    const sessionId = this.requireContext("sessionId");
+    const planItemId = this.requireContext("planItemId");
+    return buildImageStoragePath(
+      userId,
+      sessionId,
+      planItemId,
+      index,
+      "jpg",
+      this.options.storagePrefix,
+    );
+  }
+
+  private buildSupplementaryImageStoragePath(
+    kind: "poster" | "ending",
+  ): string {
+    const userId = this.requireContext("userId");
+    const sessionId = this.requireContext("sessionId");
+    const planItemId = this.requireContext("planItemId");
+    return buildSupplementaryImageStoragePath(
+      userId,
+      sessionId,
+      planItemId,
+      kind,
+      this.options.storagePrefix,
+    );
   }
 
   private async readIdeaCheckpoint(): Promise<
@@ -1900,6 +1999,152 @@ export class StoryGenerationPipeline {
       encoding: "utf8",
     });
     return filePath;
+  }
+
+  private async uploadStoryImages(
+    segmentation: StorySegmentation,
+    images: StoryImagesResult,
+  ): Promise<void> {
+    const storageBucket = this.requireContext("storageBucket");
+    const totalSegments = segmentation.segments.length;
+    const interiorImages = images.images
+      .filter((image) => image.index >= 1)
+      .filter((image) => image.index <= totalSegments)
+      .sort((a, b) => a.index - b.index);
+
+    if (interiorImages.length !== totalSegments) {
+      throw new Error(
+        `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
+      );
+    }
+
+    const endingImageIndex = totalSegments + 1;
+    const posterImageIndex = totalSegments + 2;
+    const endingImage = images.images.find(
+      (image) => image.index === endingImageIndex,
+    );
+    if (!endingImage) {
+      throw new Error(
+        `Expected ending image at index ${endingImageIndex}, but none was provided`,
+      );
+    }
+    const posterImage = images.images.find(
+      (image) => image.index === posterImageIndex,
+    );
+    if (!posterImage) {
+      throw new Error(
+        `Expected poster image at index ${posterImageIndex}, but none was provided`,
+      );
+    }
+
+    const narrationValue = this.caches.narration?.value;
+    const canonicalStoragePaths =
+      narrationValue?.storagePaths ??
+      Array.from({ length: totalSegments }, (_, index) =>
+        normaliseStoragePath(this.buildSegmentImageStoragePath(index + 1)),
+      );
+    if (canonicalStoragePaths.length !== totalSegments) {
+      throw new Error(
+        `Narration storage paths (${canonicalStoragePaths.length}) do not match expected segment count ${totalSegments}`,
+      );
+    }
+
+    const uploadPaths = canonicalStoragePaths.map((storagePath, index) => {
+      const trimmed = storagePath.replace(/^\/+/u, "");
+      if (!trimmed) {
+        throw new Error(
+          `Normalised storage path for image ${index + 1} is empty`,
+        );
+      }
+      return trimmed;
+    });
+
+    const storage = getFirebaseAdminStorage(undefined, {
+      storageBucket,
+    });
+    const bucket = storage.bucket(storageBucket);
+
+    const totalImages = interiorImages.length;
+    const uploadConcurrency = Math.min(8, totalImages);
+    this.logger.log(
+      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
+    );
+
+    let nextImageIndex = 0;
+    const uploadWorker = async (workerId: number): Promise<void> => {
+      while (true) {
+        const currentIndex = nextImageIndex;
+        nextImageIndex += 1;
+        if (currentIndex >= totalImages) {
+          return;
+        }
+        const image = interiorImages[currentIndex];
+        const jpegBuffer = await sharp(image.data)
+          .jpeg({
+            quality: 92,
+            progressive: true,
+            chromaSubsampling: "4:4:4",
+          })
+          .toBuffer();
+        const storagePath = uploadPaths[currentIndex];
+        const file = bucket.file(storagePath);
+        await file.save(jpegBuffer, {
+          resumable: false,
+          metadata: {
+            contentType: "image/jpeg",
+            cacheControl: "public, max-age=0",
+          },
+        });
+        this.logger.log(
+          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
+        );
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: uploadConcurrency }, (_, workerId) =>
+        uploadWorker(workerId),
+      ),
+    );
+
+    const posterImagePath =
+      narrationValue?.posterImage?.storagePath ??
+      normaliseStoragePath(this.buildSupplementaryImageStoragePath("poster"));
+    const endingImagePath =
+      narrationValue?.endingImage?.storagePath ??
+      normaliseStoragePath(this.buildSupplementaryImageStoragePath("ending"));
+
+    const uploadSupplementary = async (
+      image: GeneratedStoryImage,
+      kind: "poster" | "ending",
+      normalisedPath: string,
+    ): Promise<void> => {
+      const trimmed = normalisedPath.replace(/^\/+/u, "");
+      if (!trimmed) {
+        throw new Error(`Storage path for ${kind} image is empty`);
+      }
+      const jpegBuffer = await sharp(image.data)
+        .jpeg({
+          quality: 92,
+          progressive: true,
+          chromaSubsampling: "4:4:4",
+        })
+        .toBuffer();
+      const file = bucket.file(trimmed);
+      await file.save(jpegBuffer, {
+        resumable: false,
+        metadata: {
+          contentType: "image/jpeg",
+          cacheControl: "public, max-age=0",
+        },
+      });
+      this.logger.log(`[story/images] saved ${kind} image to /${trimmed}`);
+    };
+
+    await Promise.all([
+      uploadSupplementary(posterImage, "poster", posterImagePath),
+      uploadSupplementary(endingImage, "ending", endingImagePath),
+    ]);
   }
 
   private async readNarrationCheckpoint(): Promise<
@@ -2270,7 +2515,9 @@ export class StoryGenerationPipeline {
   }
 
   async ensureImages(): Promise<StageCacheEntry<StoryImagesResult>> {
+    const { value: segmentation } = await this.ensureSegmentationCorrection();
     if (this.caches.images) {
+      await this.uploadStoryImages(segmentation, this.caches.images.value);
       return this.caches.images;
     }
     const checkpoint = await this.readImagesCheckpoint();
@@ -2284,10 +2531,10 @@ export class StoryGenerationPipeline {
       this.logger.log(
         `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`,
       );
+      await this.uploadStoryImages(segmentation, entry.value);
       return entry;
     }
     await this.invalidateAfter("images");
-    const { value: segmentation } = await this.ensureSegmentationCorrection();
     const images = await generateStoryImages(
       segmentation,
       this.options.progress,
@@ -2303,6 +2550,7 @@ export class StoryGenerationPipeline {
     if (checkpointPath) {
       this.logger.log(`[story/checkpoint] wrote 'images' to ${checkpointPath}`);
     }
+    await this.uploadStoryImages(segmentation, entry.value);
     return entry;
   }
 
