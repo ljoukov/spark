@@ -6,36 +6,36 @@ This document captures the conceptual flow that powers the historical story pipe
 
 ```mermaid
 flowchart TD
-  A["generateStory(options)"] --> B["ensureIdea → generateStoryIdea"]
-  B --> C["ensureProseDraft → generateStoryProseDraft"]
-  C --> D["ensureProse → generateStoryProseRevision"]
+  A["generateStory(options)"] --> B["ensureIdea -> generateStoryIdea"]
+  B --> C["ensureProseDraft -> generateStoryProseDraft"]
+  C --> D["ensureProse -> generateStoryProseRevision"]
   D --> E{"validateStoryProse pass?"}
-  E -->|No (attempts left)| D
+  E -->|No attempts left| D
   E -->|No (exhausted)| X["abort story run"]
-  E -->|Yes| F["ensureSegmentation → generateStorySegmentation"]
+  E -->|Yes| F["ensureSegmentation -> generateStorySegmentation"]
   F --> G{Corrections needed?}
-  G -->|Yes (≤3 passes)| H["correctStorySegmentation"]
+  G -->|Yes (<=3 passes)| H["correctStorySegmentation"]
   H --> F
-  G -->|No| I["ensureImages → generateStoryImages"]
+  G -->|No| I["ensureImages -> generateStoryImages"]
   I --> J["generateImageSets (set_a & set_b)"]
   J --> SA1
   J --> SB1
 
   subgraph SetA["set_a pipeline"]
-    SA1["generateStoryFrames"] --> SA2["poster candidates ×4"]
+    SA1["generateStoryFrames"] --> SA2["poster candidates x4"]
     SA2 --> SA3["selectPosterCandidate"]
     SA3 --> SA4["generate ending card"]
   end
 
   subgraph SetB["set_b pipeline"]
-    SB1["generateStoryFrames"] --> SB2["poster candidates ×4"]
+    SB1["generateStoryFrames"] --> SB2["poster candidates x4"]
     SB2 --> SB3["selectPosterCandidate"]
     SB3 --> SB4["generate ending card"]
   end
 
   SA4 --> L["judgeImageSets"]
   SB4 --> L
-  L --> M["ensureNarration → synthesizeAndPublishNarration"]
+  L --> M["ensureNarration -> synthesizeAndPublishNarration"]
   M --> N["upload JPEG frames + cache poster/ending"]
   N --> O["return GenerateStoryResult"]
 ```
@@ -44,9 +44,9 @@ flowchart TD
 
 Story drafting now runs as a three-stage chain, with each stage writing its own checkpoint (`idea.json`, `prose.json`, `prose-revision.json`):
 
-1. **Story Architect's Brief** – a web-search-enabled research pass that identifies the canonical anchor, stakes, conceptual essence, contrasting foil, metaphor candidates, modern pivot, and glossary. The output is a Markdown brief that feeds later stages.
-2. **Narrative Weaver** – consumes the brief and delivers a 250–400 word, single-voice script (title + paragraphs) tuned for advanced UK maths students, following the mandated arc from historical problem to modern relevance.
-3. **Narrative Editor's Cut** – grades the draft against the five-point rubric, then returns revised prose plus the critique in JSON (`analysis`, `revisedStory`, `improvementSummary`). Only the revised story proceeds downstream.
+1. **Story Architect's Brief** - a web-search-enabled research pass that identifies the canonical anchor, stakes, conceptual essence, contrasting foil, metaphor candidates, modern pivot, and glossary. The output is a Markdown brief that feeds later stages.
+2. **Narrative Weaver** - consumes the brief and delivers a 250-400 word, single-voice script (title + paragraphs) tuned for advanced UK maths students, following the mandated arc from historical problem to modern relevance.
+3. **Narrative Editor's Cut** - grades the draft against the five-point rubric, then returns revised prose plus the critique in JSON (`analysis`, `revisedStory`, `improvementSummary`). Only the revised story proceeds downstream.
 
 A separate `validateStoryProse` gate audits every revised draft; failures loop back into another revision attempt (up to `PROSE_REVISION_MAX_ATTEMPTS`) before the pipeline aborts.
 
@@ -58,13 +58,13 @@ Segmentation restructures the prose into narration slices and illustration promp
 Requirements:
 1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
 …
-2. `posterPrompt` … Visible text must include a bold 2–4 word title, the protagonist’s name, and a single 4-digit year. Keep every supporting element under six words and period appropriate.
+2. `posterPrompt` … Visible text must include a bold 2-4 word title, the protagonist’s name, and a single 4-digit year. Keep every supporting element under six words and period appropriate.
 …
 4. For each of the ten `segments`:
    • Provide `narration` … Alternate between the `M` and `F` voices whenever the flow allows.
    • Provide `imagePrompt` … Focus on subject, action, setting, and lighting cues.
 5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy; avoid multi-panel layouts, mirrored halves, or overly technical camera jargon.
-6. Avoid collapse-prone specifics: no exact dates, numeric lists, or written equations in the panels. Exception: the poster may include that single 4-digit year alongside the title and protagonist’s name. Keep visible text minimal (headlines ≤4 words; signage/mottos ≤6 words).
+6. Avoid collapse-prone specifics: no exact dates, numeric lists, or written equations in the panels. Exception: the poster may include that single 4-digit year alongside the title and protagonist’s name. Keep visible text minimal (headlines <=4 words; signage/mottos <=6 words).
 …
 9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
 …
@@ -88,14 +88,14 @@ Poster, story panels, and ending card are produced twice (Set A and Set B). Each
 ```mermaid
 flowchart TD
   S["generateStoryFrames(options)"] --> B["iterate batches (prompts + style refs)"]
-  B --> A{"attempt ≤ BATCH_GENERATE_MAX_ATTEMPTS?"}
+  B --> A{"attempt <= BATCH_GENERATE_MAX_ATTEMPTS?"}
   A -->|No| X["throw FrameGenerationError"]
   A -->|Yes| G["generateImages()"]
   G --> V{"gradeBatch outcome"}
   V -->|accept| U["append batch + expand style refs"]
   U --> B
   V -->|redo_frames| RF["regenerate flagged frames"]
-  RF --> PI{"partial iteration ≤ limit?"}
+  RF --> PI{"partial iteration <= limit?"}
   PI -->|No| X
   PI -->|Yes| CB{"redo iteration > 1?"}
   CB -->|Yes| CC["selectBestRedoFrameCandidate()"]
@@ -136,7 +136,7 @@ The model must return JSON `replacements` where each entry includes a 1-based fr
 After the ten interior frames are locked:
 
 - **Poster candidates:** Each image set spins four concurrent poster renders against the same style prompt and leading frame references. A text-grade pass evaluates all candidates, flags catastrophic artefacts, and selects the most stunning acceptable poster.
-- **Poster typography:** The selector enforces the bold 2–4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
+- **Poster typography:** The selector enforces the bold 2-4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
 - **Ending card:** The last few interior frames seed the style references for a single ending-card render, generated through the same single-image helper that trims prompts and handles retries.
 
 ## Dual-Set Comparison
@@ -154,7 +154,7 @@ Only the winning set is kept for downstream storage. The judge weighs prompt fid
 
 ## Media Packaging
 
-- **Filtering:** Frames 1–10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly but re-encoded and uploaded as supplementary stills so the client can display them without Ken Burns motion.
+- **Filtering:** Frames 1-10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly but re-encoded and uploaded as supplementary stills so the client can display them without Ken Burns motion.
 - **JPEG normalisation:** Images are re-encoded (quality 92, 4:4:4) prior to upload.
 - **Narration synthesis (post-judging):** The alternating `M` / `F` segments from the winning set are passed to the narration pipeline, keeping the same order as the frames.
 
