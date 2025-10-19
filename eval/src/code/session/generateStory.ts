@@ -49,6 +49,11 @@ export const ART_STYLE: readonly string[] = [
 
 export type StoryProgress = JobProgressReporter | undefined;
 
+type StoryDebugOptions = {
+  debugRootDir?: string;
+  debugSubStage?: string;
+};
+
 function useProgress(progress: StoryProgress): JobProgressReporter {
   return {
     log(message: string) {
@@ -627,7 +632,7 @@ Guardrails:
 Hard requirements for this concept:
 - Explicitly name the concept "${topic}" in the first 3–4 sentences. Do not postpone the term to the ending.
 - Include a one-sentence naming note for the concept if the name contains a notable qualifier (e.g., "Little", "Last", "Fast"). Keep it plain (why it’s called that) and historically accurate.
-- Include a two-sentence "insight hint": (1) one abstract sentence that states the core pattern; (2) one short clarifying contrast about what predictably happens when the condition holds versus what breaks when it doesn’t. Avoid equations, symbols, or procedural steps. Do not exceed two sentences.
+- Include an "insight hint" expressed in one or two sentences: begin with an abstract sentence that states the core pattern and optionally add a short clarifying contrast about what predictably happens when the condition holds versus what breaks when it doesn’t. Avoid equations, symbols, or procedural steps.
 - End with an upbeat invitation that hints the student will "learn the details" and "master it in programming challenges" in this very lesson. Keep the tone motivating, not salesy.
 
 **Input:**
@@ -647,7 +652,7 @@ Weave the provided elements into a seamless story that makes the concept feel li
 
 1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
 2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic at a high level—no equations or step sequences.
-3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Then add exactly two sentences: (a) a single abstract "Analogy Map" sentence that links 2–3 correspondences between the analogy and the concept (nouns and plain language only); and (b) a short "insight clarifier" sentence that contrasts what predictably happens when the condition holds versus what breaks when it doesn’t. Keep strictly to two sentences.
+3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Then add a concise "Analogy Map" sentence that links 2–3 correspondences between the analogy and the concept (nouns and plain language only). You may optionally follow with one short "insight clarifier" sentence that contrasts what predictably happens when the condition holds versus what breaks when it doesn’t. The entire hint must be expressed in one or two sentences—never more.
 4. **The Ending Pivot (optional):** If a strong, natural link exists to the modern world, reveal it briefly here at the very end—and only here. If not, end without it.
 5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands—and explicitly promise that they will learn the details and practice the idea in programming challenges next.
 
@@ -687,13 +692,13 @@ Non-negotiables for this pass:
 - Fact-checking: double-check any uncertain dates, names, places, or attributions via web search before revising. Do not add citations to the JSON; revise the prose to be correct and concise.
 - Hyperbole audit: remove charged adjectives and sweeping claims. Allow at most 1–2 emotionally strong adjectives across the entire story, never more than one in a single sentence. Prefer plain, measured language.
  - Modern-connection placement: ensure any tie-in to the modern world appears only in the ending. Remove or relocate earlier references that make the story feel artificial.
- - Insight brevity: the description of the insight must be an "insight hint" of exactly two sentences—first an abstract statement of the core pattern, then a brief clarifying contrast about when it holds vs. breaks. No equations, symbols, or procedural steps.
+ - Insight brevity: the description of the insight must be an "insight hint" delivered in one or two sentences—begin with an abstract statement of the core pattern, and optionally add a brief clarifying contrast about when it holds vs. breaks. No equations, symbols, or procedural steps.
  - Length policy: do not shorten by default. Preserve or modestly extend length when adding directly relevant historical detail and clarity (≈1.2–1.5× is acceptable). Trim only tangents or redundancy.
 
  Quality gates (must pass all):
 - Explicitly name the concept "${topic}" in the first 3–4 sentences. If missing, insert it naturally without breaking flow.
 - If the concept’s name includes a notable qualifier (e.g., "Little", "Last", "Stable"), add a one-sentence naming note explaining the origin/meaning (e.g., contrasted with a different theorem). Keep it neutral and accurate.
-- Ensure the "insight hint" is exactly two sentences: (1) an abstract sentence of the core pattern; (2) a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps.
+- Ensure the "insight hint" is delivered in one or two sentences: start with an abstract sentence of the core pattern and optionally add a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps.
 - The final 1–2 sentences must invite the listener to "learn the details" and to "master it in programming challenges" next, framed as part of this lesson’s journey.
 - Historical nuance: when relevant, avoid claiming the originator created a full test or modern method; frame it as a property or insight. If the originator shared a result without a proof, note that it was presented as a challenge or confident claim without proof.
 - Vocabulary accessibility: keep language suitable for curious 12–16 year olds (CEFR B2 or simpler). Prefer familiar words like "lawyer" or "judge" instead of "magistrate" unless you explain the term immediately.
@@ -717,7 +722,7 @@ Grade the draft story against our five-point quality rubric. For each point, pro
 
 **Part B: The Final Polish**
 Based on your analysis, produce the final, revised version. Focus your edits on two mission-critical areas:
-1. **Clarify Without Calculus:** Make the analogy intuitive while removing step sequences, equations, or symbol-heavy wording. Keep any numbers minimal and illustrative. If missing, add a one-sentence "Analogy Map" that links 2–3 elements of the analogy to the underlying concept (nouns and plain language only) plus one short clarifier sentence; together these two sentences are the entire "insight hint". Do not add a third explanatory sentence.
+1. **Clarify Without Calculus:** Make the analogy intuitive while removing step sequences, equations, or symbol-heavy wording. Keep any numbers minimal and illustrative. If missing, add a concise "Analogy Map" sentence that links 2–3 elements of the analogy to the underlying concept (nouns and plain language only), and optionally add one short clarifier sentence. The entire "insight hint" must fit within one or two sentences—no more.
 2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure. Place any modern connection here (and only here). If natural, add a gentle promise that the trick is revealed in this lesson and that brief exercises follow—without explicit call-to-action wording.
 
 Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
@@ -750,7 +755,7 @@ export function buildStoryValidationPrompt(
 
 **Objective:** Audit the revised story for factual accuracy, compliance with required beats, and age-appropriate language before it can advance.
 
-**Your Role:** You are the senior fact-checker and standards editor. You must block publication if any critical or major issues remain. Always run quick web searches when you are uncertain about a historical claim.
+**Your Role:** You are the senior fact-checker and standards editor. You must block publication if any critical or major issues remain.
 
 **Material to Audit:**
 ================ Story (Final Draft) ================
@@ -760,7 +765,7 @@ ${storyText}
 **Checklist (all must pass):**
 1. **Historical accuracy:** Verify every concrete claim (dates, names, proof status). For Fermat, remember that Fermat's Little Theorem was shared without proof in 1640, and Fermat's Last Theorem was proved by Andrew Wiles (with Richard Taylor) in 1994–1995—flag any suggestion it remains unsolved.
 2. **Concept naming:** Confirm the story explicitly names "${topic}" within the first four sentences and that any naming note about qualifiers (e.g., "Little") is accurate.
-3. **Insight hint:** Confirm there is an exactly two-sentence hint about the idea—first an abstract sentence stating the core pattern, then a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps; flag if it exceeds two sentences or reads like instructions.
+3. **Insight hint:** Confirm the hint is expressed in one or two sentences—start with an abstract sentence stating the core pattern and optionally add a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps; flag if it exceeds two sentences or reads like instructions.
 4. **Modern connection placement:** Any modern tie-in (e.g., cryptography) must appear only in the ending paragraph.
 5. **Ending invitation:** The final 1–2 sentences must promise the listener will learn the details and master the idea in programming challenges.
 6. **Language accessibility:** Vocabulary should suit curious 12–16 year olds (CEFR B2 or below). Flag niche words such as "magistrate" or "jurist" unless they are immediately defined. Prefer simpler alternatives (e.g., "lawyer," "judge").
@@ -786,6 +791,33 @@ ${storyText}
 }
 
 If there are no issues, respond with an empty array.
+`;
+}
+
+export function buildStoryFactualValidationPrompt(
+  topic: string,
+  storyText: string,
+): string {
+  return `### **Prompt 4A: Historical Fact Check**
+
+**Objective:** Extract every concrete historical or biographical claim in the story and verify it using quick web searches. Flag any claim that cannot be supported by reliable sources.
+
+**Your Role:** You are the factual accuracy lead. Work claim-by-claim: identify people, places, dates, titles, and proof status statements. Run a focused Google search for each claim you cannot confirm from memory. When a search fails, try alternative keywords before concluding that the claim is unsupported.
+
+**Material to Audit:**
+================ Story (Final Draft) ================
+${storyText}
+====================================================
+
+**Checklist:**
+1. Enumerate the distinct historical claims. Treat each date, location, relationship, proof status, and attribution as a separate claim.
+2. For every claim, run at least one web search. Note the key evidence you found (e.g., source name + short summary). If results conflict or are absent, treat the claim as unsupported.
+3. Verdict rules:
+   * Return **"pass"** only if every claim is supported by your searches.
+   * Return **"fail"** when any claim is missing support, contradicts reliable sources, or remains ambiguous after reasonable searching. Record one issue per problematic claim, set 'category' to 'factual', and explain the concern in plain language.
+4. Ignore stylistic or structural issues here; only comment on historical accuracy. The next reviewer will enforce writing-quality requirements.
+
+Respond using the provided JSON schema.
 `;
 }
 
@@ -834,7 +866,7 @@ export function buildSegmentationPrompt(
 export async function generateStoryIdea(
   topic: string,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
   adapter.log(
@@ -847,7 +879,11 @@ export async function generateStoryIdea(
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     tools: [{ type: "web-search" }],
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "idea" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: "idea",
+          subStage: options.debugSubStage,
+        }
       : undefined,
   });
   adapter.log("[story/idea] brief prepared");
@@ -858,7 +894,7 @@ export async function generateStoryProseDraft(
   topic: string,
   idea: StoryIdeaResult,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
@@ -868,7 +904,17 @@ export async function generateStoryProseDraft(
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "prose" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: "prose",
+          subStage: (() => {
+            const parts = ["draft"] as string[];
+            if (options.debugSubStage) {
+              parts.push(options.debugSubStage);
+            }
+            return parts.join("/");
+          })(),
+        }
       : undefined,
   });
   adapter.log("[story/prose] draft produced");
@@ -879,7 +925,7 @@ export async function generateStoryProseRevision(
   topic: string,
   draft: StoryProseDraftResult,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
   feedback?: string,
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
@@ -893,7 +939,10 @@ export async function generateStoryProseRevision(
     responseSchema: STORY_PROSE_REVISION_RESPONSE_SCHEMA,
     schema: StoryProseRevisionResponseSchema,
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "prose-revision" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: ["prose", options.debugSubStage ?? "revision"].filter((segment): segment is string => !!segment).join("/"),
+        }
       : undefined,
   });
   adapter.log("[story/prose-revision] analysis and revision complete");
@@ -919,26 +968,66 @@ export async function validateStoryProse(
   topic: string,
   revision: StoryProseRevisionResult,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryProseValidationResult> {
   const adapter = useProgress(progress);
-  adapter.log(`[story] validating prose with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryValidationPrompt(topic, revision.text);
-  const response = await generateJson<StoryProseValidationResult>({
+  const buildStagePath = (leaf: string): string | undefined => {
+    if (!options?.debugRootDir) {
+      return undefined;
+    }
+    const segments = [
+      "prose",
+      options.debugSubStage,
+      "validation",
+      leaf,
+    ].filter((segment): segment is string => !!segment && segment.length > 0);
+    return segments.join("/");
+  };
+
+  adapter.log(`[story] validating prose – factual pass with ${TEXT_MODEL_ID}`);
+  const factualPrompt = buildStoryFactualValidationPrompt(topic, revision.text);
+  const factualResponse = await generateJson<StoryProseValidationResult>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
-    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    contents: [{ role: "user", parts: [{ type: "text", text: factualPrompt }] }],
     tools: [{ type: "web-search" }],
     responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
     schema: StoryProseValidationResultSchema,
+    maxAttempts: 3,
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "prose-validation" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: buildStagePath("factual") ?? "prose/validation/factual",
+        }
       : undefined,
   });
   adapter.log(
-    `[story/prose-validation] verdict: ${response.verdict}${response.issues.length ? ` (${response.issues.length} issue(s))` : ""}`,
+    `[story/prose-validation] factual verdict: ${factualResponse.verdict}${factualResponse.issues.length ? ` (${factualResponse.issues.length} issue(s))` : ""}`,
   );
-  return response;
+  if (factualResponse.verdict === "fail") {
+    return factualResponse;
+  }
+
+  adapter.log(`[story] validating prose – structural pass with ${TEXT_MODEL_ID}`);
+  const structuralPrompt = buildStoryValidationPrompt(topic, revision.text);
+  const structuralResponse = await generateJson<StoryProseValidationResult>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: structuralPrompt }] }],
+    responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    schema: StoryProseValidationResultSchema,
+    maxAttempts: 2,
+    debug: options?.debugRootDir
+      ? {
+          rootDir: options.debugRootDir,
+          stage: buildStagePath("quality") ?? "prose/validation/quality",
+        }
+      : undefined,
+  });
+  adapter.log(
+    `[story/prose-validation] verdict: ${structuralResponse.verdict}${structuralResponse.issues.length ? ` (${structuralResponse.issues.length} issue(s))` : ""}`,
+  );
+  return structuralResponse;
 }
 
 const PROSE_REVISION_MAX_ATTEMPTS = 3;
@@ -979,25 +1068,46 @@ function buildValidationFeedback(
 export async function generateProseStory(
   topic: string,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryProseResult> {
   const idea = await generateStoryIdea(topic, progress, options);
   const draft = await generateStoryProseDraft(topic, idea, progress, options);
   let revision: StoryProseRevisionResult | undefined;
   let feedback: string | undefined;
   for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
+    const attemptLabel = `revisions/attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_REVISION_MAX_ATTEMPTS).padStart(2, "0")}`;
+    const buildSubStage = (leaf: string): string | undefined => {
+      const segments = [options?.debugSubStage, attemptLabel, leaf]
+        .filter((segment): segment is string => typeof segment === "string" && segment.length > 0);
+      if (segments.length === 0) {
+        return undefined;
+      }
+      return segments.join("/");
+    };
+    const revisionDebugOptions: StoryDebugOptions | undefined = options?.debugRootDir
+      ? {
+          debugRootDir: options.debugRootDir,
+          debugSubStage: buildSubStage("revision"),
+        }
+      : undefined;
+    const validationDebugOptions: StoryDebugOptions | undefined = options?.debugRootDir
+      ? {
+          debugRootDir: options.debugRootDir,
+          debugSubStage: buildSubStage("validation"),
+        }
+      : undefined;
     const candidate = await generateStoryProseRevision(
       topic,
       draft,
       progress,
-      options,
+      revisionDebugOptions,
       feedback,
     );
     const validation = await validateStoryProse(
       topic,
       candidate,
       progress,
-      options,
+      validationDebugOptions,
     );
     if (validation.verdict === "pass") {
       revision = { ...candidate, validation };
@@ -1132,9 +1242,7 @@ export async function generateStorySegmentation(
   storyText: string,
   topic: string,
   progress?: StoryProgress,
-  options?: {
-    debugRootDir?: string;
-  },
+  options?: StoryDebugOptions,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
@@ -1146,7 +1254,11 @@ export async function generateStorySegmentation(
     responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
     schema: StorySegmentationSchema,
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "segmentation" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: "segmentation",
+          subStage: options.debugSubStage,
+        }
       : undefined,
   });
   adapter.log("[story/segments] parsed successfully");
@@ -1158,9 +1270,7 @@ export async function correctStorySegmentation(
   topic: string,
   initialSegmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: {
-    debugRootDir?: string;
-  },
+  options?: StoryDebugOptions,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   const generationPrompt = buildSegmentationPrompt(storyText, topic);
@@ -1176,6 +1286,10 @@ export async function correctStorySegmentation(
       workingSegmentation,
       generationPrompt,
     );
+    const attemptLabel = `corrections/attempt-${String(attempt).padStart(3, "0")}-of-${String(SEGMENTATION_CORRECTION_ATTEMPTS).padStart(3, "0")}`;
+    const stageLabel = [options?.debugSubStage, attemptLabel]
+      .filter((segment): segment is string => typeof segment === "string" && segment.length > 0)
+      .join("/") || attemptLabel;
     try {
       const response = await generateJson<SegmentationCorrectorResponse>({
         progress: adapter,
@@ -1191,7 +1305,8 @@ export async function correctStorySegmentation(
         debug: options?.debugRootDir
           ? {
               rootDir: options.debugRootDir,
-              stage: `segmentation_correction/${String(attempt).padStart(3, "0")}-of-${String(SEGMENTATION_CORRECTION_ATTEMPTS).padStart(3, "0")}`,
+              stage: stageLabel,
+              subStage: "review",
             }
           : undefined,
       });
@@ -1505,7 +1620,7 @@ async function selectPosterCandidate(options: {
 export async function generateImageSets(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryImageSet[]> {
   const adapter = useProgress(progress);
   const { entries, endingIndex, posterIndex, narrationsByIndex } =
@@ -1515,18 +1630,20 @@ export async function generateImageSets(
   const baseDebug: LlmDebugOptions | undefined = options?.debugRootDir
     ? { rootDir: options.debugRootDir, stage: "image-sets" }
     : undefined;
+  const baseSubStage = options?.debugSubStage;
   const buildDebug = (subStage: string): LlmDebugOptions | undefined => {
     if (!baseDebug) {
       return undefined;
     }
-    const cleaned = subStage
-      .split("/")
+    const segments = [baseSubStage, subStage]
+      .filter((segment): segment is string => typeof segment === "string")
+      .flatMap((segment) => segment.split("/"))
       .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0)
-      .join("/");
+      .filter((segment) => segment.length > 0);
+    const cleaned = segments.join("/");
     return {
       ...baseDebug,
-      subStage: cleaned,
+      subStage: cleaned.length > 0 ? cleaned : undefined,
     };
   };
   const posterEntry = entries.find((entry) => entry.index === posterIndex);
@@ -1704,7 +1821,7 @@ export async function judgeImageSets(
   imageSets: readonly StoryImageSet[],
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<{
   winningImageSetLabel: "set_a" | "set_b";
 }> {
@@ -1762,7 +1879,11 @@ export async function judgeImageSets(
     responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
     debug: options?.debugRootDir
-      ? { rootDir: options.debugRootDir, stage: "images-judge" }
+      ? {
+          rootDir: options.debugRootDir,
+          stage: "images-judge",
+          subStage: options.debugSubStage,
+        }
       : undefined,
   });
   const serialised = JSON.stringify(response, null, 2);
@@ -1775,7 +1896,7 @@ export async function judgeImageSets(
 export async function generateStoryImages(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: { debugRootDir?: string },
+  options?: StoryDebugOptions,
 ): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
   adapter.log("[story] generating 12 images via dual-set comparison workflow");
@@ -2496,22 +2617,35 @@ export class StoryGenerationPipeline {
       this.logger.log(
         `[story/prose] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`,
       );
+      const attemptBase = `revisions/attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_REVISION_MAX_ATTEMPTS).padStart(2, "0")}`;
+      const buildSubStage = (leaf: string): string | undefined => {
+        const segments = [attemptBase, leaf];
+        return segments.join("/");
+      };
+      const revisionOptions: StoryDebugOptions | undefined = this.options.debugRootDir
+        ? {
+            debugRootDir: this.options.debugRootDir,
+            debugSubStage: buildSubStage("revision"),
+          }
+        : undefined;
+      const validationOptions: StoryDebugOptions | undefined = this.options.debugRootDir
+        ? {
+            debugRootDir: this.options.debugRootDir,
+            debugSubStage: buildSubStage("validation"),
+          }
+        : undefined;
       const candidate = await generateStoryProseRevision(
         this.options.topic,
         draft,
         this.options.progress,
-        {
-          debugRootDir: this.options.debugRootDir,
-        },
+        revisionOptions,
         feedback,
       );
       const validationResult = await validateStoryProse(
         this.options.topic,
         candidate,
         this.options.progress,
-        {
-          debugRootDir: this.options.debugRootDir,
-        },
+        validationOptions,
       );
       if (validationResult.verdict === "pass") {
         revision = { ...candidate, validation: validationResult };
