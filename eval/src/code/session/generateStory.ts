@@ -1622,8 +1622,8 @@ export type StoryGenerationStageName =
   | "prose-revision"
   | "segmentation"
   | "segmentation_correction"
-  | "narration"
-  | "images";
+  | "images"
+  | "narration";
 
 const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
   "idea",
@@ -1631,8 +1631,8 @@ const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
   "prose-revision",
   "segmentation",
   "segmentation_correction",
-  "narration",
   "images",
+  "narration",
 ];
 
 type StoryGenerationPipelineOptions = {
@@ -1707,35 +1707,6 @@ export class StoryGenerationPipeline {
       return undefined;
     }
     return path.join(this.checkpointDir, `${stage}.json`);
-  }
-
-  private buildSegmentImageStoragePath(index: number): string {
-    const userId = this.requireContext("userId");
-    const sessionId = this.requireContext("sessionId");
-    const planItemId = this.requireContext("planItemId");
-    return buildImageStoragePath(
-      userId,
-      sessionId,
-      planItemId,
-      index,
-      "jpg",
-      this.options.storagePrefix,
-    );
-  }
-
-  private buildSupplementaryImageStoragePath(
-    kind: "poster" | "ending",
-  ): string {
-    const userId = this.requireContext("userId");
-    const sessionId = this.requireContext("sessionId");
-    const planItemId = this.requireContext("planItemId");
-    return buildSupplementaryImageStoragePath(
-      userId,
-      sessionId,
-      planItemId,
-      kind,
-      this.options.storagePrefix,
-    );
   }
 
   private async readIdeaCheckpoint(): Promise<
@@ -1999,152 +1970,6 @@ export class StoryGenerationPipeline {
       encoding: "utf8",
     });
     return filePath;
-  }
-
-  private async uploadStoryImages(
-    segmentation: StorySegmentation,
-    images: StoryImagesResult,
-  ): Promise<void> {
-    const storageBucket = this.requireContext("storageBucket");
-    const totalSegments = segmentation.segments.length;
-    const interiorImages = images.images
-      .filter((image) => image.index >= 1)
-      .filter((image) => image.index <= totalSegments)
-      .sort((a, b) => a.index - b.index);
-
-    if (interiorImages.length !== totalSegments) {
-      throw new Error(
-        `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
-      );
-    }
-
-    const endingImageIndex = totalSegments + 1;
-    const posterImageIndex = totalSegments + 2;
-    const endingImage = images.images.find(
-      (image) => image.index === endingImageIndex,
-    );
-    if (!endingImage) {
-      throw new Error(
-        `Expected ending image at index ${endingImageIndex}, but none was provided`,
-      );
-    }
-    const posterImage = images.images.find(
-      (image) => image.index === posterImageIndex,
-    );
-    if (!posterImage) {
-      throw new Error(
-        `Expected poster image at index ${posterImageIndex}, but none was provided`,
-      );
-    }
-
-    const narrationValue = this.caches.narration?.value;
-    const canonicalStoragePaths =
-      narrationValue?.storagePaths ??
-      Array.from({ length: totalSegments }, (_, index) =>
-        normaliseStoragePath(this.buildSegmentImageStoragePath(index + 1)),
-      );
-    if (canonicalStoragePaths.length !== totalSegments) {
-      throw new Error(
-        `Narration storage paths (${canonicalStoragePaths.length}) do not match expected segment count ${totalSegments}`,
-      );
-    }
-
-    const uploadPaths = canonicalStoragePaths.map((storagePath, index) => {
-      const trimmed = storagePath.replace(/^\/+/u, "");
-      if (!trimmed) {
-        throw new Error(
-          `Normalised storage path for image ${index + 1} is empty`,
-        );
-      }
-      return trimmed;
-    });
-
-    const storage = getFirebaseAdminStorage(undefined, {
-      storageBucket,
-    });
-    const bucket = storage.bucket(storageBucket);
-
-    const totalImages = interiorImages.length;
-    const uploadConcurrency = Math.min(8, totalImages);
-    this.logger.log(
-      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
-    );
-
-    let nextImageIndex = 0;
-    const uploadWorker = async (workerId: number): Promise<void> => {
-      while (true) {
-        const currentIndex = nextImageIndex;
-        nextImageIndex += 1;
-        if (currentIndex >= totalImages) {
-          return;
-        }
-        const image = interiorImages[currentIndex];
-        const jpegBuffer = await sharp(image.data)
-          .jpeg({
-            quality: 92,
-            progressive: true,
-            chromaSubsampling: "4:4:4",
-          })
-          .toBuffer();
-        const storagePath = uploadPaths[currentIndex];
-        const file = bucket.file(storagePath);
-        await file.save(jpegBuffer, {
-          resumable: false,
-          metadata: {
-            contentType: "image/jpeg",
-            cacheControl: "public, max-age=0",
-          },
-        });
-        this.logger.log(
-          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
-        );
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: uploadConcurrency }, (_, workerId) =>
-        uploadWorker(workerId),
-      ),
-    );
-
-    const posterImagePath =
-      narrationValue?.posterImage?.storagePath ??
-      normaliseStoragePath(this.buildSupplementaryImageStoragePath("poster"));
-    const endingImagePath =
-      narrationValue?.endingImage?.storagePath ??
-      normaliseStoragePath(this.buildSupplementaryImageStoragePath("ending"));
-
-    const uploadSupplementary = async (
-      image: GeneratedStoryImage,
-      kind: "poster" | "ending",
-      normalisedPath: string,
-    ): Promise<void> => {
-      const trimmed = normalisedPath.replace(/^\/+/u, "");
-      if (!trimmed) {
-        throw new Error(`Storage path for ${kind} image is empty`);
-      }
-      const jpegBuffer = await sharp(image.data)
-        .jpeg({
-          quality: 92,
-          progressive: true,
-          chromaSubsampling: "4:4:4",
-        })
-        .toBuffer();
-      const file = bucket.file(trimmed);
-      await file.save(jpegBuffer, {
-        resumable: false,
-        metadata: {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=0",
-        },
-      });
-      this.logger.log(`[story/images] saved ${kind} image to /${trimmed}`);
-    };
-
-    await Promise.all([
-      uploadSupplementary(posterImage, "poster", posterImagePath),
-      uploadSupplementary(endingImage, "ending", endingImagePath),
-    ]);
   }
 
   private async readNarrationCheckpoint(): Promise<
@@ -2515,9 +2340,7 @@ export class StoryGenerationPipeline {
   }
 
   async ensureImages(): Promise<StageCacheEntry<StoryImagesResult>> {
-    const { value: segmentation } = await this.ensureSegmentationCorrection();
     if (this.caches.images) {
-      await this.uploadStoryImages(segmentation, this.caches.images.value);
       return this.caches.images;
     }
     const checkpoint = await this.readImagesCheckpoint();
@@ -2531,10 +2354,10 @@ export class StoryGenerationPipeline {
       this.logger.log(
         `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`,
       );
-      await this.uploadStoryImages(segmentation, entry.value);
       return entry;
     }
     await this.invalidateAfter("images");
+    const { value: segmentation } = await this.ensureSegmentationCorrection();
     const images = await generateStoryImages(
       segmentation,
       this.options.progress,
@@ -2550,7 +2373,6 @@ export class StoryGenerationPipeline {
     if (checkpointPath) {
       this.logger.log(`[story/checkpoint] wrote 'images' to ${checkpointPath}`);
     }
-    await this.uploadStoryImages(segmentation, entry.value);
     return entry;
   }
 
