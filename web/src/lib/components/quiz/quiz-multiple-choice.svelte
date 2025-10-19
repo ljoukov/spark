@@ -133,12 +133,15 @@
 
 <QuizQuestionCard
 	title={question.prompt}
+	titleHtml={question.promptHtml}
 	{eyebrow}
 	status={statusProp}
 	hint={question.hint}
+	hintHtml={question.hintHtml}
 	{showHint}
 	{feedback}
 	explanation={question.explanation}
+	explanationHtml={question.explanationHtml}
 	showExplanation={revealExplanation}
 >
 	<div class="space-y-4">
@@ -155,8 +158,12 @@
 					aria-pressed={option.id === selectedOptionId}
 				>
 					<span class={bulletClasses(option.id)}>{option.label}</span>
-					<span class="text-base leading-relaxed font-medium text-foreground">
-						{option.text}
+					<span class="option-text text-base leading-relaxed font-medium text-foreground">
+						{#if option.textHtml}
+							<span class="markdown-option">{@html option.textHtml}</span>
+						{:else}
+							{option.text}
+						{/if}
 					</span>
 				</button>
 			{/each}
@@ -193,3 +200,44 @@
 		</div>
 	{/snippet}
 </QuizQuestionCard>
+
+<style>
+	.option-text {
+		flex: 1;
+		text-align: left;
+	}
+
+	.markdown-option {
+		display: block;
+	}
+
+	.markdown-option :global(p) {
+		margin: 0 0 0.5rem;
+	}
+
+	.markdown-option :global(p:last-child) {
+		margin-bottom: 0;
+	}
+
+	.markdown-option :global(ul),
+	.markdown-option :global(ol) {
+		margin: 0.25rem 0 0.5rem 1.25rem;
+		padding: 0;
+	}
+
+	.markdown-option :global(li + li) {
+		margin-top: 0.35rem;
+	}
+
+	.markdown-option :global(strong) {
+		font-weight: 600;
+	}
+
+	.markdown-option :global(code) {
+		font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+		font-size: 0.95em;
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.35rem;
+		background-color: color-mix(in srgb, currentColor 12%, transparent);
+	}
+</style>

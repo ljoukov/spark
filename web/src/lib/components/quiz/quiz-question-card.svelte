@@ -17,26 +17,32 @@
 		eyebrow?: string | null;
 		title?: string;
 		status?: Status;
-		hint?: string;
-		showHint?: boolean;
-		feedback?: QuizFeedback | null;
-		explanation?: string;
-		showExplanation?: boolean;
-		displayFooter?: boolean;
-		children?: Snippet;
-		footer?: Snippet;
-	};
+	hint?: string;
+	hintHtml?: string;
+	showHint?: boolean;
+	feedback?: QuizFeedback | null;
+	explanation?: string;
+	explanationHtml?: string;
+	showExplanation?: boolean;
+	displayFooter?: boolean;
+	titleHtml?: string;
+	children?: Snippet;
+	footer?: Snippet;
+};
 
 	let {
 		eyebrow = 'Term',
 		title,
 		status: statusProp = 'neutral' as Status,
 		hint,
+		hintHtml,
 		showHint = false,
 		feedback = null,
 		explanation,
+		explanationHtml,
 		showExplanation = false,
 		displayFooter = true,
+		titleHtml,
 		children,
 		footer,
 		class: className,
@@ -90,7 +96,11 @@
 			{/if}
 			{#if title}
 				<CardTitle class="text-xl leading-snug font-semibold text-foreground md:text-2xl">
-					{title}
+					{#if titleHtml}
+						<span class="markdown-title">{@html titleHtml}</span>
+					{:else}
+						{title}
+					{/if}
 				</CardTitle>
 			{/if}
 		</div>
@@ -99,7 +109,7 @@
 	<CardContent class="p-0">
 		{@render children?.()}
 
-		{#if showHint && hint}
+		{#if showHint && (hintHtml || hint)}
 			<div
 				class="dark:text-primary-100 mt-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm dark:border-primary/40 dark:bg-primary/15"
 			>
@@ -108,22 +118,34 @@
 				>
 					Hint
 				</p>
-				<p class="mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
-					{hint}
-				</p>
+				{#if hintHtml}
+					<div class="markdown mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
+						{@html hintHtml}
+					</div>
+				{:else if hint}
+					<p class="mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
+						{hint}
+					</p>
+				{/if}
 			</div>
 		{/if}
 
-		{#if showExplanation && explanation}
+		{#if showExplanation && (explanationHtml || explanation)}
 			<div
 				class="mt-6 rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground dark:bg-muted/20"
 			>
 				<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
 					Explanation
 				</p>
-				<p class="mt-1 text-base leading-relaxed text-muted-foreground/90">
-					{explanation}
-				</p>
+				{#if explanationHtml}
+					<div class="markdown mt-1 text-base leading-relaxed text-muted-foreground/90">
+						{@html explanationHtml}
+					</div>
+				{:else if explanation}
+					<p class="mt-1 text-base leading-relaxed text-muted-foreground/90">
+						{explanation}
+					</p>
+				{/if}
 			</div>
 		{/if}
 
@@ -143,3 +165,52 @@
 		</CardFooter>
 	{/if}
 </Card>
+
+<style>
+	.markdown {
+		display: block;
+	}
+
+	.markdown-title {
+		display: block;
+	}
+
+	.markdown :global(p),
+	.markdown-title :global(p) {
+		margin: 0 0 0.75rem;
+	}
+
+	.markdown :global(p:last-child),
+	.markdown-title :global(p:last-child) {
+		margin-bottom: 0;
+	}
+
+	.markdown :global(ul),
+	.markdown :global(ol) {
+		margin: 0.5rem 0 0.75rem 1.25rem;
+		padding: 0;
+	}
+
+	.markdown :global(li + li) {
+		margin-top: 0.35rem;
+	}
+
+	.markdown :global(code),
+	.markdown-title :global(code) {
+		font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+		font-size: 0.95em;
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.35rem;
+		background-color: color-mix(in srgb, currentColor 12%, transparent);
+	}
+
+	.markdown :global(strong),
+	.markdown-title :global(strong) {
+		font-weight: 600;
+	}
+
+	.markdown :global(em),
+	.markdown-title :global(em) {
+		font-style: italic;
+	}
+</style>

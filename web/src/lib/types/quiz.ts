@@ -9,8 +9,11 @@ export type QuizFeedback = {
 export type QuizQuestionBase = {
 	id: string;
 	prompt: string;
+	promptHtml?: string;
 	hint?: string;
+	hintHtml?: string;
 	explanation?: string;
+	explanationHtml?: string;
 	audioLabel?: string;
 };
 
@@ -18,6 +21,7 @@ export type QuizChoiceOption = {
 	id: string;
 	label: string;
 	text: string;
+	textHtml?: string;
 };
 
 export type QuizQuestionWithFeedback = QuizQuestionBase & {
@@ -40,6 +44,7 @@ export type QuizTypeAnswerQuestion = QuizQuestionWithFeedback & {
 export type QuizInfoCardQuestion = QuizQuestionBase & {
 	kind: 'info-card';
 	body: string;
+	bodyHtml?: string;
 	continueLabel?: string;
 	eyebrow?: string | null;
 };
