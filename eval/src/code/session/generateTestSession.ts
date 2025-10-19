@@ -1,4 +1,4 @@
-import { mkdir, rename, stat } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
@@ -854,6 +854,13 @@ function resolveSessionRootDir(
 
 function resolveStoryCheckpointDir(
   sessionRootDir: string,
+  _planItemId: string,
+): string {
+  return path.join(sessionRootDir, "checkpoints");
+}
+
+function resolvePlanItemStoryCheckpointDir(
+  sessionRootDir: string,
   planItemId: string,
 ): string {
   return path.join(sessionRootDir, "checkpoints", planItemId);
@@ -891,23 +898,46 @@ async function ensureStoryCheckpointDir(
   planItemId: string,
 ): Promise<string> {
   const targetDir = resolveStoryCheckpointDir(sessionRootDir, planItemId);
-  if (await pathExists(targetDir)) {
-    return targetDir;
-  }
-
+  const nestedPlanItemDir = resolvePlanItemStoryCheckpointDir(
+    sessionRootDir,
+    planItemId,
+  );
   const legacyDir = resolveLegacyStoryCheckpointDir(
     debugRootDir,
     sessionId,
     planItemId,
   );
-  if (await pathExists(legacyDir)) {
-    await mkdir(path.dirname(targetDir), { recursive: true });
-    await rename(legacyDir, targetDir);
-    console.log(
-      `[test-session/${sessionId}] migrated checkpoints from ${legacyDir} to ${targetDir}`,
-    );
-  }
 
+  const migrateDirContents = async (
+    sourceDir: string,
+    sourceLabel: string,
+  ): Promise<boolean> => {
+    if (!(await pathExists(sourceDir))) {
+      return false;
+    }
+    await mkdir(targetDir, { recursive: true });
+    const entries = await readdir(sourceDir);
+    for (const entry of entries) {
+      const fromPath = path.join(sourceDir, entry);
+      const toPath = path.join(targetDir, entry);
+      if (await pathExists(toPath)) {
+        console.warn(
+          `[test-session/${sessionId}] checkpoint ${entry} already exists in ${targetDir}; leaving ${fromPath} untouched`,
+        );
+        continue;
+      }
+      await rename(fromPath, toPath);
+    }
+    await rm(sourceDir, { recursive: true, force: true });
+    console.log(
+      `[test-session/${sessionId}] migrated checkpoints from ${sourceLabel} to ${targetDir}`,
+    );
+    return true;
+  };
+
+  await migrateDirContents(nestedPlanItemDir, nestedPlanItemDir);
+  await migrateDirContents(legacyDir, legacyDir);
+  await mkdir(targetDir, { recursive: true });
   return targetDir;
 }
 
