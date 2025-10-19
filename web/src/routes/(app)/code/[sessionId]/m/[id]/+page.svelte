@@ -114,12 +114,7 @@
 			? Math.max(activeImage.durationSec, MIN_KEN_BURNS_DURATION)
 			: DEFAULT_KEN_BURNS_DURATION
 		: 0.05; // minimal, but animation is disabled below
-	$: kenBurnsDirectionClass = kenBurnsEnabled
-		? currentImageOrder % 2 === 0
-			? 'kenburns-forward'
-			: 'kenburns-reverse'
-		: '';
-	$: kenBurnsClass = kenBurnsEnabled ? kenBurnsDirectionClass : 'no-kenburns';
+	$: kenBurnsClass = kenBurnsEnabled ? 'kenburns-forward' : 'no-kenburns';
 	$: kenBurnsPlayState = kenBurnsEnabled && isPlaying ? 'running' : 'paused';
 	$: redoThresholdTime =
 		sliderMax > COMPLETION_THRESHOLD_SEC
@@ -805,10 +800,6 @@
 		animation-name: kenburns-forward;
 	}
 
-	.image-visual.kenburns-reverse {
-		animation-name: kenburns-reverse;
-	}
-
 	:global([data-theme='dark'] .image-card-feedback),
 	:global(:root:not([data-theme='light']) .image-card-feedback) {
 		background: rgba(15, 23, 42, 0.88);
@@ -865,15 +856,6 @@
 		}
 		100% {
 			transform: scale(1.12) translate3d(2%, 2%, 0);
-		}
-	}
-
-	@keyframes kenburns-reverse {
-		0% {
-			transform: scale(1.12) translate3d(2%, 2%, 0);
-		}
-		100% {
-			transform: scale(1.05) translate3d(-2%, -2%, 0);
 		}
 	}
 
