@@ -45,7 +45,6 @@ type LoadedTemplate = {
 const TEMPLATE_ROOT_COLLECTION = 'spark-admin';
 const TEMPLATE_DOC_ID = 'templates';
 const TEMPLATE_SESSIONS_COLLECTION = 'sessions';
-const TEMPLATE_USER_ID = 'welcome-templates';
 
 const TemplateDocSchema = z.object({
 	id: z.string().trim().min(1, 'id is required'),

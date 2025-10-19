@@ -85,10 +85,13 @@ const BFS_QUIZZES: QuizDefinition[] = [
         prompt: "A Calm Explorer",
         eyebrow: "Story",
         body: [
-          "Imagine a park filled with rope bridges between treehouses. You start in the Clubhouse and every bridge takes the same time to cross.",
+          "**Imagine** a park filled with rope bridges between treehouses where each crossing takes the same time.",
           "",
-          "Breadth-first Search explores every treehouse one step away, then every treehouse two steps away. That way the first time you reach the Snack Shack you know it was the shortest hop count.",
-        ].join("\\n"),
+          "- Explore every treehouse one step away before touching the next layer.",
+          "- Then visit the wave two steps away, keeping the journey orderly.",
+          "",
+          "The first time you reach the Snack Shack you know it was the shortest hop count.",
+        ].join('\n'),
         continueLabel: "Next idea",
       },
       {
@@ -97,10 +100,14 @@ const BFS_QUIZZES: QuizDefinition[] = [
         prompt: "Levels Keep Us Oriented",
         eyebrow: "Levels",
         body: [
-          "Think of each wave as a level. Level 0 is the starting spot. Level 1 holds every room one step away, level 2 holds rooms two steps away, and so on.",
+          "Think of each wave as a level:",
           "",
-          "We finish the current level before touching the next one. This steady rhythm is how we protect the shortest-path promise.",
-        ].join("\\n"),
+          "- Level 0 is the starting spot.",
+          "- Level 1 holds every room one step away.",
+          "- Level 2 collects rooms two steps away, and so on.",
+          "",
+          "_Finishing a level before touching the next one protects the shortest-path promise._",
+        ].join('\n'),
         continueLabel: "Got it",
       },
       {
@@ -111,8 +118,11 @@ const BFS_QUIZZES: QuizDefinition[] = [
         body: [
           "A queue acts like a fair line at a theme park: whoever joins first gets served first.",
           "",
-          "Whenever we discover new neighbours, we add them to the back of the queue. We take the next place from the front, keeping the levels tidy without extra effort.",
-        ].join("\\n"),
+          "- Discover new neighbours? add them to the back.",
+          "- Pop from the front to process the next room.",
+          "",
+          "That rhythm keeps the levels tidy without extra bookkeeping.",
+        ].join('\n'),
         continueLabel: "Let's try it",
       },
       {
@@ -214,7 +224,7 @@ const BFS_QUIZZES: QuizDefinition[] = [
           "• 3 connects to 5.",
           "",
           "Starting from room 1 and adding neighbours in ascending order, what visiting order does Breadth-first Search produce?",
-        ].join("\\n"),
+        ].join('\n'),
         hint: "Follow the queue: start with 1, then its neighbours, then their neighbours.",
         explanation:
           "We visit 1 first, then 2 and 3, then 4 from 2, then 5 from 3, so the order is 1, 2, 3, 4, 5.",
@@ -277,7 +287,7 @@ const BFS_QUIZZES: QuizDefinition[] = [
           ". . T",
           "",
           "Moving only up, down, left, or right, how many steps does Breadth-first Search count along the shortest path from S to T?",
-        ].join("\\n"),
+        ].join('\n'),
         hint: "Wave outwards from S while skipping the walls.",
         explanation:
           "The best route is S → (1,0) → (2,0) → (2,1) → T, which is 4 steps.",
@@ -514,7 +524,7 @@ const BFS_QUIZZES: QuizDefinition[] = [
           "Breadth-first Search wins by exploring in levels: queue up neighbours, mark them as soon as you add them, and record their distances.",
           "",
           "Those habits let you solve both of today’s practice problems—maps of rooms and grids—without ever getting lost.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Ready for more",
       },
     ],
@@ -524,20 +534,20 @@ const BFS_QUIZZES: QuizDefinition[] = [
 const BFS_PARK_STEPS_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["5 5", "1 2", "1 3", "2 4", "3 4", "4 5", "1 5"].join("\\n"),
+    input: ["5 5", "1 2", "1 3", "2 4", "3 4", "4 5", "1 5"].join('\n'),
     output: "3",
     explanation: "One shortest walk is 1 → 3 → 4 → 5, which uses 3 bridges.",
   },
   {
     title: "Example 2",
-    input: ["4 2", "1 2", "3 4", "1 4"].join("\\n"),
+    input: ["4 2", "1 2", "3 4", "1 4"].join('\n'),
     output: "-1",
     explanation:
       "Spot 4 is cut off from spot 1, so there is no route and we print -1.",
   },
   {
     title: "Example 3",
-    input: ["3 2", "1 2", "2 3", "2 2"].join("\\n"),
+    input: ["3 2", "1 2", "2 3", "2 2"].join('\n'),
     output: "0",
     explanation:
       "The start and goal are the same spot, so the answer is 0 steps.",
@@ -561,37 +571,37 @@ const BFS_PARK_STEPS_TESTS = [
     explanation: BFS_PARK_STEPS_EXAMPLES[2].explanation,
   },
   {
-    input: ["1 0", "1 1"].join("\\n"),
+    input: ["1 0", "1 1"].join('\n'),
     output: "0",
     explanation: "Only one spot exists, so staying put takes 0 bridges.",
   },
   {
-    input: ["2 1", "1 2", "1 2"].join("\\n"),
+    input: ["2 1", "1 2", "1 2"].join('\n'),
     output: "1",
     explanation: "A single bridge links spot 1 to spot 2.",
   },
   {
-    input: ["5 4", "1 2", "2 3", "3 4", "4 5", "1 5"].join("\\n"),
+    input: ["5 4", "1 2", "2 3", "3 4", "4 5", "1 5"].join('\n'),
     output: "4",
     explanation: "The only route is the chain 1 → 2 → 3 → 4 → 5.",
   },
   {
-    input: ["5 6", "1 2", "2 3", "3 4", "4 5", "1 3", "2 5", "1 5"].join("\\n"),
+    input: ["5 6", "1 2", "2 3", "3 4", "4 5", "1 3", "2 5", "1 5"].join('\n'),
     output: "2",
     explanation: "Breadth-first Search finds the shortcut 1 → 2 → 5.",
   },
   {
-    input: ["5 3", "1 2", "2 3", "4 5", "1 5"].join("\\n"),
+    input: ["5 3", "1 2", "2 3", "4 5", "1 5"].join('\n'),
     output: "-1",
     explanation: "Spots 1–3 form a component that never reaches spot 5.",
   },
   {
-    input: ["6 6", "1 2", "1 3", "2 4", "3 5", "4 6", "5 6", "1 6"].join("\\n"),
+    input: ["6 6", "1 2", "1 3", "2 4", "3 5", "4 6", "5 6", "1 6"].join('\n'),
     output: "3",
     explanation: "Shortest path is 1 → 2 → 4 → 6 (three bridges).",
   },
   {
-    input: ["7 6", "1 2", "2 3", "3 4", "4 5", "5 6", "6 7", "4 4"].join("\\n"),
+    input: ["7 6", "1 2", "2 3", "3 4", "4 5", "5 6", "6 7", "4 4"].join('\n'),
     output: "0",
     explanation: "Start and goal are the same numbered spot.",
   },
@@ -600,19 +610,19 @@ const BFS_PARK_STEPS_TESTS = [
 const BFS_MAZE_SCOUT_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["3 3", "S..", ".##", "..T"].join("\\n"),
+    input: ["3 3", "S..", ".##", "..T"].join('\n'),
     output: "4",
     explanation: "One shortest walk is S → (1,0) → (2,0) → (2,1) → T.",
   },
   {
     title: "Example 2",
-    input: ["3 3", "S#T", "###", "..."].join("\\n"),
+    input: ["3 3", "S#T", "###", "..."].join('\n'),
     output: "-1",
     explanation: "Walls block every route to T, so the answer is -1.",
   },
   {
     title: "Example 3",
-    input: ["4 5", "S...#", ".#.#.", ".#..T", "....."].join("\\n"),
+    input: ["4 5", "S...#", ".#.#.", ".#..T", "....."].join('\n'),
     output: "6",
     explanation:
       "Breadth-first Search weaves through the open cells and reaches T in 6 steps.",
@@ -636,37 +646,37 @@ const BFS_MAZE_SCOUT_TESTS = [
     explanation: BFS_MAZE_SCOUT_EXAMPLES[2].explanation,
   },
   {
-    input: ["1 2", "ST"].join("\\n"),
+    input: ["1 2", "ST"].join('\n'),
     output: "1",
     explanation: "Moving right once reaches the treasure immediately.",
   },
   {
-    input: ["2 2", "S#", "#T"].join("\\n"),
+    input: ["2 2", "S#", "#T"].join('\n'),
     output: "-1",
     explanation: "Walls block every possible move toward T.",
   },
   {
-    input: ["3 4", "S..#", ".#..", "..T."].join("\\n"),
+    input: ["3 4", "S..#", ".#..", "..T."].join('\n'),
     output: "4",
     explanation: "We weave around the walls in four moves.",
   },
   {
-    input: ["4 4", "S..#", ".#.#", "...#", "..T."].join("\\n"),
+    input: ["4 4", "S..#", ".#.#", "...#", "..T."].join('\n'),
     output: "5",
     explanation: "A narrow corridor guides the scout to T in five steps.",
   },
   {
-    input: ["5 5", "S....", "#####", "....#", "#..#.", "..T.."].join("\\n"),
+    input: ["5 5", "S....", "#####", "....#", "#..#.", "..T.."].join('\n'),
     output: "-1",
     explanation: "The solid wall row traps S away from T.",
   },
   {
-    input: ["4 3", "S..", ".#.", ".#.", "..T"].join("\\n"),
+    input: ["4 3", "S..", ".#.", ".#.", "..T"].join('\n'),
     output: "5",
     explanation: "The scout must detour down the left column before turning.",
   },
   {
-    input: ["5 5", "S#...", ".#.#.", "..#..", ".##.#", "...T."].join("\\n"),
+    input: ["5 5", "S#...", ".#.#.", "..#..", ".##.#", "...T."].join('\n'),
     output: "7",
     explanation: "Seven careful moves wind through the maze to reach T.",
   },
@@ -682,12 +692,12 @@ const BFS_PROBLEMS: CodeProblem[] = [
       "You are planning a mini treasure hunt around the park. There are N numbered meeting spots connected by M two-way paths of equal length.",
       "",
       "Starting at spot s, print the fewest paths needed to reach spot t. If the goal is unreachable, print -1.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integers N and M — the number of spots and the number of paths.",
       "- Lines 2..(M+1): each line has two integers u v describing a two-way path between spots u and v.",
       "- Line M+2: integers s and t — the start and goal spots.",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: ["1 ≤ N ≤ 10_000", "0 ≤ M ≤ 20_000", "1 ≤ u, v, s, t ≤ N"],
     examples: BFS_PARK_STEPS_EXAMPLES,
     tests: BFS_PARK_STEPS_TESTS,
@@ -732,7 +742,7 @@ const BFS_PROBLEMS: CodeProblem[] = [
         "            queue.append(neighbour)",
         "",
         "print(distance[goal])",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
@@ -745,11 +755,11 @@ const BFS_PROBLEMS: CodeProblem[] = [
       "You are holding a simple map with R rows and C columns. 'S' marks your starting square, 'T' marks the treasure, '.' is open ground, and '#' is a wall.",
       "",
       "Move up, down, left, or right. Print the fewest moves needed to reach T. If the treasure cannot be reached, print -1.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integers R and C — the number of rows and columns.",
       "- Lines 2..(R+1): each line is a string of length C containing characters '.', '#', 'S', or 'T'.",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: [
       "1 ≤ R, C ≤ 200",
       "Exactly one 'S' and one 'T' appear in the grid.",
@@ -808,7 +818,7 @@ const BFS_PROBLEMS: CodeProblem[] = [
         "",
         "gr, gc = goal",
         "print(distance[gr][gc])",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
@@ -833,7 +843,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           "Imagine stacking glass tiles to climb a tower. Each tile records how many ways you know how to reach that height.",
           "",
           "Dynamic programming fills the tower from the ground up by trusting the answers already written on lower tiles.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Next idea",
       },
       {
@@ -845,7 +855,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           "Every DP solution picks a state — the question we want a number for — and a transition — how to combine smaller states to answer it.",
           "",
           "Good states only depend on answers we have already computed, so each new value is quick to assemble.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Makes sense",
       },
       {
@@ -857,7 +867,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           "Base cases are the floor tiles. They set exact answers for the smallest states so the rest of the tower does not float in the air.",
           "",
           "Without base cases, the recurrence would point to undefined work. With them, every new answer has somewhere solid to stand.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Ready to test",
       },
       {
@@ -897,37 +907,37 @@ const DP_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "dp-primer-recurrence",
         prompt:
-          "You store ways[i] = number of ways to stand on step i using jumps of 1 or 2. Which recurrence is correct?",
-        hint: "Think about the last jump used to land on step i.",
+          "You store `ways[i]` as the number of ways to land on step `i` using jumps of 1 or 2. Which recurrence is correct?",
+        hint: "Think about the last jump used to land on step `i`.",
         explanation:
-          "To land on step i you either step from i-1 or hop from i-2, so ways[i] is their sum.",
+          "To land on step `i` you either step from `i - 1` or hop from `i - 2`, so `ways[i]` is their sum.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "ways[i] = ways[i - 1] * ways[i - 2]",
+            text: "`ways[i] = ways[i - 1] * ways[i - 2]`",
           },
           {
             id: "B",
             label: "B",
-            text: "ways[i] = ways[i - 1] + ways[i - 2]",
+            text: "`ways[i] = ways[i - 1] + ways[i - 2]`",
           },
           {
             id: "C",
             label: "C",
-            text: "ways[i] = ways[i - 1] - ways[i - 2]",
+            text: "`ways[i] = ways[i - 1] - ways[i - 2]`",
           },
           {
             id: "D",
             label: "D",
-            text: "ways[i] = 2 * ways[i - 1]",
+            text: "`ways[i] = 2 * ways[i - 1]`",
           },
         ],
         correctOptionId: "B",
         correctFeedback: {
           heading: "Solid recurrence",
           message:
-            "Each path to step i ends with a 1-step jump from i-1 or a 2-step jump from i-2, so we add both counts.",
+            "Each path to step `i` ends with a 1-step jump from `i - 1` or a 2-step jump from `i - 2`, so we add both counts.",
         },
       },
       {
@@ -987,10 +997,10 @@ const DP_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "dp-primer-base",
         prompt:
-          "When counting stair paths, what value should ways[0] (the empty staircase) hold?",
+          "When counting stair paths, what value should `ways[0]` (the empty staircase) hold?",
         hint: "How many ways exist to stay exactly where you started?",
         explanation:
-          "There is exactly one way to stand still: take zero moves. That base case seeds the rest of the table.",
+          "There is exactly one way to stand still: take zero moves. Setting `ways[0] = 1` seeds the rest of the table.",
         options: [
           { id: "A", label: "A", text: "0" },
           { id: "B", label: "B", text: "1" },
@@ -1013,7 +1023,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           "Pick a state, write a recurrence that reuses smaller answers, anchor the base cases, and store everything in a table.",
           "",
           "Those four moves let you tame counting, optimisation, and scheduling puzzles with confidence.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Onward",
       },
     ],
@@ -1031,15 +1041,15 @@ const DP_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "dp-wrap-state",
         prompt:
-          "In Stair Sprint, what does dp[i] represent after filling the table?",
-        hint: "It counts something about landing exactly on step i.",
+          "In Stair Sprint, what does `dp[i]` represent after filling the table?",
+        hint: "It counts something about landing exactly on step `i`.",
         explanation:
-          "dp[i] equals the number of distinct sequences of allowed jumps that land exactly on step i.",
+          "`dp[i]` equals the number of distinct sequences of allowed jumps that land exactly on step `i`.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "The minimum number of jumps needed to reach step i",
+            text: "The minimum number of jumps needed to reach step `i`",
           },
           {
             id: "B",
@@ -1049,19 +1059,19 @@ const DP_QUIZZES: QuizDefinition[] = [
           {
             id: "C",
             label: "C",
-            text: "The number of ways to reach step i",
+            text: "The number of ways to reach step `i`",
           },
           {
             id: "D",
             label: "D",
-            text: "Whether step i is broken or safe",
+            text: "Whether step `i` is broken or safe",
           },
         ],
         correctOptionId: "C",
         correctFeedback: {
           heading: "Spot on",
           message:
-            "Knowing that dp[i] counts paths lets you reuse dp[i - step] for every allowed step.",
+            "Knowing that `dp[i]` counts paths lets you reuse `dp[i - step]` for every allowed step.",
         },
       },
       {
@@ -1084,10 +1094,10 @@ const DP_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "dp-wrap-museum",
         prompt:
-          "The recurrence dp[i] = max(dp[i-1], value[i] + dp[i-2]) in Museum Guard ensures what behaviour?",
-        hint: "Think about the choice to skip or take the i-th room.",
+          "The recurrence `dp[i] = max(dp[i-1], value[i] + dp[i-2])` in Museum Guard ensures what behaviour?",
+        hint: "Think about the choice to skip or take the `i`-th room.",
         explanation:
-          "It compares skipping room i (dp[i-1]) with taking it and adding the best non-adjacent total (value[i] + dp[i-2]).",
+          "It compares skipping room `i` (`dp[i-1]`) with taking it and adding the best non-adjacent total (`value[i] + dp[i-2]`).",
         options: [
           {
             id: "A",
@@ -1102,7 +1112,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           {
             id: "C",
             label: "C",
-            text: "We decide whether to take room i while respecting the no-adjacent rule",
+            text: "We decide whether to take room `i` while respecting the no-adjacent rule",
           },
           {
             id: "D",
@@ -1114,7 +1124,7 @@ const DP_QUIZZES: QuizDefinition[] = [
         correctFeedback: {
           heading: "Well reasoned",
           message:
-            "The recurrence keeps both possibilities and chooses the better one for room i.",
+            "The recurrence keeps both possibilities and chooses the better one for room `i`.",
         },
       },
       {
@@ -1159,9 +1169,9 @@ const DP_QUIZZES: QuizDefinition[] = [
         id: "dp-wrap-memory",
         prompt:
           "In Museum Guard, how many previous DP values must you keep at any moment to update the next answer?",
-        hint: "Look at the recurrence dp[i] = max(dp[i-1], value[i] + dp[i-2]).",
+        hint: "Look at the recurrence `dp[i] = max(dp[i-1], value[i] + dp[i-2])`.",
         explanation:
-          "You only need dp[i-1] and dp[i-2], so two running totals are enough.",
+          "You only need `dp[i-1]` and `dp[i-2]`, so two running totals are enough.",
         answer: "2",
         acceptableAnswers: ["two", "Two"],
         correctFeedback: {
@@ -1179,7 +1189,7 @@ const DP_QUIZZES: QuizDefinition[] = [
           "Name your state, store its base cases, choose transitions that reuse finished subproblems, and keep just the memory you need.",
           "",
           "Those instincts unlock counting paths, guarding museums, and the tougher DP adventures ahead.",
-        ].join("\\n"),
+        ].join('\n'),
         continueLabel: "Got it",
       },
     ],
@@ -1189,21 +1199,21 @@ const DP_QUIZZES: QuizDefinition[] = [
 const DP_STAIR_SPRINT_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["4 2", "1 2"].join("\\n"),
+    input: ["4 2", "1 2"].join('\n'),
     output: "5",
     explanation:
       "Paths: 1+1+1+1, 1+1+2, 1+2+1, 2+1+1, and 2+2 make five routes.",
   },
   {
     title: "Example 2",
-    input: ["6 3", "1 3 5"].join("\\n"),
+    input: ["6 3", "1 3 5"].join('\n'),
     output: "8",
     explanation:
       "Reuse the smaller counts: ways build from step 0, 1, and 3 to reach 6 in eight combinations.",
   },
   {
     title: "Example 3",
-    input: ["5 2", "2 4"].join("\\n"),
+    input: ["5 2", "2 4"].join('\n'),
     output: "0",
     explanation:
       "Every jump size is even, so you can never land exactly on odd step 5.",
@@ -1227,37 +1237,37 @@ const DP_STAIR_SPRINT_TESTS = [
     explanation: DP_STAIR_SPRINT_EXAMPLES[2].explanation,
   },
   {
-    input: ["0 1", "3"].join("\\n"),
+    input: ["0 1", "3"].join('\n'),
     output: "1",
     explanation: "The empty climb has exactly one plan: take zero moves.",
   },
-  { input: ["1 3", "1 2 3"].join("\\n"), output: "1" },
-  { input: ["10 2", "1 2"].join("\\n"), output: "89" },
-  { input: ["7 2", "2 3"].join("\\n"), output: "3" },
-  { input: ["12 3", "1 3 4"].join("\\n"), output: "169" },
-  { input: ["15 3", "1 5 6"].join("\\n"), output: "84" },
-  { input: ["25 2", "2 5"].join("\\n"), output: "68" },
-  { input: ["30 3", "1 2 5"].join("\\n"), output: "5508222" },
+  { input: ["1 3", "1 2 3"].join('\n'), output: "1" },
+  { input: ["10 2", "1 2"].join('\n'), output: "89" },
+  { input: ["7 2", "2 3"].join('\n'), output: "3" },
+  { input: ["12 3", "1 3 4"].join('\n'), output: "169" },
+  { input: ["15 3", "1 5 6"].join('\n'), output: "84" },
+  { input: ["25 2", "2 5"].join('\n'), output: "68" },
+  { input: ["30 3", "1 2 5"].join('\n'), output: "5508222" },
 ];
 
 const DP_MUSEUM_GUARD_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["5", "4 2 7 6 3"].join("\\n"),
+    input: ["5", "4 2 7 6 3"].join('\n'),
     output: "14",
     explanation:
       "Take rooms 1, 3, and 5 (1-indexed) for values 4 + 7 + 3 = 14 while skipping neighbours.",
   },
   {
     title: "Example 2",
-    input: ["4", "5 1 1 5"].join("\\n"),
+    input: ["4", "5 1 1 5"].join('\n'),
     output: "10",
     explanation:
       "Guard rooms 1 and 4 for a total of 10; taking rooms 2 or 3 would block that combo.",
   },
   {
     title: "Example 3",
-    input: ["6", "6 4 8 3 5 7"].join("\\n"),
+    input: ["6", "6 4 8 3 5 7"].join('\n'),
     output: "21",
     explanation:
       "Rooms 1, 3, and 6 grant 6 + 8 + 7 = 21 without breaking the adjacency rule.",
@@ -1280,14 +1290,14 @@ const DP_MUSEUM_GUARD_TESTS = [
     output: DP_MUSEUM_GUARD_EXAMPLES[2].output,
     explanation: DP_MUSEUM_GUARD_EXAMPLES[2].explanation,
   },
-  { input: ["1", "9"].join("\\n"), output: "9" },
-  { input: ["2", "8 5"].join("\\n"), output: "8" },
-  { input: ["3", "3 9 4"].join("\\n"), output: "9" },
-  { input: ["5", "2 7 9 3 1"].join("\\n"), output: "12" },
-  { input: ["5", "10 10 10 10 10"].join("\\n"), output: "30" },
-  { input: ["8", "1 2 3 4 5 6 7 8"].join("\\n"), output: "20" },
-  { input: ["7", "100 1 1 100 1 1 100"].join("\\n"), output: "300" },
-  { input: ["4", "0 0 0 0"].join("\\n"), output: "0" },
+  { input: ["1", "9"].join('\n'), output: "9" },
+  { input: ["2", "8 5"].join('\n'), output: "8" },
+  { input: ["3", "3 9 4"].join('\n'), output: "9" },
+  { input: ["5", "2 7 9 3 1"].join('\n'), output: "12" },
+  { input: ["5", "10 10 10 10 10"].join('\n'), output: "30" },
+  { input: ["8", "1 2 3 4 5 6 7 8"].join('\n'), output: "20" },
+  { input: ["7", "100 1 1 100 1 1 100"].join('\n'), output: "300" },
+  { input: ["4", "0 0 0 0"].join('\n'), output: "0" },
 ];
 
 const DP_PROBLEMS: CodeProblem[] = [
@@ -1300,11 +1310,11 @@ const DP_PROBLEMS: CodeProblem[] = [
       "You stand at the bottom of a staircase with n steps and a set of allowed jump sizes.",
       "",
       "Count how many distinct ordered jump sequences land you exactly on the top step.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integers n and k (0 ≤ n ≤ 50, 1 ≤ k ≤ 5) — stair height and number of jump sizes.",
       "- Line 2: k distinct positive integers giving the allowed jump sizes in any order.",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: ["0 ≤ n ≤ 50", "1 ≤ k ≤ 5", "1 ≤ jump ≤ 10"],
     examples: DP_STAIR_SPRINT_EXAMPLES,
     tests: DP_STAIR_SPRINT_TESTS,
@@ -1335,7 +1345,7 @@ const DP_PROBLEMS: CodeProblem[] = [
         "        total += dp[i - step]",
         "    dp[i] = total",
         "print(dp[n])",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
@@ -1348,11 +1358,11 @@ const DP_PROBLEMS: CodeProblem[] = [
       "You patrol a hallway of n display rooms. Each room has a value representing how exciting it is to guard.",
       "",
       "Pick a subset of rooms to maximise total value, but you cannot guard two adjacent rooms the same night.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integer n (1 ≤ n ≤ 200_000) — number of rooms.",
       "- Line 2: n integers value_i (−10^6 ≤ value_i ≤ 10^6) for each room.",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: ["1 ≤ n ≤ 200_000", "−1_000_000 ≤ value ≤ 1_000_000"],
     examples: DP_MUSEUM_GUARD_EXAMPLES,
     tests: DP_MUSEUM_GUARD_TESTS,
@@ -1377,7 +1387,7 @@ const DP_PROBLEMS: CodeProblem[] = [
         "for value in values:",
         "    prev2, prev1 = prev1, max(prev1, prev2 + value)",
         "print(prev1)",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
@@ -1399,10 +1409,13 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt: "Prime-Locked Gate",
         eyebrow: "Story",
         body: [
-          "A vault opens only when you turn a wheel with numbers 0…p-1 where p is prime.",
+          "**Prime-locked** vaults only respond to residues 0…p-1 when p stays prime.",
           "",
-          'Every spin is really "take the remainder mod p". Drop huge numbers and the lock only cares about their remainders.',
-        ].join("\\n"),
+          "- Every spin is just `value mod p`.",
+          "- Giant inputs collapse to the tiny remainder the lock understands.",
+          "",
+          "_Keep that cycle in mind before we reveal Fermat's shortcut._",
+        ].join('\n'),
         continueLabel: "Next idea",
       },
       {
@@ -1411,10 +1424,11 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt: "Prime Mod Cycles",
         eyebrow: "Pattern",
         body: [
-          "When p is prime, multiplying remainders 1…p-1 just permutes the set.",
+          "When `p` is prime, multiplying residues `1…p-1` just **reshuffles** the set.",
           "",
-          "That symmetry is why multiplying by a non-zero number never leaves zero behind.",
-        ].join("\\n"),
+          "- No residue vanishes; products stay inside `{1, …, p-1}`.",
+          "- The balance shatters the moment you let `p` be composite.",
+        ].join('\n'),
         continueLabel: "Makes sense",
       },
       {
@@ -1423,25 +1437,26 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt: "Fermat's Shortcut",
         eyebrow: "Theorem",
         body: [
-          "Fermat's little theorem says a^(p-1) ≡ 1 (mod p) whenever p is prime and p does not divide a.",
+          "Fermat's little theorem: `a^(p-1) ≡ 1 (mod p)` whenever `gcd(a, p) = 1`.",
           "",
-          "That tiny sentence builds fast power tricks and modular inverses.",
-        ].join("\\n"),
+          "- Slash huge exponents modulo `p` by cycling every `p-1` steps.",
+          "- Multiply both sides by `a^{-1}` to summon modular inverses.",
+        ].join('\n'),
         continueLabel: "Ready to test",
       },
       {
         kind: "multiple-choice",
         id: "flt-primer-naive",
         prompt:
-          'Why is "multiply a by itself b times" a terrible plan when computing a^b mod p for huge b?',
-        hint: "Think about how big the intermediate numbers become.",
+          'Why is "_multiply `a` by itself `b` times_" a terrible plan when computing `a^b mod p` for huge `b`?',
+        hint: "Think about how big the intermediate numbers become without taking `mod`.",
         explanation:
-          "Intermediate products explode far beyond what fits in native integers; taking mod each step keeps numbers tame.",
+          "Intermediate products explode far beyond native limits; applying `mod p` every step keeps numbers tame.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "The numbers explode and overflow before we can apply the modulus",
+            text: "The numbers explode and overflow before you apply `mod p` each time",
           },
           {
             id: "B",
@@ -1451,7 +1466,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
           {
             id: "C",
             label: "C",
-            text: "It only works when b is a power of two",
+            text: "It only works when `b` is a power of two",
           },
           {
             id: "D",
@@ -1463,41 +1478,48 @@ const FLT_QUIZZES: QuizDefinition[] = [
         correctFeedback: {
           heading: "Exactly",
           message:
-            "Binary exponentiation keeps numbers small by squaring and reducing mod p at every step.",
+            "Binary exponentiation keeps numbers small by squaring and reducing `mod p` at every step.",
         },
       },
       {
         kind: "multiple-choice",
         id: "flt-primer-value",
-        prompt: "If p is prime and gcd(a, p) = 1, what is a^(p-1) mod p?",
+        prompt: "If `p` is prime and `gcd(a, p) = 1`, what is `a^(p-1) mod p`?",
         hint: "This is the headline of Fermat's little theorem.",
-        explanation: "Fermat's little theorem states a^(p-1) ≡ 1 (mod p).",
+        explanation: "Fermat's little theorem states `a^(p-1) ≡ 1 (mod p)`.",
         options: [
-          { id: "A", label: "A", text: "0" },
-          { id: "B", label: "B", text: "1" },
-          { id: "C", label: "C", text: "p" },
-          { id: "D", label: "D", text: "a" },
+          { id: "A", label: "A", text: "`0`" },
+          { id: "B", label: "B", text: "`1`" },
+          { id: "C", label: "C", text: "`p`" },
+          { id: "D", label: "D", text: "`a`" },
         ],
         correctOptionId: "B",
         correctFeedback: {
           heading: "Right on",
           message:
-            "Every non-zero residue raised to the (p-1)th power loops back to 1 mod p.",
+            "Every non-zero residue raised to the `(p - 1)`th power loops back to `1 (mod p)`.",
         },
       },
       {
         kind: "type-answer",
         id: "flt-primer-blank",
-        prompt:
-          "Complete the sentence: Fermat's little theorem says a^(p-1) ≡ ___ (mod p) whenever gcd(a, p) = 1.",
-        hint: "It's a single digit.",
+        prompt: [
+          "Complete the sentence: Fermat's little theorem says",
+          "",
+          "`a^(p-1) ≡ ___ (mod p)`",
+          "",
+          "whenever",
+          "",
+          "`gcd(a, p) = 1`.",
+        ].join('\n'),
+        hint: "_It's a single digit._",
         explanation:
-          "The blank is 1, showing the cycle resets after p-1 steps.",
+          "The blank is `1`, showing the cycle resets after `p - 1` steps.",
         answer: "1",
         acceptableAnswers: ["one"],
         correctFeedback: {
           heading: "Correct",
-          message: "That 1 unlocks modular inverses and exponent reductions.",
+          message: "That `1` unlocks modular inverses and exponent reductions.",
         },
       },
       {
@@ -1505,36 +1527,36 @@ const FLT_QUIZZES: QuizDefinition[] = [
         id: "flt-primer-fail",
         prompt:
           "Which situation breaks Fermat's little theorem so the shortcut no longer holds?",
-        hint: "Check the assumptions about p and a.",
+        hint: "Check the assumptions about `p` and `a`.",
         explanation:
-          "If a shares a factor with p (for example a is a multiple of p) the theorem does not apply.",
+          "If `gcd(a, p) ≠ 1` (for example `a` is a multiple of `p`) the theorem does not apply.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "p is prime and gcd(a, p) = 1",
+            text: "`p` is prime and `gcd(a, p) = 1`",
           },
           {
             id: "B",
             label: "B",
-            text: "p = 35 and a = 2",
+            text: "`p = 35` and `a = 2`",
           },
           {
             id: "C",
             label: "C",
-            text: "p is prime but a is a multiple of p",
+            text: "`p` is prime but `a` is a multiple of `p`",
           },
           {
             id: "D",
             label: "D",
-            text: "p is prime and a = 1",
+            text: "`p` is prime and `a = 1`",
           },
         ],
         correctOptionId: "C",
         correctFeedback: {
           heading: "Good catch",
           message:
-            "We need gcd(a, p) = 1. When a is divisible by p, the conclusion collapses.",
+            "We need `gcd(a, p) = 1`. When `a` is divisible by `p`, the conclusion collapses.",
         },
       },
       {
@@ -1542,9 +1564,9 @@ const FLT_QUIZZES: QuizDefinition[] = [
         id: "flt-primer-binary",
         prompt:
           "Name the fast algorithm that squares the base and halves the exponent to compute powers quickly.",
-        hint: 'Two words: starts with "binary".',
+        hint: "_Two words_: starts with `binary`.",
         explanation:
-          "Binary exponentiation (a.k.a. exponentiation by squaring) computes large powers in O(log b).",
+          "`Binary exponentiation` (a.k.a. exponentiation by squaring) computes large powers in **O(log b)** steps.",
         answer: "binary exponentiation",
         acceptableAnswers: [
           "Binary exponentiation",
@@ -1563,10 +1585,13 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt: "Shortcut secured",
         eyebrow: "Recap",
         body: [
-          "Mod with primes keeps remainders cycling neatly. Raise any non-zero residue to p-1 and you land on 1.",
+          "**Remember**: when `gcd(a, p) = 1`, `a^(p-1) ≡ 1 (mod p)`.",
           "",
-          "From there you get fast exponentiation and modular inverses almost for free.",
-        ].join("\\n"),
+          "- Reduce wild exponents by stripping multiples of `p-1`.",
+          "- Reach for `a^(p-2)` to pull modular inverses instantly.",
+          "",
+          "_These habits keep number theory fast and steady._",
+        ].join('\n'),
         continueLabel: "Onward",
       },
     ],
@@ -1584,15 +1609,15 @@ const FLT_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "flt-wrap-inverse",
         prompt:
-          "Why does pow(a, p - 2, p) return the modular inverse of a when p is prime and gcd(a, p) = 1?",
-        hint: "Raise a to p-1 and look at the extra a factor.",
+          "Why does `pow(a, p - 2, p)` return the modular inverse of `a` when `p` is prime and `gcd(a, p) = 1`?",
+        hint: "Raise `a` to `p - 1` and look at the extra `a` factor.",
         explanation:
-          "Because a^(p-1) ≡ 1 (mod p), multiplying both sides by a^(-1) shows a^(p-2) is the inverse.",
+          "Because `a^(p-1) ≡ 1 (mod p)`, multiplying both sides by `a^(-1)` shows `a^(p-2)` is the inverse.",
         options: [
           {
             id: "A",
             label: "A",
-            text: "Because pow always divides by p before multiplying",
+            text: "Because `pow` always divides by `p` before multiplying",
           },
           {
             id: "B",
@@ -1602,7 +1627,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
           {
             id: "C",
             label: "C",
-            text: "It only works when a = 1",
+            text: "It only works when `a = 1`",
           },
           {
             id: "D",
@@ -1614,37 +1639,37 @@ const FLT_QUIZZES: QuizDefinition[] = [
         correctFeedback: {
           heading: "Exactly",
           message:
-            "Multiplying a^(p-2) by a gives a^(p-1) ≡ 1, so a^(p-2) behaves as the inverse.",
+            "Multiplying `a^(p-2)` by `a` gives `a^(p-1) ≡ 1 (mod p)`, so `a^(p-2)` behaves as the inverse.",
         },
       },
       {
         kind: "type-answer",
         id: "flt-wrap-zero",
         prompt:
-          "If a is divisible by p, what value should our modular inverse routine output?",
-        hint: "It signals that no inverse exists.",
+          "If `a` is divisible by `p`, what value should our modular inverse routine output?",
+        hint: "_It signals that no inverse exists._",
         explanation:
-          "When a ≡ 0 mod p there is no multiplicative inverse; returning -1 keeps the contract clear.",
+          "When `a ≡ 0 (mod p)` there is no multiplicative inverse; returning `-1` keeps the contract clear.",
         answer: "-1",
         acceptableAnswers: ["negative one", "- 1"],
         correctFeedback: {
           heading: "Right call",
-          message: "-1 separates impossible cases from real inverses.",
+          message: "`-1` separates impossible cases from real inverses.",
         },
       },
       {
         kind: "multiple-choice",
         id: "flt-wrap-complexity",
         prompt:
-          "Binary exponentiation runs in which time complexity with respect to the exponent b?",
-        hint: "Count how often you halve b.",
+          "Binary exponentiation runs in which time complexity with respect to the exponent `b`?",
+        hint: "Count how often you halve `b`.",
         explanation:
-          "Each step halves the exponent, so the loop runs O(log b) times.",
+          "Each step halves the exponent, so the loop runs **O(log b)** times.",
         options: [
-          { id: "A", label: "A", text: "O(b)" },
-          { id: "B", label: "B", text: "O(log b)" },
-          { id: "C", label: "C", text: "O(b log b)" },
-          { id: "D", label: "D", text: "O(1)" },
+          { id: "A", label: "A", text: "`O(b)`" },
+          { id: "B", label: "B", text: "`O(log b)`" },
+          { id: "C", label: "C", text: "`O(b log b)`" },
+          { id: "D", label: "D", text: "`O(1)`" },
         ],
         correctOptionId: "B",
         correctFeedback: {
@@ -1657,10 +1682,10 @@ const FLT_QUIZZES: QuizDefinition[] = [
         kind: "multiple-choice",
         id: "flt-wrap-reduce",
         prompt:
-          "When is it safe to reduce the exponent b using b % (p - 1) before powering?",
-        hint: "Check the conditions of Fermat's little theorem again.",
+          "When is it safe to reduce the exponent `b` using `b % (p - 1)` before powering?",
+        hint: "Check the conditions of Fermat's little theorem again: `p` prime and `gcd(a, p) = 1`.",
         explanation:
-          "You can reduce the exponent when gcd(a, p) = 1; then a^(p-1) cycles to 1.",
+          "You can reduce the exponent when `gcd(a, p) = 1`; then `a^(p-1) ≡ 1 (mod p)` resets the cycle.",
         options: [
           {
             id: "A",
@@ -1670,7 +1695,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
           {
             id: "B",
             label: "B",
-            text: "Only when gcd(a, p) = 1 and p is prime",
+            text: "Only when `gcd(a, p) = 1` and `p` is prime",
           },
           {
             id: "C",
@@ -1687,7 +1712,7 @@ const FLT_QUIZZES: QuizDefinition[] = [
         correctFeedback: {
           heading: "Good condition",
           message:
-            "Reducing by p-1 relies on Fermat, so we need the gcd to be 1 and p to be prime.",
+            "Reducing by `(p - 1)` relies on Fermat, so we need `gcd(a, p) = 1` and `p` to be prime.",
         },
       },
       {
@@ -1695,9 +1720,9 @@ const FLT_QUIZZES: QuizDefinition[] = [
         id: "flt-wrap-mod",
         prompt:
           "What operation do we apply after each multiplication step to keep numbers bounded by the modulus?",
-        hint: "It's a three-letter word.",
+        hint: "_It's a three-letter word._",
         explanation:
-          "Taking the result mod p after every multiply keeps values small and correct.",
+          "Taking the result `mod p` after every multiply keeps values small and correct.",
         answer: "mod",
         acceptableAnswers: ["modulo", "take mod"],
         correctFeedback: {
@@ -1712,10 +1737,14 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt: "Number theory boost",
         eyebrow: "Recap",
         body: [
-          "Binary exponentiation + Fermat's little theorem unlock fast powers and instant inverses under a prime modulus.",
+          "**Toolkit recap** before you leave this vault:",
           "",
-          "Remember the assumptions and the gateway to harder number theory stays wide open.",
-        ].join("\\n"),
+          "- Use `pow(a, p - 2, p)` whenever `gcd(a, p) = 1`.",
+          "- Shrink exponents with `b % (p - 1)` to recycle the cycle.",
+          "- Apply `mod` after every multiply to stay bounded.",
+          "",
+          "_Respect the assumptions and the harder puzzles stay wide open._",
+        ].join('\n'),
         continueLabel: "Ready",
       },
     ],
@@ -1725,20 +1754,20 @@ const FLT_QUIZZES: QuizDefinition[] = [
 const FLT_PRIME_POWER_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["17 5 9"].join("\\n"),
+    input: ["17 5 9"].join('\n'),
     output: "12",
     explanation: "pow(5, 9) = 1,953,125; reducing mod 17 leaves 12.",
   },
   {
     title: "Example 2",
-    input: ["13 8 100"].join("\\n"),
+    input: ["13 8 100"].join('\n'),
     output: "1",
     explanation:
       "Fermat shrinks the exponent: 8^(12) ≡ 1 mod 13, so 8^100 collapses to 1.",
   },
   {
     title: "Example 3",
-    input: ["29 10 1234567890123"].join("\\n"),
+    input: ["29 10 1234567890123"].join('\n'),
     output: "19",
     explanation:
       "Binary exponentiation keeps each squaring small; the final remainder is 19.",
@@ -1761,31 +1790,31 @@ const FLT_PRIME_POWER_TESTS = [
     output: FLT_PRIME_POWER_EXAMPLES[2].output,
     explanation: FLT_PRIME_POWER_EXAMPLES[2].explanation,
   },
-  { input: ["11 7 0"].join("\\n"), output: "1" },
-  { input: ["2 1 1000000000000"].join("\\n"), output: "1" },
-  { input: ["5 0 13"].join("\\n"), output: "0" },
-  { input: ["101 37 123456789"].join("\\n"), output: "31" },
-  { input: ["997 996 314159265358"].join("\\n"), output: "1" },
-  { input: ["97 53 42"].join("\\n"), output: "50" },
-  { input: ["3 2 27"].join("\\n"), output: "2" },
+  { input: ["11 7 0"].join('\n'), output: "1" },
+  { input: ["2 1 1000000000000"].join('\n'), output: "1" },
+  { input: ["5 0 13"].join('\n'), output: "0" },
+  { input: ["101 37 123456789"].join('\n'), output: "31" },
+  { input: ["997 996 314159265358"].join('\n'), output: "1" },
+  { input: ["97 53 42"].join('\n'), output: "50" },
+  { input: ["3 2 27"].join('\n'), output: "2" },
 ];
 
 const FLT_MODULAR_KEYSMITH_EXAMPLES = [
   {
     title: "Example 1",
-    input: ["13 3", "2 5 8"].join("\\n"),
+    input: ["13 3", "2 5 8"].join('\n'),
     output: "7 8 5",
     explanation: "Inverses: 2^-1 ≡ 7, 5^-1 ≡ 8, 8^-1 ≡ 5 mod 13.",
   },
   {
     title: "Example 2",
-    input: ["23 4", "1 11 22 7"].join("\\n"),
+    input: ["23 4", "1 11 22 7"].join('\n'),
     output: "1 21 22 10",
     explanation: "22 already equals its inverse because 22*22 ≡ 1 mod 23.",
   },
   {
     title: "Example 3",
-    input: ["19 3", "19 38 5"].join("\\n"),
+    input: ["19 3", "19 38 5"].join('\n'),
     output: "-1 -1 4",
     explanation:
       "Numbers divisible by 19 have no inverse, while 5^-1 ≡ 4 mod 19.",
@@ -1808,16 +1837,16 @@ const FLT_MODULAR_KEYSMITH_TESTS = [
     output: FLT_MODULAR_KEYSMITH_EXAMPLES[2].output,
     explanation: FLT_MODULAR_KEYSMITH_EXAMPLES[2].explanation,
   },
-  { input: ["17 4", "4 6 15 16"].join("\\n"), output: "13 3 8 16" },
-  { input: ["29 5", "3 10 21 28 29"].join("\\n"), output: "10 3 18 28 -1" },
-  { input: ["101 4", "1 50 75 100"].join("\\n"), output: "1 99 66 100" },
-  { input: ["43 5", "7 14 21 28 35"].join("\\n"), output: "37 40 41 20 16" },
+  { input: ["17 4", "4 6 15 16"].join('\n'), output: "13 3 8 16" },
+  { input: ["29 5", "3 10 21 28 29"].join('\n'), output: "10 3 18 28 -1" },
+  { input: ["101 4", "1 50 75 100"].join('\n'), output: "1 99 66 100" },
+  { input: ["43 5", "7 14 21 28 35"].join('\n'), output: "37 40 41 20 16" },
   {
-    input: ["97 6", "12 24 36 48 60 72"].join("\\n"),
+    input: ["97 6", "12 24 36 48 60 72"].join('\n'),
     output: "89 93 62 95 76 31",
   },
-  { input: ["11 5", "0 1 2 3 4"].join("\\n"), output: "-1 1 6 4 3" },
-  { input: ["13 1", "1"].join("\\n"), output: "1" },
+  { input: ["11 5", "0 1 2 3 4"].join('\n'), output: "-1 1 6 4 3" },
+  { input: ["13 1", "1"].join('\n'), output: "1" },
 ];
 
 const FLT_PROBLEMS: CodeProblem[] = [
@@ -1830,10 +1859,10 @@ const FLT_PROBLEMS: CodeProblem[] = [
       "Compute a^b mod p without getting buried under gigantic intermediate numbers.",
       "",
       "Use fast exponentiation and Fermat's little theorem to keep everything lightweight.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integers p, a, b with p prime (2 ≤ p ≤ 1_000_000_007), 0 ≤ a < p, 0 ≤ b ≤ 10^18.",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: ["2 ≤ p ≤ 1_000_000_007", "0 ≤ a < p", "0 ≤ b ≤ 10^18"],
     examples: FLT_PRIME_POWER_EXAMPLES,
     tests: FLT_PRIME_POWER_TESTS,
@@ -1862,7 +1891,7 @@ const FLT_PROBLEMS: CodeProblem[] = [
         "    base = (base * base) % p",
         "    exponent //= 2",
         "print(result if b != 0 or a != 0 else 1)",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
@@ -1875,11 +1904,11 @@ const FLT_PROBLEMS: CodeProblem[] = [
       "Forge modular inverses for several numbers under the same prime modulus.",
       "",
       "Return -1 whenever a number shares a factor with the modulus.",
-    ].join("\\n"),
+    ].join('\n'),
     inputFormat: [
       "- Line 1: integers p and q — prime modulus and number of keys (2 ≤ p ≤ 1_000_000_007, 1 ≤ q ≤ 100_000).",
       "- Line 2: q integers a_i (0 ≤ a_i < 10^18).",
-    ].join("\\n"),
+    ].join('\n'),
     constraints: [
       "2 ≤ p ≤ 1_000_000_007",
       "1 ≤ q ≤ 100_000",
@@ -1911,7 +1940,7 @@ const FLT_PROBLEMS: CodeProblem[] = [
         "    else:",
         "        parts.append(str(pow(value % p, p - 2, p)))",
         "print(' '.join(parts))",
-      ].join("\\n"),
+      ].join('\n'),
     },
     metadataVersion: 2,
   },
