@@ -175,14 +175,36 @@ export type StoryProseResult = {
     draftText: string;
     analysis: StoryProseRevisionAnalysis;
     improvementSummary: string;
+    validation?: StoryProseValidationResult;
   };
 };
 
 export type StoryProseDraftResult = StoryProseResult;
 
+export type StoryProseValidationIssue = {
+  summary: string;
+  category:
+    | "factual"
+    | "naming"
+    | "terminology"
+    | "structure"
+    | "tone"
+    | "requirement"
+    | "other";
+  severity: "critical" | "major" | "minor";
+  evidence: string;
+  recommendation: string;
+};
+
+export type StoryProseValidationResult = {
+  verdict: "pass" | "fail";
+  issues: StoryProseValidationIssue[];
+};
+
 export type StoryProseRevisionResult = StoryProseResult & {
   analysis: StoryProseRevisionAnalysis;
   improvementSummary: string;
+  validation?: StoryProseValidationResult;
 };
 
 export type GeneratedStoryImage = {
@@ -272,11 +294,33 @@ const StoryProseRevisionAnalysisSchema = z.object({
   motivationalPower: StoryProseRevisionCriterionSchema,
 });
 
+const StoryProseValidationIssueSchema = z.object({
+  summary: z.string().trim().min(1),
+  category: z.enum([
+    "factual",
+    "naming",
+    "terminology",
+    "structure",
+    "tone",
+    "requirement",
+    "other",
+  ]),
+  severity: z.enum(["critical", "major", "minor"]),
+  evidence: z.string().trim().min(1),
+  recommendation: z.string().trim().min(1),
+});
+
+const StoryProseValidationResultSchema = z.object({
+  verdict: z.enum(["pass", "fail"]),
+  issues: z.array(StoryProseValidationIssueSchema),
+});
+
 const StoryProseRevisionCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
   text: z.string().trim().min(1),
   analysis: StoryProseRevisionAnalysisSchema,
   improvementSummary: z.string().trim().min(1),
+  validation: StoryProseValidationResultSchema.optional(),
 });
 
 type StoryProseRevisionCheckpoint = z.infer<
@@ -432,6 +476,46 @@ const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["summary", "category", "severity", "evidence", "recommendation"],
+  propertyOrdering: ["summary", "category", "severity", "evidence", "recommendation"],
+  properties: {
+    summary: { type: Type.STRING, minLength: "1" },
+    category: {
+      type: Type.STRING,
+      enum: [
+        "factual",
+        "naming",
+        "terminology",
+        "structure",
+        "tone",
+        "requirement",
+        "other",
+      ],
+    },
+    severity: {
+      type: Type.STRING,
+      enum: ["critical", "major", "minor"],
+    },
+    evidence: { type: Type.STRING, minLength: "1" },
+    recommendation: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const STORY_PROSE_VALIDATION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["verdict", "issues"],
+  propertyOrdering: ["verdict", "issues"],
+  properties: {
+    verdict: { type: Type.STRING, enum: ["pass", "fail"] },
+    issues: {
+      type: Type.ARRAY,
+      items: STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA,
+    },
+  },
+};
+
 export function buildStoryIdeaPrompt(topic: string): string {
   return `### **Prompt 1: The Story Architect's Brief**
 
@@ -538,6 +622,7 @@ Guardrails:
 - Make clear this lesson will reveal the trick. Gently hint that short in-lesson exercises will let the listener try it—do not write explicit call-to-action wording.
 - Historical accuracy: only reference famous anecdotes/quotes when they are associated with the same concept/result; otherwise omit them or, if helpful, reframe as foreshadowing of a later milestone without attributing it to the current concept.
  - Fact-checking: if any historical detail (names, dates, places, artifacts) is uncertain, use web search to verify before relying on it. Do not include citations in the story; correct the prose instead.
+- Keep vocabulary accessible to curious 12–16 year olds. Prefer everyday words like "lawyer" or "judge" instead of specialist titles such as "magistrate" or "jurist" unless you briefly define them.
 
 Hard requirements for this concept:
 - Explicitly name the concept "${topic}" in the first 3–4 sentences. Do not postpone the term to the ending.
@@ -572,6 +657,7 @@ Weave the provided elements into a seamless story that makes the concept feel li
 * **Plain, Natural Language:** Avoid grandiose or emotionally charged adjectives (e.g., colossal, gigantic, revolutionary). Use such adjectives at most 1–2 times across the entire story, and never more than one in a single sentence.
 * **Measured Claims:** Prefer neutral, specific phrasing over sweeping statements. Replace extreme claims (e.g., "could take a lifetime") with grounded context or simple statements of difficulty.
 * **Tone:** Intelligent, intriguing, and respectful of the audience's curiosity.
+* **Vocabulary:** Use CEFR B2-or-simpler word choices; if a precise historical role demands a rarer word, define it in the same sentence.
 * **Title:** Provide a 2-4 word title for the story.
 
 Respond with the title on its own line followed by the story paragraphs.
@@ -581,7 +667,11 @@ Respond with the title on its own line followed by the story paragraphs.
 export function buildStoryRevisionPrompt(
   topic: string,
   storyDraft: string,
+  feedback?: string,
 ): string {
+  const feedbackSection = feedback && feedback.trim().length > 0
+    ? `\n**Additional Editorial Feedback (blocking issues to address):**\n${feedback.trim()}\n`
+    : "";
   return `### **Prompt 3: The Narrative Editor's Cut**
 
 **(Objective: To critically evaluate the story from Prompt 2 against a quality rubric and then perform a final revision to elevate it.)**
@@ -604,11 +694,13 @@ Quality gates (must pass all):
 - Ensure one clear "analogy clarifier" sentence states what predictably happens under the concept’s condition and what breaks when it doesn’t—no equations or symbols.
 - The final 1–2 sentences must invite the listener to "learn the details" and to "master it in programming challenges" next, framed as part of this lesson’s journey.
 - Historical nuance: when relevant, avoid claiming the originator created a full test or modern method; frame it as a property or insight. If the originator shared a result without a proof, note that it was presented as a challenge or confident claim without proof.
+- Vocabulary accessibility: keep language suitable for curious 12–16 year olds (CEFR B2 or simpler). Prefer familiar words like "lawyer" or "judge" instead of "magistrate" unless you explain the term immediately.
 
 **Input:**
 ================ Story Draft ================
 ${storyDraft}
 ============================================
+${feedbackSection}
 
 **Your Two-Part Task:**
 
@@ -648,6 +740,52 @@ Ensure every score is an integer between 1 and 5 inclusive.
 `;
 }
 
+export function buildStoryValidationPrompt(
+  topic: string,
+  storyText: string,
+): string {
+  return `### **Prompt 4: The Fact-Check Gate**
+
+**Objective:** Audit the revised story for factual accuracy, compliance with required beats, and age-appropriate language before it can advance.
+
+**Your Role:** You are the senior fact-checker and standards editor. You must block publication if any critical or major issues remain. Always run quick web searches when you are uncertain about a historical claim.
+
+**Material to Audit:**
+================ Story (Final Draft) ================
+${storyText}
+====================================================
+
+**Checklist (all must pass):**
+1. **Historical accuracy:** Verify every concrete claim (dates, names, proof status). For Fermat, remember that Fermat's Little Theorem was shared without proof in 1640, and Fermat's Last Theorem was proved by Andrew Wiles (with Richard Taylor) in 1994–1995—flag any suggestion it remains unsolved.
+2. **Concept naming:** Confirm the story explicitly names "${topic}" within the first four sentences and that any naming note about qualifiers (e.g., "Little") is accurate.
+3. **Analogy clarity:** Ensure there is a plainly stated sentence describing what behaves predictably when the concept applies and what breaks when it does not.
+4. **Modern connection placement:** Any modern tie-in (e.g., cryptography) must appear only in the ending paragraph.
+5. **Ending invitation:** The final 1–2 sentences must promise the listener will learn the details and master the idea in programming challenges.
+6. **Language accessibility:** Vocabulary should suit curious 12–16 year olds (CEFR B2 or below). Flag niche words such as "magistrate" or "jurist" unless they are immediately defined. Prefer simpler alternatives (e.g., "lawyer," "judge").
+7. **Tone and claims:** Watch for exaggeration or implying that Fermat invented a full primality test. Frame it correctly as a property/challenge.
+
+**Verdict Rules:**
+- Return "pass" only if **all** checklist items are satisfied and no critical/major issues remain.
+- Otherwise return "fail" and list every blocking issue with clear evidence and an actionable recommendation.
+
+**Output JSON Schema:**
+{
+  "verdict": "pass" | "fail",
+  "issues": [
+    {
+      "summary": string,
+      "category": "factual" | "naming" | "terminology" | "structure" | "tone" | "requirement" | "other",
+      "severity": "critical" | "major" | "minor",
+      "evidence": string,
+      "recommendation": string
+    }
+  ]
+}
+
+If there are no issues, respond with an empty array.
+`;
+}
+
 export function buildSegmentationPrompt(
   storyText: string,
   topic?: string,
@@ -683,7 +821,7 @@ export function buildSegmentationPrompt(
     "------------------",
     "Convert the story into alternating-voice narration segments with illustration prompts plus poster and ending prompts, following all rules above.",
     topic
-      ? `Additionally: preserve at least one narration slice that names the concept explicitly if present in the story (preferably in the first 2–3 segments). If the story names \"${topic}\", include it at least once verbatim in narration.`
+      ? `Additionally: preserve at least one narration slice that names the concept explicitly if present in the story (preferably in the first 2–3 segments). If the story names "${topic}", include it at least once verbatim in narration.`
       : "",
   ].join("\n");
 }
@@ -737,10 +875,11 @@ export async function generateStoryProseRevision(
   draft: StoryProseDraftResult,
   progress?: StoryProgress,
   options?: { debugRootDir?: string },
+  feedback?: string,
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryRevisionPrompt(topic, draft.text);
+  const prompt = buildStoryRevisionPrompt(topic, draft.text, feedback);
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -771,6 +910,67 @@ export async function generateStoryProseRevision(
   };
 }
 
+export async function validateStoryProse(
+  topic: string,
+  revision: StoryProseRevisionResult,
+  progress?: StoryProgress,
+  options?: { debugRootDir?: string },
+): Promise<StoryProseValidationResult> {
+  const adapter = useProgress(progress);
+  adapter.log(`[story] validating prose with ${TEXT_MODEL_ID}`);
+  const prompt = buildStoryValidationPrompt(topic, revision.text);
+  const response = await generateJson<StoryProseValidationResult>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    tools: [{ type: "web-search" }],
+    responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    schema: StoryProseValidationResultSchema,
+    debug: options?.debugRootDir
+      ? { rootDir: options.debugRootDir, stage: "prose-validation" }
+      : undefined,
+  });
+  adapter.log(
+    `[story/prose-validation] verdict: ${response.verdict}${response.issues.length ? ` (${response.issues.length} issue(s))` : ""}`,
+  );
+  return response;
+}
+
+const PROSE_REVISION_MAX_ATTEMPTS = 3;
+
+function summariseValidationIssues(
+  issues: readonly StoryProseValidationIssue[],
+): string {
+  if (issues.length === 0) {
+    return "no detailed issues provided";
+  }
+  return issues
+    .map((issue, index) => {
+      const label = `${index + 1}. [${issue.severity.toUpperCase()} - ${issue.category}]`;
+      return `${label} ${issue.summary}`;
+    })
+    .join("; ");
+}
+
+function buildValidationFeedback(
+  issues: readonly StoryProseValidationIssue[],
+): string {
+  if (issues.length === 0) {
+    return "The fact-checker flagged the story but did not list issues. Recheck every checklist item (facts, naming, analogy clarifier, modern placement, ending invitation, vocabulary) and correct any violations.";
+  }
+  return [
+    "Address each blocking issue identified by the fact-checker:",
+    ...issues.map((issue, index) => {
+      const lines = [
+        `${index + 1}. (${issue.severity.toUpperCase()} – ${issue.category}) ${issue.summary}`,
+        `   Evidence: ${issue.evidence}`,
+        `   Recommendation: ${issue.recommendation}`,
+      ];
+      return lines.join("\n");
+    }),
+  ].join("\n");
+}
+
 export async function generateProseStory(
   topic: string,
   progress?: StoryProgress,
@@ -778,12 +978,40 @@ export async function generateProseStory(
 ): Promise<StoryProseResult> {
   const idea = await generateStoryIdea(topic, progress, options);
   const draft = await generateStoryProseDraft(topic, idea, progress, options);
-  const revision = await generateStoryProseRevision(
-    topic,
-    draft,
-    progress,
-    options,
-  );
+  let revision: StoryProseRevisionResult | undefined;
+  let feedback: string | undefined;
+  for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
+    const candidate = await generateStoryProseRevision(
+      topic,
+      draft,
+      progress,
+      options,
+      feedback,
+    );
+    const validation = await validateStoryProse(
+      topic,
+      candidate,
+      progress,
+      options,
+    );
+    if (validation.verdict === "pass") {
+      revision = { ...candidate, validation };
+      break;
+    }
+    if (attempt === PROSE_REVISION_MAX_ATTEMPTS) {
+      const summary = validation.issues.length
+        ? summariseValidationIssues(validation.issues)
+        : "Validation failed without reported issues.";
+      throw new Error(
+        `Story prose validation failed after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
+      );
+    }
+    feedback = buildValidationFeedback(validation.issues);
+  }
+
+  if (!revision) {
+    throw new Error("Story prose revision did not produce a validated result");
+  }
   return {
     text: revision.text,
     metadata: {
@@ -791,6 +1019,7 @@ export async function generateProseStory(
       draftText: draft.text,
       analysis: revision.analysis,
       improvementSummary: revision.improvementSummary,
+      validation: revision.validation,
     },
   };
 }
@@ -1851,6 +2080,7 @@ export class StoryGenerationPipeline {
           text: checkpoint.text,
           analysis: checkpoint.analysis,
           improvementSummary: checkpoint.improvementSummary,
+          validation: checkpoint.validation,
         },
         filePath,
       };
@@ -1875,6 +2105,7 @@ export class StoryGenerationPipeline {
       text: value.text,
       analysis: value.analysis,
       improvementSummary: value.improvementSummary,
+      validation: value.validation,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -2234,6 +2465,7 @@ export class StoryGenerationPipeline {
                 draftText: draft.text,
                 analysis: checkpoint.value.analysis,
                 improvementSummary: checkpoint.value.improvementSummary,
+                validation: checkpoint.value.validation,
               },
             }
           : checkpoint.value;
@@ -2251,14 +2483,51 @@ export class StoryGenerationPipeline {
     await this.invalidateAfter("prose-revision");
     const { value: draft } = await this.ensureProseDraft();
     const idea = this.caches.idea?.value ?? (await this.ensureIdea()).value;
-    const revision = await generateStoryProseRevision(
-      this.options.topic,
-      draft,
-      this.options.progress,
-      {
-        debugRootDir: this.options.debugRootDir,
-      },
-    );
+    let feedback: string | undefined;
+    let revision: StoryProseRevisionResult | undefined;
+    for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
+      this.logger.log(
+        `[story/prose] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`,
+      );
+      const candidate = await generateStoryProseRevision(
+        this.options.topic,
+        draft,
+        this.options.progress,
+        {
+          debugRootDir: this.options.debugRootDir,
+        },
+        feedback,
+      );
+      const validationResult = await validateStoryProse(
+        this.options.topic,
+        candidate,
+        this.options.progress,
+        {
+          debugRootDir: this.options.debugRootDir,
+        },
+      );
+      if (validationResult.verdict === "pass") {
+        revision = { ...candidate, validation: validationResult };
+        break;
+      }
+      const summary = validationResult.issues.length
+        ? summariseValidationIssues(validationResult.issues)
+        : "Validation failed without reported issues.";
+      this.logger.log(
+        `[story/prose-validation] attempt ${attempt} failed: ${summary}`,
+      );
+      if (attempt === PROSE_REVISION_MAX_ATTEMPTS) {
+        throw new Error(
+          `Story prose validation failed after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
+        );
+      }
+      feedback = buildValidationFeedback(validationResult.issues);
+    }
+
+    if (!revision) {
+      throw new Error("Story prose revision did not produce a validated result");
+    }
+
     const revisionWithMetadata: StoryProseRevisionResult = {
       ...revision,
       metadata: {
@@ -2266,6 +2535,7 @@ export class StoryGenerationPipeline {
         draftText: draft.text,
         analysis: revision.analysis,
         improvementSummary: revision.improvementSummary,
+        validation: revision.validation,
       },
     };
     const checkpointPath =
