@@ -6,32 +6,38 @@ This document captures the conceptual flow that powers the historical story pipe
 
 ```mermaid
 flowchart TD
-  A["generateStory(options)"] --> B["generateProseStory"]
-  B --> C["generateStorySegmentation"]
-  C --> D{Corrections needed?}
-  D -->|Yes| E["correctStorySegmentation"]
-  E --> C
-  D -->|No| F["generateStoryImages"]
-  F --> G["generateImageSets"]
-  G --> SA1
-  G --> SB1
+  A["generateStory(options)"] --> B["ensureIdea → generateStoryIdea"]
+  B --> C["ensureProseDraft → generateStoryProseDraft"]
+  C --> D["ensureProse → generateStoryProseRevision"]
+  D --> E{"validateStoryProse pass?"}
+  E -->|No (attempts left)| D
+  E -->|No (exhausted)| X["abort story run"]
+  E -->|Yes| F["ensureSegmentation → generateStorySegmentation"]
+  F --> G{Corrections needed?}
+  G -->|Yes (≤3 passes)| H["correctStorySegmentation"]
+  H --> F
+  G -->|No| I["ensureImages → generateStoryImages"]
+  I --> J["generateImageSets (set_a & set_b)"]
+  J --> SA1
+  J --> SB1
 
-  subgraph SA["set_a pipeline"]
-    SA1["generateStoryFrames (set_a)"] --> SA2["Poster candidates (4x)"]
-    SA2 --> SA3["grade & select poster"]
-    SA3 --> SA4["Generate ending card"]
+  subgraph SetA["set_a pipeline"]
+    SA1["generateStoryFrames"] --> SA2["poster candidates ×4"]
+    SA2 --> SA3["selectPosterCandidate"]
+    SA3 --> SA4["generate ending card"]
   end
 
-  subgraph SB["set_b pipeline"]
-    SB1["generateStoryFrames (set_b)"] --> SB2["Poster candidates (4x)"]
-    SB2 --> SB3["grade & select poster"]
-    SB3 --> SB4["Generate ending card"]
+  subgraph SetB["set_b pipeline"]
+    SB1["generateStoryFrames"] --> SB2["poster candidates ×4"]
+    SB2 --> SB3["selectPosterCandidate"]
+    SB3 --> SB4["generate ending card"]
   end
 
-  SA4 --> J["judgeImageSets"]
-  SB4 --> J
-  J --> K["generateNarration (winner)"]
-  K --> L["Persist winner\nimages + narration"]
+  SA4 --> L["judgeImageSets"]
+  SB4 --> L
+  L --> M["ensureNarration → synthesizeAndPublishNarration"]
+  M --> N["upload JPEG frames + cache poster/ending"]
+  N --> O["return GenerateStoryResult"]
 ```
 
 ### Prose Ideation
@@ -42,6 +48,8 @@ Story drafting now runs as a three-stage chain, with each stage writing its own 
 2. **Narrative Weaver** – consumes the brief and delivers a 250–400 word, single-voice script (title + paragraphs) tuned for advanced UK maths students, following the mandated arc from historical problem to modern relevance.
 3. **Narrative Editor's Cut** – grades the draft against the five-point rubric, then returns revised prose plus the critique in JSON (`analysis`, `revisedStory`, `improvementSummary`). Only the revised story proceeds downstream.
 
+A separate `validateStoryProse` gate audits every revised draft; failures loop back into another revision attempt (up to `PROSE_REVISION_MAX_ATTEMPTS`) before the pipeline aborts.
+
 ### Segmentation Blueprint
 
 Segmentation restructures the prose into narration slices and illustration prompts. It solicits alternating voices, poster/ending cards, and strict scene composition rules:
@@ -50,15 +58,17 @@ Segmentation restructures the prose into narration slices and illustration promp
 Requirements:
 1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
 …
-2. `posterPrompt` … Include a bold 2-4 word title and, when it elevates the concept, one short supporting detail (date, location, motto) under six words.
+2. `posterPrompt` … Visible text must include a bold 2–4 word title, the protagonist’s name, and a single 4-digit year. Keep every supporting element under six words and period appropriate.
 …
 4. For each of the ten `segments`:
    • Provide `narration` … Alternate between the `M` and `F` voices whenever the flow allows.
    • Provide `imagePrompt` … Focus on subject, action, setting, and lighting cues.
 5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy; avoid multi-panel layouts, mirrored halves, or overly technical camera jargon.
-6. Any visible text stays purposeful: headlines <=4 words, supporting elements <=6, all period appropriate.
+6. Avoid collapse-prone specifics: no exact dates, numeric lists, or written equations in the panels. Exception: the poster may include that single 4-digit year alongside the title and protagonist’s name. Keep visible text minimal (headlines ≤4 words; signage/mottos ≤6 words).
 …
 9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
+…
+13. Keep the ten story segments purely historical—save any modern tie-in for the `endingPrompt`, and keep it brief.
 ```
 
 The narration sentences generated here are now preserved verbatim through the image pipeline. Each frame’s narration bundle is attached to later grading and prompt-revision calls so the models can re-ground revisions without drifting from the original story beat.
@@ -69,7 +79,7 @@ The segmentation is checked up to three times by a correction prompt that only r
 
 ## Frame Generation Workflow
 
-Poster, story panels, and ending card are produced twice (Set A and Set B). Each set shares the same style prompt (currently `ART_STYLE_VINTAGE_CARTOON`) which now pushes for cinematic, modern graphic-novel energy while still banning photorealism, collage artefacts, heavy borders, or multi-panel layouts.
+Poster, story panels, and ending card are produced twice (Set A and Set B). Each set shares the `ART_STYLE` prompt bundle: feature-quality 16:9 illustrated frames with modern graphic-novel energy, expressive lighting, cohesive palettes, grounded period details, and strict bans on photorealism, collage artefacts, heavy borders, or multi-panel layouts.
 
 ### Batch Grading Loop
 
@@ -77,19 +87,27 @@ Poster, story panels, and ending card are produced twice (Set A and Set B). Each
 
 ```mermaid
 flowchart TD
-  S["generateStoryFrames(options)"] --> B["for each batch"]
-  B --> C["collect style refs (base + overlap)"]
-  C --> A{"attempt <= maxBatchAttempts?"}
+  S["generateStoryFrames(options)"] --> B["iterate batches (prompts + style refs)"]
+  B --> A{"attempt ≤ BATCH_GENERATE_MAX_ATTEMPTS?"}
   A -->|No| X["throw FrameGenerationError"]
-  A -->|Yes| G["generateImages(prompts, context)"]
+  A -->|Yes| G["generateImages()"]
   G --> V{"gradeBatch outcome"}
-  V -->|accept| U["append batch to results"]
+  V -->|accept| U["append batch + expand style refs"]
   U --> B
-  V -->|redo_batch| R["increment attempt and retry"]
-  R --> A
-  V -->|redo_frames| F["regenerate flagged frames\n(check-new-only grading)"]
-  F --> T["grade flagged frames"]
-  T --> V
+  V -->|redo_frames| RF["regenerate flagged frames"]
+  RF --> PI{"partial iteration ≤ limit?"}
+  PI -->|No| X
+  PI -->|Yes| CB{"redo iteration > 1?"}
+  CB -->|Yes| CC["selectBestRedoFrameCandidate()"]
+  CC --> RFG["re-grade flagged frames\n(check-new-only)"]
+  CB -->|No| RFG
+  RFG --> V
+  V -->|redo_batch| RB["collect evidence + log feedback"]
+  RB --> PR{"prompt revision allowed?"}
+  PR -->|Yes| RR["requestFramePromptRevisions()"]
+  RR --> UP["update working prompts"]
+  PR -->|No| UP
+  UP --> A
 ```
 
 Key concepts:
@@ -97,16 +115,18 @@ Key concepts:
 - **Style propagation:** Each batch carries forward a sliding window of prior frames (`overlapSize`) so characters remain consistent; accepted images join the reference pool for partial redos.
 - **Catastrophic grading:** The grader schema enforces explicit outcomes (`accept`, `redo_frames`, `redo_batch`) and collects frame indices plus reasons to keep failures explainable.
 - **Targeted redos:** When only specific frames fail, they are regenerated individually—each with up to four image attempts—before being re-graded in isolation. Batch retries are capped by `BATCH_GENERATE_MAX_ATTEMPTS`.
+- **Fallback comparison:** From the second partial redo onward, the text judge compares the newest candidate to the prior keeper before deciding which image survives.
 - **Narration awareness:** The narration lines for each frame (voice + text) travel with the prompts and are surfaced to graders and prompt revisers so replacements stay faithful to the authored script.
 - **Deterministic failure:** Exhausting batch retries or frame redo attempts throws immediately, surfacing fatal quality issues to the caller.
 
 ### Prompt Revision Assist
 
-When the grader escalates to `redo_batch` on the second attempt or later, the pipeline now consults a text model to rewrite the problematic prompts instead of blindly reusing the same wording. The request bundles:
+Whenever the grader escalates to `redo_batch`, the pipeline (at most once per batch) consults a text model to rewrite the problematic prompts instead of blindly retrying the same wording. The request bundles:
 
 - the global style prompt and catastrophic checklist,
 - the accumulated feedback log across all failed attempts,
-- narration excerpts per frame, and
+- narration excerpts per frame,
+- semantic captions/scores plus thumbnails when available, and
 - the previous illustration prompts.
 
 The model must return JSON `replacements` where each entry includes a 1-based frame index, a rationale, and the revised prompt. Accepted revisions overwrite both the working prompt list and the batch-local prompts before the next retry. If the revision service fails or returns no applicable changes, the batch continues with the existing prompts, but the attempt is still counted towards the retry limit.
@@ -116,7 +136,7 @@ The model must return JSON `replacements` where each entry includes a 1-based fr
 After the ten interior frames are locked:
 
 - **Poster candidates:** Each image set spins four concurrent poster renders against the same style prompt and leading frame references. A text-grade pass evaluates all candidates, flags catastrophic artefacts, and selects the most stunning acceptable poster.
-- **Poster typography:** The selector enforces the bold 2-4 word title plus optional <=6 word supporting detail when the prompt calls for text.
+- **Poster typography:** The selector enforces the bold 2–4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
 - **Ending card:** The last few interior frames seed the style references for a single ending-card render, generated through the same single-image helper that trims prompts and handles retries.
 
 ## Dual-Set Comparison
