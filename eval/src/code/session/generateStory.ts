@@ -442,8 +442,8 @@ export function buildStoryIdeaPrompt(topic: string): string {
 Important constraints:
 - Avoid outlining algorithms, procedures, or step-by-step computations. It's fine to mention a few numbers in passing, but do not walk through calculations or variable notation.
 - You may introduce 1–2 terms by name if they help intrigue the listener, but do not provide precise formal definitions.
-- Optionally include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it.
-- We will invite the audience to rediscover methods later in puzzles; hint at this future discovery without writing any explicit call-to-action wording.
+- The final story must explicitly name the concept "${topic}". Include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it—but capture the note in the brief if relevant so the writer can decide.
+- Make clear that the core trick will be revealed within this very lesson; hint that brief in-lesson exercises will let the audience try it immediately (no explicit call-to-action wording).
 - Historical fidelity for anecdotes: only include famous quotes/stories when tied to the same concept/result and time period. Do not misattribute well-known anecdotes; if relevant contextually, frame as foreshadowing of a later milestone rather than attributing it to the current concept.
 - Fact-checking: when any date, name, or claim is uncertain, run a quick web search to verify before including it. Prefer authoritative sources. Do not guess.
 - Tone: neutral and factual in the brief; avoid charged adjectives and hyperbole.
@@ -465,7 +465,7 @@ Important constraints:
    * **The Human Element:** Based on the discoverer's profession and context, what was their worldview?
    * **Functional Analogy:** One functional analogy—an active system with internal rules that mirrors the concept's core logic—described briefly and without numbers or step sequences.
    * **Ending Pivot (modern connection, optional):** If a strong, natural link exists to the modern world, describe it concisely as an ending-only move. Otherwise, state "none".
-   * **Puzzle Teaser:** A one-sentence hint that the audience will later get to rediscover the method through puzzles (no explicit call-to-action wording).
+   * **Lesson Teaser:** A one-sentence hint that this very lesson will reveal the trick and include short exercises to try it immediately (no explicit call-to-action wording).
    * (Optional) A short note on naming history if genuinely interesting.
 
 **Output Format:**
@@ -477,20 +477,25 @@ Produce the research followed by three concise mini-briefs and a recommendation.
 * **Conceptual Essence:**
 * **Historical Anchor:**
   * **Figure:** [Name, Role/Profession]
-  * **Canonical Event:** [Project/Paper, Place, Year]
+ * **Canonical Event:** [Project/Paper, Place, Year]
   * **The High-Stakes Problem:**
 * **Narrative Elements:**
   * **Functional Analogy Candidate(s):** [List 2-3 named analogies with brief descriptions]
   * **Contrasting Foil:**
   * **"Invisible Architecture" Pivot:**
 * **Key Terminology & Gloss:** [List any necessary terms and their period-correct, simple definitions]
+* **Key Term to Name in Story:** ${topic}
+* **Naming Note (one line, if relevant):** [e.g., why "Little" vs. another theorem]
+* **Historical Nuance (one line):** [e.g., property vs. test; proof status if historically notable]
+* **Analogy Clarifier Seed (one line):** [predictable behavior if condition holds vs. what breaks otherwise]
+* **Closing Invitation Seed (one line):** [promise to learn details and master it in programming challenges]
 
 ### Candidate A
 * **Angle:**
 * **Anchor Event:**
 * **Analogy (no steps):**
 * **Ending Pivot (modern connection, optional):**
-* **Puzzle Teaser:**
+* **Lesson Teaser:**
 * (Optional) **Naming Note:**
 
 ### Candidate B
@@ -498,7 +503,7 @@ Produce the research followed by three concise mini-briefs and a recommendation.
 * **Anchor Event:**
 * **Analogy (no steps):**
 * **Ending Pivot (modern connection, optional):**
-* **Puzzle Teaser:**
+* **Lesson Teaser:**
 * (Optional) **Naming Note:**
 
 ### Candidate C
@@ -506,7 +511,7 @@ Produce the research followed by three concise mini-briefs and a recommendation.
 * **Anchor Event:**
 * **Analogy (no steps):**
 * **Ending Pivot (modern connection, optional):**
-* **Puzzle Teaser:**
+* **Lesson Teaser:**
 * (Optional) **Naming Note:**
 
 ### Recommendation
@@ -516,20 +521,29 @@ Produce the research followed by three concise mini-briefs and a recommendation.
 `;
 }
 
-export function buildStoryDraftPrompt(storyBrief: string): string {
+export function buildStoryDraftPrompt(
+  topic: string,
+  storyBrief: string,
+): string {
   return `### **Prompt 2: The Narrative Weaver**
 
 **(Objective: To take the structured brief from Prompt 1 and craft a compelling, audio-friendly story.)**
 
-**Your Role:** You are a master storyteller for a popular educational podcast. You have just received a "Story Brief" from our research department. Your task is to transform this brief into a captivating, audio-friendly narrative (250-400 words) for an advanced teen audience.
+**Your Role:** You are a master storyteller for a popular educational podcast. You have just received a "Story Brief" from our research department. Your task is to transform this brief into a captivating, audio-friendly narrative (250–450 words) for an advanced teen audience.
 
 Guardrails:
 - Do not explain algorithms or walk through step-by-step calculations. It's okay to mention a few numbers, but avoid variable notation and sequences like "do X, then Y".
 - You may introduce at most 1–2 terms by name if they elevate intrigue; do not give precise formal definitions.
 - Optionally include a short naming-history aside only if it adds charm and momentum.
-- Gently hint that the listener will get to rediscover the method later through puzzles—do not write any explicit call-to-action wording.
+- Make clear this lesson will reveal the trick. Gently hint that short in-lesson exercises will let the listener try it—do not write explicit call-to-action wording.
 - Historical accuracy: only reference famous anecdotes/quotes when they are associated with the same concept/result; otherwise omit them or, if helpful, reframe as foreshadowing of a later milestone without attributing it to the current concept.
  - Fact-checking: if any historical detail (names, dates, places, artifacts) is uncertain, use web search to verify before relying on it. Do not include citations in the story; correct the prose instead.
+
+Hard requirements for this concept:
+- Explicitly name the concept "${topic}" in the first 3–4 sentences. Do not postpone the term to the ending.
+- Include a one-sentence naming note for the concept if the name contains a notable qualifier (e.g., "Little", "Last", "Fast"). Keep it plain (why it’s called that) and historically accurate.
+- Add one clear "analogy clarifier" sentence that makes the core pattern concrete (e.g., what repeats when the number is prime vs. what breaks when composite). Keep it free of equations and symbols.
+- End with an upbeat invitation that hints the student will "learn the details" and "master it in programming challenges" in this very lesson. Keep the tone motivating, not salesy.
 
 **Input:**
 ================ Story Brief ================
@@ -548,9 +562,9 @@ Weave the provided elements into a seamless story that makes the concept feel li
 
 1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
 2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic at a high level—no equations or step sequences.
-3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Add a single sentence that clarifies 2–3 correspondences between the analogy and the concept (e.g., "X stands for Y"). Suggest that a later set of puzzles will let the listener rediscover the method firsthand (no explicit wording).
+3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Add both (a) a single sentence that clarifies 2–3 correspondences between the analogy and the concept (e.g., "X stands for Y") and (b) a plain one-line "analogy clarifier" that states the predictability when the concept’s condition holds versus what breaks when it doesn’t.
 4. **The Ending Pivot (optional):** If a strong, natural link exists to the modern world, reveal it briefly here at the very end—and only here. If not, end without it.
-5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands. The invitation should naturally suggest exploration without explicit calls to action.
+5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands—and explicitly promise that they will learn the details and practice the idea in programming challenges next.
 
 **Stylistic Requirements:**
 * **Audio-First:** Use clear, concise sentences. Read it aloud in your "mind's ear" to ensure it flows well.
@@ -564,7 +578,10 @@ Respond with the title on its own line followed by the story paragraphs.
 `;
 }
 
-export function buildStoryRevisionPrompt(storyDraft: string): string {
+export function buildStoryRevisionPrompt(
+  topic: string,
+  storyDraft: string,
+): string {
   return `### **Prompt 3: The Narrative Editor's Cut**
 
 **(Objective: To critically evaluate the story from Prompt 2 against a quality rubric and then perform a final revision to elevate it.)**
@@ -574,12 +591,19 @@ export function buildStoryRevisionPrompt(storyDraft: string): string {
 Non-negotiables for this pass:
 - Remove or rewrite any step-by-step math, equations, variable notation, or algorithmic walkthroughs. Mentions of a few numbers are okay if they are evocative and not procedural.
 - Keep, at most, 1–2 named terms without formal definitions.
-- Where appropriate, include a light-touch hint that future puzzles will allow the listener to rediscover the method; do not craft explicit call-to-action wording.
+- Make clear that this lesson reveals the trick. If helpful, include a light-touch hint that short in-lesson exercises will follow; do not craft explicit call-to-action wording.
 - Preserve historical grounding and momentum; include naming-history only if it helps.
 - Correct any historical misattributions: use famous anecdotes or quotations only when linked to the same concept/result and time period. If a well-known story belongs elsewhere, remove it or recast it as foreshadowing of a later milestone, without attributing it to the current concept.
 - Fact-checking: double-check any uncertain dates, names, places, or attributions via web search before revising. Do not add citations to the JSON; revise the prose to be correct and concise.
 - Hyperbole audit: remove charged adjectives and sweeping claims. Allow at most 1–2 emotionally strong adjectives across the entire story, never more than one in a single sentence. Prefer plain, measured language.
  - Modern-connection placement: ensure any tie-in to the modern world appears only in the ending. Remove or relocate earlier references that make the story feel artificial.
+
+Quality gates (must pass all):
+- Explicitly name the concept "${topic}" in the first 3–4 sentences. If missing, insert it naturally without breaking flow.
+- If the concept’s name includes a notable qualifier (e.g., "Little", "Last", "Stable"), add a one-sentence naming note explaining the origin/meaning (e.g., contrasted with a different theorem). Keep it neutral and accurate.
+- Ensure one clear "analogy clarifier" sentence states what predictably happens under the concept’s condition and what breaks when it doesn’t—no equations or symbols.
+- The final 1–2 sentences must invite the listener to "learn the details" and to "master it in programming challenges" next, framed as part of this lesson’s journey.
+- Historical nuance: when relevant, avoid claiming the originator created a full test or modern method; frame it as a property or insight. If the originator shared a result without a proof, note that it was presented as a challenge or confident claim without proof.
 
 **Input:**
 ================ Story Draft ================
@@ -600,7 +624,7 @@ Grade the draft story against our five-point quality rubric. For each point, pro
 **Part B: The Final Polish**
 Based on your analysis, produce the final, revised version. Focus your edits on two mission-critical areas:
 1. **Clarify Without Calculus:** Make the analogy intuitive while removing step sequences, equations, or symbol-heavy wording. Keep any numbers minimal and illustrative. If missing, add a one-sentence "Analogy Map" that links 2–3 elements of the analogy to the underlying concept (nouns and plain language only).
-2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure. Place any modern connection here (and only here). If natural, hint that puzzles await their discovery—without writing explicit call-to-action wording.
+2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure. Place any modern connection here (and only here). If natural, add a gentle promise that the trick is revealed in this lesson and that brief exercises follow—without explicit call-to-action wording.
 
 Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
 
@@ -624,7 +648,10 @@ Ensure every score is an integer between 1 and 5 inclusive.
 `;
 }
 
-export function buildSegmentationPrompt(storyText: string): string {
+export function buildSegmentationPrompt(
+  storyText: string,
+  topic?: string,
+): string {
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
   return [
     "Convert the provided historical story into a structured narration and illustration plan.",
@@ -655,6 +682,9 @@ export function buildSegmentationPrompt(storyText: string): string {
     "segmentation prompt:",
     "------------------",
     "Convert the story into alternating-voice narration segments with illustration prompts plus poster and ending prompts, following all rules above.",
+    topic
+      ? `Additionally: preserve at least one narration slice that names the concept explicitly if present in the story (preferably in the first 2–3 segments). If the story names \"${topic}\", include it at least once verbatim in narration.`
+      : "",
   ].join("\n");
 }
 
@@ -682,14 +712,14 @@ export async function generateStoryIdea(
 }
 
 export async function generateStoryProseDraft(
-  _topic: string,
+  topic: string,
   idea: StoryIdeaResult,
   progress?: StoryProgress,
   options?: { debugRootDir?: string },
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryDraftPrompt(idea.brief);
+  const prompt = buildStoryDraftPrompt(topic, idea.brief);
   const text = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -703,14 +733,14 @@ export async function generateStoryProseDraft(
 }
 
 export async function generateStoryProseRevision(
-  _topic: string,
+  topic: string,
   draft: StoryProseDraftResult,
   progress?: StoryProgress,
   options?: { debugRootDir?: string },
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryRevisionPrompt(draft.text);
+  const prompt = buildStoryRevisionPrompt(topic, draft.text);
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -864,6 +894,7 @@ function applySegmentationCorrections(
 
 export async function generateStorySegmentation(
   storyText: string,
+  topic: string,
   progress?: StoryProgress,
   options?: {
     debugRootDir?: string;
@@ -871,7 +902,7 @@ export async function generateStorySegmentation(
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
-  const prompt = buildSegmentationPrompt(storyText);
+  const prompt = buildSegmentationPrompt(storyText, topic);
   const segmentation = await generateJson<StorySegmentation>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -888,6 +919,7 @@ export async function generateStorySegmentation(
 
 export async function correctStorySegmentation(
   storyText: string,
+  topic: string,
   initialSegmentation: StorySegmentation,
   progress?: StoryProgress,
   options?: {
@@ -895,7 +927,7 @@ export async function correctStorySegmentation(
   },
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
-  const generationPrompt = buildSegmentationPrompt(storyText);
+  const generationPrompt = buildSegmentationPrompt(storyText, topic);
   let workingSegmentation = initialSegmentation;
   adapter.log(`[story] reviewing segmentation prompts with ${TEXT_MODEL_ID}`);
 
@@ -2273,6 +2305,7 @@ export class StoryGenerationPipeline {
     const { value: prose } = await this.ensureProse();
     const segmentation = await generateStorySegmentation(
       prose.text,
+      this.options.topic,
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
@@ -2317,6 +2350,7 @@ export class StoryGenerationPipeline {
     const { value: draft } = await this.ensureSegmentation();
     const corrected = await correctStorySegmentation(
       prose.text,
+      this.options.topic,
       draft,
       this.options.progress,
       {
