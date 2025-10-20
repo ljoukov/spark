@@ -627,6 +627,7 @@ export function buildStoryIdeaPrompt(topic: string): string {
 Important constraints:
 - Avoid outlining algorithms, procedures, or step-by-step computations. It's fine to mention a few numbers in passing, but do not walk through calculations or variable notation.
 - You may introduce 1–2 terms by name if they help intrigue the listener, but do not provide precise formal definitions.
+- Every factual statement (dates, locations, publications, people, proof status, terminology origins) must include an inline citation in parentheses with the source title and URL (e.g., "(Source: Bell Labs Archive — https://example.org/...)"). Collect all citations at the end under a "Sources" heading with one bullet per source and a short 1-line summary.
 - The final story must explicitly name the concept "${topic}". Include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it—but capture the note in the brief if relevant so the writer can decide.
 - Make clear that the core trick will be revealed within this very lesson; hint that brief in-lesson exercises will let the audience try it immediately (no explicit call-to-action wording).
 - Historical fidelity for anecdotes: only include famous quotes/stories when tied to the same concept/result and time period. Do not misattribute well-known anecdotes; if relevant contextually, frame as foreshadowing of a later milestone rather than attributing it to the current concept.
@@ -654,7 +655,7 @@ Important constraints:
    * (Optional) A short note on naming history if genuinely interesting.
 
 **Output Format:**
-Produce the research followed by three concise mini-briefs and a recommendation. Be concise and factual.
+Produce the research followed by three concise mini-briefs and a recommendation. Be concise and factual. Embed citations inline and include the Sources section at the end.
 
 \`\`\`markdown
 ### Research Snapshot
@@ -698,6 +699,9 @@ Produce the research followed by three concise mini-briefs and a recommendation.
 * **Ending Pivot (modern connection, optional):**
 * **Lesson Teaser:**
 * (Optional) **Naming Note:**
+
+### Sources
+- [Source Title — URL]: One-sentence summary of what this source confirms.
 
 ### Recommendation
 * **Selected Candidate:** [A/B/C]
