@@ -14,6 +14,7 @@
 - Re-run the update command if new submodules are added or refs change.
 - All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
+- Run every interactive command inside tmux — this is mandatory for long-lived processes like `git rebase`, dev servers (`npm run dev`, `npm --prefix web run dev`), database shells, etc. Start sessions with `tmux new-session -s <name>` (install via `brew install tmux` if missing) and attach with `tmux attach -t <name>` so the process stays healthy if the terminal disconnects.
 
 ## spark-data Submodule
 
