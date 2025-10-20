@@ -30,7 +30,7 @@
 
 ## 2) Key Functional Requirements
 
-- Inputs: JPEG/PNG photos (normalized to JPEG) and PDFs (full or page selection). Max 15 MB per upload; enforced client-side and server-side with 413 rejection.
+- Inputs: JPEG/PNG photos (normalized to JPEG) and PDFs (full or page selection). Max 25 MB per upload; enforced client-side and server-side with 413 rejection.
 - Metadata: `programme = gcse_triple_science`, optional `subject`, `board`, `topic`, `subtopic`. Server enriches or corrects metadata when confident; clients treat board/subject as optional choices.
 - Generation modes:
   - **Extraction mode** when source already contains Q&A pairs — preserve wording verbatim.
@@ -122,7 +122,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/code`.
-- `/spark` greets the authenticated user by name as the hub landing page after sign-in, while `/code` continues to host the coding sessions UI.
+- `/spark` greets the authenticated user by name as the hub landing page after sign-in, while `/code` continues to host the coding sessions UI. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf`.
 - `/welcome` accepts an optional `destination` query (`code` | `spark`). Without a destination it shows the dual-card picker (Spark Quiz → `/spark`, Spark Code → `/code`) after authentication; when present it deep-links to the requested experience post-login.
 - `/logout` honours a `from` query (`code` | `spark`) and routes the “Back to welcome” action to `/welcome?destination=<from>` so learners land in the correct experience.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
