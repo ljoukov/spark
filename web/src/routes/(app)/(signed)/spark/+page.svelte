@@ -55,8 +55,8 @@ const userStore = getContext<UserStore | undefined>('spark:user');
 				<img
 					src="https://fonts.gstatic.com/s/e/notoemoji/latest/2604_fe0f/512.gif"
 					alt=""
-					width="32"
-					height="32"
+					width="64"
+					height="64"
 				/>
 			</picture>
 		</h1>
@@ -107,7 +107,11 @@ const userStore = getContext<UserStore | undefined>('spark:user');
 	}
 
 	.spark-title {
-		margin: 0;
+		margin: 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.9rem;
 		font-size: clamp(2rem, 3.4vw, 2.8rem);
 		font-weight: 650;
 		line-height: 1.05;
@@ -117,13 +121,10 @@ const userStore = getContext<UserStore | undefined>('spark:user');
 	.spark-comet {
 		display: inline-flex;
 		align-items: center;
-		margin-left: 0.65rem;
 	}
 
 	.spark-comet img {
 		display: block;
-		width: clamp(2rem, 3vw, 2.5rem);
-		height: clamp(2rem, 3vw, 2.5rem);
 	}
 
 	.spark-copy {
