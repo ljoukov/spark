@@ -175,8 +175,239 @@ export type StoryProseRevisionAnalysis = {
   motivationalPower: StoryProseRevisionCriterion;
 };
 
+const STORY_IDEA_CANDIDATE_IDS = [
+  "candidate_a",
+  "candidate_b",
+  "candidate_c",
+] as const;
+
+const StoryIdeaFunctionalAnalogySchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+});
+
+const StoryIdeaTerminologySchema = z.object({
+  term: z.string().trim().min(1),
+  definition: z.string().trim().min(1),
+});
+
+const StoryIdeaHistoricalAnchorSchema = z.object({
+  figure: z.string().trim().min(1),
+  canonicalEvent: z.string().trim().min(1),
+  highStakesProblem: z.string().trim().min(1),
+});
+
+const StoryIdeaNarrativeElementsSchema = z.object({
+  functionalAnalogies: z
+    .array(StoryIdeaFunctionalAnalogySchema)
+    .min(1, "Provide at least one functional analogy"),
+  contrastingFoil: z.string().trim().min(1),
+  invisibleArchitecturePivot: z.string().trim().min(1),
+});
+
+const StoryIdeaResearchSnapshotSchema = z.object({
+  conceptualEssence: z.string().trim().min(1),
+  historicalAnchor: StoryIdeaHistoricalAnchorSchema,
+  narrativeElements: StoryIdeaNarrativeElementsSchema,
+  keyTerminologyGloss: z
+    .array(StoryIdeaTerminologySchema)
+    .optional()
+    .default([]),
+  keyTermToNameInStory: z.string().trim().min(1),
+  namingNote: z.string().trim().min(1).nullish(),
+  historicalNuance: z.string().trim().min(1).nullish(),
+  analogyClarifierSeed: z.string().trim().min(1),
+  closingInvitationSeed: z.string().trim().min(1),
+});
+
+const StoryIdeaCandidateSchema = z.object({
+  id: z.enum(STORY_IDEA_CANDIDATE_IDS),
+  angle: z.string().trim().min(1),
+  anchorEvent: z.string().trim().min(1),
+  analogy: z.string().trim().min(1),
+  endingPivot: z.string().trim().min(1).nullish(),
+  lessonTeaser: z.string().trim().min(1),
+  namingNote: z.string().trim().min(1).nullish(),
+});
+
+const StoryIdeaRecommendationSchema = z.object({
+  selectedCandidateId: z.enum(STORY_IDEA_CANDIDATE_IDS),
+  rationale: z.string().trim().min(1),
+});
+
+const StoryIdeaSourceSchema = z.object({
+  title: z.string().trim().min(1),
+  url: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+});
+
+const StoryIdeaDataSchema = z.object({
+  researchSnapshot: StoryIdeaResearchSnapshotSchema,
+  candidates: z
+    .array(StoryIdeaCandidateSchema)
+    .min(1, "Provide at least one narrative candidate"),
+  recommendation: StoryIdeaRecommendationSchema,
+  sources: z.array(StoryIdeaSourceSchema).min(1, "List at least one source"),
+});
+
+export type StoryIdeaData = z.infer<typeof StoryIdeaDataSchema>;
+
+const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["researchSnapshot", "candidates", "recommendation", "sources"],
+  propertyOrdering: [
+    "researchSnapshot",
+    "candidates",
+    "recommendation",
+    "sources",
+  ],
+  properties: {
+    researchSnapshot: {
+      type: Type.OBJECT,
+      required: [
+        "conceptualEssence",
+        "historicalAnchor",
+        "narrativeElements",
+        "keyTermToNameInStory",
+        "analogyClarifierSeed",
+        "closingInvitationSeed",
+      ],
+      propertyOrdering: [
+        "conceptualEssence",
+        "historicalAnchor",
+        "narrativeElements",
+        "keyTerminologyGloss",
+        "keyTermToNameInStory",
+        "namingNote",
+        "historicalNuance",
+        "analogyClarifierSeed",
+        "closingInvitationSeed",
+      ],
+      properties: {
+        conceptualEssence: { type: Type.STRING, minLength: "1" },
+        historicalAnchor: {
+          type: Type.OBJECT,
+          required: ["figure", "canonicalEvent", "highStakesProblem"],
+          propertyOrdering: ["figure", "canonicalEvent", "highStakesProblem"],
+          properties: {
+            figure: { type: Type.STRING, minLength: "1" },
+            canonicalEvent: { type: Type.STRING, minLength: "1" },
+            highStakesProblem: { type: Type.STRING, minLength: "1" },
+          },
+        },
+        narrativeElements: {
+          type: Type.OBJECT,
+          required: [
+            "functionalAnalogies",
+            "contrastingFoil",
+            "invisibleArchitecturePivot",
+          ],
+          propertyOrdering: [
+            "functionalAnalogies",
+            "contrastingFoil",
+            "invisibleArchitecturePivot",
+          ],
+          properties: {
+            functionalAnalogies: {
+              type: Type.ARRAY,
+              minItems: "1",
+              items: {
+                type: Type.OBJECT,
+                required: ["name", "description"],
+                propertyOrdering: ["name", "description"],
+                properties: {
+                  name: { type: Type.STRING, minLength: "1" },
+                  description: { type: Type.STRING, minLength: "1" },
+                },
+              },
+            },
+            contrastingFoil: { type: Type.STRING, minLength: "1" },
+            invisibleArchitecturePivot: {
+              type: Type.STRING,
+              minLength: "1",
+            },
+          },
+        },
+        keyTerminologyGloss: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            required: ["term", "definition"],
+            propertyOrdering: ["term", "definition"],
+            properties: {
+              term: { type: Type.STRING, minLength: "1" },
+              definition: { type: Type.STRING, minLength: "1" },
+            },
+          },
+        },
+        keyTermToNameInStory: { type: Type.STRING, minLength: "1" },
+        namingNote: { type: Type.STRING, minLength: "1" },
+        historicalNuance: { type: Type.STRING, minLength: "1" },
+        analogyClarifierSeed: { type: Type.STRING, minLength: "1" },
+        closingInvitationSeed: { type: Type.STRING, minLength: "1" },
+      },
+    },
+    candidates: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: {
+        type: Type.OBJECT,
+        required: ["id", "angle", "anchorEvent", "analogy", "lessonTeaser"],
+        propertyOrdering: [
+          "id",
+          "angle",
+          "anchorEvent",
+          "analogy",
+          "endingPivot",
+          "lessonTeaser",
+          "namingNote",
+        ],
+        properties: {
+          id: {
+            type: Type.STRING,
+            enum: [...STORY_IDEA_CANDIDATE_IDS],
+          },
+          angle: { type: Type.STRING, minLength: "1" },
+          anchorEvent: { type: Type.STRING, minLength: "1" },
+          analogy: { type: Type.STRING, minLength: "1" },
+          endingPivot: { type: Type.STRING, minLength: "1" },
+          lessonTeaser: { type: Type.STRING, minLength: "1" },
+          namingNote: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+    recommendation: {
+      type: Type.OBJECT,
+      required: ["selectedCandidateId", "rationale"],
+      propertyOrdering: ["selectedCandidateId", "rationale"],
+      properties: {
+        selectedCandidateId: {
+          type: Type.STRING,
+          enum: [...STORY_IDEA_CANDIDATE_IDS],
+        },
+        rationale: { type: Type.STRING, minLength: "1" },
+      },
+    },
+    sources: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: {
+        type: Type.OBJECT,
+        required: ["title", "url", "summary"],
+        propertyOrdering: ["title", "url", "summary"],
+        properties: {
+          title: { type: Type.STRING, minLength: "1" },
+          url: { type: Type.STRING, minLength: "1" },
+          summary: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+  },
+};
+
 export type StoryIdeaResult = {
   brief: string;
+  data?: StoryIdeaData;
 };
 
 export type StoryProseVariantLabel = "variant_a" | "variant_b";
@@ -316,6 +547,7 @@ export function deserialiseStoryImageSets(
 const StoryIdeaCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
   brief: z.string().trim().min(1),
+  data: StoryIdeaDataSchema.optional(),
 });
 
 type StoryIdeaCheckpoint = z.infer<typeof StoryIdeaCheckpointSchema>;
@@ -655,58 +887,51 @@ Important constraints:
    * (Optional) A short note on naming history if genuinely interesting.
 
 **Output Format:**
-Produce the research followed by three concise mini-briefs and a recommendation. Be concise and factual. Embed citations inline and include the Sources section at the end.
+Respond **only** with JSON matching the structure below (no Markdown, comments, or trailing text). Embed inline citations inside the string fields and populate the \`sources\` array with one entry per unique source.
 
-\`\`\`markdown
-### Research Snapshot
-
-* **Conceptual Essence:**
-* **Historical Anchor:**
-  * **Figure:** [Name, Role/Profession]
- * **Canonical Event:** [Project/Paper, Place, Year]
-  * **The High-Stakes Problem:**
-* **Narrative Elements:**
-  * **Functional Analogy Candidate(s):** [List 2-3 named analogies with brief descriptions]
-  * **Contrasting Foil:**
-  * **"Invisible Architecture" Pivot:**
-* **Key Terminology & Gloss:** [List any necessary terms and their period-correct, simple definitions]
-* **Key Term to Name in Story:** ${topic}
-* **Naming Note (one line, if relevant):** [e.g., why "Little" vs. another theorem]
-* **Historical Nuance (one line):** [e.g., property vs. test; proof status if historically notable]
-* **Analogy Clarifier Seed (one line):** [predictable behavior if condition holds vs. what breaks otherwise]
-* **Closing Invitation Seed (one line):** [promise to learn details and master it in programming challenges]
-
-### Candidate A
-* **Angle:**
-* **Anchor Event:**
-* **Analogy (no steps):**
-* **Ending Pivot (modern connection, optional):**
-* **Lesson Teaser:**
-* (Optional) **Naming Note:**
-
-### Candidate B
-* **Angle:**
-* **Anchor Event:**
-* **Analogy (no steps):**
-* **Ending Pivot (modern connection, optional):**
-* **Lesson Teaser:**
-* (Optional) **Naming Note:**
-
-### Candidate C
-* **Angle:**
-* **Anchor Event:**
-* **Analogy (no steps):**
-* **Ending Pivot (modern connection, optional):**
-* **Lesson Teaser:**
-* (Optional) **Naming Note:**
-
-### Sources
-- [Source Title — URL]: One-sentence summary of what this source confirms.
-
-### Recommendation
-* **Selected Candidate:** [A/B/C]
-* **Why this choice will spark curiosity without heavy maths:**
+\`\`\`json
+{
+  "researchSnapshot": {
+    "conceptualEssence": string,
+    "historicalAnchor": {
+      "figure": string,
+      "canonicalEvent": string,
+      "highStakesProblem": string
+    },
+    "narrativeElements": {
+      "functionalAnalogies": [
+        { "name": string, "description": string }
+      ],
+      "contrastingFoil": string,
+      "invisibleArchitecturePivot": string
+    },
+    "keyTerminologyGloss": [
+      { "term": string, "definition": string }
+    ],
+    "keyTermToNameInStory": "${topic}",
+    "namingNote": string | null,
+    "historicalNuance": string | null,
+    "analogyClarifierSeed": string,
+    "closingInvitationSeed": string
+  },
+  "candidates": [
+    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string },
+    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string },
+    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string }
+  ],
+  "recommendation": {
+    "selectedCandidateId": "candidate_a" | "candidate_b" | "candidate_c",
+    "rationale": string
+  },
+  "sources": [
+    { "title": string, "url": string, "summary": string }
+  ]
+}
 \`\`\`
+
+- Use each candidate identifier exactly once within \`candidates\`. Omit optional fields (like \`endingPivot\` or \`namingNote\`) when not applicable instead of returning null.
+- Ensure the citation text inside the string fields references the matching source entry.
+- \`sources\` should summarise what each reference confirms.
 `;
 }
 
@@ -988,15 +1213,18 @@ export async function generateStoryIdea(
         }
       : undefined;
     try {
-      const brief = await generateText({
+      const data = await generateJson<StoryIdeaData>({
         progress: adapter,
         modelId: TEXT_MODEL_ID,
         contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
         tools: [{ type: "web-search" }],
+        responseSchema: STORY_IDEA_RESPONSE_SCHEMA,
+        schema: StoryIdeaDataSchema,
         debug: debugOptions,
       });
+      const brief = formatIdeaBrief(data);
       adapter.log("[story/idea] brief prepared");
-      return { brief };
+      return { brief, data };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error ?? "unknown");
@@ -1217,6 +1445,85 @@ function combineDebugSegments(
     return undefined;
   }
   return cleaned.join("/");
+}
+
+function formatIdeaBrief(data: StoryIdeaData): string {
+  const { researchSnapshot, candidates, recommendation, sources } = data;
+  const selectedCandidate = candidates.find(
+    (candidate) => candidate.id === recommendation.selectedCandidateId,
+  );
+  if (!selectedCandidate) {
+    throw new Error(
+      `Story idea recommendation referenced missing candidate ${recommendation.selectedCandidateId}`,
+    );
+  }
+
+  const lines: string[] = [];
+  lines.push("### Research Snapshot");
+  lines.push("");
+  lines.push(`- Conceptual Essence: ${researchSnapshot.conceptualEssence}`);
+  lines.push(`- Historical Anchor: ${researchSnapshot.historicalAnchor.figure}`);
+  lines.push(
+    `- Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`,
+  );
+  lines.push(
+    `- High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`,
+  );
+  const functionalAnalogies = researchSnapshot.narrativeElements.functionalAnalogies
+    .map((analogy) => `${analogy.name}: ${analogy.description}`)
+    .join("; ");
+  lines.push(`- Functional Analogies: ${functionalAnalogies}`);
+  lines.push(
+    `- Contrasting Foil: ${researchSnapshot.narrativeElements.contrastingFoil}`,
+  );
+  lines.push(
+    `- Invisible Architecture Pivot: ${researchSnapshot.narrativeElements.invisibleArchitecturePivot}`,
+  );
+  const terminology = researchSnapshot.keyTerminologyGloss ?? [];
+  if (terminology.length > 0) {
+    lines.push("- Key Terminology & Gloss:");
+    for (const entry of terminology) {
+      lines.push(`  * ${entry.term}: ${entry.definition}`);
+    }
+  }
+  lines.push(
+    `- Key Term to Name in Story: ${researchSnapshot.keyTermToNameInStory}`,
+  );
+  if (researchSnapshot.namingNote) {
+    lines.push(`- Naming Note: ${researchSnapshot.namingNote}`);
+  }
+  if (researchSnapshot.historicalNuance) {
+    lines.push(`- Historical Nuance: ${researchSnapshot.historicalNuance}`);
+  }
+
+  lines.push("");
+  lines.push("### Selected Narrative Direction");
+  lines.push(`- Angle: ${selectedCandidate.angle}`);
+  lines.push(`- Anchor Event: ${selectedCandidate.anchorEvent}`);
+  lines.push(`- Analogy: ${selectedCandidate.analogy}`);
+  if (selectedCandidate.endingPivot) {
+    lines.push(`- Ending Pivot: ${selectedCandidate.endingPivot}`);
+  }
+  lines.push(`- Lesson Teaser: ${selectedCandidate.lessonTeaser}`);
+  if (selectedCandidate.namingNote) {
+    lines.push(`- Candidate Naming Note: ${selectedCandidate.namingNote}`);
+  }
+  lines.push(`- Recommendation Rationale: ${recommendation.rationale}`);
+
+  lines.push("");
+  lines.push("### Lesson Seeds");
+  lines.push(`- Analogy Clarifier: ${researchSnapshot.analogyClarifierSeed}`);
+  lines.push(`- Closing Invitation: ${researchSnapshot.closingInvitationSeed}`);
+
+  if (sources.length > 0) {
+    lines.push("");
+    lines.push("### Sources");
+    for (const source of sources) {
+      lines.push(`- ${source.title} — ${source.url}: ${source.summary}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function buildVariantDebugOptions(
@@ -2516,7 +2823,18 @@ export class StoryGenerationPipeline {
         );
         return undefined;
       }
-      return { value: { brief: checkpoint.brief }, filePath };
+      let data: StoryIdeaData | undefined;
+      if (checkpoint.data) {
+        const parseResult = StoryIdeaDataSchema.safeParse(checkpoint.data);
+        if (parseResult.success) {
+          data = parseResult.data;
+        } else {
+          this.logger.log(
+            `[story/checkpoint] ignored 'idea' checkpoint data at ${filePath} (schema mismatch)`,
+          );
+        }
+      }
+      return { value: { brief: checkpoint.brief, data }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
         return undefined;
@@ -2536,6 +2854,7 @@ export class StoryGenerationPipeline {
     const payload: StoryIdeaCheckpoint = {
       topic: this.options.topic,
       brief: value.brief,
+      data: value.data,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
