@@ -21,19 +21,19 @@ import {
   type QuizGeneration,
   QuizGenerationSchema,
   QUIZ_RESPONSE_SCHEMA,
-} from "@spark/llm/quiz/schemas";
+} from "@spark/llm/quiz/legacy/schemas";
 import {
   buildExtensionPrompt,
   buildGenerationPrompt,
   buildSourceParts,
   normaliseQuizPayload,
   type GenerateQuizOptions,
-} from "@spark/llm/quiz/prompts";
+} from "@spark/llm/quiz/legacy/prompts";
 import {
   DEFAULT_EXTENSION_QUESTION_COUNT,
   DEFAULT_GENERATION_QUESTION_COUNT,
   QUIZ_GENERATION_MODEL_ID,
-} from "@spark/llm/quiz/generator";
+} from "@spark/llm/quiz/legacy/generator";
 import { type Schema } from "@google/genai";
 import {
   AUDIT_RESPONSE_SCHEMA,
@@ -41,7 +41,7 @@ import {
   buildAuditPrompt,
   buildJudgePrompt,
   QUIZ_EVAL_MODEL_ID,
-} from "@spark/llm/quiz/judge";
+} from "@spark/llm/quiz/legacy/judge";
 import type { GeminiModelId } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,

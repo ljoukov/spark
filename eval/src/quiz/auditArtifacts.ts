@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { JudgeAuditSchema } from "@spark/llm/quiz/schemas";
+import { JudgeAuditSchema } from "@spark/llm/quiz/legacy/schemas";
 
 import {
   JudgeAuditFilePayloadSchema,

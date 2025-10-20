@@ -6,8 +6,8 @@ import {
   buildGenerationPrompt,
   buildSourceParts,
   normaliseQuizPayload,
-} from "../src/quiz/prompts";
-import { QuizGenerationSchema } from "../src/quiz/schemas";
+} from "../src/quiz/legacy/prompts";
+import { QuizGenerationSchema } from "../src/quiz/legacy/schemas";
 
 const INLINE_SAMPLE = {
   displayName: "sample.pdf",

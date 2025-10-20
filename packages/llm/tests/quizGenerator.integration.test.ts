@@ -5,17 +5,17 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
-import { auditJudgeDecision, judgeQuiz } from "../src/quiz/judge";
+import { auditJudgeDecision, judgeQuiz } from "../src/quiz/legacy/judge";
 import {
   type InlineSourceFile,
   type JudgeAudit,
   type JudgeVerdict,
   type QuizGeneration,
-} from "../src/quiz/schemas";
+} from "../src/quiz/legacy/schemas";
 import {
   extendQuizWithMoreQuestions,
   generateQuizFromSource,
-} from "../src/quiz/generator";
+} from "../src/quiz/legacy/generator";
 import { runGeminiCall } from "../src/utils/gemini";
 import { loadLocalEnv } from "../src/utils/env";
 
