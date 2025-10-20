@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { getAuth, onAuthStateChanged, type Auth, type User } from 'firebase/auth';
 
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -55,6 +56,13 @@
 		status: 'checking' as LogoutStatus,
 		errorMessage: ''
 	});
+
+	const logoutFrom = $derived($page.url.searchParams.get('from'));
+	const returnHref = $derived(
+		logoutFrom === 'code' || logoutFrom === 'spark'
+			? `/welcome?destination=${logoutFrom}`
+			: '/welcome'
+	);
 
 	let authInstance: Auth | null = null;
 
@@ -141,7 +149,7 @@
 		{#if !isBusy && (showLoginLink || showRetry)}
 			<footer class="logout-footer">
 				{#if showLoginLink}
-					<Button href="/welcome" size="lg" class="logout-action">Back to welcome</Button>
+					<Button href={returnHref} size="lg" class="logout-action">Back to welcome</Button>
 				{/if}
 				{#if showRetry}
 					<Button
