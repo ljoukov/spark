@@ -45,7 +45,21 @@ const userStore = getContext<UserStore | undefined>('spark:user');
 <section class="spark-welcome">
 	<div class="spark-card">
 		<p class="spark-eyebrow">Welcome back</p>
-		<h1 class="spark-title">Hi {firstName}!</h1>
+		<h1 class="spark-title">
+			Hi {firstName}!
+			<picture class="spark-comet" aria-hidden="true">
+				<source
+					srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/2604_fe0f/512.webp"
+					type="image/webp"
+				/>
+				<img
+					src="https://fonts.gstatic.com/s/e/notoemoji/latest/2604_fe0f/512.gif"
+					alt=""
+					width="32"
+					height="32"
+				/>
+			</picture>
+		</h1>
 		<p class="spark-copy">
 			This is your Spark hub. Pick any experience from the navigation above to get started.
 		</p>
@@ -98,6 +112,18 @@ const userStore = getContext<UserStore | undefined>('spark:user');
 		font-weight: 650;
 		line-height: 1.05;
 		color: var(--text-primary, var(--foreground));
+	}
+
+	.spark-comet {
+		display: inline-flex;
+		align-items: center;
+		margin-left: 0.65rem;
+	}
+
+	.spark-comet img {
+		display: block;
+		width: clamp(2rem, 3vw, 2.5rem);
+		height: clamp(2rem, 3vw, 2.5rem);
 	}
 
 	.spark-copy {
