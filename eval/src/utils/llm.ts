@@ -9,6 +9,7 @@ import { inspect } from "node:util";
 import {
   FinishReason,
   type Content,
+  type GroundingMetadata,
   type Part,
   type Schema,
   type Tool,
@@ -707,11 +708,13 @@ async function writeTextResponseSnapshot({
   summary = [],
   text,
   contents,
+  grounding,
 }: {
   pathname: string;
   summary?: readonly string[];
   text: string;
   contents?: readonly LlmContent[];
+  grounding?: GroundingMetadata | undefined;
 }): Promise<void> {
   const sections: string[] = [];
   if (summary.length > 0) {
@@ -726,6 +729,10 @@ async function writeTextResponseSnapshot({
     if (sections[sections.length - 1] !== "") {
       sections.push("");
     }
+  }
+  if (grounding) {
+    sections.push("===== Grounding =====");
+    sections.push(JSON.stringify(grounding, null, 2), "");
   }
   await mkdir(path.dirname(pathname), { recursive: true });
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
@@ -1064,6 +1071,7 @@ async function llmStream({
     const responseParts: LlmContentPart[] = [];
     let responseRole: LlmRole | undefined;
     let blocked = false;
+    let responseGroundingMetadata: GroundingMetadata | undefined;
     let imageCounter = 0;
 
     const appendTextPart = (text: string, isThought: boolean): void => {
@@ -1139,6 +1147,7 @@ async function llmStream({
           contents: googlePromptContents,
           config,
         });
+        let latestGroundingMetadata: GroundingMetadata | undefined;
         for await (const chunk of stream) {
           if (chunk.modelVersion) {
             resolvedModelVersion = chunk.modelVersion;
@@ -1158,6 +1167,9 @@ async function llmStream({
               const candidateContent = candidate.content;
               if (!candidateContent) {
                 continue;
+              }
+              if (candidate.groundingMetadata) {
+                latestGroundingMetadata = candidate.groundingMetadata;
               }
               try {
                 const content =
@@ -1179,6 +1191,9 @@ async function llmStream({
               outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
             });
           }
+        }
+        if (latestGroundingMetadata) {
+          responseGroundingMetadata = latestGroundingMetadata;
         }
       });
     } finally {
@@ -1213,6 +1228,7 @@ async function llmStream({
           summary: snapshotSummary,
           text: trimmedResponseText,
           contents: snapshotContents,
+          grounding: responseGroundingMetadata,
         });
       }
       if (debugLogDir) {
@@ -1221,6 +1237,7 @@ async function llmStream({
           summary: snapshotSummary,
           text: trimmedResponseText,
           contents: snapshotContents,
+          grounding: responseGroundingMetadata,
         });
       }
       if (debugOutputDirs.length > 0) {
