@@ -966,25 +966,50 @@ export async function generateStoryIdea(
   options?: StoryDebugOptions,
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
-  adapter.log(
-    `[story] generating idea with web-search-enabled ${TEXT_MODEL_ID}`,
-  );
   const prompt = buildStoryIdeaPrompt(topic);
-  const brief = await generateText({
-    progress: adapter,
-    modelId: TEXT_MODEL_ID,
-    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    tools: [{ type: "web-search" }],
-    debug: options?.debugRootDir
+  for (
+    let attempt = 1;
+    attempt <= IDEA_GENERATION_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(IDEA_GENERATION_MAX_ATTEMPTS).padStart(2, "0")}`;
+    adapter.log(
+      `[story/idea] generation attempt ${attempt} of ${IDEA_GENERATION_MAX_ATTEMPTS} with web-search-enabled ${TEXT_MODEL_ID}`,
+    );
+    const debugOptions = options?.debugRootDir
       ? {
           rootDir: options.debugRootDir,
           stage: "idea",
-          subStage: options.debugSubStage,
+          subStage: combineDebugSegments(options.debugSubStage, attemptLabel),
         }
-      : undefined,
-  });
-  adapter.log("[story/idea] brief prepared");
-  return { brief };
+      : undefined;
+    try {
+      const brief = await generateText({
+        progress: adapter,
+        modelId: TEXT_MODEL_ID,
+        contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+        tools: [{ type: "web-search" }],
+        debug: debugOptions,
+      });
+      adapter.log("[story/idea] brief prepared");
+      return { brief };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error ?? "unknown");
+      if (attempt === IDEA_GENERATION_MAX_ATTEMPTS) {
+        adapter.log(
+          `[story/idea] generation attempt ${attempt} failed (${message}); no retries left`,
+        );
+        throw new Error(
+          `Story idea generation failed after ${IDEA_GENERATION_MAX_ATTEMPTS} attempt(s): ${message}`,
+        );
+      }
+      adapter.log(
+        `[story/idea] generation attempt ${attempt} failed (${message}); retrying...`,
+      );
+    }
+  }
+  throw new Error("Story idea generation failed; no idea was produced.");
 }
 
 export async function generateStoryProseDraft(
@@ -1169,6 +1194,7 @@ function buildValidationFeedback(
   ].join("\n");
 }
 
+const IDEA_GENERATION_MAX_ATTEMPTS = 3;
 const PROSE_DRAFT_MAX_ATTEMPTS = 3;
 const PROSE_REVISION_MAX_ATTEMPTS = 3;
 
