@@ -1684,7 +1684,7 @@ function combineDebugSegments(
 }
 
 function formatIdeaBrief(data: StoryIdeaData): string {
-  const { researchSnapshot, candidates, recommendation, sources } = data;
+  const { researchSnapshot, candidates, recommendation } = data;
   const selectedCandidate = candidates.find(
     (candidate) => candidate.id === recommendation.selectedCandidateId
   );
@@ -1753,14 +1753,6 @@ function formatIdeaBrief(data: StoryIdeaData): string {
   lines.push("### Lesson Seeds");
   lines.push(`- Analogy Clarifier: ${researchSnapshot.analogyClarifierSeed}`);
   lines.push(`- Closing Invitation: ${researchSnapshot.closingInvitationSeed}`);
-
-  if (sources.length > 0) {
-    lines.push("");
-    lines.push("### Sources");
-    for (const source of sources) {
-      lines.push(`- ${source.title} — ${source.url}: ${source.summary}`);
-    }
-  }
 
   return lines.join("\n");
 }
