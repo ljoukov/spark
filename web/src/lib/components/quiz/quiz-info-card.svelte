@@ -77,7 +77,17 @@
 	}
 
 	.info-markdown :global(code) {
-		font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+		font-family: var(
+			--font-mono,
+			ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Monaco,
+			Consolas,
+			'Liberation Mono',
+			'Courier New',
+			monospace
+		);
 		font-size: 0.95em;
 		padding: 0.1rem 0.25rem;
 		border-radius: 0.35rem;
