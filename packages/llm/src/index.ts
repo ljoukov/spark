@@ -1,4 +1,4 @@
-export * from "./quiz";
+export * from "./quiz/legacy";
 export * from "./code";
 export * from "./utils/env";
 export * from "./utils/testUser";
