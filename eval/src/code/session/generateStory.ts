@@ -1169,6 +1169,7 @@ function buildValidationFeedback(
   ].join("\n");
 }
 
+const PROSE_DRAFT_MAX_ATTEMPTS = 3;
 const PROSE_REVISION_MAX_ATTEMPTS = 3;
 
 function combineDebugSegments(
@@ -1213,14 +1214,48 @@ async function prepareProseVariantDraft(
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions,
 ): Promise<StoryProseDraftVariant> {
-  const draftOptions = buildVariantDebugOptions(baseDebug, label);
-  const draft = await generateStoryProseDraft(
-    topic,
-    idea,
-    progress,
-    draftOptions,
+  const adapter = useProgress(progress);
+  for (
+    let attempt = 1;
+    attempt <= PROSE_DRAFT_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_DRAFT_MAX_ATTEMPTS).padStart(2, "0")}`;
+    adapter.log(
+      `[story/prose/${label}] draft attempt ${attempt} of ${PROSE_DRAFT_MAX_ATTEMPTS}`,
+    );
+    const draftOptions = buildVariantDebugOptions(
+      baseDebug,
+      label,
+      attemptLabel,
+    );
+    try {
+      const draft = await generateStoryProseDraft(
+        topic,
+        idea,
+        progress,
+        draftOptions,
+      );
+      return { label, idea, draft };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error ?? "unknown");
+      if (attempt === PROSE_DRAFT_MAX_ATTEMPTS) {
+        adapter.log(
+          `[story/prose/${label}] draft attempt ${attempt} failed (${message}); no retries left`,
+        );
+        throw new Error(
+          `Story prose draft generation failed for ${label} after ${PROSE_DRAFT_MAX_ATTEMPTS} attempt(s): ${message}`,
+        );
+      }
+      adapter.log(
+        `[story/prose/${label}] draft attempt ${attempt} failed (${message}); retrying...`,
+      );
+    }
+  }
+  throw new Error(
+    `Story prose draft generation failed for ${label}; no draft was produced.`,
   );
-  return { label, idea, draft };
 }
 
 async function reviseProseVariant(
