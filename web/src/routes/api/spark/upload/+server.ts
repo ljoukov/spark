@@ -1,11 +1,14 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirebaseAdminBucket } from '$lib/server/utils/firebaseAdmin';
+import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
+import { type SparkUploadQuizStatus, type SparkUploadStatus } from '@spark/schemas';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
+import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
+const SPARK_UPLOAD_QUIZ_QUESTION_COUNT = 20;
 
 const filenameSchema = z
 	.string()
@@ -138,12 +141,73 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 
+	const firestore = getFirebaseAdminFirestore();
+	const uploadDocRef = firestore
+		.collection('spark')
+		.doc(userId)
+		.collection('uploads')
+		.doc(digest);
+	const quizDocRef = uploadDocRef.collection('quiz').doc();
+	const serverTimestamp = FieldValue.serverTimestamp();
+	const uploadStatus: SparkUploadStatus = 'uploaded';
+	const quizStatus: SparkUploadQuizStatus = 'pending';
+
+	try {
+		await firestore.runTransaction(async (tx) => {
+			tx.set(
+				uploadDocRef,
+				{
+					filename,
+					storagePath,
+					contentType: storageContentType,
+					hash: digest,
+					sizeBytes: fileBuffer.length,
+					status: uploadStatus,
+					quizStatus,
+					quizQuestionCount: SPARK_UPLOAD_QUIZ_QUESTION_COUNT,
+					uploadedAt: serverTimestamp,
+					lastUpdatedAt: serverTimestamp,
+					activeQuizId: quizDocRef.id
+				},
+				{ merge: true }
+			);
+
+			tx.set(quizDocRef, {
+				uploadId: digest,
+				status: quizStatus,
+				requestedQuestionCount: SPARK_UPLOAD_QUIZ_QUESTION_COUNT,
+				createdAt: serverTimestamp,
+				updatedAt: serverTimestamp
+			});
+		});
+	} catch (error) {
+		console.error('Spark upload: failed to persist Firestore metadata', {
+			error,
+			userId,
+			storagePath,
+			uploadDocPath: uploadDocRef.path,
+			quizDocPath: quizDocRef.path
+		});
+		return json(
+			{
+				error: 'metadata_failed',
+				message: 'We uploaded the file but could not record its metadata. Please try again.'
+			},
+			{ status: 500 }
+		);
+	}
+
 	return json(
 		{
 			storagePath,
 			hash: digest,
 			size: fileBuffer.length,
-			contentType: storageContentType
+			contentType: storageContentType,
+			uploadId: digest,
+			uploadDocPath: uploadDocRef.path,
+			quizId: quizDocRef.id,
+			quizDocPath: quizDocRef.path,
+			questionCount: SPARK_UPLOAD_QUIZ_QUESTION_COUNT
 		},
 		{ status: 201 }
 	);

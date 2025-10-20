@@ -1,4 +1,5 @@
 export * from "./quiz/legacy";
+export * from "./quiz/sparkUpload";
 export * from "./code";
 export * from "./utils/env";
 export * from "./utils/testUser";
