@@ -908,13 +908,13 @@ ${storyText}
 
 **Checklist:**
 1. Enumerate the distinct historical claims. Treat each date, location, relationship, proof status, and attribution as a separate claim.
-2. For every claim, run at least one web search. Note the key evidence you found (e.g., source name + short summary). If results conflict or are absent, treat the claim as unsupported.
+2. For every claim, run at least one web search. Note the key evidence you found, and record explicit citations with the source name and URL (e.g., "Bell Labs oral history – https://example.org/..."). If results conflict or are absent, treat the claim as unsupported.
 3. Verdict rules:
    * Return **"pass"** only if every claim is supported by your searches.
    * Return **"fail"** when any claim is missing support, contradicts reliable sources, or remains ambiguous after reasonable searching. Record one issue per problematic claim, set 'category' to 'factual', and explain the concern in plain language.
 4. Ignore stylistic or structural issues here; only comment on historical accuracy. The next reviewer will enforce writing-quality requirements.
 
-Respond using the provided JSON schema.
+Respond using the provided JSON schema. In every issue you log, include the supporting citation(s) inside the "evidence" field.
 `;
 }
 
