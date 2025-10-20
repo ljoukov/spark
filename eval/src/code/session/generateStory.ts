@@ -51,6 +51,8 @@ export const ART_STYLE: readonly string[] = [
   "If any writing appears, it must be on physical surfaces (paper, chalkboard, signage) and period-appropriate. Keep it minimal and never depict equations or dense text.",
 ];
 
+const IMAGE_SET_GENERATE_MAX_ATTEMPTS = 3;
+
 export type StoryProgress = JobProgressReporter | undefined;
 
 type StoryDebugOptions = {
@@ -1947,146 +1949,183 @@ export async function generateImageSets(
   const runImageSet = async (
     imageSetLabel: "set_a" | "set_b",
   ): Promise<StoryImageSet> => {
-    adapter.log(
-      `[story/image-sets/${imageSetLabel}] generating main frames (${panelEntries.length} prompts)`,
-    );
     const frameNarrationByIndex = new Map<number, readonly string[]>();
     for (const entry of panelEntries) {
       const narrationLines =
         narrationsByIndex.get(entry.index) ?? entry.narration ?? [];
       frameNarrationByIndex.set(entry.index, narrationLines);
     }
-    const mainImageParts = await generateStoryFrames({
-      progress: adapter,
-      imageModelId: IMAGE_MODEL_ID,
-      gradingModelId: TEXT_MODEL_ID,
-      stylePrompt,
-      imagePrompts: panelEntries.map((entry) => entry.prompt),
-      batchSize: 5,
-      overlapSize: 3,
-      gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
-      imageAspectRatio: "16:9",
-      frameNarrationByIndex,
-      debug: buildDebug(`${imageSetLabel}/main`),
-    });
+    let lastError: unknown;
 
-    const imagesByIndex = new Map<number, GeneratedStoryImage>();
-    for (let index = 0; index < panelEntries.length; index += 1) {
-      const entry = panelEntries[index];
-      const part = mainImageParts[index];
-      if (!part) {
-        continue;
-      }
-      imagesByIndex.set(entry.index, {
-        index: entry.index,
-        mimeType: part.mimeType ?? "image/png",
-        data: part.data,
-      });
-      adapter.log(
-        `[story/image-sets/${imageSetLabel}] received image ${entry.index} (${part.data.length} bytes)`,
-      );
-    }
+    for (
+      let attempt = 1;
+      attempt <= IMAGE_SET_GENERATE_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(
+        IMAGE_SET_GENERATE_MAX_ATTEMPTS,
+      ).padStart(2, "0")}`;
+      const attemptLogPrefix = `[story/image-sets/${imageSetLabel}] [${attemptLabel}]`;
+      const logWithAttempt = (message: string) => {
+        adapter.log(`${attemptLogPrefix} ${message}`);
+      };
+      const attemptDebug = (
+        subStage: string,
+      ): LlmDebugOptions | undefined =>
+        buildDebug(`${imageSetLabel}/${attemptLabel}/${subStage}`);
 
-    const posterReferences = mainImageParts.slice(0, 4);
-    adapter.log(
-      `[story/image-sets/${imageSetLabel}] generating poster candidates (4 variants)`,
-    );
-    const posterCandidatePromises = Array.from({ length: 4 }).map(
-      async (_, offset) => {
-        const candidateIndex = offset + 1;
-        const image = await generateSingleImage({
+      try {
+        logWithAttempt(
+          `generating main frames (${panelEntries.length} prompts)`,
+        );
+        const mainImageParts = await generateStoryFrames({
+          progress: adapter,
+          imageModelId: IMAGE_MODEL_ID,
+          gradingModelId: TEXT_MODEL_ID,
+          stylePrompt,
+          imagePrompts: panelEntries.map((entry) => entry.prompt),
+          batchSize: 5,
+          overlapSize: 3,
+          gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
+          imageAspectRatio: "16:9",
+          frameNarrationByIndex,
+          debug: attemptDebug("main"),
+        });
+
+        const imagesByIndex = new Map<number, GeneratedStoryImage>();
+        for (let index = 0; index < panelEntries.length; index += 1) {
+          const entry = panelEntries[index];
+          const part = mainImageParts[index];
+          if (!part) {
+            continue;
+          }
+          imagesByIndex.set(entry.index, {
+            index: entry.index,
+            mimeType: part.mimeType ?? "image/png",
+            data: part.data,
+          });
+          logWithAttempt(
+            `received image ${entry.index} (${part.data.length} bytes)`,
+          );
+        }
+
+        const posterReferences = mainImageParts.slice(0, 4);
+        logWithAttempt("generating poster candidates (4 variants)");
+        const posterCandidatePromises = Array.from({ length: 4 }).map(
+          async (_, offset) => {
+            const candidateIndex = offset + 1;
+            const image = await generateSingleImage({
+              progress: adapter,
+              modelId: IMAGE_MODEL_ID,
+              stylePrompt,
+              styleImages: posterReferences,
+              prompt: posterEntry.prompt,
+              maxAttempts: 4,
+              imageAspectRatio: "16:9",
+              debug: attemptDebug(`poster/candidate_${candidateIndex}`),
+            });
+            logWithAttempt(
+              `poster candidate ${candidateIndex} (${image.data.length} bytes)`,
+            );
+            return { candidateIndex, image };
+          },
+        );
+        const posterCandidates = await Promise.all(posterCandidatePromises);
+        const posterSelection = await selectPosterCandidate({
+          prompt: posterEntry.prompt,
+          stylePrompt,
+          styleReferences: posterReferences,
+          candidates: posterCandidates,
+          catastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
+          progress: adapter,
+          gradingModelId: TEXT_MODEL_ID,
+          debug: attemptDebug("poster/select"),
+        });
+        const winningPoster = posterCandidates.find(
+          (candidate) =>
+            candidate.candidateIndex === posterSelection.winnerCandidateIndex,
+        );
+        if (!winningPoster) {
+          throw new Error(
+            `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`,
+          );
+        }
+        imagesByIndex.set(posterIndex, {
+          index: posterIndex,
+          mimeType: winningPoster.image.mimeType ?? "image/png",
+          data: winningPoster.image.data,
+        });
+        logWithAttempt(
+          `selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`,
+        );
+        for (const finding of posterSelection.catastrophicFindings) {
+          logWithAttempt(
+            `poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`,
+          );
+        }
+
+        const endingReferences = mainImageParts.slice(
+          Math.max(mainImageParts.length - 4, 0),
+        );
+        logWithAttempt("generating end card");
+        const endingPart = await generateSingleImage({
           progress: adapter,
           modelId: IMAGE_MODEL_ID,
           stylePrompt,
-          styleImages: posterReferences,
-          prompt: posterEntry.prompt,
+          styleImages: endingReferences,
+          prompt: endingEntry.prompt,
           maxAttempts: 4,
           imageAspectRatio: "16:9",
-          debug: buildDebug(
-            `${imageSetLabel}/poster/candidate_${candidateIndex}`,
-          ),
+          debug: attemptDebug("ending"),
         });
-        adapter.log(
-          `[story/image-sets/${imageSetLabel}] poster candidate ${candidateIndex} (${image.data.length} bytes)`,
+        imagesByIndex.set(endingIndex, {
+          index: endingIndex,
+          mimeType: endingPart.mimeType ?? "image/png",
+          data: endingPart.data,
+        });
+        logWithAttempt(
+          `received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
         );
-        return { candidateIndex, image };
-      },
-    );
-    const posterCandidates = await Promise.all(posterCandidatePromises);
-    const posterSelection = await selectPosterCandidate({
-      prompt: posterEntry.prompt,
-      stylePrompt,
-      styleReferences: posterReferences,
-      candidates: posterCandidates,
-      catastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
-      progress: adapter,
-      gradingModelId: TEXT_MODEL_ID,
-      debug: buildDebug(`${imageSetLabel}/poster/select`),
-    });
-    const winningPoster = posterCandidates.find(
-      (candidate) =>
-        candidate.candidateIndex === posterSelection.winnerCandidateIndex,
-    );
-    if (!winningPoster) {
-      throw new Error(
-        `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`,
-      );
-    }
-    imagesByIndex.set(posterIndex, {
-      index: posterIndex,
-      mimeType: winningPoster.image.mimeType ?? "image/png",
-      data: winningPoster.image.data,
-    });
-    adapter.log(
-      `[story/image-sets/${imageSetLabel}] selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`,
-    );
-    for (const finding of posterSelection.catastrophicFindings) {
-      adapter.log(
-        `[story/image-sets/${imageSetLabel}] poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`,
-      );
-    }
 
-    const endingReferences = mainImageParts.slice(
-      Math.max(mainImageParts.length - 4, 0),
-    );
-    adapter.log(`[story/image-sets/${imageSetLabel}] generating end card`);
-    const endingPart = await generateSingleImage({
-      progress: adapter,
-      modelId: IMAGE_MODEL_ID,
-      stylePrompt,
-      styleImages: endingReferences,
-      prompt: endingEntry.prompt,
-      maxAttempts: 4,
-      imageAspectRatio: "16:9",
-      debug: buildDebug(`${imageSetLabel}/ending`),
-    });
-    imagesByIndex.set(endingIndex, {
-      index: endingIndex,
-      mimeType: endingPart.mimeType ?? "image/png",
-      data: endingPart.data,
-    });
-    adapter.log(
-      `[story/image-sets/${imageSetLabel}] received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
-    );
+        const orderedImages: GeneratedStoryImage[] = [];
+        const appendImageIfPresent = (targetIndex: number) => {
+          const image = imagesByIndex.get(targetIndex);
+          if (image) {
+            orderedImages.push(image);
+          }
+        };
 
-    const orderedImages: GeneratedStoryImage[] = [];
-    const appendImageIfPresent = (targetIndex: number) => {
-      const image = imagesByIndex.get(targetIndex);
-      if (image) {
-        orderedImages.push(image);
+        appendImageIfPresent(posterIndex);
+        for (const entry of panelEntries) {
+          appendImageIfPresent(entry.index);
+        }
+        appendImageIfPresent(endingIndex);
+
+        logWithAttempt("completed image set generation");
+        return {
+          imageSetLabel,
+          images: orderedImages,
+        };
+      } catch (error) {
+        lastError = error;
+        const message =
+          error instanceof Error ? error.message : String(error);
+        logWithAttempt(`failed: ${message}`);
+        if (attempt === IMAGE_SET_GENERATE_MAX_ATTEMPTS) {
+          throw error instanceof Error ? error : new Error(message);
+        }
+        logWithAttempt("retrying after failure");
+        continue;
       }
-    };
-
-    appendImageIfPresent(posterIndex);
-    for (const entry of panelEntries) {
-      appendImageIfPresent(entry.index);
     }
-    appendImageIfPresent(endingIndex);
 
-    return {
-      imageSetLabel,
-      images: orderedImages,
-    };
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(
+          `Image set generation failed for ${imageSetLabel}${
+            lastError ? `: ${String(lastError)}` : ""
+          }`,
+        );
   };
 
   // Generate both image sets in parallel to reduce wall-clock time.
