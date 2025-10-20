@@ -4,15 +4,15 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { QUIZ_EVAL_MODEL_ID } from "@spark/llm/quiz/judge";
+import { QUIZ_EVAL_MODEL_ID } from "@spark/llm/quiz/legacy/judge";
 import {
   DEFAULT_EXTENSION_QUESTION_COUNT,
   DEFAULT_GENERATION_QUESTION_COUNT,
-} from "@spark/llm/quiz/generator";
+} from "@spark/llm/quiz/legacy/generator";
 import {
   buildExtensionPrompt,
   buildGenerationPrompt,
-} from "@spark/llm/quiz/prompts";
+} from "@spark/llm/quiz/legacy/prompts";
 import { runJobsWithConcurrency } from "../utils/concurrency";
 import type { JobProgressReporter } from "../utils/concurrency";
 import { generateText } from "../utils/llm";

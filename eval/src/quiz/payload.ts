@@ -8,7 +8,7 @@ import {
   type JudgeAudit,
   type JudgeVerdict,
   type QuizGeneration,
-} from "@spark/llm/quiz/schemas";
+} from "@spark/llm/quiz/legacy/schemas";
 
 export const QuizModelRunSchema = z.object({
   modelId: z.string().min(1),
