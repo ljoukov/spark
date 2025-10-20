@@ -44,6 +44,8 @@ All calls accept:
 
 Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
 
+When you need to explain the expected shape inside a prompt, describe it in clear prose (sections, fields, and intent) rather than pasting raw JSON schemas or example skeletons. The schema definitions live in code; prompts should only outline the requirements at a conceptual level.
+
 ## Progress and Metrics
 
 The wrappers report per-call usage to a `JobProgressReporter`:

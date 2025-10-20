@@ -175,11 +175,7 @@ export type StoryProseRevisionAnalysis = {
   motivationalPower: StoryProseRevisionCriterion;
 };
 
-const STORY_IDEA_CANDIDATE_IDS = [
-  "candidate_a",
-  "candidate_b",
-  "candidate_c",
-] as const;
+const STORY_IDEA_CANDIDATE_IDS = ["candidate_a", "candidate_b", "candidate_c"] as const;
 
 const StoryIdeaFunctionalAnalogySchema = z.object({
   name: z.string().trim().min(1),
@@ -205,6 +201,13 @@ const StoryIdeaNarrativeElementsSchema = z.object({
   invisibleArchitecturePivot: z.string().trim().min(1),
 });
 
+const optionalIdeaString = z
+  .string()
+  .trim()
+  .min(1)
+  .nullish()
+  .transform((value) => (value === null || value === undefined ? undefined : value));
+
 const StoryIdeaResearchSnapshotSchema = z.object({
   conceptualEssence: z.string().trim().min(1),
   historicalAnchor: StoryIdeaHistoricalAnchorSchema,
@@ -214,8 +217,8 @@ const StoryIdeaResearchSnapshotSchema = z.object({
     .optional()
     .default([]),
   keyTermToNameInStory: z.string().trim().min(1),
-  namingNote: z.string().trim().min(1).nullish(),
-  historicalNuance: z.string().trim().min(1).nullish(),
+  namingNote: optionalIdeaString,
+  historicalNuance: optionalIdeaString,
   analogyClarifierSeed: z.string().trim().min(1),
   closingInvitationSeed: z.string().trim().min(1),
 });
@@ -225,9 +228,9 @@ const StoryIdeaCandidateSchema = z.object({
   angle: z.string().trim().min(1),
   anchorEvent: z.string().trim().min(1),
   analogy: z.string().trim().min(1),
-  endingPivot: z.string().trim().min(1).nullish(),
+  endingPivot: optionalIdeaString,
   lessonTeaser: z.string().trim().min(1),
-  namingNote: z.string().trim().min(1).nullish(),
+  namingNote: optionalIdeaString,
 });
 
 const StoryIdeaRecommendationSchema = z.object({
@@ -241,13 +244,35 @@ const StoryIdeaSourceSchema = z.object({
   summary: z.string().trim().min(1),
 });
 
-const StoryIdeaDataSchema = z.object({
+const StoryIdeaDataSchemaBase = z.object({
   researchSnapshot: StoryIdeaResearchSnapshotSchema,
   candidates: z
     .array(StoryIdeaCandidateSchema)
     .min(1, "Provide at least one narrative candidate"),
   recommendation: StoryIdeaRecommendationSchema,
   sources: z.array(StoryIdeaSourceSchema).min(1, "List at least one source"),
+});
+
+const StoryIdeaDataSchema = StoryIdeaDataSchemaBase.superRefine((value, ctx) => {
+  const ids = value.candidates.map((candidate) => candidate.id);
+  const expectedIds = new Set(STORY_IDEA_CANDIDATE_IDS);
+  if (ids.length !== expectedIds.size) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Expected exactly ${expectedIds.size} candidates (one per identifier).`,
+      path: ["candidates"],
+    });
+    return;
+  }
+  for (const expectedId of expectedIds) {
+    if (!ids.includes(expectedId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Missing candidate with id '${expectedId}'.`,
+        path: ["candidates"],
+      });
+    }
+  }
 });
 
 export type StoryIdeaData = z.infer<typeof StoryIdeaDataSchema>;
@@ -264,6 +289,8 @@ const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
   properties: {
     researchSnapshot: {
       type: Type.OBJECT,
+      description:
+        "Factual research summary that grounds the chosen story direction.",
       required: [
         "conceptualEssence",
         "historicalAnchor",
@@ -284,19 +311,43 @@ const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
         "closingInvitationSeed",
       ],
       properties: {
-        conceptualEssence: { type: Type.STRING, minLength: "1" },
+        conceptualEssence: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "One-sentence explanation of the core behaviour or insight behind the concept.",
+        },
         historicalAnchor: {
           type: Type.OBJECT,
+          description:
+            "Primary historical figure and decisive moment that anchor the narrative.",
           required: ["figure", "canonicalEvent", "highStakesProblem"],
           propertyOrdering: ["figure", "canonicalEvent", "highStakesProblem"],
           properties: {
-            figure: { type: Type.STRING, minLength: "1" },
-            canonicalEvent: { type: Type.STRING, minLength: "1" },
-            highStakesProblem: { type: Type.STRING, minLength: "1" },
+            figure: {
+              type: Type.STRING,
+              minLength: "1",
+              description:
+                "Full name and role of the person whose story we will tell.",
+            },
+            canonicalEvent: {
+              type: Type.STRING,
+              minLength: "1",
+              description:
+                "Specific paper, project, or milestone (with year/location) where the concept proved decisive.",
+            },
+            highStakesProblem: {
+              type: Type.STRING,
+              minLength: "1",
+              description:
+                "Why the problem mattered at that moment and what was at risk.",
+            },
           },
         },
         narrativeElements: {
           type: Type.OBJECT,
+          description:
+            "Analogy and foil information that shape how the story will be told.",
           required: [
             "functionalAnalogies",
             "contrastingFoil",
@@ -311,45 +362,100 @@ const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
             functionalAnalogies: {
               type: Type.ARRAY,
               minItems: "1",
+              description:
+                "Candidate analogies (2–3) that can map the concept to familiar systems.",
               items: {
                 type: Type.OBJECT,
                 required: ["name", "description"],
                 propertyOrdering: ["name", "description"],
                 properties: {
-                  name: { type: Type.STRING, minLength: "1" },
-                  description: { type: Type.STRING, minLength: "1" },
+                  name: {
+                    type: Type.STRING,
+                    minLength: "1",
+                    description: "Short title for the analogy (2–4 words).",
+                  },
+                  description: {
+                    type: Type.STRING,
+                    minLength: "1",
+                    description:
+                      "One-sentence description mapping the analogy behaviour to the concept.",
+                  },
                 },
               },
             },
-            contrastingFoil: { type: Type.STRING, minLength: "1" },
+            contrastingFoil: {
+              type: Type.STRING,
+              minLength: "1",
+              description:
+                "Alternate approach that fails for this historical problem (one sentence).",
+            },
             invisibleArchitecturePivot: {
               type: Type.STRING,
               minLength: "1",
+              description:
+                "Modern-day system or experience powered by the concept; used only in the ending.",
             },
           },
         },
         keyTerminologyGloss: {
           type: Type.ARRAY,
+          description:
+            "Optional glossary entries; omit when no glossary terms are required.",
           items: {
             type: Type.OBJECT,
             required: ["term", "definition"],
             propertyOrdering: ["term", "definition"],
             properties: {
-              term: { type: Type.STRING, minLength: "1" },
-              definition: { type: Type.STRING, minLength: "1" },
+              term: {
+                type: Type.STRING,
+                minLength: "1",
+                description: "Term that must appear in the final story.",
+              },
+              definition: {
+                type: Type.STRING,
+                minLength: "1",
+                description:
+                  "Learner-friendly definition (no formulas) to guide writers.",
+              },
             },
           },
         },
-        keyTermToNameInStory: { type: Type.STRING, minLength: "1" },
-        namingNote: { type: Type.STRING, minLength: "1" },
-        historicalNuance: { type: Type.STRING, minLength: "1" },
-        analogyClarifierSeed: { type: Type.STRING, minLength: "1" },
-        closingInvitationSeed: { type: Type.STRING, minLength: "1" },
+        keyTermToNameInStory: {
+          type: Type.STRING,
+          minLength: "1",
+          description: "Exact concept name that must appear early in the story.",
+        },
+        namingNote: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "Optional sentence clarifying how or why the concept received its name.",
+        },
+        historicalNuance: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "Optional note about proof status, independent rediscoveries, or caveats.",
+        },
+        analogyClarifierSeed: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "Sentence the writer can reuse to explain why the analogy guarantees the desired behaviour.",
+        },
+        closingInvitationSeed: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "Cliffhanger sentence promising learners they will practice the trick in this lesson.",
+        },
       },
     },
     candidates: {
       type: Type.ARRAY,
       minItems: "1",
+      description:
+        "Exactly three narrative directions (candidate_a/b/c) for the writer to choose from.",
       items: {
         type: Type.OBJECT,
         required: ["id", "angle", "anchorEvent", "analogy", "lessonTeaser"],
@@ -366,39 +472,92 @@ const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
           id: {
             type: Type.STRING,
             enum: [...STORY_IDEA_CANDIDATE_IDS],
+            description: "Stable identifier (candidate_a, candidate_b, candidate_c).",
           },
-          angle: { type: Type.STRING, minLength: "1" },
-          anchorEvent: { type: Type.STRING, minLength: "1" },
-          analogy: { type: Type.STRING, minLength: "1" },
-          endingPivot: { type: Type.STRING, minLength: "1" },
-          lessonTeaser: { type: Type.STRING, minLength: "1" },
-          namingNote: { type: Type.STRING, minLength: "1" },
+          angle: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "One-sentence framing of the narrative focus for this candidate.",
+          },
+          anchorEvent: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "Specific event used to open the story for this candidate (include year/place if applicable).",
+          },
+          analogy: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "Analogy sentence tailored to this candidate (no numbered steps).",
+          },
+          endingPivot: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "Optional sentence describing how the story ends with a modern tie-in; omit if none.",
+          },
+          lessonTeaser: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "Sentence promising learners the trick will be revealed and practised in the lesson.",
+          },
+          namingNote: {
+            type: Type.STRING,
+            minLength: "1",
+            description: "Optional naming trivia unique to this candidate.",
+          },
         },
       },
     },
     recommendation: {
       type: Type.OBJECT,
+      description:
+        "Recommendation of which candidate to ship, with supporting rationale.",
       required: ["selectedCandidateId", "rationale"],
-      propertyOrdering: ["selectedCandidateId", "rationale"],
+      propertyOrdering: ["rationale", "selectedCandidateId"],
       properties: {
         selectedCandidateId: {
           type: Type.STRING,
           enum: [...STORY_IDEA_CANDIDATE_IDS],
+          description: "Identifier of the winning candidate (must match one entry in candidates).",
         },
-        rationale: { type: Type.STRING, minLength: "1" },
+        rationale: {
+          type: Type.STRING,
+          minLength: "1",
+          description:
+            "Concise argument (2–3 sentences) explaining why this candidate delivers the best story.",
+        },
       },
     },
     sources: {
       type: Type.ARRAY,
       minItems: "1",
+      description:
+        "Merged bibliography covering every citation used in the snapshot and candidates.",
       items: {
         type: Type.OBJECT,
         required: ["title", "url", "summary"],
         propertyOrdering: ["title", "url", "summary"],
         properties: {
-          title: { type: Type.STRING, minLength: "1" },
-          url: { type: Type.STRING, minLength: "1" },
-          summary: { type: Type.STRING, minLength: "1" },
+          title: {
+            type: Type.STRING,
+            minLength: "1",
+            description: "Human-readable source title (site + article/book name).",
+          },
+          url: {
+            type: Type.STRING,
+            minLength: "1",
+            description: "Direct URL to the supporting evidence.",
+          },
+          summary: {
+            type: Type.STRING,
+            minLength: "1",
+            description:
+              "One-sentence recap of what this source confirms (dates, quotes, context, etc.).",
+          },
         },
       },
     },
@@ -886,50 +1045,13 @@ Important constraints:
    * **Lesson Teaser:** A one-sentence hint that this very lesson will reveal the trick and include short exercises to try it immediately (no explicit call-to-action wording).
    * (Optional) A short note on naming history if genuinely interesting.
 
-**Output Format:**
-Respond **only** with JSON matching the structure below (no Markdown, comments, or trailing text). Embed inline citations inside the string fields and populate the \`sources\` array with one entry per unique source.
-
-\`\`\`json
-{
-  "researchSnapshot": {
-    "conceptualEssence": string,
-    "historicalAnchor": {
-      "figure": string,
-      "canonicalEvent": string,
-      "highStakesProblem": string
-    },
-    "narrativeElements": {
-      "functionalAnalogies": [
-        { "name": string, "description": string }
-      ],
-      "contrastingFoil": string,
-      "invisibleArchitecturePivot": string
-    },
-    "keyTerminologyGloss": [
-      { "term": string, "definition": string }
-    ],
-    "keyTermToNameInStory": "${topic}",
-    "namingNote": string | null,
-    "historicalNuance": string | null,
-    "analogyClarifierSeed": string,
-    "closingInvitationSeed": string
-  },
-  "candidates": [
-    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string },
-    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string },
-    { "id": "candidate_a" | "candidate_b" | "candidate_c", "angle": string, "anchorEvent": string, "analogy": string, "endingPivot": string, "lessonTeaser": string, "namingNote": string }
-  ],
-  "recommendation": {
-    "selectedCandidateId": "candidate_a" | "candidate_b" | "candidate_c",
-    "rationale": string
-  },
-  "sources": [
-    { "title": string, "url": string, "summary": string }
-  ]
-}
-\`\`\`
-
-- Use each candidate identifier exactly once within \`candidates\`. Omit optional fields (like \`endingPivot\` or \`namingNote\`) when not applicable instead of returning null.
+- **Output Format:** Provide four sections—Research Snapshot, Candidates, Recommendation, and Sources—using the same structure our writers consume downstream. The structured output service already enforces typing; focus on supplying accurate values (with inline citations) for each field described below.
+  * **Research Snapshot:** Include the conceptual essence (one sentence), historical anchor (figure, canonical event, high-stakes problem), narrative elements (2–3 functional analogies with names+descriptions, contrasting foil, invisible architecture pivot), optional glossary terms, the exact concept name, optional naming/historical nuance notes, and the analogy clarifier and closing invitation seeds.
+  * **Candidates:** Return exactly three entries—\`candidate_a\`, \`candidate_b\`, and \`candidate_c\`. For each, supply an angle sentence, anchor event, tailored analogy sentence, optional ending pivot, lesson teaser, and optional naming note. Do not duplicate IDs or invent additional candidates.
+  * **Recommendation:** Pick one candidate ID and justify the choice with a two-to-three sentence rationale that references the audience impact. Place the rationale before naming the chosen ID so editors see the reasoning first.
+  * **Sources:** List every unique source referenced in the snapshot, candidates, or recommendation. For each, give the source title, direct URL, and a single-sentence summary of what it confirms.
+- Use inline citations in the fields above so each factual statement points to the supporting source entry.
+- Do not emit commentary outside the structured response; the schema will be validated automatically.
 - Ensure the citation text inside the string fields references the matching source entry.
 - \`sources\` should summarise what each reference confirms.
 `;

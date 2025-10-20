@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile, rename, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { inspect } from "node:util";
 
-// NOTE: Keep eval/src/utils/LLM.md in sync with any API changes to this file.
+// NOTE: Keep docs/LLM.md in sync with any API changes to this file.
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
   FinishReason,
