@@ -1045,16 +1045,48 @@ Important constraints:
    * **Lesson Teaser:** A one-sentence hint that this very lesson will reveal the trick and include short exercises to try it immediately (no explicit call-to-action wording).
    * (Optional) A short note on naming history if genuinely interesting.
 
-- **Output Format:** Provide four sections—Research Snapshot, Candidates, Recommendation, and Sources—using the same structure our writers consume downstream. The structured output service already enforces typing; focus on supplying accurate values (with inline citations) for each field described below.
+- **Output Format:** Return Markdown with these exact headings and subsection titles:
+  * \`### Research Snapshot\`
+  * \`### Candidates\`
+    * Include three subsections named \`#### candidate_a\`, \`#### candidate_b\`, and \`#### candidate_c\`.
+  * \`### Recommendation\`
+  * \`### Sources\`
+- Under each heading, use bullet lists or short paragraphs to supply the required details:
   * **Research Snapshot:** Include the conceptual essence (one sentence), historical anchor (figure, canonical event, high-stakes problem), narrative elements (2–3 functional analogies with names+descriptions, contrasting foil, invisible architecture pivot), optional glossary terms, the exact concept name, optional naming/historical nuance notes, and the analogy clarifier and closing invitation seeds.
-  * **Candidates:** Return exactly three entries—\`candidate_a\`, \`candidate_b\`, and \`candidate_c\`. For each, supply an angle sentence, anchor event, tailored analogy sentence, optional ending pivot, lesson teaser, and optional naming note. Do not duplicate IDs or invent additional candidates.
-  * **Recommendation:** Pick one candidate ID and justify the choice with a two-to-three sentence rationale that references the audience impact. Place the rationale before naming the chosen ID so editors see the reasoning first.
-  * **Sources:** List every unique source referenced in the snapshot, candidates, or recommendation. For each, give the source title, direct URL, and a single-sentence summary of what it confirms.
-- Use inline citations in the fields above so each factual statement points to the supporting source entry.
-- Do not emit commentary outside the structured response; the schema will be validated automatically.
-- Ensure the citation text inside the string fields references the matching source entry.
-- \`sources\` should summarise what each reference confirms.
+  * **Candidates:** For each subsection, provide an angle sentence, anchor event, tailored analogy sentence, optional ending pivot, lesson teaser, and optional naming note. Do not create extra candidates.
+  * **Recommendation:** Write a two-to-three sentence rationale referencing audience impact, then state the chosen candidate ID.
+  * **Sources:** List every unique source referenced anywhere in the brief. For each, include the source title, direct URL, and a one-sentence summary of what it confirms.
+- Keep inline citations inside the text so each factual statement references its supporting source entry.
+- Do not output JSON, code fences, or commentary outside the Markdown headings above.
 `;
+}
+
+export function buildStoryIdeaParsePrompt(
+  topic: string,
+  briefMarkdown: string,
+): string {
+  const schemaJson = JSON.stringify(STORY_IDEA_RESPONSE_SCHEMA, null, 2);
+  return [
+    "You are a structured-data specialist.",
+    "",
+    `Task: Convert the following Markdown story brief for the concept "${topic}" into JSON that matches STORY_IDEA_RESPONSE_SCHEMA.`,
+    "",
+    "Rules:",
+    "- Preserve every inline citation exactly as written.",
+    "- Do not invent new data. If a field is missing in the brief, omit it from the output rather than guessing.",
+    "- Keep candidate identifiers aligned with their headings (candidate_a, candidate_b, candidate_c).",
+    "- Ensure the selected candidate in the recommendation exists in the candidates list.",
+    "",
+    "JSON schema (for reference):",
+    schemaJson,
+    "",
+    "Markdown brief to parse:",
+    "<<<STORY_IDEA_BRIEF_START>>>",
+    briefMarkdown,
+    "<<<STORY_IDEA_BRIEF_END>>>",
+    "",
+    "Return JSON only.",
+  ].join("\n");
 }
 
 export function buildStoryDraftPrompt(
@@ -1265,8 +1297,41 @@ ${storyText}
    * Return **"fail"** when any claim is missing support, contradicts reliable sources, or remains ambiguous after reasonable searching. Record one issue per problematic claim, set 'category' to 'factual', and explain the concern in plain language.
 4. Ignore stylistic or structural issues here; only comment on historical accuracy. The next reviewer will enforce writing-quality requirements.
 
-Respond using the provided JSON schema. In every issue you log, include the supporting citation(s) inside the "evidence" field.
+**Reporting Format:**
+- Begin with a single line \`Verdict: pass\` or \`Verdict: fail\`.
+- Follow with an \`Issues:\` heading. When the verdict is \`fail\`, list each blocking issue as a numbered list item in the form:
+  1. (Category – Severity) Summary sentence
+     Evidence: ...
+     Recommendation: ...
+- When there are no issues, write \`Issues: none\`.
+- Include inline citations inside every evidence line so the supporting source is clear.
+- Return plain text or Markdown following the structure above. Do **not** output JSON.
 `;
+}
+
+export function buildStoryFactualValidationParsePrompt(
+  factualReport: string,
+): string {
+  const schemaJson = JSON.stringify(STORY_PROSE_VALIDATION_RESPONSE_SCHEMA, null, 2);
+  return [
+    "You are converting a fact-check report into structured JSON.",
+    "",
+    "Instructions:",
+    "- Read the analyst's report below and extract the verdict and issues.",
+    "- Preserve severity, categories, recommendations, and evidence exactly (including citations).",
+    "- If the report says there are no issues, return an empty array for issues.",
+    "- Do not fabricate data; faithfully mirror the report.",
+    "",
+    "Expected JSON schema:",
+    schemaJson,
+    "",
+    "Report to convert:",
+    "<<<FACTUAL_REPORT_START>>>",
+    factualReport,
+    "<<<FACTUAL_REPORT_END>>>",
+    "",
+    "Return JSON only.",
+  ].join("\n");
 }
 
 export function buildSegmentationPrompt(
@@ -1324,42 +1389,60 @@ export async function generateStoryIdea(
     attempt += 1
   ) {
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(IDEA_GENERATION_MAX_ATTEMPTS).padStart(2, "0")}`;
+    const subStage = combineDebugSegments(options?.debugSubStage, attemptLabel);
     adapter.log(
-      `[story/idea] generation attempt ${attempt} of ${IDEA_GENERATION_MAX_ATTEMPTS} with web-search-enabled ${TEXT_MODEL_ID}`,
+      `[story/ideas] generation attempt ${attempt} of ${IDEA_GENERATION_MAX_ATTEMPTS} with web-search-enabled ${TEXT_MODEL_ID}`,
     );
-    const debugOptions = options?.debugRootDir
+    const ideaDebugOptions = options?.debugRootDir
       ? {
           rootDir: options.debugRootDir,
-          stage: "idea",
-          subStage: combineDebugSegments(options.debugSubStage, attemptLabel),
+          stage: "ideas",
+          subStage,
+        }
+      : undefined;
+    const parseDebugOptions = options?.debugRootDir
+      ? {
+          rootDir: options.debugRootDir,
+          stage: "ideas-parse",
+          subStage,
         }
       : undefined;
     try {
-      const data = await generateJson<StoryIdeaData>({
+      const ideaMarkdown = await generateText({
         progress: adapter,
         modelId: TEXT_MODEL_ID,
         contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
         tools: [{ type: "web-search" }],
+        debug: ideaDebugOptions,
+      });
+      adapter.log("[story/ideas] textual brief prepared");
+      const parsePrompt = buildStoryIdeaParsePrompt(topic, ideaMarkdown);
+      const data = await generateJson<StoryIdeaData>({
+        progress: adapter,
+        modelId: TEXT_MODEL_ID,
+        contents: [
+          { role: "user", parts: [{ type: "text", text: parsePrompt }] },
+        ],
         responseSchema: STORY_IDEA_RESPONSE_SCHEMA,
         schema: StoryIdeaDataSchema,
-        debug: debugOptions,
+        debug: parseDebugOptions,
       });
       const brief = formatIdeaBrief(data);
-      adapter.log("[story/idea] brief prepared");
+      adapter.log("[story/ideas-parse] structured brief parsed");
       return { brief, data };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error ?? "unknown");
       if (attempt === IDEA_GENERATION_MAX_ATTEMPTS) {
         adapter.log(
-          `[story/idea] generation attempt ${attempt} failed (${message}); no retries left`,
+          `[story/ideas] generation attempt ${attempt} failed (${message}); no retries left`,
         );
         throw new Error(
           `Story idea generation failed after ${IDEA_GENERATION_MAX_ATTEMPTS} attempt(s): ${message}`,
         );
       }
       adapter.log(
-        `[story/idea] generation attempt ${attempt} failed (${message}); retrying...`,
+        `[story/ideas] generation attempt ${attempt} failed (${message}); retrying...`,
       );
     }
   }
@@ -1463,22 +1546,41 @@ export async function validateStoryProse(
     return segments.join("/");
   };
 
-  adapter.log(`[story] validating prose – factual pass with ${TEXT_MODEL_ID}`);
+  adapter.log(
+    `[story] validating prose – factual analysis with ${TEXT_MODEL_ID}`,
+  );
   const factualPrompt = buildStoryFactualValidationPrompt(topic, revision.text);
-  const factualResponse = await generateJson<StoryProseValidationResult>({
+  const factualReport = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [
       { role: "user", parts: [{ type: "text", text: factualPrompt }] },
     ],
     tools: [{ type: "web-search" }],
+    debug: options?.debugRootDir
+      ? {
+          rootDir: options.debugRootDir,
+          stage: buildStagePath("factual") ?? "prose/validation/factual",
+        }
+      : undefined,
+  });
+  const factualParsePrompt =
+    buildStoryFactualValidationParsePrompt(factualReport);
+  const factualResponse = await generateJson<StoryProseValidationResult>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [
+      { role: "user", parts: [{ type: "text", text: factualParsePrompt }] },
+    ],
     responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
     schema: StoryProseValidationResultSchema,
     maxAttempts: 3,
     debug: options?.debugRootDir
       ? {
           rootDir: options.debugRootDir,
-          stage: buildStagePath("factual") ?? "prose/validation/factual",
+          stage:
+            buildStagePath("factual-parse") ??
+            "prose/validation/factual-parse",
         }
       : undefined,
   });
