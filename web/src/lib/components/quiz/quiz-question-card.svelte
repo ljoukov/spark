@@ -17,18 +17,18 @@
 		eyebrow?: string | null;
 		title?: string;
 		status?: Status;
-	hint?: string;
-	hintHtml?: string;
-	showHint?: boolean;
-	feedback?: QuizFeedback | null;
-	explanation?: string;
-	explanationHtml?: string;
-	showExplanation?: boolean;
-	displayFooter?: boolean;
-	titleHtml?: string;
-	children?: Snippet;
-	footer?: Snippet;
-};
+		hint?: string;
+		hintHtml?: string;
+		showHint?: boolean;
+		feedback?: QuizFeedback | null;
+		explanation?: string;
+		explanationHtml?: string;
+		showExplanation?: boolean;
+		displayFooter?: boolean;
+		titleHtml?: string;
+		children?: Snippet;
+		footer?: Snippet;
+	};
 
 	let {
 		eyebrow = 'Term',
@@ -119,7 +119,9 @@
 					Hint
 				</p>
 				{#if hintHtml}
-					<div class="markdown mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground">
+					<div
+						class="markdown mt-1 text-base leading-relaxed text-foreground/90 dark:text-foreground"
+					>
 						{@html hintHtml}
 					</div>
 				{:else if hint}
@@ -197,7 +199,17 @@
 
 	.markdown :global(code),
 	.markdown-title :global(code) {
-		font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+		font-family: var(
+			--font-mono,
+			ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Monaco,
+			Consolas,
+			'Liberation Mono',
+			'Courier New',
+			monospace
+		);
 		font-size: 0.95em;
 		padding: 0.1rem 0.25rem;
 		border-radius: 0.35rem;
