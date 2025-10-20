@@ -138,7 +138,7 @@ export type LlmContent = {
 };
 
 export function convertGooglePartsToLlmParts(
-  parts: readonly Part[],
+  parts: readonly Part[]
 ): LlmContentPart[] {
   const result: LlmContentPart[] = [];
   for (const part of parts) {
@@ -274,7 +274,7 @@ export class LlmJsonCallError extends Error {
       readonly attempt: number;
       readonly rawText: string;
       readonly error: unknown;
-    }>,
+    }>
   ) {
     super(message);
     this.name = "LlmJsonCallError";
@@ -372,7 +372,7 @@ async function writeImageToMediaDir({
     mediaDir,
     `${filename}.${Date.now().toString(36)}-${Math.random()
       .toString(36)
-      .slice(2)}.tmp`,
+      .slice(2)}.tmp`
   );
   await writeFile(tempPath, buffer);
   try {
@@ -427,7 +427,7 @@ async function createDebugImageArtifact({
       log(
         `failed to convert debug image to JPEG: ${
           error instanceof Error ? error.message : String(error)
-        }`,
+        }`
       );
     }
   }
@@ -445,13 +445,13 @@ async function createDebugImageArtifact({
           mediaDir: path.join(dir, "media"),
           filename: mediaFilename,
           buffer: outputBuffer,
-        }),
-      ),
+        })
+      )
     );
   }
   const shortHash = `${prefix}-${String(index).padStart(3, "0")}-${originalHash.slice(
     0,
-    6,
+    6
   )}`;
   const symlinkFilename = `${prefix}-${String(index).padStart(3, "0")}.jpg`;
   await Promise.all(
@@ -470,7 +470,7 @@ async function createDebugImageArtifact({
         log(
           `failed to remove existing link at ${linkPath}: ${
             error instanceof Error ? error.message : String(error)
-          }`,
+          }`
         );
       }
       try {
@@ -479,7 +479,7 @@ async function createDebugImageArtifact({
         log(
           `failed to create symlink ${linkPath} -> ${relativeTarget}: ${
             error instanceof Error ? error.message : String(error)
-          } (falling back to copy)`,
+          } (falling back to copy)`
         );
         try {
           await writeFile(linkPath, outputBuffer);
@@ -489,11 +489,11 @@ async function createDebugImageArtifact({
               fallbackError instanceof Error
                 ? fallbackError.message
                 : String(fallbackError)
-            }`,
+            }`
           );
         }
       }
-    }),
+    })
   );
   return { hash: shortHash, filename: symlinkFilename };
 }
@@ -520,7 +520,7 @@ function cloneContentForDebug(content: LlmContent): LlmContent {
 }
 
 function toGeminiTools(
-  tools: readonly LlmToolConfig[] | undefined,
+  tools: readonly LlmToolConfig[] | undefined
 ): Tool[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
@@ -551,7 +551,7 @@ async function resetDebugDir(debugDir?: string): Promise<void> {
 
 function resolveDebugDir(
   debug: LlmDebugOptions | undefined,
-  { attempt, maxAttempts }: { attempt: number; maxAttempts: number },
+  { attempt, maxAttempts }: { attempt: number; maxAttempts: number }
 ): string | undefined {
   if (!debug || !debug.rootDir || debug.enabled === false) {
     return undefined;
@@ -563,8 +563,8 @@ function resolveDebugDir(
   }
   segments.push(
     normalisePathSegment(
-      `attempt-${String(attempt).padStart(2, "0")}-of-${String(maxAttempts).padStart(2, "0")}`,
-    ),
+      `attempt-${String(attempt).padStart(2, "0")}-of-${String(maxAttempts).padStart(2, "0")}`
+    )
   );
   return path.join(...segments);
 }
@@ -584,7 +584,7 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
         switch (part.type) {
           case "text":
             lines.push(
-              `${header} (${part.thought === true ? "thought" : "text"}):`,
+              `${header} (${part.thought === true ? "thought" : "text"}):`
             );
             lines.push(part.text);
             break;
@@ -595,7 +595,7 @@ function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
                 ? `, ${part.debugImageHash}`
                 : "";
             lines.push(
-              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes${hashLabel})`,
+              `${header} (inline ${part.mimeType ?? "binary"}, ${bytes} bytes${hashLabel})`
             );
             break;
           }
@@ -625,8 +625,8 @@ async function writeDebugTextFile({
   }
   await Promise.all(
     dirs.map(async (dir) =>
-      writeFile(path.join(dir, filename), contents, { encoding: "utf8" }),
-    ),
+      writeFile(path.join(dir, filename), contents, { encoding: "utf8" })
+    )
   );
 }
 
@@ -697,7 +697,7 @@ function buildExceptionSnapshot({
 
 async function writePromptSnapshot(
   pathname: string,
-  contents: readonly LlmContent[],
+  contents: readonly LlmContent[]
 ): Promise<void> {
   const snapshot = formatContentsForSnapshot(contents);
   await writeFile(pathname, snapshot, { encoding: "utf8" });
@@ -808,12 +808,12 @@ function buildConversationHtml({
   ];
   messages.forEach((message, messageIndex) => {
     html.push(
-      `  <section class="message role-${escapeAttribute(message.role)}">`,
+      `  <section class="message role-${escapeAttribute(message.role)}">`
     );
     html.push(
       `    <h2>${escapeHtml(formatRoleLabel(message.role))} #${
         messageIndex + 1
-      }</h2>`,
+      }</h2>`
     );
     html.push('    <div class="parts">');
     message.parts.forEach((part, partIndex) => {
@@ -822,8 +822,8 @@ function buildConversationHtml({
         html.push('      <div class="part part-text">');
         html.push(
           `        <div class="part-label">Part ${partIndex + 1} (${escapeHtml(
-            flavour,
-          )})</div>`,
+            flavour
+          )})</div>`
         );
         html.push(`        <pre>${escapeHtml(part.text)}</pre>`);
         html.push("      </div>");
@@ -840,18 +840,18 @@ function buildConversationHtml({
       html.push('      <div class="part part-image">');
       html.push(
         `        <div class="part-label">Part ${partIndex + 1} (inline ${escapeHtml(
-          part.mimeType ?? "binary",
-        )}, ${bytes} bytes${hashLabel})</div>`,
+          part.mimeType ?? "binary"
+        )}, ${bytes} bytes${hashLabel})</div>`
       );
       if (isImage && resolvedSrc) {
         html.push(
           `        <img src="${escapeAttribute(
-            resolvedSrc,
-          )}" alt="Part ${partIndex + 1} image" />`,
+            resolvedSrc
+          )}" alt="Part ${partIndex + 1} image" />`
         );
       } else if (isImage) {
         html.push(
-          "        <div>Image bytes omitted (debug file not available).</div>",
+          "        <div>Image bytes omitted (debug file not available).</div>"
         );
       } else {
         html.push("        <div>Inline data omitted from snapshot.</div>");
@@ -939,16 +939,16 @@ async function llmStream({
   const debugOutputDirs = Array.from(
     new Set(
       [stage.debugDir, debugLogDir].filter(
-        (dir): dir is string => typeof dir === "string",
-      ),
-    ),
+        (dir): dir is string => typeof dir === "string"
+      )
+    )
   );
   const sharedMediaDir =
     debugRootDir !== undefined ? path.join(debugRootDir, "media") : undefined;
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
   const googlePromptContents = promptContents.map(
-    convertLlmContentToGoogleContent,
+    convertLlmContentToGoogleContent
   );
   const config: GeminiCallConfig = {};
   const thinkingConfig = (() => {
@@ -1034,13 +1034,13 @@ async function llmStream({
     if (stage.debugDir) {
       await writePromptSnapshot(
         path.join(stage.debugDir, "prompt.txt"),
-        promptDebugContents,
+        promptDebugContents
       );
     }
     if (debugLogDir) {
       await writePromptSnapshot(
         path.join(debugLogDir, "prompt.txt"),
-        promptDebugContents,
+        promptDebugContents
       );
     }
 
@@ -1087,7 +1087,7 @@ async function llmStream({
 
     const appendInlinePart = (
       data: string,
-      mimeType: string | undefined,
+      mimeType: string | undefined
     ): void => {
       if (data.length === 0) {
         return;
@@ -1115,12 +1115,12 @@ async function llmStream({
           });
           inlinePart.debugImageHash = hash;
           inlinePart.debugImageFilename = filename;
-        })(),
+        })()
       );
     };
 
     const accumulateContent = (
-      content: LlmContent,
+      content: LlmContent
     ): { charDelta: number; byteDelta: number } => {
       let charDelta = 0;
       let byteDelta = 0;
@@ -1179,7 +1179,7 @@ async function llmStream({
                 chunkByteDelta += deltas.byteDelta;
               } catch (error) {
                 log(
-                  `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
+                  `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`
                 );
               }
             }
@@ -1202,7 +1202,7 @@ async function llmStream({
 
     const elapsedMs = Date.now() - startedAt;
     log(
-      `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`,
+      `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`
     );
 
     await Promise.all(debugWriteTasks);
@@ -1269,9 +1269,9 @@ async function llmStream({
               conversationHtml,
               {
                 encoding: "utf8",
-              },
+              }
             );
-          }),
+          })
         );
       }
     }
@@ -1299,7 +1299,7 @@ async function llmStream({
               exceptionSnapshot,
               {
                 encoding: "utf8",
-              },
+              }
             );
           } catch (writeError) {
             log(
@@ -1307,10 +1307,10 @@ async function llmStream({
                 writeError instanceof Error
                   ? writeError.message
                   : String(writeError)
-              }`,
+              }`
             );
           }
-        }),
+        })
       );
     }
     throw error;
@@ -1318,7 +1318,7 @@ async function llmStream({
 }
 
 function mergeConsecutiveTextParts(
-  parts: readonly LlmContentPart[],
+  parts: readonly LlmContentPart[]
 ): LlmContentPart[] {
   if (parts.length === 0) {
     return [];
@@ -1353,7 +1353,7 @@ function mergeConsecutiveTextParts(
 
 async function generateTextWithAttempts(
   options: LlmTextCallOptions,
-  { attempt, maxAttempts }: { attempt: number; maxAttempts: number },
+  { attempt, maxAttempts }: { attempt: number; maxAttempts: number }
 ): Promise<string> {
   const result = await llmStream({
     options,
@@ -1368,7 +1368,7 @@ async function generateTextWithAttempts(
 }
 
 export async function generateText(
-  options: LlmTextCallOptions,
+  options: LlmTextCallOptions
 ): Promise<string> {
   return await generateTextWithAttempts(options, {
     attempt: 1,
@@ -1377,7 +1377,7 @@ export async function generateText(
 }
 
 export async function generateJson<T>(
-  options: LlmJsonCallOptions<T>,
+  options: LlmJsonCallOptions<T>
 ): Promise<T> {
   const {
     schema,
@@ -1435,7 +1435,7 @@ export async function generateJson<T>(
       if (attempt >= maxAttempts) {
         throw new LlmJsonCallError(
           `LLM JSON call failed after ${attempt} attempt(s)`,
-          failures,
+          failures
         );
       }
     }
@@ -1445,7 +1445,7 @@ export async function generateJson<T>(
 }
 
 export async function generateImages(
-  options: LlmGenerateImagesOptions,
+  options: LlmGenerateImagesOptions
 ): Promise<LlmImageData[]> {
   const {
     stylePrompt,
@@ -1465,14 +1465,14 @@ export async function generateImages(
       const trimmedPrompt = rawPrompt.trim();
       if (!trimmedPrompt) {
         throw new Error(
-          `imagePrompts[${arrayIndex}] must be a non-empty string`,
+          `imagePrompts[${arrayIndex}] must be a non-empty string`
         );
       }
       return {
         index: arrayIndex + 1,
         prompt: trimmedPrompt,
       };
-    },
+    }
   );
 
   const numImages = promptEntries.length;
@@ -1498,12 +1498,12 @@ export async function generateImages(
         "",
         "Follow the style:",
         stylePrompt,
-      ].join("\n"),
+      ].join("\n")
     );
     if (styleImages !== undefined && styleImages.length > 0) {
       addText(
         parts,
-        "\nFollow the visual style, composition and the characters from these images:",
+        "\nFollow the visual style, composition and the characters from these images:"
       );
       for (const styleImage of styleImages) {
         parts.push({
@@ -1525,7 +1525,7 @@ export async function generateImages(
   };
 
   const buildContinuationPrompt = (
-    pending: PromptEntry[],
+    pending: PromptEntry[]
   ): LlmContentPart[] => {
     const pendingIds = pending.map((entry) => entry.index).join(", ");
     const lines: string[] = [
@@ -1597,7 +1597,7 @@ export async function generateImageInBatches(
   options: LlmGenerateImagesOptions & {
     batchSize: number;
     overlapSize: number;
-  },
+  }
 ): Promise<LlmImageData[]> {
   const {
     batchSize,
@@ -1630,7 +1630,7 @@ export async function generateImageInBatches(
     let styleImagesForBatch: readonly LlmImageData[] = baseStyleImages;
     if (overlapSize > 0 && generatedImages.length > 0) {
       const overlapImages = generatedImages.slice(
-        Math.max(0, generatedImages.length - overlapSize),
+        Math.max(0, generatedImages.length - overlapSize)
       );
       if (overlapImages.length > 0) {
         styleImagesForBatch = [...baseStyleImages, ...overlapImages];
