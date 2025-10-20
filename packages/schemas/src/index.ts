@@ -6,3 +6,4 @@ export * from "./user";
 export * from "./quiz";
 export * from "./codeProblem";
 export * from "./sessionMedia";
+export * from "./spark";

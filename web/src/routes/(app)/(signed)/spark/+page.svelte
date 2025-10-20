@@ -34,6 +34,7 @@
 
 	const MAX_FILE_BYTES = 25 * 1024 * 1024;
 	const MAX_FILE_MB_LABEL = '25MB';
+	const DEFAULT_QUIZ_QUESTION_COUNT = 20;
 
 	function resetFeedback(): void {
 		uploadError = null;
@@ -96,17 +97,39 @@
 				return;
 			}
 
-			if (
-				!payload ||
-				typeof payload !== 'object' ||
-				!('storagePath' in payload) ||
-				typeof (payload as { storagePath: unknown }).storagePath !== 'string'
-			) {
+			if (!payload || typeof payload !== 'object') {
 				uploadSuccess = 'Upload completed.';
 				return;
 			}
 
-			uploadSuccess = `Uploaded to storage at ${(payload as { storagePath: string }).storagePath}.`;
+			const payloadRecord = payload as Record<string, unknown>;
+			const uploadDocPath =
+				typeof payloadRecord.uploadDocPath === 'string' ? payloadRecord.uploadDocPath : null;
+			const quizDocPath =
+				typeof payloadRecord.quizDocPath === 'string' ? payloadRecord.quizDocPath : null;
+			const questionCountRaw = payloadRecord.questionCount;
+			let questionCount = DEFAULT_QUIZ_QUESTION_COUNT;
+			if (
+				typeof questionCountRaw === 'number' &&
+				Number.isFinite(questionCountRaw) &&
+				questionCountRaw > 0
+			) {
+				questionCount = Math.trunc(questionCountRaw);
+			}
+
+			if (uploadDocPath && quizDocPath) {
+				uploadSuccess = `Upload saved. We'll build a ${questionCount}-question quiz next.`;
+				return;
+			}
+
+			const storagePath =
+				typeof payloadRecord.storagePath === 'string' ? payloadRecord.storagePath : null;
+			if (storagePath) {
+				uploadSuccess = `Uploaded to storage at ${storagePath}.`;
+				return;
+			}
+
+			uploadSuccess = 'Upload completed.';
 		} catch (error) {
 			console.error('Spark upload: request failed', error);
 			uploadError = 'We could not upload that file. Please check your connection and try again.';
