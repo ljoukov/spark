@@ -19,6 +19,7 @@ export const handle = (async ({ event, resolve }) => {
 	const shouldHydrateAppUser = (target: string) =>
 		target.startsWith('/app') ||
 		target.startsWith('/code') ||
+		target.startsWith('/spark') ||
 		target.startsWith('/welcome') ||
 		target.startsWith('/logout');
 

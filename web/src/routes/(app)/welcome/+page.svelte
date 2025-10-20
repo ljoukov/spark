@@ -8,20 +8,24 @@
 	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
 	import type { PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+let { data }: { data: PageData } = $props();
 
-	let authResolved = $state(data.authDisabled);
-	let redirecting = $state(false);
-	let lastSyncedUid = $state<string | null>(null);
+const destination = data.destination;
+const hasDestination = destination !== null;
 
-	const ui = $state({
-		showAuth: true,
-		showAnonConfirm: false,
-		signingInWithGoogle: false,
-		signingInAnonymously: false,
-		syncingProfile: false,
-		errorMessage: ''
-	});
+let authResolved = $state(data.authDisabled || data.alreadyAuthenticated);
+let redirecting = $state(false);
+let lastSyncedUid = $state<string | null>(null);
+
+const ui = $state({
+	showAuth: !(data.alreadyAuthenticated || data.authDisabled),
+	showAnonConfirm: false,
+	signingInWithGoogle: false,
+	signingInAnonymously: false,
+	syncingProfile: false,
+	errorMessage: '',
+	showExperiencePicker: (data.alreadyAuthenticated || data.authDisabled) && !hasDestination
+});
 
 	const googleButtonLabel = $derived(
 		ui.signingInWithGoogle ? 'Redirecting to Google…' : 'Continue with Google'
@@ -37,14 +41,24 @@
 		ui.errorMessage = '';
 	}
 
-	function redirectToCode(): void {
+	function redirectToDestination(target: 'code' | 'spark'): void {
 		if (redirecting) {
 			return;
 		}
 		redirecting = true;
 		if (typeof window !== 'undefined') {
-			window.location.href = '/code';
+			window.location.href = target === 'code' ? '/code' : '/spark';
 		}
+	}
+
+	function presentExperiencePicker(): void {
+		ui.showExperiencePicker = true;
+		ui.showAuth = false;
+		redirecting = false;
+	}
+
+	function handleExperienceSelect(target: 'code' | 'spark'): void {
+		redirectToDestination(target);
 	}
 
 	type SyncErrorDetails = {
@@ -199,7 +213,13 @@
 
 	onMount(() => {
 		if (data.authDisabled) {
-			redirectToCode();
+			authResolved = true;
+			ui.showAuth = false;
+			if (destination) {
+				redirectToDestination(destination);
+			} else {
+				presentExperiencePicker();
+			}
 			return () => {};
 		}
 
@@ -210,6 +230,7 @@
 				clearIdTokenCookie();
 				ui.showAuth = true;
 				ui.showAnonConfirm = false;
+				ui.showExperiencePicker = false;
 				lastSyncedUid = null;
 				redirecting = false;
 				return;
@@ -218,14 +239,26 @@
 			ui.showAuth = false;
 			ui.showAnonConfirm = false;
 
+		const navigateToNextStep = () => {
+			ui.errorMessage = '';
+			if (destination) {
+				ui.showExperiencePicker = false;
+				redirectToDestination(destination);
+			} else {
+				presentExperiencePicker();
+			}
+		};
+
 			if (lastSyncedUid === user.uid) {
 				const mirrored = await mirrorCookie(user);
 				if (mirrored) {
-					redirectToCode();
+					navigateToNextStep();
 					return;
 				}
 				ui.showAuth = true;
 				ui.showAnonConfirm = false;
+				ui.showExperiencePicker = false;
+				redirecting = false;
 				return;
 			}
 
@@ -233,15 +266,19 @@
 			if (!synced) {
 				ui.showAuth = true;
 				ui.showAnonConfirm = false;
+				ui.showExperiencePicker = false;
+				redirecting = false;
 				return;
 			}
 			const mirrored = await mirrorCookie(user);
 			if (!mirrored) {
 				ui.showAuth = true;
 				ui.showAnonConfirm = false;
+				ui.showExperiencePicker = false;
+				redirecting = false;
 				return;
 			}
-			redirectToCode();
+			navigateToNextStep();
 		});
 
 		return () => {
@@ -323,6 +360,55 @@
 				<span class="auth-footer__prompt">Need a quick start?</span>
 				<button type="button" onclick={handleOpenAnonymousConfirm}>Use guest mode</button>
 			</footer>
+		</div>
+	</div>
+{/if}
+
+{#if authResolved && ui.showExperiencePicker}
+	<div class="auth-backdrop">
+		<div class="auth-blob-field" aria-hidden="true"></div>
+		<div class="experience-card">
+			<header class="experience-header">
+				<p class="experience-eyebrow">Let's go</p>
+				<h2 class="experience-title">Choose your Spark experience</h2>
+				<p class="experience-subtitle">
+					Pick the journey that fits right now. You can switch anytime using the header.
+				</p>
+			</header>
+
+			<div class="experience-options">
+				<button
+					type="button"
+					class="experience-option"
+					disabled={redirecting}
+					onclick={() => handleExperienceSelect('spark')}
+				>
+					<span class="experience-option__emoji" aria-hidden="true">📝</span>
+					<div class="experience-option__content">
+						<span class="experience-option__title">Spark Quiz</span>
+						<span class="experience-option__copy">
+							Turn class notes into quick quizzes with instant feedback.
+						</span>
+					</div>
+					<span class="experience-option__cta" aria-hidden="true">Start</span>
+				</button>
+
+				<button
+					type="button"
+					class="experience-option"
+					disabled={redirecting}
+					onclick={() => handleExperienceSelect('code')}
+				>
+					<span class="experience-option__emoji" aria-hidden="true">💻</span>
+					<div class="experience-option__content">
+						<span class="experience-option__title">Spark Code</span>
+						<span class="experience-option__copy">
+							Solve BIO-style problems, track XP, and sharpen your skills.
+						</span>
+					</div>
+					<span class="experience-option__cta" aria-hidden="true">Dive in</span>
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}
@@ -560,6 +646,155 @@
 			align-items: stretch;
 			gap: 0.75rem;
 		}
+	}
+
+	.experience-card {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: clamp(1.8rem, 3vw, 2.4rem);
+		padding: clamp(2.2rem, 3.2vw, 2.9rem);
+		max-width: min(50rem, 94vw);
+		border-radius: clamp(2rem, 3vw, 2.6rem);
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		background: color-mix(in srgb, var(--app-content-bg) 70%, transparent 30%);
+		box-shadow: 0 32px 90px -50px rgba(15, 23, 42, 0.5);
+		backdrop-filter: saturate(140%) blur(18px);
+	}
+
+	:global([data-theme='dark'] .experience-card),
+	:global(:root:not([data-theme='light']) .experience-card) {
+		background: rgba(6, 11, 25, 0.72);
+		border-color: rgba(148, 163, 184, 0.32);
+		box-shadow: 0 40px 110px -60px rgba(2, 6, 23, 0.65);
+	}
+
+	.experience-header {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		text-align: center;
+	}
+
+	.experience-eyebrow {
+		margin: 0;
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: rgba(59, 130, 246, 0.82);
+		font-weight: 600;
+	}
+
+	.experience-title {
+		margin: 0;
+		font-size: clamp(2rem, 3.6vw, 2.7rem);
+		font-weight: 650;
+		line-height: 1.08;
+	}
+
+	.experience-subtitle {
+		margin: 0 auto;
+		max-width: 32rem;
+		font-size: 1.05rem;
+		line-height: 1.6;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
+	}
+
+	:global([data-theme='dark'] .experience-subtitle),
+	:global(:root:not([data-theme='light']) .experience-subtitle) {
+		color: rgba(203, 213, 225, 0.82);
+	}
+
+	.experience-options {
+		display: flex;
+		flex-direction: column;
+		gap: clamp(1rem, 2.2vw, 1.6rem);
+	}
+
+	@media (min-width: 48rem) {
+		.experience-options {
+			flex-direction: row;
+		}
+	}
+
+	.experience-option {
+		display: flex;
+		align-items: center;
+		gap: clamp(1rem, 2.2vw, 1.6rem);
+		width: 100%;
+		border-radius: clamp(1.2rem, 2vw, 1.6rem);
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		padding: clamp(1.2rem, 2.4vw, 1.6rem) clamp(1.3rem, 2.6vw, 1.8rem);
+		background: color-mix(in srgb, rgba(255, 255, 255, 0.92) 40%, transparent);
+		text-align: left;
+		cursor: pointer;
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease,
+			border-color 0.2s ease,
+			background 0.2s ease;
+	}
+
+	:global([data-theme='dark'] .experience-option),
+	:global(:root:not([data-theme='light']) .experience-option) {
+		background: rgba(14, 22, 42, 0.72);
+		border-color: rgba(148, 163, 184, 0.28);
+	}
+
+	.experience-option:hover:not(:disabled),
+	.experience-option:focus-visible {
+		transform: translateY(-2px);
+		border-color: rgba(59, 130, 246, 0.55);
+		box-shadow: 0 24px 55px -30px rgba(59, 130, 246, 0.5);
+		background: color-mix(in srgb, rgba(59, 130, 246, 0.14) 35%, transparent);
+	}
+
+	.experience-option:focus-visible {
+		outline: 2px solid rgba(59, 130, 246, 0.8);
+		outline-offset: 4px;
+	}
+
+	.experience-option:disabled {
+		cursor: progress;
+		opacity: 0.7;
+	}
+
+	.experience-option__emoji {
+		font-size: clamp(2.3rem, 3.6vw, 2.8rem);
+	}
+
+	.experience-option__content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		flex: 1;
+	}
+
+	.experience-option__title {
+		font-size: 1.2rem;
+		font-weight: 650;
+	}
+
+	.experience-option__copy {
+		font-size: 0.95rem;
+		line-height: 1.5;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.7));
+	}
+
+	:global([data-theme='dark'] .experience-option__copy),
+	:global(:root:not([data-theme='light']) .experience-option__copy) {
+		color: rgba(203, 213, 225, 0.8);
+	}
+
+	.experience-option__cta {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: rgba(59, 130, 246, 0.85);
+	}
+
+	:global([data-theme='dark'] .experience-option__cta),
+	:global(:root:not([data-theme='light']) .experience-option__cta) {
+		color: rgba(129, 199, 255, 0.9);
 	}
 
 	:global([data-slot='dialog-overlay']) {

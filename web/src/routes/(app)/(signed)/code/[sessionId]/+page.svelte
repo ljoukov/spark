@@ -11,7 +11,7 @@
 		) => () => void;
 	};
 
-	const userStore = getContext<UserStore | undefined>('spark-code:user');
+const userStore = getContext<UserStore | undefined>('spark:user');
 
 	let firstName = $state('Sparkie');
 	let unsubscribe: (() => void) | null = null;

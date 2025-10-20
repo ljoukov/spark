@@ -1,33 +1,71 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import CheckIcon from '@lucide/svelte/icons/check';
-	import { onMount, setContext } from 'svelte';
-	import type { Snippet } from 'svelte';
-	import { writable } from 'svelte/store';
-	import * as Avatar from '$lib/components/ui/avatar/index.js';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import {
-		themePreference,
-		setThemePreference,
-		type ThemePreference
-	} from '$lib/stores/themePreference';
-	import type { LayoutData } from './$types';
-	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
+import { goto } from '$app/navigation';
+import { page } from '$app/stores';
+import CheckIcon from '@lucide/svelte/icons/check';
+import { onMount, setContext } from 'svelte';
+import type { Snippet } from 'svelte';
+import { writable } from 'svelte/store';
+import * as Avatar from '$lib/components/ui/avatar/index.js';
+import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+import {
+	themePreference,
+	setThemePreference,
+	type ThemePreference
+} from '$lib/stores/themePreference';
+import type { LayoutData } from './$types';
+import { getFirebaseApp } from '$lib/utils/firebaseClient';
+import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
 
-	type ClientUser = NonNullable<LayoutData['user']>;
+type ClientUser = NonNullable<LayoutData['user']>;
 
-	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-	const initialUser = data.user;
-	const userStore = writable<ClientUser | null>(initialUser);
-	setContext('spark-code:user', { subscribe: userStore.subscribe });
+type ExperienceKey = 'code' | 'spark' | null;
 
-	let user = $state<ClientUser | null>(initialUser);
-	const sessionId = $derived($page.params.sessionId ?? null);
-	const sessionHomeHref = $derived(sessionId ? `/code/${sessionId}` : '/code');
-	let theme = $state<ThemePreference>('auto');
+function resolveExperience(routeId: string | null | undefined): ExperienceKey {
+	if (!routeId) {
+		return null;
+	}
+	if (routeId.startsWith('/(app)/(signed)/code')) {
+		return 'code';
+	}
+	if (routeId.startsWith('/(app)/(signed)/spark')) {
+		return 'spark';
+	}
+	return null;
+}
+
+function resolveSessionHomeHref(experience: ExperienceKey, sessionId: string | null): string {
+	if (experience === 'code') {
+		return sessionId ? `/code/${sessionId}` : '/code';
+	}
+	return '/spark';
+}
+
+function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string } {
+	if (experience === 'code') {
+		return { title: 'Spark Code', tagline: 'Think. Hack. Spark.' };
+	}
+	if (experience === 'spark') {
+		return { title: 'Spark Quiz', tagline: 'Revise. Learn. Spark.' };
+	}
+	return { title: 'Spark', tagline: 'Think. Learn. Spark.' };
+}
+
+const initialUser = data.user;
+const userStore = writable<ClientUser | null>(initialUser);
+setContext('spark:user', { subscribe: userStore.subscribe });
+
+let user = $state<ClientUser | null>(initialUser);
+const sessionId = $derived($page.params.sessionId ?? null);
+const experience = $derived(resolveExperience($page.route.id));
+const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
+const brandCopy = $derived(resolveBrandCopy(experience));
+const experiences = [
+	{ id: 'spark', label: 'Spark Quiz', href: '/spark' },
+	{ id: 'code', label: 'Spark Code', href: '/code' }
+] satisfies ReadonlyArray<{ id: 'spark' | 'code'; label: string; href: string }>;
+let theme = $state<ThemePreference>('auto');
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
 		{ label: 'Automatic', value: 'auto' },
@@ -207,7 +245,12 @@
 	}
 
 	async function handleLogout(): Promise<void> {
-		await goto('/logout');
+		const params = new URLSearchParams();
+		if (experience) {
+			params.set('from', experience);
+		}
+		const query = params.toString();
+		await goto(query.length > 0 ? `/logout?${query}` : '/logout');
 	}
 </script>
 
@@ -217,9 +260,9 @@
 			<a class="app-brand" href={sessionHomeHref}>
 				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
 				<div class="app-brand__text">
-					<span class="app-brand__title">Spark Code</span>
+					<span class="app-brand__title">{brandCopy.title}</span>
 					<span class="app-brand__separator" aria-hidden="true">•</span>
-					<span class="app-brand__tagline">Think. Hack. Spark.</span>
+					<span class="app-brand__tagline">{brandCopy.tagline}</span>
 				</div>
 			</a>
 			<div class="app-header__actions">
@@ -238,6 +281,30 @@
 							<span class="app-user-menu__name">{getDisplayName()}</span>
 							<span class="app-user-menu__email">{getEmailLabel()}</span>
 						</div>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Sub>
+							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
+								Launch
+							</DropdownMenu.SubTrigger>
+							<DropdownMenu.SubContent class="app-appearance-menu" alignOffset={-8} sideOffset={8}>
+								<DropdownMenu.RadioGroup value={experience ?? ''}>
+									{#each experiences as option}
+										<DropdownMenu.RadioItem
+											value={option.id}
+											class="app-appearance-menu__item"
+											onSelect={() => {
+												if (experience !== option.id) {
+													void goto(option.href);
+												}
+											}}
+										>
+											<CheckIcon class="theme-check" />
+											<span>{option.label}</span>
+										</DropdownMenu.RadioItem>
+									{/each}
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.SubContent>
+						</DropdownMenu.Sub>
 						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
@@ -355,8 +422,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		height: 3rem;
-		padding: 0 1rem;
+	min-height: 3rem;
+		padding: 0 1.25rem;
+		gap: 1rem;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.32);
 		background: color-mix(in srgb, var(--app-content-bg) 50%, transparent);
 		box-shadow: 0 25px 60px -40px rgba(15, 23, 42, 0.25);
@@ -378,6 +446,7 @@
 		display: flex;
 		align-items: center;
 		gap: 1rem;
+		flex-shrink: 0;
 	}
 
 	.app-brand__logo {
@@ -419,6 +488,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
+		margin-left: auto;
 	}
 
 	:global(.app-avatar) {

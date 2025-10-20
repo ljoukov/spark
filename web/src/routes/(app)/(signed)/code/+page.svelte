@@ -24,7 +24,7 @@
 		return base.split(/\s+/)[0] || fallback;
 	}
 
-	const userStore = getContext<UserStore | undefined>('spark-code:user');
+const userStore = getContext<UserStore | undefined>('spark:user');
 
 	let firstName = $state(resolveFirst({ name: data.userName ?? null }, 'friend'));
 
