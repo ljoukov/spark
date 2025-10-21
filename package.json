@@ -1,6 +1,7 @@
 {
   "name": "spark-monorepo",
   "private": true,
+  "type": "module",
   "workspaces": [
     "web",
     "packages/*",
