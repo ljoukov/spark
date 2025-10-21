@@ -49,6 +49,7 @@
 `/api/spark` accepts SparkApiRequestProto and responds with SparkApiResponseProto, to simplify logging
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
+`/api/internal/tasks` (POST only) is an internal task-runner hook that currently returns a placeholder `{ message: "hello" }` payload. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
 
 ### 3.1 Data Flow
 
