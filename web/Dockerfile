@@ -33,8 +33,8 @@ COPY --from=deps /workspace/node_modules ./node_modules
 
 # Ensure adapter-auto picks Node in CI images (matches existing behavior)
 ENV GCP_BUILDPACKS="make-sveltekit-adapter-auto-use-node"
-# Preserve symlinked workspace modules for Vite/SvelteKit
-ENV NODE_OPTIONS="--preserve-symlinks"
+# Preserve symlinked workspace modules for Vite/SvelteKit and expand heap for Rollup/Vite
+ENV NODE_OPTIONS="--preserve-symlinks --max-old-space-size=4096"
 
 # Prepare and build only the web workspace
 RUN npm -w web run prepare
