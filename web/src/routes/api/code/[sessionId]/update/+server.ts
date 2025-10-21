@@ -10,8 +10,8 @@ import {
 	type PlanItemState,
 	type UserStats
 } from '@spark/schemas';
+import { getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 const paramsSchema = z.object({
@@ -57,6 +57,7 @@ const CODE_PROBLEM_XP: Record<string, number> = Object.freeze({
 });
 
 const DEFAULT_CODE_XP = 40;
+const { FieldValue } = getFirebaseAdminFirestoreModule();
 
 function computeQuizXp(quiz: Awaited<ReturnType<typeof getUserQuiz>>): number {
 	if (!quiz) {
