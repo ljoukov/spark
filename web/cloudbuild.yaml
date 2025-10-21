@@ -7,6 +7,9 @@ substitutions:
   _PROJECT_ID: pic2toon
   _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/pic2toon-docker-repo/${_SERVICE_NAME}-image:tag1
 steps:
+  - name: hello
+    entrypoint: echo
+    args: ['hello world']
   - name: python:slim
     entrypoint: python
     args: ['web/write_dotenv.py']
