@@ -37,7 +37,6 @@ ENV GCP_BUILDPACKS="make-sveltekit-adapter-auto-use-node"
 ENV NODE_OPTIONS="--preserve-symlinks --max-old-space-size=4096"
 
 # Prepare and build only the web workspace
-RUN npm --workspace @spark/llm run build
 RUN npm -w web run prepare
 RUN npm -w web run build
 
@@ -56,9 +55,7 @@ COPY --from=build /workspace/web/build ./build
 # Bring runtime env for server-side libs (read via loadLocalEnv())
 COPY --from=build /workspace/web/.env.local ./.env.local
 
-# Provide compiled @spark/llm runtime module instead of workspace symlink
-RUN rm -rf node_modules/@spark/llm && mkdir -p node_modules/@spark/llm
-COPY --from=build /workspace/packages/llm/dist ./node_modules/@spark/llm/dist
-RUN printf '{\n  "name": "@spark/llm",\n  "version": "0.0.0",\n  "type": "module",\n  "main": "dist/index.js",\n  "exports": { ".": "./dist/index.js" },\n  "types": "dist/index.d.ts"\n}\n' > node_modules/@spark/llm/package.json
+# Include workspace sources so npm symlinks resolve in production image
+COPY --from=build /workspace/packages ./packages
 
 CMD ["node", "build"]
