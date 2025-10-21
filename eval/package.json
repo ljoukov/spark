@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "quiz:prepare-input": "tsx src/quiz/prepare-input.ts",
-    "quiz:eval": "tsx src/quiz/run-eval.ts",
-    "quiz:audit": "tsx src/quiz/audit-eval.ts",
+    "quiz:prepare-input": "tsx src/quiz/legacy/prepare-input.ts",
+    "quiz:eval": "tsx src/quiz/legacy/run-eval.ts",
+    "quiz:audit": "tsx src/quiz/legacy/audit-eval.ts",
     "code:import": "tsx src/code/import-problems.ts",
     "code:download:leetcode": "tsx src/code/download-leetcode.ts",
     "tools:list-voices": "tsx src/tools/list-voices.ts",
