@@ -62,11 +62,22 @@ export default defineConfig({
 	worker: {
 		format: 'es'
 	},
-    ssr: {
-        // keep our workspaces bundled; only externalize the one incompatible CJS lib
-        noExternal: ['@spark/llm', '@spark/schemas'],
-        external: ['google-gax']
-    },
+	ssr: {
+		// keep our workspaces bundled; push firebase-admin + transitive CJS deps to runtime
+		noExternal: ['@spark/llm', '@spark/schemas'],
+		external: [
+			'firebase-admin',
+			'firebase-admin/app',
+			'firebase-admin/auth',
+			'firebase-admin/firestore',
+			'firebase-admin/storage',
+			'@google-cloud/firestore',
+			'@google-cloud/storage',
+			'google-gax',
+			'@grpc/grpc-js',
+			'@grpc/proto-loader'
+		]
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
