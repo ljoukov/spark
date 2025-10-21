@@ -45,6 +45,10 @@ RUN npm -w web run build
 FROM node:20-slim AS production
 WORKDIR /usr/src/app
 
+# Runtime dependencies (externalized SSR deps) from deps stage
+COPY --from=deps /workspace/node_modules ./node_modules
+COPY --from=deps /workspace/package.json ./package.json
+
 # Copy the built server bundle
 COPY --from=build /workspace/web/build ./build
 
