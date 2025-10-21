@@ -1,9 +1,10 @@
+import { TASKS_API_KEY } from '$env/static/private';
 import { isUserAdmin } from '$lib/server/utils/admin';
 import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { getTestUserId, isTestUser, isTestUserAdmin } from '$lib/server/auth/testUser';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { z } from 'zod';
-import { type Handle, redirect } from '@sveltejs/kit';
+import { json, type Handle, redirect } from '@sveltejs/kit';
 
 if (typeof global !== 'undefined') {
 	global.process.on('unhandledRejection', (reason, promise) => {
@@ -15,6 +16,42 @@ export const handle = (async ({ event, resolve }) => {
 	// Initialize app user locals to a known state
 	event.locals.appUser = null;
 	const pathname = event.url.pathname;
+	const internalTasksPrefix = '/api/internal/tasks';
+	const isInternalTasksRoute =
+		pathname === internalTasksPrefix || pathname.startsWith(`${internalTasksPrefix}/`);
+
+	if (isInternalTasksRoute) {
+		if (event.request.method !== 'POST') {
+			return json(
+				{ error: 'method_not_allowed' },
+				{
+					status: 405,
+					headers: {
+						Allow: 'POST'
+					}
+				}
+			);
+		}
+
+		if (!TASKS_API_KEY) {
+			console.error('TASKS_API_KEY is not configured');
+			return json({ error: 'server_misconfigured' }, { status: 500 });
+		}
+
+		const authorization = event.request.headers.get('authorization');
+		const expectedToken = `Bearer ${TASKS_API_KEY}`;
+		if (authorization !== expectedToken) {
+			return json(
+				{ error: 'unauthorized' },
+				{
+					status: 401,
+					headers: {
+						'WWW-Authenticate': 'Bearer'
+					}
+				}
+			);
+		}
+	}
 
 	const shouldHydrateAppUser = (target: string) =>
 		target.startsWith('/app') ||
