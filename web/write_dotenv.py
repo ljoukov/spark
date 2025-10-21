@@ -2,6 +2,7 @@ import os
 
 dotenv = os.environ["DOTENV"]
 print(f"DOTENV is None: {dotenv is None}")
-print(f"Writing .env: len={len(dotenv)}")
-with open(".env", "w") as f:
+file_name = "web/.env.local"
+print(f"Writing {file_name}: len={len(dotenv)}")
+with open(file_name, "w") as f:
     f.write(dotenv)
