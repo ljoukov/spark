@@ -169,3 +169,31 @@ Only the winning set is kept for downstream storage. The judge weighs prompt fid
 - **Narration synthesis (post-judging):** The alternating `M` / `F` segments from the winning set are passed to the narration pipeline, keeping the same order as the frames.
 
 The result bundle contains the story text, accepted segmentation, storage paths for the ten canonical frames, poster/ending still references, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.
+
+## Revise + Validate Flow
+
+```mermaid
+flowchart TD
+  D0["generateStoryProseDraft (variant)"] --> LOOP
+
+  subgraph LOOP["Revise + Validate Loop (≤ PROSE_REVISION_MAX_ATTEMPTS)"]
+    direction TB
+    E1["Editor's Cut: revise story\n(JSON: analysis, revisedStory, improvementSummary, fixChecklist)"] --> V1["Validation 4A: Historical Fact Check (web-search)"]
+    V1 --> P1["Parse factual report → JSON issues"]
+    P1 -->|fail| FB1["Feedback: factual issues (with citations)"]
+    FB1 --> E1
+    P1 -->|pass| V2["Validation 4: Structural Guardrails\n(JSON: verdict, issues, blockers)"]
+    V2 -->|fail| FB2["Feedback: blockers + issues + fixChecklist mismatches"]
+    FB2 --> E1
+    V2 -->|pass| BLK{"blockers empty?"}
+    BLK -->|no| FB3["Feedback: lingering blockers"] --> E1
+    BLK -->|yes| OK["Validated revision"]
+  end
+
+  style LOOP stroke-width:2px
+```
+
+Notes
+- Validation runs in two passes: 4A (factual with web-search → parsed) then 4 (structural guardrails).
+- The guardrails validator must return a normalized `blockers` object with keys `namingAttribution`, `exclusivityClaim`, `modernTieInOverclaim`, `datePrecision`, `wrongEntity`.
+- The editor’s `fixChecklist` mirrors those keys; mismatches generate explicit feedback and another revision attempt, up to the configured limit.
