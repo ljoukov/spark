@@ -29,14 +29,14 @@ import {
   STORY_PLAN_ITEM_ID,
   STORY_TOPIC,
 } from "./constants";
-import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
 import { generateStory, type GenerateStoryResult } from "./generateStory";
 import { validateProblems, ProblemValidationError } from "./problemValidation";
-import { runJobsWithConcurrency } from "../../utils/concurrency";
+import { runJobsWithConcurrency } from "../utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
 const MEDIA_SOURCES: Array<{

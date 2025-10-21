@@ -5,9 +5,9 @@ import {
   type SynthesisedAudioResult,
   type SpeakerCode,
   type AudioGenerationProgress,
-} from "../../utils/audio";
-import { errorAsString } from "../../utils/error";
-import type { Voice } from "../../utils/tts";
+} from "../utils/audio";
+import { errorAsString } from "../utils/error";
+import type { Voice } from "../utils/tts";
 import { MediaSegmentSchema, type MediaSegment } from "./schemas";
 
 export type SessionAudioResult = SynthesisedAudioResult & {

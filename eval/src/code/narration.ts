@@ -15,7 +15,7 @@ import {
   formatDurationSeconds,
   formatInteger,
   formatMillis,
-} from "../../utils/format";
+} from "../utils/format";
 
 function formatTimestamp(seconds: number): string {
   return formatDurationSeconds(seconds);

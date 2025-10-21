@@ -18,14 +18,14 @@ import type {
   CodeProblem,
 } from "@spark/schemas";
 
-import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
 } from "./narration";
 import { generateStory, type GenerateStoryResult } from "./generateStory";
 import { validateProblems, ProblemValidationError } from "./problemValidation";
-import { runJobsWithConcurrency } from "../../utils/concurrency";
+import { runJobsWithConcurrency } from "../utils/concurrency";
 
 const TEMPLATE_USER_ID = "welcome-templates";
 const TEMPLATE_ROOT_COLLECTION = "spark-admin";
