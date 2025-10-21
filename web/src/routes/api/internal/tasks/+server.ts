@@ -16,17 +16,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const task = result.data;
-	switch (task.type) {
-		case 'generateQuiz': {
-			const { userId, quizId } = task.generateQuiz;
-			console.log(`[internal task] generateQuiz userId=${userId} quizId=${quizId}`);
-			break;
-		}
-		default: {
-			// Exhaustiveness guard via discriminated union; unreachable
-			return json({ error: 'unsupported_task' }, { status: 400 });
-		}
+	if (task.type !== 'generateQuiz') {
+		return json({ error: 'unsupported_task' }, { status: 400 });
 	}
+
+	const { userId, quizId } = task.generateQuiz;
+	console.log(`[internal task] generateQuiz userId=${userId} quizId=${quizId}`);
 
 	return json({ status: 'accepted' }, { status: 202 });
 };
