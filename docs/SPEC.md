@@ -49,7 +49,17 @@
 `/api/spark` accepts SparkApiRequestProto and responds with SparkApiResponseProto, to simplify logging
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
-`/api/internal/tasks` (POST only) is an internal task-runner hook that currently returns a placeholder `{ message: "hello" }` payload. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
+`/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
+
+Payload shape is validated with `@spark/schemas` using a discriminated union over `type`:
+
+- `type = "generateQuiz"` with `generateQuiz: { userId: string; quizId: string }`.
+
+During development, the server schedules work by POSTing directly to `TASKS_SERVICE_URL` (typically the same app’s `/api/internal/tasks`). In production the same binary schedules via Google Cloud Tasks:
+
+- Env: `TASKS_SERVICE_URL` (full handler URL), `TASKS_API_KEY` (Bearer), optional `TASKS_QUEUE` (default `spark-tasks`).
+- Location: `us-central1`.
+- The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
 
 ### 3.1 Data Flow
 

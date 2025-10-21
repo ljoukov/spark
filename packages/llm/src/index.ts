@@ -1,5 +1,6 @@
 export * from "./quiz/legacy";
 export * from "./quiz/sparkUpload";
+export * from "./quiz/task";
 export * from "./code/schemas";
 export * from "./code/audio";
 export * from "./code/mediaPublisher";
@@ -12,3 +13,4 @@ export * from "./utils/googleTTS";
 export * from "./utils/openai";
 export * from "./utils/openaiTTS";
 export * from "./utils/tts";
+export * from "./utils/tasks";

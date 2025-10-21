@@ -47,13 +47,19 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const fileValue = formData.get('file');
 	if (!(fileValue instanceof File)) {
-		return json({ error: 'missing_file', message: 'Please attach a PDF to upload.' }, { status: 400 });
+		return json(
+			{ error: 'missing_file', message: 'Please attach a PDF to upload.' },
+			{ status: 400 }
+		);
 	}
 
 	const filenameResult = filenameSchema.safeParse(fileValue.name ?? '');
 	if (!filenameResult.success) {
 		return json(
-			{ error: 'invalid_filename', message: filenameResult.error.issues[0]?.message ?? 'Invalid file name.' },
+			{
+				error: 'invalid_filename',
+				message: filenameResult.error.issues[0]?.message ?? 'Invalid file name.'
+			},
 			{ status: 400 }
 		);
 	}
@@ -79,13 +85,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			: null;
 	const extension = inferExtension(filename, mimeType);
 	if (extension !== 'pdf') {
-		return json({ error: 'invalid_type', message: 'Only PDF files are supported right now.' }, { status: 400 });
+		return json(
+			{ error: 'invalid_type', message: 'Only PDF files are supported right now.' },
+			{ status: 400 }
+		);
 	}
 	if (
 		mimeType &&
 		!['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(mimeType)
 	) {
-		return json({ error: 'invalid_type', message: 'Only PDF files are supported right now.' }, { status: 400 });
+		return json(
+			{ error: 'invalid_type', message: 'Only PDF files are supported right now.' },
+			{ status: 400 }
+		);
 	}
 
 	const storageContentType =
@@ -142,11 +154,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const firestore = getFirebaseAdminFirestore();
-	const uploadDocRef = firestore
-		.collection('spark')
-		.doc(userId)
-		.collection('uploads')
-		.doc(digest);
+	const uploadDocRef = firestore.collection('spark').doc(userId).collection('uploads').doc(digest);
 	const quizDocRef = uploadDocRef.collection('quiz').doc();
 	const serverTimestamp = FieldValue.serverTimestamp();
 	const uploadStatus: SparkUploadStatus = 'uploaded';

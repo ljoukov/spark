@@ -13,10 +13,7 @@ import {
   type LlmImageData,
   type LlmDebugOptions,
 } from "../utils/llm";
-import type {
-  JobProgressReporter,
-  LlmUsageChunk,
-} from "../utils/concurrency";
+import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { getFirebaseAdminStorage, getFirebaseAdminFirestore } from "@spark/llm";
 import type { MediaSegment } from "@spark/llm";
 import sharp from "sharp";
@@ -123,7 +120,7 @@ const SegmentationCorrectorResponseSchema = z
           prompt_index: z.number().int().min(0).max(11),
           critique: z.string().trim().min(1),
           updatedPrompt: z.string().trim().min(1),
-        })
+        }),
       )
       .default([]),
   })
@@ -211,7 +208,7 @@ const optionalIdeaString = z
   .min(1)
   .nullish()
   .transform((value) =>
-    value === null || value === undefined ? undefined : value
+    value === null || value === undefined ? undefined : value,
   );
 
 const StoryIdeaResearchSnapshotSchema = z.object({
@@ -280,7 +277,7 @@ const StoryIdeaDataSchema = StoryIdeaDataSchemaBase.superRefine(
         });
       }
     }
-  }
+  },
 );
 
 export type StoryIdeaData = z.infer<typeof StoryIdeaDataSchema>;
@@ -786,7 +783,7 @@ export type SerialisedStoryImageSet = z.infer<
 >;
 
 export function serialiseStoryImageSets(
-  imageSets: readonly StoryImageSet[]
+  imageSets: readonly StoryImageSet[],
 ): SerialisedStoryImageSet[] {
   return imageSets.map((set) => ({
     imageSetLabel: set.imageSetLabel,
@@ -799,7 +796,7 @@ export function serialiseStoryImageSets(
 }
 
 export function deserialiseStoryImageSets(
-  serialised: readonly SerialisedStoryImageSet[]
+  serialised: readonly SerialisedStoryImageSet[],
 ): StoryImageSet[] {
   return serialised.map((set) => ({
     imageSetLabel: set.imageSetLabel,
@@ -908,7 +905,7 @@ const StoryProseRevisionCheckpointSchema = z.object({
         improvementSummary: z.string().trim().min(1),
         fixChecklist: StoryFixChecklistSchema,
         validation: StoryProseValidationResultSchema.optional(),
-      })
+      }),
     )
     .optional(),
   judge: StoryProseVariantsJudgeSchema.optional(),
@@ -987,7 +984,7 @@ type StoryNarrationCheckpoint = z.infer<typeof StoryNarrationCheckpointSchema>;
 export class SegmentationCorrectionError extends Error {
   constructor(
     message: string,
-    readonly segmentation: StorySegmentation
+    readonly segmentation: StorySegmentation,
   ) {
     super(message);
     this.name = "SegmentationCorrectionError";
@@ -1043,12 +1040,7 @@ const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
 
 const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: [
-    "analysis",
-    "revisedStory",
-    "improvementSummary",
-    "fixChecklist",
-  ],
+  required: ["analysis", "revisedStory", "improvementSummary", "fixChecklist"],
   propertyOrdering: [
     "analysis",
     "revisedStory",
@@ -1262,7 +1254,7 @@ Important constraints:
 
 export function buildStoryIdeaParsePrompt(
   topic: string,
-  briefMarkdown: string
+  briefMarkdown: string,
 ): string {
   return [
     "You are a structured-data specialist.",
@@ -1295,7 +1287,7 @@ export function buildStoryIdeaParsePrompt(
 export function buildStoryDraftPrompt(
   topic: string,
   storyBrief: string,
-  originsCapsule: string
+  originsCapsule: string,
 ): string {
   return `### **Prompt 2: The Narrative Weaver**
 
@@ -1349,7 +1341,7 @@ export function buildStoryRevisionPrompt(
   topic: string,
   storyDraft: string,
   originsCapsule: string,
-  feedback?: string
+  feedback?: string,
 ): string {
   const feedbackSection =
     feedback && feedback.trim().length > 0
@@ -1430,7 +1422,7 @@ Do not include commentary outside the JSON object. Every score must be an intege
 
 export function buildStoryValidationPrompt(
   topic: string,
-  storyText: string
+  storyText: string,
 ): string {
   return `### **Prompt 4: The Fact-Check Gate**
 
@@ -1494,7 +1486,7 @@ If there are no issues, return an empty array for \\"issues\\" but still include
 
 export function buildStoryFactualValidationPrompt(
   topic: string,
-  storyText: string
+  storyText: string,
 ): string {
   return `### **Prompt 4A: Historical Fact Check**
 
@@ -1528,7 +1520,7 @@ ${storyText}
 }
 
 export function buildStoryFactualValidationParsePrompt(
-  factualReport: string
+  factualReport: string,
 ): string {
   return [
     "You are converting a fact-check report into structured JSON.",
@@ -1556,7 +1548,7 @@ export function buildStoryFactualValidationParsePrompt(
 
 export function buildSegmentationPrompt(
   storyText: string,
-  topic?: string
+  topic?: string,
 ): string {
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
   return [
@@ -1599,7 +1591,7 @@ export function buildSegmentationPrompt(
 export async function generateStoryIdea(
   topic: string,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
   const prompt = buildStoryIdeaPrompt(topic);
@@ -1607,7 +1599,7 @@ export async function generateStoryIdea(
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(IDEA_GENERATION_MAX_ATTEMPTS).padStart(2, "0")}`;
     const subStage = combineDebugSegments(options?.debugSubStage, attemptLabel);
     adapter.log(
-      `[story/ideas] generation attempt ${attempt} of ${IDEA_GENERATION_MAX_ATTEMPTS} with web-search-enabled ${TEXT_MODEL_ID}`
+      `[story/ideas] generation attempt ${attempt} of ${IDEA_GENERATION_MAX_ATTEMPTS} with web-search-enabled ${TEXT_MODEL_ID}`,
     );
     const ideaDebugOptions = options?.debugRootDir
       ? {
@@ -1651,14 +1643,14 @@ export async function generateStoryIdea(
         error instanceof Error ? error.message : String(error ?? "unknown");
       if (attempt === IDEA_GENERATION_MAX_ATTEMPTS) {
         adapter.log(
-          `[story/ideas] generation attempt ${attempt} failed (${message}); no retries left`
+          `[story/ideas] generation attempt ${attempt} failed (${message}); no retries left`,
         );
         throw new Error(
-          `Story idea generation failed after ${IDEA_GENERATION_MAX_ATTEMPTS} attempt(s): ${message}`
+          `Story idea generation failed after ${IDEA_GENERATION_MAX_ATTEMPTS} attempt(s): ${message}`,
         );
       }
       adapter.log(
-        `[story/ideas] generation attempt ${attempt} failed (${message}); retrying...`
+        `[story/ideas] generation attempt ${attempt} failed (${message}); retrying...`,
       );
     }
   }
@@ -1672,18 +1664,16 @@ function buildOriginsCapsuleResearchContext(idea: StoryIdeaResult): string {
   }
   const { researchSnapshot, recommendation, candidates } = data;
   const selectedCandidate = candidates.find(
-    (candidate) => candidate.id === recommendation.selectedCandidateId
+    (candidate) => candidate.id === recommendation.selectedCandidateId,
   );
   const lines: string[] = [];
   lines.push(`Conceptual Essence: ${researchSnapshot.conceptualEssence}`);
+  lines.push(`Primary Figure: ${researchSnapshot.historicalAnchor.figure}`);
   lines.push(
-    `Primary Figure: ${researchSnapshot.historicalAnchor.figure}`
+    `Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`,
   );
   lines.push(
-    `Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`
-  );
-  lines.push(
-    `High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`
+    `High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`,
   );
   if (researchSnapshot.namingNote) {
     lines.push(`Naming Note: ${researchSnapshot.namingNote}`);
@@ -1704,11 +1694,12 @@ function buildOriginsCapsuleResearchContext(idea: StoryIdeaResult): string {
 function buildOriginsCapsulePrompt(
   topic: string,
   researchContext: string,
-  additionalGuidance?: string
+  additionalGuidance?: string,
 ): string {
-  const guidance = additionalGuidance && additionalGuidance.trim().length > 0
-    ? `\n**Adjustments from fact-check feedback:**\n${additionalGuidance.trim()}\n`
-    : "";
+  const guidance =
+    additionalGuidance && additionalGuidance.trim().length > 0
+      ? `\n**Adjustments from fact-check feedback:**\n${additionalGuidance.trim()}\n`
+      : "";
   return [
     "### Origins Capsule Forge",
     "",
@@ -1717,17 +1708,17 @@ function buildOriginsCapsulePrompt(
     "",
     "**Mission Parameters:**",
     "1. Output exactly two sentences (max 40 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
-    "2. Sentence 1: Introduce the classical anchor using a neutral verb (\"described\", \"published\", \"popularized\") with approximate timing and include the phrasing \"now known as\" before the concept name.",
-    "3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as \"independently developed\", \"... and others\", or \"later published\".",
+    '2. Sentence 1: Introduce the classical anchor using a neutral verb ("described", "published", "popularized") with approximate timing and include the phrasing "now known as" before the concept name.',
+    '3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as "independently developed", "... and others", or "later published".',
     "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
-    "5. Avoid exclusivity claims (\"first\", \"sole inventor\", \"coined\") unless universally accepted.",
+    '5. Avoid exclusivity claims ("first", "sole inventor", "coined") unless universally accepted.',
     "6. No citations, quotation marks, or parenthetical lists. Keep to plain prose suitable for narration.",
-    "7. Limit to one named individual or institution; mention others only through hedged phrases (\"... and others\").",
+    '7. Limit to one named individual or institution; mention others only through hedged phrases ("... and others").',
     guidance,
     "**Validated Research Extract:**",
     researchContext,
     "",
-    "Return only the two-sentence capsule with standard punctuation."
+    "Return only the two-sentence capsule with standard punctuation.",
   ]
     .filter((segment) => segment !== "")
     .join("\n");
@@ -1736,7 +1727,7 @@ function buildOriginsCapsulePrompt(
 function buildOriginsCapsuleValidationPrompt(
   topic: string,
   capsule: string,
-  researchContext: string
+  researchContext: string,
 ): string {
   return [
     "### Origins Capsule Fact-Check",
@@ -1751,16 +1742,16 @@ function buildOriginsCapsuleValidationPrompt(
     "",
     "**Validation Checklist:**",
     "1. Names, titles, institutions, and dates must align with mainstream historical accounts referenced in the research extract.",
-    "2. Ensure the capsule keeps the neutral \"now known as\" framing without implying exclusive naming or invention.",
-    "3. Confirm hedged nuance is honest—allow \"... and others\" when additional contributors exist. Do not demand exhaustive lists.",
+    '2. Ensure the capsule keeps the neutral "now known as" framing without implying exclusive naming or invention.',
+    '3. Confirm hedged nuance is honest—allow "... and others" when additional contributors exist. Do not demand exhaustive lists.',
     "4. Block the capsule only for catastrophic issues: wrong entities, wrong dates, exclusive origin claims, or unverifiable attributions.",
     "",
     "**Instructions:**",
     "- Run web searches as needed to confirm uncertain claims.",
-    "- If everything checks out, set verdict to \"pass\" and leave issues empty.",
-    "- If problems remain, set verdict to \"fail\" and record each blocker with a short summary and a concrete recommendation (e.g., hedge a date, drop a contested name).",
+    '- If everything checks out, set verdict to "pass" and leave issues empty.',
+    '- If problems remain, set verdict to "fail" and record each blocker with a short summary and a concrete recommendation (e.g., hedge a date, drop a contested name).',
     "",
-    "Respond in JSON following the schema with fields 'verdict' and 'issues'."
+    "Respond in JSON following the schema with fields 'verdict' and 'issues'.",
   ].join("\n");
 }
 
@@ -1770,13 +1761,13 @@ async function validateOriginsCapsule(
   researchContext: string,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
-  attemptLabel?: string
+  attemptLabel?: string,
 ): Promise<OriginsCapsuleValidationResponse> {
   const adapter = useProgress(progress);
   const prompt = buildOriginsCapsuleValidationPrompt(
     topic,
     capsule,
-    researchContext
+    researchContext,
   );
   const debug = options?.debugRootDir
     ? {
@@ -1785,7 +1776,7 @@ async function validateOriginsCapsule(
           combineDebugSegments(
             options.debugSubStage ?? "origins",
             attemptLabel,
-            "validation"
+            "validation",
           ) ?? `origins/${attemptLabel ?? "validation"}/validation`,
       }
     : undefined;
@@ -1804,20 +1795,14 @@ export async function generateOriginsCapsule(
   topic: string,
   idea: StoryIdeaResult,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryOriginsCapsule> {
   const adapter = useProgress(progress);
   const researchContext = buildOriginsCapsuleResearchContext(idea);
   let additionalGuidance: string | undefined;
-  for (
-    let attempt = 1;
-    attempt <= ORIGINS_CAPSULE_MAX_ATTEMPTS;
-    attempt += 1
-  ) {
+  for (let attempt = 1; attempt <= ORIGINS_CAPSULE_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(ORIGINS_CAPSULE_MAX_ATTEMPTS).padStart(2, "0")}`;
-    adapter.log(
-      `[story/origins] capsule generation ${attemptLabel}`
-    );
+    adapter.log(`[story/origins] capsule generation ${attemptLabel}`);
     const debug = options?.debugRootDir
       ? {
           rootDir: options.debugRootDir,
@@ -1825,14 +1810,14 @@ export async function generateOriginsCapsule(
             combineDebugSegments(
               options?.debugSubStage ?? "origins",
               attemptLabel,
-              "draft"
+              "draft",
             ) ?? `origins/${attemptLabel}/draft`,
         }
       : undefined;
     const prompt = buildOriginsCapsulePrompt(
       topic,
       researchContext,
-      additionalGuidance
+      additionalGuidance,
     );
     const raw = await generateText({
       progress: adapter,
@@ -1848,7 +1833,7 @@ export async function generateOriginsCapsule(
       .filter((sentence) => sentence.length > 0);
     if (sentences.length !== 2) {
       structuralIssues.push(
-        `Produce exactly two sentences separated by a single space (you returned ${sentences.length}).`
+        `Produce exactly two sentences separated by a single space (you returned ${sentences.length}).`,
       );
     }
     const wordCount = candidate.length
@@ -1859,7 +1844,7 @@ export async function generateOriginsCapsule(
     }
     if (wordCount > 40) {
       structuralIssues.push(
-        `Reduce the word count to 40 or fewer (current count: ${wordCount}).`
+        `Reduce the word count to 40 or fewer (current count: ${wordCount}).`,
       );
     }
     if (structuralIssues.length > 0) {
@@ -1868,7 +1853,7 @@ export async function generateOriginsCapsule(
         ...structuralIssues.map((issue) => `- ${issue}`),
       ].join("\n");
       adapter.log(
-        `[story/origins] structural check failed: ${structuralIssues.join(", ")}`
+        `[story/origins] structural check failed: ${structuralIssues.join(", ")}`,
       );
       continue;
     }
@@ -1879,7 +1864,7 @@ export async function generateOriginsCapsule(
       researchContext,
       progress,
       options,
-      attemptLabel
+      attemptLabel,
     );
     if (validation.verdict === "pass") {
       adapter.log("[story/origins] capsule validated");
@@ -1888,29 +1873,31 @@ export async function generateOriginsCapsule(
 
     const blockers = validation.issues.length
       ? validation.issues
-      : [{
-          summary:
-            "Fact-checker flagged unresolved concerns without specific details.",
-          recommendation:
-            "Increase hedging or remove uncertain names before retrying.",
-        }];
+      : [
+          {
+            summary:
+              "Fact-checker flagged unresolved concerns without specific details.",
+            recommendation:
+              "Increase hedging or remove uncertain names before retrying.",
+          },
+        ];
     additionalGuidance = [
       "Revise the capsule to address the fact-check feedback:",
       ...blockers.map(
         (issue, index) =>
-          `${index + 1}. ${issue.summary} — ${issue.recommendation}`
+          `${index + 1}. ${issue.summary} — ${issue.recommendation}`,
       ),
       "Default to hedged phrasing or drop disputed claims if certainty is low.",
     ].join("\n");
     adapter.log(
       `[story/origins] fact-check failed: ${blockers
         .map((issue) => issue.summary)
-        .join("; ")}`
+        .join("; ")}`,
     );
   }
 
   throw new Error(
-    `Origins capsule generation failed after ${ORIGINS_CAPSULE_MAX_ATTEMPTS} attempt(s).`
+    `Origins capsule generation failed after ${ORIGINS_CAPSULE_MAX_ATTEMPTS} attempt(s).`,
   );
 }
 
@@ -1919,7 +1906,7 @@ export async function generateStoryProseDraft(
   idea: StoryIdeaResult,
   originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
@@ -1953,7 +1940,7 @@ export async function generateStoryProseRevision(
   originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
-  feedback?: string
+  feedback?: string,
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
@@ -1961,7 +1948,7 @@ export async function generateStoryProseRevision(
     topic,
     draft.text,
     originsCapsule.text,
-    feedback
+    feedback,
   );
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
@@ -2002,7 +1989,7 @@ export async function validateStoryProse(
   topic: string,
   revision: StoryProseRevisionResult,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryProseValidationResult> {
   const adapter = useProgress(progress);
   const buildStagePath = (leaf: string): string | undefined => {
@@ -2019,7 +2006,7 @@ export async function validateStoryProse(
   };
 
   adapter.log(
-    `[story] validating prose – factual analysis with ${TEXT_MODEL_ID}`
+    `[story] validating prose – factual analysis with ${TEXT_MODEL_ID}`,
   );
   const factualPrompt = buildStoryFactualValidationPrompt(topic, revision.text);
   const factualReport = await generateText({
@@ -2056,14 +2043,14 @@ export async function validateStoryProse(
       : undefined,
   });
   adapter.log(
-    `[story/prose-validation] factual verdict: ${factualResponse.verdict}${factualResponse.issues.length ? ` (${factualResponse.issues.length} issue(s))` : ""}`
+    `[story/prose-validation] factual verdict: ${factualResponse.verdict}${factualResponse.issues.length ? ` (${factualResponse.issues.length} issue(s))` : ""}`,
   );
   if (factualResponse.verdict === "fail") {
     return factualResponse;
   }
 
   adapter.log(
-    `[story] validating prose – structural pass with ${TEXT_MODEL_ID}`
+    `[story] validating prose – structural pass with ${TEXT_MODEL_ID}`,
   );
   const structuralPrompt = buildStoryValidationPrompt(topic, revision.text);
   const structuralResponse = await generateJson<StoryProseValidationResult>({
@@ -2083,18 +2070,18 @@ export async function validateStoryProse(
       : undefined,
   });
   adapter.log(
-    `[story/prose-validation] verdict: ${structuralResponse.verdict}${structuralResponse.issues.length ? ` (${structuralResponse.issues.length} issue(s))` : ""}`
+    `[story/prose-validation] verdict: ${structuralResponse.verdict}${structuralResponse.issues.length ? ` (${structuralResponse.issues.length} issue(s))` : ""}`,
   );
   if (!structuralResponse.blockers) {
     throw new Error(
-      "Story validation response omitted the blockers object; retrying"
+      "Story validation response omitted the blockers object; retrying",
     );
   }
   return structuralResponse;
 }
 
 function summariseValidationIssues(
-  issues: readonly StoryProseValidationIssue[]
+  issues: readonly StoryProseValidationIssue[],
 ): string {
   if (issues.length === 0) {
     return "no detailed issues provided";
@@ -2109,7 +2096,7 @@ function summariseValidationIssues(
 }
 
 function buildBlockerMessages(
-  blockers: StoryValidationBlockers | undefined
+  blockers: StoryValidationBlockers | undefined,
 ): string[] {
   if (!blockers) {
     return [];
@@ -2117,17 +2104,17 @@ function buildBlockerMessages(
   const messages: string[] = [];
   if (blockers.namingAttribution === true) {
     messages.push(
-      "Replace ‘coined/named/formalized by’ with neutral ‘now known as’ / ‘widely called’ phrasing."
+      "Replace ‘coined/named/formalized by’ with neutral ‘now known as’ / ‘widely called’ phrasing.",
     );
   }
   if (blockers.exclusivityClaim === true) {
     messages.push(
-      "Remove exclusive ‘first/sole’ origin claims; swap them for hedged language like ‘credited among early contributors’."
+      "Remove exclusive ‘first/sole’ origin claims; swap them for hedged language like ‘credited among early contributors’.",
     );
   }
   if (blockers.modernTieInOverclaim === true) {
     messages.push(
-      "Switch the ending to one of the approved hedged modern-connection templates."
+      "Switch the ending to one of the approved hedged modern-connection templates.",
     );
   }
   const datePrecision = blockers.datePrecision;
@@ -2136,12 +2123,12 @@ function buildBlockerMessages(
     (typeof datePrecision === "boolean" && datePrecision)
   ) {
     messages.push(
-      "Use an approximate era (e.g., ‘late 19xx’) instead of a precise date unless high confidence."
+      "Use an approximate era (e.g., ‘late 19xx’) instead of a precise date unless high confidence.",
     );
   }
   if (blockers.wrongEntity === true) {
     messages.push(
-      "Correct names, titles, or institutions to the mainstream textbook versions."
+      "Correct names, titles, or institutions to the mainstream textbook versions.",
     );
   }
   return messages;
@@ -2149,7 +2136,7 @@ function buildBlockerMessages(
 
 function buildFixChecklistMismatches(
   blockers: StoryValidationBlockers | undefined,
-  checklist: StoryFixChecklist | undefined
+  checklist: StoryFixChecklist | undefined,
 ): string[] {
   if (!blockers || !checklist) {
     return [];
@@ -2157,22 +2144,25 @@ function buildFixChecklistMismatches(
   const messages: string[] = [];
   if (blockers.namingAttribution === true && checklist.namingAttribution) {
     messages.push(
-      "Set fixChecklist.namingAttribution to false until the prose uses neutral naming (‘now known as’ / ‘widely called’)."
+      "Set fixChecklist.namingAttribution to false until the prose uses neutral naming (‘now known as’ / ‘widely called’).",
     );
   }
   if (blockers.exclusivityClaim === true && checklist.exclusivityClaim) {
     messages.push(
-      "Set fixChecklist.exclusivityClaim to false until exclusive ‘first/sole’ phrasing is removed."
+      "Set fixChecklist.exclusivityClaim to false until exclusive ‘first/sole’ phrasing is removed.",
     );
   }
-  if (blockers.modernTieInOverclaim === true && checklist.modernTieInOverclaim) {
+  if (
+    blockers.modernTieInOverclaim === true &&
+    checklist.modernTieInOverclaim
+  ) {
     messages.push(
-      "Set fixChecklist.modernTieInOverclaim to false until the ending uses one approved hedged template."
+      "Set fixChecklist.modernTieInOverclaim to false until the ending uses one approved hedged template.",
     );
   }
   if (blockers.wrongEntity === true && checklist.wrongEntity) {
     messages.push(
-      "Set fixChecklist.wrongEntity to false until all names and titles match mainstream accounts."
+      "Set fixChecklist.wrongEntity to false until all names and titles match mainstream accounts.",
     );
   }
   const datePrecision = blockers.datePrecision;
@@ -2182,7 +2172,7 @@ function buildFixChecklistMismatches(
     checklist.datePrecision !== "recommend-hedge"
   ) {
     messages.push(
-      "Set fixChecklist.datePrecision to \"recommend-hedge\" until the timeline uses approximate phrasing."
+      'Set fixChecklist.datePrecision to "recommend-hedge" until the timeline uses approximate phrasing.',
     );
   }
   return messages;
@@ -2190,16 +2180,14 @@ function buildFixChecklistMismatches(
 
 function buildValidationFeedback(
   issues: readonly StoryProseValidationIssue[],
-  blockers: StoryValidationBlockers | undefined
+  blockers: StoryValidationBlockers | undefined,
 ): string {
   const sections: string[] = [];
   const blockerMessages = buildBlockerMessages(blockers);
   if (blockerMessages.length > 0) {
     sections.push(
       "Resolve the guardrail blockers:",
-      ...blockerMessages.map(
-        (message, index) => `${index + 1}. ${message}`
-      )
+      ...blockerMessages.map((message, index) => `${index + 1}. ${message}`),
     );
   }
 
@@ -2237,7 +2225,7 @@ function combineDebugSegments(
           .split("/")
           .map((part) => part.trim())
           .filter((part) => part.length > 0)
-      : []
+      : [],
   );
   if (cleaned.length === 0) {
     return undefined;
@@ -2248,11 +2236,11 @@ function combineDebugSegments(
 function formatIdeaBrief(data: StoryIdeaData): string {
   const { researchSnapshot, candidates, recommendation } = data;
   const selectedCandidate = candidates.find(
-    (candidate) => candidate.id === recommendation.selectedCandidateId
+    (candidate) => candidate.id === recommendation.selectedCandidateId,
   );
   if (!selectedCandidate) {
     throw new Error(
-      `Story idea recommendation referenced missing candidate ${recommendation.selectedCandidateId}`
+      `Story idea recommendation referenced missing candidate ${recommendation.selectedCandidateId}`,
     );
   }
 
@@ -2261,13 +2249,13 @@ function formatIdeaBrief(data: StoryIdeaData): string {
   lines.push("");
   lines.push(`- Conceptual Essence: ${researchSnapshot.conceptualEssence}`);
   lines.push(
-    `- Historical Anchor: ${researchSnapshot.historicalAnchor.figure}`
+    `- Historical Anchor: ${researchSnapshot.historicalAnchor.figure}`,
   );
   lines.push(
-    `- Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`
+    `- Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`,
   );
   lines.push(
-    `- High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`
+    `- High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`,
   );
   const functionalAnalogies =
     researchSnapshot.narrativeElements.functionalAnalogies
@@ -2275,10 +2263,10 @@ function formatIdeaBrief(data: StoryIdeaData): string {
       .join("; ");
   lines.push(`- Functional Analogies: ${functionalAnalogies}`);
   lines.push(
-    `- Contrasting Foil: ${researchSnapshot.narrativeElements.contrastingFoil}`
+    `- Contrasting Foil: ${researchSnapshot.narrativeElements.contrastingFoil}`,
   );
   lines.push(
-    `- Invisible Architecture Pivot: ${researchSnapshot.narrativeElements.invisibleArchitecturePivot}`
+    `- Invisible Architecture Pivot: ${researchSnapshot.narrativeElements.invisibleArchitecturePivot}`,
   );
   const terminology = researchSnapshot.keyTerminologyGloss ?? [];
   if (terminology.length > 0) {
@@ -2288,7 +2276,7 @@ function formatIdeaBrief(data: StoryIdeaData): string {
     }
   }
   lines.push(
-    `- Key Term to Name in Story: ${researchSnapshot.keyTermToNameInStory}`
+    `- Key Term to Name in Story: ${researchSnapshot.keyTermToNameInStory}`,
   );
   if (researchSnapshot.namingNote) {
     lines.push(`- Naming Note: ${researchSnapshot.namingNote}`);
@@ -2332,7 +2320,7 @@ function buildVariantDebugOptions(
     debugSubStage: combineDebugSegments(
       base.debugSubStage,
       variantLabel,
-      ...extraSegments
+      ...extraSegments,
     ),
   };
 }
@@ -2343,18 +2331,18 @@ async function prepareProseVariantDraft(
   idea: StoryIdeaResult,
   originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
-  baseDebug?: StoryDebugOptions
+  baseDebug?: StoryDebugOptions,
 ): Promise<StoryProseDraftVariant> {
   const adapter = useProgress(progress);
   for (let attempt = 1; attempt <= PROSE_DRAFT_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_DRAFT_MAX_ATTEMPTS).padStart(2, "0")}`;
     adapter.log(
-      `[story/prose/${label}] draft attempt ${attempt} of ${PROSE_DRAFT_MAX_ATTEMPTS}`
+      `[story/prose/${label}] draft attempt ${attempt} of ${PROSE_DRAFT_MAX_ATTEMPTS}`,
     );
     const draftOptions = buildVariantDebugOptions(
       baseDebug,
       label,
-      attemptLabel
+      attemptLabel,
     );
     try {
       const draft = await generateStoryProseDraft(
@@ -2362,7 +2350,7 @@ async function prepareProseVariantDraft(
         idea,
         originsCapsule,
         progress,
-        draftOptions
+        draftOptions,
       );
       return { label, idea, originsCapsule, draft };
     } catch (error) {
@@ -2370,19 +2358,19 @@ async function prepareProseVariantDraft(
         error instanceof Error ? error.message : String(error ?? "unknown");
       if (attempt === PROSE_DRAFT_MAX_ATTEMPTS) {
         adapter.log(
-          `[story/prose/${label}] draft attempt ${attempt} failed (${message}); no retries left`
+          `[story/prose/${label}] draft attempt ${attempt} failed (${message}); no retries left`,
         );
         throw new Error(
-          `Story prose draft generation failed for ${label} after ${PROSE_DRAFT_MAX_ATTEMPTS} attempt(s): ${message}`
+          `Story prose draft generation failed for ${label} after ${PROSE_DRAFT_MAX_ATTEMPTS} attempt(s): ${message}`,
         );
       }
       adapter.log(
-        `[story/prose/${label}] draft attempt ${attempt} failed (${message}); retrying...`
+        `[story/prose/${label}] draft attempt ${attempt} failed (${message}); retrying...`,
       );
     }
   }
   throw new Error(
-    `Story prose draft generation failed for ${label}; no draft was produced.`
+    `Story prose draft generation failed for ${label}; no draft was produced.`,
   );
 }
 
@@ -2390,7 +2378,7 @@ async function reviseProseVariant(
   topic: string,
   variant: StoryProseDraftVariant,
   progress?: StoryProgress,
-  baseDebug?: StoryDebugOptions
+  baseDebug?: StoryDebugOptions,
 ): Promise<StoryProseVariantCandidate> {
   const adapter = useProgress(progress);
   let feedback: string | undefined;
@@ -2398,19 +2386,19 @@ async function reviseProseVariant(
   for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `revisions/attempt-${String(attempt).padStart(2, "0")}-of-${String(PROSE_REVISION_MAX_ATTEMPTS).padStart(2, "0")}`;
     adapter.log(
-      `[story/prose/${variant.label}] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`
+      `[story/prose/${variant.label}] revision attempt ${attempt} of ${PROSE_REVISION_MAX_ATTEMPTS}`,
     );
     const revisionOptions = buildVariantDebugOptions(
       baseDebug,
       variant.label,
       attemptLabel,
-      "revision"
+      "revision",
     );
     const validationOptions = buildVariantDebugOptions(
       baseDebug,
       variant.label,
       attemptLabel,
-      "validation"
+      "validation",
     );
     const candidate = await generateStoryProseRevision(
       topic,
@@ -2418,19 +2406,19 @@ async function reviseProseVariant(
       variant.originsCapsule,
       progress,
       revisionOptions,
-      feedback
+      feedback,
     );
     const validation = await validateStoryProse(
       topic,
       candidate,
       progress,
-      validationOptions
+      validationOptions,
     );
     if (validation.verdict === "pass") {
       const lingeringBlockers = buildBlockerMessages(validation.blockers);
       if (lingeringBlockers.length > 0) {
         throw new Error(
-          `Story validation reported 'pass' but blockers remain: ${lingeringBlockers.join("; ")}`
+          `Story validation reported 'pass' but blockers remain: ${lingeringBlockers.join("; ")}`,
         );
       }
       revision = { ...candidate, validation };
@@ -2440,21 +2428,18 @@ async function reviseProseVariant(
       ? summariseValidationIssues(validation.issues)
       : "Validation failed without reported issues.";
     adapter.log(
-      `[story/prose-validation/${variant.label}] attempt ${attempt} failed: ${summary}`
+      `[story/prose-validation/${variant.label}] attempt ${attempt} failed: ${summary}`,
     );
     if (attempt === PROSE_REVISION_MAX_ATTEMPTS) {
       throw new Error(
-        `Story prose validation failed for ${variant.label} after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`
+        `Story prose validation failed for ${variant.label} after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`,
       );
     }
     const checklistMismatches = buildFixChecklistMismatches(
       validation.blockers,
-      candidate.fixChecklist
+      candidate.fixChecklist,
     );
-    feedback = buildValidationFeedback(
-      validation.issues,
-      validation.blockers
-    );
+    feedback = buildValidationFeedback(validation.issues, validation.blockers);
     if (checklistMismatches.length > 0) {
       feedback = [
         "Update the fixChecklist so it reflects unresolved blockers:",
@@ -2466,7 +2451,7 @@ async function reviseProseVariant(
   }
   if (!revision) {
     throw new Error(
-      `Story prose revision did not produce a validated result for ${variant.label}`
+      `Story prose revision did not produce a validated result for ${variant.label}`,
     );
   }
   return {
@@ -2480,7 +2465,7 @@ async function reviseProseVariant(
 
 function buildProseVariantsJudgePrompt(
   topic: string,
-  variants: readonly StoryProseVariantCandidate[]
+  variants: readonly StoryProseVariantCandidate[],
 ): string {
   const lines: string[] = [
     "### Prompt 5: Story Variant Judge",
@@ -2512,12 +2497,12 @@ function buildProseVariantsJudgePrompt(
         `- Conceptual Clarity: ${analysis.conceptualClarity.score}/5 – ${analysis.conceptualClarity.justification}`,
         `- Audience Resonance: ${analysis.audienceResonance.score}/5 – ${analysis.audienceResonance.justification}`,
         `- Motivational Power: ${analysis.motivationalPower.score}/5 – ${analysis.motivationalPower.justification}`,
-      ].join("\n")
+      ].join("\n"),
     );
     const validation = variant.revision.validation;
     if (validation) {
       lines.push(
-        `Validation Verdict: ${validation.verdict.toUpperCase()}${validation.issues.length ? ` (previously flagged ${validation.issues.length} issue(s))` : ""}`
+        `Validation Verdict: ${validation.verdict.toUpperCase()}${validation.issues.length ? ` (previously flagged ${validation.issues.length} issue(s))` : ""}`,
       );
     }
     lines.push("Story:");
@@ -2525,7 +2510,7 @@ function buildProseVariantsJudgePrompt(
     lines.push("");
   }
   lines.push(
-    'Respond in JSON with keys `reasoning` (short paragraph explaining your choice) and `verdict` (`"variant_a"` or `"variant_b"`).'
+    'Respond in JSON with keys `reasoning` (short paragraph explaining your choice) and `verdict` (`"variant_a"` or `"variant_b"`).',
   );
   return lines.join("\n");
 }
@@ -2534,11 +2519,11 @@ async function judgeProseVariants(
   topic: string,
   variants: readonly StoryProseVariantCandidate[],
   progress?: StoryProgress,
-  baseDebug?: StoryDebugOptions
+  baseDebug?: StoryDebugOptions,
 ): Promise<StoryProseVariantsJudgeSummary> {
   if (variants.length !== STORY_PROSE_VARIANT_LABELS.length) {
     throw new Error(
-      `Expected ${STORY_PROSE_VARIANT_LABELS.length} variants for judging, received ${variants.length}`
+      `Expected ${STORY_PROSE_VARIANT_LABELS.length} variants for judging, received ${variants.length}`,
     );
   }
   const adapter = useProgress(progress);
@@ -2559,7 +2544,7 @@ async function judgeProseVariants(
       : undefined,
   });
   adapter.log(
-    `[story/prose-variants-judge] verdict ${response.verdict} – ${response.reasoning}`
+    `[story/prose-variants-judge] verdict ${response.verdict} – ${response.reasoning}`,
   );
   return {
     verdict: response.verdict,
@@ -2570,14 +2555,14 @@ async function judgeProseVariants(
 export async function generateProseStory(
   topic: string,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryProseResult> {
   const idea = await generateStoryIdea(topic, progress, options);
   const originsCapsule = await generateOriginsCapsule(
     topic,
     idea,
     progress,
-    options
+    options,
   );
   const variantDrafts = await Promise.all(
     STORY_PROSE_VARIANT_LABELS.map((label) =>
@@ -2587,27 +2572,27 @@ export async function generateProseStory(
         idea,
         originsCapsule,
         progress,
-        options
-      )
-    )
+        options,
+      ),
+    ),
   );
   const variantResults = await Promise.all(
     variantDrafts.map((variant) =>
-      reviseProseVariant(topic, variant, progress, options)
-    )
+      reviseProseVariant(topic, variant, progress, options),
+    ),
   );
   const judge = await judgeProseVariants(
     topic,
     variantResults,
     progress,
-    options
+    options,
   );
   const winning = variantResults.find(
-    (variant) => variant.label === judge.verdict
+    (variant) => variant.label === judge.verdict,
   );
   if (!winning) {
     throw new Error(
-      `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`
+      `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
     );
   }
   return {
@@ -2641,7 +2626,7 @@ const SEGMENTATION_CORRECTION_ATTEMPTS = 3;
 
 function buildSegmentationCorrectorPrompt(
   segmentation: StorySegmentation,
-  generationPrompt: string
+  generationPrompt: string,
 ): string {
   const lines: string[] = [
     "You are the image prompt corrector for illustrated historical stories.",
@@ -2677,7 +2662,7 @@ function buildSegmentationCorrectorPrompt(
   segmentation.segments.forEach((segment, idx) => {
     const promptIndex = idx;
     lines.push(
-      `Prompt ${promptIndex} (story panel ${idx + 1}) image prompt: ${segment.imagePrompt}`
+      `Prompt ${promptIndex} (story panel ${idx + 1}) image prompt: ${segment.imagePrompt}`,
     );
     const narrationSummary = segment.narration
       .map((line) => `${line.voice}: ${line.text}`)
@@ -2689,12 +2674,12 @@ function buildSegmentationCorrectorPrompt(
 
   const endingIndex = segmentation.segments.length;
   lines.push(
-    `Prompt ${endingIndex} ("the end" card) image prompt: ${segmentation.endingPrompt}`
+    `Prompt ${endingIndex} ("the end" card) image prompt: ${segmentation.endingPrompt}`,
   );
 
   const posterIndex = segmentation.segments.length + 1;
   lines.push(
-    `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`
+    `Prompt ${posterIndex} (poster) image prompt: ${segmentation.posterPrompt}`,
   );
 
   return lines.join("\n");
@@ -2702,7 +2687,7 @@ function buildSegmentationCorrectorPrompt(
 
 function applySegmentationCorrections(
   segmentation: StorySegmentation,
-  corrections: readonly SegmentationPromptCorrection[]
+  corrections: readonly SegmentationPromptCorrection[],
 ): StorySegmentation {
   if (!corrections.length) {
     return segmentation;
@@ -2732,7 +2717,7 @@ function applySegmentationCorrections(
       return;
     }
     throw new Error(
-      `Segmentation corrector returned invalid prompt index ${targetIndex}`
+      `Segmentation corrector returned invalid prompt index ${targetIndex}`,
     );
   });
 
@@ -2743,7 +2728,7 @@ export async function generateStorySegmentation(
   storyText: string,
   topic: string,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
@@ -2771,7 +2756,7 @@ export async function correctStorySegmentation(
   topic: string,
   initialSegmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   const generationPrompt = buildSegmentationPrompt(storyText, topic);
@@ -2785,14 +2770,14 @@ export async function correctStorySegmentation(
   ) {
     const reviewPrompt = buildSegmentationCorrectorPrompt(
       workingSegmentation,
-      generationPrompt
+      generationPrompt,
     );
     const attemptLabel = `corrections/attempt-${String(attempt).padStart(3, "0")}-of-${String(SEGMENTATION_CORRECTION_ATTEMPTS).padStart(3, "0")}`;
     const stageLabel =
       [options?.debugSubStage, attemptLabel]
         .filter(
           (segment): segment is string =>
-            typeof segment === "string" && segment.length > 0
+            typeof segment === "string" && segment.length > 0,
         )
         .join("/") || attemptLabel;
     try {
@@ -2818,13 +2803,13 @@ export async function correctStorySegmentation(
 
       if (response.issuesSummary) {
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} issues summary: ${response.issuesSummary}`
+          `[story/segmentation_correction] attempt ${attempt} issues summary: ${response.issuesSummary}`,
         );
       }
 
       if (response.corrections.length === 0) {
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} returned no corrections`
+          `[story/segmentation_correction] attempt ${attempt} returned no corrections`,
         );
         return workingSegmentation;
       }
@@ -2832,29 +2817,29 @@ export async function correctStorySegmentation(
       try {
         workingSegmentation = applySegmentationCorrections(
           workingSegmentation,
-          response.corrections
+          response.corrections,
         );
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`
+          `[story/segmentation_correction] attempt ${attempt} applied ${response.corrections.length} correction(s)`,
         );
         return workingSegmentation;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         adapter.log(
-          `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`
+          `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`,
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       adapter.log(
-        `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`
+        `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`,
       );
     }
   }
 
   throw new SegmentationCorrectionError(
     `Segmentation correction failed after ${SEGMENTATION_CORRECTION_ATTEMPTS} attempt(s).`,
-    workingSegmentation
+    workingSegmentation,
   );
 }
 
@@ -2889,7 +2874,7 @@ type SegmentationImageContext = {
 };
 
 function collectSegmentationImageContext(
-  segmentation: StorySegmentation
+  segmentation: StorySegmentation,
 ): SegmentationImageContext {
   const posterPrompt = segmentation.posterPrompt.trim();
   const endingPrompt = segmentation.endingPrompt.trim();
@@ -2912,12 +2897,12 @@ function collectSegmentationImageContext(
     const segmentPrompt = segment.imagePrompt.trim();
     if (!segmentPrompt) {
       throw new Error(
-        `Segmentation segment ${i + 1} is missing an imagePrompt`
+        `Segmentation segment ${i + 1} is missing an imagePrompt`,
       );
     }
     const index = i + 1;
     const narrationLines = segment.narration.map(
-      (line) => `${line.voice}: ${line.text}`
+      (line) => `${line.voice}: ${line.text}`,
     );
     entries.push({ index, prompt: segmentPrompt, narration: narrationLines });
     promptsByIndex.set(index, segmentPrompt);
@@ -2955,7 +2940,7 @@ type SingleImageGenerationOptions = {
 };
 
 async function generateSingleImage(
-  options: SingleImageGenerationOptions
+  options: SingleImageGenerationOptions,
 ): Promise<LlmImageData> {
   const trimmedPrompt = options.prompt.trim();
   if (!trimmedPrompt) {
@@ -3003,7 +2988,7 @@ const PosterSelectionSchema = z
         z.object({
           index: z.number().int().min(1),
           reason: z.string().trim().min(1),
-        })
+        }),
       )
       .default([]),
   })
@@ -3125,7 +3110,7 @@ async function selectPosterCandidate(options: {
 export async function generateImageSets(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryImageSet[]> {
   const adapter = useProgress(progress);
   const { entries, endingIndex, posterIndex, narrationsByIndex } =
@@ -3155,22 +3140,22 @@ export async function generateImageSets(
   const endingEntry = entries.find((entry) => entry.index === endingIndex);
   if (!posterEntry) {
     throw new Error(
-      `Segmentation image context is missing the poster entry (index ${posterIndex})`
+      `Segmentation image context is missing the poster entry (index ${posterIndex})`,
     );
   }
   if (!endingEntry) {
     throw new Error(
-      `Segmentation image context is missing the ending entry (index ${endingIndex})`
+      `Segmentation image context is missing the ending entry (index ${endingIndex})`,
     );
   }
   const panelEntries = entries
     .filter(
-      (entry) => entry.index !== posterIndex && entry.index !== endingIndex
+      (entry) => entry.index !== posterIndex && entry.index !== endingIndex,
     )
     .sort((a, b) => a.index - b.index);
 
   const runImageSet = async (
-    imageSetLabel: "set_a" | "set_b"
+    imageSetLabel: "set_a" | "set_b",
   ): Promise<StoryImageSet> => {
     const frameNarrationByIndex = new Map<number, readonly string[]>();
     for (const entry of panelEntries) {
@@ -3186,7 +3171,7 @@ export async function generateImageSets(
       attempt += 1
     ) {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(
-        IMAGE_SET_GENERATE_MAX_ATTEMPTS
+        IMAGE_SET_GENERATE_MAX_ATTEMPTS,
       ).padStart(2, "0")}`;
       const attemptLogPrefix = `[story/image-sets/${imageSetLabel}] [${attemptLabel}]`;
       const logWithAttempt = (message: string) => {
@@ -3197,7 +3182,7 @@ export async function generateImageSets(
 
       try {
         logWithAttempt(
-          `generating main frames (${panelEntries.length} prompts)`
+          `generating main frames (${panelEntries.length} prompts)`,
         );
         const mainImageParts = await generateStoryFrames({
           progress: adapter,
@@ -3226,7 +3211,7 @@ export async function generateImageSets(
             data: part.data,
           });
           logWithAttempt(
-            `received image ${entry.index} (${part.data.length} bytes)`
+            `received image ${entry.index} (${part.data.length} bytes)`,
           );
         }
 
@@ -3246,10 +3231,10 @@ export async function generateImageSets(
               debug: attemptDebug(`poster/candidate_${candidateIndex}`),
             });
             logWithAttempt(
-              `poster candidate ${candidateIndex} (${image.data.length} bytes)`
+              `poster candidate ${candidateIndex} (${image.data.length} bytes)`,
             );
             return { candidateIndex, image };
-          }
+          },
         );
         const posterCandidates = await Promise.all(posterCandidatePromises);
         const posterSelection = await selectPosterCandidate({
@@ -3264,11 +3249,11 @@ export async function generateImageSets(
         });
         const winningPoster = posterCandidates.find(
           (candidate) =>
-            candidate.candidateIndex === posterSelection.winnerCandidateIndex
+            candidate.candidateIndex === posterSelection.winnerCandidateIndex,
         );
         if (!winningPoster) {
           throw new Error(
-            `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`
+            `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`,
           );
         }
         imagesByIndex.set(posterIndex, {
@@ -3277,16 +3262,16 @@ export async function generateImageSets(
           data: winningPoster.image.data,
         });
         logWithAttempt(
-          `selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`
+          `selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`,
         );
         for (const finding of posterSelection.catastrophicFindings) {
           logWithAttempt(
-            `poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`
+            `poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`,
           );
         }
 
         const endingReferences = mainImageParts.slice(
-          Math.max(mainImageParts.length - 4, 0)
+          Math.max(mainImageParts.length - 4, 0),
         );
         logWithAttempt("generating end card");
         const endingPart = await generateSingleImage({
@@ -3305,7 +3290,7 @@ export async function generateImageSets(
           data: endingPart.data,
         });
         logWithAttempt(
-          `received ending image ${endingIndex} (${endingPart.data.length} bytes)`
+          `received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
         );
 
         const orderedImages: GeneratedStoryImage[] = [];
@@ -3344,7 +3329,7 @@ export async function generateImageSets(
       : new Error(
           `Image set generation failed for ${imageSetLabel}${
             lastError ? `: ${String(lastError)}` : ""
-          }`
+          }`,
         );
   };
 
@@ -3360,7 +3345,7 @@ export async function judgeImageSets(
   imageSets: readonly StoryImageSet[],
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<{
   winningImageSetLabel: "set_a" | "set_b";
 }> {
@@ -3435,7 +3420,7 @@ export async function judgeImageSets(
 export async function generateStoryImages(
   segmentation: StorySegmentation,
   progress?: StoryProgress,
-  options?: StoryDebugOptions
+  options?: StoryDebugOptions,
 ): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
   adapter.log("[story] generating 12 images via dual-set comparison workflow");
@@ -3447,11 +3432,11 @@ export async function generateStoryImages(
   const imageSets = await generateImageSets(segmentation, adapter, options);
   const judge = await judgeImageSets(imageSets, segmentation, adapter, options);
   const winner = imageSets.find(
-    (set) => set.imageSetLabel === judge.winningImageSetLabel
+    (set) => set.imageSetLabel === judge.winningImageSetLabel,
   );
   if (!winner) {
     throw new Error(
-      `Winning image set ${judge.winningImageSetLabel} not found in generated sets`
+      `Winning image set ${judge.winningImageSetLabel} not found in generated sets`,
     );
   }
 
@@ -3501,7 +3486,7 @@ function buildImageStoragePath(
   planItemId: string,
   index: number,
   extension: string,
-  prefix?: string
+  prefix?: string,
 ): string {
   const folder = prefix
     ? path.join(prefix, userId, "sessions", sessionId, planItemId)
@@ -3516,7 +3501,7 @@ function buildSupplementaryImageStoragePath(
   sessionId: string,
   planItemId: string,
   kind: "poster" | "ending",
-  prefix?: string
+  prefix?: string,
 ): string {
   const folder = prefix
     ? path.join(prefix, userId, "sessions", sessionId, planItemId)
@@ -3527,11 +3512,11 @@ function buildSupplementaryImageStoragePath(
 
 function toMediaSegments(
   segmentation: StorySegmentation,
-  imagePaths: readonly string[]
+  imagePaths: readonly string[],
 ): MediaSegment[] {
   if (segmentation.segments.length !== imagePaths.length) {
     throw new Error(
-      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`
+      `Image count ${imagePaths.length} does not match segmentation segments ${segmentation.segments.length}`,
     );
   }
 
@@ -3601,7 +3586,7 @@ function isEnoent(error: unknown): boolean {
     error &&
       typeof error === "object" &&
       "code" in error &&
-      (error as { code?: string }).code === "ENOENT"
+      (error as { code?: string }).code === "ENOENT",
   );
 }
 
@@ -3653,7 +3638,7 @@ export class StoryGenerationPipeline {
       const checkpoint = StoryIdeaCheckpointSchema.parse(parsed);
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'idea' checkpoint at ${filePath} (topic mismatch)`
+          `[story/checkpoint] ignoring 'idea' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -3664,7 +3649,7 @@ export class StoryGenerationPipeline {
           data = parseResult.data;
         } else {
           this.logger.log(
-            `[story/checkpoint] ignored 'idea' checkpoint data at ${filePath} (schema mismatch)`
+            `[story/checkpoint] ignored 'idea' checkpoint data at ${filePath} (schema mismatch)`,
           );
         }
       }
@@ -3678,7 +3663,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeIdeaCheckpoint(
-    value: StoryIdeaResult
+    value: StoryIdeaResult,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("idea");
     if (!filePath || !this.checkpointDir) {
@@ -3709,7 +3694,7 @@ export class StoryGenerationPipeline {
       const checkpoint = StoryOriginsCapsuleCheckpointSchema.parse(parsed);
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'origins_capsule' checkpoint at ${filePath} (topic mismatch)`
+          `[story/checkpoint] ignoring 'origins_capsule' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -3718,7 +3703,7 @@ export class StoryGenerationPipeline {
       });
       if (!value.success) {
         this.logger.log(
-          `[story/checkpoint] ignored 'origins_capsule' checkpoint at ${filePath} (schema mismatch)`
+          `[story/checkpoint] ignored 'origins_capsule' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -3735,7 +3720,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeOriginsCapsuleCheckpoint(
-    value: StoryOriginsCapsule
+    value: StoryOriginsCapsule,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("origins_capsule");
     if (!filePath || !this.checkpointDir) {
@@ -3765,14 +3750,14 @@ export class StoryGenerationPipeline {
       const checkpointResult = StoryProseCheckpointSchema.safeParse(parsed);
       if (!checkpointResult.success) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (schema mismatch)`
+          `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       const checkpoint = checkpointResult.data;
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (topic mismatch)`
+          `[story/checkpoint] ignoring 'prose' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -3784,7 +3769,7 @@ export class StoryGenerationPipeline {
             text: variant.originsCapsule,
           }),
           draft: { text: variant.draftText },
-        })
+        }),
       );
       return { value: variants, filePath };
     } catch (error) {
@@ -3796,7 +3781,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeProseCheckpoint(
-    value: readonly StoryProseDraftVariant[]
+    value: readonly StoryProseDraftVariant[],
   ): Promise<string | undefined> {
     const filePath = this.stageFile("prose");
     if (!filePath || !this.checkpointDir) {
@@ -3832,14 +3817,14 @@ export class StoryGenerationPipeline {
         StoryProseRevisionCheckpointSchema.safeParse(parsed);
       if (!checkpointResult.success) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (schema mismatch)`
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       const checkpoint = checkpointResult.data;
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (topic mismatch)`
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -3850,7 +3835,7 @@ export class StoryGenerationPipeline {
         !checkpoint.judge
       ) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (missing variant metadata)`
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (missing variant metadata)`,
         );
         return undefined;
       }
@@ -3867,11 +3852,11 @@ export class StoryGenerationPipeline {
           validation: variant.validation,
         }));
       const winningMetadata = variantsMetadata.find(
-        (variant) => variant.label === checkpoint.variantLabel
+        (variant) => variant.label === checkpoint.variantLabel,
       );
       if (!winningMetadata) {
         this.logger.log(
-          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (winning variant not found)`
+          `[story/checkpoint] ignoring 'prose-revision' checkpoint at ${filePath} (winning variant not found)`,
         );
         return undefined;
       }
@@ -3968,7 +3953,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeSegmentationCheckpoint(
-    value: StorySegmentation
+    value: StorySegmentation,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("segmentation");
     if (!filePath || !this.checkpointDir) {
@@ -4002,7 +3987,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeCorrectedSegmentationCheckpoint(
-    value: StorySegmentation
+    value: StorySegmentation,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("segmentation_correction");
     if (!filePath || !this.checkpointDir) {
@@ -4046,7 +4031,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeImagesCheckpoint(
-    value: StoryImagesResult
+    value: StoryImagesResult,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("images");
     if (!filePath || !this.checkpointDir) {
@@ -4083,20 +4068,20 @@ export class StoryGenerationPipeline {
       const posterImage = checkpoint.posterImage
         ? {
             storagePath: normaliseStoragePath(
-              checkpoint.posterImage.storagePath
+              checkpoint.posterImage.storagePath,
             ),
           }
         : undefined;
       const endingImage = checkpoint.endingImage
         ? {
             storagePath: normaliseStoragePath(
-              checkpoint.endingImage.storagePath
+              checkpoint.endingImage.storagePath,
             ),
           }
         : undefined;
       const value: NarrationStageValue = {
         storagePaths: checkpoint.storagePaths.map((storagePath) =>
-          normaliseStoragePath(storagePath)
+          normaliseStoragePath(storagePath),
         ),
         publishResult: checkpoint.publishResult,
         posterImage,
@@ -4112,7 +4097,7 @@ export class StoryGenerationPipeline {
   }
 
   private async writeNarrationCheckpoint(
-    value: NarrationStageValue
+    value: NarrationStageValue,
   ): Promise<string | undefined> {
     const filePath = this.stageFile("narration");
     if (!filePath || !this.checkpointDir) {
@@ -4121,7 +4106,7 @@ export class StoryGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: StoryNarrationCheckpoint = {
       storagePaths: value.storagePaths.map((storagePath) =>
-        normaliseStoragePath(storagePath)
+        normaliseStoragePath(storagePath),
       ),
       publishResult: value.publishResult,
       posterImage: value.posterImage,
@@ -4134,7 +4119,7 @@ export class StoryGenerationPipeline {
   }
 
   private async invalidateAfter(
-    stage: StoryGenerationStageName
+    stage: StoryGenerationStageName,
   ): Promise<void> {
     const stageIndex = STORY_STAGE_ORDER.indexOf(stage);
     if (stageIndex === -1) {
@@ -4195,12 +4180,12 @@ export class StoryGenerationPipeline {
   }
 
   private requireContext(
-    key: "userId" | "sessionId" | "planItemId" | "storageBucket"
+    key: "userId" | "sessionId" | "planItemId" | "storageBucket",
   ): string {
     const value = this.options[key];
     if (!value) {
       throw new Error(
-        `Story generation stage '${key}' requires ${key} to be provided.`
+        `Story generation stage '${key}' requires ${key} to be provided.`,
       );
     }
     return value;
@@ -4219,7 +4204,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.idea = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'idea' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'idea' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4229,7 +4214,7 @@ export class StoryGenerationPipeline {
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
-      }
+      },
     );
     const checkpointPath = await this.writeIdeaCheckpoint(idea);
     const entry: StageCacheEntry<StoryIdeaResult> = {
@@ -4259,7 +4244,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.originsCapsule = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'origins_capsule' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'origins_capsule' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4272,7 +4257,7 @@ export class StoryGenerationPipeline {
       this.options.topic,
       idea,
       this.options.progress,
-      baseDebug
+      baseDebug,
     );
     const checkpointPath = await this.writeOriginsCapsuleCheckpoint(capsule);
     const entry: StageCacheEntry<StoryOriginsCapsule> = {
@@ -4283,7 +4268,7 @@ export class StoryGenerationPipeline {
     this.caches.originsCapsule = entry;
     if (checkpointPath) {
       this.logger.log(
-        `[story/checkpoint] wrote 'origins_capsule' to ${checkpointPath}`
+        `[story/checkpoint] wrote 'origins_capsule' to ${checkpointPath}`,
       );
     }
     return entry;
@@ -4304,7 +4289,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.proseDraft = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'prose' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'prose' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4322,9 +4307,9 @@ export class StoryGenerationPipeline {
           idea,
           originsCapsule,
           this.options.progress,
-          baseDebug
-        )
-      )
+          baseDebug,
+        ),
+      ),
     );
     const checkpointPath = await this.writeProseCheckpoint(drafts);
     const entry: StageCacheEntry<StoryProseDraftVariant[]> = {
@@ -4353,7 +4338,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.prose = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'prose-revision' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'prose-revision' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4368,22 +4353,22 @@ export class StoryGenerationPipeline {
           this.options.topic,
           variant,
           this.options.progress,
-          baseDebug
-        )
-      )
+          baseDebug,
+        ),
+      ),
     );
     const judge = await judgeProseVariants(
       this.options.topic,
       variantResults,
       this.options.progress,
-      baseDebug
+      baseDebug,
     );
     const winning = variantResults.find(
-      (variant) => variant.label === judge.verdict
+      (variant) => variant.label === judge.verdict,
     );
     if (!winning) {
       throw new Error(
-        `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`
+        `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
       );
     }
     const metadata: StoryProseResult["metadata"] = {
@@ -4429,7 +4414,7 @@ export class StoryGenerationPipeline {
     this.caches.prose = entry;
     if (checkpointPath) {
       this.logger.log(
-        `[story/checkpoint] wrote 'prose-revision' to ${checkpointPath}`
+        `[story/checkpoint] wrote 'prose-revision' to ${checkpointPath}`,
       );
     }
     return entry;
@@ -4448,7 +4433,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.segmentation = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'segmentation' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'segmentation' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4460,7 +4445,7 @@ export class StoryGenerationPipeline {
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
-      }
+      },
     );
     const checkpointPath = await this.writeSegmentationCheckpoint(segmentation);
     const entry: StageCacheEntry<StorySegmentation> = {
@@ -4471,7 +4456,7 @@ export class StoryGenerationPipeline {
     this.caches.segmentation = entry;
     if (checkpointPath) {
       this.logger.log(
-        `[story/checkpoint] wrote 'segmentation' to ${checkpointPath}`
+        `[story/checkpoint] wrote 'segmentation' to ${checkpointPath}`,
       );
     }
     return entry;
@@ -4492,7 +4477,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.segmentationCorrection = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'segmentation_correction' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'segmentation_correction' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4506,7 +4491,7 @@ export class StoryGenerationPipeline {
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
-      }
+      },
     );
     const checkpointPath =
       await this.writeCorrectedSegmentationCheckpoint(corrected);
@@ -4518,7 +4503,7 @@ export class StoryGenerationPipeline {
     this.caches.segmentationCorrection = entry;
     if (checkpointPath) {
       this.logger.log(
-        `[story/checkpoint] wrote 'segmentation_correction' to ${checkpointPath}`
+        `[story/checkpoint] wrote 'segmentation_correction' to ${checkpointPath}`,
       );
     }
     return entry;
@@ -4537,7 +4522,7 @@ export class StoryGenerationPipeline {
       };
       this.caches.images = entry;
       this.logger.log(
-        `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`,
       );
       return entry;
     }
@@ -4546,7 +4531,7 @@ export class StoryGenerationPipeline {
     const images = await generateStoryImages(
       segmentation,
       this.options.progress,
-      { debugRootDir: this.options.debugRootDir }
+      { debugRootDir: this.options.debugRootDir },
     );
     const checkpointPath = await this.writeImagesCheckpoint(images);
     const entry: StageCacheEntry<StoryImagesResult> = {
@@ -4570,12 +4555,12 @@ export class StoryGenerationPipeline {
     if (checkpoint) {
       restoredCheckpointPath = checkpoint.filePath;
       this.logger.log(
-        `[story/checkpoint] restored 'narration' from ${checkpoint.filePath}`
+        `[story/checkpoint] restored 'narration' from ${checkpoint.filePath}`,
       );
       const cachedPath =
         checkpoint.value.publishResult?.documentPath ?? "unknown";
       this.logger.log(
-        `[story/narration] republishing using cached media references at ${cachedPath}`
+        `[story/narration] republishing using cached media references at ${cachedPath}`,
       );
     }
 
@@ -4594,26 +4579,26 @@ export class StoryGenerationPipeline {
 
     if (interiorImages.length !== totalSegments) {
       throw new Error(
-        `Expected ${totalSegments} interior images, found ${interiorImages.length}`
+        `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
       );
     }
 
     const endingImageIndex = totalSegments + 1;
     const posterImageIndex = totalSegments + 2;
     const endingImage = images.images.find(
-      (image) => image.index === endingImageIndex
+      (image) => image.index === endingImageIndex,
     );
     if (!endingImage) {
       throw new Error(
-        `Expected ending image at index ${endingImageIndex}, but none was provided`
+        `Expected ending image at index ${endingImageIndex}, but none was provided`,
       );
     }
     const posterImage = images.images.find(
-      (image) => image.index === posterImageIndex
+      (image) => image.index === posterImageIndex,
     );
     if (!posterImage) {
       throw new Error(
-        `Expected poster image at index ${posterImageIndex}, but none was provided`
+        `Expected poster image at index ${posterImageIndex}, but none was provided`,
       );
     }
 
@@ -4625,7 +4610,7 @@ export class StoryGenerationPipeline {
     const totalImages = interiorImages.length;
     const uploadConcurrency = Math.min(8, totalImages);
     this.logger.log(
-      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`
+      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
     );
     const storagePaths: string[] = new Array(totalImages);
 
@@ -4652,7 +4637,7 @@ export class StoryGenerationPipeline {
           planItemId,
           currentIndex + 1,
           "jpg",
-          this.options.storagePrefix
+          this.options.storagePrefix,
         );
         const file = bucket.file(storagePath);
         await file.save(jpegBuffer, {
@@ -4664,20 +4649,20 @@ export class StoryGenerationPipeline {
         });
         storagePaths[currentIndex] = normaliseStoragePath(storagePath);
         this.logger.log(
-          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`
+          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
         );
       }
     };
 
     await Promise.all(
       Array.from({ length: uploadConcurrency }, (_, workerId) =>
-        uploadWorker(workerId)
-      )
+        uploadWorker(workerId),
+      ),
     );
 
     const uploadSupplementaryImage = async (
       image: GeneratedStoryImage,
-      kind: "poster" | "ending"
+      kind: "poster" | "ending",
     ): Promise<StorySupplementaryImage> => {
       const jpegBuffer = await sharp(image.data)
         .jpeg({
@@ -4691,7 +4676,7 @@ export class StoryGenerationPipeline {
         sessionId,
         planItemId,
         kind,
-        this.options.storagePrefix
+        this.options.storagePrefix,
       );
       const file = bucket.file(storagePath);
       await file.save(jpegBuffer, {
@@ -4723,7 +4708,7 @@ export class StoryGenerationPipeline {
       const docSnapshot = await docRef.get();
       if (docSnapshot.exists) {
         this.logger.log(
-          `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`
+          `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,
         );
         const stageValue: NarrationStageValue = {
           publishResult: cachedPublishResult,
@@ -4740,18 +4725,18 @@ export class StoryGenerationPipeline {
         this.caches.narration = entry;
         if (checkpointPath) {
           this.logger.log(
-            `[story/checkpoint] wrote 'narration' to ${checkpointPath}`
+            `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
           );
         }
         return entry;
       }
       this.logger.log(
-        `[story/narration] cached media document ${cachedPublishResult.documentPath} missing; regenerating audio`
+        `[story/narration] cached media document ${cachedPublishResult.documentPath} missing; regenerating audio`,
       );
     }
 
     this.logger.log(
-      `[story/narration] publishing ${segments.length} segments to storage bucket ${storageBucket}`
+      `[story/narration] publishing ${segments.length} segments to storage bucket ${storageBucket}`,
     );
     const publishResult = await synthesizeAndPublishNarration({
       userId,
@@ -4779,18 +4764,18 @@ export class StoryGenerationPipeline {
     this.caches.narration = entry;
     if (checkpointPath) {
       this.logger.log(
-        `[story/checkpoint] wrote 'narration' to ${checkpointPath}`
+        `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
       );
     }
     this.logger.log(
-      `[story/narration] ensured media doc ${stageValue.publishResult.documentPath}`
+      `[story/narration] ensured media doc ${stageValue.publishResult.documentPath}`,
     );
     return entry;
   }
 }
 
 export async function generateStory(
-  options: GenerateStoryOptions
+  options: GenerateStoryOptions,
 ): Promise<GenerateStoryResult> {
   const pipeline = new StoryGenerationPipeline({
     topic: options.topic,

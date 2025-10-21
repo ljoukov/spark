@@ -17,6 +17,7 @@
     "test": "vitest --run"
   },
   "dependencies": {
+    "@spark/schemas": "file:../schemas",
     "@google/genai": "^1.21.0",
     "execa": "^9.6.0",
     "google-auth-library": "^9.15.1",
