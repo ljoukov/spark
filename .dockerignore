@@ -1,0 +1,20 @@
+# General
+.DS_Store
+.git
+.gitmodules
+.github
+node_modules
+**/node_modules
+**/.svelte-kit
+**/.vercel
+**/.vite
+**/.cache
+**/.eslintcache
+
+# Large or irrelevant directories
+spark-data
+Spark
+
+# Build outputs
+**/build
+**/dist
