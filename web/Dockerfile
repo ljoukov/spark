@@ -4,7 +4,7 @@
 # - Installs with npm workspaces so local packages under packages/* resolve
 ######################################################################
 
-FROM node:20 AS deps
+FROM node:22 AS deps
 WORKDIR /workspace
 
 # Copy manifests first for better layer caching
@@ -18,7 +18,7 @@ COPY packages/llm/package.json packages/llm/package.json
 RUN npm ci --workspaces --include-workspace-root=false --no-audit --no-fund
 
 
-FROM node:20 AS build
+FROM node:22 AS build
 WORKDIR /workspace
 
 # Bring in sources for workspaces and the web app
@@ -42,7 +42,7 @@ RUN npm -w web run build
 
 
 # ---- Production ----
-FROM node:20-slim AS production
+FROM node:22-slim AS production
 WORKDIR /usr/src/app
 
 # Runtime dependencies (externalized SSR deps) from deps stage
