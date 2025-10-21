@@ -1,7 +1,6 @@
 import devtoolsJson from 'vite-plugin-devtools-json';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
-import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 import type { ServerOptions as HttpsServerOptions } from 'node:https';
 import fs from 'node:fs';
@@ -17,18 +16,34 @@ const httpsOption: HttpsServerOptions | undefined = hasCustomCert
 			key: fs.readFileSync(customKeyPath, 'utf8'),
 			cert: fs.readFileSync(customCertPath, 'utf8')
 		}
-	: undefined; // plugin will provide cert and enable https when undefined
-const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
-const fallbackHttpsOption: HttpsServerOptions = {};
-const httpsServerOption: HttpsServerOptions | undefined = isHttpsDev
-	? (httpsOption ?? fallbackHttpsOption)
 	: undefined;
-const plugins = [tailwindcss(), sveltekit(), devtoolsJson(), ...(isHttpsDev ? [basicSsl()] : [])];
+const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
+// Fail loudly if dev:https is requested but local certs are missing
+if (isHttpsDev && !hasCustomCert) {
+    const msg = [
+        'HTTPS dev requires trusted local certs.',
+        `Expected:`,
+        `  key:  ${customKeyPath}`,
+        `  cert: ${customCertPath}`,
+        '',
+        'Create them once with mkcert:',
+        '  brew install mkcert nss && mkcert -install',
+        `  mkdir -p ${localCertDir}`,
+        `  mkcert -key-file "${customKeyPath}" \\`,
+        `         -cert-file "${customCertPath}" \\`,
+        '         localhost 127.0.0.1 ::1'
+    ].join('\n');
+    throw new Error(msg);
+}
+
+const httpsServerOption: HttpsServerOptions | undefined = isHttpsDev ? httpsOption : undefined;
+const plugins = [tailwindcss(), sveltekit(), devtoolsJson()];
 
 const serverOptions = {
-	host: 'localhost',
-	port: 8080,
-	...(httpsServerOption ? { https: httpsServerOption } : {})
+    host: 'localhost',
+    port: 8080,
+    strictPort: true, // avoid silently switching ports; fail if 8080 is taken
+    ...(httpsServerOption ? { https: httpsServerOption } : {})
 };
 
 export default defineConfig({
