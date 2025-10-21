@@ -5,7 +5,8 @@ substitutions:
   _SERVICE_NAME: spark
   _REGION: us-central1
   _PROJECT_ID: pic2toon
-  _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/pic2toon-docker-repo/${_SERVICE_NAME}-image:tag1
+  _AR_REPO: pic2toon-docker-repo
+  _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}-image:tag1
 steps:
   - name: python:slim
     entrypoint: echo
@@ -14,6 +15,36 @@ steps:
     entrypoint: python
     args: ['web/write_dotenv.py']
     secretEnv: ['DOTENV']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - -lc
+      - |
+        set -euo pipefail
+        gcloud config set project ${_PROJECT_ID}
+        gcloud services enable artifactregistry.googleapis.com run.googleapis.com --quiet || true
+        if ! gcloud artifacts repositories describe "${_AR_REPO}" --location="${_REGION}" >/dev/null 2>&1; then
+          gcloud artifacts repositories create "${_AR_REPO}" \
+            --repository-format=docker \
+            --location="${_REGION}" \
+            --description="Docker repo for ${_PROJECT_ID}" \
+            --quiet
+        fi
+        PROJECT_NUMBER=$(gcloud projects describe ${_PROJECT_ID} --format='value(projectNumber)')
+        CLOUD_BUILD_SA="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
+        gcloud artifacts repositories add-iam-policy-binding "${_AR_REPO}" \
+          --location="${_REGION}" \
+          --member="serviceAccount:${CLOUD_BUILD_SA}" \
+          --role="roles/artifactregistry.writer" \
+          --quiet || true
+        gcloud projects add-iam-policy-binding "${_PROJECT_ID}" \
+          --member="serviceAccount:${CLOUD_BUILD_SA}" \
+          --role="roles/run.admin" \
+          --quiet || true
+        gcloud projects add-iam-policy-binding "${_PROJECT_ID}" \
+          --member="serviceAccount:${CLOUD_BUILD_SA}" \
+          --role="roles/iam.serviceAccountUser" \
+          --quiet || true
   - name: 'gcr.io/cloud-builders/docker'
     script: |
       # Build from the monorepo root so workspaces under packages/* are available
