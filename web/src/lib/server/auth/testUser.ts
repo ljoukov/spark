@@ -1,1 +1,1 @@
-export { getTestUserId, isTestUser, isTestUserAdmin } from '@spark/llm';
+export { getTestUserId, isTestUser, isTestUserAdmin } from '@spark/llm/utils/testUser';

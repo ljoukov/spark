@@ -1,5 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { TaskSchema } from '@spark/llm';
+// Import just the schema module to avoid pulling in heavy server deps
+import { TaskSchema } from '@spark/llm/utils/tasks';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const bodyText = await request.text();
