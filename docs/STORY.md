@@ -9,8 +9,19 @@ flowchart TD
   A["generateStory(options)"] --> B["ensureIdea -> generateStoryIdea"]
   B --> OC["ensureOriginsCapsule -> generateOriginsCapsule (2 sentences)"]
   OC --> PD["ensureProseDraft (variants A & B)"]
-  PD --> PR["ensureProse -> revise + validate each variant"]
-  PR --> JV{"judge prose variants"}
+  PD --> VA1
+  PD --> VB1
+
+  subgraph VariantA["variant_a pipeline"]
+    VA1["generateStoryProseDraft (A)"] --> VA2["revise + validate (A)"]
+  end
+
+  subgraph VariantB["variant_b pipeline"]
+    VB1["generateStoryProseDraft (B)"] --> VB2["revise + validate (B)"]
+  end
+
+  VA2 --> JV{"judge prose variants"}
+  VB2 --> JV
   JV -->|pick winner| F["ensureSegmentation -> generateStorySegmentation"]
   JV -->|if both fail| X["abort story run"]
   F --> FC["ensureSegmentationCorrection -> correctStorySegmentation (≤3 passes)"]
