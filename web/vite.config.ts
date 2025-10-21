@@ -63,27 +63,9 @@ export default defineConfig({
 		format: 'es'
 	},
     ssr: {
-        // Bundle only schemas; force everything else external so CJS libs keep __dirname/require
-        noExternal: ['@spark/schemas'],
-        external: [
-            // our server-only package (ships as compiled dist in Docker image)
-            /^@spark\/llm(\/.*)?$/,
-            // google/fb admin stack
-            /^firebase-admin(\/.*)?$/,
-            /^@google-cloud\/.*/,
-            /^google-gax(\/.*)?$/,
-            /^google-proto-files(\/.*)?$/,
-            /^@grpc\/.*/,
-            /^googleapis(\/.*)?$/,
-            // auth / clients
-            /^google-auth-library(\/.*)?$/,
-            /^@google\/genai(\/.*)?$/,
-            /^openai(\/.*)?$/,
-            // misc heavy libs frequently pulled in transitively
-            /^protobufjs(\/.*)?$/,
-            /^@protobufjs\/.*/,
-            /^@opentelemetry\/.*/
-        ]
+        // keep our workspaces bundled; only externalize the one incompatible CJS lib
+        noExternal: ['@spark/llm', '@spark/schemas'],
+        external: ['google-gax']
     },
 	test: {
 		expect: { requireAssertions: true },

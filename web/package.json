@@ -33,7 +33,6 @@
 		"@internationalized/date": "^3.9.0",
 		"@lucide/svelte": "^0.544.0",
 		"@opentelemetry/api": "^1.9.0",
-		"@protobuf-ts/plugin": "^2.11.1",
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/adapter-cloudflare": "^7.2.3",
 		"@sveltejs/adapter-vercel": "^5.10.2",

@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "generate": "rm -rf ../web/proto ../Spark/proto && mkdir -p ../web/proto && mkdir -p ../Spark/proto && protoc --swift_out=../Spark/proto/ --ts_out=../web/proto/ --ts_opt eslint_disable,long_type_string,ts_nocheck --proto_path=src/ src/*.proto src/third_party/*.proto",
+    "generate": "rm -rf ../Spark/proto && && mkdir -p ../Spark/proto && protoc --swift_out=../Spark/proto/ --ts_out=../eval/proto/ --ts_opt eslint_disable,long_type_string,ts_nocheck --proto_path=src/ src/*.proto src/third_party/*.proto",
     "format": "clang-format --style=google -i src/*.proto"
   },
   "dependencies": {

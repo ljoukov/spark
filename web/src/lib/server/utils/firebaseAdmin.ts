@@ -8,11 +8,9 @@ import { clientFirebaseConfig } from '../../config/firebase';
 import {
   getFirebaseAdminApp as getSharedFirebaseAdminApp,
   type FirebaseAdminOptions,
-} from '@spark/llm/utils/firebaseAdmin';
-import {
   getGoogleServiceAccount,
   type GoogleServiceAccount,
-} from '@spark/llm/utils/googleAuth';
+} from '@spark/llm';
 
 const serviceAccountConfig: GoogleServiceAccount = Object.freeze(getGoogleServiceAccount());
 
