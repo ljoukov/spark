@@ -63,7 +63,7 @@ export default defineConfig({
 		format: 'es'
 	},
 	ssr: {
-		noExternal: ['@spark/llm']
+		noExternal: ['@spark/llm', '@spark/schemas']
 	},
 	test: {
 		expect: { requireAssertions: true },
