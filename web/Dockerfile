@@ -48,5 +48,8 @@ WORKDIR /usr/src/app
 # Copy the built server bundle
 COPY --from=build /workspace/web/build ./build
 
+# Bring runtime env for server-side libs (read via loadLocalEnv())
+COPY --from=build /workspace/web/.env.local ./.env.local
+
 EXPOSE 3000
 CMD ["node", "build"]
