@@ -1,4 +1,5 @@
 options:
+  logging: CLOUD_LOGGING_ONLY
   dynamicSubstitutions: true
 substitutions:
   _SERVICE_NAME: spark
