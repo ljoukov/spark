@@ -62,15 +62,16 @@ export default defineConfig({
 	worker: {
 		format: 'es'
 	},
-	ssr: {
-		// Keep tiny TS workspace bundled; keep server-only heavy libs external to reduce memory
-		noExternal: ['@spark/schemas', '@spark/llm'],
-		external: [
-			'firebase-admin',
-			'google-gax',
-			'google-auth-library',
-			'openai',
-			'@google/genai',
+    ssr: {
+        // Bundle only schemas; keep all server-only heavy libs and @spark/llm external
+        noExternal: ['@spark/schemas'],
+        external: [
+            '@spark/llm',
+            'firebase-admin',
+            'google-gax',
+            'google-auth-library',
+            'openai',
+            '@google/genai',
 			/^@google-cloud\/.*/,
 			/^@grpc\/.*/,
 			/^protobufjs(\/.*)?$/,
