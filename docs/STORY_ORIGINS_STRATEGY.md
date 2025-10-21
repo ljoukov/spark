@@ -16,6 +16,7 @@ This document captures the topic-agnostic guardrails we will implement in the st
 | 1   | **Origins Capsule**                 | Insert a validated two-sentence historical anchor before drafting the story. |
 | 2   | **Naming & Exclusivity Guardrails** | Push neutral naming and non-exclusive language in the narrative prompts.     |
 | 3   | **Modern Tie-in Policy**            | Keep modern connections hedged and honest, with pre-approved templates.      |
+| 4   | **Dual-Variant + Judge**            | Draft/revise two prose variants and pick the stronger one.                   |
 | 5   | **Structured Validator Feedback**   | Return normalized blockers that the editor must fix explicitly.              |
 
 ## Strategy 1 — Origins Capsule
@@ -33,8 +34,8 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
    - Sentence structure:
      1. Classical anchor with neutral verb (“described”, “published”, “popularized”) + approximate timing + “now known as …”.
      2. Nuance sentence acknowledging parallel/earlier work via hedges (“independently developed”, “… and others”, “later published”).
-   - ≤ 40 words, no citations, no absolutes unless high confidence.
-3. **Validation:** Run the factual checker on the capsule. On failure, retry with heavier hedging or drop questionable names.
+   - ≤ 40 words (enforced by a structural check), no citations, no absolutes unless high confidence.
+3. **Validation:** Run a dedicated capsule fact-check (with web search) on the two-sentence draft. On failure, the system retries (up to 3 attempts) with additional guidance to hedge dates or remove contested names.
 4. **Downstream usage:** Pass the frozen capsule text into Prompt 2 (Narrative Weaver) and Prompt 3 (Editor’s Cut). They may paraphrase lightly, but names, titles, and timing semantics must remain.
 
 ### Notes
@@ -58,6 +59,7 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
 - Reaffirm the same guardrails and require the editor to protect the capsule facts.
 - If a draft contains exclusive or coinage claims, the editor must replace them with neutral wording.
 - Keep the story crisp and focused—hedges replace long name lists.
+- The editor returns a `fixChecklist` object confirming which blockers were resolved (see Strategy 5).
 
 ## Strategy 3 — Modern Tie-in Policy
 
@@ -79,6 +81,16 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
 - Treat the absence of hedging as a blocking `modernTieInOverclaim`.
 - Accept any of the approved templates without further scrutiny.
 
+## Strategy 4 — Dual-Variant + Judge
+
+Two independent prose variants improve quality and reduce drift:
+
+- Generate two draft variants (`variant_a`, `variant_b`) from the same research brief and locked Origins Capsule.
+- Run the full Editor’s Cut + validation loop on each variant independently, including `fixChecklist`.
+- A judge prompt compares the two validated revisions (with analysis scores and improvement summaries) and selects the winner.
+
+The pipeline proceeds with the winning variant only; the losing variant is kept in metadata for audit and debugging.
+
 ## Strategy 5 — Structured Validator Feedback
 
 ### Fact-Check Prompt Adjustments
@@ -87,6 +99,8 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
   - We protect young learners by sticking with classical, widely taught anchors. When prose uses neutral hedges (“… and others”) and avoids exclusivity, do **not** fail the story for omitting additional names.
   - Fail only on catastrophic issues: wrong names/titles/dates, misattributed naming, sole-origin claims, overclaimed modern ties.
 - Require each issue to start with `Tag: <taxonomy>` where taxonomy ∈ { namingAttribution, exclusivityClaim, modernTieInOverclaim, datePrecision, wrongEntity, other }.
+
+Implementation detail: validation runs in two passes in code — a web-search factual pass (4A) that produces a textual report which is then parsed into JSON, followed by the structural guardrails pass (4). The second pass must include a normalized `blockers` object.
 
 ### Parsing & Feedback
 
@@ -109,7 +123,7 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
 
 ### Prompt 3 Fix Checklist
 
-- Require the editor to output a `fixChecklist` indicating each blocker was resolved. Either extend the JSON schema or add a plain-text section after the JSON. Example:
+- Require the editor to output a `fixChecklist` indicating each blocker was resolved. The JSON schema enforces all keys. Example:
   ```json
   "fixChecklist": {
     "namingAttribution": true,
@@ -126,13 +140,18 @@ Origins and naming disputes triggered factual failures in the logs. A small, hig
 - Origins Capsule passes fact-check and shows up (with consistent semantics) in the story.
 - Stories use neutral naming and non-exclusive phrasing by default.
 - Modern connections use hedged templates; direct overclaims are blocked.
-- Validator supplies structured blockers; the editor’s fixChecklist reflects actual revisions.
+- Validator supplies structured blockers; the editor’s `fixChecklist` reflects actual revisions.
+- Two revised variants are generated and judged; the stronger one is selected.
 - Stories remain memorable: typically a single named figure, classical anchor intact.
 - Neutral generalizations (e.g., “… and others”) no longer trigger unnecessary failures.
 
 ## Additional Notes
 
 - Update `docs/SPEC.md` after implementation to reference this strategy.
+
+## Implementation Reference
+
+- Implemented in code in commit df2110adde7757c9192524258fa232898d701b15: https://github.com/ljoukob/spark/commit/df2110adde7757c9192524258fa232898d701b15
 
 ## Out of Scope
 

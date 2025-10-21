@@ -7,12 +7,12 @@ This document captures the conceptual flow that powers the historical story pipe
 ```mermaid
 flowchart TD
   A["generateStory(options)"] --> B["ensureIdea -> generateStoryIdea"]
-  B --> C["ensureProseDraft -> generateStoryProseDraft"]
-  C --> D["ensureProse -> generateStoryProseRevision"]
-  D --> E{"validateStoryProse pass?"}
-  E -->|Retry| D
-  E -->|No retries| X["abort story run"]
-  E -->|Pass| F["ensureSegmentation -> generateStorySegmentation"]
+  B --> OC["ensureOriginsCapsule -> generateOriginsCapsule (2 sentences)"]
+  OC --> PD["ensureProseDraft (variants A & B)"]
+  PD --> PR["ensureProse -> revise + validate each variant"]
+  PR --> J{"judge prose variants"}
+  J -->|pick winner| F["ensureSegmentation -> generateStorySegmentation"]
+  J -->|if both fail| X["abort story run"]
   F --> G{Corrections needed?}
   G -->|Needs fixes| H["correctStorySegmentation"]
   H --> F
@@ -42,13 +42,14 @@ flowchart TD
 
 ### Prose Ideation
 
-Story drafting now runs as a three-stage chain, with each stage writing its own checkpoint (`idea.json`, `prose.json`, `prose-revision.json`):
+Story drafting runs through research, a locked micro-stage, dual variants, and judging. Each major stage writes a checkpoint (`idea.json`, `origins_capsule.json`, `prose.json`, `prose-revision.json`):
 
-1. **Story Architect's Brief** - a web-search-enabled research pass that identifies the canonical anchor, stakes, conceptual essence, contrasting foil, metaphor candidates, modern pivot, and glossary. The output is a Markdown brief that feeds later stages.
-2. **Narrative Weaver** - consumes the brief and delivers a 250-400 word, single-voice script (title + paragraphs) tuned for advanced UK maths students, following the mandated arc from historical problem to modern relevance.
-3. **Narrative Editor's Cut** - grades the draft against the five-point rubric, then returns revised prose plus the critique in JSON (`analysis`, `revisedStory`, `improvementSummary`). Only the revised story proceeds downstream.
-
-A separate `validateStoryProse` gate audits every revised draft; failures loop back into another revision attempt (up to `PROSE_REVISION_MAX_ATTEMPTS`) before the pipeline aborts.
+1. **Story Architect's Brief** — web-search-enabled research that identifies the canonical anchor, stakes, conceptual essence, contrasting foil, analogy candidates, modern pivot, and glossary. Output is a structured brief.
+2. **Origins Capsule (locked facts)** — a 2-sentence capsule (≤40 words total) using neutral naming (e.g., “now known as …”) with hedged nuance. A dedicated fact-checker validates the capsule; on failure it retries with additional hedging guidance.
+3. **Narrative Weaver (two variants)** — produces two 250–450 word drafts (title + paragraphs) that must place the Origins Capsule in the first half, limit to one named figure, and keep the modern tie-in for the ending using approved hedged templates.
+4. **Narrative Editor's Cut (per variant)** — scores and revises each draft, returning JSON (`analysis`, `revisedStory`, `improvementSummary`, `fixChecklist`).
+5. **Fact-Check Gate** — runs in two passes: a web-search factual pass (text report parsed into JSON) and a structural guardrails pass that must return a normalized `blockers` object. Failures loop back into another revision attempt per variant (up to `PROSE_REVISION_MAX_ATTEMPTS`).
+6. **Prose Variant Judge** — compares the two validated revisions with their analyses and picks the winner. Only the winning text proceeds.
 
 ### Segmentation Blueprint
 
@@ -64,7 +65,7 @@ Requirements:
    • Provide `narration` … Alternate between the `M` and `F` voices whenever the flow allows.
    • Provide `imagePrompt` … Focus on subject, action, setting, and lighting cues.
 5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy; avoid multi-panel layouts, mirrored halves, or overly technical camera jargon.
-6. Avoid collapse-prone specifics: no exact dates, numeric lists, or written equations in the panels. Exception: the poster may include that single 4-digit year alongside the title and protagonist’s name. Keep visible text minimal (headlines <=4 words; signage/mottos <=6 words).
+6. Avoid collapse-prone specifics: no exact dates, numeric lists, or written equations in the panels. Exception: the poster may include a single 4-digit year alongside the title and protagonist’s name. Keep visible text minimal (headlines ≤4 words; signage/mottos ≤6 words) and on physical surfaces only.
 …
 9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
 …
@@ -136,7 +137,7 @@ The model must return JSON `replacements` where each entry includes a 1-based fr
 After the ten interior frames are locked:
 
 - **Poster candidates:** Each image set spins four concurrent poster renders against the same style prompt and leading frame references. A text-grade pass evaluates all candidates, flags catastrophic artefacts, and selects the most stunning acceptable poster.
-- **Poster typography:** The selector enforces the bold 2-4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
+- **Poster typography:** The selector enforces the bold 2–4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
 - **Ending card:** The last few interior frames seed the style references for a single ending-card render, generated through the same single-image helper that trims prompts and handles retries.
 
 ## Dual-Set Comparison
