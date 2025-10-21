@@ -10,12 +10,16 @@
     "./*": "./src/*"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
     "test": "vitest --run"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@spark/schemas": "file:../schemas",
     "@google/genai": "^1.21.0",
