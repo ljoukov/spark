@@ -1,0 +1,40 @@
+options:
+  dynamicSubstitutions: true
+substitutions:
+  _SERVICE_NAME: spark
+  _REGION: us-central1
+  _PROJECT_ID: pic2toon
+  _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/pic2toon-docker-repo/${_SERVICE_NAME}-image:tag1
+steps:
+  - name: gcr.io/cloud-builders/git
+    args: ['submodule', 'update', '--init', '--recursive']
+  - name: python:slim
+    entrypoint: python
+    args: ['write_dotenv.py']
+    secretEnv: ['DOTENV']
+  - name: 'gcr.io/cloud-builders/docker'
+    script: |
+      docker build -t ${_IMAGE_NAME} .
+    automapSubstitutions: true
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_IMAGE_NAME']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run',
+        'deploy',
+        '$_SERVICE_NAME',
+        '--image',
+        '$_IMAGE_NAME',
+        '--region',
+        '$_REGION',
+        '--timeout',
+        '20m'
+      ]
+images:
+  - ${_IMAGE_NAME}
+availableSecrets:
+  secretManager:
+    - versionName: projects/1083072308192/secrets/env-prod/versions/latest
+      env: 'DOTENV'

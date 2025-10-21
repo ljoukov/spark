@@ -8,24 +8,24 @@
 	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
 	import type { PageData } from './$types';
 
-let { data }: { data: PageData } = $props();
+	let { data }: { data: PageData } = $props();
 
-const destination = data.destination;
-const hasDestination = destination !== null;
+	const destination = data.destination;
+	const hasDestination = destination !== null;
 
-let authResolved = $state(data.authDisabled || data.alreadyAuthenticated);
-let redirecting = $state(false);
-let lastSyncedUid = $state<string | null>(null);
+	let authResolved = $state(data.authDisabled || data.alreadyAuthenticated);
+	let redirecting = $state(false);
+	let lastSyncedUid = $state<string | null>(null);
 
-const ui = $state({
-	showAuth: !(data.alreadyAuthenticated || data.authDisabled),
-	showAnonConfirm: false,
-	signingInWithGoogle: false,
-	signingInAnonymously: false,
-	syncingProfile: false,
-	errorMessage: '',
-	showExperiencePicker: (data.alreadyAuthenticated || data.authDisabled) && !hasDestination
-});
+	const ui = $state({
+		showAuth: !(data.alreadyAuthenticated || data.authDisabled),
+		showAnonConfirm: false,
+		signingInWithGoogle: false,
+		signingInAnonymously: false,
+		syncingProfile: false,
+		errorMessage: '',
+		showExperiencePicker: (data.alreadyAuthenticated || data.authDisabled) && !hasDestination
+	});
 
 	const googleButtonLabel = $derived(
 		ui.signingInWithGoogle ? 'Redirecting to Google…' : 'Continue with Google'
@@ -239,15 +239,15 @@ const ui = $state({
 			ui.showAuth = false;
 			ui.showAnonConfirm = false;
 
-		const navigateToNextStep = () => {
-			ui.errorMessage = '';
-			if (destination) {
-				ui.showExperiencePicker = false;
-				redirectToDestination(destination);
-			} else {
-				presentExperiencePicker();
-			}
-		};
+			const navigateToNextStep = () => {
+				ui.errorMessage = '';
+				if (destination) {
+					ui.showExperiencePicker = false;
+					redirectToDestination(destination);
+				} else {
+					presentExperiencePicker();
+				}
+			};
 
 			if (lastSyncedUid === user.uid) {
 				const mirrored = await mirrorCookie(user);

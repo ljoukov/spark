@@ -31,6 +31,11 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 - `docs/SPEC.md` general technical stack
 - Update `docs/SPEC.md` for changes to UI/UX of the app (iOS or web; this does NOT apply to /admin)
 
+## Schemas: Browser vs Server
+
+- `packages/schemas/` is for browser-safe, shared Zod schemas and TS types consumed by the web app and other browser contexts. These must be importable in client code (no server-only concerns, credentials, or privileged shapes).
+- Server-only schemas (e.g., internal background tasks, admin-only payloads) must live in server packages, e.g. `@spark/llm` under an appropriate folder (`packages/llm/src/**`). Import these from server code only (SvelteKit server routes, hooks, or Node utilities).
+
 ## Quiz LLM Eval
 
 - Prepare input: `eval/src/quiz/prepare-input.ts` (`npm --prefix eval run prepare-input`). Reads raw assets from `spark-data/quiz/downloads/**`, classifies them, and writes curated bundles to `spark-data/quiz/eval-input/**`.
