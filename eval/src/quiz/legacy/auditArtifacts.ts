@@ -13,7 +13,7 @@ import {
   type JudgeAuditFilePayload,
   type JudgeFilePayload,
 } from "./payload";
-import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../../utils/paths";
 
 ensureEvalEnvLoaded();
 
