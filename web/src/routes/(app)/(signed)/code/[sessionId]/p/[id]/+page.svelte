@@ -1167,7 +1167,7 @@
 		}
 	}
 
-	const FORMAT_ENDPOINT = '/api/format';
+	const FORMAT_ENDPOINT = '/api/code/format';
 	const FORMAT_HASH_ALGORITHM: HashAlgorithm = 'sha256';
 
 	async function computeHashHex(algorithm: HashAlgorithm, content: string): Promise<string> {
