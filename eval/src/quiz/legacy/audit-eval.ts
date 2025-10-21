@@ -13,10 +13,10 @@ import {
   buildExtensionPrompt,
   buildGenerationPrompt,
 } from "@spark/llm/quiz/legacy/prompts";
-import { runJobsWithConcurrency } from "../utils/concurrency";
-import type { JobProgressReporter } from "../utils/concurrency";
-import { generateText } from "../utils/llm";
-import { createCliCommand, splitCommaSeparated } from "../utils/cli";
+import { runJobsWithConcurrency } from "../../utils/concurrency";
+import type { JobProgressReporter } from "../../utils/concurrency";
+import { generateText } from "../../utils/llm";
+import { createCliCommand, splitCommaSeparated } from "../../utils/cli";
 import {
   AUDIT_CHECKPOINT_PATH,
   deriveAuditFailures,
@@ -26,7 +26,7 @@ import {
   type LoadAuditEvaluationsResult,
   type LoadedEvaluation,
 } from "./auditArtifacts";
-import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../../utils/paths";
 
 ensureEvalEnvLoaded();
 

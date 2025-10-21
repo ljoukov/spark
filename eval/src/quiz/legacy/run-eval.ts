@@ -47,7 +47,7 @@ import {
   runJobsWithConcurrency,
   type JobProgressReporter,
   type StatusMode,
-} from "../utils/concurrency";
+} from "../../utils/concurrency";
 import {
   AUDIT_CHECKPOINT_PATH,
   AUDIT_CHECKPOINT_VERSION,
@@ -55,22 +55,22 @@ import {
   readAuditCheckpoint,
   type AuditCheckpoint,
 } from "./auditArtifacts";
-import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../utils/paths";
-import { readJson, writeJson } from "../utils/fs";
+import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../../utils/paths";
+import { readJson, writeJson } from "../../utils/fs";
 import {
   LlmJsonCallError,
   convertGooglePartsToLlmParts,
   generateJson,
   sanitisePartForLogging,
   type LlmContentPart,
-} from "../utils/llm";
-import { detectMimeType } from "../utils/mime";
+} from "../../utils/llm";
+import { detectMimeType } from "../../utils/mime";
 import {
   createCliCommand,
   createIntegerParser,
   parseBooleanOption,
   parseStatusModeOption,
-} from "../utils/cli";
+} from "../../utils/cli";
 
 import type { JudgeFilePayload, QuizFilePayload, SampleJob } from "./payload";
 
