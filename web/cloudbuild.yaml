@@ -16,7 +16,7 @@ steps:
     secretEnv: ['DOTENV']
   - name: 'gcr.io/cloud-builders/docker'
     script: |
-      docker build -t ${_IMAGE_NAME} .
+      docker build -t ${_IMAGE_NAME} web
     automapSubstitutions: true
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '$_IMAGE_NAME']
