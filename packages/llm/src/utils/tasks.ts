@@ -1,6 +1,22 @@
+import { z } from "zod";
 import { loadLocalEnv } from "./env";
 import { getGoogleAccessToken, getGoogleServiceAccount } from "./googleAuth";
-import type { Task } from "../quiz/task";
+
+// Server-side task schema
+export const GenerateQuizTaskSchema = z.object({
+  userId: z.string().min(1),
+  quizId: z.string().min(1),
+});
+
+export const TaskSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("generateQuiz"),
+    generateQuiz: GenerateQuizTaskSchema,
+  }),
+]);
+
+export type GenerateQuizTask = z.infer<typeof GenerateQuizTaskSchema>;
+export type Task = z.infer<typeof TaskSchema>;
 
 const CLOUD_TASKS_SCOPE = [
   "https://www.googleapis.com/auth/cloud-platform",

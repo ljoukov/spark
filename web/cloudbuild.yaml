@@ -9,7 +9,7 @@ substitutions:
 steps:
   - name: python:slim
     entrypoint: python
-    args: ['write_dotenv.py']
+    args: ['web/write_dotenv.py']
     secretEnv: ['DOTENV']
   - name: 'gcr.io/cloud-builders/docker'
     script: |

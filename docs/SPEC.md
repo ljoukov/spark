@@ -51,7 +51,7 @@ additional CGI parameter "method" (eg ?method=create) is added to the url, there
 name of the oneof in `SparkApiRequestProto.request`.
 `/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
 
-Payload shape is validated with `@spark/schemas` using a discriminated union over `type`:
+Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
 - `type = "generateQuiz"` with `generateQuiz: { userId: string; quizId: string }`.
 
