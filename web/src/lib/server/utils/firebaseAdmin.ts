@@ -6,11 +6,13 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { clientFirebaseConfig } from '../../config/firebase';
 import {
-	getFirebaseAdminApp as getSharedFirebaseAdminApp,
-	type FirebaseAdminOptions,
-	getGoogleServiceAccount,
-	type GoogleServiceAccount
-} from '@spark/llm';
+  getFirebaseAdminApp as getSharedFirebaseAdminApp,
+  type FirebaseAdminOptions,
+} from '@spark/llm/utils/firebaseAdmin';
+import {
+  getGoogleServiceAccount,
+  type GoogleServiceAccount,
+} from '@spark/llm/utils/googleAuth';
 
 const serviceAccountConfig: GoogleServiceAccount = Object.freeze(getGoogleServiceAccount());
 
