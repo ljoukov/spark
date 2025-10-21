@@ -49,7 +49,9 @@ const SparkUploadQuizQuestionSchema = z.discriminatedUnion("kind", [
   SparkTypeAnswerQuestionSchema,
 ]);
 
-export type SparkUploadQuizQuestion = z.infer<typeof SparkUploadQuizQuestionSchema>;
+export type SparkUploadQuizQuestion = z.infer<
+  typeof SparkUploadQuizQuestionSchema
+>;
 
 const SparkUploadQuizPayloadSchema = z.object({
   quizId: trimmedString,
@@ -62,7 +64,9 @@ const SparkUploadQuizPayloadSchema = z.object({
   questions: z.array(SparkUploadQuizQuestionSchema).min(1),
 });
 
-export type SparkUploadQuizPayload = z.infer<typeof SparkUploadQuizPayloadSchema>;
+export type SparkUploadQuizPayload = z.infer<
+  typeof SparkUploadQuizPayloadSchema
+>;
 
 export const SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -155,9 +159,7 @@ export interface GenerateSparkUploadQuizOptions {
   readonly topicHint?: string;
 }
 
-function normaliseStringList(
-  values: readonly string[] | undefined,
-): string[] {
+function normaliseStringList(values: readonly string[] | undefined): string[] {
   if (!values) {
     return [];
   }
@@ -228,9 +230,7 @@ function convertMultipleChoiceQuestion(
     };
   });
   if (options.length < 2) {
-    throw new Error(
-      `Question ${questionId} must include at least two options`,
-    );
+    throw new Error(`Question ${questionId} must include at least two options`);
   }
   const optionIndex =
     question.correctOptionIndex >= 1
@@ -302,7 +302,8 @@ function convertPayloadToQuizDefinition(
   const quiz: QuizDefinition = {
     id: options.quizId,
     title: title.length > 0 ? title : "Spark Quiz",
-    description: description && description.length > 0 ? description : undefined,
+    description:
+      description && description.length > 0 ? description : undefined,
     topic: topic && topic.length > 0 ? topic : undefined,
     questions,
   };
@@ -357,10 +358,7 @@ function buildSparkUploadQuizPrompt(
     lines.push(`Topic hint: ${options.topicHint.trim()}.`);
   }
 
-  lines.push(
-    "",
-    "Attached assets (PDF unless stated otherwise):",
-  );
+  lines.push("", "Attached assets (PDF unless stated otherwise):");
   options.inlineFiles.forEach((file, index) => {
     lines.push(`- [${index + 1}] ${file.displayName} (${file.mimeType})`);
   });

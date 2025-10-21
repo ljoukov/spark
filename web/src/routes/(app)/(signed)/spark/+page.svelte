@@ -91,7 +91,9 @@
 			if (!response.ok) {
 				const message =
 					payload && typeof payload === 'object' && payload !== null && 'message' in payload
-						? String((payload as { message?: unknown }).message ?? 'Upload failed. Please try again.')
+						? String(
+								(payload as { message?: unknown }).message ?? 'Upload failed. Please try again.'
+							)
 						: 'Upload failed. Please try again.';
 				uploadError = message;
 				return;
@@ -254,7 +256,9 @@
 				/>
 			</picture>
 		</h1>
-		<p class="spark-copy">Your revision launchpad—drop study notes here and keep progress sparking.</p>
+		<p class="spark-copy">
+			Your revision launchpad—drop study notes here and keep progress sparking.
+		</p>
 		<div class="spark-uploader-wrapper">
 			<div
 				class="spark-uploader"

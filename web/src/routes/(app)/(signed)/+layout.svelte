@@ -1,71 +1,71 @@
 <script lang="ts">
-import { goto } from '$app/navigation';
-import { page } from '$app/stores';
-import CheckIcon from '@lucide/svelte/icons/check';
-import { onMount, setContext } from 'svelte';
-import type { Snippet } from 'svelte';
-import { writable } from 'svelte/store';
-import * as Avatar from '$lib/components/ui/avatar/index.js';
-import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-import {
-	themePreference,
-	setThemePreference,
-	type ThemePreference
-} from '$lib/stores/themePreference';
-import type { LayoutData } from './$types';
-import { getFirebaseApp } from '$lib/utils/firebaseClient';
-import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import { onMount, setContext } from 'svelte';
+	import type { Snippet } from 'svelte';
+	import { writable } from 'svelte/store';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import {
+		themePreference,
+		setThemePreference,
+		type ThemePreference
+	} from '$lib/stores/themePreference';
+	import type { LayoutData } from './$types';
+	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
 
-type ClientUser = NonNullable<LayoutData['user']>;
+	type ClientUser = NonNullable<LayoutData['user']>;
 
-let { data, children }: { data: LayoutData; children: Snippet } = $props();
+	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-type ExperienceKey = 'code' | 'spark' | null;
+	type ExperienceKey = 'code' | 'spark' | null;
 
-function resolveExperience(routeId: string | null | undefined): ExperienceKey {
-	if (!routeId) {
+	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
+		if (!routeId) {
+			return null;
+		}
+		if (routeId.startsWith('/(app)/(signed)/code')) {
+			return 'code';
+		}
+		if (routeId.startsWith('/(app)/(signed)/spark')) {
+			return 'spark';
+		}
 		return null;
 	}
-	if (routeId.startsWith('/(app)/(signed)/code')) {
-		return 'code';
-	}
-	if (routeId.startsWith('/(app)/(signed)/spark')) {
-		return 'spark';
-	}
-	return null;
-}
 
-function resolveSessionHomeHref(experience: ExperienceKey, sessionId: string | null): string {
-	if (experience === 'code') {
-		return sessionId ? `/code/${sessionId}` : '/code';
+	function resolveSessionHomeHref(experience: ExperienceKey, sessionId: string | null): string {
+		if (experience === 'code') {
+			return sessionId ? `/code/${sessionId}` : '/code';
+		}
+		return '/spark';
 	}
-	return '/spark';
-}
 
-function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string } {
-	if (experience === 'code') {
-		return { title: 'Spark Code', tagline: 'Think. Hack. Spark.' };
+	function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string } {
+		if (experience === 'code') {
+			return { title: 'Spark Code', tagline: 'Think. Hack. Spark.' };
+		}
+		if (experience === 'spark') {
+			return { title: 'Spark Quiz', tagline: 'Revise. Learn. Spark.' };
+		}
+		return { title: 'Spark', tagline: 'Think. Learn. Spark.' };
 	}
-	if (experience === 'spark') {
-		return { title: 'Spark Quiz', tagline: 'Revise. Learn. Spark.' };
-	}
-	return { title: 'Spark', tagline: 'Think. Learn. Spark.' };
-}
 
-const initialUser = data.user;
-const userStore = writable<ClientUser | null>(initialUser);
-setContext('spark:user', { subscribe: userStore.subscribe });
+	const initialUser = data.user;
+	const userStore = writable<ClientUser | null>(initialUser);
+	setContext('spark:user', { subscribe: userStore.subscribe });
 
-let user = $state<ClientUser | null>(initialUser);
-const sessionId = $derived($page.params.sessionId ?? null);
-const experience = $derived(resolveExperience($page.route.id));
-const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
-const brandCopy = $derived(resolveBrandCopy(experience));
-const experiences = [
-	{ id: 'spark', label: 'Spark Quiz', href: '/spark' },
-	{ id: 'code', label: 'Spark Code', href: '/code' }
-] satisfies ReadonlyArray<{ id: 'spark' | 'code'; label: string; href: string }>;
-let theme = $state<ThemePreference>('auto');
+	let user = $state<ClientUser | null>(initialUser);
+	const sessionId = $derived($page.params.sessionId ?? null);
+	const experience = $derived(resolveExperience($page.route.id));
+	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
+	const brandCopy = $derived(resolveBrandCopy(experience));
+	const experiences = [
+		{ id: 'spark', label: 'Spark Quiz', href: '/spark' },
+		{ id: 'code', label: 'Spark Code', href: '/code' }
+	] satisfies ReadonlyArray<{ id: 'spark' | 'code'; label: string; href: string }>;
+	let theme = $state<ThemePreference>('auto');
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
 		{ label: 'Automatic', value: 'auto' },
@@ -422,7 +422,7 @@ let theme = $state<ThemePreference>('auto');
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-	min-height: 3rem;
+		min-height: 3rem;
 		padding: 0 1.25rem;
 		gap: 1rem;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.32);

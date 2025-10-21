@@ -20,30 +20,30 @@ const httpsOption: HttpsServerOptions | undefined = hasCustomCert
 const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
 // Fail loudly if dev:https is requested but local certs are missing
 if (isHttpsDev && !hasCustomCert) {
-    const msg = [
-        'HTTPS dev requires trusted local certs.',
-        `Expected:`,
-        `  key:  ${customKeyPath}`,
-        `  cert: ${customCertPath}`,
-        '',
-        'Create them once with mkcert:',
-        '  brew install mkcert nss && mkcert -install',
-        `  mkdir -p ${localCertDir}`,
-        `  mkcert -key-file "${customKeyPath}" \\`,
-        `         -cert-file "${customCertPath}" \\`,
-        '         localhost 127.0.0.1 ::1'
-    ].join('\n');
-    throw new Error(msg);
+	const msg = [
+		'HTTPS dev requires trusted local certs.',
+		`Expected:`,
+		`  key:  ${customKeyPath}`,
+		`  cert: ${customCertPath}`,
+		'',
+		'Create them once with mkcert:',
+		'  brew install mkcert nss && mkcert -install',
+		`  mkdir -p ${localCertDir}`,
+		`  mkcert -key-file "${customKeyPath}" \\`,
+		`         -cert-file "${customCertPath}" \\`,
+		'         localhost 127.0.0.1 ::1'
+	].join('\n');
+	throw new Error(msg);
 }
 
 const httpsServerOption: HttpsServerOptions | undefined = isHttpsDev ? httpsOption : undefined;
 const plugins = [tailwindcss(), sveltekit(), devtoolsJson()];
 
 const serverOptions = {
-    host: 'localhost',
-    port: 8080,
-    strictPort: true, // avoid silently switching ports; fail if 8080 is taken
-    ...(httpsServerOption ? { https: httpsServerOption } : {})
+	host: 'localhost',
+	port: 8080,
+	strictPort: true, // avoid silently switching ports; fail if 8080 is taken
+	...(httpsServerOption ? { https: httpsServerOption } : {})
 };
 
 export default defineConfig({
