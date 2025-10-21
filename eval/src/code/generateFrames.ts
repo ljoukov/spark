@@ -10,8 +10,8 @@ import {
   type LlmImageData,
   type LlmImageModelId,
   type LlmTextModelId,
-} from "../../utils/llm";
-import type { JobProgressReporter } from "../../utils/concurrency";
+} from "../utils/llm";
+import type { JobProgressReporter } from "../utils/concurrency";
 
 const IMAGE_GENERATION_MAX_ATTEMPTS = 4;
 const BATCH_GENERATE_MAX_ATTEMPTS = 3;

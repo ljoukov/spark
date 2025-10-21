@@ -66,14 +66,14 @@ All Firestore reads/writes validated with `@spark/schemas` using Zod; normalize 
 
 ## Session Generation (Test User Only)
 
-- Move CLI to `eval/src/code/session/generateTestSession.ts`.
+- Move CLI to `eval/src/code/generateTestSession.ts`.
   - Uses `getTestUserId()` for the single allowed user.
     - Import from `packages/llm` (shared server package), to be renamed to `packages/shared-server` later.
   - Creates a fixed session with a simple static plan for now (no LLM). The client never embeds plans; it only reads from Firestore.
   - Builds `Session` with `id` (generated human-readable short id), `title`, `createdAt` (server timestamp), and `plan`.
   - Writes via `saveSession()` and sets `currentSessionId` on the user doc.
   - Guard: exit unless operating on the test user.
-  - Add npm script in `eval`: `"session:generate": "tsx src/code/session/generateTestSession.ts"`.
+  - Add npm script in `eval`: `"session:generate": "tsx src/code/generateTestSession.ts"`.
 
 
 ## Web Routing (Bookmarkable)
