@@ -63,22 +63,28 @@ export default defineConfig({
 		format: 'es'
 	},
     ssr: {
-        // Bundle only schemas; keep all server-only heavy libs and @spark/llm external
+        // Bundle only schemas; force everything else external so CJS libs keep __dirname/require
         noExternal: ['@spark/schemas'],
         external: [
-            '@spark/llm',
-            'firebase-admin',
-            'google-gax',
-            'google-auth-library',
-            'openai',
-            '@google/genai',
-			/^@google-cloud\/.*/,
-			/^@grpc\/.*/,
-			/^protobufjs(\/.*)?$/,
-			/^@protobufjs\/.*/,
-			/^@opentelemetry\/.*/
-		]
-	},
+            // our server-only package (ships as compiled dist in Docker image)
+            /^@spark\/llm(\/.*)?$/,
+            // google/fb admin stack
+            /^firebase-admin(\/.*)?$/,
+            /^@google-cloud\/.*/,
+            /^google-gax(\/.*)?$/,
+            /^google-proto-files(\/.*)?$/,
+            /^@grpc\/.*/,
+            /^googleapis(\/.*)?$/,
+            // auth / clients
+            /^google-auth-library(\/.*)?$/,
+            /^@google\/genai(\/.*)?$/,
+            /^openai(\/.*)?$/,
+            // misc heavy libs frequently pulled in transitively
+            /^protobufjs(\/.*)?$/,
+            /^@protobufjs\/.*/,
+            /^@opentelemetry\/.*/
+        ]
+    },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
