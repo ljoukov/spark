@@ -1,14 +1,15 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
+import { getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { type SparkUploadQuizStatus, type SparkUploadStatus } from '@spark/schemas';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
-import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
 const SPARK_UPLOAD_QUIZ_QUESTION_COUNT = 20;
+const { FieldValue } = getFirebaseAdminFirestoreModule();
 
 const filenameSchema = z
 	.string()

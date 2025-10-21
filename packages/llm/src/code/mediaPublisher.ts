@@ -1,9 +1,10 @@
 import path from "node:path";
-import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
+import type { Timestamp as FirestoreTimestamp } from "firebase-admin/firestore";
 import {
   getFirebaseAdminFirestore,
+  getFirebaseAdminFirestoreModule,
   getFirebaseAdminStorage,
 } from "../utils/firebaseAdmin";
 import {
@@ -15,6 +16,8 @@ import {
 } from "@spark/schemas";
 import type { SessionAudioResult } from "./audio";
 import type { MediaSegment } from "./schemas";
+
+const { Timestamp } = getFirebaseAdminFirestoreModule();
 
 const idSchema = z.string().trim().min(1);
 
@@ -161,7 +164,7 @@ export async function publishSessionMediaClip(
   const existing = await docRef.get();
   const createdAt =
     existing.exists && existing.get("createdAt") instanceof Timestamp
-      ? (existing.get("createdAt") as Timestamp)
+      ? (existing.get("createdAt") as FirestoreTimestamp)
       : now;
 
   const docData = {

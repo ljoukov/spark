@@ -1,4 +1,3 @@
-import { Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import {
 	CodeProblemSchema,
@@ -16,6 +15,7 @@ import {
 	FirestoreTimestampSchema
 } from '@spark/schemas';
 
+import { getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
 import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
@@ -45,6 +45,7 @@ type LoadedTemplate = {
 const TEMPLATE_ROOT_COLLECTION = 'spark-admin';
 const TEMPLATE_DOC_ID = 'templates';
 const TEMPLATE_SESSIONS_COLLECTION = 'sessions';
+const { Timestamp } = getFirebaseAdminFirestoreModule();
 
 const TemplateDocSchema = z.object({
 	id: z.string().trim().min(1, 'id is required'),
