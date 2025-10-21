@@ -21,9 +21,9 @@ import {
   getTestUserId,
   type MediaSegment,
 } from "@spark/llm";
-import { runJobsWithConcurrency } from "../../utils/concurrency";
-import { formatByteSize, formatDurationSeconds } from "../../utils/format";
-import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { runJobsWithConcurrency } from "../utils/concurrency";
+import { formatByteSize, formatDurationSeconds } from "../utils/format";
+import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { createConsoleProgress } from "./narration";
 import { STORY_PLAN_ITEM_ID, STORY_TOPIC, TEST_SESSION_ID } from "./constants";
 

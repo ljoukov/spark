@@ -12,11 +12,11 @@ import {
   type LlmContentPart,
   type LlmImageData,
   type LlmDebugOptions,
-} from "../../utils/llm";
+} from "../utils/llm";
 import type {
   JobProgressReporter,
   LlmUsageChunk,
-} from "../../utils/concurrency";
+} from "../utils/concurrency";
 import { getFirebaseAdminStorage, getFirebaseAdminFirestore } from "@spark/llm";
 import type { MediaSegment } from "@spark/llm";
 import sharp from "sharp";

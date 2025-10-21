@@ -5,7 +5,7 @@ import { z } from "zod";
 import {
   getFirebaseAdminFirestore,
   getFirebaseAdminStorage,
-} from "../../utils/firebaseAdmin";
+} from "../utils/firebaseAdmin";
 import {
   SessionMediaDocSchema,
   type SessionMediaDoc,
