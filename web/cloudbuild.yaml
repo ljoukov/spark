@@ -33,6 +33,7 @@ steps:
         '$_IMAGE_NAME',
         '--region',
         '$_REGION',
+        '--allow-unauthenticated',
         '--timeout',
         '20m'
       ]
