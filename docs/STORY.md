@@ -10,16 +10,14 @@ flowchart TD
   B --> OC["ensureOriginsCapsule -> generateOriginsCapsule (2 sentences)"]
   OC --> PD["ensureProseDraft (variants A & B)"]
   PD --> PR["ensureProse -> revise + validate each variant"]
-  PR --> J{"judge prose variants"}
-  J -->|pick winner| F["ensureSegmentation -> generateStorySegmentation"]
-  J -->|if both fail| X["abort story run"]
-  F --> G{Corrections needed?}
-  G -->|Needs fixes| H["correctStorySegmentation"]
-  H --> F
-  G -->|Ready| I["ensureImages -> generateStoryImages"]
-  I --> J["generateImageSets (set_a & set_b)"]
-  J --> SA1
-  J --> SB1
+  PR --> JV{"judge prose variants"}
+  JV -->|pick winner| F["ensureSegmentation -> generateStorySegmentation"]
+  JV -->|if both fail| X["abort story run"]
+  F --> FC["ensureSegmentationCorrection -> correctStorySegmentation (≤3 passes)"]
+  FC --> I["ensureImages -> generateStoryImages"]
+  I --> IS["generateImageSets (set_a & set_b)"]
+  IS --> SA1
+  IS --> SB1
 
   subgraph SetA["set_a pipeline"]
     SA1["generateStoryFrames"] --> SA2["poster candidates x4"]
