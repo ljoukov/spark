@@ -38,7 +38,7 @@ async function sendSessionUpdate(
 	state: PlanItemState,
 	options?: SessionUpdateOptions
 ): Promise<SessionUpdateResult> {
-	const response = await fetch(`/api/session/${sessionId}/update`, {
+	const response = await fetch(`/api/code/${sessionId}/update`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		keepalive: options?.keepalive ?? false,
