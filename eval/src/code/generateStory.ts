@@ -581,6 +581,94 @@ export type StoryIdeaResult = {
   data?: StoryIdeaData;
 };
 
+const StoryOriginsCapsuleSchema = z.object({
+  text: z.string().trim().min(1, "Origins capsule must include text"),
+});
+
+export type StoryOriginsCapsule = z.infer<typeof StoryOriginsCapsuleSchema>;
+
+const StoryValidationBooleanFlagSchema = z.boolean();
+const StoryValidationDateFlagSchema = z.union([
+  z.literal("hedged"),
+  z.literal("recommend-hedge"),
+  z.literal(false),
+]);
+
+const STORY_VALIDATION_TAGS = [
+  "namingAttribution",
+  "exclusivityClaim",
+  "modernTieInOverclaim",
+  "datePrecision",
+  "wrongEntity",
+  "other",
+] as const;
+
+const StoryValidationBlockersSchema = z.object({
+  namingAttribution: StoryValidationBooleanFlagSchema.optional(),
+  exclusivityClaim: StoryValidationBooleanFlagSchema.optional(),
+  modernTieInOverclaim: StoryValidationBooleanFlagSchema.optional(),
+  datePrecision: StoryValidationDateFlagSchema.optional(),
+  wrongEntity: StoryValidationBooleanFlagSchema.optional(),
+});
+
+const StoryFixChecklistSchema = z.object({
+  namingAttribution: StoryValidationBooleanFlagSchema,
+  exclusivityClaim: StoryValidationBooleanFlagSchema,
+  modernTieInOverclaim: StoryValidationBooleanFlagSchema,
+  datePrecision: StoryValidationDateFlagSchema,
+  wrongEntity: StoryValidationBooleanFlagSchema,
+});
+
+export type StoryValidationBlockers = z.infer<
+  typeof StoryValidationBlockersSchema
+>;
+
+export type StoryFixChecklist = z.infer<typeof StoryFixChecklistSchema>;
+
+export type StoryValidationTag = (typeof STORY_VALIDATION_TAGS)[number];
+
+const OriginsCapsuleValidationIssueSchema = z.object({
+  summary: z.string().trim().min(1),
+  recommendation: z.string().trim().min(1),
+});
+
+const OriginsCapsuleValidationResponseSchema = z.object({
+  verdict: z.enum(["pass", "fail"]),
+  issues: z.array(OriginsCapsuleValidationIssueSchema).default([]),
+});
+
+type OriginsCapsuleValidationIssue = z.infer<
+  typeof OriginsCapsuleValidationIssueSchema
+>;
+
+type OriginsCapsuleValidationResponse = z.infer<
+  typeof OriginsCapsuleValidationResponseSchema
+>;
+
+const ORIGINS_CAPSULE_VALIDATION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["verdict"],
+  propertyOrdering: ["verdict", "issues"],
+  properties: {
+    verdict: {
+      type: Type.STRING,
+      enum: ["pass", "fail"],
+    },
+    issues: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["summary", "recommendation"],
+        propertyOrdering: ["summary", "recommendation"],
+        properties: {
+          summary: { type: Type.STRING, minLength: "1" },
+          recommendation: { type: Type.STRING, minLength: "1" },
+        },
+      },
+    },
+  },
+};
+
 export type StoryProseVariantLabel = "variant_a" | "variant_b";
 
 export const STORY_PROSE_VARIANT_LABELS: readonly StoryProseVariantLabel[] = [
@@ -597,9 +685,11 @@ export type StoryProseVariantMetadata = {
   label: StoryProseVariantLabel;
   ideaBrief: string;
   draftText: string;
+  originsCapsule: string;
   text: string;
   analysis: StoryProseRevisionAnalysis;
   improvementSummary: string;
+  fixChecklist: StoryFixChecklist;
   validation?: StoryProseValidationResult;
 };
 
@@ -608,8 +698,10 @@ export type StoryProseResult = {
   metadata?: {
     ideaBrief: string;
     draftText: string;
+    originsCapsule?: string;
     analysis: StoryProseRevisionAnalysis;
     improvementSummary: string;
+    fixChecklist?: StoryFixChecklist;
     validation?: StoryProseValidationResult;
     variantLabel?: StoryProseVariantLabel;
     variants?: StoryProseVariantMetadata[];
@@ -622,6 +714,7 @@ export type StoryProseDraftResult = StoryProseResult;
 export type StoryProseDraftVariant = {
   label: StoryProseVariantLabel;
   idea: StoryIdeaResult;
+  originsCapsule: StoryOriginsCapsule;
   draft: StoryProseDraftResult;
 };
 
@@ -630,6 +723,7 @@ export type StoryProseVariantCandidate = StoryProseDraftVariant & {
 };
 
 export type StoryProseValidationIssue = {
+  tag?: StoryValidationTag;
   summary: string;
   category:
     | "factual"
@@ -647,11 +741,13 @@ export type StoryProseValidationIssue = {
 export type StoryProseValidationResult = {
   verdict: "pass" | "fail";
   issues: StoryProseValidationIssue[];
+  blockers?: StoryValidationBlockers;
 };
 
 export type StoryProseRevisionResult = StoryProseResult & {
   analysis: StoryProseRevisionAnalysis;
   improvementSummary: string;
+  fixChecklist: StoryFixChecklist;
   validation?: StoryProseValidationResult;
 };
 
@@ -723,10 +819,20 @@ const StoryIdeaCheckpointSchema = z.object({
 
 type StoryIdeaCheckpoint = z.infer<typeof StoryIdeaCheckpointSchema>;
 
+const StoryOriginsCapsuleCheckpointSchema = z.object({
+  topic: z.string().trim().min(1),
+  capsule: z.string().trim().min(1),
+});
+
+type StoryOriginsCapsuleCheckpoint = z.infer<
+  typeof StoryOriginsCapsuleCheckpointSchema
+>;
+
 const StoryProseCheckpointVariantSchema = z.object({
   label: z.enum(["variant_a", "variant_b"]),
   ideaBrief: z.string().trim().min(1),
   draftText: z.string().trim().min(1),
+  originsCapsule: z.string().trim().min(1),
 });
 
 type StoryProseCheckpointVariant = z.infer<
@@ -754,6 +860,7 @@ const StoryProseRevisionAnalysisSchema = z.object({
 });
 
 const StoryProseValidationIssueSchema = z.object({
+  tag: z.enum(STORY_VALIDATION_TAGS).optional(),
   summary: z.string().trim().min(1),
   category: z.enum([
     "factual",
@@ -772,6 +879,7 @@ const StoryProseValidationIssueSchema = z.object({
 const StoryProseValidationResultSchema = z.object({
   verdict: z.enum(["pass", "fail"]),
   issues: z.array(StoryProseValidationIssueSchema),
+  blockers: StoryValidationBlockersSchema.optional(),
 });
 
 const StoryProseVariantsJudgeSchema = z.object({
@@ -784,17 +892,21 @@ const StoryProseRevisionCheckpointSchema = z.object({
   text: z.string().trim().min(1),
   analysis: StoryProseRevisionAnalysisSchema,
   improvementSummary: z.string().trim().min(1),
+  fixChecklist: StoryFixChecklistSchema,
   validation: StoryProseValidationResultSchema.optional(),
   variantLabel: z.enum(["variant_a", "variant_b"]).optional(),
+  originsCapsule: z.string().trim().min(1).optional(),
   variants: z
     .array(
       z.object({
         label: z.enum(["variant_a", "variant_b"]),
         ideaBrief: z.string().trim().min(1),
         draftText: z.string().trim().min(1),
+        originsCapsule: z.string().trim().min(1),
         text: z.string().trim().min(1),
         analysis: StoryProseRevisionAnalysisSchema,
         improvementSummary: z.string().trim().min(1),
+        fixChecklist: StoryFixChecklistSchema,
         validation: StoryProseValidationResultSchema.optional(),
       })
     )
@@ -815,6 +927,7 @@ const StoryProseRevisionResponseSchema = z.object({
   analysis: StoryProseRevisionAnalysisSchema,
   revisedStory: StoryProseRevisionRevisedStorySchema,
   improvementSummary: z.string().trim().min(1),
+  fixChecklist: StoryFixChecklistSchema,
 });
 
 type StoryProseRevisionResponse = z.infer<
@@ -930,8 +1043,18 @@ const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
 
 const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["analysis", "revisedStory", "improvementSummary"],
-  propertyOrdering: ["analysis", "revisedStory", "improvementSummary"],
+  required: [
+    "analysis",
+    "revisedStory",
+    "improvementSummary",
+    "fixChecklist",
+  ],
+  propertyOrdering: [
+    "analysis",
+    "revisedStory",
+    "improvementSummary",
+    "fixChecklist",
+  ],
   properties: {
     analysis: {
       type: Type.OBJECT,
@@ -971,6 +1094,35 @@ const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
       },
     },
     improvementSummary: { type: Type.STRING, minLength: "1" },
+    fixChecklist: {
+      type: Type.OBJECT,
+      required: [
+        "namingAttribution",
+        "exclusivityClaim",
+        "modernTieInOverclaim",
+        "datePrecision",
+        "wrongEntity",
+      ],
+      propertyOrdering: [
+        "namingAttribution",
+        "exclusivityClaim",
+        "modernTieInOverclaim",
+        "datePrecision",
+        "wrongEntity",
+      ],
+      properties: {
+        namingAttribution: { type: Type.BOOLEAN },
+        exclusivityClaim: { type: Type.BOOLEAN },
+        modernTieInOverclaim: { type: Type.BOOLEAN },
+        datePrecision: {
+          anyOf: [
+            { type: Type.STRING, enum: ["hedged", "recommend-hedge"] },
+            { type: Type.BOOLEAN },
+          ],
+        },
+        wrongEntity: { type: Type.BOOLEAN },
+      },
+    },
   },
 };
 
@@ -978,6 +1130,7 @@ const STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["summary", "category", "severity", "evidence", "recommendation"],
   propertyOrdering: [
+    "tag",
     "summary",
     "category",
     "severity",
@@ -985,6 +1138,11 @@ const STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA: Schema = {
     "recommendation",
   ],
   properties: {
+    tag: {
+      type: Type.STRING,
+      enum: [...STORY_VALIDATION_TAGS],
+      description: "Taxonomy tag for this issue.",
+    },
     summary: { type: Type.STRING, minLength: "1" },
     category: {
       type: Type.STRING,
@@ -1010,12 +1168,41 @@ const STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA: Schema = {
 const STORY_PROSE_VALIDATION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["verdict", "issues"],
-  propertyOrdering: ["verdict", "issues"],
+  propertyOrdering: ["verdict", "issues", "blockers"],
   properties: {
     verdict: { type: Type.STRING, enum: ["pass", "fail"] },
     issues: {
       type: Type.ARRAY,
       items: STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA,
+    },
+    blockers: {
+      type: Type.OBJECT,
+      required: [
+        "namingAttribution",
+        "exclusivityClaim",
+        "modernTieInOverclaim",
+        "datePrecision",
+        "wrongEntity",
+      ],
+      propertyOrdering: [
+        "namingAttribution",
+        "exclusivityClaim",
+        "modernTieInOverclaim",
+        "datePrecision",
+        "wrongEntity",
+      ],
+      properties: {
+        namingAttribution: { type: Type.BOOLEAN },
+        exclusivityClaim: { type: Type.BOOLEAN },
+        modernTieInOverclaim: { type: Type.BOOLEAN },
+        datePrecision: {
+          anyOf: [
+            { type: Type.STRING, enum: ["hedged", "recommend-hedge"] },
+            { type: Type.BOOLEAN },
+          ],
+        },
+        wrongEntity: { type: Type.BOOLEAN },
+      },
     },
   },
 };
@@ -1107,66 +1294,61 @@ export function buildStoryIdeaParsePrompt(
 
 export function buildStoryDraftPrompt(
   topic: string,
-  storyBrief: string
+  storyBrief: string,
+  originsCapsule: string
 ): string {
   return `### **Prompt 2: The Narrative Weaver**
 
-**(Objective: To take the structured brief from Prompt 1 and craft a compelling, audio-friendly story.)**
+**Objective:** Transform the strategic brief and Origins Capsule into a 250–450 word audio-first story for curious 12–16 year olds. You may extend modestly (≈1.2–1.5×) when the added detail sharpens clarity; never pad with tangents.
 
-**Your Role:** You are a master storyteller for a popular educational podcast. You have just received a "Story Brief" from our research department. Your task is to transform this brief into a captivating, audio-friendly narrative (250–450 words) for an advanced teen audience. It's acceptable to go modestly longer (≈1.2–1.5×) when adding directly relevant historical color; do not shorten by default if doing so removes helpful context.
+**Your Role:** You are the narrative lead for our educational podcast. Your draft must honour the locked Origins Capsule while keeping the narrative lively and memorable.
 
-Guardrails:
-- Do not explain algorithms or walk through step-by-step calculations. It's okay to mention a few numbers, but avoid variable notation and sequences like "do X, then Y".
-- You may introduce at most 1–2 terms by name if they elevate intrigue; do not give precise formal definitions.
-- Optionally include a short naming-history aside only if it adds charm and momentum.
-- Make clear this lesson will reveal the trick. Gently hint that short in-lesson exercises will let the listener try it—do not write explicit call-to-action wording.
-- Historical accuracy: only reference famous anecdotes/quotes when they are associated with the same concept/result; otherwise omit them or, if helpful, reframe as foreshadowing of a later milestone without attributing it to the current concept.
- - Fact-checking: if any historical detail (names, dates, places, artifacts) is uncertain, use web search to verify before relying on it. Do not include citations in the story; correct the prose instead.
-- Keep vocabulary accessible to curious 12–16 year olds. Prefer everyday words like "lawyer" or "judge" instead of specialist titles such as "magistrate" or "jurist" unless you briefly define them.
+**Origins Capsule (locked facts — keep semantics intact, allow gentle paraphrasing only):**
+================ Origins Capsule ================
+${originsCapsule}
+===============================================
 
-Hard requirements for this concept:
-- Explicitly name the concept "${topic}" in the first 3–4 sentences. Do not postpone the term to the ending.
-- Include a one-sentence naming note for the concept if the name contains a notable qualifier (e.g., "Little", "Last", "Fast"). Keep it plain (why it’s called that) and historically accurate.
-- Include an "insight hint" expressed in one or two sentences: begin with an abstract sentence that states the core pattern and optionally add a short clarifying contrast about what predictably happens when the condition holds versus what breaks when it doesn’t. Avoid equations, symbols, or procedural steps.
-- End with an upbeat invitation that hints the student will "learn the details" and "master it in programming challenges" in this very lesson. Keep the tone motivating, not salesy.
-
-**Input:**
+**Story Brief Reference (follow the Recommendation when multiple candidates appear):**
 ================ Story Brief ================
 ${storyBrief}
 ============================================
 
-**Guiding Ethos:**
-* **Reveal, Don't Just Tell:** Let the listener feel they are being entrusted with a strategic secret.
-* **Transform the Concept into a Superpower:** Frame the knowledge as a powerful tool the listener is about to wield.
-* **Excitement Through Motivation:** Create momentum from real historical stakes and human intent—not from exaggerated adjectives.
+**Guardrails You Must Obey:**
+- Place the Origins Capsule in the first half of the story. Preserve every name, title, and timing nuance exactly—even if you lightly rephrase the sentences.
+- Use neutral naming language such as "now known as", "often called", or "widely referred to as". Never claim anyone "coined", "named", "invented", or held sole credit unless the capsule already asserts it.
+- Avoid exclusivity language. Swap "first" or "sole inventor" claims for hedged phrasing like "credited among early contributors", "independently developed", or "... and others".
+- Limit the narrative to one named figure or institution. When others matter, acknowledge them with neutral hedges instead of listing names.
+- Introduce the concept "${topic}" within the first four sentences. Include a naming note only when the qualifier is well established and high-confidence.
+- Deliver the insight hint in one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
+- Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
 
-**Your Mission:**
-Weave the provided elements into a seamless story that makes the concept feel like a powerful secret the listener is about to inherit. If multiple candidate briefs are present, use the "Recommendation" section; otherwise, choose the strongest angle. The story must flow from a historical problem to a modern-day superpower without teaching the algorithm. Keep any modern connection (if truly relevant) for the ending only; avoid modern references earlier.
+**Modern Tie-in (ending paragraph only):** choose exactly one of these hedged templates and customise the {application domain} placeholder:
+1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
+2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
+3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
 
-**The Narrative Arc to Follow:**
+**Narrative Flow:**
+1. **Set the Stakes:** Anchor the listener in the historical scene, pressing problem, and protagonist from the brief. Thread in the Origins Capsule here.
+2. **Reveal the Insight:** Show the "aha" moment and introduce the functional analogy in motion—no procedural walkthroughs.
+3. **Analogy Map + Hint:** Provide the succinct analogy map (2–3 concrete correspondences) and, if helpful, one short clarifier contrasting success vs. failure conditions.
+4. **Parallel Voices (hedged):** Maintain momentum without adding new named figures; use phrases like "others later refined the idea" when nuance is required.
+5. **Modern Pivot + Invitation:** In the final paragraph, deploy one approved template and close with an empowering promise that this lesson reveals the details and lets the listener master them in programming challenges.
 
-1. **The Quest:** Open with the historical figure and the urgent, concrete problem they faced. Ground the listener in the time, place, and stakes from the brief.
-2. **The Insight:** Describe the "aha!" moment. Introduce the chosen functional analogy as the key to solving the problem. Use the analogy's name and its internal logic at a high level—no equations or step sequences.
-3. **The Teaser + Analogy Map:** Offer an evocative glimpse of the idea in action—without steps, symbols, or variable notation. Keep any numbers minimal and illustrative. Then add a concise "Analogy Map" sentence that links 2–3 correspondences between the analogy and the concept (nouns and plain language only). You may optionally follow with one short "insight clarifier" sentence that contrasts what predictably happens when the condition holds versus what breaks when it doesn’t. The entire hint must be expressed in one or two sentences—never more.
-4. **The Ending Pivot (optional):** If a strong, natural link exists to the modern world, reveal it briefly here at the very end—and only here. If not, end without it.
-5. **The Call to Adventure:** Finish with a concise, powerful invitation. The final sentence must complete the central analogy and hand the listener an active role—place the metaphorical tool (pen, key, compass, etc.) in their hands—and explicitly promise that they will learn the details and practice the idea in programming challenges next.
+**Style Expectations:**
+- Audio-first cadence with clear, varied sentences.
+- Strong verbs and concrete nouns; hedges over absolutes when evidence is uncertain.
+- At most one or two vivid adjectives across the entire story, never more than one per sentence.
+- Vocabulary at or below CEFR B2; define any specialised term immediately.
+- Provide a 2–4 word title on its own line followed by the story paragraphs.
 
-**Stylistic Requirements:**
-* **Audio-First:** Use clear, concise sentences. Read it aloud in your "mind's ear" to ensure it flows well.
-* **Vivid but Restrained:** Use strong verbs and concrete nouns.
-* **Plain, Natural Language:** Avoid grandiose or emotionally charged adjectives (e.g., colossal, gigantic, revolutionary). Use such adjectives at most 1–2 times across the entire story, and never more than one in a single sentence.
-* **Measured Claims:** Prefer neutral, specific phrasing over sweeping statements. Replace extreme claims (e.g., "could take a lifetime") with grounded context or simple statements of difficulty.
-* **Tone:** Intelligent, intriguing, and respectful of the audience's curiosity.
-* **Vocabulary:** Use CEFR B2-or-simpler word choices; if a precise historical role demands a rarer word, define it in the same sentence.
-* **Title:** Provide a 2-4 word title for the story.
-
-Respond with the title on its own line followed by the story paragraphs.
+Return only the title and paragraphs—no commentary, bullet lists, or template explanations.
 `;
 }
 
 export function buildStoryRevisionPrompt(
   topic: string,
   storyDraft: string,
+  originsCapsule: string,
   feedback?: string
 ): string {
   const feedbackSection =
@@ -1175,55 +1357,51 @@ export function buildStoryRevisionPrompt(
       : "";
   return `### **Prompt 3: The Narrative Editor's Cut**
 
-**(Objective: To critically evaluate the story from Prompt 2 against a quality rubric and then perform a final revision to elevate it.)**
+**Objective:** Audit the Narrative Weaver draft against all guardrails, protect the Origins Capsule facts, and deliver the final polished story.
 
-**Your Role:** You are the lead editor for our educational content studio. You are responsible for ensuring every story is not just accurate, but exceptionally engaging and effective.
+**Origins Capsule (unaltered facts — keep semantics intact):**
+================ Origins Capsule ================
+${originsCapsule}
+===============================================
 
-Non-negotiables for this pass:
-- Remove or rewrite any step-by-step math, equations, variable notation, or algorithmic walkthroughs. Mentions of a few numbers are okay if they are evocative and not procedural.
-- Keep, at most, 1–2 named terms without formal definitions.
-- Make clear that this lesson reveals the trick. If helpful, include a light-touch hint that short in-lesson exercises will follow; do not craft explicit call-to-action wording.
-- Preserve historical grounding and momentum; include naming-history only if it helps.
-- Correct any historical misattributions: use famous anecdotes or quotations only when linked to the same concept/result and time period. If a well-known story belongs elsewhere, remove it or recast it as foreshadowing of a later milestone, without attributing it to the current concept.
-- Fact-checking: double-check any uncertain dates, names, places, or attributions via web search before revising. Do not add citations to the JSON; revise the prose to be correct and concise.
-- Hyperbole audit: remove charged adjectives and sweeping claims. Allow at most 1–2 emotionally strong adjectives across the entire story, never more than one in a single sentence. Prefer plain, measured language.
- - Modern-connection placement: ensure any tie-in to the modern world appears only in the ending. Remove or relocate earlier references that make the story feel artificial.
- - Insight brevity: the description of the insight must be an "insight hint" delivered in one or two sentences—begin with an abstract statement of the core pattern, and optionally add a brief clarifying contrast about when it holds vs. breaks. No equations, symbols, or procedural steps.
- - Length policy: do not shorten by default. Preserve or modestly extend length when adding directly relevant historical detail and clarity (≈1.2–1.5× is acceptable). Trim only tangents or redundancy.
-
- Quality gates (must pass all):
-- Explicitly name the concept "${topic}" in the first 3–4 sentences. If missing, insert it naturally without breaking flow.
-- If the concept’s name includes a notable qualifier (e.g., "Little", "Last", "Stable"), add a one-sentence naming note explaining the origin/meaning (e.g., contrasted with a different theorem). Keep it neutral and accurate.
-- Ensure the "insight hint" is delivered in one or two sentences: start with an abstract sentence of the core pattern and optionally add a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps.
-- The final 1–2 sentences must invite the listener to "learn the details" and to "master it in programming challenges" next, framed as part of this lesson’s journey.
-- Historical nuance: when relevant, avoid claiming the originator created a full test or modern method; frame it as a property or insight. If the originator shared a result without a proof, note that it was presented as a challenge or confident claim without proof.
-- Vocabulary accessibility: keep language suitable for curious 12–16 year olds (CEFR B2 or simpler). Prefer familiar words like "lawyer" or "judge" instead of "magistrate" unless you explain the term immediately.
-
-**Input:**
+**Draft Under Review:**
 ================ Story Draft ================
 ${storyDraft}
 ============================================
 ${feedbackSection}
 
+**Non-negotiables for this pass:**
+- Preserve the Origins Capsule details verbatim in meaning. You may smooth language, but the names, titles, and timing must remain unchanged.
+- Enforce neutral naming. Replace any "coined", "named", "invented", or sole-credit claims with hedged phrases like "now known as", "credited among", or "... and others".
+- Remove exclusivity claims. The story should never assert "first" or "sole" originators unless the capsule already does so explicitly.
+- Limit the narrative to one named figure or institution; other contributors should appear only as hedged acknowledgements.
+- Keep modern references out of the body. The final paragraph must use one approved template (below) and promise learners they will "learn the details" and "master it in programming challenges" next.
+- Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
+- Run web searches when historical details are uncertain, but fix the prose rather than adding citations. Hedge when evidence is ambiguous.
+- Tone check: at most one or two vivid adjectives across the entire story; vocabulary stays at or below CEFR B2, with any specialised term defined immediately.
+
+**Approved Modern Tie-in Templates (ending paragraph only):**
+1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
+2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
+3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
+
+**Fix Checklist expectation:** After revising, you must populate a \\"fixChecklist\\" object confirming which blockers are resolved. Use these keys: \\"namingAttribution\\", \\"exclusivityClaim\\", \\"modernTieInOverclaim\\", \\"datePrecision\\", \\"wrongEntity\\". Set each boolean key to true only when the revised story clearly addresses it; leave false when unresolved. For \\"datePrecision\\", use \\"hedged\\" when you softened or approximated timing, \\"recommend-hedge\\" if you still urge additional hedging, or false when no adjustment was required.
+
 **Your Two-Part Task:**
 
-**Part A: The Critical Analysis**
-Grade the draft story against our five-point quality rubric. For each point, provide a score (1-5, with 5 being excellent) and a brief justification for your rating. Be honest and critical.
+**Part A: Critical Analysis**
+Score the draft against our five-point rubric (1–5, integers only) with concise justifications. Be direct.
 
-* **1. Metaphorical Power:** How effective is the functional analogy? Is it a complete system that makes the concept intuitive, memorable, and consistently applied?
-* **2. Narrative Momentum:** Does the story build from a compelling problem to a satisfying revelation? Is the pacing tight and engaging?
-* **3. Conceptual Revelation:** Does the story make the listener feel clever—as if a secret has been revealed rather than a lesson delivered?
-* **4. "Invisible Architecture" Impact:** Does the pivot create a true "wow" moment by exposing how the concept already powers the listener's hidden technological world?
-* **5. Empowering Conclusion:** Does the ending avoid cliché? Does it actively empower the student by completing the central analogy and handing them a role in the story?
+* **1. Metaphorical Power**
+* **2. Narrative Momentum**
+* **3. Conceptual Clarity**
+* **4. Audience Resonance**
+* **5. Motivational Power**
 
-**Part B: The Final Polish**
-Based on your analysis, produce the final, revised version. Focus your edits on two mission-critical areas:
-1. **Clarify Without Calculus:** Make the analogy intuitive while removing step sequences, equations, or symbol-heavy wording. Keep any numbers minimal and illustrative. If missing, add a concise "Analogy Map" sentence that links 2–3 elements of the analogy to the underlying concept (nouns and plain language only), and optionally add one short clarifier sentence. The entire "insight hint" must fit within one or two sentences—no more.
-2. **Sharpen the Ending:** Rewrite the final one or two sentences to be active, concise, and explicitly tied to the analogy so the listener receives a powerful call to adventure. Place any modern connection here (and only here). If natural, add a gentle promise that the trick is revealed in this lesson and that brief exercises follow—without explicit call-to-action wording.
+**Part B: Final Revision**
+Rewrite the story so it satisfies every guardrail above, protects the Origins Capsule semantics, integrates exactly one modern template in the ending, and keeps the insight hint brief. Ensure the final sentences hand the learner the metaphorical tool and promise lesson mastery plus programming challenges.
 
-Respond strictly in JSON matching the provided schema. Omit all commentary outside the JSON object.
-
-JSON schema:
+Respond strictly in JSON with this structure:
 {
   "analysis": {
     "metaphoricalIntegrity": { "score": 1-5 integer, "justification": string },
@@ -1234,12 +1412,19 @@ JSON schema:
   },
   "revisedStory": {
     "title": string (2-4 words),
-    "paragraphs": array of strings (each 1+ sentences, no blank strings)
+    "paragraphs": array of non-empty strings (each 1+ sentences)
   },
-  "improvementSummary": string (single sentence describing the biggest improvement)
+  "improvementSummary": string (single sentence describing the biggest improvement),
+  "fixChecklist": {
+    "namingAttribution": boolean,
+    "exclusivityClaim": boolean,
+    "modernTieInOverclaim": boolean,
+    "datePrecision": "hedged" | "recommend-hedge" | false,
+    "wrongEntity": boolean
+  }
 }
 
-Ensure every score is an integer between 1 and 5 inclusive.
+Do not include commentary outside the JSON object. Every score must be an integer from 1 to 5 inclusive.
 `;
 }
 
@@ -1249,44 +1434,61 @@ export function buildStoryValidationPrompt(
 ): string {
   return `### **Prompt 4: The Fact-Check Gate**
 
-**Objective:** Audit the revised story for factual accuracy, compliance with required beats, and age-appropriate language before it can advance.
+**Objective:** Safeguard young learners by catching catastrophic factual or naming errors while respecting neutral hedges and the locked Origins Capsule facts.
 
-**Your Role:** You are the senior fact-checker and standards editor. You must block publication if any critical or major issues remain.
+**Policy Notes:**
+- Stick with classical, widely taught anchors. Neutral hedges such as "... and others" or "credited among" are acceptable; do **not** fail a story simply for omitting extra contributor names when it avoids exclusivity.
+- Block only catastrophic issues: wrong or conflicting names/titles/dates, misattributed naming, exclusive origin claims, un-hedged modern tie-ins, incorrect entities, or dates that need hedging.
 
 **Material to Audit:**
 ================ Story (Final Draft) ================
 ${storyText}
 ====================================================
 
-**Checklist (all must pass):**
-1. **Historical accuracy:** Verify every concrete claim (dates, names, proof status). For Fermat, remember that Fermat's Little Theorem was shared without proof in 1640, and Fermat's Last Theorem was proved by Andrew Wiles (with Richard Taylor) in 1994–1995—flag any suggestion it remains unsolved.
-2. **Concept naming:** Confirm the story explicitly names "${topic}" within the first four sentences and that any naming note about qualifiers (e.g., "Little") is accurate.
-3. **Insight hint:** Confirm the hint is expressed in one or two sentences—start with an abstract sentence stating the core pattern and optionally add a short clarifier contrasting what predictably happens when the condition holds vs. what breaks when it doesn’t. No equations, symbols, or procedural steps; flag if it exceeds two sentences or reads like instructions.
-4. **Modern connection placement:** Any modern tie-in (e.g., cryptography) must appear only in the ending paragraph.
-5. **Ending invitation:** The final 1–2 sentences must promise the listener will learn the details and master the idea in programming challenges.
-6. **Language accessibility:** Vocabulary should suit curious 12–16 year olds (CEFR B2 or below). Flag niche words such as "magistrate" or "jurist" unless they are immediately defined. Prefer simpler alternatives (e.g., "lawyer," "judge").
-7. **Tone and claims:** Watch for exaggeration or implying that Fermat invented a full primality test. Frame it correctly as a property/challenge.
-8. **Length and focus:** Do not penalize modestly longer stories (≈1.2–1.5×) when added details are directly relevant and improve clarity. Flag only if the narrative drifts into tangents or drops required clarifications.
+**Checklist (all must hold):**
+1. Concept naming: "${topic}" appears within the first four sentences, and any naming note with qualifiers is accurate and neutral.
+2. Historical anchor: the narrative keeps the Origins Capsule semantics—neutral verbs like "described" or "published", no sole-credit claims, and names/timing that match mainstream consensus.
+3. Insight hint: exactly one or two sentences, purely conceptual, no equations, symbols, or step sequences.
+4. Naming & exclusivity guardrails: no "coined", "invented", "first", or "sole" assertions unless universally accepted and stated in the capsule; hedged wording is encouraged.
+5. Modern tie-in: confined to the final paragraph and matches one approved template with hedged language.
+6. Ending invitation: final sentences promise learners they will learn the details and master the idea in programming challenges.
+7. Vocabulary and tone: CEFR B2 or simpler; define any specialist title immediately; keep charged adjectives to a minimum.
 
-**Verdict Rules:**
-- Return "pass" only if **all** checklist items are satisfied and no critical/major issues remain.
-- Otherwise return "fail" and list every blocking issue with clear evidence and an actionable recommendation.
+**Approved Modern Tie-in Templates (compare with the final paragraph):**
+1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
+2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
+3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
+
+**Reporting Instructions:**
+- Return "pass" only when every checklist item succeeds and no critical/major blockers remain; otherwise return "fail".
+- For each issue, start the summary with "Tag: <taxonomy> – ..." where taxonomy ∈ { namingAttribution, exclusivityClaim, modernTieInOverclaim, datePrecision, wrongEntity, other }.
+- Record the same taxonomy in the JSON field "tag". Provide severity, evidence (with citations when referencing sources), and a concrete recommendation.
+- Populate the "blockers" object: set boolean keys to true when the story violates the guardrail, false when resolved. For "datePrecision", use "hedged" if the prose already uses approximate timing, "recommend-hedge" if it still needs softening, or false when precise dating is acceptable.
+- Treat an un-hedged or non-template modern ending as modernTieInOverclaim.
 
 **Output JSON Schema:**
 {
   "verdict": "pass" | "fail",
   "issues": [
     {
+      "tag": "namingAttribution" | "exclusivityClaim" | "modernTieInOverclaim" | "datePrecision" | "wrongEntity" | "other",
       "summary": string,
       "category": "factual" | "naming" | "terminology" | "structure" | "tone" | "requirement" | "other",
       "severity": "critical" | "major" | "minor",
       "evidence": string,
       "recommendation": string
     }
-  ]
+  ],
+  "blockers": {
+    "namingAttribution": boolean,
+    "exclusivityClaim": boolean,
+    "modernTieInOverclaim": boolean,
+    "datePrecision": "hedged" | "recommend-hedge" | false,
+    "wrongEntity": boolean
+  }
 }
 
-If there are no issues, respond with an empty array.
+If there are no issues, return an empty array for \\"issues\\" but still include the \\"blockers\\" object with truthful values.
 `;
 }
 
@@ -1463,15 +1665,265 @@ export async function generateStoryIdea(
   throw new Error("Story idea generation failed; no idea was produced.");
 }
 
+function buildOriginsCapsuleResearchContext(idea: StoryIdeaResult): string {
+  const data = idea.data;
+  if (!data) {
+    return idea.brief;
+  }
+  const { researchSnapshot, recommendation, candidates } = data;
+  const selectedCandidate = candidates.find(
+    (candidate) => candidate.id === recommendation.selectedCandidateId
+  );
+  const lines: string[] = [];
+  lines.push(`Conceptual Essence: ${researchSnapshot.conceptualEssence}`);
+  lines.push(
+    `Primary Figure: ${researchSnapshot.historicalAnchor.figure}`
+  );
+  lines.push(
+    `Canonical Event: ${researchSnapshot.historicalAnchor.canonicalEvent}`
+  );
+  lines.push(
+    `High-Stakes Problem: ${researchSnapshot.historicalAnchor.highStakesProblem}`
+  );
+  if (researchSnapshot.namingNote) {
+    lines.push(`Naming Note: ${researchSnapshot.namingNote}`);
+  }
+  if (researchSnapshot.historicalNuance) {
+    lines.push(`Historical Nuance: ${researchSnapshot.historicalNuance}`);
+  }
+  if (selectedCandidate) {
+    lines.push(`Selected Angle: ${selectedCandidate.angle}`);
+    lines.push(`Anchor Event Detail: ${selectedCandidate.anchorEvent}`);
+    if (selectedCandidate.namingNote) {
+      lines.push(`Candidate Naming Detail: ${selectedCandidate.namingNote}`);
+    }
+  }
+  return lines.map((line) => `- ${line}`).join("\n");
+}
+
+function buildOriginsCapsulePrompt(
+  topic: string,
+  researchContext: string,
+  additionalGuidance?: string
+): string {
+  const guidance = additionalGuidance && additionalGuidance.trim().length > 0
+    ? `\n**Adjustments from fact-check feedback:**\n${additionalGuidance.trim()}\n`
+    : "";
+  return [
+    "### Origins Capsule Forge",
+    "",
+    `**Role:** Craft a two-sentence Origins Capsule for the concept "${topic}" using the validated research below.`,
+    "**Audience:** 12–16 year olds who need a reliable, memorable anchor.",
+    "",
+    "**Mission Parameters:**",
+    "1. Output exactly two sentences (max 40 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
+    "2. Sentence 1: Introduce the classical anchor using a neutral verb (\"described\", \"published\", \"popularized\") with approximate timing and include the phrasing \"now known as\" before the concept name.",
+    "3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as \"independently developed\", \"... and others\", or \"later published\".",
+    "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
+    "5. Avoid exclusivity claims (\"first\", \"sole inventor\", \"coined\") unless universally accepted.",
+    "6. No citations, quotation marks, or parenthetical lists. Keep to plain prose suitable for narration.",
+    "7. Limit to one named individual or institution; mention others only through hedged phrases (\"... and others\").",
+    guidance,
+    "**Validated Research Extract:**",
+    researchContext,
+    "",
+    "Return only the two-sentence capsule with standard punctuation."
+  ]
+    .filter((segment) => segment !== "")
+    .join("\n");
+}
+
+function buildOriginsCapsuleValidationPrompt(
+  topic: string,
+  capsule: string,
+  researchContext: string
+): string {
+  return [
+    "### Origins Capsule Fact-Check",
+    "",
+    "You are verifying a two-sentence Origins Capsule before it is locked for downstream prompts.",
+    "",
+    "**Capsule Under Review:**",
+    capsule,
+    "",
+    "**Reference Research:**",
+    researchContext,
+    "",
+    "**Validation Checklist:**",
+    "1. Names, titles, institutions, and dates must align with mainstream historical accounts referenced in the research extract.",
+    "2. Ensure the capsule keeps the neutral \"now known as\" framing without implying exclusive naming or invention.",
+    "3. Confirm hedged nuance is honest—allow \"... and others\" when additional contributors exist. Do not demand exhaustive lists.",
+    "4. Block the capsule only for catastrophic issues: wrong entities, wrong dates, exclusive origin claims, or unverifiable attributions.",
+    "",
+    "**Instructions:**",
+    "- Run web searches as needed to confirm uncertain claims.",
+    "- If everything checks out, set verdict to \"pass\" and leave issues empty.",
+    "- If problems remain, set verdict to \"fail\" and record each blocker with a short summary and a concrete recommendation (e.g., hedge a date, drop a contested name).",
+    "",
+    "Respond in JSON following the schema with fields 'verdict' and 'issues'."
+  ].join("\n");
+}
+
+async function validateOriginsCapsule(
+  topic: string,
+  capsule: string,
+  researchContext: string,
+  progress?: StoryProgress,
+  options?: StoryDebugOptions,
+  attemptLabel?: string
+): Promise<OriginsCapsuleValidationResponse> {
+  const adapter = useProgress(progress);
+  const prompt = buildOriginsCapsuleValidationPrompt(
+    topic,
+    capsule,
+    researchContext
+  );
+  const debug = options?.debugRootDir
+    ? {
+        rootDir: options.debugRootDir,
+        stage:
+          combineDebugSegments(
+            options.debugSubStage ?? "origins",
+            attemptLabel,
+            "validation"
+          ) ?? `origins/${attemptLabel ?? "validation"}/validation`,
+      }
+    : undefined;
+  return generateJson<OriginsCapsuleValidationResponse>({
+    progress: adapter,
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    responseSchema: ORIGINS_CAPSULE_VALIDATION_RESPONSE_SCHEMA,
+    schema: OriginsCapsuleValidationResponseSchema,
+    tools: [{ type: "web-search" }],
+    debug,
+  });
+}
+
+export async function generateOriginsCapsule(
+  topic: string,
+  idea: StoryIdeaResult,
+  progress?: StoryProgress,
+  options?: StoryDebugOptions
+): Promise<StoryOriginsCapsule> {
+  const adapter = useProgress(progress);
+  const researchContext = buildOriginsCapsuleResearchContext(idea);
+  let additionalGuidance: string | undefined;
+  for (
+    let attempt = 1;
+    attempt <= ORIGINS_CAPSULE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(ORIGINS_CAPSULE_MAX_ATTEMPTS).padStart(2, "0")}`;
+    adapter.log(
+      `[story/origins] capsule generation ${attemptLabel}`
+    );
+    const debug = options?.debugRootDir
+      ? {
+          rootDir: options.debugRootDir,
+          stage:
+            combineDebugSegments(
+              options?.debugSubStage ?? "origins",
+              attemptLabel,
+              "draft"
+            ) ?? `origins/${attemptLabel}/draft`,
+        }
+      : undefined;
+    const prompt = buildOriginsCapsulePrompt(
+      topic,
+      researchContext,
+      additionalGuidance
+    );
+    const raw = await generateText({
+      progress: adapter,
+      modelId: TEXT_MODEL_ID,
+      contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+      debug,
+    });
+    const candidate = raw.replace(/\s+/gu, " ").trim();
+    const structuralIssues: string[] = [];
+    const sentences = candidate
+      .split(/(?<=[.!?])\s+/u)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length > 0);
+    if (sentences.length !== 2) {
+      structuralIssues.push(
+        `Produce exactly two sentences separated by a single space (you returned ${sentences.length}).`
+      );
+    }
+    const wordCount = candidate.length
+      ? candidate.split(/\s+/u).filter((word) => word.length > 0).length
+      : 0;
+    if (wordCount === 0) {
+      structuralIssues.push("The capsule was empty.");
+    }
+    if (wordCount > 40) {
+      structuralIssues.push(
+        `Reduce the word count to 40 or fewer (current count: ${wordCount}).`
+      );
+    }
+    if (structuralIssues.length > 0) {
+      additionalGuidance = [
+        "Fix the structural issues before retrying:",
+        ...structuralIssues.map((issue) => `- ${issue}`),
+      ].join("\n");
+      adapter.log(
+        `[story/origins] structural check failed: ${structuralIssues.join(", ")}`
+      );
+      continue;
+    }
+
+    const validation = await validateOriginsCapsule(
+      topic,
+      candidate,
+      researchContext,
+      progress,
+      options,
+      attemptLabel
+    );
+    if (validation.verdict === "pass") {
+      adapter.log("[story/origins] capsule validated");
+      return StoryOriginsCapsuleSchema.parse({ text: candidate });
+    }
+
+    const blockers = validation.issues.length
+      ? validation.issues
+      : [{
+          summary:
+            "Fact-checker flagged unresolved concerns without specific details.",
+          recommendation:
+            "Increase hedging or remove uncertain names before retrying.",
+        }];
+    additionalGuidance = [
+      "Revise the capsule to address the fact-check feedback:",
+      ...blockers.map(
+        (issue, index) =>
+          `${index + 1}. ${issue.summary} — ${issue.recommendation}`
+      ),
+      "Default to hedged phrasing or drop disputed claims if certainty is low.",
+    ].join("\n");
+    adapter.log(
+      `[story/origins] fact-check failed: ${blockers
+        .map((issue) => issue.summary)
+        .join("; ")}`
+    );
+  }
+
+  throw new Error(
+    `Origins capsule generation failed after ${ORIGINS_CAPSULE_MAX_ATTEMPTS} attempt(s).`
+  );
+}
+
 export async function generateStoryProseDraft(
   topic: string,
   idea: StoryIdeaResult,
+  originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   options?: StoryDebugOptions
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryDraftPrompt(topic, idea.brief);
+  const prompt = buildStoryDraftPrompt(topic, idea.brief, originsCapsule.text);
   const text = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -1498,13 +1950,19 @@ export async function generateStoryProseDraft(
 export async function generateStoryProseRevision(
   topic: string,
   draft: StoryProseDraftResult,
+  originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
   feedback?: string
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryRevisionPrompt(topic, draft.text, feedback);
+  const prompt = buildStoryRevisionPrompt(
+    topic,
+    draft.text,
+    originsCapsule.text,
+    feedback
+  );
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -1536,6 +1994,7 @@ export async function generateStoryProseRevision(
     text,
     analysis: response.analysis,
     improvementSummary: response.improvementSummary.trim(),
+    fixChecklist: response.fixChecklist,
   };
 }
 
@@ -1626,6 +2085,11 @@ export async function validateStoryProse(
   adapter.log(
     `[story/prose-validation] verdict: ${structuralResponse.verdict}${structuralResponse.issues.length ? ` (${structuralResponse.issues.length} issue(s))` : ""}`
   );
+  if (!structuralResponse.blockers) {
+    throw new Error(
+      "Story validation response omitted the blockers object; retrying"
+    );
+  }
   return structuralResponse;
 }
 
@@ -1637,31 +2101,129 @@ function summariseValidationIssues(
   }
   return issues
     .map((issue, index) => {
-      const label = `${index + 1}. [${issue.severity.toUpperCase()} - ${issue.category}]`;
+      const tagSegment = issue.tag ? ` - ${issue.tag}` : "";
+      const label = `${index + 1}. [${issue.severity.toUpperCase()} - ${issue.category}${tagSegment}]`;
       return `${label} ${issue.summary}`;
     })
     .join("; ");
 }
 
-function buildValidationFeedback(
-  issues: readonly StoryProseValidationIssue[]
-): string {
-  if (issues.length === 0) {
-    return "The fact-checker flagged the story but did not list issues. Recheck every checklist item (facts, naming, insight hint, modern placement, ending invitation, vocabulary) and correct any violations.";
+function buildBlockerMessages(
+  blockers: StoryValidationBlockers | undefined
+): string[] {
+  if (!blockers) {
+    return [];
   }
-  return [
-    "Address each blocking issue identified by the fact-checker:",
-    ...issues.map((issue, index) => {
+  const messages: string[] = [];
+  if (blockers.namingAttribution === true) {
+    messages.push(
+      "Replace ‘coined/named/formalized by’ with neutral ‘now known as’ / ‘widely called’ phrasing."
+    );
+  }
+  if (blockers.exclusivityClaim === true) {
+    messages.push(
+      "Remove exclusive ‘first/sole’ origin claims; swap them for hedged language like ‘credited among early contributors’."
+    );
+  }
+  if (blockers.modernTieInOverclaim === true) {
+    messages.push(
+      "Switch the ending to one of the approved hedged modern-connection templates."
+    );
+  }
+  const datePrecision = blockers.datePrecision;
+  if (
+    datePrecision === "recommend-hedge" ||
+    (typeof datePrecision === "boolean" && datePrecision)
+  ) {
+    messages.push(
+      "Use an approximate era (e.g., ‘late 19xx’) instead of a precise date unless high confidence."
+    );
+  }
+  if (blockers.wrongEntity === true) {
+    messages.push(
+      "Correct names, titles, or institutions to the mainstream textbook versions."
+    );
+  }
+  return messages;
+}
+
+function buildFixChecklistMismatches(
+  blockers: StoryValidationBlockers | undefined,
+  checklist: StoryFixChecklist | undefined
+): string[] {
+  if (!blockers || !checklist) {
+    return [];
+  }
+  const messages: string[] = [];
+  if (blockers.namingAttribution === true && checklist.namingAttribution) {
+    messages.push(
+      "Set fixChecklist.namingAttribution to false until the prose uses neutral naming (‘now known as’ / ‘widely called’)."
+    );
+  }
+  if (blockers.exclusivityClaim === true && checklist.exclusivityClaim) {
+    messages.push(
+      "Set fixChecklist.exclusivityClaim to false until exclusive ‘first/sole’ phrasing is removed."
+    );
+  }
+  if (blockers.modernTieInOverclaim === true && checklist.modernTieInOverclaim) {
+    messages.push(
+      "Set fixChecklist.modernTieInOverclaim to false until the ending uses one approved hedged template."
+    );
+  }
+  if (blockers.wrongEntity === true && checklist.wrongEntity) {
+    messages.push(
+      "Set fixChecklist.wrongEntity to false until all names and titles match mainstream accounts."
+    );
+  }
+  const datePrecision = blockers.datePrecision;
+  if (
+    (datePrecision === "recommend-hedge" ||
+      (typeof datePrecision === "boolean" && datePrecision)) &&
+    checklist.datePrecision !== "recommend-hedge"
+  ) {
+    messages.push(
+      "Set fixChecklist.datePrecision to \"recommend-hedge\" until the timeline uses approximate phrasing."
+    );
+  }
+  return messages;
+}
+
+function buildValidationFeedback(
+  issues: readonly StoryProseValidationIssue[],
+  blockers: StoryValidationBlockers | undefined
+): string {
+  const sections: string[] = [];
+  const blockerMessages = buildBlockerMessages(blockers);
+  if (blockerMessages.length > 0) {
+    sections.push(
+      "Resolve the guardrail blockers:",
+      ...blockerMessages.map(
+        (message, index) => `${index + 1}. ${message}`
+      )
+    );
+  }
+
+  if (issues.length > 0) {
+    const detailed = issues.map((issue, index) => {
+      const tagSegment = issue.tag ? ` – ${issue.tag}` : "";
       const lines = [
-        `${index + 1}. (${issue.severity.toUpperCase()} – ${issue.category}) ${issue.summary}`,
+        `${index + 1}. (${issue.severity.toUpperCase()} – ${issue.category}${tagSegment}) ${issue.summary}`,
         `   Evidence: ${issue.evidence}`,
         `   Recommendation: ${issue.recommendation}`,
       ];
       return lines.join("\n");
-    }),
-  ].join("\n");
+    });
+    sections.push("Detailed fact-check notes:", ...detailed);
+  }
+
+  if (sections.length === 0) {
+    return "The fact-checker flagged the story but did not supply actionable feedback. Recheck every guardrail (naming, exclusivity, modern tie-in, date precision, wrong entities) before attempting another revision.";
+  }
+
+  return sections.join("\n");
 }
 
+const ORIGINS_CAPSULE_MAX_ATTEMPTS = 3;
 const IDEA_GENERATION_MAX_ATTEMPTS = 3;
 const PROSE_DRAFT_MAX_ATTEMPTS = 3;
 const PROSE_REVISION_MAX_ATTEMPTS = 3;
@@ -1779,6 +2341,7 @@ async function prepareProseVariantDraft(
   topic: string,
   label: StoryProseVariantLabel,
   idea: StoryIdeaResult,
+  originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions
 ): Promise<StoryProseDraftVariant> {
@@ -1797,10 +2360,11 @@ async function prepareProseVariantDraft(
       const draft = await generateStoryProseDraft(
         topic,
         idea,
+        originsCapsule,
         progress,
         draftOptions
       );
-      return { label, idea, draft };
+      return { label, idea, originsCapsule, draft };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error ?? "unknown");
@@ -1851,6 +2415,7 @@ async function reviseProseVariant(
     const candidate = await generateStoryProseRevision(
       topic,
       variant.draft,
+      variant.originsCapsule,
       progress,
       revisionOptions,
       feedback
@@ -1862,6 +2427,12 @@ async function reviseProseVariant(
       validationOptions
     );
     if (validation.verdict === "pass") {
+      const lingeringBlockers = buildBlockerMessages(validation.blockers);
+      if (lingeringBlockers.length > 0) {
+        throw new Error(
+          `Story validation reported 'pass' but blockers remain: ${lingeringBlockers.join("; ")}`
+        );
+      }
       revision = { ...candidate, validation };
       break;
     }
@@ -1876,7 +2447,22 @@ async function reviseProseVariant(
         `Story prose validation failed for ${variant.label} after ${PROSE_REVISION_MAX_ATTEMPTS} attempt(s): ${summary}`
       );
     }
-    feedback = buildValidationFeedback(validation.issues);
+    const checklistMismatches = buildFixChecklistMismatches(
+      validation.blockers,
+      candidate.fixChecklist
+    );
+    feedback = buildValidationFeedback(
+      validation.issues,
+      validation.blockers
+    );
+    if (checklistMismatches.length > 0) {
+      feedback = [
+        "Update the fixChecklist so it reflects unresolved blockers:",
+        ...checklistMismatches,
+        "",
+        feedback,
+      ].join("\n");
+    }
   }
   if (!revision) {
     throw new Error(
@@ -1887,6 +2473,7 @@ async function reviseProseVariant(
     label: variant.label,
     idea: variant.idea,
     draft: variant.draft,
+    originsCapsule: variant.originsCapsule,
     revision,
   };
 }
@@ -1986,9 +2573,22 @@ export async function generateProseStory(
   options?: StoryDebugOptions
 ): Promise<StoryProseResult> {
   const idea = await generateStoryIdea(topic, progress, options);
+  const originsCapsule = await generateOriginsCapsule(
+    topic,
+    idea,
+    progress,
+    options
+  );
   const variantDrafts = await Promise.all(
     STORY_PROSE_VARIANT_LABELS.map((label) =>
-      prepareProseVariantDraft(topic, label, idea, progress, options)
+      prepareProseVariantDraft(
+        topic,
+        label,
+        idea,
+        originsCapsule,
+        progress,
+        options
+      )
     )
   );
   const variantResults = await Promise.all(
@@ -2015,17 +2615,21 @@ export async function generateProseStory(
     metadata: {
       ideaBrief: winning.idea.brief,
       draftText: winning.draft.text,
+      originsCapsule: winning.originsCapsule.text,
       analysis: winning.revision.analysis,
       improvementSummary: winning.revision.improvementSummary,
+      fixChecklist: winning.revision.fixChecklist,
       validation: winning.revision.validation,
       variantLabel: judge.verdict,
       variants: variantResults.map((variant) => ({
         label: variant.label,
         ideaBrief: variant.idea.brief,
         draftText: variant.draft.text,
+        originsCapsule: variant.originsCapsule.text,
         text: variant.revision.text,
         analysis: variant.revision.analysis,
         improvementSummary: variant.revision.improvementSummary,
+        fixChecklist: variant.revision.fixChecklist,
         validation: variant.revision.validation,
       })),
       judge,
@@ -2942,6 +3546,7 @@ function toMediaSegments(
 
 export type StoryGenerationStageName =
   | "idea"
+  | "origins_capsule"
   | "prose"
   | "prose-revision"
   | "segmentation"
@@ -2951,6 +3556,7 @@ export type StoryGenerationStageName =
 
 const STORY_STAGE_ORDER: readonly StoryGenerationStageName[] = [
   "idea",
+  "origins_capsule",
   "prose",
   "prose-revision",
   "segmentation",
@@ -3008,6 +3614,7 @@ function normaliseStoragePath(raw: string): string {
 export class StoryGenerationPipeline {
   private readonly caches: {
     idea?: StageCacheEntry<StoryIdeaResult>;
+    originsCapsule?: StageCacheEntry<StoryOriginsCapsule>;
     proseDraft?: StageCacheEntry<StoryProseDraftVariant[]>;
     prose?: StageCacheEntry<StoryProseRevisionResult>;
     segmentation?: StageCacheEntry<StorySegmentation>;
@@ -3089,6 +3696,62 @@ export class StoryGenerationPipeline {
     return filePath;
   }
 
+  private async readOriginsCapsuleCheckpoint(): Promise<
+    StageReadResult<StoryOriginsCapsule> | undefined
+  > {
+    const filePath = this.stageFile("origins_capsule");
+    if (!filePath) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(filePath, { encoding: "utf8" });
+      const parsed = JSON.parse(raw);
+      const checkpoint = StoryOriginsCapsuleCheckpointSchema.parse(parsed);
+      if (checkpoint.topic !== this.options.topic) {
+        this.logger.log(
+          `[story/checkpoint] ignoring 'origins_capsule' checkpoint at ${filePath} (topic mismatch)`
+        );
+        return undefined;
+      }
+      const value = StoryOriginsCapsuleSchema.safeParse({
+        text: checkpoint.capsule,
+      });
+      if (!value.success) {
+        this.logger.log(
+          `[story/checkpoint] ignored 'origins_capsule' checkpoint at ${filePath} (schema mismatch)`
+        );
+        return undefined;
+      }
+      return {
+        value: value.data,
+        filePath,
+      };
+    } catch (error) {
+      if (isEnoent(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async writeOriginsCapsuleCheckpoint(
+    value: StoryOriginsCapsule
+  ): Promise<string | undefined> {
+    const filePath = this.stageFile("origins_capsule");
+    if (!filePath || !this.checkpointDir) {
+      return undefined;
+    }
+    await mkdir(this.checkpointDir, { recursive: true });
+    const payload: StoryOriginsCapsuleCheckpoint = {
+      topic: this.options.topic,
+      capsule: value.text,
+    };
+    await writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: "utf8",
+    });
+    return filePath;
+  }
+
   private async readProseCheckpoint(): Promise<
     StageReadResult<StoryProseDraftVariant[]> | undefined
   > {
@@ -3117,6 +3780,9 @@ export class StoryGenerationPipeline {
         (variant) => ({
           label: variant.label,
           idea: { brief: variant.ideaBrief },
+          originsCapsule: StoryOriginsCapsuleSchema.parse({
+            text: variant.originsCapsule,
+          }),
           draft: { text: variant.draftText },
         })
       );
@@ -3143,6 +3809,7 @@ export class StoryGenerationPipeline {
         label: variant.label,
         ideaBrief: variant.idea.brief,
         draftText: variant.draft.text,
+        originsCapsule: variant.originsCapsule.text,
       })),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -3192,9 +3859,11 @@ export class StoryGenerationPipeline {
           label: variant.label,
           ideaBrief: variant.ideaBrief,
           draftText: variant.draftText,
+          originsCapsule: variant.originsCapsule,
           text: variant.text,
           analysis: variant.analysis,
           improvementSummary: variant.improvementSummary,
+          fixChecklist: variant.fixChecklist,
           validation: variant.validation,
         }));
       const winningMetadata = variantsMetadata.find(
@@ -3211,12 +3880,15 @@ export class StoryGenerationPipeline {
           text: checkpoint.text,
           analysis: checkpoint.analysis,
           improvementSummary: checkpoint.improvementSummary,
+          fixChecklist: checkpoint.fixChecklist,
           validation: checkpoint.validation,
           metadata: {
             ideaBrief: winningMetadata.ideaBrief,
             draftText: winningMetadata.draftText,
+            originsCapsule: checkpoint.originsCapsule,
             analysis: checkpoint.analysis,
             improvementSummary: checkpoint.improvementSummary,
+            fixChecklist: checkpoint.fixChecklist,
             validation: checkpoint.validation,
             variantLabel: checkpoint.variantLabel,
             variants: variantsMetadata,
@@ -3252,15 +3924,19 @@ export class StoryGenerationPipeline {
       text: winning.revision.text,
       analysis: winning.revision.analysis,
       improvementSummary: winning.revision.improvementSummary,
+      fixChecklist: winning.revision.fixChecklist,
       validation: winning.revision.validation,
       variantLabel: winning.label,
+      originsCapsule: winning.originsCapsule.text,
       variants: variants.map((variant) => ({
         label: variant.label,
         ideaBrief: variant.idea.brief,
         draftText: variant.draft.text,
+        originsCapsule: variant.originsCapsule.text,
         text: variant.revision.text,
         analysis: variant.revision.analysis,
         improvementSummary: variant.revision.improvementSummary,
+        fixChecklist: variant.revision.fixChecklist,
         validation: variant.revision.validation,
       })),
       judge,
@@ -3483,6 +4159,10 @@ export class StoryGenerationPipeline {
         this.caches.idea = undefined;
         break;
       }
+      case "origins_capsule": {
+        this.caches.originsCapsule = undefined;
+        break;
+      }
       case "prose": {
         this.caches.proseDraft = undefined;
         break;
@@ -3564,6 +4244,51 @@ export class StoryGenerationPipeline {
     return entry;
   }
 
+  private async ensureOriginsCapsule(): Promise<
+    StageCacheEntry<StoryOriginsCapsule>
+  > {
+    if (this.caches.originsCapsule) {
+      return this.caches.originsCapsule;
+    }
+    const checkpoint = await this.readOriginsCapsuleCheckpoint();
+    if (checkpoint) {
+      const entry: StageCacheEntry<StoryOriginsCapsule> = {
+        value: checkpoint.value,
+        source: "checkpoint",
+        checkpointPath: checkpoint.filePath,
+      };
+      this.caches.originsCapsule = entry;
+      this.logger.log(
+        `[story/checkpoint] restored 'origins_capsule' from ${checkpoint.filePath}`
+      );
+      return entry;
+    }
+    await this.invalidateAfter("origins_capsule");
+    const { value: idea } = await this.ensureIdea();
+    const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
+      ? { debugRootDir: this.options.debugRootDir, debugSubStage: "origins" }
+      : undefined;
+    const capsule = await generateOriginsCapsule(
+      this.options.topic,
+      idea,
+      this.options.progress,
+      baseDebug
+    );
+    const checkpointPath = await this.writeOriginsCapsuleCheckpoint(capsule);
+    const entry: StageCacheEntry<StoryOriginsCapsule> = {
+      value: capsule,
+      source: "generated",
+      checkpointPath,
+    };
+    this.caches.originsCapsule = entry;
+    if (checkpointPath) {
+      this.logger.log(
+        `[story/checkpoint] wrote 'origins_capsule' to ${checkpointPath}`
+      );
+    }
+    return entry;
+  }
+
   private async ensureProseDraft(): Promise<
     StageCacheEntry<StoryProseDraftVariant[]>
   > {
@@ -3585,6 +4310,7 @@ export class StoryGenerationPipeline {
     }
     await this.invalidateAfter("prose");
     const { value: idea } = await this.ensureIdea();
+    const { value: originsCapsule } = await this.ensureOriginsCapsule();
     const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
       ? { debugRootDir: this.options.debugRootDir }
       : undefined;
@@ -3594,6 +4320,7 @@ export class StoryGenerationPipeline {
           this.options.topic,
           label,
           idea,
+          originsCapsule,
           this.options.progress,
           baseDebug
         )
@@ -3662,17 +4389,21 @@ export class StoryGenerationPipeline {
     const metadata: StoryProseResult["metadata"] = {
       ideaBrief: winning.idea.brief,
       draftText: winning.draft.text,
+      originsCapsule: winning.originsCapsule.text,
       analysis: winning.revision.analysis,
       improvementSummary: winning.revision.improvementSummary,
+      fixChecklist: winning.revision.fixChecklist,
       validation: winning.revision.validation,
       variantLabel: judge.verdict,
       variants: variantResults.map((variant) => ({
         label: variant.label,
         ideaBrief: variant.idea.brief,
         draftText: variant.draft.text,
+        originsCapsule: variant.originsCapsule.text,
         text: variant.revision.text,
         analysis: variant.revision.analysis,
         improvementSummary: variant.revision.improvementSummary,
+        fixChecklist: variant.revision.fixChecklist,
         validation: variant.revision.validation,
       })),
       judge,
@@ -3681,6 +4412,7 @@ export class StoryGenerationPipeline {
       text: winning.revision.text,
       analysis: winning.revision.analysis,
       improvementSummary: winning.revision.improvementSummary,
+      fixChecklist: winning.revision.fixChecklist,
       validation: winning.revision.validation,
       metadata,
     };
