@@ -25,13 +25,11 @@ WORKDIR /workspace
 COPY packages ./packages
 COPY web ./web
 
-# Bring in root manifests and workspace node_modules from deps stage
+# Bring in root manifests and hoisted node_modules from deps stage
 COPY --from=deps /workspace/package.json ./package.json
 COPY --from=deps /workspace/package-lock.json ./package-lock.json
 COPY --from=deps /workspace/node_modules ./node_modules
-COPY --from=deps /workspace/web/node_modules ./web/node_modules
-# COPY --from=deps /workspace/packages/llm/node_modules ./packages/llm/node_modules
-# COPY --from=deps /workspace/packages/schemas/node_modules ./packages/schemas/node_modules
+# Note: workspace packages typically hoist to root; per-package node_modules may not exist.
 
 # Ensure adapter-auto picks Node in CI images (matches existing behavior)
 ENV GCP_BUILDPACKS="make-sveltekit-adapter-auto-use-node"
