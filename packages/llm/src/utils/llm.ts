@@ -1420,7 +1420,7 @@ export async function generateJson<T>(
         attempt,
         maxAttempts,
       });
-      const payload = JSON.parse(rawText);
+      const payload: unknown = JSON.parse(rawText);
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {
