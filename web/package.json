@@ -4,7 +4,8 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "FORCE_TEST_USER=true vite dev --port 3000",
+		"dev": "vite dev --host 0.0.0.0 --port 8080",
+		"dev:test-user": "FORCE_TEST_USER=true vite dev --host 0.0.0.0 --port 8080",
 		"dev:https": "vite dev --port 8080",
 		"build": "vite build",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
