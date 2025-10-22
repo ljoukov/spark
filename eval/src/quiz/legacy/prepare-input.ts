@@ -24,7 +24,10 @@ import {
 } from "@spark/llm/utils/concurrency";
 import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../../utils/paths";
 import { detectMimeType } from "../../utils/mime";
-import { convertGooglePartsToLlmParts, generateJson } from "@spark/llm/utils/llm";
+import {
+  convertGooglePartsToLlmParts,
+  generateJson,
+} from "@spark/llm/utils/llm";
 import { createCliCommand, createIntegerParser } from "../../utils/cli";
 
 ensureEvalEnvLoaded();
