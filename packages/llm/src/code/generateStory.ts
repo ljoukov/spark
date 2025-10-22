@@ -1549,7 +1549,10 @@ export function buildSegmentationPrompt(
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
   const topicLines =
     topic && topic.trim().length > 0
-      ? [`Story topic: ${topic.trim()}. Keep narration aligned to this theme.`, ""]
+      ? [
+          `Story topic: ${topic.trim()}. Keep narration aligned to this theme.`,
+          "",
+        ]
       : [];
   return [
     "Convert the provided historical story into a structured narration and illustration plan.",
