@@ -15,11 +15,11 @@ import {
 	FirestoreTimestampSchema
 } from '@spark/schemas';
 
-import { clientFirebaseConfig } from '$lib/config/firebase';
 import {
 	getFirebaseAdminFirestore,
 	getFirebaseAdminFirestoreModule,
-	getFirebaseAdminStorage
+	getFirebaseAdminStorage,
+	getFirebaseStorageBucketName
 } from '@spark/llm';
 import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
@@ -51,17 +51,13 @@ const TEMPLATE_DOC_ID = 'templates';
 const TEMPLATE_SESSIONS_COLLECTION = 'sessions';
 const { Timestamp } = getFirebaseAdminFirestoreModule();
 
-const firebaseAdminOptions = {
-	storageBucket: clientFirebaseConfig.storageBucket
-};
-
 function getFirestore() {
-	return getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
+	return getFirebaseAdminFirestore();
 }
 
 function getStorageBucket() {
-	const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
-	return storage.bucket();
+	const storage = getFirebaseAdminStorage();
+	return storage.bucket(getFirebaseStorageBucketName());
 }
 
 const TemplateDocSchema = z.object({

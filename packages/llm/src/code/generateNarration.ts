@@ -83,7 +83,6 @@ export type NarrationJob = {
   sessionId: string;
   planItemId: string;
   segments: readonly MediaSegment[];
-  storageBucket: string;
   posterImage?: NarrationSupplementaryImage;
   endingImage?: NarrationSupplementaryImage;
   voiceMap?: Partial<Record<SpeakerCode, Voice>>;
@@ -140,7 +139,6 @@ export async function synthesizeAndPublishNarration(
     planItemId: job.planItemId,
     segments: job.segments,
     audio: audioResult,
-    storageBucket: job.storageBucket,
     posterImage: job.posterImage,
     endingImage: job.endingImage,
   });

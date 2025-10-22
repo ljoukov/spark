@@ -1,5 +1,8 @@
-import { clientFirebaseConfig } from '$lib/config/firebase';
-import { getFirebaseAdminFirestore, getFirebaseAdminStorage } from '@spark/llm';
+import {
+	getFirebaseAdminFirestore,
+	getFirebaseAdminStorage,
+	getFirebaseStorageBucketName
+} from '@spark/llm';
 import {
 	SessionMediaDocSchema,
 	type SessionMediaDoc,
@@ -11,17 +14,13 @@ const userIdSchema = z.string().trim().min(1, 'userId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
 const planItemIdSchema = z.string().trim().min(1, 'planItemId is required');
 
-const firebaseAdminOptions = {
-	storageBucket: clientFirebaseConfig.storageBucket
-};
-
 function getFirestore() {
-	return getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
+	return getFirebaseAdminFirestore();
 }
 
 function getStorageBucket() {
-	const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
-	return storage.bucket();
+	const storage = getFirebaseAdminStorage();
+	return storage.bucket(getFirebaseStorageBucketName());
 }
 
 function normaliseStoragePath(input: string): string {

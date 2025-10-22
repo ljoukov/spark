@@ -3,7 +3,7 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import { getFirebaseAdminFirestore, getGoogleServiceAccount } from "@spark/llm";
+import { getFirebaseAdminFirestore } from "@spark/llm";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -71,7 +71,6 @@ type WelcomeSessionContext = {
 
 type RuntimeConfig = {
   userId: string;
-  storageBucket: string;
   debugRootBaseDir: string;
 };
 
@@ -2172,42 +2171,6 @@ const optionsSchema = z.object({
 
 type CliOptions = z.infer<typeof optionsSchema>;
 
-function normalizeBucketName(raw: string | undefined): string {
-  if (!raw) {
-    return "";
-  }
-  return raw
-    .trim()
-    .replace(/^gs:\/\//i, "")
-    .replace(/^https:\/\/storage\.googleapis\.com\//i, "")
-    .replace(/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i, "")
-    .replace(/\/.*$/, "");
-}
-
-function resolveStorageBucket(): string {
-  const sources = [
-    process.env.FIREBASE_STORAGE_BUCKET,
-    process.env.STORAGE_BUCKET,
-    process.env.GCLOUD_STORAGE_BUCKET,
-  ];
-  const bucketFromEnv = sources
-    .map((candidate) => normalizeBucketName(candidate))
-    .find((value) => value.length > 0);
-  if (bucketFromEnv) {
-    return bucketFromEnv;
-  }
-
-  try {
-    const serviceAccount = getGoogleServiceAccount();
-    return `${serviceAccount.projectId}.firebasestorage.app`;
-  } catch (error) {
-    throw new Error(
-      "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-      { cause: error instanceof Error ? error : undefined },
-    );
-  }
-}
-
 function resolveDebugRootBaseDir(): string {
   return path.join(
     WORKSPACE_PATHS.codeSyntheticDir,
@@ -2434,7 +2397,6 @@ async function ensureStoryResult(
         userId: runtime.userId,
         sessionId: blueprint.sessionId,
         planItemId: blueprint.storyPlanItemId,
-        storageBucket: runtime.storageBucket,
         progress,
         debugRootDir: resolveSessionDebugRootDir(
           runtime.debugRootBaseDir,
@@ -2649,7 +2611,6 @@ async function publishMediaAssets(
       sessionId: blueprint.sessionId,
       planItemId: source.planItemId,
       segments: source.segments,
-      storageBucket: runtime.storageBucket,
       progress: createConsoleProgress(
         `${blueprint.sessionId}/${source.planItemId}`,
       ),
@@ -2680,10 +2641,8 @@ async function executeStages(
 ): Promise<void> {
   ensureEvalEnvLoaded();
 
-  const storageBucket = resolveStorageBucket();
   const runtime: RuntimeConfig = {
     userId: TEMPLATE_USER_ID,
-    storageBucket,
     debugRootBaseDir: resolveDebugRootBaseDir(),
   };
 

@@ -3,11 +3,7 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { z } from "zod";
-import {
-  getTestUserId,
-  getFirebaseAdminFirestore,
-  getGoogleServiceAccount,
-} from "@spark/llm";
+import { getTestUserId, getFirebaseAdminFirestore } from "@spark/llm";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -944,46 +940,9 @@ async function ensureStoryCheckpointDir(
   return targetDir;
 }
 
-function normalizeBucketName(raw: string | undefined): string {
-  if (!raw) {
-    return "";
-  }
-  return raw
-    .trim()
-    .replace(/^gs:\/\//i, "")
-    .replace(/^https:\/\/storage\.googleapis\.com\//i, "")
-    .replace(/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i, "")
-    .replace(/\/.*$/, "");
-}
-
-function resolveStorageBucket(): string {
-  const sources = [
-    process.env.FIREBASE_STORAGE_BUCKET,
-    process.env.STORAGE_BUCKET,
-    process.env.GCLOUD_STORAGE_BUCKET,
-  ];
-  const bucketFromEnv = sources
-    .map((candidate) => normalizeBucketName(candidate))
-    .find((value) => value.length > 0);
-  if (bucketFromEnv) {
-    return bucketFromEnv;
-  }
-
-  try {
-    const serviceAccount = getGoogleServiceAccount();
-    return `${serviceAccount.projectId}.firebasestorage.app`;
-  } catch (error) {
-    throw new Error(
-      "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-      { cause: error instanceof Error ? error : undefined },
-    );
-  }
-}
-
 async function publishMediaAssets(
   userId: string,
   sessionId: string,
-  storageBucket: string,
 ): Promise<void> {
   if (MEDIA_SOURCES.length === 0) {
     console.log(
@@ -998,7 +957,6 @@ async function publishMediaAssets(
       sessionId,
       planItemId: source.planItemId,
       segments: source.segments,
-      storageBucket,
       progress: createConsoleProgress(source.planItemId),
     });
   }
@@ -1063,7 +1021,6 @@ type CliOptions = z.infer<typeof optionsSchema>;
 type RuntimeConfig = {
   userId: string;
   sessionId: string;
-  storageBucket: string;
   debugRootDir: string;
   storyCheckpointDir: string;
 };
@@ -1103,7 +1060,6 @@ async function ensureStoryResult(
         userId: runtime.userId,
         sessionId: runtime.sessionId,
         planItemId: STORY_PLAN_ITEM_ID,
-        storageBucket: runtime.storageBucket,
         progress,
         debugRootDir: runtime.debugRootDir,
         checkpointDir: runtime.storyCheckpointDir,
@@ -1191,7 +1147,6 @@ async function runPublishStage(
   await publishMediaAssets(
     runtime.userId,
     context.session.id,
-    runtime.storageBucket,
   );
 
   console.log(
@@ -1234,7 +1189,6 @@ async function main(): Promise<void> {
 
   const userId = getTestUserId();
   const sessionId = TEST_SESSION_ID;
-  const storageBucket = resolveStorageBucket();
   const debugRootBaseDir = resolveDebugRootDir();
   const sessionRootDir = resolveSessionRootDir(debugRootBaseDir, sessionId);
   const storyCheckpointDir = await ensureStoryCheckpointDir(
@@ -1247,7 +1201,6 @@ async function main(): Promise<void> {
   const runtime: RuntimeConfig = {
     userId,
     sessionId,
-    storageBucket,
     debugRootDir: sessionRootDir,
     storyCheckpointDir,
   };

@@ -17,7 +17,6 @@ import {
 } from "@spark/llm/code/generateStory";
 import {
   generateSessionAudio,
-  getGoogleServiceAccount,
   getTestUserId,
   type MediaSegment,
 } from "@spark/llm";
@@ -161,42 +160,6 @@ async function loadImageSetsFromDisk(
   }
 }
 
-function normalizeBucketName(raw: string | undefined): string {
-  if (!raw) {
-    return "";
-  }
-  return raw
-    .trim()
-    .replace(/^gs:\/\//i, "")
-    .replace(/^https:\/\/storage\.googleapis\.com\//i, "")
-    .replace(/^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\//i, "")
-    .replace(/\/.*$/, "");
-}
-
-function resolveStorageBucket(): string {
-  const sources = [
-    process.env.FIREBASE_STORAGE_BUCKET,
-    process.env.STORAGE_BUCKET,
-    process.env.GCLOUD_STORAGE_BUCKET,
-  ];
-  const bucketFromEnv = sources
-    .map((candidate) => normalizeBucketName(candidate))
-    .find((value) => value.length > 0);
-  if (bucketFromEnv) {
-    return bucketFromEnv;
-  }
-
-  try {
-    const serviceAccount = getGoogleServiceAccount();
-    return `${serviceAccount.projectId}.firebasestorage.app`;
-  } catch (error) {
-    throw new Error(
-      "FIREBASE_STORAGE_BUCKET (or STORAGE_BUCKET) must be provided to publish media assets.",
-      { cause: error instanceof Error ? error : undefined },
-    );
-  }
-}
-
 async function main(): Promise<void> {
   ensureEvalEnvLoaded();
   const program = new Command();
@@ -235,7 +198,6 @@ async function main(): Promise<void> {
       const userId = getTestUserId();
       const sessionId = TEST_SESSION_ID;
       const planItemId = STORY_PLAN_ITEM_ID;
-      const storageBucket = resolveStorageBucket();
       const debugRootDir = path.join(outDir, "debug");
       const checkpointDir = resolveCheckpointsDir(outDir);
 
@@ -244,7 +206,6 @@ async function main(): Promise<void> {
         userId,
         sessionId,
         planItemId,
-        storageBucket,
         progress,
         audioProgressLabel: "story/audio",
         debugRootDir,

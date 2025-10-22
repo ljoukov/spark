@@ -1,9 +1,9 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { clientFirebaseConfig } from '$lib/config/firebase';
 import {
 	getFirebaseAdminFirestore,
 	getFirebaseAdminFirestoreModule,
-	getFirebaseAdminStorage
+	getFirebaseAdminStorage,
+	getFirebaseStorageBucketName
 } from '@spark/llm';
 import { type SparkUploadQuizStatus, type SparkUploadStatus } from '@spark/schemas';
 import { json, type RequestHandler } from '@sveltejs/kit';
@@ -135,13 +135,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			? `spark/uploads/${userId}/${digest}.${extension}`
 			: `spark/uploads/${userId}/${digest}`;
 
-	const firebaseAdminOptions = {
-		storageBucket: clientFirebaseConfig.storageBucket
-	};
-
 	try {
-		const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
-		const bucket = storage.bucket();
+		const storage = getFirebaseAdminStorage();
+		const bucket = storage.bucket(getFirebaseStorageBucketName());
 		const fileRef = bucket.file(storagePath);
 		await fileRef.save(fileBuffer, {
 			resumable: false,
@@ -163,7 +159,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 
-	const firestore = getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
+	const firestore = getFirebaseAdminFirestore();
 	const uploadDocRef = firestore.collection('spark').doc(userId).collection('uploads').doc(digest);
 	const quizDocRef = uploadDocRef.collection('quiz').doc();
 	const serverTimestamp = FieldValue.serverTimestamp();

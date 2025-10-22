@@ -6,6 +6,7 @@ import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
   getFirebaseAdminStorage,
+  getFirebaseStorageBucketName,
 } from "../utils/firebaseAdmin";
 import {
   SessionMediaDocSchema,
@@ -106,7 +107,6 @@ export type PublishSessionMediaInput = {
   planItemId: string;
   segments: readonly MediaSegment[];
   audio: SessionAudioResult;
-  storageBucket: string;
   posterImage?: SessionMediaSupplementaryImage;
   endingImage?: SessionMediaSupplementaryImage;
 };
@@ -124,17 +124,15 @@ export async function publishSessionMediaClip(
   const userId = assertId("userId", input.userId);
   const sessionId = assertId("sessionId", input.sessionId);
   const planItemId = assertId("planItemId", input.planItemId);
-  const bucketName = assertId("storageBucket", input.storageBucket);
 
   if (input.segments.length === 0) {
     throw new Error("At least one media segment is required to publish audio");
   }
 
   const firestore = getFirebaseAdminFirestore();
-  const storage = getFirebaseAdminStorage(undefined, {
-    storageBucket: bucketName,
-  });
-  const bucket = storage.bucket(bucketName);
+  const storageBucket = getFirebaseStorageBucketName();
+  const storage = getFirebaseAdminStorage();
+  const bucket = storage.bucket(storageBucket);
 
   const storagePath = buildStoragePath(userId, sessionId, planItemId);
 
