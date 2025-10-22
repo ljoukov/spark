@@ -45,6 +45,91 @@ function useProgress(progress: SessionProgress): JobProgressReporter {
   };
 }
 
+function buildSingleUserPrompt(
+  systemInstruction: string,
+  userPrompt: string,
+): LlmContent[] {
+  const trimmedSystem = systemInstruction.trim();
+  const trimmedUser = userPrompt.trim();
+  const combined =
+    trimmedSystem.length > 0
+      ? `${trimmedSystem}\n\n${trimmedUser}`
+      : trimmedUser;
+  return [
+    {
+      role: "user",
+      parts: [{ type: "text", text: combined }],
+    },
+  ];
+}
+
+function stripMarkdownFences(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("```")) {
+    return raw;
+  }
+  const fenceStart = trimmed.indexOf("\n");
+  if (fenceStart === -1) {
+    return raw;
+  }
+  const fenceLabel = trimmed.slice(0, fenceStart).replace(/```/g, "");
+  const withoutOpening = trimmed.slice(fenceStart + 1);
+  const fenceEndIndex = withoutOpening.lastIndexOf("```");
+  if (fenceEndIndex === -1) {
+    return raw;
+  }
+  const inner = withoutOpening.slice(0, fenceEndIndex);
+  return inner.trim();
+}
+
+function normaliseProblemsPayload(payload: unknown): unknown {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    payload !== null &&
+    "problems" in payload &&
+    Array.isArray((payload as { problems?: unknown[] }).problems)
+  ) {
+    const original = payload as { problems: unknown[] };
+    const normalisedProblems = original.problems.map((problem) => {
+      if (
+        problem &&
+        typeof problem === "object" &&
+        problem !== null &&
+        "function" in problem
+      ) {
+        const fn = (problem as { function: unknown }).function;
+        if (fn && typeof fn === "object" && fn !== null && "returns" in fn) {
+          const returnsValue = (fn as { returns: unknown }).returns;
+          let returns = returnsValue;
+          if (
+            returnsValue &&
+            typeof returnsValue === "object" &&
+            returnsValue !== null &&
+            "type" in returnsValue &&
+            typeof (returnsValue as { type: unknown }).type === "string"
+          ) {
+            returns = (returnsValue as { type: string }).type;
+          }
+          return {
+            ...(problem as Record<string, unknown>),
+            function: {
+              ...(fn as Record<string, unknown>),
+              returns,
+            },
+          };
+        }
+      }
+      return problem;
+    });
+    return {
+      ...(payload as Record<string, unknown>),
+      problems: normalisedProblems,
+    };
+  }
+  return payload;
+}
+
 const ASSUMPTIONS = [
   "basic Python syntax",
   "lists",
@@ -247,7 +332,7 @@ const CodingProblemTestsSchema = z.object({
     .array(
       z.object({
         input: z.string().trim().min(1),
-        output: z.string().trim().min(1),
+        output: z.string().transform((value) => value.trim()),
       }),
     )
     .min(1),
@@ -449,7 +534,8 @@ function buildPlanParseUserPrompt(markdown: string): string {
   return [
     "Schema: {topic, difficulty, assumptions, storyTopic, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
     `Include assumptions ${JSON.stringify(ASSUMPTIONS)}`,
-    "Parts must be exactly 1=storyTopic, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.",
+    'Set "difficulty" exactly to "easy" (lowercase).',
+    "Parts must be exactly 1=story, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.",
     "coding_blueprints must have ids p1 and p2.",
     "Output strict JSON only.",
     "",
@@ -502,13 +588,15 @@ function buildQuizzesGenerateUserPrompt(
   const introCount = questionCounts?.introQuiz;
   const wrapCount = questionCounts?.wrapUpQuiz;
   const constraints: string[] = [
-    "Generate JSON for intro_quiz and wrap_up_quiz.",
+    'Return a JSON object with a single key "quizzes" whose value is an array of exactly two quiz definitions.',
+    'Each quiz definition must include "quiz_id" (either "intro_quiz" or "wrap_up_quiz"), optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
+    'Every question object must follow the schema: {"id","type","prompt","explanation","tags", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
     "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
     "Each quiz must include exactly 4 questions unless overrides provided.",
     "If concepts introduced, add theory block before first related question and tag accordingly.",
     "Tags must include promised skills and any concept tags.",
     "Provide concise explanations.",
-    "Output strict JSON only.",
+    "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
   if (typeof introCount === "number" && introCount > 0) {
     constraints.push(`Override: intro_quiz must have exactly ${introCount} questions.`);
@@ -578,11 +666,16 @@ function buildProblemsGenerateUserPrompt(
   quizzes: readonly SessionQuiz[],
 ): string {
   return [
-    "Generate JSON objects (ids p1, p2) matching schema.",
-    "Include story_callback, constraints, 2-3 total examples (>=1 per problem).",
-    "Include public tests (3-5 each) and private test count (3-8).",
+    'Return a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
+    'Each problem must include fields: id, title, difficulty (set to "easy"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private_count:int}.',
+    "Represent inputs and outputs as strings (escape newlines with \\n); do not return nested objects for these fields.",
+    "Include story_callback, constraints, and at least two examples per problem.",
+    "Provide 3-5 public tests per problem and private_count between 3 and 8.",
+    'Do not include extra fields such as "prompt", "solution", or "private_tests".',
+    'Problem "p1" must implement the first idea from the Markdown above (connection check). Problem "p2" must implement the second idea (shortest path/path reconstruction). Do not skip the connection-check problem.',
+    "Ensure reference_solution_py uses return type hints consistent with the declared function signature.",
     "Solutions must be simple Python 3.",
-    "Output strict JSON only.",
+    "Do not wrap the JSON in Markdown fences or add commentary.",
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -721,7 +814,7 @@ const PROBLEMS_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-class SessionGenerationPipeline {
+export class SessionGenerationPipeline {
   private readonly logger: JobProgressReporter;
 
   private readonly caches: {
@@ -1296,21 +1389,10 @@ class SessionGenerationPipeline {
         this.logger.log(
           `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
         );
-        const contents: LlmContent[] = [
-          {
-            role: "system",
-            parts: [
-              {
-                type: "text",
-                text: "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
-              },
-            ],
-          },
-          {
-            role: "user",
-            parts: [{ type: "text", text: userPrompt }],
-          },
-        ];
+        const contents = buildSingleUserPrompt(
+          "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
+          userPrompt,
+        );
         const markdown = await generateText({
           modelId: TEXT_MODEL_ID,
           contents,
@@ -1369,18 +1451,10 @@ class SessionGenerationPipeline {
     this.logger.log("[session/plan] parsing ideas into plan JSON");
     const planJson = await generateJson<SessionPlan>({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
+        userPrompt,
+      ),
       responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
       schema: SessionPlanSchema,
       progress: this.logger,
@@ -1425,18 +1499,10 @@ class SessionGenerationPipeline {
     this.logger.log("[session/plan-grade] grading plan");
     const grade = await generateJson<PlanGrade>({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "Rubric QA, diagnose only.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "Rubric QA, diagnose only.",
+        userPrompt,
+      ),
       responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
       schema: PlanGradeSchema,
       progress: this.logger,
@@ -1492,18 +1558,10 @@ class SessionGenerationPipeline {
         );
         const coverageMarkdown = await generateText({
           modelId: TEXT_MODEL_ID,
-          contents: [
-            {
-              role: "system",
-              parts: [
-                {
-                  type: "text",
-                  text: "Expand plan into quiz coverage ensuring primers precede practice.",
-                },
-              ],
-            },
-            { role: "user", parts: [{ type: "text", text: userPrompt }] },
-          ],
+          contents: buildSingleUserPrompt(
+            "Expand plan into quiz coverage ensuring primers precede practice.",
+            userPrompt,
+          ),
           progress: this.logger,
           debug: debugOptions,
         });
@@ -1565,24 +1623,17 @@ class SessionGenerationPipeline {
     this.logger.log("[session/quizzes] generating quiz JSON");
     const raw = await generateText({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "Produce final quizzes with concise explanations, optional theory blocks.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "Produce final quizzes with concise explanations, optional theory blocks.",
+        userPrompt,
+      ),
       progress: this.logger,
       debug: debugOptions,
     });
+    const jsonText = stripMarkdownFences(raw);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(jsonText);
     } catch (error) {
       throw new Error(
         `Failed to parse quizzes JSON: ${errorAsString(error)}\nRaw output:\n${raw}`,
@@ -1629,18 +1680,10 @@ class SessionGenerationPipeline {
     this.logger.log("[session/quizzes-grade] grading quizzes");
     const grade = await generateJson<QuizzesGrade>({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "QA quizzes for coverage, theory, clarity.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "QA quizzes for coverage, theory, clarity.",
+        userPrompt,
+      ),
       responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
       schema: QuizzesGradeSchema,
       progress: this.logger,
@@ -1704,18 +1747,10 @@ class SessionGenerationPipeline {
         );
         const markdown = await generateText({
           modelId: TEXT_MODEL_ID,
-          contents: [
-            {
-              role: "system",
-              parts: [
-                {
-                  type: "text",
-                  text: "Generate two easy ideas aligned with promised skills and story.",
-                },
-              ],
-            },
-            { role: "user", parts: [{ type: "text", text: userPrompt }] },
-          ],
+          contents: buildSingleUserPrompt(
+            "Generate two easy ideas aligned with promised skills and story.",
+            userPrompt,
+          ),
           progress: this.logger,
           debug: debugOptions,
         });
@@ -1778,30 +1813,26 @@ class SessionGenerationPipeline {
     this.logger.log("[session/problems] generating coding problems");
     const raw = await generateText({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "Produce full beginner-friendly specs with reference solutions and tests.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "Produce full beginner-friendly specs with reference solutions and tests.",
+        userPrompt,
+      ),
       progress: this.logger,
       debug: debugOptions,
     });
+    const jsonText = stripMarkdownFences(raw);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(jsonText);
     } catch (error) {
       throw new Error(
         `Failed to parse problems JSON: ${errorAsString(error)}\nRaw output:\n${raw}`,
       );
     }
-    const problems = ProblemsSchema.parse(parsed);
+    const normalised =
+      Array.isArray(parsed) ? { problems: parsed } : parsed;
+    const cleaned = normaliseProblemsPayload(normalised);
+    const problems = ProblemsSchema.parse(cleaned);
     await this.writeProblemsCheckpoint(problems);
     const entry: StageCacheEntry<ProblemsPayload> = {
       value: problems,
@@ -1842,18 +1873,10 @@ class SessionGenerationPipeline {
     this.logger.log("[session/problems-grade] grading coding problems");
     const grade = await generateJson<ProblemsGrade>({
       modelId: TEXT_MODEL_ID,
-      contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "QA problems for alignment, clarity, and difficulty.",
-            },
-          ],
-        },
-        { role: "user", parts: [{ type: "text", text: userPrompt }] },
-      ],
+      contents: buildSingleUserPrompt(
+        "QA problems for alignment, clarity, and difficulty.",
+        userPrompt,
+      ),
       responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
       schema: ProblemsGradeSchema,
       progress: this.logger,
@@ -1900,6 +1923,7 @@ export type GenerateSessionOptions = {
   sessionId?: string;
   storyPlanItemId: string;
   storagePrefix?: string;
+  includeStory?: boolean;
 };
 
 export type GenerateSessionResult = {
@@ -1911,12 +1935,13 @@ export type GenerateSessionResult = {
   quizzesGrade: QuizzesGrade;
   problems: readonly CodingProblem[];
   problemsGrade: ProblemsGrade;
-  story: GenerateStoryResult;
+  story?: GenerateStoryResult;
 };
 
 export async function generateSession(
   options: GenerateSessionOptions,
 ): Promise<GenerateSessionResult> {
+  const includeStory = options.includeStory ?? true;
   const pipeline = new SessionGenerationPipeline({
     topic: options.topic,
     seed: options.seed,
@@ -1997,18 +2022,21 @@ export async function generateSession(
   const slug = slugifyTopic(options.topic);
   const sessionId = options.sessionId ?? slug;
 
-  const story = await generateStory({
-    topic: plan.story.storyTopic,
-    userId: options.userId,
-    sessionId,
-    planItemId: options.storyPlanItemId,
-    storagePrefix: options.storagePrefix,
-    progress: options.progress,
-    debugRootDir: options.debugRootDir,
-    checkpointDir: options.checkpointDir
-      ? path.join(options.checkpointDir, "story")
-      : undefined,
-  });
+  let story: GenerateStoryResult | undefined;
+  if (includeStory) {
+    story = await generateStory({
+      topic: plan.story.storyTopic,
+      userId: options.userId,
+      sessionId,
+      planItemId: options.storyPlanItemId,
+      storagePrefix: options.storagePrefix,
+      progress: options.progress,
+      debugRootDir: options.debugRootDir,
+      checkpointDir: options.checkpointDir
+        ? path.join(options.checkpointDir, "story")
+        : undefined,
+    });
+  }
 
   return {
     sessionId,
