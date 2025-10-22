@@ -6,6 +6,7 @@ export * from "./code/mediaPublisher";
 export * from "./code/generateFrames";
 export * from "./code/generateNarration";
 export * from "./code/generateStory";
+export * from "./code/generateSession";
 export * from "./code/problemValidation";
 export * from "./utils/env";
 export * from "./utils/testUser";
