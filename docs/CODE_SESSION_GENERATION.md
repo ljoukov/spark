@@ -2,11 +2,13 @@
 
 ## Overview
 
-- Generate full lesson sessions from a `topic`, producing plan → quizzes → coding problems, plus a story paragraph ending with the literal string `in todays's lesson...`.
+- Generate full lesson sessions from a `topic`, producing plan → quizzes → coding problems, plus an introductory story.
 - Every artifact uses a two-pass Generate → Grade cycle with strict schema outputs (JSON) except ideation phases (Markdown).
 - The session pipeline adopts the checkpointing pattern established in `packages/llm/src/code/generateStory.ts` so work can resume mid-stage.
 
 ## Learner Assumptions
+
+Hard code in a variable the following assumption about the student (we will later have these loaded from student profile):
 
 - Students already know: basic Python syntax, lists, integer division `//`, modulo `%`.
 - If a lesson introduces dicts, sets, or a new algorithm, the intro quiz must teach it before coding challenges reinforce it.
@@ -19,7 +21,7 @@
 - `topic: string`
 - `difficulty: "easy"`
 - `assumptions: string[]` (default: `["basic Python syntax", "lists", "integer division (//)", "modulo (%)"]`)
-- `story: { title: string; text: string }` (`text` ends with `in todays's lesson...`)
+- `story: { storyTopic: string }` topic as formulated for the story including idea for what will be covered in the lesson
 - `parts: Array<{ order: 1|2|3|4|5; kind: "story"|"intro_quiz"|"coding_1"|"coding_2"|"wrap_up_quiz"; summary: string }>`
 - `promised_skills: string[]` (micro-skills the session promises)
 - `concepts_to_teach: string[]` (new concepts, if any)
@@ -76,12 +78,11 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 ### Plan-Parse
 
 - **System**
-  - Convert Markdown ideas into plan JSON. Enforce ordering, literal story ending, coverage of required skills, and difficulty.
+  - Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.
 - **User**
-  - Schema: `{topic, difficulty, assumptions, story {title, text}, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}`.
+  - Schema: `{topic, difficulty, assumptions, storyTopic, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}`.
   - Include assumptions `["basic Python syntax","lists","integer division (//)","modulo (%)"]`.
-  - Parts must be exactly 1=story, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.
-  - `story.text` must end with `in todays's lesson...`.
+  - Parts must be exactly 1=storyTopic, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.
   - `coding_blueprints` must have ids `p1` and `p2`.
   - Output strict JSON only.
   - Body includes the Markdown ideas block.
@@ -91,7 +92,7 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 - **System**
   - Rubric QA, diagnose only.
 - **User**
-  - Check rules: R1 parts ordered; R2 story ending literal; R3 promised skills cover blueprint requirements; R4 concepts_to_teach referenced and manageable; R5 difficulty “easy”. Output `{pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]}` JSON only.
+  - Check rules: R1 parts ordered; R2 promised skills cover blueprint requirements; R3 concepts_to_teach referenced and manageable; R5 difficulty “easy”. Output `{pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]}` JSON only.
 
 ### Quiz-Ideas
 
@@ -183,7 +184,7 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 
 ## Consistency Rules
 
-- Story paragraph must end with `in todays's lesson...`; quizzes and problems reference the story promise and promised skills.
+- Story must hint onto problems and quizes which will be in the lesson; quizzes and problems reference the story promise and promised skills. This does NOT have to be super strict, it is ok to hint in the story at one of the aspects, select the most interesting or intribguing or most classical or famous one.
 - Every `coding_blueprints[*].required_skills` appears across the two quizzes.
 - Maintain “easy” difficulty by constraining inputs, providing primers, and keeping solutions straightforward.
 - Ideation prompts (plan/quiz/problem ideas) return Markdown only; final artifacts and checkpoints must be strict JSON.
