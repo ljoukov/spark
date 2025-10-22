@@ -1,5 +1,5 @@
 import { ensureEvalEnvLoaded } from "../utils/paths";
-import { generateText, type LlmTextModelId } from "../utils/llm";
+import { generateText, type LlmTextModelId } from "@spark/llm/utils/llm";
 import { z } from "zod";
 
 ensureEvalEnvLoaded();

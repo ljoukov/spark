@@ -22,10 +22,10 @@ import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
-} from "./narration";
-import { generateStory, type GenerateStoryResult } from "./generateStory";
-import { validateProblems, ProblemValidationError } from "./problemValidation";
-import { runJobsWithConcurrency } from "../utils/concurrency";
+} from "@spark/llm/code/generateNarration";
+import { generateStory, type GenerateStoryResult } from "@spark/llm/code/generateStory";
+import { validateProblems, ProblemValidationError } from "@spark/llm/code/problemValidation";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
 const TEMPLATE_USER_ID = "welcome-templates";
 const TEMPLATE_ROOT_COLLECTION = "spark-admin";

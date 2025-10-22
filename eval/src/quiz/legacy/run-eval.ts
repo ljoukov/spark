@@ -47,7 +47,7 @@ import {
   runJobsWithConcurrency,
   type JobProgressReporter,
   type StatusMode,
-} from "../../utils/concurrency";
+} from "@spark/llm/utils/concurrency";
 import {
   AUDIT_CHECKPOINT_PATH,
   AUDIT_CHECKPOINT_VERSION,
@@ -63,7 +63,7 @@ import {
   generateJson,
   sanitisePartForLogging,
   type LlmContentPart,
-} from "../../utils/llm";
+} from "@spark/llm/utils/llm";
 import { detectMimeType } from "../../utils/mime";
 import {
   createCliCommand,

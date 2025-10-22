@@ -13,9 +13,9 @@ import {
   buildExtensionPrompt,
   buildGenerationPrompt,
 } from "@spark/llm/quiz/legacy/prompts";
-import { runJobsWithConcurrency } from "../../utils/concurrency";
-import type { JobProgressReporter } from "../../utils/concurrency";
-import { generateText } from "../../utils/llm";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
+import type { JobProgressReporter } from "@spark/llm/utils/concurrency";
+import { generateText } from "@spark/llm/utils/llm";
 import { createCliCommand, splitCommaSeparated } from "../../utils/cli";
 import {
   AUDIT_CHECKPOINT_PATH,

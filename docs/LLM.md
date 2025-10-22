@@ -1,4 +1,4 @@
-# LLM Utilities (eval/src/utils/llm.ts)
+# LLM Utilities (packages/llm/src/utils/llm.ts)
 
 This module provides thin wrappers around Gemini streaming to make it easy to:
 - Send prompts as structured parts (text, inline data)

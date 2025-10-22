@@ -14,14 +14,17 @@ import {
   type LlmDebugOptions,
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
-import { getFirebaseAdminStorage, getFirebaseAdminFirestore } from "@spark/llm";
-import type { MediaSegment } from "@spark/llm";
+import {
+  getFirebaseAdminStorage,
+  getFirebaseAdminFirestore,
+} from "../utils/firebaseAdmin";
+import type { MediaSegment } from "./schemas";
 import sharp from "sharp";
 
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
-} from "./narration";
+} from "./generateNarration";
 import { generateStoryFrames } from "./generateFrames";
 
 export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { z } from "zod";
 
-import type { StatusMode } from "./concurrency";
+import type { StatusMode } from "@spark/llm/utils/concurrency";
 
 export function createCliCommand(name: string, description?: string): Command {
   const command = new Command(name);

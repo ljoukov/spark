@@ -14,7 +14,7 @@ import {
   type Schema,
   type Tool,
 } from "@google/genai";
-import { runGeminiCall, type GeminiModelId } from "@spark/llm/utils/gemini";
+import { runGeminiCall, type GeminiModelId } from "./gemini";
 import { z } from "zod";
 import sharp from "sharp";
 
