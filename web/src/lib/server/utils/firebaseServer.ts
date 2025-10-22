@@ -11,12 +11,8 @@ const JWKS_URL = new URL(
 	'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 );
 
-const firebaseAdminOptions = {
-	storageBucket: clientFirebaseConfig.storageBucket
-};
-
 function getAuth() {
-	return getFirebaseAdminAuth(undefined, firebaseAdminOptions);
+	return getFirebaseAdminAuth();
 }
 
 const jwks = createRemoteJWKSet(JWKS_URL);

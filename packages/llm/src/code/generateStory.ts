@@ -18,6 +18,7 @@ import { errorAsString } from "../utils/error";
 import {
   getFirebaseAdminStorage,
   getFirebaseAdminFirestore,
+  getFirebaseStorageBucketName,
 } from "../utils/firebaseAdmin";
 import type { MediaSegment } from "./schemas";
 import sharp from "sharp";
@@ -3461,7 +3462,6 @@ type GenerateStoryOptions = {
   userId: string;
   sessionId: string;
   planItemId: string;
-  storageBucket: string;
   storagePrefix?: string;
   progress?: StoryProgress;
   audioProgressLabel?: string;
@@ -3557,7 +3557,6 @@ type StoryGenerationPipelineOptions = {
   userId?: string;
   sessionId?: string;
   planItemId?: string;
-  storageBucket?: string;
   storagePrefix?: string;
   progress?: StoryProgress;
   audioProgressLabel?: string;
@@ -4181,7 +4180,7 @@ export class StoryGenerationPipeline {
   }
 
   private requireContext(
-    key: "userId" | "sessionId" | "planItemId" | "storageBucket",
+    key: "userId" | "sessionId" | "planItemId",
   ): string {
     const value = this.options[key];
     if (!value) {
@@ -4570,7 +4569,7 @@ export class StoryGenerationPipeline {
     const userId = this.requireContext("userId");
     const sessionId = this.requireContext("sessionId");
     const planItemId = this.requireContext("planItemId");
-    const storageBucket = this.requireContext("storageBucket");
+    const storageBucket = getFirebaseStorageBucketName();
 
     const totalSegments = segmentation.segments.length;
     const interiorImages = images.images
@@ -4603,9 +4602,7 @@ export class StoryGenerationPipeline {
       );
     }
 
-    const storage = getFirebaseAdminStorage(undefined, {
-      storageBucket,
-    });
+    const storage = getFirebaseAdminStorage();
     const bucket = storage.bucket(storageBucket);
 
     const totalImages = interiorImages.length;
@@ -4744,7 +4741,6 @@ export class StoryGenerationPipeline {
       sessionId,
       planItemId,
       segments,
-      storageBucket,
       posterImage: posterReference,
       endingImage: endingReference,
       progress: createConsoleProgress(narrationProgressLabel),
@@ -4783,7 +4779,6 @@ export async function generateStory(
     userId: options.userId,
     sessionId: options.sessionId,
     planItemId: options.planItemId,
-    storageBucket: options.storageBucket,
     storagePrefix: options.storagePrefix,
     progress: options.progress,
     audioProgressLabel: options.audioProgressLabel,
