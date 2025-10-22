@@ -472,7 +472,7 @@ export async function runJobsWithConcurrency<I, O>({
     return [];
   }
   const effectiveConcurrency = Math.max(1, Math.min(concurrency, total));
-  const results: O[] = new Array(total);
+  const results = new Array<O>(total);
   const stream = output ?? process.stderr;
   const effectiveStatusMode: StatusMode = stream.isTTY
     ? statusMode
@@ -511,9 +511,10 @@ export async function runJobsWithConcurrency<I, O>({
             log: (message: string) => {
               reporter.log(`[${id}] ${message}`);
             },
-            startModelCall: reporter.startModelCall,
-            recordModelUsage: reporter.recordModelUsage,
-            finishModelCall: reporter.finishModelCall,
+            startModelCall: (details) => reporter.startModelCall(details),
+            recordModelUsage: (handle, chunk) =>
+              reporter.recordModelUsage(handle, chunk),
+            finishModelCall: (handle) => reporter.finishModelCall(handle),
           },
         });
         results[currentIndex] = result;

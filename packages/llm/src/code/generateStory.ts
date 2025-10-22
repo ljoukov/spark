@@ -14,6 +14,7 @@ import {
   type LlmDebugOptions,
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
+import { errorAsString } from "../utils/error";
 import {
   getFirebaseAdminStorage,
   getFirebaseAdminFirestore,
@@ -637,10 +638,6 @@ const OriginsCapsuleValidationResponseSchema = z.object({
   issues: z.array(OriginsCapsuleValidationIssueSchema).default([]),
 });
 
-type OriginsCapsuleValidationIssue = z.infer<
-  typeof OriginsCapsuleValidationIssueSchema
->;
-
 type OriginsCapsuleValidationResponse = z.infer<
   typeof OriginsCapsuleValidationResponseSchema
 >;
@@ -834,10 +831,6 @@ const StoryProseCheckpointVariantSchema = z.object({
   draftText: z.string().trim().min(1),
   originsCapsule: z.string().trim().min(1),
 });
-
-type StoryProseCheckpointVariant = z.infer<
-  typeof StoryProseCheckpointVariantSchema
->;
 
 const StoryProseCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
@@ -1554,9 +1547,14 @@ export function buildSegmentationPrompt(
   topic?: string,
 ): string {
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
+  const topicLines =
+    topic && topic.trim().length > 0
+      ? [`Story topic: ${topic.trim()}. Keep narration aligned to this theme.`, ""]
+      : [];
   return [
     "Convert the provided historical story into a structured narration and illustration plan.",
     "",
+    ...topicLines,
     "Requirements:",
     "1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
     "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
@@ -1642,8 +1640,7 @@ export async function generateStoryIdea(
       adapter.log("[story/ideas-parse] structured brief parsed");
       return { brief, data };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error ?? "unknown");
+      const message = errorAsString(error);
       if (attempt === IDEA_GENERATION_MAX_ATTEMPTS) {
         adapter.log(
           `[story/ideas] generation attempt ${attempt} failed (${message}); no retries left`,
@@ -2357,8 +2354,7 @@ async function prepareProseVariantDraft(
       );
       return { label, idea, originsCapsule, draft };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error ?? "unknown");
+      const message = errorAsString(error);
       if (attempt === PROSE_DRAFT_MAX_ATTEMPTS) {
         adapter.log(
           `[story/prose/${label}] draft attempt ${attempt} failed (${message}); no retries left`,
@@ -2827,13 +2823,13 @@ export async function correctStorySegmentation(
         );
         return workingSegmentation;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorAsString(error);
         adapter.log(
           `[story/segmentation_correction] attempt ${attempt} failed to apply corrections (${message}); retrying...`,
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorAsString(error);
       adapter.log(
         `[story/segmentation_correction] attempt ${attempt} failed (${message}); retrying...`,
       );
@@ -3317,7 +3313,7 @@ export async function generateImageSets(
         };
       } catch (error) {
         lastError = error;
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorAsString(error);
         logWithAttempt(`failed: ${message}`);
         if (attempt === IMAGE_SET_GENERATE_MAX_ATTEMPTS) {
           throw error instanceof Error ? error : new Error(message);
@@ -3331,7 +3327,7 @@ export async function generateImageSets(
       ? lastError
       : new Error(
           `Image set generation failed for ${imageSetLabel}${
-            lastError ? `: ${String(lastError)}` : ""
+            lastError ? `: ${errorAsString(lastError)}` : ""
           }`,
         );
   };
@@ -3637,7 +3633,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpoint = StoryIdeaCheckpointSchema.parse(parsed);
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
@@ -3693,7 +3689,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpoint = StoryOriginsCapsuleCheckpointSchema.parse(parsed);
       if (checkpoint.topic !== this.options.topic) {
         this.logger.log(
@@ -3749,7 +3745,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpointResult = StoryProseCheckpointSchema.safeParse(parsed);
       if (!checkpointResult.success) {
         this.logger.log(
@@ -3815,7 +3811,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpointResult =
         StoryProseRevisionCheckpointSchema.safeParse(parsed);
       if (!checkpointResult.success) {
@@ -3944,7 +3940,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const segmentation = StorySegmentationSchema.parse(parsed);
       return { value: segmentation, filePath };
     } catch (error) {
@@ -3978,7 +3974,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const segmentation = StorySegmentationSchema.parse(parsed);
       return { value: segmentation, filePath };
     } catch (error) {
@@ -4012,7 +4008,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpoint = StoryImagesCheckpointSchema.parse(parsed);
       const deserialised: StoryImagesResult = {
         prompt: checkpoint.prompt,
@@ -4066,7 +4062,7 @@ export class StoryGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       const checkpoint = StoryNarrationCheckpointSchema.parse(parsed);
       const posterImage = checkpoint.posterImage
         ? {
@@ -4176,8 +4172,7 @@ export class StoryGenerationPipeline {
         break;
       }
       default: {
-        const exhaustiveCheck: never = stage;
-        throw new Error(`Unknown stage: ${exhaustiveCheck}`);
+        throw new Error("Unknown stage");
       }
     }
   }
@@ -4615,7 +4610,7 @@ export class StoryGenerationPipeline {
     this.logger.log(
       `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
     );
-    const storagePaths: string[] = new Array(totalImages);
+    const storagePaths = new Array<string>(totalImages);
 
     let nextImageIndex = 0;
     const uploadWorker = async (workerId: number): Promise<void> => {
