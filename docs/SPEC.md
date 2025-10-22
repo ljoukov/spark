@@ -82,7 +82,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
   Test/preview mode override: when environment variable `TEST_USER` is set to a valid test ID (format `test-(admin|free|paid)-[A-Za-z0-9]{16}`), authentication is fully disabled. The server does not validate ID tokens and forces the authenticated user ID to `TEST_USER`. The client does not rely on Firebase Auth in this mode; UI renders as signed-in with the server-provided user. Admin access in this mode follows the `test-admin-` prefix (admin allowed) vs other prefixes (admin denied). The user display name is read from `/spark/<TEST_USER>/name` in Firestore.
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
-- **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership.
+- **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership. The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
 
 ## 4) Backend (SvelteKit)
 

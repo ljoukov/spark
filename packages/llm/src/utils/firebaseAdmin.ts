@@ -26,12 +26,8 @@ const firebaseAdminStorageModule: FirebaseAdminStorageModule = await import(
   "firebase-admin/storage"
 );
 
-export type FirebaseAdminOptions = {
-  storageBucket?: string;
-};
-
 let cachedApp: App | null = null;
-let cachedBucket: string | undefined;
+let cachedBucket: string | null = null;
 
 function toServiceAccount(config: GoogleServiceAccount): ServiceAccount {
   return {
@@ -47,31 +43,42 @@ function resolveServiceAccount(
   return config ?? getGoogleServiceAccount();
 }
 
+function resolveStorageBucketName(config: GoogleServiceAccount): string {
+  return `${config.projectId}.firebasestorage.app`;
+}
+
+function ensureStorageBucket(
+  config: GoogleServiceAccount,
+): string {
+  if (cachedBucket) {
+    return cachedBucket;
+  }
+  const bucket = resolveStorageBucketName(config);
+  cachedBucket = bucket;
+  return bucket;
+}
+
 export function getFirebaseAdminApp(
   config?: GoogleServiceAccount,
-  options: FirebaseAdminOptions = {},
 ): App {
   const { cert, getApps, initializeApp } = firebaseAdminAppModule;
   const resolvedConfig = resolveServiceAccount(config);
-  const desiredBucket = options.storageBucket;
+  const resolvedBucket = ensureStorageBucket(resolvedConfig);
 
   if (cachedApp) {
-    if (
-      desiredBucket !== undefined &&
-      cachedBucket !== undefined &&
-      desiredBucket !== cachedBucket
-    ) {
-      throw new Error(
-        "Firebase app already initialised with a different storage bucket.",
-      );
-    }
     return cachedApp;
   }
 
   const registeredApps = getApps();
   if (registeredApps.length > 0) {
     cachedApp = registeredApps[0]!;
-    cachedBucket = desiredBucket ?? cachedBucket;
+    const existingBucket = cachedApp.options?.storageBucket;
+    if (existingBucket && existingBucket !== resolvedBucket) {
+      throw new Error(
+        `Firebase app already initialised with unexpected storage bucket '${existingBucket}'.`,
+      );
+    }
+    cachedBucket = existingBucket ?? resolvedBucket;
     return cachedApp;
   }
 
@@ -82,41 +89,42 @@ export function getFirebaseAdminApp(
   } = {
     credential: cert(toServiceAccount(resolvedConfig)),
     projectId: resolvedConfig.projectId,
+    storageBucket: resolvedBucket,
   };
 
-  if (desiredBucket) {
-    initializeOptions.storageBucket = desiredBucket;
-  }
-
   cachedApp = initializeApp(initializeOptions);
-  cachedBucket = desiredBucket ?? cachedBucket;
+  cachedBucket = resolvedBucket;
   return cachedApp;
 }
 
 export function getFirebaseAdminAuth(
   config?: GoogleServiceAccount,
-  options: FirebaseAdminOptions = {},
 ): Auth {
   const { getAuth } = firebaseAdminAuthModule;
-  return getAuth(getFirebaseAdminApp(config, options));
+  return getAuth(getFirebaseAdminApp(config));
 }
 
 export function getFirebaseAdminFirestore(
   config?: GoogleServiceAccount,
-  options: FirebaseAdminOptions = {},
 ): Firestore {
   const { getFirestore } = firebaseAdminFirestoreModule;
-  return getFirestore(getFirebaseAdminApp(config, options));
+  return getFirestore(getFirebaseAdminApp(config));
 }
 
 export function getFirebaseAdminStorage(
   config?: GoogleServiceAccount,
-  options: FirebaseAdminOptions = {},
 ): Storage {
   const { getStorage } = firebaseAdminStorageModule;
-  return getStorage(getFirebaseAdminApp(config, options));
+  return getStorage(getFirebaseAdminApp(config));
 }
 
 export function getFirebaseAdminFirestoreModule(): FirebaseAdminFirestoreModule {
   return firebaseAdminFirestoreModule;
+}
+
+export function getFirebaseStorageBucketName(
+  config?: GoogleServiceAccount,
+): string {
+  const resolvedConfig = resolveServiceAccount(config);
+  return ensureStorageBucket(resolvedConfig);
 }
