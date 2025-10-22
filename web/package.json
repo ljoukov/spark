@@ -24,6 +24,7 @@
 	"dependencies": {
 		"@spark/llm": "file:../packages/llm",
 		"@spark/schemas": "file:../packages/schemas",
+		"@vercel/analytics": "^1.5.0",
 		"firebase-admin": "^13.5.0"
 	},
 	"devDependencies": {

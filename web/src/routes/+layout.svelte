@@ -6,6 +6,10 @@
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 	import { getAuth } from 'firebase/auth';
+	import { dev } from '$app/environment';
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
+
+	injectAnalytics({ mode: dev ? 'development' : 'production' });
 
 	let { children } = $props();
 
