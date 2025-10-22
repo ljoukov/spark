@@ -17,8 +17,8 @@
     "lint": "npm run typecheck && npm run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run",
-    "session:generate": "FORCE_TEST_USER=true tsx src/code/generateTestSession.ts",
-    "session:generateWelcome": "tsx src/code/generateWelcomeSessions.ts",
+    "session:generateTestSession": "FORCE_TEST_USER=true tsx src/code/generateTestSession.ts",
+    "session:generateWelcomeSessions": "tsx src/code/generateWelcomeSessions.ts",
     "session:story": "tsx src/code/generateTestStory.ts"
   },
   "dependencies": {
