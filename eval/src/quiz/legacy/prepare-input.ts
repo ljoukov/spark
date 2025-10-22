@@ -21,10 +21,10 @@ import { GeminiModelId } from "@spark/llm/utils/gemini";
 import {
   runJobsWithConcurrency,
   type JobProgressReporter,
-} from "../../utils/concurrency";
+} from "@spark/llm/utils/concurrency";
 import { WORKSPACE_PATHS, ensureEvalEnvLoaded } from "../../utils/paths";
 import { detectMimeType } from "../../utils/mime";
-import { convertGooglePartsToLlmParts, generateJson } from "../../utils/llm";
+import { convertGooglePartsToLlmParts, generateJson } from "@spark/llm/utils/llm";
 import { createCliCommand, createIntegerParser } from "../../utils/cli";
 
 ensureEvalEnvLoaded();

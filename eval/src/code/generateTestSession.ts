@@ -33,10 +33,10 @@ import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
-} from "./narration";
-import { generateStory, type GenerateStoryResult } from "./generateStory";
-import { validateProblems, ProblemValidationError } from "./problemValidation";
-import { runJobsWithConcurrency } from "../utils/concurrency";
+} from "@spark/llm/code/generateNarration";
+import { generateStory, type GenerateStoryResult } from "@spark/llm/code/generateStory";
+import { validateProblems, ProblemValidationError } from "@spark/llm/code/problemValidation";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 // No local audio file constants: audio is generated on the fly
 
 const MEDIA_SOURCES: Array<{
