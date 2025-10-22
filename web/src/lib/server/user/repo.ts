@@ -1,5 +1,5 @@
 import { UserDocSchema, DEFAULT_USER_STATS, type UserDoc, type UserStats } from '@spark/schemas';
-import { getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
+import { getFirebaseAdminFirestore } from '@spark/llm';
 import { z } from 'zod';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');

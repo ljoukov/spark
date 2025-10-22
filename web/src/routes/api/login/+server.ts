@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
+import { getFirebaseAdminFirestore } from '@spark/llm';
 
 const bodySchema = z
 	.object({

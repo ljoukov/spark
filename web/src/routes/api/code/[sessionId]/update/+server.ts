@@ -1,7 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getUserQuiz } from '$lib/server/quiz/repo';
 import { getSession } from '$lib/server/session/repo';
-import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
 import {
 	DEFAULT_USER_STATS,
 	PlanItemStateSchema,
@@ -10,7 +9,7 @@ import {
 	type PlanItemState,
 	type UserStats
 } from '@spark/schemas';
-import { getFirebaseAdminFirestoreModule } from '@spark/llm';
+import { getFirebaseAdminFirestore, getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 
