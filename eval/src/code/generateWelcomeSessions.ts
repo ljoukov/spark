@@ -2235,10 +2235,7 @@ function resolveStoryCheckpointsRootDir(sessionId: string): string {
   return path.join(sessionRootDir, "checkpoints");
 }
 
-function resolveStoryCheckpointDir(
-  sessionId: string,
-  _planItemId: string,
-): string {
+function resolveStoryCheckpointDir(sessionId: string): string {
   return resolveStoryCheckpointsRootDir(sessionId);
 }
 
@@ -2282,7 +2279,7 @@ async function ensureStoryCheckpointDir(
   sessionId: string,
   planItemId: string,
 ): Promise<string> {
-  const targetDir = resolveStoryCheckpointDir(sessionId, planItemId);
+  const targetDir = resolveStoryCheckpointDir(sessionId);
   const nestedPlanItemDir = resolvePlanItemStoryCheckpointDir(
     sessionId,
     planItemId,
