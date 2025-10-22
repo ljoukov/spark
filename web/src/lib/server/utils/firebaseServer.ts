@@ -1,8 +1,8 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
-import type { DecodedIdToken } from 'firebase-admin/auth';
-import { getFirebaseAdminAuth } from './firebaseAdmin';
-import { clientFirebaseConfig } from '../../config/firebase';
+import { clientFirebaseConfig } from '$lib/config/firebase';
 import { getTestUserId, isTestUser } from '$lib/server/auth/testUser';
+import type { DecodedIdToken } from 'firebase-admin/auth';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { getFirebaseAdminAuth } from '@spark/llm';
 import { z } from 'zod';
 
 const PROJECT_ID = clientFirebaseConfig.projectId; // From firebase config
@@ -10,6 +10,14 @@ const ISSUER = `https://securetoken.google.com/${PROJECT_ID}`;
 const JWKS_URL = new URL(
 	'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 );
+
+const firebaseAdminOptions = {
+	storageBucket: clientFirebaseConfig.storageBucket
+};
+
+function getAuth() {
+	return getFirebaseAdminAuth(undefined, firebaseAdminOptions);
+}
 
 const jwks = createRemoteJWKSet(JWKS_URL);
 
@@ -72,7 +80,7 @@ export async function verifyFirebaseSessionCookie(sessionCookie: string): Promis
 		};
 		return testSession;
 	}
-	const auth = getFirebaseAdminAuth();
+	const auth = getAuth();
 	// By default, do not check for revocation here; call sites can decide policy.
 	const decoded = await auth.verifySessionCookie(sessionCookie, false);
 	return decoded;

@@ -1,4 +1,5 @@
-import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
+import { clientFirebaseConfig } from '$lib/config/firebase';
+import { getFirebaseAdminFirestore, getFirebaseAdminStorage } from '@spark/llm';
 import {
 	SessionMediaDocSchema,
 	type SessionMediaDoc,
@@ -10,12 +11,25 @@ const userIdSchema = z.string().trim().min(1, 'userId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
 const planItemIdSchema = z.string().trim().min(1, 'planItemId is required');
 
+const firebaseAdminOptions = {
+	storageBucket: clientFirebaseConfig.storageBucket
+};
+
+function getFirestore() {
+	return getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
+}
+
+function getStorageBucket() {
+	const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
+	return storage.bucket();
+}
+
 function normaliseStoragePath(input: string): string {
 	return input.replace(/^\/+/, '');
 }
 
 async function createSignedUrl(storagePath: string): Promise<{ url: string; expiresAt: Date }> {
-	const bucket = getFirebaseAdminBucket();
+	const bucket = getStorageBucket();
 	const file = bucket.file(normaliseStoragePath(storagePath));
 	const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 	const [url] = await file.getSignedUrl({
@@ -53,7 +67,7 @@ export async function getSessionMedia(
 	sessionId: string,
 	planItemId: string
 ): Promise<SessionMediaWithUrl | null> {
-	const firestore = getFirebaseAdminFirestore();
+	const firestore = getFirestore();
 	const uid = userIdSchema.parse(userId);
 	const sid = sessionIdSchema.parse(sessionId);
 	const pid = planItemIdSchema.parse(planItemId);

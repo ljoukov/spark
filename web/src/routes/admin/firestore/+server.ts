@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z, ZodError } from 'zod';
-import { getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
+import { getFirebaseAdminFirestore } from '@spark/llm';
 
 // The document holds arbitrary diagnostic data; validate as an object with any keys.
 const DocSchema = z.object({}).loose();
