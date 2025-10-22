@@ -4,7 +4,7 @@
 
 - Generate full lesson sessions from a `topic`, producing plan → quizzes → coding problems, plus a story paragraph ending with the literal string `in todays's lesson...`.
 - Every artifact uses a two-pass Generate → Grade cycle with strict schema outputs (JSON) except ideation phases (Markdown).
-- The session pipeline adopts the checkpointing pattern established in `eval/src/code/generateStory.ts` so work can resume mid-stage.
+- The session pipeline adopts the checkpointing pattern established in `packages/llm/src/code/generateStory.ts` so work can resume mid-stage.
 
 ## Learner Assumptions
 

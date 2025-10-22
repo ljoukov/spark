@@ -2,13 +2,11 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type {
-  AudioGenerationProgress,
-  MediaSegment,
-  SpeakerCode,
-  Voice,
-} from "@spark/llm";
-import { generateSessionAudio, publishSessionMediaClip } from "@spark/llm";
+import type { AudioGenerationProgress, SpeakerCode } from "../utils/audio";
+import type { Voice } from "../utils/tts";
+import type { MediaSegment } from "./schemas";
+import { generateSessionAudio } from "./audio";
+import { publishSessionMediaClip } from "./mediaPublisher";
 
 import {
   formatByteSize,

@@ -14,17 +14,17 @@ import {
   type StoryImageSet,
   type StorySegmentation,
   StoryGenerationPipeline,
-} from "./generateStory";
+} from "@spark/llm/code/generateStory";
 import {
   generateSessionAudio,
   getGoogleServiceAccount,
   getTestUserId,
   type MediaSegment,
 } from "@spark/llm";
-import { runJobsWithConcurrency } from "../utils/concurrency";
-import { formatByteSize, formatDurationSeconds } from "../utils/format";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
+import { formatByteSize, formatDurationSeconds } from "@spark/llm/utils/format";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
-import { createConsoleProgress } from "./narration";
+import { createConsoleProgress } from "@spark/llm/code/generateNarration";
 import { STORY_PLAN_ITEM_ID, STORY_TOPIC, TEST_SESSION_ID } from "./constants";
 
 ensureEvalEnvLoaded();
