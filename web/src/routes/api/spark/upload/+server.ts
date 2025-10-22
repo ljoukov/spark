@@ -1,6 +1,10 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '$lib/server/utils/firebaseAdmin';
-import { getFirebaseAdminFirestoreModule } from '@spark/llm';
+import { clientFirebaseConfig } from '$lib/config/firebase';
+import {
+	getFirebaseAdminFirestore,
+	getFirebaseAdminFirestoreModule,
+	getFirebaseAdminStorage
+} from '@spark/llm';
 import { type SparkUploadQuizStatus, type SparkUploadStatus } from '@spark/schemas';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
@@ -131,8 +135,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			? `spark/uploads/${userId}/${digest}.${extension}`
 			: `spark/uploads/${userId}/${digest}`;
 
+	const firebaseAdminOptions = {
+		storageBucket: clientFirebaseConfig.storageBucket
+	};
+
 	try {
-		const bucket = getFirebaseAdminBucket();
+		const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
+		const bucket = storage.bucket();
 		const fileRef = bucket.file(storagePath);
 		await fileRef.save(fileBuffer, {
 			resumable: false,
@@ -154,7 +163,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 
-	const firestore = getFirebaseAdminFirestore();
+	const firestore = getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
 	const uploadDocRef = firestore.collection('spark').doc(userId).collection('uploads').doc(digest);
 	const quizDocRef = uploadDocRef.collection('quiz').doc();
 	const serverTimestamp = FieldValue.serverTimestamp();

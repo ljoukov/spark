@@ -15,8 +15,12 @@ import {
 	FirestoreTimestampSchema
 } from '@spark/schemas';
 
-import { getFirebaseAdminFirestoreModule } from '@spark/llm';
-import { getFirebaseAdminBucket, getFirebaseAdminFirestore } from '../utils/firebaseAdmin';
+import { clientFirebaseConfig } from '$lib/config/firebase';
+import {
+	getFirebaseAdminFirestore,
+	getFirebaseAdminFirestoreModule,
+	getFirebaseAdminStorage
+} from '@spark/llm';
 import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
 import { saveUserProblem } from '../code/problemRepo';
@@ -47,6 +51,19 @@ const TEMPLATE_DOC_ID = 'templates';
 const TEMPLATE_SESSIONS_COLLECTION = 'sessions';
 const { Timestamp } = getFirebaseAdminFirestoreModule();
 
+const firebaseAdminOptions = {
+	storageBucket: clientFirebaseConfig.storageBucket
+};
+
+function getFirestore() {
+	return getFirebaseAdminFirestore(undefined, firebaseAdminOptions);
+}
+
+function getStorageBucket() {
+	const storage = getFirebaseAdminStorage(undefined, firebaseAdminOptions);
+	return storage.bucket();
+}
+
 const TemplateDocSchema = z.object({
 	id: z.string().trim().min(1, 'id is required'),
 	title: z.string().trim().optional(),
@@ -61,7 +78,7 @@ const TemplateDocSchema = z.object({
 type TemplateDoc = z.infer<typeof TemplateDocSchema>;
 
 function resolveTemplateCollection() {
-	const firestore = getFirebaseAdminFirestore();
+	const firestore = getFirestore();
 	return firestore
 		.collection(TEMPLATE_ROOT_COLLECTION)
 		.doc(TEMPLATE_DOC_ID)
@@ -150,7 +167,7 @@ function normaliseStoragePath(input: string): string {
 
 async function createSignedUrl(storagePath: string): Promise<string | null> {
 	try {
-		const bucket = getFirebaseAdminBucket();
+		const bucket = getStorageBucket();
 		const file = bucket.file(normaliseStoragePath(storagePath));
 		const expiresAt = new Date(Date.now() + POSTER_SIGNED_URL_TTL_MS);
 		const [url] = await file.getSignedUrl({
@@ -260,7 +277,7 @@ async function copyMediaToUser(
 	sessionId: string,
 	media: SessionMediaDoc
 ): Promise<void> {
-	const firestore = getFirebaseAdminFirestore();
+	const firestore = getFirestore();
 	const now = Timestamp.now();
 	await firestore
 		.collection('spark')
@@ -277,7 +294,7 @@ async function copyMediaToUser(
 }
 
 async function seedSessionState(userId: string, session: Session): Promise<void> {
-	const firestore = getFirebaseAdminFirestore();
+	const firestore = getFirestore();
 	const stateRef = firestore.collection('spark').doc(userId).collection('state').doc(session.id);
 
 	const baseState: SessionState = SessionStateSchema.parse({
