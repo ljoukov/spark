@@ -25,6 +25,7 @@
     "@google/genai": "^1.21.0",
     "execa": "^9.6.0",
     "google-auth-library": "^9.15.1",
+    "firebase-admin": "^13.5.0",
     "openai": "^6.3.0",
     "zod": "^4.1.11"
   },

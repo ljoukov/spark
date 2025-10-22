@@ -22,7 +22,8 @@
 	},
 	"dependencies": {
 		"@spark/llm": "file:../packages/llm",
-		"@spark/schemas": "file:../packages/schemas"
+		"@spark/schemas": "file:../packages/schemas",
+		"firebase-admin": "^13.5.0"
 	},
 	"devDependencies": {
 		"@astral-sh/ruff-wasm-nodejs": "^0.13.3",
@@ -48,7 +49,6 @@
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
 		"firebase": "^12.3.0",
-		"firebase-admin": "^13.5.0",
 		"globals": "^16.0.0",
 		"jose": "^6.1.0",
 		"marked": "^16.3.0",
