@@ -1756,6 +1756,852 @@ const FLT_QUIZZES: QuizDefinition[] = [
   },
 ];
 
+const ENZYME_QUIZZES: QuizDefinition[] = [
+  {
+    id: "enzymes-foundations-quiz",
+    title: "Enzyme Catalyst Foundations",
+    topic: "Enzyme Structure and Digestion",
+    estimatedMinutes: 14,
+    progressKey: "primer",
+    description:
+      "Check the lock-and-key model and digestive enzyme roles from the mouth to the small intestine.",
+    questions: [
+      {
+        kind: "multiple-choice",
+        id: "enzyme-lock-key",
+        prompt:
+          "In the lock and key model of enzyme action, which statement best describes how products are formed?",
+        hint: "Think about how the active site and substrate interact.",
+        explanation:
+          "The active site is complementary to the substrate, so they form an enzyme-substrate complex that converts into products, which then leave while the enzyme is unchanged.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "The active site has a complementary shape to the substrate, forming an enzyme-substrate complex that turns into products which are released while the enzyme remains unchanged.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "The active site reshapes to fit any molecule, so one enzyme can catalyse every reaction equally well.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "The substrate becomes permanently attached to the enzyme and becomes part of the enzyme's structure.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Products mould the enzyme's active site before the substrate can bind.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Spot on",
+          message:
+            "Complementary binding creates the enzyme-substrate complex, the reaction runs, and the unchanged enzyme releases the products.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-specific-catalyst",
+        prompt:
+          "An enzyme is described as a specific biological catalyst. What does this reveal about its structure and function?",
+        hint: "Break the phrase into the two separate words.",
+        explanation:
+          "Specific means the active site only fits certain substrates, and biological catalyst means the protein speeds reactions without being consumed.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Its active site only binds substrates with a complementary shape, and the protein speeds reactions without being used up.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "It acts only in one organ and must use ATP for every reaction it catalyses.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "It only works at one temperature and can transform into whichever product the cell needs.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "It reacts with any molecule and is used up to become part of the product.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Exactly",
+          message:
+            "The complementarity of the active site gives specificity, and as a catalyst the enzyme speeds reactions without being consumed.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-active-site-fit",
+        prompt:
+          "Using the lock and key theory, why is an enzyme's structure perfectly suited to its function?",
+        hint: "Focus on the amino acids that make up the active site.",
+        explanation:
+          "The R-groups in the active site create a complementary microenvironment that positions the substrate so bonds break or form efficiently.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "The active site amino acids are arranged to form complementary interactions that hold the substrate in the correct orientation for the reaction.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "The active site is a random cavity that only works once before collapsing.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "The enzyme is mostly lipid so it can dissolve any substrate that approaches.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "The substrate shapes the enzyme after binding so the enzyme does not need an active site.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Well reasoned",
+          message:
+            "Complementary side chains hold the substrate in place, lowering the activation energy for the specific reaction.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-mechanism-flexibility",
+        prompt:
+          "How can the same enzyme mechanism allow both the breakdown of a molecule and the synthesis of a larger molecule?",
+        hint: "Consider how substrates are oriented in the active site.",
+        explanation:
+          "Active sites bind substrates in precise positions, so the enzyme can strain bonds to split a substrate or hold two substrates together so a new bond forms.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "By orientating substrates precisely, a single substrate can be strained and broken apart or two substrates can be joined and released as a larger product.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Enzymes only catalyse breakdown reactions and cannot catalyse synthesis.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "An enzyme breaks molecules down but synthesis requires a completely different enzyme with no active site.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Enzymes swap between being carbohydrates or lipids so the cell can choose which reaction happens.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Nice connection",
+          message:
+            "The same complementary fit holds substrates so bonds can be broken or formed, giving both catabolic and anabolic roles.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "digestive-summary",
+        prompt:
+          "Which summary correctly describes the chemical digestion of a meal containing carbohydrates, proteins, and lipids?",
+        hint: "Think about the enzymes, substrates, products, and locations involved.",
+        explanation:
+          "Amylase acts in the mouth and small intestine to turn starch into maltose and glucose, pepsin and pancreatic proteases turn proteins into amino acids, and lipase with bile in the small intestine releases fatty acids and glycerol.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Carbohydrates: salivary and pancreatic amylase then maltase in the small intestine produce glucose; Proteins: pepsin in the stomach then trypsin and peptidases in the small intestine produce amino acids; Lipids: bile emulsifies fats and pancreatic lipase in the small intestine produces fatty acids and glycerol.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Carbohydrates: only stomach acid digests starch; Proteins: lipase in the mouth breaks proteins into amino acids; Lipids: pepsin works in the stomach to release fatty acids.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Carbohydrates: pancreatic lipase converts starch into glycogen in the stomach; Proteins: amylase converts proteins into sugars in the small intestine; Lipids: bile in the mouth digests fats into amino acids.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Carbohydrates: amylase and maltase act only in the large intestine; Proteins: trypsin works in the mouth; Lipids: no enzyme action is needed because fats diffuse directly into the blood.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Comprehensive",
+          message:
+            "Each nutrient class uses a specific set of enzymes in defined locations to produce absorbable products.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "starch-digestion-sequence",
+        prompt:
+          "Which sequence correctly describes starch digestion from the mouth to the small intestine?",
+        hint: "Follow the enzyme names and the organs that release them.",
+        explanation:
+          "Salivary amylase begins starch digestion to maltose, pancreatic amylase continues it in the small intestine, and brush-border enzymes finish the hydrolysis to glucose.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Salivary glands release amylase in the mouth to form maltose, stomach acid halts the enzyme, pancreatic amylase resumes digestion in the duodenum, and maltase in the intestinal wall converts maltose to glucose.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Starch is first digested by pepsin in the stomach, then lipase in the pancreas converts it to glucose, and finally bile finishes digestion in the large intestine.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Amylase in the mouth converts starch directly to amino acids that are absorbed in the stomach.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "No digestion occurs until the large intestine, where trypsin converts starch into fatty acids.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Nice timeline",
+          message:
+            "Amylase acts in the mouth and duodenum, and intestinal enzymes finish the job by releasing glucose.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "protein-vs-lipid-digestion",
+        prompt:
+          "How does protein digestion in the stomach compare with lipid digestion in the small intestine?",
+        hint: "Compare the enzymes, conditions, substrates, and products.",
+        explanation:
+          "Pepsin works on proteins in the acidic stomach to form shorter peptides, while pancreatic lipase works in the alkaline small intestine with bile to hydrolyse triglycerides into fatty acids and glycerol.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Pepsin in the stomach needs acidic conditions to break proteins into peptides, whereas pancreatic lipase in the small intestine needs bile and an alkaline pH to convert triglycerides into fatty acids and glycerol.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Pepsin in the stomach splits lipids into glycerol, while lipase in the small intestine breaks proteins into amino acids at low pH.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Both pepsin and lipase work best at pH 2 and turn their substrates into glucose for absorption.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Protein digestion only happens in the mouth and lipid digestion only happens in the stomach.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Great comparison",
+          message:
+            "Different enzymes, pH conditions, and products distinguish protein digestion in the stomach from lipid digestion in the small intestine.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "pancreatic-failure-consequence",
+        prompt:
+          "A patient has a condition where their pancreas does not produce digestive enzymes. What is the main consequence for digestion and absorption?",
+        hint: "Think about which enzymes enter the duodenum from the pancreas.",
+        explanation:
+          "Without pancreatic amylase, proteases, and lipase, carbohydrates, proteins, and lipids are not fully digested, leading to malabsorption and nutrient deficiencies.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Most starch, protein, and lipid digestion fails in the small intestine, causing poor nutrient absorption, weight loss, and fatty stools.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Only protein digestion is affected because carbohydrates and lipids are completely digested in the stomach.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Digestion speeds up because stomach enzymes work harder to compensate.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "There is no change because bile completely replaces pancreatic enzymes.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Right outcome",
+          message:
+            "Pancreatic enzymes are vital for digesting all three macronutrients, so malabsorption follows when they are missing.",
+        },
+      },
+    ],
+  },
+  {
+    id: "enzymes-activity-quiz",
+    title: "Enzyme Activity Explorer",
+    topic: "Factors Affecting Enzyme Activity",
+    estimatedMinutes: 18,
+    progressKey: "wrap",
+    description:
+      "Explore how temperature, pH, experiments, and real-world uses affect enzyme performance.",
+    questions: [
+      {
+        kind: "multiple-choice",
+        id: "temperature-curve",
+        prompt:
+          "Describe the effect of increasing temperature on the rate of an enzyme-controlled reaction from 0°C to 100°C.",
+        hint: "Consider kinetic energy, the optimum temperature, and denaturation.",
+        explanation:
+          "Rate rises with temperature because particles move faster and collide more often until the optimum, after which the enzyme denatures and activity rapidly falls to zero by 100°C.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "The rate increases as particles gain kinetic energy until the optimum temperature, then falls sharply as the enzyme denatures and stops working by around 100°C.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "The rate stays constant at every temperature because catalysts are unaffected by heat.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "The rate falls steadily from 0°C because enzymes are destroyed by any warming.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "The rate only increases between 80°C and 100°C because enzymes are inactive below boiling point.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Temperature story nailed",
+          message:
+            "Heating boosts collisions up to the optimum, but further heating breaks bonds in the enzyme so the rate crashes.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "ph-effect",
+        prompt: "Why is enzyme activity affected by pH?",
+        hint: "Focus on the charges and shape of the active site.",
+        explanation:
+          "Changes in pH alter the ionisation of amino acid side chains, changing the active site's shape; extremes disrupt bonds and denature the enzyme.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "pH changes alter the charges on amino acid side chains, so the active site shape is lost away from the optimum and the enzyme may denature.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "pH only changes the colour of the enzyme but not how it binds substrates.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "pH has no effect unless the enzyme is mixed with heavy metals.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Enzymes prefer neutral pH because acidic or alkaline conditions always activate them more.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Correct explanation",
+          message:
+            "Altering pH changes bonding in the active site, so only the optimum keeps the correct complementary shape.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "temp-ph-graphs",
+        prompt:
+          "Using typical graphs on enzyme activity, how do the effects of temperature and pH compare?",
+        hint: "Think about the shapes of the curves and the molecular reasons.",
+        explanation:
+          "Temperature gives an asymmetric curve because collisions increase then denaturation drops activity, whereas pH gives a narrower symmetric peak because charge balance is only correct near the optimum.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Temperature produces a curve that rises to an optimum then falls steeply as denaturation occurs, while pH gives a sharper, more symmetrical peak because charge balance is only correct near the optimum value.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Both graphs stay flat because temperature and pH never affect enzyme activity.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Temperature produces a symmetrical peak but pH is a straight line because enzymes ignore acidity.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Temperature lowers activity at low values but pH always raises activity the further you go from neutral.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Good comparison",
+          message:
+            "Temperature changes kinetic energy and denaturation, giving an asymmetric curve; pH disrupts charges, giving a narrow optimum.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "pepsin-in-small-intestine",
+        prompt:
+          "Pepsin is a protease with an optimum pH of 2. Why would it not function effectively in the small intestine at pH 8?",
+        hint: "Consider how pH affects the active site.",
+        explanation:
+          "At alkaline pH the charges on pepsin's amino acids change, distorting the active site so the substrate no longer fits and the enzyme denatures.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "The alkaline pH changes the charge and shape of pepsin's active site so the substrate no longer fits and the enzyme denatures.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "The small intestine has no protein for pepsin to digest, so it has nothing to do.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Pepsin only works when bile is present, and bile is absent from the intestine.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Pepsin would digest itself because enzymes always break down in alkaline conditions.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Exactly",
+          message:
+            "Moving pepsin to pH 8 changes its active site so the complementary fit with proteins is lost.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "temperature-extremes",
+        prompt:
+          "Compare the effect of a very low temperature (2°C) with a very high temperature (80°C) on an enzyme.",
+        hint: "Think about reversibility and enzyme structure.",
+        explanation:
+          "Low temperatures slow molecular movement but leave the enzyme intact, so activity returns when warmed; very high temperatures break bonds, denaturing the active site irreversibly.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "At 2°C the enzyme works slowly but remains intact and activity recovers when warmed, whereas at 80°C the enzyme denatures and the loss of activity is usually irreversible.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "At 2°C the enzyme denatures permanently, but at 80°C it simply speeds up.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Both temperatures denature the enzyme irreversibly.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Neither temperature has any effect on the enzyme's activity.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Right distinction",
+          message:
+            "Cold slows catalysis without structural damage, but high heat breaks bonds and destroys the active site.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "ph-experiment-amylase",
+        prompt:
+          "Which plan best describes an experiment to investigate the effect of pH on the rate of amylase activity?",
+        hint: "Think about controlled variables and how to measure the reaction.",
+        explanation:
+          "You vary the buffer pH while keeping temperature, enzyme, and substrate concentrations constant, then time how long iodine shows that starch remains.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Use buffered starch-amylase mixtures at different pH values, keep temperature constant, sample at set times onto iodine, and record the time taken for the iodine to stay brown (no starch).",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Heat amylase to boiling point, add starch, and record the mass of starch left after an hour without using buffers.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Mix amylase with lipase in one test tube and compare their colours after a day.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Only vary the concentration of starch and assume the pH stays constant.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Experimental win",
+          message:
+            "Controlling everything except pH and timing the starch disappearance with iodine isolates the effect of pH on amylase.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "starch-testing",
+        prompt:
+          "A student sets up starch solution with amylase. How could they show over time that the enzyme is working?",
+        hint: "Use a test that distinguishes starch from sugar.",
+        explanation:
+          "Taking samples, adding iodine, and watching the colour change from blue-black to orange-brown demonstrates starch disappearance as amylase works.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Remove samples at intervals, add iodine on a spotting tile, and record when the colour stays orange-brown instead of blue-black.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Measure the pH with universal indicator to see if it changes colour.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Smell the mixture to see if it becomes sweeter over time.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Shine a light through the tube and record the brightness.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Classic test",
+          message:
+            "Iodine losing its blue-black colour shows the starch has been digested by amylase.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "washing-powder",
+        prompt:
+          "Biological washing powders contain enzymes such as proteases and lipases. How do these enzymes help remove stains, and why is a washing temperature of 30-40°C recommended?",
+        hint: "Consider the substrates in stains and how temperature affects enzymes.",
+        explanation:
+          "Enzymes hydrolyse protein and fat stains at moderate temperatures; hotter washes risk denaturing them so they become ineffective.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Proteases and lipases break down protein and fat stains into soluble fragments, and moderate temperatures keep the enzymes active without denaturing them.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "High temperatures are needed so the enzymes melt the stains away completely.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "The enzymes only add fragrance, so any temperature will do.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Proteases convert stains into starch, which then dissolves instantly.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Laundry logic",
+          message:
+            "Moderate washes keep the enzymes active so they can hydrolyse protein and fat stains.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-denature",
+        prompt:
+          "What happens when an enzyme is denatured?",
+        hint: "Focus on the structure of the active site.",
+        explanation:
+          "Denaturation breaks bonds that maintain the enzyme's shape, so the active site loses its complementarity and the substrate no longer binds.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Its active site changes shape because bonds break, so the substrate no longer fits and the reaction stops.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "It becomes faster temporarily before returning to normal.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "It turns into a carbohydrate that stores energy.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "It splits into two smaller enzymes that each work on half the substrate.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Right definition",
+          message:
+            "Denaturation destroys the active site's complementary shape so substrates cannot bind.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "catalase-temperature",
+        prompt:
+          "Catalase breaks down hydrogen peroxide much faster at 35°C than at 10°C. Why?",
+        hint: "Consider collision frequency and the active site.",
+        explanation:
+          "Higher temperature increases kinetic energy so more enzyme-substrate complexes form per second while the active site remains intact at 35°C.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Particles move faster at 35°C, creating more enzyme-substrate collisions while the active site keeps its shape; at 10°C collisions are rarer so the rate is slower.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Catalase is denatured at 10°C but renatures at 35°C.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Hydrogen peroxide only exists at 35°C, so no reaction can happen at 10°C.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Catalase needs light, and 35°C is brighter than 10°C.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Good kinetic link",
+          message:
+            "More kinetic energy at 35°C gives more frequent successful collisions, boosting the rate.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-importance",
+        prompt:
+          "Why are enzymes essential in the human body, considering both digestion and another life process?",
+        hint: "Think about reaction speed and specificity.",
+        explanation:
+          "Enzymes make vital reactions fast enough to sustain life, from digestion to respiration and DNA replication.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "They allow rapid digestion of food and catalyse other key processes such as respiration and DNA replication that would otherwise be too slow.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "They only help digestion; other body reactions run unaided at useful speeds.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "They are mainly energy stores that can be broken down when food is scarce.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "They provide structural support in bones instead of catalysing reactions.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Exactly",
+          message:
+            "Without enzymes, digestion and other essential pathways would be too slow to keep us alive.",
+        },
+      },
+      {
+        kind: "multiple-choice",
+        id: "enzyme-locations",
+        prompt:
+          "Slide 35 shows graphs for Enzyme X and Enzyme Y. If Enzyme X has an optimum pH near 2 and Enzyme Y peaks around pH 8, where would each enzyme operate, and what happens if Enzyme X moves to Enzyme Y's environment?",
+        hint: "Match optimum pH to regions of the digestive system.",
+        explanation:
+          "Enzyme X suits the acidic stomach, while Enzyme Y suits the alkaline small intestine; moving the stomach enzyme to pH 8 would distort its active site and halt its activity.",
+        options: [
+          {
+            id: "A",
+            label: "A",
+            text:
+              "Enzyme X works in the stomach and Enzyme Y in the small intestine; shifting Enzyme X to pH 8 denatures it so activity drops sharply.",
+          },
+          {
+            id: "B",
+            label: "B",
+            text:
+              "Both enzymes belong in the mouth, and Enzyme X speeds up in alkaline conditions.",
+          },
+          {
+            id: "C",
+            label: "C",
+            text:
+              "Enzyme X should be in the pancreas duct and Enzyme Y in the stomach; swapping them has no effect.",
+          },
+          {
+            id: "D",
+            label: "D",
+            text:
+              "Both enzymes work best in the large intestine, and Enzyme X becomes more active if moved there.",
+          },
+        ],
+        correctOptionId: "A",
+        correctFeedback: {
+          heading: "Location matched",
+          message:
+            "Stomach enzymes prefer acidic pH, whereas small-intestine enzymes prefer alkaline conditions, so swapping environments destroys the stomach enzyme's activity.",
+        },
+      },
+    ],
+  },
+];
+
+const ENZYME_PROBLEMS: CodeProblem[] = [];
+
 const FLT_PRIME_POWER_EXAMPLES = [
   {
     title: "Example 1",
@@ -1951,6 +2797,41 @@ const FLT_PROBLEMS: CodeProblem[] = [
   },
 ];
 
+const ENZYME_SESSION_ID = "welcome-enzyme-catalysts";
+const ENZYME_STORY_PLAN_ITEM_ID = "welcome-enzyme-story";
+
+function buildEnzymePlan(storyTitle: string): PlanItem[] {
+  return [
+    {
+      id: ENZYME_STORY_PLAN_ITEM_ID,
+      kind: "media",
+      title: storyTitle,
+      icon: "📖",
+      meta: "Story",
+      summary:
+        "Follow enzymes through digestion to see how structure, conditions, and denaturation shape their roles.",
+    },
+    {
+      id: "enzymes-foundations-quiz",
+      kind: "quiz",
+      title: "Enzyme Structure & Digestion",
+      icon: "🧪",
+      meta: "8 checks",
+      summary:
+        "Lock in the lock-and-key model and track digestive enzymes from the mouth to the small intestine.",
+    },
+    {
+      id: "enzymes-activity-quiz",
+      kind: "quiz",
+      title: "Enzyme Activity & Application",
+      icon: "🔥",
+      meta: "12 checks",
+      summary:
+        "Predict how temperature, pH, and practical tests affect enzymes in the lab and at home.",
+    },
+  ];
+}
+
 const BFS_SESSION_ID = "welcome-bfs-explorer";
 const BFS_STORY_PLAN_ITEM_ID = "welcome-bfs-story";
 
@@ -2107,6 +2988,21 @@ function buildFermatPlan(storyTitle: string): PlanItem[] {
   ];
 }
 
+const ENZYME_BLUEPRINT: WelcomeSessionBlueprint = {
+  sessionId: ENZYME_SESSION_ID,
+  key: ENZYME_SESSION_ID,
+  title: "Catalyst Keys: Enzymes in Digestion",
+  tagline:
+    "Understand the lock-and-key model, digestive enzymes, and how temperature and pH shape their activity.",
+  emoji: "🧪",
+  topic:
+    "The structure and function of enzymes as specific protein catalysts, explained by the lock and key model, focusing on their role in digestion and how factors such as temperature and pH affect their activity and can cause denaturation.",
+  storyPlanItemId: ENZYME_STORY_PLAN_ITEM_ID,
+  buildPlan: buildEnzymePlan,
+  quizzes: ENZYME_QUIZZES,
+  problems: ENZYME_PROBLEMS,
+};
+
 const BFS_BLUEPRINT: WelcomeSessionBlueprint = {
   sessionId: BFS_SESSION_ID,
   key: BFS_SESSION_ID,
@@ -2147,6 +3043,7 @@ const FLT_BLUEPRINT: WelcomeSessionBlueprint = {
 };
 
 const WELCOME_BLUEPRINTS: WelcomeSessionBlueprint[] = [
+  ENZYME_BLUEPRINT,
   BFS_BLUEPRINT,
   DP_BLUEPRINT,
   FLT_BLUEPRINT,
@@ -2281,6 +3178,7 @@ async function ensureStoryCheckpointDir(
   await mkdir(targetDir, { recursive: true });
   return targetDir;
 }
+
 
 function resolveStageSequence(options: CliOptions): StageName[] {
   if (options.stages.length === 0) {
