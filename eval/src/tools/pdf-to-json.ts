@@ -5,6 +5,7 @@ import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
 import { generateJson, type LlmContent } from "@spark/llm/utils/llm";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
 import { createCliCommand } from "../utils/cli";
 import { detectMimeType } from "../utils/mime";
@@ -160,16 +161,32 @@ async function main(argv: readonly string[]): Promise<void> {
   ensureEvalEnvLoaded();
   const options = parseCliOptions(argv);
   const pdfBase64 = await readPdfBase64(options.inputFile);
+  const fileName = path.basename(options.inputFile);
   const contents = buildPrompt({
-    fileName: path.basename(options.inputFile),
+    fileName,
     pdfBase64,
   });
 
-  const analysis = await generateJson<PdfAnalysis>({
-    modelId: "gemini-2.5-pro",
-    contents,
-    schema: PdfAnalysisSchema,
-    responseSchema: PDF_ANALYSIS_RESPONSE_SCHEMA,
+  const [analysis] = await runJobsWithConcurrency<
+    { fileName: string; contents: LlmContent[] },
+    PdfAnalysis
+  >({
+    items: [{ fileName, contents }],
+    concurrency: 1,
+    getId: (item) => item.fileName,
+    label: "[pdf-to-json]",
+    handler: async (item, { progress }) => {
+      progress.log(`starting Gemini analysis for ${item.fileName}`);
+      const result = await generateJson<PdfAnalysis>({
+        modelId: "gemini-2.5-pro",
+        contents: item.contents,
+        schema: PdfAnalysisSchema,
+        responseSchema: PDF_ANALYSIS_RESPONSE_SCHEMA,
+        progress,
+      });
+      progress.log(`completed Gemini analysis for ${item.fileName}`);
+      return result;
+    },
   });
 
   console.log(JSON.stringify(analysis, null, 2));
