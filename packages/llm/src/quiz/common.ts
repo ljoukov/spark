@@ -1,6 +1,10 @@
 import type { QuizFeedback } from "@spark/schemas";
 
-import type { InlineSourceFile } from "./legacy/schemas";
+export interface InlineSourceFile {
+  readonly displayName: string;
+  readonly mimeType: string;
+  readonly data: string;
+}
 
 export interface SparkQuizSourceFile {
   readonly filename: string;
