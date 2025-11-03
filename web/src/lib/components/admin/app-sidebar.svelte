@@ -1,7 +1,8 @@
 <script lang="ts">
 	import HomeIcon from '@lucide/svelte/icons/home';
 	import BotIcon from '@lucide/svelte/icons/bot';
-	import DatabaseIcon from '@lucide/svelte/icons/database';
+import DatabaseIcon from '@lucide/svelte/icons/database';
+import PlayIcon from '@lucide/svelte/icons/play';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -39,6 +40,12 @@
 			href: '/admin/gemini',
 			icon: BotIcon,
 			highlight: (path) => path.startsWith('/admin/gemini')
+		},
+		{
+			title: 'Tasks',
+			href: '/admin/tasks',
+			icon: PlayIcon,
+			highlight: (path) => path.startsWith('/admin/tasks')
 		}
 	] satisfies readonly NavItem[];
 

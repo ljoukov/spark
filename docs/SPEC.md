@@ -54,12 +54,17 @@ name of the oneof in `SparkApiRequestProto.request`.
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
 - `type = "generateQuiz"` with `generateQuiz: { userId: string; quizId: string }`.
+- `type = "helloWorld"` with no additional payload. The handler logs `Hello World` for smoke testing and pipeline diagnostics.
 
 During development, the server schedules work by POSTing directly to `TASKS_SERVICE_URL` (typically the same app’s `/api/internal/tasks`). In production the same binary schedules via Google Cloud Tasks:
 
 - Env: `TASKS_SERVICE_URL` (full handler URL), `TASKS_API_KEY` (Bearer), optional `TASKS_QUEUE` (default `spark-tasks`).
 - Location: `us-central1`.
 - The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
+
+### Admin UI
+
+- `/admin/tasks` exposes manual task triggers for operators. The initial control is a "Run task" button that enqueues the `helloWorld` task and expects to see `Hello World` in the server logs, confirming API key + queue configuration end to end.
 
 ### 3.1 Data Flow
 
