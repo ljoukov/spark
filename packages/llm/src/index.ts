@@ -1,5 +1,7 @@
 export * from "./quiz/legacy";
 export * from "./quiz/sparkUpload";
+export * from "./quiz/pdfQuiz";
+export type { SparkQuizSourceFile } from "./quiz/common";
 export * from "./code/schemas";
 export * from "./code/audio";
 export * from "./code/mediaPublisher";
