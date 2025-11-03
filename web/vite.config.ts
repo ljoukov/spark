@@ -75,7 +75,8 @@ export default defineConfig({
 			'@google-cloud/storage',
 			'google-gax',
 			'@grpc/grpc-js',
-			'@grpc/proto-loader'
+			'@grpc/proto-loader',
+			'sharp'
 		]
 	},
 	test: {
