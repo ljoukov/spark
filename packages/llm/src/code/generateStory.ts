@@ -21,7 +21,7 @@ import {
   getFirebaseStorageBucketName,
 } from "../utils/firebaseAdmin";
 import type { MediaSegment } from "./schemas";
-import sharp from "sharp";
+import { getSharp } from "../utils/sharp";
 
 import {
   createConsoleProgress,
@@ -4603,6 +4603,7 @@ export class StoryGenerationPipeline {
     const storage = getFirebaseAdminStorage();
     const bucket = storage.bucket(storageBucket);
 
+    const sharpModule = getSharp();
     const totalImages = interiorImages.length;
     const uploadConcurrency = Math.min(8, totalImages);
     this.logger.log(
@@ -4620,7 +4621,7 @@ export class StoryGenerationPipeline {
           return;
         }
         const image = interiorImages[currentIndex];
-        const jpegBuffer = await sharp(image.data)
+        const jpegBuffer = await sharpModule(image.data)
           .jpeg({
             quality: 92,
             progressive: true,
@@ -4660,7 +4661,7 @@ export class StoryGenerationPipeline {
       image: GeneratedStoryImage,
       kind: "poster" | "ending",
     ): Promise<StorySupplementaryImage> => {
-      const jpegBuffer = await sharp(image.data)
+      const jpegBuffer = await sharpModule(image.data)
         .jpeg({
           quality: 92,
           progressive: true,
