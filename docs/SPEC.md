@@ -196,3 +196,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - Do we need offline capture queue on iOS (store uploads locally until connectivity resumes)?
 - Should we expose partial quiz previews while they are being generated? (Answer: definitely)
+
+## 12) Developer Operations Notes
+
+- Cloud Run troubleshooting: when native bindings (e.g., `sharp`) misbehave in production, validate the image locally before redeploying. Run `docker build -f web/Dockerfile -t spark-web-local .` followed by `docker run --rm -e PORT=8080 -p 8080:8080 spark-web-local` and `curl http://127.0.0.1:8080` to confirm the server starts. This workflow is slow (≈1–2 minutes per build) and should only be used while chasing deployment-specific regressions, not during routine development.
