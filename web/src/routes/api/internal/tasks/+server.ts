@@ -17,12 +17,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const task = result.data;
-	if (task.type !== 'generateQuiz') {
-		return json({ error: 'unsupported_task' }, { status: 400 });
+	if (task.type === 'generateQuiz') {
+		const { userId, quizId } = task.generateQuiz;
+		console.log(`[internal task] generateQuiz userId=${userId} quizId=${quizId}`);
+	} else {
+		console.log('[internal task] Hello World');
 	}
-
-	const { userId, quizId } = task.generateQuiz;
-	console.log(`[internal task] generateQuiz userId=${userId} quizId=${quizId}`);
 
 	return json({ status: 'accepted' }, { status: 202 });
 };
