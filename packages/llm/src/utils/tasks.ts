@@ -8,14 +8,22 @@ export const GenerateQuizTaskSchema = z.object({
   quizId: z.string().min(1),
 });
 
+const GenerateQuizTaskEnvelope = z.object({
+  type: z.literal("generateQuiz"),
+  generateQuiz: GenerateQuizTaskSchema,
+});
+
+const HelloWorldTaskEnvelope = z.object({
+  type: z.literal("helloWorld"),
+});
+
 export const TaskSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("generateQuiz"),
-    generateQuiz: GenerateQuizTaskSchema,
-  }),
+  GenerateQuizTaskEnvelope,
+  HelloWorldTaskEnvelope,
 ]);
 
 export type GenerateQuizTask = z.infer<typeof GenerateQuizTaskSchema>;
+export type HelloWorldTask = z.infer<typeof HelloWorldTaskEnvelope>;
 export type Task = z.infer<typeof TaskSchema>;
 
 const CLOUD_TASKS_SCOPE = [
@@ -48,13 +56,6 @@ function isLocalUrl(url: string): boolean {
   }
 }
 
-type CreateTaskOptions = {
-  serviceUrl?: string; // full URL to the tasks handler (e.g., https://host/api/internal/tasks)
-  apiKey?: string; // bearer token for the handler
-  queue?: string; // Cloud Tasks queue name
-  location?: string; // GCP region
-};
-
 async function getTasksAccessToken(): Promise<string> {
   return await getGoogleAccessToken(CLOUD_TASKS_SCOPE);
 }
@@ -64,26 +65,22 @@ function getProjectId(): string {
   return sa.projectId;
 }
 
-export async function createTask(
-  task: Task,
-  opts: CreateTaskOptions = {},
-): Promise<void> {
+export async function createTask(task: Task): Promise<void> {
   loadLocalEnv();
-
-  const serviceUrl = opts.serviceUrl ?? process.env.TASKS_SERVICE_URL ?? "";
-  const apiKey = opts.apiKey ?? process.env.TASKS_API_KEY ?? "";
-  const location = opts.location ?? DEFAULT_LOCATION;
-  const queue = opts.queue ?? process.env.TASKS_QUEUE ?? DEFAULT_QUEUE;
-
+  const serviceUrl = process.env.TASKS_SERVICE_URL ?? "";
   if (!serviceUrl) {
     throw new Error(
-      "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl.",
+      "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl."
     );
   }
 
+  const apiKey = process.env.TASKS_API_KEY ?? "";
   if (!apiKey) {
     throw new Error("TASKS_API_KEY is not configured. Set env or pass apiKey.");
   }
+
+  const location = DEFAULT_LOCATION;
+  const queue = DEFAULT_QUEUE;
 
   if (isLocalUrl(serviceUrl)) {
     // Call handler directly during local development
@@ -99,8 +96,10 @@ export async function createTask(
         u.pathname = "/api/internal/tasks";
       }
       postUrl = u.toString();
-    } catch {
-      // keep as-is
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
+      );
     }
     try {
       const resp = await fetch(postUrl, {
@@ -111,7 +110,7 @@ export async function createTask(
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
         console.warn(
-          `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`,
+          `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`
         );
       }
     } catch (err) {
@@ -133,7 +132,7 @@ export async function createTask(
 
   const taskPayload = JSON.stringify(task);
   const encodedBody = base64EncodeUrlSafe(
-    new TextEncoder().encode(taskPayload),
+    new TextEncoder().encode(taskPayload)
   );
 
   const createUrl = `https://cloudtasks.googleapis.com/v2/projects/${projectId}/locations/${location}/queues/${queue}/tasks`;
@@ -162,7 +161,7 @@ export async function createTask(
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     console.warn(
-      `Cloud Tasks create failed: ${resp.status} ${resp.statusText} ${text}`,
+      `Cloud Tasks create failed: ${resp.status} ${resp.statusText} ${text}`
     );
     throw new Error("Task creation failed");
   }
