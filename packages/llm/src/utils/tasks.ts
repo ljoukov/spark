@@ -5,6 +5,7 @@ import { getGoogleAccessToken, getGoogleServiceAccount } from "./googleAuth";
 // Server-side task schema
 export const GenerateQuizTaskSchema = z.object({
   userId: z.string().min(1),
+  uploadId: z.string().min(1),
   quizId: z.string().min(1),
 });
 

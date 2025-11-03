@@ -53,7 +53,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
-- `type = "generateQuiz"` with `generateQuiz: { userId: string; quizId: string }`.
+- `type = "generateQuiz"` with `generateQuiz: { userId: string; uploadId: string; quizId: string }`.
 - `type = "helloWorld"` with no additional payload. The handler logs `Hello World` for smoke testing and pipeline diagnostics.
 
 During development, the server schedules work by POSTing directly to `TASKS_SERVICE_URL` (typically the same app’s `/api/internal/tasks`). In production the same binary schedules via Google Cloud Tasks:
@@ -139,6 +139,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/code`.
 - `/spark` greets the authenticated user by name as the hub landing page after sign-in, while `/code` continues to host the coding sessions UI. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf` and immediately register Firestore metadata at `spark/{uid}/uploads/{sha}` with a pending 20-question quiz run.
+  - Learners can trigger additional quiz runs for a stored upload via `POST /api/spark/uploads/{uploadId}/quiz`; each request creates a new `spark/{uid}/uploads/{uploadId}/quiz/{quizId}` document and enqueues processing without duplicating the underlying PDF.
 - `/welcome` accepts an optional `destination` query (`code` | `spark`). Without a destination it shows the dual-card picker (Spark Quiz → `/spark`, Spark Code → `/code`) after authentication; when present it deep-links to the requested experience post-login.
 - `/logout` honours a `from` query (`code` | `spark`) and routes the “Back to welcome” action to `/welcome?destination=<from>` so learners land in the correct experience.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.

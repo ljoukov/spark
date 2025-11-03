@@ -1,5 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import {
+	createTask,
 	getFirebaseAdminFirestore,
 	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
@@ -206,6 +207,52 @@ export const POST: RequestHandler = async ({ request }) => {
 			{
 				error: 'metadata_failed',
 				message: 'We uploaded the file but could not record its metadata. Please try again.'
+			},
+			{ status: 500 }
+		);
+	}
+
+	try {
+		await createTask({
+			type: 'generateQuiz',
+			generateQuiz: {
+				userId,
+				uploadId: digest,
+				quizId: quizDocRef.id
+			}
+		});
+	} catch (error) {
+		console.error('Spark upload: failed to enqueue quiz generation task', {
+			error,
+			userId,
+			uploadId: digest,
+			quizId: quizDocRef.id
+		});
+		try {
+			await uploadDocRef.update({
+				status: 'failed',
+				quizStatus: 'failed',
+				latestError: 'Failed to enqueue quiz generation. Please retry later.',
+				lastUpdatedAt: FieldValue.serverTimestamp()
+			});
+			await quizDocRef.update({
+				status: 'failed',
+				updatedAt: FieldValue.serverTimestamp(),
+				failureReason: 'enqueue_failed'
+			});
+		} catch (updateError) {
+			console.error('Spark upload: failed to mark enqueue failure', {
+				error: updateError,
+				userId,
+				uploadId: digest,
+				quizId: quizDocRef.id
+			});
+		}
+		return json(
+			{
+				error: 'enqueue_failed',
+				message:
+					'We saved your file but could not start quiz generation. Please try again in a moment.'
 			},
 			{ status: 500 }
 		);
