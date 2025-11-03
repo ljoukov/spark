@@ -599,7 +599,9 @@ function buildQuizzesGenerateUserPrompt(
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
   if (typeof introCount === "number" && introCount > 0) {
-    constraints.push(`Override: intro_quiz must have exactly ${introCount} questions.`);
+    constraints.push(
+      `Override: intro_quiz must have exactly ${introCount} questions.`,
+    );
   }
   if (typeof wrapCount === "number" && wrapCount > 0) {
     constraints.push(
@@ -938,9 +940,7 @@ export class SessionGenerationPipeline {
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
-    this.logger.log(
-      `[session/checkpoint] wrote 'plan_ideas' to ${filePath}`,
-    );
+    this.logger.log(`[session/checkpoint] wrote 'plan_ideas' to ${filePath}`);
   }
 
   private async readPlanCheckpoint(): Promise<
@@ -954,7 +954,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1000,7 +1003,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1028,13 +1034,14 @@ export class SessionGenerationPipeline {
       return;
     }
     await mkdir(this.checkpointDir, { recursive: true });
-    const payload: PlanGradeCheckpoint = { ...value, topic: this.options.topic };
+    const payload: PlanGradeCheckpoint = {
+      ...value,
+      topic: this.options.topic,
+    };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
-    this.logger.log(
-      `[session/checkpoint] wrote 'plan_grade' to ${filePath}`,
-    );
+    this.logger.log(`[session/checkpoint] wrote 'plan_grade' to ${filePath}`);
   }
 
   private async readQuizIdeasCheckpoint(): Promise<
@@ -1082,9 +1089,7 @@ export class SessionGenerationPipeline {
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
-    this.logger.log(
-      `[session/checkpoint] wrote 'quiz_ideas' to ${filePath}`,
-    );
+    this.logger.log(`[session/checkpoint] wrote 'quiz_ideas' to ${filePath}`);
   }
 
   private async readQuizzesCheckpoint(): Promise<
@@ -1098,7 +1103,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1133,9 +1141,7 @@ export class SessionGenerationPipeline {
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
-    this.logger.log(
-      `[session/checkpoint] wrote 'quizzes' to ${filePath}`,
-    );
+    this.logger.log(`[session/checkpoint] wrote 'quizzes' to ${filePath}`);
   }
 
   private async readQuizzesGradeCheckpoint(): Promise<
@@ -1149,7 +1155,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1250,7 +1259,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1285,9 +1297,7 @@ export class SessionGenerationPipeline {
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
-    this.logger.log(
-      `[session/checkpoint] wrote 'problems' to ${filePath}`,
-    );
+    this.logger.log(`[session/checkpoint] wrote 'problems' to ${filePath}`);
   }
 
   private async readProblemsGradeCheckpoint(): Promise<
@@ -1301,7 +1311,10 @@ export class SessionGenerationPipeline {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const checkpointTopic = parsed?.topic;
-      if (typeof checkpointTopic === "string" && checkpointTopic !== this.options.topic) {
+      if (
+        typeof checkpointTopic === "string" &&
+        checkpointTopic !== this.options.topic
+      ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
@@ -1474,9 +1487,7 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
-  private async ensurePlanGradeInternal(): Promise<
-    StageCacheEntry<PlanGrade>
-  > {
+  private async ensurePlanGradeInternal(): Promise<StageCacheEntry<PlanGrade>> {
     if (this.caches.planGrade) {
       return this.caches.planGrade;
     }
@@ -1499,10 +1510,7 @@ export class SessionGenerationPipeline {
     this.logger.log("[session/plan-grade] grading plan");
     const grade = await generateJson<PlanGrade>({
       modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "Rubric QA, diagnose only.",
-        userPrompt,
-      ),
+      contents: buildSingleUserPrompt("Rubric QA, diagnose only.", userPrompt),
       responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
       schema: PlanGradeSchema,
       progress: this.logger,
@@ -1547,7 +1555,10 @@ export class SessionGenerationPipeline {
     for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
       try {
-        const debugOptions = this.createDebugOptions("quiz-ideas", attemptLabel);
+        const debugOptions = this.createDebugOptions(
+          "quiz-ideas",
+          attemptLabel,
+        );
         const userPrompt = buildQuizIdeasUserPrompt(
           plan,
           planIdeas.markdown,
@@ -1725,11 +1736,7 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const quizzes = await this.ensureQuizzes();
     const quizIdeas = await this.ensureQuizIdeas();
-    for (
-      let attempt = 1;
-      attempt <= MAX_PROBLEM_ATTEMPTS;
-      attempt += 1
-    ) {
+    for (let attempt = 1; attempt <= MAX_PROBLEM_ATTEMPTS; attempt += 1) {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_ATTEMPTS).padStart(2, "0")}`;
       try {
         const debugOptions = this.createDebugOptions(
@@ -1829,8 +1836,7 @@ export class SessionGenerationPipeline {
         `Failed to parse problems JSON: ${errorAsString(error)}\nRaw output:\n${raw}`,
       );
     }
-    const normalised =
-      Array.isArray(parsed) ? { problems: parsed } : parsed;
+    const normalised = Array.isArray(parsed) ? { problems: parsed } : parsed;
     const cleaned = normaliseProblemsPayload(normalised);
     const problems = ProblemsSchema.parse(cleaned);
     await this.writeProblemsCheckpoint(problems);
@@ -1896,7 +1902,9 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
-  async invalidateStagesAfter(stage: SessionGenerationStageName): Promise<void> {
+  async invalidateStagesAfter(
+    stage: SessionGenerationStageName,
+  ): Promise<void> {
     await this.invalidateDownstreamStages(stage);
   }
 
@@ -1910,7 +1918,8 @@ export class SessionGenerationPipeline {
   }
 }
 
-type SessionGenerationQuestionCounts = SessionGenerationPipelineOptions["questionCounts"];
+type SessionGenerationQuestionCounts =
+  SessionGenerationPipelineOptions["questionCounts"];
 
 export type GenerateSessionOptions = {
   topic: string;
@@ -1973,11 +1982,7 @@ export async function generateSession(
 
   let quizzes: readonly SessionQuiz[] | undefined;
   let quizzesGrade: QuizzesGrade | undefined;
-  for (
-    let attempt = 1;
-    attempt <= 1 + MAX_QUIZ_GRADE_RETRIES;
-    attempt += 1
-  ) {
+  for (let attempt = 1; attempt <= 1 + MAX_QUIZ_GRADE_RETRIES; attempt += 1) {
     quizzes = await pipeline.ensureQuizzes();
     quizzesGrade = await pipeline.ensureQuizzesGrade();
     if (quizzesGrade.pass) {

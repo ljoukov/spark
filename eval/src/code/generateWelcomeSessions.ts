@@ -1778,26 +1778,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "The active site has a complementary shape to the substrate, forming an enzyme-substrate complex that turns into products which are released while the enzyme remains unchanged.",
+            text: "The active site has a complementary shape to the substrate, forming an enzyme-substrate complex that turns into products which are released while the enzyme remains unchanged.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "The active site reshapes to fit any molecule, so one enzyme can catalyse every reaction equally well.",
+            text: "The active site reshapes to fit any molecule, so one enzyme can catalyse every reaction equally well.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "The substrate becomes permanently attached to the enzyme and becomes part of the enzyme's structure.",
+            text: "The substrate becomes permanently attached to the enzyme and becomes part of the enzyme's structure.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Products mould the enzyme's active site before the substrate can bind.",
+            text: "Products mould the enzyme's active site before the substrate can bind.",
           },
         ],
         correctOptionId: "A",
@@ -1819,26 +1815,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Its active site only binds substrates with a complementary shape, and the protein speeds reactions without being used up.",
+            text: "Its active site only binds substrates with a complementary shape, and the protein speeds reactions without being used up.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "It acts only in one organ and must use ATP for every reaction it catalyses.",
+            text: "It acts only in one organ and must use ATP for every reaction it catalyses.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "It only works at one temperature and can transform into whichever product the cell needs.",
+            text: "It only works at one temperature and can transform into whichever product the cell needs.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "It reacts with any molecule and is used up to become part of the product.",
+            text: "It reacts with any molecule and is used up to become part of the product.",
           },
         ],
         correctOptionId: "A",
@@ -1860,26 +1852,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "The active site amino acids are arranged to form complementary interactions that hold the substrate in the correct orientation for the reaction.",
+            text: "The active site amino acids are arranged to form complementary interactions that hold the substrate in the correct orientation for the reaction.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "The active site is a random cavity that only works once before collapsing.",
+            text: "The active site is a random cavity that only works once before collapsing.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "The enzyme is mostly lipid so it can dissolve any substrate that approaches.",
+            text: "The enzyme is mostly lipid so it can dissolve any substrate that approaches.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "The substrate shapes the enzyme after binding so the enzyme does not need an active site.",
+            text: "The substrate shapes the enzyme after binding so the enzyme does not need an active site.",
           },
         ],
         correctOptionId: "A",
@@ -1901,26 +1889,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "By orientating substrates precisely, a single substrate can be strained and broken apart or two substrates can be joined and released as a larger product.",
+            text: "By orientating substrates precisely, a single substrate can be strained and broken apart or two substrates can be joined and released as a larger product.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Enzymes only catalyse breakdown reactions and cannot catalyse synthesis.",
+            text: "Enzymes only catalyse breakdown reactions and cannot catalyse synthesis.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "An enzyme breaks molecules down but synthesis requires a completely different enzyme with no active site.",
+            text: "An enzyme breaks molecules down but synthesis requires a completely different enzyme with no active site.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Enzymes swap between being carbohydrates or lipids so the cell can choose which reaction happens.",
+            text: "Enzymes swap between being carbohydrates or lipids so the cell can choose which reaction happens.",
           },
         ],
         correctOptionId: "A",
@@ -1942,26 +1926,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Carbohydrates: salivary and pancreatic amylase then maltase in the small intestine produce glucose; Proteins: pepsin in the stomach then trypsin and peptidases in the small intestine produce amino acids; Lipids: bile emulsifies fats and pancreatic lipase in the small intestine produces fatty acids and glycerol.",
+            text: "Carbohydrates: salivary and pancreatic amylase then maltase in the small intestine produce glucose; Proteins: pepsin in the stomach then trypsin and peptidases in the small intestine produce amino acids; Lipids: bile emulsifies fats and pancreatic lipase in the small intestine produces fatty acids and glycerol.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Carbohydrates: only stomach acid digests starch; Proteins: lipase in the mouth breaks proteins into amino acids; Lipids: pepsin works in the stomach to release fatty acids.",
+            text: "Carbohydrates: only stomach acid digests starch; Proteins: lipase in the mouth breaks proteins into amino acids; Lipids: pepsin works in the stomach to release fatty acids.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Carbohydrates: pancreatic lipase converts starch into glycogen in the stomach; Proteins: amylase converts proteins into sugars in the small intestine; Lipids: bile in the mouth digests fats into amino acids.",
+            text: "Carbohydrates: pancreatic lipase converts starch into glycogen in the stomach; Proteins: amylase converts proteins into sugars in the small intestine; Lipids: bile in the mouth digests fats into amino acids.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Carbohydrates: amylase and maltase act only in the large intestine; Proteins: trypsin works in the mouth; Lipids: no enzyme action is needed because fats diffuse directly into the blood.",
+            text: "Carbohydrates: amylase and maltase act only in the large intestine; Proteins: trypsin works in the mouth; Lipids: no enzyme action is needed because fats diffuse directly into the blood.",
           },
         ],
         correctOptionId: "A",
@@ -1983,26 +1963,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Salivary glands release amylase in the mouth to form maltose, stomach acid halts the enzyme, pancreatic amylase resumes digestion in the duodenum, and maltase in the intestinal wall converts maltose to glucose.",
+            text: "Salivary glands release amylase in the mouth to form maltose, stomach acid halts the enzyme, pancreatic amylase resumes digestion in the duodenum, and maltase in the intestinal wall converts maltose to glucose.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Starch is first digested by pepsin in the stomach, then lipase in the pancreas converts it to glucose, and finally bile finishes digestion in the large intestine.",
+            text: "Starch is first digested by pepsin in the stomach, then lipase in the pancreas converts it to glucose, and finally bile finishes digestion in the large intestine.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Amylase in the mouth converts starch directly to amino acids that are absorbed in the stomach.",
+            text: "Amylase in the mouth converts starch directly to amino acids that are absorbed in the stomach.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "No digestion occurs until the large intestine, where trypsin converts starch into fatty acids.",
+            text: "No digestion occurs until the large intestine, where trypsin converts starch into fatty acids.",
           },
         ],
         correctOptionId: "A",
@@ -2024,26 +2000,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Pepsin in the stomach needs acidic conditions to break proteins into peptides, whereas pancreatic lipase in the small intestine needs bile and an alkaline pH to convert triglycerides into fatty acids and glycerol.",
+            text: "Pepsin in the stomach needs acidic conditions to break proteins into peptides, whereas pancreatic lipase in the small intestine needs bile and an alkaline pH to convert triglycerides into fatty acids and glycerol.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Pepsin in the stomach splits lipids into glycerol, while lipase in the small intestine breaks proteins into amino acids at low pH.",
+            text: "Pepsin in the stomach splits lipids into glycerol, while lipase in the small intestine breaks proteins into amino acids at low pH.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Both pepsin and lipase work best at pH 2 and turn their substrates into glucose for absorption.",
+            text: "Both pepsin and lipase work best at pH 2 and turn their substrates into glucose for absorption.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Protein digestion only happens in the mouth and lipid digestion only happens in the stomach.",
+            text: "Protein digestion only happens in the mouth and lipid digestion only happens in the stomach.",
           },
         ],
         correctOptionId: "A",
@@ -2065,26 +2037,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Most starch, protein, and lipid digestion fails in the small intestine, causing poor nutrient absorption, weight loss, and fatty stools.",
+            text: "Most starch, protein, and lipid digestion fails in the small intestine, causing poor nutrient absorption, weight loss, and fatty stools.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Only protein digestion is affected because carbohydrates and lipids are completely digested in the stomach.",
+            text: "Only protein digestion is affected because carbohydrates and lipids are completely digested in the stomach.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Digestion speeds up because stomach enzymes work harder to compensate.",
+            text: "Digestion speeds up because stomach enzymes work harder to compensate.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "There is no change because bile completely replaces pancreatic enzymes.",
+            text: "There is no change because bile completely replaces pancreatic enzymes.",
           },
         ],
         correctOptionId: "A",
@@ -2117,26 +2085,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "The rate increases as particles gain kinetic energy until the optimum temperature, then falls sharply as the enzyme denatures and stops working by around 100°C.",
+            text: "The rate increases as particles gain kinetic energy until the optimum temperature, then falls sharply as the enzyme denatures and stops working by around 100°C.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "The rate stays constant at every temperature because catalysts are unaffected by heat.",
+            text: "The rate stays constant at every temperature because catalysts are unaffected by heat.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "The rate falls steadily from 0°C because enzymes are destroyed by any warming.",
+            text: "The rate falls steadily from 0°C because enzymes are destroyed by any warming.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "The rate only increases between 80°C and 100°C because enzymes are inactive below boiling point.",
+            text: "The rate only increases between 80°C and 100°C because enzymes are inactive below boiling point.",
           },
         ],
         correctOptionId: "A",
@@ -2157,26 +2121,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "pH changes alter the charges on amino acid side chains, so the active site shape is lost away from the optimum and the enzyme may denature.",
+            text: "pH changes alter the charges on amino acid side chains, so the active site shape is lost away from the optimum and the enzyme may denature.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "pH only changes the colour of the enzyme but not how it binds substrates.",
+            text: "pH only changes the colour of the enzyme but not how it binds substrates.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "pH has no effect unless the enzyme is mixed with heavy metals.",
+            text: "pH has no effect unless the enzyme is mixed with heavy metals.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Enzymes prefer neutral pH because acidic or alkaline conditions always activate them more.",
+            text: "Enzymes prefer neutral pH because acidic or alkaline conditions always activate them more.",
           },
         ],
         correctOptionId: "A",
@@ -2198,26 +2158,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Temperature produces a curve that rises to an optimum then falls steeply as denaturation occurs, while pH gives a sharper, more symmetrical peak because charge balance is only correct near the optimum value.",
+            text: "Temperature produces a curve that rises to an optimum then falls steeply as denaturation occurs, while pH gives a sharper, more symmetrical peak because charge balance is only correct near the optimum value.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Both graphs stay flat because temperature and pH never affect enzyme activity.",
+            text: "Both graphs stay flat because temperature and pH never affect enzyme activity.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Temperature produces a symmetrical peak but pH is a straight line because enzymes ignore acidity.",
+            text: "Temperature produces a symmetrical peak but pH is a straight line because enzymes ignore acidity.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Temperature lowers activity at low values but pH always raises activity the further you go from neutral.",
+            text: "Temperature lowers activity at low values but pH always raises activity the further you go from neutral.",
           },
         ],
         correctOptionId: "A",
@@ -2239,26 +2195,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "The alkaline pH changes the charge and shape of pepsin's active site so the substrate no longer fits and the enzyme denatures.",
+            text: "The alkaline pH changes the charge and shape of pepsin's active site so the substrate no longer fits and the enzyme denatures.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "The small intestine has no protein for pepsin to digest, so it has nothing to do.",
+            text: "The small intestine has no protein for pepsin to digest, so it has nothing to do.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Pepsin only works when bile is present, and bile is absent from the intestine.",
+            text: "Pepsin only works when bile is present, and bile is absent from the intestine.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Pepsin would digest itself because enzymes always break down in alkaline conditions.",
+            text: "Pepsin would digest itself because enzymes always break down in alkaline conditions.",
           },
         ],
         correctOptionId: "A",
@@ -2280,26 +2232,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "At 2°C the enzyme works slowly but remains intact and activity recovers when warmed, whereas at 80°C the enzyme denatures and the loss of activity is usually irreversible.",
+            text: "At 2°C the enzyme works slowly but remains intact and activity recovers when warmed, whereas at 80°C the enzyme denatures and the loss of activity is usually irreversible.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "At 2°C the enzyme denatures permanently, but at 80°C it simply speeds up.",
+            text: "At 2°C the enzyme denatures permanently, but at 80°C it simply speeds up.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Both temperatures denature the enzyme irreversibly.",
+            text: "Both temperatures denature the enzyme irreversibly.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Neither temperature has any effect on the enzyme's activity.",
+            text: "Neither temperature has any effect on the enzyme's activity.",
           },
         ],
         correctOptionId: "A",
@@ -2321,26 +2269,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Use buffered starch-amylase mixtures at different pH values, keep temperature constant, sample at set times onto iodine, and record the time taken for the iodine to stay brown (no starch).",
+            text: "Use buffered starch-amylase mixtures at different pH values, keep temperature constant, sample at set times onto iodine, and record the time taken for the iodine to stay brown (no starch).",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Heat amylase to boiling point, add starch, and record the mass of starch left after an hour without using buffers.",
+            text: "Heat amylase to boiling point, add starch, and record the mass of starch left after an hour without using buffers.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Mix amylase with lipase in one test tube and compare their colours after a day.",
+            text: "Mix amylase with lipase in one test tube and compare their colours after a day.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Only vary the concentration of starch and assume the pH stays constant.",
+            text: "Only vary the concentration of starch and assume the pH stays constant.",
           },
         ],
         correctOptionId: "A",
@@ -2362,26 +2306,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Remove samples at intervals, add iodine on a spotting tile, and record when the colour stays orange-brown instead of blue-black.",
+            text: "Remove samples at intervals, add iodine on a spotting tile, and record when the colour stays orange-brown instead of blue-black.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Measure the pH with universal indicator to see if it changes colour.",
+            text: "Measure the pH with universal indicator to see if it changes colour.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Smell the mixture to see if it becomes sweeter over time.",
+            text: "Smell the mixture to see if it becomes sweeter over time.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Shine a light through the tube and record the brightness.",
+            text: "Shine a light through the tube and record the brightness.",
           },
         ],
         correctOptionId: "A",
@@ -2403,26 +2343,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Proteases and lipases break down protein and fat stains into soluble fragments, and moderate temperatures keep the enzymes active without denaturing them.",
+            text: "Proteases and lipases break down protein and fat stains into soluble fragments, and moderate temperatures keep the enzymes active without denaturing them.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "High temperatures are needed so the enzymes melt the stains away completely.",
+            text: "High temperatures are needed so the enzymes melt the stains away completely.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "The enzymes only add fragrance, so any temperature will do.",
+            text: "The enzymes only add fragrance, so any temperature will do.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Proteases convert stains into starch, which then dissolves instantly.",
+            text: "Proteases convert stains into starch, which then dissolves instantly.",
           },
         ],
         correctOptionId: "A",
@@ -2435,8 +2371,7 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
       {
         kind: "multiple-choice",
         id: "enzyme-denature",
-        prompt:
-          "What happens when an enzyme is denatured?",
+        prompt: "What happens when an enzyme is denatured?",
         hint: "Focus on the structure of the active site.",
         explanation:
           "Denaturation breaks bonds that maintain the enzyme's shape, so the active site loses its complementarity and the substrate no longer binds.",
@@ -2444,26 +2379,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Its active site changes shape because bonds break, so the substrate no longer fits and the reaction stops.",
+            text: "Its active site changes shape because bonds break, so the substrate no longer fits and the reaction stops.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "It becomes faster temporarily before returning to normal.",
+            text: "It becomes faster temporarily before returning to normal.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "It turns into a carbohydrate that stores energy.",
+            text: "It turns into a carbohydrate that stores energy.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "It splits into two smaller enzymes that each work on half the substrate.",
+            text: "It splits into two smaller enzymes that each work on half the substrate.",
           },
         ],
         correctOptionId: "A",
@@ -2485,26 +2416,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Particles move faster at 35°C, creating more enzyme-substrate collisions while the active site keeps its shape; at 10°C collisions are rarer so the rate is slower.",
+            text: "Particles move faster at 35°C, creating more enzyme-substrate collisions while the active site keeps its shape; at 10°C collisions are rarer so the rate is slower.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Catalase is denatured at 10°C but renatures at 35°C.",
+            text: "Catalase is denatured at 10°C but renatures at 35°C.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Hydrogen peroxide only exists at 35°C, so no reaction can happen at 10°C.",
+            text: "Hydrogen peroxide only exists at 35°C, so no reaction can happen at 10°C.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Catalase needs light, and 35°C is brighter than 10°C.",
+            text: "Catalase needs light, and 35°C is brighter than 10°C.",
           },
         ],
         correctOptionId: "A",
@@ -2526,26 +2453,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "They allow rapid digestion of food and catalyse other key processes such as respiration and DNA replication that would otherwise be too slow.",
+            text: "They allow rapid digestion of food and catalyse other key processes such as respiration and DNA replication that would otherwise be too slow.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "They only help digestion; other body reactions run unaided at useful speeds.",
+            text: "They only help digestion; other body reactions run unaided at useful speeds.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "They are mainly energy stores that can be broken down when food is scarce.",
+            text: "They are mainly energy stores that can be broken down when food is scarce.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "They provide structural support in bones instead of catalysing reactions.",
+            text: "They provide structural support in bones instead of catalysing reactions.",
           },
         ],
         correctOptionId: "A",
@@ -2567,26 +2490,22 @@ const ENZYME_QUIZZES: QuizDefinition[] = [
           {
             id: "A",
             label: "A",
-            text:
-              "Enzyme X works in the stomach and Enzyme Y in the small intestine; shifting Enzyme X to pH 8 denatures it so activity drops sharply.",
+            text: "Enzyme X works in the stomach and Enzyme Y in the small intestine; shifting Enzyme X to pH 8 denatures it so activity drops sharply.",
           },
           {
             id: "B",
             label: "B",
-            text:
-              "Both enzymes belong in the mouth, and Enzyme X speeds up in alkaline conditions.",
+            text: "Both enzymes belong in the mouth, and Enzyme X speeds up in alkaline conditions.",
           },
           {
             id: "C",
             label: "C",
-            text:
-              "Enzyme X should be in the pancreas duct and Enzyme Y in the stomach; swapping them has no effect.",
+            text: "Enzyme X should be in the pancreas duct and Enzyme Y in the stomach; swapping them has no effect.",
           },
           {
             id: "D",
             label: "D",
-            text:
-              "Both enzymes work best in the large intestine, and Enzyme X becomes more active if moved there.",
+            text: "Both enzymes work best in the large intestine, and Enzyme X becomes more active if moved there.",
           },
         ],
         correctOptionId: "A",
@@ -3178,7 +3097,6 @@ async function ensureStoryCheckpointDir(
   await mkdir(targetDir, { recursive: true });
   return targetDir;
 }
-
 
 function resolveStageSequence(options: CliOptions): StageName[] {
   if (options.stages.length === 0) {
