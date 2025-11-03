@@ -98,10 +98,11 @@ export async function createTask(task: Task): Promise<void> {
       postUrl = u.toString();
     } catch (error) {
       throw new Error(
-        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
+        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`
       );
     }
     try {
+      console.warn(`Starting a local task: ${postUrl}`);
       const resp = await fetch(postUrl, {
         method: "POST",
         headers,
@@ -137,6 +138,7 @@ export async function createTask(task: Task): Promise<void> {
 
   const createUrl = `https://cloudtasks.googleapis.com/v2/projects/${projectId}/locations/${location}/queues/${queue}/tasks`;
 
+  console.warn(`Starting remote task via TasksAPI: ${handlerUrl}`);
   const resp = await fetch(createUrl, {
     method: "POST",
     headers: {
