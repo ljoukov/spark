@@ -4179,9 +4179,7 @@ export class StoryGenerationPipeline {
     }
   }
 
-  private requireContext(
-    key: "userId" | "sessionId" | "planItemId",
-  ): string {
+  private requireContext(key: "userId" | "sessionId" | "planItemId"): string {
     const value = this.options[key];
     if (!value) {
       throw new Error(
