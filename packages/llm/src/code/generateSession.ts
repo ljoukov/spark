@@ -72,7 +72,6 @@ function stripMarkdownFences(raw: string): string {
   if (fenceStart === -1) {
     return raw;
   }
-  const fenceLabel = trimmed.slice(0, fenceStart).replace(/```/g, "");
   const withoutOpening = trimmed.slice(fenceStart + 1);
   const fenceEndIndex = withoutOpening.lastIndexOf("```");
   if (fenceEndIndex === -1) {
