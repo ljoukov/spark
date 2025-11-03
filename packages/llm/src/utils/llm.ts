@@ -16,7 +16,7 @@ import {
 } from "@google/genai";
 import { runGeminiCall, type GeminiModelId } from "./gemini";
 import { z } from "zod";
-import sharp from "sharp";
+import { getSharp } from "./sharp";
 
 import type { JobProgressReporter } from "./concurrency";
 import { formatMillis } from "./format";
@@ -416,6 +416,7 @@ async function createDebugImageArtifact({
   let outputBuffer = buffer;
   if (isInlineImageMime(mimeType)) {
     try {
+      const sharp = getSharp();
       outputBuffer = await sharp(buffer)
         .jpeg({
           quality: 92,
