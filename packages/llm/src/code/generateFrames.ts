@@ -1,6 +1,6 @@
 import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
-import sharp from "sharp";
+import { getSharp } from "../utils/sharp";
 
 import {
   generateImages,
@@ -643,6 +643,7 @@ async function makePromptRevisionThumbnail(
   image: LlmImageData,
 ): Promise<LlmImageData | undefined> {
   try {
+    const sharp = getSharp();
     const buffer = await sharp(image.data)
       .resize({
         width: PROMPT_REVISION_THUMBNAIL_WIDTH,
