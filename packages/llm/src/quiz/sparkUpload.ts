@@ -1,22 +1,29 @@
-import { Type, type Schema } from "@google/genai";
+import { Type, type Part, type Schema } from "@google/genai";
 import type { QuizDefinition } from "@spark/schemas";
 import { QuizDefinitionSchema } from "@spark/schemas";
 import { z } from "zod";
-
-export type { SparkQuizSourceFile } from "./common";
 
 import {
   buildCorrectFeedback,
   coerceQuestionId,
   normaliseStringList,
   toInlineSourceFiles,
+  type InlineSourceFile,
+  type SparkQuizSourceFile,
 } from "./common";
-import type { SparkQuizSourceFile } from "./common";
-import { buildSourceParts } from "./legacy/prompts";
-import type { InlineSourceFile } from "./legacy/schemas";
+export type { SparkQuizSourceFile } from "./common";
 import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
 
 type QuizQuestionDefinition = QuizDefinition["questions"][number];
+
+function buildSourceParts(files: InlineSourceFile[]): Part[] {
+  return files.map((file) => ({
+    inlineData: {
+      data: file.data,
+      mimeType: file.mimeType,
+    },
+  }));
+}
 
 export const SPARK_UPLOAD_QUIZ_MODEL_ID: GeminiModelId = "gemini-2.5-pro";
 export const SPARK_UPLOAD_QUIZ_QUESTION_COUNT = 20;

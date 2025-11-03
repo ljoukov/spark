@@ -1,4 +1,3 @@
-export * from "./quiz/legacy";
 export * from "./quiz/sparkUpload";
 export * from "./quiz/pdfQuiz";
 export type { SparkQuizSourceFile } from "./quiz/common";
