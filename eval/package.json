@@ -10,6 +10,7 @@
     "code:import": "tsx src/code/import-problems.ts",
     "code:download:leetcode": "tsx src/code/download-leetcode.ts",
     "tools:list-voices": "tsx src/tools/list-voices.ts",
+    "tools:pdf-to-json": "tsx src/tools/pdf-to-json.ts",
     "tools:say": "tsx src/tools/say.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
     "typecheck": "tsc --noEmit",
