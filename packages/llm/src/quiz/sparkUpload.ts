@@ -1,10 +1,20 @@
 import { Type, type Schema } from "@google/genai";
-import type { QuizDefinition, QuizFeedback } from "@spark/schemas";
+import type { QuizDefinition } from "@spark/schemas";
 import { QuizDefinitionSchema } from "@spark/schemas";
-import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
+import { z } from "zod";
+
+export type { SparkQuizSourceFile } from "./common";
+
+import {
+  buildCorrectFeedback,
+  coerceQuestionId,
+  normaliseStringList,
+  toInlineSourceFiles,
+} from "./common";
+import type { SparkQuizSourceFile } from "./common";
 import { buildSourceParts } from "./legacy/prompts";
 import type { InlineSourceFile } from "./legacy/schemas";
-import { z } from "zod";
+import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
 
 type QuizQuestionDefinition = QuizDefinition["questions"][number];
 
@@ -44,7 +54,7 @@ const SparkTypeAnswerQuestionSchema = z.object({
   acceptableAnswers: z.array(trimmedString).max(6).optional(),
 });
 
-const SparkUploadQuizQuestionSchema = z.discriminatedUnion("kind", [
+export const SparkUploadQuizQuestionSchema = z.discriminatedUnion("kind", [
   SparkMultipleChoiceQuestionSchema,
   SparkTypeAnswerQuestionSchema,
 ]);
@@ -53,7 +63,7 @@ export type SparkUploadQuizQuestion = z.infer<
   typeof SparkUploadQuizQuestionSchema
 >;
 
-const SparkUploadQuizPayloadSchema = z.object({
+export const SparkUploadQuizPayloadSchema = z.object({
   quizId: trimmedString,
   title: trimmedString,
   description: z.string().optional(),
@@ -143,12 +153,6 @@ export const SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA: Schema = {
   ],
 };
 
-export interface SparkQuizSourceFile {
-  readonly filename: string;
-  readonly mimeType?: string;
-  readonly data: Buffer;
-}
-
 export interface GenerateSparkUploadQuizOptions {
   readonly uploadId: string;
   readonly quizId: string;
@@ -157,62 +161,6 @@ export interface GenerateSparkUploadQuizOptions {
   readonly subject?: string;
   readonly board?: string;
   readonly topicHint?: string;
-}
-
-function normaliseStringList(values: readonly string[] | undefined): string[] {
-  if (!values) {
-    return [];
-  }
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(trimmed);
-  }
-  return result;
-}
-
-function buildCorrectFeedback(explanation: string): QuizFeedback {
-  const trimmed = explanation.trim();
-  if (trimmed.length === 0) {
-    return { message: "Correct! Keep going.", tone: "success" };
-  }
-  if (trimmed.length <= 200) {
-    return { message: trimmed, tone: "success" };
-  }
-  return {
-    message: `${trimmed.slice(0, 180)}…`,
-    tone: "success",
-  };
-}
-
-function coerceQuestionId(
-  proposedId: string,
-  index: number,
-  seen: Set<string>,
-): string {
-  const fallback = `Q${index + 1}`;
-  const trimmed = proposedId.trim();
-  const baseId = trimmed.length > 0 ? trimmed : fallback;
-  if (!seen.has(baseId)) {
-    seen.add(baseId);
-    return baseId;
-  }
-  let counter = 2;
-  while (seen.has(`${baseId}-${counter}`)) {
-    counter += 1;
-  }
-  const nextId = `${baseId}-${counter}`;
-  seen.add(nextId);
-  return nextId;
 }
 
 function convertMultipleChoiceQuestion(
@@ -268,7 +216,7 @@ function convertTypeAnswerQuestion(
   };
 }
 
-function convertPayloadToQuizDefinition(
+export function convertSparkUploadPayloadToQuizDefinition(
   payload: SparkUploadQuizPayload,
   options: GenerateSparkUploadQuizOptions,
 ): QuizDefinition {
@@ -366,29 +314,6 @@ function buildSparkUploadQuizPrompt(
   return lines.join("\n");
 }
 
-function toInlineSourceFiles(
-  sources: ReadonlyArray<SparkQuizSourceFile>,
-): InlineSourceFile[] {
-  if (sources.length === 0) {
-    throw new Error("At least one source file is required to generate a quiz");
-  }
-  return sources.map((source, index) => {
-    const mimeType =
-      source.mimeType && source.mimeType.trim().length > 0
-        ? source.mimeType
-        : "application/pdf";
-    const filename =
-      source.filename && source.filename.trim().length > 0
-        ? source.filename.trim()
-        : `upload-${index + 1}.pdf`;
-    return {
-      displayName: filename,
-      mimeType,
-      data: source.data.toString("base64"),
-    };
-  });
-}
-
 export async function generateSparkUploadQuizDefinition(
   options: GenerateSparkUploadQuizOptions,
 ): Promise<QuizDefinition> {
@@ -426,7 +351,7 @@ export async function generateSparkUploadQuizDefinition(
   }
 
   const payload = SparkUploadQuizPayloadSchema.parse(parsed);
-  return convertPayloadToQuizDefinition(payload, {
+  return convertSparkUploadPayloadToQuizDefinition(payload, {
     ...options,
     questionCount,
   });
