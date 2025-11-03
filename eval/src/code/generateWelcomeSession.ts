@@ -15,7 +15,10 @@ import {
   type CodingProblem,
   type ProblemsGrade,
 } from "@spark/llm/code/generateSession";
-import { generateStory, type GenerateStoryResult } from "@spark/llm/code/generateStory";
+import {
+  generateStory,
+  type GenerateStoryResult,
+} from "@spark/llm/code/generateStory";
 import { getFirebaseAdminFirestore } from "@spark/llm";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
@@ -139,7 +142,14 @@ async function copyStoryToTemplate(
   const targetDoc = getTemplateDocRef(sessionId)
     .collection("media")
     .doc(planItemId);
-  await targetDoc.set(snapshot.data());
+  const payload = snapshot.data();
+  if (!payload) {
+    console.warn(
+      `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing data; skipping copy`,
+    );
+    return;
+  }
+  await targetDoc.set(payload);
   console.log(
     `[welcome/${sessionId}] published story media to ${targetDoc.path}`,
   );
@@ -259,10 +269,7 @@ async function main(): Promise<void> {
     stages?: string[];
   }>();
 
-  const rawStages = [
-    ...(raw.stage ?? []),
-    ...(raw.stages ?? []),
-  ];
+  const rawStages = [...(raw.stage ?? []), ...(raw.stages ?? [])];
 
   const parsed = optionsSchema.parse({
     topic: raw.topic,
@@ -276,8 +283,7 @@ async function main(): Promise<void> {
 
   const targetSessionId = parsed.sessionId ?? slugifyTopic(parsed.topic);
   const checkpointDir =
-    parsed.checkpointDir ??
-    resolveDefaultCheckpointDir(targetSessionId);
+    parsed.checkpointDir ?? resolveDefaultCheckpointDir(targetSessionId);
   const debugRootDir =
     parsed.debugRootDir ?? resolveDefaultDebugDir(targetSessionId);
   const baseDir = resolveSessionBaseDir(targetSessionId);
@@ -371,7 +377,8 @@ async function main(): Promise<void> {
           }
           case "quiz_ideas": {
             const coverage = await pipeline.ensureQuizIdeas();
-            stageContext.planIdeas = stageContext.planIdeas ?? coverage.markdown;
+            stageContext.planIdeas =
+              stageContext.planIdeas ?? coverage.markdown;
             const lineCount = coverage.markdown.split("\n").length;
             progress.log(
               `[welcome/${targetSessionId}] quiz coverage ready (${lineCount} lines)`,

@@ -47,9 +47,7 @@ function resolveStorageBucketName(config: GoogleServiceAccount): string {
   return `${config.projectId}.firebasestorage.app`;
 }
 
-function ensureStorageBucket(
-  config: GoogleServiceAccount,
-): string {
+function ensureStorageBucket(config: GoogleServiceAccount): string {
   if (cachedBucket) {
     return cachedBucket;
   }
@@ -58,9 +56,7 @@ function ensureStorageBucket(
   return bucket;
 }
 
-export function getFirebaseAdminApp(
-  config?: GoogleServiceAccount,
-): App {
+export function getFirebaseAdminApp(config?: GoogleServiceAccount): App {
   const { cert, getApps, initializeApp } = firebaseAdminAppModule;
   const resolvedConfig = resolveServiceAccount(config);
   const resolvedBucket = ensureStorageBucket(resolvedConfig);
@@ -97,9 +93,7 @@ export function getFirebaseAdminApp(
   return cachedApp;
 }
 
-export function getFirebaseAdminAuth(
-  config?: GoogleServiceAccount,
-): Auth {
+export function getFirebaseAdminAuth(config?: GoogleServiceAccount): Auth {
   const { getAuth } = firebaseAdminAuthModule;
   return getAuth(getFirebaseAdminApp(config));
 }

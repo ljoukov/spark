@@ -1144,10 +1144,7 @@ async function runPublishStage(
     );
   }
 
-  await publishMediaAssets(
-    runtime.userId,
-    context.session.id,
-  );
+  await publishMediaAssets(runtime.userId, context.session.id);
 
   console.log(
     `[test-session] Published media assets for session '${context.session.id}'`,
