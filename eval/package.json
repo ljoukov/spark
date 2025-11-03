@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "quiz:prepare-input": "tsx src/quiz/legacy/prepare-input.ts",
+    "quiz:prepare-input": "tsx src/quiz/eval/prepare-input.ts",
     "quiz:generate": "tsx src/quiz/generateQuiz.ts",
     "code:import": "tsx src/code/import-problems.ts",
     "code:download:leetcode": "tsx src/code/download-leetcode.ts",
