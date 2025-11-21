@@ -19,6 +19,7 @@ const RATE_LIMIT_REASONS = new Set([
 ]);
 
 export const GEMINI_MODEL_IDS = [
+  "gemini-3-pro-preview",
   "gemini-2.5-pro",
   "gemini-flash-latest",
   "gemini-flash-lite-latest",

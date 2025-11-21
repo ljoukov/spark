@@ -12,8 +12,10 @@ import {
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
-import { generateStory, TEXT_MODEL_ID } from "./generateStory";
+import { generateStory } from "./generateStory";
 import type { GenerateStoryResult } from "./generateStory";
+
+const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
 
 type SessionProgress = JobProgressReporter | undefined;
 
