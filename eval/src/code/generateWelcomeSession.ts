@@ -648,9 +648,7 @@ async function main(): Promise<void> {
             progress.log(
               `[welcome/${targetSessionId}] story ready ("${story.title}")`,
             );
-            await appendStageLog(baseDir, stage, [
-              `title=${story.title}`,
-            ]);
+            await appendStageLog(baseDir, stage, [`title=${story.title}`]);
             break;
           }
           case "publish": {
@@ -674,23 +672,20 @@ async function main(): Promise<void> {
             const metadata = await generateMetadata(parsed.topic, plan, {
               log: (msg) => progress.log(msg),
               startModelCall: (d) => pipeline["logger"].startModelCall(d), // hack to access logger
-              recordModelUsage: (h, c) => pipeline["logger"].recordModelUsage(h, c),
+              recordModelUsage: (h, c) =>
+                pipeline["logger"].recordModelUsage(h, c),
               finishModelCall: (h) => pipeline["logger"].finishModelCall(h),
             });
 
             // Transform plan
             const finalPlan = convertPlan(plan, parsed.storyPlanItemId);
 
-            await writeTemplateDoc(
-              targetSessionId,
-              parsed.topic,
-              {
-                plan: finalPlan,
-                tagline: metadata.tagline,
-                emoji: metadata.emoji,
-                title: stageContext.story.title,
-              },
-            );
+            await writeTemplateDoc(targetSessionId, parsed.topic, {
+              plan: finalPlan,
+              tagline: metadata.tagline,
+              emoji: metadata.emoji,
+              title: stageContext.story.title,
+            });
 
             await appendStageLog(baseDir, stage, [
               "story media copied",
