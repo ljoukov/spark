@@ -22,7 +22,7 @@ Hard code in a variable the following assumption about the student (we will late
 - `difficulty: "easy"`
 - `assumptions: string[]` (default: `["basic Python syntax", "lists", "integer division (//)", "modulo (%)"]`)
 - `story: { storyTopic: string }` topic as formulated for the story including idea for what will be covered in the lesson
-- `parts: Array<{ order: 1|2|3|4|5; kind: "story"|"intro_quiz"|"coding_1"|"coding_2"|"wrap_up_quiz"; summary: string }>`
+- `parts: Array<{ order: 1|2|3|4|5; kind: "story"|"intro_quiz"|"coding_1"|"coding_2"|"wrap_up_quiz"; summary: string }>` — keep each summary concise (10-15 words)
 - `promised_skills: string[]` (micro-skills the session promises)
 - `concepts_to_teach: string[]` (new concepts, if any)
 - `coding_blueprints: Array<{ id: "p1"|"p2"; title: string; idea: string; required_skills: string[]; constraints?: string[] }>`

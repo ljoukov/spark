@@ -26,6 +26,12 @@ import {
   getFirebaseAdminFirestoreModule,
 } from "@spark/llm";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
+import {
+  CodeProblemSchema,
+  QuizDefinitionSchema,
+  type CodeProblem,
+  type QuizDefinition,
+} from "@spark/schemas";
 
 const TEMPLATE_USER_ID = "welcome-templates";
 const TEMPLATE_ROOT_COLLECTION = "spark-admin";
@@ -95,14 +101,16 @@ type StageContext = {
 const MetadataSchema = z.object({
   tagline: z.string().trim().min(1),
   emoji: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
 });
 
 const METADATA_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["tagline", "emoji"],
+  required: ["tagline", "emoji", "summary"],
   properties: {
     tagline: { type: Type.STRING },
     emoji: { type: Type.STRING },
+    summary: { type: Type.STRING },
   },
 };
 
@@ -112,13 +120,16 @@ async function generateMetadata(
   progress?: SessionGenerationPipeline["logger"],
 ) {
   const prompt = `
-    Generate a catchy tagline (max 10 words) and a single emoji for a coding session about "${topic}".
+    Generate metadata for a coding session about "${topic}".
+    - Tagline: punchy, max 10 words.
+    - Emoji: single character.
+    - Summary: 1-2 sentences (30-45 words) describing the overall session arc; do not reuse a single plan step.
     The session story is about: "${plan.story.storyTopic}".
-    
-    Return JSON with "tagline" and "emoji".
+
+    Return JSON with "tagline", "emoji", and "summary".
   `;
 
-  return generateJson<{ tagline: string; emoji: string }>({
+  return generateJson<{ tagline: string; emoji: string; summary: string }>({
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: MetadataSchema,
@@ -127,11 +138,20 @@ async function generateMetadata(
   });
 }
 
+function clampSummaryWords(summary: string, maxWords = 15): string {
+  const words = summary.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return summary.trim();
+  }
+  return words.slice(0, maxWords).join(" ").concat("...");
+}
+
 function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
   return plan.parts.map((part) => {
+    const conciseSummary = clampSummaryWords(part.summary, 15);
     const base = {
       title: part.summary.split(".")[0] || "Session Part", // Simple title extraction
-      summary: part.summary,
+      summary: conciseSummary,
     };
 
     switch (part.kind) {
@@ -172,6 +192,120 @@ function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
         };
     }
   });
+}
+
+const QuizDefinitionsPayloadSchema = z.object({
+  quizzes: z.array(QuizDefinitionSchema),
+});
+
+const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["quizzes"],
+  properties: {
+    quizzes: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+  },
+};
+
+function buildQuizDefinitionsPrompt(
+  plan: SessionPlan,
+  quizzes: readonly SessionQuiz[],
+): string {
+  return [
+    "Convert the session quizzes into Spark quiz definitions for the learner dashboard.",
+    "Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
+    "Each quiz should have 4-5 concise questions with short explanations; include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
+    "Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
+    "Keep prompts short, avoid jargon, and stick to the promised skills.",
+    "",
+    `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
+    "Promised skills:",
+    plan.promised_skills.map((skill) => `- ${skill}`).join("\n"),
+    "",
+    "Plan parts:",
+    plan.parts
+      .map((part) => `- ${part.kind}: ${part.summary}`)
+      .join("\n"),
+    "",
+    "Draft quizzes JSON:",
+    JSON.stringify(quizzes, null, 2),
+  ].join("\n");
+}
+
+async function generateQuizDefinitions(
+  plan: SessionPlan,
+  quizzes: readonly SessionQuiz[],
+  progress?: SessionGenerationPipeline["logger"],
+): Promise<readonly QuizDefinition[]> {
+  const prompt = buildQuizDefinitionsPrompt(plan, quizzes);
+  const payload = await generateJson<{ quizzes: QuizDefinition[] }>({
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    schema: QuizDefinitionsPayloadSchema,
+    responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
+    progress,
+  });
+  return payload.quizzes;
+}
+
+const CodeProblemsPayloadSchema = z.object({
+  problems: z.array(CodeProblemSchema),
+});
+
+const CODE_PROBLEMS_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["problems"],
+  properties: {
+    problems: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+  },
+};
+
+function buildCodeProblemsPrompt(
+  plan: SessionPlan,
+  problems: readonly CodingProblem[],
+): string {
+  return [
+    "Convert these two draft coding problems into Spark CodeProblem JSON (array with problems).",
+    "Rules:",
+    '- Slugs must be "p1" and "p2" (matching plan ids).',
+    "Difficulty stays easy; keep Python 3 solutions.",
+    "Provide exactly 3 examples; the first three tests must match those examples exactly.",
+    "Provide 10-14 total tests (>=10, <=14) with short explanations; inputs/outputs as plain text.",
+    "Hints must be exactly three ordered bullets.",
+    "metadataVersion should be 1.",
+    "Topics should reflect promised skills and the blueprint focus; 2-4 concise topics.",
+    "Keep descriptions/input format in Markdown; constraints as clear bullet strings.",
+    "",
+    `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
+    "Promised skills:",
+    plan.promised_skills.map((skill) => `- ${skill}`).join("\n"),
+    "",
+    "Coding blueprints:",
+    plan.coding_blueprints
+      .map(
+        (blueprint) =>
+          `- ${blueprint.id}: ${blueprint.title} (${blueprint.required_skills.join(", ")})`,
+      )
+      .join("\n"),
+    "",
+    "Draft coding problems JSON:",
+    JSON.stringify(problems, null, 2),
+  ].join("\n");
+}
+
+async function generateCodeProblems(
+  plan: SessionPlan,
+  problems: readonly CodingProblem[],
+  progress?: SessionGenerationPipeline["logger"],
+): Promise<readonly CodeProblem[]> {
+  const prompt = buildCodeProblemsPrompt(plan, problems);
+  const payload = await generateJson<{ problems: CodeProblem[] }>({
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    schema: CodeProblemsPayloadSchema,
+    responseSchema: CODE_PROBLEMS_RESPONSE_SCHEMA,
+    progress,
+  });
+  return payload.problems;
 }
 
 function slugifyTopic(topic: string): string {
@@ -243,6 +377,46 @@ async function copyStoryToTemplate(
   );
 }
 
+async function writeQuizzesToTemplate(
+  sessionId: string,
+  quizzes: readonly QuizDefinition[],
+): Promise<void> {
+  const firestore = getFirebaseAdminFirestore();
+  const batch = firestore.batch();
+  const templateDoc = getTemplateDocRef(sessionId);
+
+  for (const quiz of quizzes) {
+    const target = templateDoc.collection("quiz").doc(quiz.id);
+    const { id, ...rest } = quiz;
+    batch.set(target, rest);
+  }
+
+  await batch.commit();
+  console.log(
+    `[welcome/${sessionId}] published ${quizzes.length} quizzes to template`,
+  );
+}
+
+async function writeProblemsToTemplate(
+  sessionId: string,
+  problems: readonly CodeProblem[],
+): Promise<void> {
+  const firestore = getFirebaseAdminFirestore();
+  const batch = firestore.batch();
+  const templateDoc = getTemplateDocRef(sessionId);
+
+  for (const problem of problems) {
+    const target = templateDoc.collection("code").doc(problem.slug);
+    const { slug, ...rest } = problem;
+    batch.set(target, rest);
+  }
+
+  await batch.commit();
+  console.log(
+    `[welcome/${sessionId}] published ${problems.length} problems to template`,
+  );
+}
+
 async function appendStageLog(
   baseDir: string,
   stage: StageName,
@@ -274,6 +448,7 @@ async function writeTemplateDoc(
     plan: unknown[];
     tagline: string;
     emoji: string;
+    summary?: string;
     title?: string;
   },
 ): Promise<void> {
@@ -288,6 +463,9 @@ async function writeTemplateDoc(
   payload.plan = finalData.plan;
   payload.tagline = finalData.tagline;
   payload.emoji = finalData.emoji;
+  if (finalData.summary) {
+    payload.summary = finalData.summary;
+  }
   if (finalData.title) {
     payload.title = finalData.title;
   }
@@ -658,11 +836,60 @@ async function main(): Promise<void> {
                 "Cannot publish story assets before generating the story. Run the 'story' stage first.",
               );
             }
+            const quizzes =
+              stageContext.quizzes ?? (await pipeline.ensureQuizzes());
+            const problems =
+              stageContext.problems ?? (await pipeline.ensureProblems());
+
             await copyStoryToTemplate(
               targetSessionId,
               parsed.storyPlanItemId,
               stageContext.story,
             );
+
+            progress.log(
+              `[welcome/${targetSessionId}] converting quizzes to app definitions...`,
+            );
+            const quizDefinitions = await generateQuizDefinitions(
+              plan,
+              quizzes,
+              pipeline["logger"],
+            );
+            const filteredQuizDefinitions = quizDefinitions.filter((quiz) =>
+              ["intro_quiz", "wrap_up_quiz"].includes(quiz.id),
+            );
+            const quizIds = new Set(
+              filteredQuizDefinitions.map((quiz) => quiz.id),
+            );
+            for (const requiredId of ["intro_quiz", "wrap_up_quiz"]) {
+              if (!quizIds.has(requiredId)) {
+                throw new Error(
+                  `quiz definitions missing required id '${requiredId}'`,
+                );
+              }
+            }
+
+            progress.log(
+              `[welcome/${targetSessionId}] converting problems to app definitions...`,
+            );
+            const codeProblems = await generateCodeProblems(
+              plan,
+              problems,
+              pipeline["logger"],
+            );
+            const problemSlugs = new Set(
+              codeProblems.map((problem) => problem.slug),
+            );
+            const filteredProblems = codeProblems.filter((problem) =>
+              ["p1", "p2"].includes(problem.slug),
+            );
+            for (const required of ["p1", "p2"]) {
+              if (!problemSlugs.has(required)) {
+                throw new Error(
+                  `code problems missing required slug '${required}'`,
+                );
+              }
+            }
 
             // Generate metadata
             progress.log(
@@ -684,11 +911,20 @@ async function main(): Promise<void> {
               plan: finalPlan,
               tagline: metadata.tagline,
               emoji: metadata.emoji,
+              summary: metadata.summary,
               title: stageContext.story.title,
             });
 
+            await writeQuizzesToTemplate(
+              targetSessionId,
+              filteredQuizDefinitions,
+            );
+            await writeProblemsToTemplate(targetSessionId, filteredProblems);
+
             await appendStageLog(baseDir, stage, [
               "story media copied",
+              "quizzes published",
+              "problems published",
               "metadata generated",
               "template finalized",
             ]);

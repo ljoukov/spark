@@ -136,7 +136,19 @@ const PlanPartSchema = z.object({
     z.literal(5),
   ]),
   kind: z.enum(["story", "intro_quiz", "coding_1", "coding_2", "wrap_up_quiz"]),
-  summary: z.string().trim().min(1),
+  summary: z
+    .string()
+    .trim()
+    .min(1)
+    .superRefine((value, ctx) => {
+      const words = value.split(/\s+/).filter((part) => part.length > 0);
+      if (words.length > 15) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "summary must be 15 words or fewer",
+        });
+      }
+    }),
 });
 
 const CodingBlueprintSchema = z.object({
@@ -519,6 +531,7 @@ function buildPlanParseUserPrompt(markdown: string): string {
     `Include relevant assumptions from ${JSON.stringify(ASSUMPTIONS)}`,
     'Set "difficulty" to "easy", "medium", or "hard".',
     "Parts must be exactly 1=story, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.",
+    "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
     "coding_blueprints must have ids p1 and p2.",
     "Output strict JSON only.",
     "",
@@ -531,6 +544,7 @@ function buildPlanEditUserPrompt(plan: SessionPlan, grade: PlanGrade): string {
   return [
     "The following session plan received a failing grade.",
     "Please revise the plan to address the reported issues.",
+    "Keep each part summary concise (no more than 15 words).",
     "",
     "Grading Report:",
     `Pass: ${grade.pass}`,
@@ -551,6 +565,7 @@ function buildPlanGradeUserPrompt(plan: SessionPlan): string {
     "R1 parts ordered;",
     "R2 promised skills cover blueprint requirements;",
     "R3 concepts_to_teach referenced and manageable;",
+    "R4 each parts.summary is concise (<=15 words) and specific;",
     "Output {pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]} JSON only.",
     "",
     "Plan JSON:",
