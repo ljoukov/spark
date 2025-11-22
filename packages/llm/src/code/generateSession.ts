@@ -690,6 +690,7 @@ function buildProblemsGenerateUserPrompt(
     'Return a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
     'Each problem must include fields: id, title, difficulty (set to "easy", "medium", or "hard"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private_count:int}.',
     "Represent inputs and outputs as strings (escape newlines with \\n); do not return nested objects for these fields.",
+    "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
     "Include story_callback, constraints, and at least two examples per problem.",
     "Provide 3-5 public tests per problem and private_count between 3 and 8.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests".',
@@ -1682,25 +1683,16 @@ export class SessionGenerationPipeline {
     );
     const debugOptions = this.createDebugOptions("quizzes-generate");
     this.logger.log("[session/quizzes] generating quiz JSON");
-    const raw = await generateText({
+    const quizzes = await generateJson<QuizzesPayload>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
         "Produce final quizzes with concise explanations, optional theory blocks.",
         userPrompt,
       ),
+      schema: QuizzesSchema,
       progress: this.logger,
       debug: debugOptions,
     });
-    const jsonText = stripMarkdownFences(raw);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse quizzes JSON: ${errorAsString(error)}\nRaw output:\n${raw}`,
-      );
-    }
-    const quizzes = QuizzesSchema.parse(parsed);
     await this.writeQuizzesCheckpoint(quizzes);
     const entry: StageCacheEntry<QuizzesPayload> = {
       value: quizzes,
@@ -1868,26 +1860,17 @@ export class SessionGenerationPipeline {
     );
     const debugOptions = this.createDebugOptions("problems-generate");
     this.logger.log("[session/problems] generating coding problems");
-    const raw = await generateText({
+    const rawProblems = await generateJson<ProblemsPayload>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
         "Produce full beginner-friendly specs with reference solutions and tests.",
         userPrompt,
       ),
+      schema: ProblemsSchema,
       progress: this.logger,
       debug: debugOptions,
     });
-    const jsonText = stripMarkdownFences(raw);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse problems JSON: ${errorAsString(error)}\nRaw output:\n${raw}`,
-      );
-    }
-    const normalised = Array.isArray(parsed) ? { problems: parsed } : parsed;
-    const cleaned = normaliseProblemsPayload(normalised);
+    const cleaned = normaliseProblemsPayload(rawProblems);
     const problems = ProblemsSchema.parse(cleaned);
     await this.writeProblemsCheckpoint(problems);
     const entry: StageCacheEntry<ProblemsPayload> = {
