@@ -1,13 +1,11 @@
 import { error } from '@sveltejs/kit';
-import { marked } from 'marked';
 import { z } from 'zod';
+import { renderMarkdown } from '$lib/server/markdown';
 import { getUserProblem } from '$lib/server/code/problemRepo';
 import { savePlanItemState } from '$lib/server/sessionState/repo';
 import { DEFAULT_CODE_SOURCE } from '$lib/code/constants';
 import type { CodeProblem, PlanItemState } from '@spark/schemas';
 import type { PageServerLoad } from './$types';
-
-marked.setOptions({ breaks: true, gfm: true });
 
 const paramsSchema = z.object({
 	id: z.string().trim().min(1, 'Problem id is required')
@@ -35,11 +33,6 @@ type SerializableProblem = {
 	solution: CodeProblem['solution'] & { code: string };
 	metadataVersion: number;
 };
-
-function renderMarkdown(markdown: string): string {
-	const parsed = marked.parse(markdown);
-	return typeof parsed === 'string' ? parsed : '';
-}
 
 function toSerializable(problem: CodeProblem): SerializableProblem {
 	return {

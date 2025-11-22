@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
 @import 'tw-animate-css';
+@import 'katex/dist/katex.min.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -217,4 +218,15 @@
 	body {
 		@apply bg-background text-foreground;
 	}
+}
+
+:is(.markdown, .markdown-title, .markdown-option, .info-markdown) .katex {
+	font-size: 1em;
+}
+
+:is(.markdown, .markdown-title, .markdown-option, .info-markdown) .katex-display {
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding: 0.35rem 0.5rem;
+	text-align: left;
 }
