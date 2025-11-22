@@ -282,6 +282,15 @@
 							<span class="app-user-menu__email">{getEmailLabel()}</span>
 						</div>
 						<DropdownMenu.Separator />
+						<DropdownMenu.Item
+							class="app-user-menu__link"
+							onSelect={() => {
+								void goto('/code/lessons');
+							}}
+						>
+							Lessons
+						</DropdownMenu.Item>
+						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
 								Launch
@@ -572,6 +581,10 @@
 
 	:global(.app-appearance-menu__item[data-state='checked'] .theme-check) {
 		opacity: 1;
+	}
+
+	:global(.app-user-menu__link) {
+		font-weight: 600;
 	}
 
 	:global(.app-user-menu__logout) {

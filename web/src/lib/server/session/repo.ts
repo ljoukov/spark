@@ -1,10 +1,21 @@
-import { SessionSchema, type Session, UserDocSchema } from '@spark/schemas';
-import { getFirebaseAdminFirestore } from '@spark/llm';
+import {
+	LessonProposalSchema,
+	SessionSchema,
+	type LessonProposal,
+	type Session,
+	type SessionStatus,
+	UserDocSchema
+} from '@spark/schemas';
+import { getFirebaseAdminFirestore, getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { z } from 'zod';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
+
+const proposalsArraySchema = z.array(LessonProposalSchema).min(1);
+
+const { FieldValue } = getFirebaseAdminFirestoreModule();
 
 function resolveUserDocRef(userId: string) {
 	const firestore = getFirebaseAdminFirestore();
@@ -96,4 +107,29 @@ export async function getOrSelectCurrentSession(userId: string): Promise<Session
 	});
 
 	return latest;
+}
+
+export async function saveNextLessonProposals(
+	userId: string,
+	sessionId: string,
+	proposals: LessonProposal[]
+): Promise<void> {
+	const validatedProposals = proposalsArraySchema.parse(proposals);
+	const docRef = resolveSessionDocRef(userId, sessionId);
+	await docRef.set(
+		{
+			nextLessonProposals: validatedProposals,
+			nextLessonProposalsGeneratedAt: FieldValue.serverTimestamp()
+		},
+		{ merge: true }
+	);
+}
+
+export async function updateSessionStatus(
+	userId: string,
+	sessionId: string,
+	status: SessionStatus
+): Promise<void> {
+	const docRef = resolveSessionDocRef(userId, sessionId);
+	await docRef.set({ status }, { merge: true });
 }

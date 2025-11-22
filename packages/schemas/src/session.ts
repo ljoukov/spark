@@ -38,6 +38,28 @@ export const PlanItemSchema = z.discriminatedUnion("kind", [
 
 export type PlanItem = z.infer<typeof PlanItemSchema>;
 
+export const SessionStatusSchema = z.enum([
+  "generating",
+  "ready",
+  "in_progress",
+  "completed",
+  "error",
+]);
+
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+
+export const LessonProposalSchema = z.object({
+  id: trimmedId,
+  title: z.string().trim().min(1, "title is required"),
+  tagline: z.string().trim().min(1, "tagline is required"),
+  topics: z
+    .array(z.string().trim().min(1, "topic is required"))
+    .min(1, "at least one topic is required"),
+  emoji: z.string().trim().min(1, "emoji is required"),
+});
+
+export type LessonProposal = z.infer<typeof LessonProposalSchema>;
+
 export const SessionSchema = z
   .object({
     id: trimmedId,
@@ -46,21 +68,73 @@ export const SessionSchema = z
     tagline: optionalTrimmed,
     emoji: optionalTrimmed,
     createdAt: FirestoreTimestampSchema,
-    plan: z.array(PlanItemSchema).min(1, "plan must contain at least one item"),
+    plan: z.array(PlanItemSchema).optional(),
+    status: SessionStatusSchema.optional(),
+    topics: z.array(z.string().trim().min(1)).optional(),
+    sourceSessionId: optionalTrimmed,
+    sourceProposalId: optionalTrimmed,
+    nextLessonProposals: z.array(LessonProposalSchema).optional(),
+    nextLessonProposalsGeneratedAt: FirestoreTimestampSchema.optional(),
   })
-  .transform(({ id, title, createdAt, plan, summary, tagline, emoji }) => {
-    const planItems = plan.map((item) => ({ ...item }));
-    const resolvedTitle = title ?? planItems[0]?.title ?? "Your session plan";
-
-    return {
+  .superRefine((value, ctx) => {
+    const status = value.status ?? "ready";
+    if (status !== "generating" && status !== "error") {
+      if (!value.plan || value.plan.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["plan"],
+          message: "plan must contain at least one item",
+        });
+      }
+    }
+  })
+  .transform(
+    ({
       id,
-      title: resolvedTitle,
+      title,
+      createdAt,
+      plan,
       summary,
       tagline,
       emoji,
-      createdAt,
-      plan: planItems,
-    };
-  });
+      status,
+      topics,
+      sourceSessionId,
+      sourceProposalId,
+      nextLessonProposals,
+      nextLessonProposalsGeneratedAt,
+    }) => {
+      const planItems = (plan ?? []).map((item) => ({ ...item }));
+      const resolvedStatus = status ?? "ready";
+      const resolvedTitle = title ?? planItems[0]?.title ?? "Your session plan";
+      const sessionTopics =
+        topics
+          ?.map((topic) => topic.trim())
+          .filter((topic) => topic.length > 0) ?? undefined;
+      const proposals =
+        nextLessonProposals?.map((proposal) => ({
+          ...proposal,
+          topics: proposal.topics
+            .map((topic) => topic.trim())
+            .filter((topic) => topic.length > 0),
+        })) ?? [];
+
+      return {
+        id,
+        title: resolvedTitle,
+        summary,
+        tagline,
+        emoji,
+        createdAt,
+        plan: planItems,
+        status: resolvedStatus,
+        topics: sessionTopics,
+        sourceSessionId,
+        sourceProposalId,
+        nextLessonProposals: proposals,
+        nextLessonProposalsGeneratedAt,
+      };
+    },
+  );
 
 export type Session = z.infer<typeof SessionSchema>;
