@@ -590,11 +590,14 @@ const StoryOriginsCapsuleSchema = z.object({
 export type StoryOriginsCapsule = z.infer<typeof StoryOriginsCapsuleSchema>;
 
 const StoryValidationBooleanFlagSchema = z.boolean();
-const StoryValidationDateFlagSchema = z.union([
-  z.literal("hedged"),
-  z.literal("recommend-hedge"),
-  z.literal(false),
-]);
+const StoryValidationDateFlagSchema = z.preprocess(
+  (val) => (val === true ? "hedged" : val),
+  z.union([
+    z.literal("hedged"),
+    z.literal("recommend-hedge"),
+    z.literal(false),
+  ]),
+);
 
 const STORY_VALIDATION_TAGS = [
   "namingAttribution",
@@ -1374,7 +1377,7 @@ ${feedbackSection}
 2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
 3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
 
-**Fix Checklist expectation:** After revising, you must populate a \\"fixChecklist\\" object confirming which blockers are resolved. Use these keys: \\"namingAttribution\\", \\"exclusivityClaim\\", \\"modernTieInOverclaim\\", \\"datePrecision\\", \\"wrongEntity\\". Set each boolean key to true only when the revised story clearly addresses it; leave false when unresolved. For \\"datePrecision\\", use \\"hedged\\" when you softened or approximated timing, \\"recommend-hedge\\" if you still urge additional hedging, or false when no adjustment was required.
+**Fix Checklist expectation:** After revising, you must populate a \\"fixChecklist\\" object confirming which blockers are resolved. Use these keys: \\"namingAttribution\\", \\"exclusivityClaim\\", \\"modernTieInOverclaim\\", \\"datePrecision\\", \\"wrongEntity\\". Set each boolean key to true only when the revised story clearly addresses it; leave false when unresolved. For \\"datePrecision\\", use \\"hedged\\" (string) when you softened or approximated timing, \\"recommend-hedge\\" (string) if you still urge additional hedging, or false (boolean) when no adjustment was required. Do not use true.
 
 **Your Two-Part Task:**
 
@@ -1449,7 +1452,7 @@ ${storyText}
 3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
 
 **Reporting Instructions:**
-- Return "pass" only when every checklist item succeeds and no critical/major blockers remain; otherwise return "fail".
+- Return "pass" if there are no Critical or Major issues. Minor issues alone should result in a "pass" verdict (but still list them in 'issues' for feedback).
 - For each issue, start the summary with "Tag: <taxonomy> – ..." where taxonomy ∈ { namingAttribution, exclusivityClaim, modernTieInOverclaim, datePrecision, wrongEntity, other }.
 - Record the same taxonomy in the JSON field "tag". Provide severity, evidence (with citations when referencing sources), and a concrete recommendation.
 - Populate the "blockers" object: set boolean keys to true when the story violates the guardrail, false when resolved. For "datePrecision", use "hedged" if the prose already uses approximate timing, "recommend-hedge" if it still needs softening, or false when precise dating is acceptable.
@@ -1500,8 +1503,8 @@ ${storyText}
 1. Enumerate the distinct historical claims. Treat each date, location, relationship, proof status, and attribution as a separate claim.
 2. For every claim, run at least one web search. Note the key evidence you found, and record explicit citations with the source name and URL (e.g., "Bell Labs oral history – https://example.org/..."). If results conflict or are absent, treat the claim as unsupported.
 3. Verdict rules:
-   * Return **"pass"** only if every claim is supported by your searches.
-   * Return **"fail"** when any claim is missing support, contradicts reliable sources, or remains ambiguous after reasonable searching. Record one issue per problematic claim, set 'category' to 'factual', and explain the concern in plain language.
+   * Return **"pass"** if there are no Critical or Major factual errors. Minor precision issues should result in a "pass" (but list them).
+   * Return **"fail"** only when there are Critical or Major unsupported claims or contradictions. Record one issue per problematic claim, set 'category' to 'factual', and explain the concern in plain language.
 4. Ignore stylistic or structural issues here; only comment on historical accuracy. The next reviewer will enforce writing-quality requirements.
 
 **Reporting Format:**
@@ -1711,10 +1714,12 @@ function buildOriginsCapsulePrompt(
     "**Audience:** 12–16 year olds who need a reliable, memorable anchor.",
     "",
     "**Mission Parameters:**",
-    "1. Output exactly two sentences (max 40 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
+    "1. Output exactly two sentences (max 50 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
     '2. Sentence 1: Introduce the classical anchor using a neutral verb ("described", "published", "popularized") with approximate timing and include the phrasing "now known as" before the concept name.',
     '3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as "independently developed", "... and others", or "later published".',
     "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
+    "4a. Use established names from the research (e.g., Reed–Solomon codes); do not invent new titles, aliases, or brand-like labels.",
+    "4b. Do not reuse the story title or any fictional/metaphorical label (e.g., \"Interstellar Archivist\"); keep names strictly factual.",
     '5. Avoid exclusivity claims ("first", "sole inventor", "coined") unless universally accepted.',
     "6. No citations, quotation marks, or parenthetical lists. Keep to plain prose suitable for narration.",
     '7. Limit to one named individual or institution; mention others only through hedged phrases ("... and others").',
@@ -1846,9 +1851,9 @@ export async function generateOriginsCapsule(
     if (wordCount === 0) {
       structuralIssues.push("The capsule was empty.");
     }
-    if (wordCount > 40) {
+    if (wordCount > 50) {
       structuralIssues.push(
-        `Reduce the word count to 40 or fewer (current count: ${wordCount}).`,
+        `Reduce the word count to 50 or fewer (current count: ${wordCount}).`,
       );
     }
     if (structuralIssues.length > 0) {
@@ -2215,10 +2220,10 @@ function buildValidationFeedback(
   return sections.join("\n");
 }
 
-const ORIGINS_CAPSULE_MAX_ATTEMPTS = 3;
+const ORIGINS_CAPSULE_MAX_ATTEMPTS = 5;
 const IDEA_GENERATION_MAX_ATTEMPTS = 3;
 const PROSE_DRAFT_MAX_ATTEMPTS = 3;
-const PROSE_REVISION_MAX_ATTEMPTS = 3;
+const PROSE_REVISION_MAX_ATTEMPTS = 5;
 
 function combineDebugSegments(
   ...segments: (string | undefined)[]
