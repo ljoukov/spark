@@ -225,9 +225,7 @@ function buildQuizDefinitionsPrompt(
     plan.promised_skills.map((skill) => `- ${skill}`).join("\n"),
     "",
     "Plan parts:",
-    plan.parts
-      .map((part) => `- ${part.kind}: ${part.summary}`)
-      .join("\n"),
+    plan.parts.map((part) => `- ${part.kind}: ${part.summary}`).join("\n"),
     "",
     "Draft quizzes JSON:",
     JSON.stringify(quizzes, null, 2),
@@ -391,6 +389,7 @@ async function writeQuizzesToTemplate(
   for (const quiz of quizzes) {
     const target = templateDoc.collection("quiz").doc(quiz.id);
     const { id, ...rest } = quiz;
+    void id;
     batch.set(target, rest);
   }
 
@@ -411,6 +410,7 @@ async function writeProblemsToTemplate(
   for (const problem of problems) {
     const target = templateDoc.collection("code").doc(problem.slug);
     const { slug, ...rest } = problem;
+    void slug;
     batch.set(target, rest);
   }
 
