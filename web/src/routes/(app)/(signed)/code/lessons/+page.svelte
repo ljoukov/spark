@@ -1,6 +1,14 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 
+	type WelcomeTemplate = {
+		key: string;
+		title: string;
+		tagline?: string | null;
+		emoji?: string | null;
+		posterImageUrl?: string | null;
+	};
+
 	const statusLabels: Record<string, string> = {
 		generating: 'Generating',
 		error: 'Error',
@@ -10,6 +18,7 @@
 	};
 
 	let { data }: { data: PageData } = $props();
+	const templates = $derived(data.welcomeTemplates as WelcomeTemplate[]);
 
 	function formatDate(value: string): string {
 		const date = new Date(value);
@@ -89,6 +98,56 @@
 			</div>
 		{/if}
 	</div>
+
+	<section class="templates-panel">
+		<header class="templates-header">
+			<div>
+				<p class="eyebrow">Starter options</p>
+				<h2>Welcome templates</h2>
+				<p class="subtitle">
+					Want a fresh start? Launch any of our built-in starter sessions.
+				</p>
+			</div>
+		</header>
+
+		{#if templates.length === 0}
+			<div class="empty-state">
+				<div class="empty-emoji" aria-hidden="true">🧭</div>
+				<div class="empty-copy">
+					<h3>No templates available</h3>
+					<p>Starter lessons will appear here when configured.</p>
+				</div>
+			</div>
+		{:else}
+			<div class="templates-grid">
+				{#each templates as template}
+					<form method="POST" action="/code?/start" class="template-card">
+						<input type="hidden" name="topic" value={template.key} />
+						{#if template.posterImageUrl}
+							<img
+								src={template.posterImageUrl}
+								alt=""
+								class="template-poster"
+								loading="lazy"
+								decoding="async"
+							/>
+						{:else}
+							<div class="template-emoji" aria-hidden="true">
+								{template.emoji ?? '🚀'}
+							</div>
+						{/if}
+						<div class="template-body">
+							<h3>{template.title}</h3>
+							{#if template.tagline}
+								<p class="template-tagline">{template.tagline}</p>
+							{/if}
+						</div>
+						<button type="submit" class="template-action">Start lesson</button>
+					</form>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </section>
 
 <style lang="postcss">
@@ -316,6 +375,74 @@
 
 	.empty-copy p {
 		margin: 0.15rem 0 0;
+	}
+
+	.templates-panel {
+		margin-top: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.templates-header h2 {
+		margin: 0 0 0.25rem;
+	}
+
+	.templates-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+		gap: clamp(0.9rem, 2vw, 1.3rem);
+	}
+
+	.template-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		padding: 1rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		background: color-mix(in srgb, var(--app-content-bg) 92%, transparent);
+		text-decoration: none;
+		color: inherit;
+		box-shadow: 0 18px 50px -44px rgba(15, 23, 42, 0.45);
+	}
+
+	.template-poster {
+		width: 100%;
+		height: 9rem;
+		object-fit: cover;
+		border-radius: 0.85rem;
+		border: 1px solid rgba(148, 163, 184, 0.24);
+	}
+
+	.template-emoji {
+		font-size: 1.6rem;
+		line-height: 1;
+	}
+
+	.template-body h3 {
+		margin: 0;
+	}
+
+	.template-tagline {
+		margin: 0.2rem 0 0;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
+	}
+
+	.template-action {
+		align-self: flex-start;
+		margin-top: auto;
+		padding: 0.55rem 1rem;
+		border-radius: 0.9rem;
+		border: none;
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
+		color: #fff;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.template-action:hover {
+		filter: brightness(1.03);
 	}
 
 	@media (max-width: 720px) {
