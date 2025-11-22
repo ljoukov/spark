@@ -87,11 +87,22 @@ function resolveTemplateDocRef(sessionId: string) {
 }
 
 async function fetchTemplateSnapshot(sessionId: string) {
-	const docRef = resolveTemplateDocRef(sessionId);
-	const snapshot = await docRef.get();
-	if (!snapshot.exists) {
-		throw new Error(`Welcome session template not found for key '${sessionId}'`);
+	const primaryRef = resolveTemplateDocRef(sessionId);
+	const primarySnapshot = await primaryRef.get();
+
+	let snapshot = primarySnapshot;
+	let docRef = primaryRef;
+
+	if (!primarySnapshot.exists) {
+		const fallbackQuery = await resolveTemplateCollection().where('key', '==', sessionId).limit(1).get();
+		const [match] = fallbackQuery.docs;
+		if (!match) {
+			throw new Error(`Welcome session template not found for key '${sessionId}'`);
+		}
+		snapshot = match;
+		docRef = match.ref;
 	}
+
 	const raw = snapshot.data();
 	if (!raw) {
 		throw new Error(`Template data missing for key '${sessionId}'`);
