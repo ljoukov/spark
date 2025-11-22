@@ -4,7 +4,9 @@ import markedKatex from 'marked-katex-extension';
 marked.setOptions({ breaks: true, gfm: true });
 marked.use(
 	markedKatex({
-		throwOnError: false
+		throwOnError: false,
+		// Allow inline math without requiring surrounding spaces (e.g. "($N!$)").
+		nonStandard: true
 	})
 );
 
