@@ -1,6 +1,7 @@
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import { listSessions } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
+import { listWelcomeSessionOptions } from '$lib/server/session/welcomeSessions';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -16,6 +17,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const states = await Promise.all(
 		sessions.map((session) => getSessionState(user.uid, session.id))
 	);
+	const welcomeTemplates = await listWelcomeSessionOptions();
 
 	const lessons = sessions.map((session, index) => {
 		const state = states[index];
@@ -33,5 +35,5 @@ export const load: PageServerLoad = async ({ locals }) => {
 		};
 	});
 
-	return { lessons };
+	return { lessons, welcomeTemplates };
 };
