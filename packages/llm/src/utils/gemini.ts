@@ -309,6 +309,9 @@ function shouldRetry(error: unknown): boolean {
   ) {
     return true;
   }
+  if (message.includes("fetch failed") || message.includes("socket hang up")) {
+    return true;
+  }
   if (message.includes("quota") || message.includes("insufficient")) {
     return false;
   }
