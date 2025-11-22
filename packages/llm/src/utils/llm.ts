@@ -232,9 +232,7 @@ function normalizeJsonText(rawText: string): string {
     text = text.replace(/```(?:\s*)?$/, "").trim();
   }
 
-  const fenced =
-    /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(text) ??
-    /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(text);
   if (fenced?.[1]) {
     return fenced[1].trim();
   }
