@@ -70,7 +70,9 @@
 		data.session.title ?? data.session.plan[0]?.title ?? 'Your session plan'
 	);
 	const planSummary = $derived(
-		data.session.plan[0]?.summary ??
+		data.session.summary ??
+			data.session.tagline ??
+			data.session.plan[0]?.summary ??
 			data.session.plan[0]?.description ??
 			'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
 	);

@@ -68,6 +68,7 @@ const TemplateDocSchema = z.object({
 	tagline: z.string().trim().min(1, 'tagline is required'),
 	emoji: z.string().trim().min(1, 'emoji is required'),
 	topic: z.string().trim().min(1, 'topic is required'),
+	summary: z.string().trim().optional(),
 	key: z.string().trim().optional()
 });
 
@@ -246,6 +247,9 @@ async function loadTemplate(sessionId: string): Promise<LoadedTemplate> {
 	const session = SessionSchema.parse({
 		id: parsed.id,
 		title: parsed.title,
+		summary: parsed.summary,
+		tagline: parsed.tagline,
+		emoji: parsed.emoji,
 		createdAt: parsed.createdAt ?? Timestamp.now(),
 		plan: parsed.plan
 	});
@@ -365,6 +369,9 @@ export async function provisionWelcomeSession(
 	const session = SessionSchema.parse({
 		id: template.session.id,
 		title: template.session.title,
+		summary: template.session.summary,
+		tagline: template.session.tagline,
+		emoji: template.session.emoji,
 		createdAt: Timestamp.now(),
 		plan: template.session.plan
 	});
