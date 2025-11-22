@@ -4,12 +4,7 @@
 	import { z } from 'zod';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { PageData } from './$types';
-	import {
-		LessonProposalSchema,
-		type LessonProposal,
-		type PlanItemState,
-		type UserStats
-	} from '@spark/schemas';
+	import type { LessonProposal, PlanItemState, UserStats } from '@spark/schemas';
 	import { createSessionStateStore } from '$lib/client/sessionState';
 	import { initializeUserStats } from '$lib/client/userStats';
 
@@ -161,8 +156,16 @@
 				: `Start ${startLabel}`
 	);
 
+	const lessonProposalSchema = z.object({
+		id: z.string().trim().min(1),
+		title: z.string().trim().min(1),
+		tagline: z.string().trim().min(1),
+		topics: z.array(z.string().trim().min(1)).min(1),
+		emoji: z.string().trim().min(1)
+	});
+
 	const proposalsResponseSchema = z.object({
-		proposals: z.array(LessonProposalSchema),
+		proposals: z.array(lessonProposalSchema),
 		reused: z.boolean().optional()
 	});
 
