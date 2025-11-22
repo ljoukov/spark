@@ -1199,7 +1199,49 @@ const STORY_PROSE_VALIDATION_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-export function buildStoryIdeaPrompt(topic: string): string {
+export function buildStoryIdeaPrompt(
+  topic: string,
+  lessonContext?: StoryLessonContext,
+): string {
+  const contextLines: string[] = [];
+  if (lessonContext) {
+    contextLines.push("**Lesson Context (align hints to these):**");
+    contextLines.push(
+      `- Session topic seed: "${lessonContext.planTopic}". Story topic: "${topic}".`,
+    );
+    if (lessonContext.promisedSkills.length > 0) {
+      contextLines.push(
+        `- Promised skills to reinforce: ${lessonContext.promisedSkills.join(", ")}.`,
+      );
+    }
+    if (lessonContext.techniques && lessonContext.techniques.length > 0) {
+      contextLines.push(
+        "- Problem-solving techniques to nod to (no step-by-step teaching, just narrative foreshadowing):",
+      );
+      for (const technique of lessonContext.techniques) {
+        contextLines.push(
+          `  • ${technique.id}: ${technique.title} — ${technique.summary}`,
+        );
+      }
+    }
+    if (lessonContext.problems && lessonContext.problems.length > 0) {
+      contextLines.push("- Coding challenges learners will tackle:");
+      for (const problem of lessonContext.problems) {
+        const details = [problem.title];
+        if (problem.story_callback) {
+          details.push(`story hook: ${problem.story_callback}`);
+        }
+        if (problem.summary) {
+          details.push(`summary: ${problem.summary}`);
+        }
+        contextLines.push(`  • ${problem.id}: ${details.join(" | ")}`);
+      }
+    }
+    contextLines.push(
+      "- The story should foreshadow the key trick(s) and end with a line that tees up the warm-up quiz to explore them next.",
+      "- Do not introduce advanced concepts beyond these techniques/skills/assumptions.",
+    );
+  }
   return `### **Prompt 1: The Story Architect's Brief**
 
 **(Objective: To perform deep research and strategic planning. The output of this prompt is a structured brief, not a full story.)**
@@ -1212,6 +1254,8 @@ Important constraints:
 - Every factual statement (dates, locations, publications, people, proof status, terminology origins) must include an inline citation in parentheses with the source title and URL (e.g., "(Source: Bell Labs Archive — https://example.org/...)"). Collect all citations at the end under a "Sources" heading with one bullet per source and a short 1-line summary.
 - The final story must explicitly name the concept "${topic}". Include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it—but capture the note in the brief if relevant so the writer can decide.
 - Make clear that the core trick will be revealed within this very lesson; hint that brief in-lesson exercises will let the audience try it immediately (no explicit call-to-action wording).
+- Ensure any narrative seeds align with the lesson context so the story hints at the techniques learners will practice in the warm-up quiz and coding problems.
+${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 - Historical fidelity for anecdotes: only include famous quotes/stories when tied to the same concept/result and time period. Do not misattribute well-known anecdotes; if relevant contextually, frame as foreshadowing of a later milestone rather than attributing it to the current concept.
 - Fact-checking: when any date, name, or claim is uncertain, run a quick web search to verify before including it. Prefer authoritative sources. Do not guess.
 - Tone: neutral and factual in the brief; avoid charged adjectives and hyperbole.
@@ -1288,7 +1332,47 @@ export function buildStoryDraftPrompt(
   topic: string,
   storyBrief: string,
   originsCapsule: string,
+  lessonContext?: StoryLessonContext,
 ): string {
+  const contextLines: string[] = [];
+  if (lessonContext) {
+    contextLines.push("**Lesson Context (keep the narrative tethered to these):**");
+    contextLines.push(
+      `- Session topic seed: "${lessonContext.planTopic}". Story topic: "${topic}".`,
+    );
+    if (lessonContext.promisedSkills.length > 0) {
+      contextLines.push(
+        `- Promised skills to reinforce: ${lessonContext.promisedSkills.join(", ")}.`,
+      );
+    }
+    if (lessonContext.techniques && lessonContext.techniques.length > 0) {
+      contextLines.push(
+        "- Techniques learners will practice (hint at them narratively; do not teach steps):",
+      );
+      for (const technique of lessonContext.techniques) {
+        contextLines.push(
+          `  • ${technique.id}: ${technique.title} — ${technique.summary}`,
+        );
+      }
+    }
+    if (lessonContext.problems && lessonContext.problems.length > 0) {
+      contextLines.push("- Coding challenges this story tees up:");
+      for (const problem of lessonContext.problems) {
+        const parts = [problem.title];
+        if (problem.story_callback) {
+          parts.push(`story hook: ${problem.story_callback}`);
+        }
+        if (problem.summary) {
+          parts.push(`summary: ${problem.summary}`);
+        }
+        contextLines.push(`  • ${problem.id}: ${parts.join(" | ")}`);
+      }
+    }
+    contextLines.push(
+      "- Close with a line that hands off to the warm-up quiz to explore the hinted trick(s).",
+      "- Do not introduce new advanced concepts beyond these skills/techniques/assumptions.",
+    );
+  }
   return `### **Prompt 2: The Narrative Weaver**
 
 **Objective:** Transform the strategic brief and Origins Capsule into a 250–450 word audio-first story for curious 12–16 year olds. You may extend modestly (≈1.2–1.5×) when the added detail sharpens clarity; never pad with tangents.
@@ -1313,6 +1397,7 @@ ${storyBrief}
 - Introduce the concept "${topic}" within the first four sentences. Include a naming note only when the qualifier is well established and high-confidence.
 - Deliver the insight hint in one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
 - Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
+${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
 **Modern Tie-in (ending paragraph only):** choose exactly one of these hedged templates and customise the {application domain} placeholder:
 1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
@@ -1342,11 +1427,50 @@ export function buildStoryRevisionPrompt(
   storyDraft: string,
   originsCapsule: string,
   feedback?: string,
+  lessonContext?: StoryLessonContext,
 ): string {
   const feedbackSection =
     feedback && feedback.trim().length > 0
       ? `\n**Additional Editorial Feedback (blocking issues to address):**\n${feedback.trim()}\n`
       : "";
+  const contextLines: string[] = [];
+  if (lessonContext) {
+    contextLines.push("**Lesson Context (must remain aligned):**");
+    contextLines.push(
+      `- Session topic seed: "${lessonContext.planTopic}". Story topic: "${topic}".`,
+    );
+    if (lessonContext.promisedSkills.length > 0) {
+      contextLines.push(
+        `- Promised skills: ${lessonContext.promisedSkills.join(", ")}.`,
+      );
+    }
+    if (lessonContext.techniques && lessonContext.techniques.length > 0) {
+      contextLines.push("- Techniques to hint at (no new ones):");
+      for (const technique of lessonContext.techniques) {
+        contextLines.push(
+          `  • ${technique.id}: ${technique.title} — ${technique.summary}`,
+        );
+      }
+    }
+    if (lessonContext.problems && lessonContext.problems.length > 0) {
+      contextLines.push(
+        "- Coding challenges this story should gently foreshadow (no spoilers):",
+      );
+      for (const problem of lessonContext.problems) {
+        const parts = [problem.title];
+        if (problem.story_callback) {
+          parts.push(`story hook: ${problem.story_callback}`);
+        }
+        if (problem.summary) {
+          parts.push(`summary: ${problem.summary}`);
+        }
+        contextLines.push(`  • ${problem.id}: ${parts.join(" | ")}`);
+      }
+    }
+    contextLines.push(
+      "- Maintain a final line that hands off to the warm-up quiz to explore the hinted trick(s).",
+    );
+  }
   return `### **Prompt 3: The Narrative Editor's Cut**
 
 **Objective:** Audit the Narrative Weaver draft against all guardrails, protect the Origins Capsule facts, and deliver the final polished story.
@@ -1371,6 +1495,7 @@ ${feedbackSection}
 - Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
 - Run web searches when historical details are uncertain, but fix the prose rather than adding citations. Hedge when evidence is ambiguous.
 - Tone check: at most one or two vivid adjectives across the entire story; vocabulary stays at or below CEFR B2, with any specialised term defined immediately.
+${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
 **Approved Modern Tie-in Templates (ending paragraph only):**
 1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
@@ -1599,11 +1724,12 @@ export function buildSegmentationPrompt(
 
 export async function generateStoryIdea(
   topic: string,
+  lessonContext?: StoryLessonContext,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
-  const prompt = buildStoryIdeaPrompt(topic);
+  const prompt = buildStoryIdeaPrompt(topic, lessonContext);
   for (let attempt = 1; attempt <= IDEA_GENERATION_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(IDEA_GENERATION_MAX_ATTEMPTS).padStart(2, "0")}`;
     const subStage = combineDebugSegments(options?.debugSubStage, attemptLabel);
@@ -1917,10 +2043,16 @@ export async function generateStoryProseDraft(
   originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
+  lessonContext?: StoryLessonContext,
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
-  const prompt = buildStoryDraftPrompt(topic, idea.brief, originsCapsule.text);
+  const prompt = buildStoryDraftPrompt(
+    topic,
+    idea.brief,
+    originsCapsule.text,
+    lessonContext,
+  );
   const text = await generateText({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -1951,6 +2083,7 @@ export async function generateStoryProseRevision(
   progress?: StoryProgress,
   options?: StoryDebugOptions,
   feedback?: string,
+  lessonContext?: StoryLessonContext,
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
@@ -1959,6 +2092,7 @@ export async function generateStoryProseRevision(
     draft.text,
     originsCapsule.text,
     feedback,
+    lessonContext,
   );
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
@@ -2342,6 +2476,7 @@ async function prepareProseVariantDraft(
   originsCapsule: StoryOriginsCapsule,
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions,
+  lessonContext?: StoryLessonContext,
 ): Promise<StoryProseDraftVariant> {
   const adapter = useProgress(progress);
   for (let attempt = 1; attempt <= PROSE_DRAFT_MAX_ATTEMPTS; attempt += 1) {
@@ -2361,6 +2496,7 @@ async function prepareProseVariantDraft(
         originsCapsule,
         progress,
         draftOptions,
+        lessonContext,
       );
       return { label, idea, originsCapsule, draft };
     } catch (error) {
@@ -2388,6 +2524,7 @@ async function reviseProseVariant(
   variant: StoryProseDraftVariant,
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions,
+  lessonContext?: StoryLessonContext,
 ): Promise<StoryProseVariantCandidate> {
   const adapter = useProgress(progress);
   let feedback: string | undefined;
@@ -2416,6 +2553,7 @@ async function reviseProseVariant(
       progress,
       revisionOptions,
       feedback,
+      lessonContext,
     );
     const validation = await validateStoryProse(
       topic,
@@ -2563,10 +2701,11 @@ async function judgeProseVariants(
 
 export async function generateProseStory(
   topic: string,
+  lessonContext?: StoryLessonContext,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
 ): Promise<StoryProseResult> {
-  const idea = await generateStoryIdea(topic, progress, options);
+  const idea = await generateStoryIdea(topic, lessonContext, progress, options);
   const originsCapsule = await generateOriginsCapsule(
     topic,
     idea,
@@ -2582,12 +2721,19 @@ export async function generateProseStory(
         originsCapsule,
         progress,
         options,
+        lessonContext,
       ),
     ),
   );
   const variantResults = await Promise.all(
     variantDrafts.map((variant) =>
-      reviseProseVariant(topic, variant, progress, options),
+      reviseProseVariant(
+        topic,
+        variant,
+        progress,
+        options,
+        lessonContext,
+      ),
     ),
   );
   const judge = await judgeProseVariants(
@@ -3473,6 +3619,7 @@ type GenerateStoryOptions = {
   audioProgressLabel?: string;
   debugRootDir?: string;
   checkpointDir?: string;
+  lessonContext?: StoryLessonContext;
 };
 
 export type GenerateStoryResult = {
@@ -3568,12 +3715,31 @@ type StoryGenerationPipelineOptions = {
   audioProgressLabel?: string;
   debugRootDir?: string;
   checkpointDir?: string;
+  lessonContext?: StoryLessonContext;
 };
 
 type StageCacheEntry<TValue> = {
   value: TValue;
   source: "checkpoint" | "generated";
   checkpointPath?: string;
+};
+
+type StoryLessonContext = {
+  planTopic: string;
+  promisedSkills: readonly string[];
+  techniques?: readonly {
+    id: string;
+    title: string;
+    summary: string;
+    applies_to: readonly string[];
+    tags: readonly string[];
+  }[];
+  problems?: readonly {
+    id: string;
+    title: string;
+    story_callback?: string;
+    summary?: string;
+  }[];
 };
 
 type NarrationStageValue = {
@@ -4215,6 +4381,7 @@ export class StoryGenerationPipeline {
     await this.invalidateAfter("idea");
     const idea = await generateStoryIdea(
       this.options.topic,
+      this.options.lessonContext,
       this.options.progress,
       {
         debugRootDir: this.options.debugRootDir,
@@ -4312,6 +4479,7 @@ export class StoryGenerationPipeline {
           originsCapsule,
           this.options.progress,
           baseDebug,
+          this.options.lessonContext,
         ),
       ),
     );
@@ -4358,6 +4526,7 @@ export class StoryGenerationPipeline {
           variant,
           this.options.progress,
           baseDebug,
+          this.options.lessonContext,
         ),
       ),
     );
@@ -4789,6 +4958,7 @@ export async function generateStory(
     audioProgressLabel: options.audioProgressLabel,
     debugRootDir: options.debugRootDir,
     checkpointDir: options.checkpointDir,
+    lessonContext: options.lessonContext,
   });
 
   const { value: story } = await pipeline.ensureProse();
