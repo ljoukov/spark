@@ -235,6 +235,49 @@ function normalizeJsonText(rawText: string): string {
   return trimmed;
 }
 
+function escapeNewlinesInStrings(jsonText: string): string {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < jsonText.length; i += 1) {
+    const char = jsonText[i] ?? "";
+    if (inString) {
+      if (escaped) {
+        output += char;
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        output += char;
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        output += char;
+        inString = false;
+        continue;
+      }
+      if (char === "\n") {
+        output += "\\n";
+        continue;
+      }
+      if (char === "\r") {
+        output += "\\r";
+        continue;
+      }
+      output += char;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
 function extractImages(content: LlmContent | undefined): LlmImageData[] {
   if (!content) {
     return [];
@@ -1433,7 +1476,8 @@ export async function generateJson<T>(
         maxAttempts,
       });
       const cleanedText = normalizeJsonText(rawText);
-      const payload: unknown = JSON.parse(cleanedText);
+      const repairedText = escapeNewlinesInStrings(cleanedText);
+      const payload: unknown = JSON.parse(repairedText);
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {
