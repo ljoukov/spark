@@ -1,7 +1,15 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { getContext, onDestroy } from 'svelte';
+	import { z } from 'zod';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { PageData } from './$types';
-	import type { PlanItemState, UserStats } from '@spark/schemas';
+	import {
+		LessonProposalSchema,
+		type LessonProposal,
+		type PlanItemState,
+		type UserStats
+	} from '@spark/schemas';
 	import { createSessionStateStore } from '$lib/client/sessionState';
 	import { initializeUserStats } from '$lib/client/userStats';
 
@@ -63,12 +71,14 @@
 	const stats = $derived(buildStats(liveStats ?? data.stats));
 
 	const sessionId = $derived(data.session.id);
-	const sessionPlan = $derived(data.session.plan);
+	const sessionStatus = $derived(data.session.status ?? 'ready');
+	const isGeneratingSession = $derived(sessionStatus === 'generating');
+	const isErroredSession = $derived(sessionStatus === 'error');
+	const sessionPlan = $derived(data.session.plan ?? []);
+	const hasPlanItems = $derived(sessionPlan.length > 0);
 
 	const planEyebrow = $derived("Today's plan");
-	const planTopic = $derived(
-		data.session.title ?? data.session.plan[0]?.title ?? 'Your session plan'
-	);
+	const planTopic = $derived(data.session.title ?? sessionPlan[0]?.title ?? 'Your session plan');
 	const planSummary = $derived(data.session.summary ?? '');
 
 	const sessionStateStore = createSessionStateStore(data.session.id, data.sessionState);
@@ -85,28 +95,31 @@
 	});
 
 	const baseTimeline = $derived(
-		sessionPlan.map<TimelineStep>((item) => {
-			const icon =
-				item.icon ?? (item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
-			const meta =
-				item.meta ?? (item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
-			const description = item.summary ?? '';
-			const href =
-				item.kind === 'quiz'
-					? `/code/${sessionId}/quiz/${item.id}`
-					: item.kind === 'problem'
-						? `/code/${sessionId}/p/${item.id}`
-						: `/code/${sessionId}/m/${item.id}`;
-			return {
-				key: item.id,
-				title: item.title,
-				icon,
-				meta,
-				description,
-				href,
-				status: 'not_started'
-			};
-		})
+		hasPlanItems
+			? sessionPlan.map<TimelineStep>((item) => {
+					const icon =
+						item.icon ?? (item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
+					const meta =
+						item.meta ??
+						(item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
+					const description = item.summary ?? '';
+					const href =
+						item.kind === 'quiz'
+							? `/code/${sessionId}/quiz/${item.id}`
+							: item.kind === 'problem'
+								? `/code/${sessionId}/p/${item.id}`
+								: `/code/${sessionId}/m/${item.id}`;
+					return {
+						key: item.id,
+						title: item.title,
+						icon,
+						meta,
+						description,
+						href,
+						status: 'not_started'
+					};
+				})
+			: []
 	);
 
 	const timeline = $derived(
@@ -116,25 +129,129 @@
 		}))
 	);
 	const firstIncomplete = $derived(
-		timeline.find((step) => step.status !== 'completed') ?? timeline[timeline.length - 1]!
+		timeline.length > 0
+			? (timeline.find((step) => step.status !== 'completed') ?? timeline[timeline.length - 1]!)
+			: null
 	);
-	const startHref = $derived(firstIncomplete.href);
-	const startLabel = $derived(firstIncomplete.title);
+	const startHref = $derived(firstIncomplete?.href ?? `/code/${sessionId}`);
+	const startLabel = $derived(firstIncomplete?.title ?? 'Session');
 	const timelineStatuses = $derived(timeline.map((step) => step.status));
 	const allCompleted = $derived(
-		timelineStatuses.length > 0 && timelineStatuses.every((status) => status === 'completed')
+		timeline.length > 0 && timelineStatuses.every((status) => status === 'completed')
 	);
 	const hasProgress = $derived(timelineStatuses.some((status) => status !== 'not_started'));
-	const ctaState = $derived(allCompleted ? 'completed' : hasProgress ? 'continue' : 'start');
-	const ctaIcon = $derived(allCompleted ? '🎉' : '▶');
-	const ctaLabel = $derived(allCompleted ? 'Finish' : hasProgress ? 'Continue' : 'Start');
+	const ctaState = $derived(
+		timeline.length === 0
+			? 'start'
+			: allCompleted
+				? 'completed'
+				: hasProgress
+					? 'continue'
+					: 'start'
+	);
+	const ctaIcon = $derived(ctaState === 'completed' ? '🎉' : '▶');
+	const ctaLabel = $derived(
+		ctaState === 'completed' ? 'Finish' : ctaState === 'continue' ? 'Continue' : 'Start'
+	);
 	const ctaAria = $derived(
-		allCompleted
+		ctaState === 'completed'
 			? 'Session completed — review any step again if you like.'
-			: hasProgress
+			: ctaState === 'continue'
 				? `Continue with ${startLabel}`
 				: `Start ${startLabel}`
 	);
+
+	const proposalsResponseSchema = z.object({
+		proposals: z.array(LessonProposalSchema),
+		reused: z.boolean().optional()
+	});
+
+	const selectResponseSchema = z.object({
+		nextSessionId: z.string().trim().min(1),
+		status: z.string().trim().optional()
+	});
+
+	let proposalDialogOpen = $state(false);
+	let proposalsLoading = $state(false);
+	let proposalsLoaded = $state((data.session.nextLessonProposals?.length ?? 0) > 0);
+	let proposalsError = $state<string | null>(null);
+	let selectionError = $state<string | null>(null);
+	let proposals = $state<LessonProposal[]>(data.session.nextLessonProposals ?? []);
+	let selectPendingId = $state<string | null>(null);
+
+	async function fetchProposals(): Promise<void> {
+		proposalsError = null;
+		proposalsLoading = true;
+		try {
+			const response = await fetch(`/api/code/${sessionId}/next-lessons`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'propose' })
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				const message =
+					payload && typeof payload.message === 'string'
+						? payload.message
+						: 'Unable to draft next lessons. Please try again.';
+				proposalsError = message;
+				return;
+			}
+			const payload = proposalsResponseSchema.parse(await response.json());
+			proposals = payload.proposals;
+			proposalsLoaded = true;
+		} catch (error) {
+			console.error('Failed to fetch next-lesson proposals', error);
+			proposalsError = 'Unable to draft next lessons. Please try again.';
+		} finally {
+			proposalsLoading = false;
+		}
+	}
+
+	function openProposalDialog(): void {
+		proposalDialogOpen = true;
+		selectionError = null;
+		if (!proposalsLoaded && !proposalsLoading) {
+			void fetchProposals();
+		}
+	}
+
+	function handlePlanCtaClick(event: MouseEvent): void {
+		if (ctaState !== 'completed') {
+			return;
+		}
+		event.preventDefault();
+		openProposalDialog();
+	}
+
+	async function handleProposalPick(proposalId: string): Promise<void> {
+		selectionError = null;
+		selectPendingId = proposalId;
+		try {
+			const response = await fetch(`/api/code/${sessionId}/next-lessons`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'select', proposalId })
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				const message =
+					payload && typeof payload.message === 'string'
+						? payload.message
+						: 'Could not start that lesson. Please try again.';
+				selectionError = message;
+				return;
+			}
+			const payload = selectResponseSchema.parse(await response.json());
+			proposalDialogOpen = false;
+			await goto(`/code/${payload.nextSessionId}`);
+		} catch (error) {
+			console.error('Failed to start next lesson', error);
+			selectionError = 'Could not start that lesson. Please try again.';
+		} finally {
+			selectPendingId = null;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -147,85 +264,389 @@
 	/>
 </svelte:head>
 
-<section class="dashboard">
-	<div class="hero-card">
-		<h1 class="hero-title">
-			Welcome back, {firstName}!
-			<picture class="hero-rocket">
-				<source
-					srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.webp"
-					type="image/webp"
-				/>
-				<img
-					src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.gif"
-					alt="🚀"
-					width="48"
-					height="48"
-				/>
-			</picture>
-		</h1>
-		<p class="hero-subtitle">Let&apos;s crush today&apos;s session.</p>
-		<div class="stat-chips">
-			{#each stats as stat}
-				<div class="stat-chip">
-					<span class="chip-value">{stat.value}</span>
-					<span class="chip-label">{stat.label}</span>
-				</div>
-			{/each}
+{#if isGeneratingSession}
+	<section class="generating">
+		<div class="generating-card">
+			<div class="next-spinner" aria-hidden="true"></div>
+			<div class="generating-copy">
+				<h1>Generating your next lesson…</h1>
+				<p>We&rsquo;re assembling a fresh plan. This usually takes under a minute.</p>
+				<a class="secondary-link" href="/code/lessons">See other lessons</a>
+			</div>
 		</div>
-	</div>
+	</section>
+{:else if isErroredSession}
+	<section class="generating">
+		<div class="generating-card">
+			<div class="generating-copy">
+				<h1>We hit a snag</h1>
+				<p>We could not finish this lesson. Check your other lessons or try again later.</p>
+				<a class="secondary-link" href="/code/lessons">See other lessons</a>
+			</div>
+		</div>
+	</section>
+{:else}
+	<section class="dashboard">
+		<div class="hero-card">
+			<h1 class="hero-title">
+				Welcome back, {firstName}!
+				<picture class="hero-rocket">
+					<source
+						srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.webp"
+						type="image/webp"
+					/>
+					<img
+						src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/512.gif"
+						alt="🚀"
+						width="48"
+						height="48"
+					/>
+				</picture>
+			</h1>
+			<p class="hero-subtitle">Let&apos;s crush today&apos;s session.</p>
+			<div class="stat-chips">
+				{#each stats as stat}
+					<div class="stat-chip">
+						<span class="chip-value">{stat.value}</span>
+						<span class="chip-label">{stat.label}</span>
+					</div>
+				{/each}
+			</div>
+		</div>
 
-	<div class="plan-card">
-		<header class="plan-header">
-			<p class="plan-eyebrow">{planEyebrow}</p>
-			<h2>{planTopic}</h2>
-			<p class="plan-summary">{planSummary}</p>
-		</header>
-		<div class="plan-body">
-			{#each timeline as item, index}
-				<a
-					class="timeline-row"
-					href={item.href}
-					data-first={index === 0}
-					data-last={index === timeline.length - 1}
-					data-done={item.status === 'completed'}
-					data-status={item.status}
-				>
-					<div class="timeline-hit">
-						<div class="timeline-point" data-done={item.status === 'completed'}>
-							<span class="timeline-circle" data-done={item.status === 'completed'}></span>
-						</div>
-						<div class="timeline-body">
-							<span class="timeline-emoji" aria-hidden="true">
-								{item.icon}
-							</span>
-							<div class="timeline-text-block">
-								<div class="headline-row">
-									<span class="checkpoint-name">{item.title}</span>
-									{#if item.meta}
-										<span class="checkpoint-dot">·</span>
-										<span class="checkpoint-meta">{item.meta}</span>
-									{/if}
-								</div>
-								<div class="checkpoint-description">
-									<span>{item.description}</span>
+		<div class="plan-card">
+			<header class="plan-header">
+				<p class="plan-eyebrow">{planEyebrow}</p>
+				<h2>{planTopic}</h2>
+				<p class="plan-summary">{planSummary}</p>
+			</header>
+			<div class="plan-body">
+				{#each timeline as item, index}
+					<a
+						class="timeline-row"
+						href={item.href}
+						data-first={index === 0}
+						data-last={index === timeline.length - 1}
+						data-done={item.status === 'completed'}
+						data-status={item.status}
+					>
+						<div class="timeline-hit">
+							<div class="timeline-point" data-done={item.status === 'completed'}>
+								<span class="timeline-circle" data-done={item.status === 'completed'}></span>
+							</div>
+							<div class="timeline-body">
+								<span class="timeline-emoji" aria-hidden="true">
+									{item.icon}
+								</span>
+								<div class="timeline-text-block">
+									<div class="headline-row">
+										<span class="checkpoint-name">{item.title}</span>
+										{#if item.meta}
+											<span class="checkpoint-dot">·</span>
+											<span class="checkpoint-meta">{item.meta}</span>
+										{/if}
+									</div>
+									<div class="checkpoint-description">
+										<span>{item.description}</span>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
+					</a>
+				{/each}
+			</div>
+			<div class="plan-footer">
+				<a
+					class="plan-start"
+					href={startHref}
+					data-state={ctaState}
+					aria-label={ctaAria}
+					on:click={handlePlanCtaClick}
+				>
+					{ctaIcon}
+					{ctaLabel}
 				</a>
-			{/each}
+			</div>
 		</div>
-		<div class="plan-footer">
-			<a class="plan-start" href={startHref} data-state={ctaState} aria-label={ctaAria}>
-				{ctaIcon}
-				{ctaLabel}
-			</a>
-		</div>
-	</div>
-</section>
+	</section>
+{/if}
+
+<Dialog.Root
+	open={proposalDialogOpen}
+	onOpenChange={(value) => {
+		proposalDialogOpen = value;
+		if (!value) {
+			selectionError = null;
+		}
+	}}
+>
+	<Dialog.Content class="next-dialog" hideClose>
+		{#if proposalsLoading && !proposalsLoaded}
+			<div class="next-dialog__loading">
+				<div class="next-spinner" aria-hidden="true"></div>
+				<div class="next-dialog__copy">
+					<h2>Deciding on your next sessions…</h2>
+					<p>We&rsquo;re lining up three options based on what you finished.</p>
+				</div>
+			</div>
+		{:else}
+			<div class="next-dialog__body">
+				<div class="next-dialog__header">
+					<h2>Pick your next lesson</h2>
+					<p>Choose one to start generating right away.</p>
+				</div>
+				{#if proposalsError}
+					<p class="proposal-error">{proposalsError}</p>
+					<div class="next-dialog__actions">
+						<button
+							class="proposal-action"
+							on:click={() => void fetchProposals()}
+							disabled={proposalsLoading}
+						>
+							Try again
+						</button>
+						<button class="proposal-secondary" on:click={() => (proposalDialogOpen = false)}>
+							Close
+						</button>
+					</div>
+				{:else if proposals.length === 0}
+					<div class="next-dialog__empty">
+						<p>No proposals yet. Try again in a moment.</p>
+						<button
+							class="proposal-action"
+							on:click={() => void fetchProposals()}
+							disabled={proposalsLoading}
+						>
+							Refresh
+						</button>
+					</div>
+				{:else}
+					<div class="proposal-grid">
+						{#each proposals as proposal}
+							<article class="proposal-card">
+								<div class="proposal-emoji" aria-hidden="true">{proposal.emoji}</div>
+								<div class="proposal-main">
+									<h3>{proposal.title}</h3>
+									<p class="proposal-tagline">{proposal.tagline}</p>
+									<ul class="proposal-topics">
+										{#each proposal.topics as topic}
+											<li>{topic}</li>
+										{/each}
+									</ul>
+								</div>
+								<button
+									class="proposal-action"
+									disabled={selectPendingId === proposal.id}
+									on:click={() => void handleProposalPick(proposal.id)}
+								>
+									{selectPendingId === proposal.id ? 'Starting…' : 'Start this lesson'}
+								</button>
+							</article>
+						{/each}
+					</div>
+					{#if selectionError}
+						<p class="proposal-error">{selectionError}</p>
+					{/if}
+					<div class="next-dialog__actions">
+						<button class="proposal-secondary" on:click={() => (proposalDialogOpen = false)}>
+							Cancel
+						</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>
 
 <style lang="postcss">
+	.generating {
+		width: min(80rem, 92vw);
+		margin: 0 auto clamp(2rem, 4vw, 3rem);
+		padding-top: clamp(1.5rem, 3vw, 2.4rem);
+	}
+
+	.generating-card {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 1.6rem;
+		border-radius: 1.4rem;
+		background: color-mix(in srgb, var(--app-content-bg) 88%, transparent);
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		box-shadow: 0 20px 60px -46px rgba(15, 23, 42, 0.45);
+	}
+
+	.generating-copy h1 {
+		margin: 0 0 0.35rem;
+	}
+
+	.generating-copy p {
+		margin: 0 0 0.6rem;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.78));
+	}
+
+	.secondary-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		text-decoration: none;
+		font-weight: 600;
+		color: rgba(59, 130, 246, 0.95);
+	}
+
+	.next-spinner {
+		height: 2.75rem;
+		width: 2.75rem;
+		border-radius: 9999px;
+		border: 3px solid rgba(148, 163, 184, 0.35);
+		border-top-color: rgba(59, 130, 246, 0.85);
+		animation: next-spin 0.75s linear infinite;
+	}
+
+	@keyframes next-spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.next-dialog {
+		max-width: 56rem;
+		width: min(56rem, 92vw);
+		padding: 0;
+		border-radius: 1.5rem;
+		overflow: hidden;
+	}
+
+	.next-dialog__loading,
+	.next-dialog__body {
+		padding: 1.5rem;
+	}
+
+	.next-dialog__loading {
+		display: flex;
+		gap: 1rem;
+		align-items: center;
+	}
+
+	.next-dialog__copy h2,
+	.next-dialog__copy p {
+		margin: 0;
+	}
+
+	.next-dialog__body {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.next-dialog__header h2 {
+		margin: 0 0 0.25rem;
+	}
+
+	.next-dialog__header p {
+		margin: 0;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
+	}
+
+	.proposal-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 0.9rem;
+	}
+
+	.proposal-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 1rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		background: color-mix(in srgb, var(--app-content-bg) 92%, transparent);
+		box-shadow: 0 18px 50px -44px rgba(15, 23, 42, 0.45);
+	}
+
+	.proposal-emoji {
+		font-size: 1.4rem;
+		line-height: 1;
+	}
+
+	.proposal-main h3 {
+		margin: 0;
+		font-size: 1.05rem;
+	}
+
+	.proposal-tagline {
+		margin: 0.2rem 0 0;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.75));
+	}
+
+	.proposal-topics {
+		list-style: none;
+		padding: 0;
+		margin: 0.6rem 0 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.proposal-topics li {
+		padding: 0.2rem 0.55rem;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.18);
+		font-size: 0.85rem;
+	}
+
+	.proposal-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.55rem 1rem;
+		border-radius: 0.9rem;
+		border: none;
+		cursor: pointer;
+		font-weight: 700;
+		color: #fff;
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(96, 165, 250, 0.78));
+	}
+
+	.proposal-action:disabled {
+		opacity: 0.65;
+		cursor: not-allowed;
+	}
+
+	.proposal-secondary {
+		border: none;
+		background: none;
+		color: rgba(30, 41, 59, 0.9);
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.proposal-error {
+		margin: 0;
+		padding: 0.65rem 0.8rem;
+		border-radius: 0.85rem;
+		border: 1px solid rgba(239, 68, 68, 0.38);
+		background: rgba(248, 113, 113, 0.14);
+		color: #b91c1c;
+	}
+
+	.next-dialog__actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.7rem;
+	}
+
+	.next-dialog__empty {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
 	.dashboard {
 		display: grid;
 		grid-template-columns: 1fr;
