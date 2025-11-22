@@ -1396,8 +1396,9 @@ ${storyBrief}
 - Use neutral naming language such as "now known as", "often called", or "widely referred to as". Never claim anyone "coined", "named", "invented", or held sole credit unless the capsule already asserts it.
 - Avoid exclusivity language. Swap "first" or "sole inventor" claims for hedged phrasing like "credited among early contributors", "independently developed", or "... and others".
 - Limit the narrative to one named figure or institution. When others matter, acknowledge them with neutral hedges instead of listing names.
+- The required concept name must appear in the title and again within the first four sentences of the prose, verbatim. Keep the title aligned with the same entity/concept described in the story.
 - Introduce the concept "${topic}" within the first four sentences. Include a naming note only when the qualifier is well established and high-confidence.
-- Deliver the insight hint in one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
+- Deliver the insight hint in exactly one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
 - Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
 ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
