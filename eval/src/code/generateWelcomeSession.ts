@@ -542,11 +542,104 @@ const CodeProblemsPayloadSchema = z.object({
   problems: z.array(CodeProblemSchema),
 });
 
+const CODE_PROBLEM_EXAMPLE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["title", "input", "output", "explanation"],
+  properties: {
+    title: { type: Type.STRING, minLength: "1" },
+    input: { type: Type.STRING, minLength: "1" },
+    output: { type: Type.STRING, minLength: "1" },
+    explanation: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODE_PROBLEM_TEST_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["input", "output", "explanation"],
+  properties: {
+    input: { type: Type.STRING, minLength: "1" },
+    output: { type: Type.STRING, minLength: "1" },
+    explanation: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODE_PROBLEM_SOLUTION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["language", "code"],
+  properties: {
+    language: { type: Type.STRING, enum: ["python"] },
+    code: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: [
+    "slug",
+    "title",
+    "topics",
+    "difficulty",
+    "description",
+    "inputFormat",
+    "constraints",
+    "examples",
+    "tests",
+    "hints",
+    "solution",
+    "metadataVersion",
+  ],
+  properties: {
+    slug: { type: Type.STRING, minLength: "1" },
+    title: { type: Type.STRING, minLength: "1" },
+    topics: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    difficulty: {
+      type: Type.STRING,
+      enum: ["warmup", "intro", "easy", "medium", "hard"],
+    },
+    description: { type: Type.STRING, minLength: "1" },
+    inputFormat: { type: Type.STRING, minLength: "1" },
+    constraints: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    examples: {
+      type: Type.ARRAY,
+      minItems: "3",
+      maxItems: "3",
+      items: CODE_PROBLEM_EXAMPLE_RESPONSE_SCHEMA,
+    },
+    tests: {
+      type: Type.ARRAY,
+      minItems: "10",
+      maxItems: "25",
+      items: CODE_PROBLEM_TEST_RESPONSE_SCHEMA,
+    },
+    hints: {
+      type: Type.ARRAY,
+      minItems: "3",
+      maxItems: "3",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    solution: CODE_PROBLEM_SOLUTION_RESPONSE_SCHEMA,
+    metadataVersion: { type: Type.NUMBER },
+  },
+};
+
 const CODE_PROBLEMS_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["problems"],
   properties: {
-    problems: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+    problems: {
+      type: Type.ARRAY,
+      minItems: "2",
+      maxItems: "2",
+      items: CODE_PROBLEM_RESPONSE_SCHEMA,
+    },
   },
 };
 
@@ -594,6 +687,7 @@ async function generateCodeProblems(
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: CodeProblemsPayloadSchema,
     responseSchema: CODE_PROBLEMS_RESPONSE_SCHEMA,
+    maxAttempts: 4,
     progress,
   });
   return payload.problems;
