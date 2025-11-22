@@ -29,7 +29,7 @@ import {
 } from "./generateNarration";
 import { generateStoryFrames } from "./generateFrames";
 
-export const TEXT_MODEL_ID = "gemini-2.5-pro" as const;
+export const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
 export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
 
 const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
