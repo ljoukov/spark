@@ -225,14 +225,31 @@ function extractVisibleText(content: LlmContent | undefined): string {
 }
 
 function normalizeJsonText(rawText: string): string {
-  const trimmed = rawText.trim();
+  let text = rawText.trim();
+
+  if (text.startsWith("```")) {
+    text = text.replace(/^```[a-zA-Z0-9_-]*\s*\n?/, "");
+    text = text.replace(/```(?:\s*)?$/, "").trim();
+  }
+
   const fenced =
-    /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed) ??
-    /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(trimmed);
+    /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(text) ??
+    /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
   if (fenced?.[1]) {
     return fenced[1].trim();
   }
-  return trimmed;
+
+  if (!text.startsWith("{") && !text.startsWith("[")) {
+    const firstBrace = text.indexOf("{");
+    if (firstBrace !== -1) {
+      const lastBrace = text.lastIndexOf("}");
+      if (lastBrace !== -1 && lastBrace > firstBrace) {
+        text = text.slice(firstBrace, lastBrace + 1).trim();
+      }
+    }
+  }
+
+  return text;
 }
 
 function escapeNewlinesInStrings(jsonText: string): string {
