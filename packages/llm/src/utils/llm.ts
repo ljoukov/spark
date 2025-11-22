@@ -224,6 +224,17 @@ function extractVisibleText(content: LlmContent | undefined): string {
   return text.trim();
 }
 
+function normalizeJsonText(rawText: string): string {
+  const trimmed = rawText.trim();
+  const fenced =
+    /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed) ??
+    /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(trimmed);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+  return trimmed;
+}
+
 function extractImages(content: LlmContent | undefined): LlmImageData[] {
   if (!content) {
     return [];
@@ -1421,7 +1432,8 @@ export async function generateJson<T>(
         attempt,
         maxAttempts,
       });
-      const payload: unknown = JSON.parse(rawText);
+      const cleanedText = normalizeJsonText(rawText);
+      const payload: unknown = JSON.parse(cleanedText);
       const parsed = schema.parse(payload);
       return parsed;
     } catch (error) {
