@@ -17,7 +17,9 @@
 		completed: 'Completed'
 	};
 
-	let { data }: { data: PageData } = $props();
+	import type { ActionData } from './$types';
+
+	let { data, form }: { data: PageData; form: ActionData | null } = $props();
 	const templates = $derived(data.welcomeTemplates as WelcomeTemplate[]);
 
 	function formatDate(value: string): string {
@@ -110,6 +112,10 @@
 			</div>
 		</header>
 
+		{#if form?.error}
+			<p class="template-error">{form.error}</p>
+		{/if}
+
 		{#if templates.length === 0}
 			<div class="empty-state">
 				<div class="empty-emoji" aria-hidden="true">🧭</div>
@@ -121,7 +127,7 @@
 		{:else}
 			<div class="templates-grid">
 				{#each templates as template}
-					<form method="POST" action="/code?/start" class="template-card">
+					<form method="POST" action="?/start" class="template-card">
 						<input type="hidden" name="topic" value={template.key} />
 						{#if template.posterImageUrl}
 							<img
@@ -443,6 +449,15 @@
 
 	.template-action:hover {
 		filter: brightness(1.03);
+	}
+
+	.template-error {
+		margin: 0;
+		padding: 0.7rem 0.85rem;
+		border-radius: 0.85rem;
+		border: 1px solid rgba(239, 68, 68, 0.38);
+		background: rgba(248, 113, 113, 0.14);
+		color: #b91c1c;
 	}
 
 	@media (max-width: 720px) {
