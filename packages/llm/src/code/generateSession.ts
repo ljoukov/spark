@@ -234,6 +234,7 @@ const QuizQuestionBaseSchema = z.object({
   prompt: z.string().trim().min(1),
   explanation: z.string().trim().min(1),
   tags: z.array(z.string().trim().min(1)).min(1),
+  covers_techniques: z.array(z.string().trim().min(1)).min(1),
 });
 
 const QuizQuestionMcqSchema = QuizQuestionBaseSchema.extend({
@@ -307,6 +308,7 @@ const QuizzesGradeSchema = z.object({
   issues: z.array(z.string().trim()).default([]),
   uncovered_skills: z.array(z.string().trim()).default([]),
   missing_theory_for_concepts: z.array(z.string().trim()).default([]),
+  missing_techniques: z.array(z.string().trim()).default([]),
 });
 
 export type QuizzesGrade = z.infer<typeof QuizzesGradeSchema>;
@@ -389,8 +391,29 @@ const ProblemsGradeSchema = z.object({
 
 export type ProblemsGrade = z.infer<typeof ProblemsGradeSchema>;
 
+const ProblemTechniqueSchema = z.object({
+  id: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  applies_to: z.array(z.enum(["p1", "p2"])).min(1),
+  tags: z.array(z.string().trim().min(1)).min(1),
+});
+
+export type ProblemTechnique = z.infer<typeof ProblemTechniqueSchema>;
+
+const ProblemTechniquesSchema = z.object({
+  topic: z.string().trim().min(1),
+  techniques: z.array(ProblemTechniqueSchema).min(1),
+});
+
+type ProblemTechniquesPayload = z.infer<typeof ProblemTechniquesSchema>;
+
 type PlanIdeasStageValue = {
   markdown: string;
+};
+
+type ProblemTechniquesStageValue = {
+  techniques: ProblemTechnique[];
 };
 
 type QuizIdeasStageValue = {
@@ -437,6 +460,7 @@ type SessionGenerationStageName =
   | "plan_ideas"
   | "plan"
   | "plan_grade"
+  | "problem_techniques"
   | "quiz_ideas"
   | "quizzes"
   | "quizzes_grade"
@@ -448,12 +472,13 @@ const SESSION_STAGE_ORDER: readonly SessionGenerationStageName[] = [
   "plan_ideas",
   "plan",
   "plan_grade",
-  "quiz_ideas",
-  "quizzes",
-  "quizzes_grade",
+  "problem_techniques",
   "problem_ideas",
   "problems",
   "problems_grade",
+  "quiz_ideas",
+  "quizzes",
+  "quizzes_grade",
 ];
 
 type SessionGenerationPipelineOptions = {
@@ -477,6 +502,8 @@ type QuizIdeasCheckpoint = {
   topic: string;
   markdown: string;
 };
+
+type ProblemTechniquesCheckpoint = ProblemTechniquesPayload;
 
 type PlanCheckpoint = SessionPlan & {
   topic: string;
@@ -573,8 +600,27 @@ function buildPlanGradeUserPrompt(plan: SessionPlan): string {
   ].join("\n");
 }
 
+function buildProblemTechniquesUserPrompt(plan: SessionPlan): string {
+  return [
+    `Topic: "${plan.topic}"`,
+    "",
+    "Extract the problem-solving techniques needed to solve the two coding problems implied by the coding_blueprints (ids p1 and p2).",
+    "Techniques include algorithms, patterns, invariants, decomposition steps, edge-case handling, math shortcuts, and data structure choices. Keep them aligned to the plan difficulty and promised skills; avoid advanced or unseen topics.",
+    'Return JSON {topic, techniques:[{id,title,summary,applies_to:["p1"|"p2"],tags[]}]} where:',
+    "- ids are short stable tokens (e.g., t1, t2, t3);",
+    "- summary explains why the technique matters and the maneuver to apply;",
+    "- applies_to lists which problem(s) require it (p1, p2, or both);",
+    "- tags reference promised_skills or concepts_to_teach that match the technique.",
+    "",
+    "Plan JSON:",
+    JSON.stringify(plan, null, 2),
+  ].join("\n");
+}
+
 function buildQuizIdeasUserPrompt(
   plan: SessionPlan,
+  techniques: readonly ProblemTechnique[],
+  problems: readonly CodingProblem[],
   markdownPlanIdeas: string,
   seed?: number,
 ): string {
@@ -582,13 +628,19 @@ function buildQuizIdeasUserPrompt(
     `Topic: "${plan.topic}"`,
     `Seed: ${seed ?? "none"}`,
     "",
-    "Provide Markdown describing intro and wrap-up quiz coverage.",
-    "Include theory primers if concepts_to_teach is non-empty.",
-    "List question stems with types.",
-    "Map stems to promised skills.",
+    "Provide Markdown describing intro and wrap-up quiz coverage that fully teaches the techniques required for the coding problems before students attempt them.",
+    "Include theory primers when a technique or concept is not already covered by assumptions.",
+    "List question stems with types and map them to promised skills AND technique ids.",
+    "Call out which techniques are introduced in theory blocks vs. practiced in questions (especially in the intro quiz).",
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
+    "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
+    "",
+    "Problems JSON:",
+    JSON.stringify(problems, null, 2),
     "",
     "Original Plan Ideas:",
     markdownPlanIdeas,
@@ -598,6 +650,8 @@ function buildQuizIdeasUserPrompt(
 function buildQuizzesGenerateUserPrompt(
   plan: SessionPlan,
   coverageMarkdown: string,
+  problems: readonly CodingProblem[],
+  techniques: readonly ProblemTechnique[],
   questionCounts?: SessionGenerationPipelineOptions["questionCounts"],
 ): string {
   const introCount = questionCounts?.introQuiz;
@@ -605,13 +659,15 @@ function buildQuizzesGenerateUserPrompt(
   const constraints: string[] = [
     'Return a JSON object with a single key "quizzes" whose value is an array of exactly two quiz definitions.',
     'Each quiz definition must include "quiz_id" (either "intro_quiz" or "wrap_up_quiz"), optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
-    'Every question object must follow the schema: {"id","type","prompt","explanation","tags", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
+    'Every question object must follow the schema: {"id","type","prompt","explanation","tags","covers_techniques", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
     'If a question has only one correct answer, use "mcq" (not "multi"). For "multi", return at least two correct answers in the "correct" array.',
     "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
     "Each quiz must include exactly 4 questions unless overrides provided.",
-    "If concepts introduced, add theory block before first related question and tag accordingly.",
-    "Tags must include promised skills and any concept tags.",
-    "Provide concise explanations.",
+    "Intro quiz must teach every technique required for p1/p2 before coding: include at least one intro question per technique and set covers_techniques to the matching ids.",
+    "covers_techniques must use ids from the provided Problem Techniques JSON.",
+    "If a technique or concept is not in assumptions, add a concise theory block before its first use.",
+    "Tags must include promised skills, concept tags, and technique-aligned tags.",
+    "Provide concise explanations that teach the technique being covered.",
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
   if (typeof introCount === "number" && introCount > 0) {
@@ -630,6 +686,12 @@ function buildQuizzesGenerateUserPrompt(
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
     "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
+    "",
+    "Problems JSON:",
+    JSON.stringify(problems, null, 2),
+    "",
     "Quiz coverage Markdown:",
     coverageMarkdown,
   ].join("\n");
@@ -638,15 +700,20 @@ function buildQuizzesGenerateUserPrompt(
 function buildQuizzesGradeUserPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
+  techniques: readonly ProblemTechnique[],
 ): string {
   return [
     "Ensure all required skills covered.",
     "Ensure theory blocks present when needed for new concepts.",
     "Ensure answers unambiguous and explanations correct.",
-    "Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[]} JSON only.",
+    "Ensure every technique required for p1/p2 appears in the intro quiz with at least one question covering it (covers_techniques).",
+    "Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]} JSON only.",
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
+    "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
     "",
     "Quizzes JSON:",
     JSON.stringify(quizzes, null, 2),
@@ -655,33 +722,29 @@ function buildQuizzesGradeUserPrompt(
 
 function buildProblemIdeasUserPrompt(
   plan: SessionPlan,
-  quizzes: readonly SessionQuiz[],
-  quizCoverageMarkdown: string,
+  techniques: readonly ProblemTechnique[],
   seed?: number,
 ): string {
   return [
     `Topic: "${plan.topic}"`,
     `Seed: ${seed ?? "none"}`,
     "",
-    "Generate Markdown summaries for two easy coding problems aligned with promised skills and story.",
+    "Generate Markdown summaries for two easy coding problems aligned with promised skills, story, and the listed techniques.",
     "Include Title, One-line Pitch, Story alignment note, Required Skills, Any New Concept, Example I/O.",
-    "Avoid advanced structures unless declared.",
+    "Avoid advanced structures unless declared; stay within the techniques provided for each problem id.",
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
     "",
-    "Quiz Coverage Markdown:",
-    quizCoverageMarkdown,
-    "",
-    "Quizzes JSON:",
-    JSON.stringify(quizzes, null, 2),
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
   ].join("\n");
 }
 
 function buildProblemsGenerateUserPrompt(
   plan: SessionPlan,
   problemIdeasMarkdown: string,
-  quizzes: readonly SessionQuiz[],
+  techniques: readonly ProblemTechnique[],
 ): string {
   return [
     'Return a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
@@ -693,7 +756,7 @@ function buildProblemsGenerateUserPrompt(
     'Do not include extra fields such as "prompt", "solution", or "private_tests".',
     'Problem "p1" must implement the first idea from the Markdown above (connection check). Problem "p2" must implement the second idea (shortest path/path reconstruction). Do not skip the connection-check problem.',
     "Ensure reference_solution_py uses return type hints consistent with the declared function signature.",
-    "Solutions must be simple Python 3.",
+    "Solutions must be simple Python 3 that rely only on the listed techniques (do not introduce new advanced techniques).",
     "Do not wrap the JSON in Markdown fences or add commentary.",
     "",
     "Plan JSON:",
@@ -702,21 +765,26 @@ function buildProblemsGenerateUserPrompt(
     "Problem Idea Markdown:",
     problemIdeasMarkdown,
     "",
-    "Quizzes JSON:",
-    JSON.stringify(quizzes, null, 2),
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
   ].join("\n");
 }
 
 function buildProblemsGradeUserPrompt(
   plan: SessionPlan,
   problems: readonly CodingProblem[],
+  techniques: readonly ProblemTechnique[],
 ): string {
   return [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
+    "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
     "Output {pass:boolean, issues:string[], too_hard_reasons:string[], misaligned_skills:string[]} JSON only.",
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
+    "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
     "",
     "Problems JSON:",
     JSON.stringify(problems, null, 2),
@@ -822,6 +890,39 @@ const PLAN_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const PROBLEM_TECHNIQUES_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["topic", "techniques"],
+  propertyOrdering: ["topic", "techniques"],
+  properties: {
+    topic: { type: Type.STRING, minLength: "1" },
+    techniques: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: {
+        type: Type.OBJECT,
+        required: ["id", "title", "summary", "applies_to", "tags"],
+        propertyOrdering: ["id", "title", "summary", "applies_to", "tags"],
+        properties: {
+          id: { type: Type.STRING, minLength: "1" },
+          title: { type: Type.STRING, minLength: "1" },
+          summary: { type: Type.STRING, minLength: "1" },
+          applies_to: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: { type: Type.STRING, enum: ["p1", "p2"] },
+          },
+          tags: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: { type: Type.STRING, minLength: "1" },
+          },
+        },
+      },
+    },
+  },
+};
+
 const QUIZZES_GRADE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: [
@@ -829,6 +930,7 @@ const QUIZZES_GRADE_RESPONSE_SCHEMA: Schema = {
     "issues",
     "uncovered_skills",
     "missing_theory_for_concepts",
+    "missing_techniques",
   ],
   properties: {
     pass: { type: Type.BOOLEAN },
@@ -838,6 +940,7 @@ const QUIZZES_GRADE_RESPONSE_SCHEMA: Schema = {
       type: Type.ARRAY,
       items: { type: Type.STRING },
     },
+    missing_techniques: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
 };
 
@@ -846,6 +949,11 @@ const QUIZ_QUESTION_BASE_PROPERTIES: Record<string, Schema> = {
   prompt: { type: Type.STRING, minLength: "1" },
   explanation: { type: Type.STRING, minLength: "1" },
   tags: {
+    type: Type.ARRAY,
+    minItems: "1",
+    items: { type: Type.STRING, minLength: "1" },
+  },
+  covers_techniques: {
     type: Type.ARRAY,
     minItems: "1",
     items: { type: Type.STRING, minLength: "1" },
@@ -865,8 +973,26 @@ const QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA: Schema = {
 
 const QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
-  propertyOrdering: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  required: [
+    "id",
+    "type",
+    "prompt",
+    "options",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
+  propertyOrdering: [
+    "id",
+    "type",
+    "prompt",
+    "options",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
   properties: {
     ...QUIZ_QUESTION_BASE_PROPERTIES,
     type: { type: Type.STRING, enum: ["mcq"] },
@@ -881,8 +1007,26 @@ const QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA: Schema = {
 
 const QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
-  propertyOrdering: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  required: [
+    "id",
+    "type",
+    "prompt",
+    "options",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
+  propertyOrdering: [
+    "id",
+    "type",
+    "prompt",
+    "options",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
   properties: {
     ...QUIZ_QUESTION_BASE_PROPERTIES,
     type: { type: Type.STRING, enum: ["multi"] },
@@ -901,8 +1045,24 @@ const QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA: Schema = {
 
 const QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
-  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  required: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
+  propertyOrdering: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
   properties: {
     ...QUIZ_QUESTION_BASE_PROPERTIES,
     type: { type: Type.STRING, enum: ["short"] },
@@ -912,8 +1072,24 @@ const QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA: Schema = {
 
 const QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
-  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  required: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
+  propertyOrdering: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
   properties: {
     ...QUIZ_QUESTION_BASE_PROPERTIES,
     type: { type: Type.STRING, enum: ["numeric"] },
@@ -923,8 +1099,24 @@ const QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA: Schema = {
 
 const QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
-  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  required: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
+  propertyOrdering: [
+    "id",
+    "type",
+    "prompt",
+    "correct",
+    "explanation",
+    "tags",
+    "covers_techniques",
+  ],
   properties: {
     ...QUIZ_QUESTION_BASE_PROPERTIES,
     type: { type: Type.STRING, enum: ["code_reading"] },
@@ -1128,6 +1320,7 @@ export class SessionGenerationPipeline {
     planIdeas?: StageCacheEntry<PlanIdeasStageValue>;
     plan?: StageCacheEntry<SessionPlan>;
     planGrade?: StageCacheEntry<PlanGrade>;
+    problemTechniques?: StageCacheEntry<ProblemTechniquesStageValue>;
     quizIdeas?: StageCacheEntry<QuizIdeasStageValue>;
     quizzes?: StageCacheEntry<QuizzesPayload>;
     quizzesGrade?: StageCacheEntry<QuizzesGrade>;
@@ -1161,6 +1354,9 @@ export class SessionGenerationPipeline {
         break;
       case "plan_grade":
         delete this.caches.planGrade;
+        break;
+      case "problem_techniques":
+        delete this.caches.problemTechniques;
         break;
       case "quiz_ideas":
         delete this.caches.quizIdeas;
@@ -1347,6 +1543,61 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(`[session/checkpoint] wrote 'plan_grade' to ${filePath}`);
+  }
+
+  private async readProblemTechniquesCheckpoint(): Promise<
+    StageReadResult<ProblemTechniquesStageValue> | undefined
+  > {
+    const filePath = this.stageFile("problem_techniques");
+    if (!filePath) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(filePath, { encoding: "utf8" });
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const result = ProblemTechniquesSchema.safeParse(parsed);
+      if (!result.success) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      if (result.data.topic !== this.options.topic) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (topic mismatch)`,
+        );
+        return undefined;
+      }
+      return {
+        value: { techniques: result.data.techniques },
+        filePath,
+      };
+    } catch (error) {
+      if (isEnoent(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async writeProblemTechniquesCheckpoint(
+    value: ProblemTechniquesStageValue,
+  ) {
+    const filePath = this.stageFile("problem_techniques");
+    if (!filePath || !this.checkpointDir) {
+      return;
+    }
+    await mkdir(this.checkpointDir, { recursive: true });
+    const payload: ProblemTechniquesCheckpoint = {
+      topic: this.options.topic,
+      techniques: value.techniques,
+    };
+    await writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: "utf8",
+    });
+    this.logger.log(
+      `[session/checkpoint] wrote 'problem_techniques' to ${filePath}`,
+    );
   }
 
   private async readQuizIdeasCheckpoint(): Promise<
@@ -1835,6 +2086,55 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
+  private async ensureProblemTechniquesInternal(): Promise<
+    StageCacheEntry<ProblemTechniquesStageValue>
+  > {
+    if (this.caches.problemTechniques) {
+      return this.caches.problemTechniques;
+    }
+    const checkpoint = await this.readProblemTechniquesCheckpoint();
+    if (checkpoint) {
+      this.logger.log(
+        `[session/checkpoint] restored 'problem_techniques' from ${checkpoint.filePath}`,
+      );
+      const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
+        value: checkpoint.value,
+        source: "checkpoint",
+        checkpointPath: checkpoint.filePath,
+      };
+      this.caches.problemTechniques = entry;
+      return entry;
+    }
+    const plan = await this.ensurePlan();
+    const userPrompt = buildProblemTechniquesUserPrompt(plan);
+    const debugOptions = this.createDebugOptions("problem-techniques");
+    this.logger.log("[session/problem-techniques] extracting techniques");
+    const payload = await generateJson<ProblemTechniquesPayload>({
+      modelId: TEXT_MODEL_ID,
+      contents: buildSingleUserPrompt(
+        "List concrete techniques learners must know before solving the problems.",
+        userPrompt,
+      ),
+      responseSchema: PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
+      schema: ProblemTechniquesSchema,
+      progress: this.logger,
+      debug: debugOptions,
+    });
+    const value: ProblemTechniquesStageValue = { techniques: payload.techniques };
+    await this.writeProblemTechniquesCheckpoint(value);
+    const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
+      value,
+      source: "generated",
+    };
+    this.caches.problemTechniques = entry;
+    return entry;
+  }
+
+  async ensureProblemTechniques(): Promise<ProblemTechnique[]> {
+    const entry = await this.ensureProblemTechniquesInternal();
+    return entry.value.techniques;
+  }
+
   async editPlan(
     currentPlan: SessionPlan,
     grade: PlanGrade,
@@ -1888,6 +2188,8 @@ export class SessionGenerationPipeline {
     const planEntry = await this.ensurePlanInternal();
     const plan = planEntry.value;
     const planIdeas = await this.ensurePlanIdeas();
+    const techniques = await this.ensureProblemTechniques();
+    const problems = await this.ensureProblems();
     for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
       try {
@@ -1897,6 +2199,8 @@ export class SessionGenerationPipeline {
         );
         const userPrompt = buildQuizIdeasUserPrompt(
           plan,
+          techniques,
+          problems,
           planIdeas.markdown,
           this.options.seed,
         );
@@ -1906,7 +2210,7 @@ export class SessionGenerationPipeline {
         const coverageMarkdown = await generateText({
           modelId: TEXT_MODEL_ID,
           contents: buildSingleUserPrompt(
-            "Expand plan into quiz coverage ensuring primers precede practice.",
+            "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding.",
             userPrompt,
           ),
           progress: this.logger,
@@ -1961,9 +2265,13 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     const quizIdeas = await this.ensureQuizIdeas();
+    const techniques = await this.ensureProblemTechniques();
+    const problems = await this.ensureProblems();
     const userPrompt = buildQuizzesGenerateUserPrompt(
       plan,
       quizIdeas.markdown,
+      problems,
+      techniques,
       this.options.questionCounts,
     );
     const debugOptions = this.createDebugOptions("quizzes-generate");
@@ -1971,7 +2279,7 @@ export class SessionGenerationPipeline {
     const quizzes = await generateJson<QuizzesPayload>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
-        "Produce final quizzes with concise explanations, optional theory blocks.",
+        "Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.",
         userPrompt,
       ),
       responseSchema: QUIZZES_RESPONSE_SCHEMA,
@@ -2014,13 +2322,18 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     const quizzes = await this.ensureQuizzes();
-    const userPrompt = buildQuizzesGradeUserPrompt(plan, quizzes);
+    const techniques = await this.ensureProblemTechniques();
+    const userPrompt = buildQuizzesGradeUserPrompt(
+      plan,
+      quizzes,
+      techniques,
+    );
     const debugOptions = this.createDebugOptions("quizzes-grade");
     this.logger.log("[session/quizzes-grade] grading quizzes");
     const grade = await generateJson<QuizzesGrade>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
-        "QA quizzes for coverage, theory, clarity.",
+        "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
         userPrompt,
       ),
       responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
@@ -2062,8 +2375,7 @@ export class SessionGenerationPipeline {
       return entry;
     }
     const plan = await this.ensurePlan();
-    const quizzes = await this.ensureQuizzes();
-    const quizIdeas = await this.ensureQuizIdeas();
+    const techniques = await this.ensureProblemTechniques();
     for (let attempt = 1; attempt <= MAX_PROBLEM_ATTEMPTS; attempt += 1) {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_ATTEMPTS).padStart(2, "0")}`;
       try {
@@ -2073,8 +2385,7 @@ export class SessionGenerationPipeline {
         );
         const userPrompt = buildProblemIdeasUserPrompt(
           plan,
-          quizzes,
-          quizIdeas.markdown,
+          techniques,
           this.options.seed,
         );
         this.logger.log(
@@ -2083,7 +2394,7 @@ export class SessionGenerationPipeline {
         const markdown = await generateText({
           modelId: TEXT_MODEL_ID,
           contents: buildSingleUserPrompt(
-            "Generate two easy ideas aligned with promised skills and story.",
+            "Generate two easy ideas aligned with promised skills, story, and the listed techniques.",
             userPrompt,
           ),
           progress: this.logger,
@@ -2138,18 +2449,18 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     const problemIdeas = await this.ensureProblemIdeas();
-    const quizzes = await this.ensureQuizzes();
+    const techniques = await this.ensureProblemTechniques();
     const userPrompt = buildProblemsGenerateUserPrompt(
       plan,
       problemIdeas.markdown,
-      quizzes,
+      techniques,
     );
     const debugOptions = this.createDebugOptions("problems-generate");
     this.logger.log("[session/problems] generating coding problems");
     const rawProblems = await generateJson<ProblemsPayload>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
-        "Produce full beginner-friendly specs with reference solutions and tests.",
+        "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
         userPrompt,
       ),
       responseSchema: PROBLEMS_RESPONSE_SCHEMA,
@@ -2194,13 +2505,18 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     const problems = await this.ensureProblems();
-    const userPrompt = buildProblemsGradeUserPrompt(plan, problems);
+    const techniques = await this.ensureProblemTechniques();
+    const userPrompt = buildProblemsGradeUserPrompt(
+      plan,
+      problems,
+      techniques,
+    );
     const debugOptions = this.createDebugOptions("problems-grade");
     this.logger.log("[session/problems-grade] grading coding problems");
     const grade = await generateJson<ProblemsGrade>({
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
-        "QA problems for alignment, clarity, and difficulty.",
+        "QA problems for alignment, clarity, difficulty, and technique alignment.",
         userPrompt,
       ),
       responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
@@ -2300,26 +2616,6 @@ export async function generateSession(
     throw new Error("Plan generation failed");
   }
 
-  let quizzes: readonly SessionQuiz[] | undefined;
-  let quizzesGrade: QuizzesGrade | undefined;
-  for (let attempt = 1; attempt <= 1 + MAX_QUIZ_GRADE_RETRIES; attempt += 1) {
-    quizzes = await pipeline.ensureQuizzes();
-    quizzesGrade = await pipeline.ensureQuizzesGrade();
-    if (quizzesGrade.pass) {
-      break;
-    }
-    if (attempt === 1 + MAX_QUIZ_GRADE_RETRIES) {
-      throw new Error(
-        `Quiz grading failed after ${MAX_QUIZ_GRADE_RETRIES + 1} attempts: ${quizzesGrade.issues.join("; ")}`,
-      );
-    }
-    await pipeline.invalidateStage("quizzes");
-  }
-
-  if (!quizzes || !quizzesGrade) {
-    throw new Error("Quiz generation failed");
-  }
-
   let problems: readonly CodingProblem[] | undefined;
   let problemsGrade: ProblemsGrade | undefined;
   for (
@@ -2342,6 +2638,26 @@ export async function generateSession(
 
   if (!problems || !problemsGrade) {
     throw new Error("Problem generation failed");
+  }
+
+  let quizzes: readonly SessionQuiz[] | undefined;
+  let quizzesGrade: QuizzesGrade | undefined;
+  for (let attempt = 1; attempt <= 1 + MAX_QUIZ_GRADE_RETRIES; attempt += 1) {
+    quizzes = await pipeline.ensureQuizzes();
+    quizzesGrade = await pipeline.ensureQuizzesGrade();
+    if (quizzesGrade.pass) {
+      break;
+    }
+    if (attempt === 1 + MAX_QUIZ_GRADE_RETRIES) {
+      throw new Error(
+        `Quiz grading failed after ${MAX_QUIZ_GRADE_RETRIES + 1} attempts: ${quizzesGrade.issues.join("; ")}`,
+      );
+    }
+    await pipeline.invalidateStage("quizzes");
+  }
+
+  if (!quizzes || !quizzesGrade) {
+    throw new Error("Quiz generation failed");
   }
 
   const slug = slugifyTopic(options.topic);

@@ -2,7 +2,7 @@
 
 ## Overview
 
-- Generate full lesson sessions from a `topic`, producing plan → quizzes → coding problems, plus an introductory story.
+- Generate full lesson sessions from a `topic`, producing plan → coding problems → quizzes (warm-up and wrap-up), plus an introductory story.
 - Every artifact uses a two-pass Generate → Grade cycle with strict schema outputs (JSON) except ideation phases (Markdown).
 - The session pipeline adopts the checkpointing pattern established in `packages/llm/src/code/generateStory.ts` so work can resume mid-stage.
 
@@ -31,7 +31,7 @@ Hard code in a variable the following assumption about the student (we will late
 
 - `quiz_id: "intro_quiz"|"wrap_up_quiz"`
 - `theory_blocks?: Array<{ id: string; title: string; content_md: string }>`
-- `questions: Array<{ id: string; type: "mcq"|"multi"|"short"|"numeric"|"code_reading"; prompt: string; options?: string[]; correct: string|string[]; explanation: string; tags: string[] }>`
+- `questions: Array<{ id: string; type: "mcq"|"multi"|"short"|"numeric"|"code_reading"; prompt: string; options?: string[]; correct: string|string[]; explanation: string; tags: string[]; covers_techniques: string[] }>`
 
 ### Coding Problem JSON
 
@@ -54,14 +54,15 @@ Hard code in a variable the following assumption about the student (we will late
 1. Plan-Ideas (Markdown, ≥3 ideas)
 2. Plan-Parse (Markdown → Plan JSON)
 3. Plan-Grade (QA JSON)
-4. Quiz-Ideas (Markdown coverage)
-5. Quizzes-Generate (JSON)
-6. Quizzes-Grade (QA JSON)
-7. Coding-Problem-Ideas (Markdown)
-8. Coding-Problems-Generate (JSON)
-9. Coding-Problems-Grade (QA JSON)
-10. Quiz Answer Grading (per student response)
-11. Student Code Grading (tests first, optional LLM feedback)
+4. Problem-Techniques (JSON list of required techniques per problem id)
+5. Coding-Problem-Ideas (Markdown)
+6. Coding-Problems-Generate (JSON)
+7. Coding-Problems-Grade (QA JSON)
+8. Quiz-Ideas (Markdown coverage referencing techniques and problems)
+9. Quizzes-Generate (JSON)
+10. Quizzes-Grade (QA JSON)
+11. Quiz Answer Grading (per student response)
+12. Student Code Grading (tests first, optional LLM feedback)
 
 ## Prompt Templates
 
@@ -94,26 +95,34 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 - **User**
   - Check rules: R1 parts ordered; R2 promised skills cover blueprint requirements; R3 concepts_to_teach referenced and manageable; R5 difficulty “easy”. Output `{pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]}` JSON only.
 
+### Problem-Techniques
+
+- **System**
+  - List concrete techniques learners must know before solving the problems.
+- **User**
+  - Extract techniques from coding blueprints and promised skills. Include algorithms, patterns, invariants, decomposition steps, edge cases, and data structure choices. Output `{topic, techniques:[{id,title,summary,applies_to:["p1"|"p2"],tags[]}]}`
+    where ids are short tokens (t1, t2, ...), summaries mention why/when to use the technique, applies_to lists p1/p2, and tags align to promised skills/concepts.
+
 ### Quiz-Ideas
 
 - **System**
-  - Expand plan into quiz coverage ensuring primers precede practice.
+  - Expand plan into quiz coverage ensuring primers precede practice and every required technique is taught before coding.
 - **User**
-  - Provide Markdown describing intro and wrap-up quiz coverage. Include theory primers if `concepts_to_teach` non-empty; list question stems with types; map stems to promised skills. Output Markdown only.
+  - Provide Markdown describing intro and wrap-up quiz coverage. Include theory primers when a technique or concept is not in assumptions; list question stems with types; map stems to promised skills AND technique ids. Call out which techniques are taught in theory blocks and practiced (especially in the intro quiz). Output Markdown only.
 
 ### Quizzes-Generate
 
 - **System**
-  - Produce final quizzes with concise explanations, optional theory blocks.
+  - Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.
 - **User**
-  - Generate JSON for `intro_quiz` and `wrap_up_quiz`. Each uses 4 questions; include varied types. If concepts introduced, add theory block before first related question and tag accordingly. Tags include promised skills and any concept tags. Output strict JSON only.
+  - Generate JSON for `intro_quiz` and `wrap_up_quiz`. Each uses 4 questions; include varied types. Intro quiz must teach every technique required for p1/p2 before coding with at least one question per technique. Add theory blocks before first use when techniques/concepts are new. Each question includes `covers_techniques` (ids from the techniques list), `tags` (skills/concepts/techniques), concise explanations, and optional theory blocks. Output strict JSON only.
 
 ### Quizzes-Grade
 
 - **System**
-  - QA quizzes for coverage, theory, clarity.
+  - QA quizzes for coverage, theory, clarity, and technique readiness.
 - **User**
-  - Ensure all required skills covered, theory blocks present when needed, answers unambiguous, explanations correct. Output `{pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[]}` JSON only.
+  - Ensure all required skills covered, theory blocks present when needed, answers unambiguous, explanations correct, and every technique appears in the intro quiz (via `covers_techniques`). Output `{pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]}` JSON only.
 
 ### Quiz Answer Grading
 
@@ -125,16 +134,16 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 ### Coding Problem Ideas
 
 - **System**
-  - Generate two easy ideas aligned with promised skills and story.
+  - Generate two easy ideas aligned with promised skills, story, and the listed techniques.
 - **User**
-  - Markdown output summarizing each problem: Title, One-line Pitch, Story alignment, Required Skills, Any New Concept, Example I/O. No advanced structures unless declared.
+  - Markdown output summarizing each problem: Title, One-line Pitch, Story alignment, Required Skills, Any New Concept, Example I/O. No advanced structures unless declared; stay within the supplied techniques for each problem id.
 
 ### Coding Problems-Generate
 
 - **System**
   - Produce full beginner-friendly specs with reference solutions and tests.
 - **User**
-  - Generate JSON objects (ids `p1`, `p2`) matching the schema above. Include story callback, constraints, 2–3 total examples (≥1 per problem), public tests (3–5 each) and private test count (3–8). Solutions must be simple Python 3. Output strict JSON only.
+  - Generate JSON objects (ids `p1`, `p2`) matching the schema above. Include story callback, constraints, 2–3 total examples (≥1 per problem), public tests (3–5 each) and private test count (3–8). Solutions must be simple Python 3 and rely only on the provided techniques (no new advanced techniques). Output strict JSON only.
 
 ### Coding Problems-Grade
 
@@ -152,7 +161,7 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 ## Checkpointing Strategy
 
 - Adopt the staged checkpoint pipeline from `generateStory.ts`.
-- Stage order for session generation: `plan_ideas` → `plan` → `plan_grade` → `quiz_ideas` → `quizzes` → `quizzes_grade` → `problem_ideas` → `problems` → `problems_grade`. Story generation retains its own stages (`idea`, `origins_capsule`, `prose`, `prose-revision`, `segmentation`, `segmentation_correction`, `images`, `narration`).
+- Stage order for session generation: `plan_ideas` → `plan` → `plan_grade` → `problem_techniques` → `problem_ideas` → `problems` → `problems_grade` → `quiz_ideas` → `quizzes` → `quizzes_grade`. Story generation retains its own stages (`idea`, `origins_capsule`, `prose`, `prose-revision`, `segmentation`, `segmentation_correction`, `images`, `narration`).
 - `generateSession.ts` accepts `checkpointDir`; stage files live at `<checkpointDir>/<stage>.json`.
 - For Markdown outputs, store JSON payloads with `{ topic, markdown: string }`. All checkpoints include `topic` for validation.
 - Reading a checkpoint:
@@ -176,8 +185,8 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 - Accept options: `topic`, optional `seed`, `checkpointDir`, `debugRootDir`, `progress` reporter, question count overrides.
 - Sequence:
   - `ensurePlanIdeas` → `ensurePlan` → `ensurePlanGrade`.
-  - `ensureQuizIdeas` → `ensureQuizzes` → `ensureQuizzesGrade`.
-  - `ensureProblemIdeas` → `ensureProblems` → `ensureProblemsGrade`.
+  - `ensureProblemTechniques` → `ensureProblemIdeas` → `ensureProblems` → `ensureProblemsGrade`.
+  - `ensureQuizIdeas` → `ensureQuizzes` → `ensureQuizzesGrade` (quizzes generated after problems so the intro quiz teaches the techniques needed).
   - For the story PlanItem, call `generateStory` with matching `checkpointDir` / `debugRootDir`.
 - On QA failure, iterate by regenerating the minimal failing stage (e.g., select next plan idea, adjust quiz coverage).
 - Filter disallowed topics before prompting; otherwise constrain outputs to CS education.
@@ -186,6 +195,7 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 
 - Story must hint onto problems and quizes which will be in the lesson; quizzes and problems reference the story promise and promised skills. This does NOT have to be super strict, it is ok to hint in the story at one of the aspects, select the most interesting or intribguing or most classical or famous one.
 - Every `coding_blueprints[*].required_skills` appears across the two quizzes.
+- Intro quiz must teach every problem-solving technique needed for p1/p2 (via `covers_techniques`) with theory blocks if a technique or concept is new.
 - Maintain “easy” difficulty by constraining inputs, providing primers, and keeping solutions straightforward.
 - Ideation prompts (plan/quiz/problem ideas) return Markdown only; final artifacts and checkpoints must be strict JSON.
 - Update `docs/SPEC.md` when UI/UX flows change (e.g., progression structure) to keep the source of truth synchronized.
