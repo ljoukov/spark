@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { marked } from 'marked';
+import { renderMarkdownOptional } from '$lib/server/markdown';
 import { getUserQuiz } from '$lib/server/quiz/repo';
 import type { PageServerLoad } from './$types';
 import type { QuizDefinition as SchemaQuizDefinition } from '@spark/schemas';
@@ -11,27 +11,13 @@ import type {
 	QuizTypeAnswerQuestion
 } from '$lib/types/quiz';
 
-marked.setOptions({ breaks: true, gfm: true });
-
-function renderMarkdown(value?: string | null): string | undefined {
-	if (!value) {
-		return undefined;
-	}
-	const parsed = marked.parse(value);
-	if (typeof parsed !== 'string') {
-		return undefined;
-	}
-	const trimmed = parsed.trim();
-	return trimmed.length > 0 ? parsed : undefined;
-}
-
 function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 	return {
 		...quiz,
 		questions: quiz.questions.map((question) => {
-			const promptHtml = renderMarkdown(question.prompt);
-			const hintHtml = renderMarkdown(question.hint);
-			const explanationHtml = renderMarkdown(question.explanation);
+			const promptHtml = renderMarkdownOptional(question.prompt);
+			const hintHtml = renderMarkdownOptional(question.hint);
+			const explanationHtml = renderMarkdownOptional(question.explanation);
 
 			if (question.kind === 'multiple-choice') {
 				return {
@@ -41,7 +27,7 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 					explanationHtml,
 					options: question.options.map((option) => ({
 						...option,
-						textHtml: renderMarkdown(option.text)
+						textHtml: renderMarkdownOptional(option.text)
 					}))
 				} satisfies QuizMultipleChoiceQuestion;
 			}
@@ -52,7 +38,7 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 					promptHtml,
 					hintHtml,
 					explanationHtml,
-					bodyHtml: renderMarkdown(question.body)
+					bodyHtml: renderMarkdownOptional(question.body)
 				} satisfies QuizInfoCardQuestion;
 			}
 
