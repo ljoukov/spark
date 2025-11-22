@@ -222,12 +222,18 @@ function buildQuizDefinitionsPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
 ): string {
+  const quizCount = quizzes.length;
   return [
     "Convert the session quizzes into Spark quiz definitions for the learner dashboard.",
+    `Return exactly ${quizCount} quiz objects (same order as provided) and nothing else.`,
     "Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
     "Each quiz should have 4-5 concise questions with short explanations; include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
     "Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
     "Keep prompts short, avoid jargon, and stick to the promised skills.",
+    "Populate every required field; never emit empty objects or empty strings.",
+    "IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
+    "JSON schema (informal): { quizzes: [ { id, title, description?, topic?, estimatedMinutes?, progressKey?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint?, explanation?, correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
+    'Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
     "",
     `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
     "Promised skills:",
@@ -252,6 +258,7 @@ async function generateQuizDefinitions(
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: QuizDefinitionsPayloadSchema,
     responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
+    maxAttempts: 3,
     progress,
   });
   return payload.quizzes;
@@ -850,7 +857,9 @@ async function main(): Promise<void> {
                 techniques,
                 problems: problems.map((problem) => {
                   const summaryLine =
-                    problem.statement_md.split("\n").find((line) => line.trim()) ??
+                    problem.statement_md
+                      .split("\n")
+                      .find((line) => line.trim()) ??
                     problem.statement_md.slice(0, 160);
                   return {
                     id: problem.id,
