@@ -401,28 +401,28 @@
 				{#if proposalsError}
 					<p class="proposal-error">{proposalsError}</p>
 					<div class="next-dialog__actions">
-							<button
-								class="proposal-action"
-								onclick={() => void fetchProposals()}
-								disabled={proposalsLoading}
-							>
-								Try again
-							</button>
-							<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
-								Close
-							</button>
-						</div>
-					{:else if proposals.length === 0}
-						<div class="next-dialog__empty">
-							<p>No proposals yet. Try again in a moment.</p>
-							<button
-								class="proposal-action"
-								onclick={() => void fetchProposals()}
-								disabled={proposalsLoading}
-							>
-								Refresh
-							</button>
-						</div>
+						<button
+							class="proposal-action"
+							onclick={() => void fetchProposals()}
+							disabled={proposalsLoading}
+						>
+							Try again
+						</button>
+						<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
+							Close
+						</button>
+					</div>
+				{:else if proposals.length === 0}
+					<div class="next-dialog__empty">
+						<p>No proposals yet. Try again in a moment.</p>
+						<button
+							class="proposal-action"
+							onclick={() => void fetchProposals()}
+							disabled={proposalsLoading}
+						>
+							Refresh
+						</button>
+					</div>
 				{:else}
 					<div class="proposal-grid">
 						{#each proposals as proposal}
@@ -447,16 +447,16 @@
 							</article>
 						{/each}
 					</div>
-						{#if selectionError}
-							<p class="proposal-error">{selectionError}</p>
-						{/if}
-						<div class="next-dialog__actions">
-							<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
-								Cancel
-							</button>
-						</div>
+					{#if selectionError}
+						<p class="proposal-error">{selectionError}</p>
 					{/if}
-				</div>
+					<div class="next-dialog__actions">
+						<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
+							Cancel
+						</button>
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
