@@ -30,6 +30,7 @@ import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
+  type QuizFeedback,
   type CodeProblem,
   type QuizDefinition,
 } from "@spark/schemas";
@@ -210,6 +211,88 @@ const QuizDefinitionsPayloadSchema = z.object({
   quizzes: z.array(QuizDefinitionSchema),
 });
 
+const QUIZ_FEEDBACK_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["message"],
+  properties: {
+    message: { type: Type.STRING, minLength: "1" },
+    tone: { type: Type.STRING, enum: ["info", "success", "warning"] },
+    heading: { type: Type.STRING },
+  },
+};
+
+const QUIZ_OPTION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "label", "text"],
+  properties: {
+    id: { type: Type.STRING, minLength: "1" },
+    label: { type: Type.STRING, minLength: "1" },
+    text: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_BASE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "kind", "prompt"],
+  properties: {
+    id: { type: Type.STRING, minLength: "1" },
+    kind: {
+      type: Type.STRING,
+      enum: ["multiple-choice", "type-answer", "info-card"],
+    },
+    prompt: { type: Type.STRING, minLength: "1" },
+    hint: { type: Type.STRING },
+    explanation: { type: Type.STRING },
+  },
+};
+
+const QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: [
+    "id",
+    "kind",
+    "prompt",
+    "options",
+    "correctOptionId",
+    "correctFeedback",
+  ],
+  properties: {
+    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties!,
+    kind: { type: Type.STRING, enum: ["multiple-choice"] },
+    options: {
+      type: Type.ARRAY,
+      minItems: "2",
+      items: QUIZ_OPTION_RESPONSE_SCHEMA,
+    },
+    correctOptionId: { type: Type.STRING, minLength: "1" },
+    correctFeedback: QUIZ_FEEDBACK_RESPONSE_SCHEMA,
+  },
+};
+
+const QUIZ_QUESTION_TYPE_ANSWER_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "kind", "prompt", "answer", "correctFeedback"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties!,
+    kind: { type: Type.STRING, enum: ["type-answer"] },
+    answer: { type: Type.STRING, minLength: "1" },
+    acceptableAnswers: { type: Type.ARRAY, items: { type: Type.STRING } },
+    correctFeedback: QUIZ_FEEDBACK_RESPONSE_SCHEMA,
+  },
+};
+
+const QUIZ_QUESTION_INFO_CARD_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "kind", "prompt", "body"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties!,
+    kind: { type: Type.STRING, enum: ["info-card"] },
+    body: { type: Type.STRING, minLength: "1" },
+    continueLabel: { type: Type.STRING },
+    eyebrow: { type: Type.STRING },
+  },
+};
+
 const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["quizzes"],
@@ -220,54 +303,21 @@ const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
         type: Type.OBJECT,
         required: ["id", "title", "questions"],
         properties: {
-          id: { type: Type.STRING },
-          title: { type: Type.STRING },
+          id: { type: Type.STRING, minLength: "1" },
+          title: { type: Type.STRING, minLength: "1" },
           description: { type: Type.STRING },
           topic: { type: Type.STRING },
           estimatedMinutes: { type: Type.NUMBER },
           progressKey: { type: Type.STRING },
           questions: {
             type: Type.ARRAY,
+            minItems: "1",
             items: {
-              type: Type.OBJECT,
-              required: ["id", "kind", "prompt"],
-              properties: {
-                id: { type: Type.STRING },
-                kind: {
-                  type: Type.STRING,
-                  enum: ["multiple-choice", "type-answer", "info-card"],
-                },
-                prompt: { type: Type.STRING },
-                hint: { type: Type.STRING },
-                explanation: { type: Type.STRING },
-                correctFeedback: {
-                  type: Type.OBJECT,
-                  properties: {
-                    heading: { type: Type.STRING },
-                    message: { type: Type.STRING },
-                    tone: { type: Type.STRING },
-                  },
-                },
-                options: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    required: ["id", "label", "text"],
-                    properties: {
-                      id: { type: Type.STRING },
-                      label: { type: Type.STRING },
-                      text: { type: Type.STRING },
-                    },
-                  },
-                },
-                correctOptionId: { type: Type.STRING },
-                answer: { type: Type.STRING },
-                acceptableAnswers: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                },
-                body: { type: Type.STRING },
-              },
+              anyOf: [
+                QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_TYPE_ANSWER_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_INFO_CARD_RESPONSE_SCHEMA,
+              ],
             },
           },
         },
@@ -275,6 +325,153 @@ const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
     },
   },
 };
+
+function repairQuizzesJson(rawText: string): { quizzes: QuizDefinition[] } {
+  const parseJson = (text: string): unknown => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        return JSON.parse(text.slice(start, end + 1));
+      }
+      throw new Error("could not parse JSON for repair");
+    }
+  };
+
+  const asString = (value: unknown, fallback?: string): string | undefined =>
+    typeof value === "string" && value.trim().length > 0 ? value : fallback;
+
+  const asNumber = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+  const asArray = <T>(value: unknown): T[] =>
+    Array.isArray(value) ? (value as T[]) : [];
+
+  const json = parseJson(rawText);
+  if (!json || typeof json !== "object" || !("quizzes" in json)) {
+    throw new Error("parsed JSON missing quizzes");
+  }
+
+  const rawQuizzes = asArray<unknown>((json as { quizzes: unknown }).quizzes);
+
+  const repaired = rawQuizzes.map((rawQuiz, quizIndex): QuizDefinition => {
+    const q =
+      rawQuiz && typeof rawQuiz === "object"
+        ? (rawQuiz as Record<string, unknown>)
+        : {};
+    const id = asString(q.id, `quiz_${quizIndex + 1}`)!;
+    const title = asString(q.title, `Quiz ${quizIndex + 1}`)!;
+    const description = asString(q.description, "") ?? "";
+    const topic = asString(q.topic, undefined);
+    const estimatedMinutes = asNumber(q.estimatedMinutes);
+    const progressKey = asString(q.progressKey, undefined);
+
+    const rawQuestions = asArray<unknown>(q.questions);
+    const questions = rawQuestions.map(
+      (rawQuestion, questionIndex): QuizDefinition["questions"][number] => {
+        const rq =
+          rawQuestion && typeof rawQuestion === "object"
+            ? (rawQuestion as Record<string, unknown>)
+            : {};
+        const baseId = asString(rq.id, `${id}_q${questionIndex + 1}`)!;
+        const kind = asString(rq.kind, "multiple-choice");
+
+        if (kind === "info-card") {
+          return {
+            id: baseId,
+            kind: "info-card",
+            prompt: asString(rq.prompt, "Read this tip")!,
+            body: asString(rq.body, asString(rq.prompt, "Helpful info."))!,
+            hint: asString(rq.hint, undefined),
+            explanation: asString(rq.explanation, undefined),
+          };
+        }
+
+        if (kind === "type-answer") {
+          return {
+            id: baseId,
+            kind: "type-answer",
+            prompt: asString(rq.prompt, "Type your answer.")!,
+            answer: asString(rq.answer, "") ?? "",
+            acceptableAnswers: asArray<string>(rq.acceptableAnswers),
+            hint: asString(rq.hint, undefined),
+            explanation: asString(rq.explanation, undefined),
+            correctFeedback:
+              rq.correctFeedback && typeof rq.correctFeedback === "object"
+                ? (rq.correctFeedback as QuizFeedback)
+                : {
+                    heading: "Nice!",
+                    message: "Well done.",
+                    tone: "success",
+                  },
+          };
+        }
+
+        const rawOptions = asArray<unknown>(rq.options);
+        const options =
+          rawOptions.length > 0
+            ? rawOptions.map((opt, idx) => {
+                const ro =
+                  opt && typeof opt === "object"
+                    ? (opt as Record<string, unknown>)
+                    : {};
+                const label =
+                  asString(ro.label, String.fromCharCode(65 + idx)) ?? "A";
+                const optionId = asString(ro.id, label) ?? label;
+                return {
+                  id: optionId,
+                  label,
+                  text: asString(ro.text, `Option ${idx + 1}`)!,
+                };
+              })
+            : [
+                { id: "A", label: "A", text: "Option A" },
+                { id: "B", label: "B", text: "Option B" },
+              ];
+
+        const correctOptionId = asString(
+          rq.correctOptionId,
+          options[0]?.id ?? "A",
+        )!;
+
+        return {
+          id: baseId,
+          kind: "multiple-choice",
+          prompt: asString(rq.prompt, "Choose the correct option.")!,
+          options,
+          correctOptionId,
+          hint: asString(rq.hint, undefined),
+          explanation: asString(
+            rq.explanation,
+            "The first option is treated as correct by default.",
+          ),
+          correctFeedback:
+            rq.correctFeedback && typeof rq.correctFeedback === "object"
+              ? (rq.correctFeedback as QuizFeedback)
+              : {
+                  heading: "Great job!",
+                  message: "You picked the correct option.",
+                  tone: "success",
+                },
+        };
+      },
+    );
+
+    return {
+      id,
+      title,
+      description,
+      topic,
+      estimatedMinutes,
+      progressKey,
+      questions,
+    };
+  });
+
+  return QuizDefinitionsPayloadSchema.parse({ quizzes: repaired });
+}
 
 function buildQuizDefinitionsPrompt(
   plan: SessionPlan,
@@ -312,15 +509,33 @@ async function generateQuizDefinitions(
   progress?: SessionGenerationPipeline["logger"],
 ): Promise<readonly QuizDefinition[]> {
   const prompt = buildQuizDefinitionsPrompt(plan, quizzes);
-  const payload = await generateJson<{ quizzes: QuizDefinition[] }>({
-    modelId: TEXT_MODEL_ID,
-    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    schema: QuizDefinitionsPayloadSchema,
-    responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
-    maxAttempts: 4,
-    progress,
-  });
-  return payload.quizzes;
+  try {
+    const payload = await generateJson<{ quizzes: QuizDefinition[] }>({
+      modelId: TEXT_MODEL_ID,
+      contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+      schema: QuizDefinitionsPayloadSchema,
+      responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
+      maxAttempts: 4,
+      progress,
+    });
+    return payload.quizzes;
+  } catch (error) {
+    const attempts = (error as { attempts?: { rawText: string }[] }).attempts;
+    const lastRaw =
+      attempts && attempts.length > 0
+        ? attempts[attempts.length - 1]?.rawText
+        : undefined;
+    if (lastRaw) {
+      try {
+        const repaired = repairQuizzesJson(lastRaw);
+        progress?.log?.("[welcome/quizzes] recovered quizzes via local repair");
+        return repaired.quizzes;
+      } catch {
+        // fall through to rethrow original error
+      }
+    }
+    throw error;
+  }
 }
 
 const CodeProblemsPayloadSchema = z.object({
