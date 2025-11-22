@@ -69,13 +69,7 @@
 	const planTopic = $derived(
 		data.session.title ?? data.session.plan[0]?.title ?? 'Your session plan'
 	);
-	const planSummary = $derived(
-		data.session.summary ??
-			data.session.tagline ??
-			data.session.plan[0]?.summary ??
-			data.session.plan[0]?.description ??
-			'This mix keeps momentum: quizzes prime your thinking, problems lock it in.'
-	);
+	const planSummary = $derived(data.session.summary ?? '');
 
 	const sessionStateStore = createSessionStateStore(data.session.id, data.sessionState);
 	let sessionStateItems = $state<Record<string, PlanItemState>>({});
@@ -96,7 +90,7 @@
 				item.icon ?? (item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
 			const meta =
 				item.meta ?? (item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
-			const description = item.summary ?? item.description ?? '';
+			const description = item.summary ?? '';
 			const href =
 				item.kind === 'quiz'
 					? `/code/${sessionId}/quiz/${item.id}`
