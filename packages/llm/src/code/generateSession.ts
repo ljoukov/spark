@@ -2657,6 +2657,8 @@ export async function generateSession(
   const slug = slugifyTopic(options.topic);
   const sessionId = options.sessionId ?? slug;
 
+  const techniques = await pipeline.ensureProblemTechniques();
+
   let story: GenerateStoryResult | undefined;
   if (includeStory) {
     story = await generateStory({
@@ -2670,6 +2672,22 @@ export async function generateSession(
       checkpointDir: options.checkpointDir
         ? path.join(options.checkpointDir, "story")
         : undefined,
+      lessonContext: {
+        planTopic: plan.topic,
+        promisedSkills: plan.promised_skills,
+        techniques,
+        problems: problems.map((problem) => {
+          const summary =
+            problem.statement_md.split("\n").find((line) => line.trim()) ??
+            problem.statement_md.slice(0, 160);
+          return {
+            id: problem.id,
+            title: problem.title,
+            story_callback: problem.story_callback,
+            summary: summary.trim(),
+          };
+        }),
+      },
     });
   }
 

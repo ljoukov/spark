@@ -163,7 +163,7 @@ function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
           ...base,
           id: storyPlanItemId,
           kind: "media",
-          title: "The Story",
+          title: plan.story.storyTopic || "Story",
         };
       case "intro_quiz":
         return {
