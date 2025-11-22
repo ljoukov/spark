@@ -1,11 +1,18 @@
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import { listSessions } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
-import { listWelcomeSessionOptions } from '$lib/server/session/welcomeSessions';
-import { redirect } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import {
+	listWelcomeSessionOptions,
+	provisionWelcomeSession
+} from '$lib/server/session/welcomeSessions';
+import { fail, redirect } from '@sveltejs/kit';
+import { z } from 'zod';
+import type { Actions, PageServerLoad } from './$types';
 
 const LESSON_LIST_LIMIT = 50;
+const selectionSchema = z.object({
+	topic: z.string().trim().min(1, 'Please choose a topic to begin.')
+});
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const user = locals.appUser;
@@ -36,4 +43,34 @@ export const load: PageServerLoad = async ({ locals }) => {
 	});
 
 	return { lessons, welcomeTemplates };
+};
+
+export const actions: Actions = {
+	start: async ({ locals, request }) => {
+		const user = locals.appUser;
+		if (!user) {
+			throw redirect(302, '/welcome');
+		}
+
+		const formData = await request.formData();
+		const parsed = selectionSchema.safeParse({ topic: formData.get('topic') });
+		if (!parsed.success) {
+			return fail(400, { error: 'Please choose a topic to begin.' });
+		}
+
+		try {
+			const options = await listWelcomeSessionOptions();
+			const allowedKeys = new Set(options.map((option) => option.key));
+			const topic = parsed.data.topic;
+			if (!allowedKeys.has(topic)) {
+				return fail(400, { error: 'Please choose a topic to begin.' });
+			}
+
+			const session = await provisionWelcomeSession(user.uid, topic);
+			throw redirect(303, `/code/${session.id}`);
+		} catch (error) {
+			console.error('Unable to provision welcome session from lessons page', error);
+			return fail(500, { error: 'We could not start that session. Please try again.' });
+		}
+	}
 };
