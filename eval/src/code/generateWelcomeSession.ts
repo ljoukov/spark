@@ -15,6 +15,7 @@ import {
   type QuizzesGrade,
   type CodingProblem,
   type ProblemsGrade,
+  type ProblemTechnique,
 } from "@spark/llm/code/generateSession";
 import {
   generateStory,
@@ -47,12 +48,13 @@ const StageEnum = z.enum([
   "plan_ideas",
   "plan",
   "plan_grade",
-  "quiz_ideas",
-  "quizzes",
-  "quizzes_grade",
+  "problem_techniques",
   "problem_ideas",
   "problems",
   "problems_grade",
+  "quiz_ideas",
+  "quizzes",
+  "quizzes_grade",
   "story",
   "publish",
 ]);
@@ -91,6 +93,7 @@ type StageContext = {
   planIdeas?: string;
   plan?: SessionPlan;
   planGrade?: PlanGrade;
+  problemTechniques?: readonly ProblemTechnique[];
   quizzes?: readonly SessionQuiz[];
   quizzesGrade?: QuizzesGrade;
   problems?: readonly CodingProblem[];
@@ -682,6 +685,17 @@ async function main(): Promise<void> {
             if (!lastGrade?.pass) {
               throw new Error("Plan grade did not pass");
             }
+            break;
+          }
+          case "problem_techniques": {
+            const techniques = await pipeline.ensureProblemTechniques();
+            stageContext.problemTechniques = techniques;
+            progress.log(
+              `[welcome/${targetSessionId}] problem techniques ready (${techniques.length})`,
+            );
+            await appendStageLog(baseDir, stage, [
+              `techniques=${techniques.map((technique) => technique.id).join(",")}`,
+            ]);
             break;
           }
           case "quiz_ideas": {
