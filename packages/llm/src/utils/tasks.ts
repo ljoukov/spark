@@ -14,16 +14,34 @@ const GenerateQuizTaskEnvelope = z.object({
   generateQuiz: GenerateQuizTaskSchema,
 });
 
+export const GenerateLessonTaskSchema = z.object({
+  userId: z.string().min(1),
+  sessionId: z.string().min(1),
+  proposalId: z.string().min(1),
+  title: z.string().min(1),
+  tagline: z.string().min(1).optional(),
+  topics: z.array(z.string().min(1)).min(1),
+  emoji: z.string().min(1).optional(),
+  sourceSessionId: z.string().min(1).optional(),
+});
+
+const GenerateLessonTaskEnvelope = z.object({
+  type: z.literal("generateLesson"),
+  generateLesson: GenerateLessonTaskSchema,
+});
+
 const HelloWorldTaskEnvelope = z.object({
   type: z.literal("helloWorld"),
 });
 
 export const TaskSchema = z.discriminatedUnion("type", [
   GenerateQuizTaskEnvelope,
+  GenerateLessonTaskEnvelope,
   HelloWorldTaskEnvelope,
 ]);
 
 export type GenerateQuizTask = z.infer<typeof GenerateQuizTaskSchema>;
+export type GenerateLessonTask = z.infer<typeof GenerateLessonTaskSchema>;
 export type HelloWorldTask = z.infer<typeof HelloWorldTaskEnvelope>;
 export type Task = z.infer<typeof TaskSchema>;
 
