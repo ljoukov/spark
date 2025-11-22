@@ -2120,7 +2120,9 @@ export class SessionGenerationPipeline {
       progress: this.logger,
       debug: debugOptions,
     });
-    const value: ProblemTechniquesStageValue = { techniques: payload.techniques };
+    const value: ProblemTechniquesStageValue = {
+      techniques: payload.techniques,
+    };
     await this.writeProblemTechniquesCheckpoint(value);
     const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
       value,
@@ -2323,11 +2325,7 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const quizzes = await this.ensureQuizzes();
     const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildQuizzesGradeUserPrompt(
-      plan,
-      quizzes,
-      techniques,
-    );
+    const userPrompt = buildQuizzesGradeUserPrompt(plan, quizzes, techniques);
     const debugOptions = this.createDebugOptions("quizzes-grade");
     this.logger.log("[session/quizzes-grade] grading quizzes");
     const grade = await generateJson<QuizzesGrade>({
@@ -2506,11 +2504,7 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const problems = await this.ensureProblems();
     const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildProblemsGradeUserPrompt(
-      plan,
-      problems,
-      techniques,
-    );
+    const userPrompt = buildProblemsGradeUserPrompt(plan, problems, techniques);
     const debugOptions = this.createDebugOptions("problems-grade");
     this.logger.log("[session/problems-grade] grading coding problems");
     const grade = await generateJson<ProblemsGrade>({
