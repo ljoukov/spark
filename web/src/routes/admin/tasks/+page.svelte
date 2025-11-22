@@ -17,16 +17,24 @@
 		</Card.Header>
 		<Card.Content class="space-y-4">
 			{#if hasSuccess}
-				<p class="rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+				<p
+					class="rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+				>
 					Started Hello World task.
 				</p>
 			{:else if errorMessage}
-				<p class="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+				<p
+					class="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+				>
 					{errorMessage}
 				</p>
 			{/if}
 
-			<form method="POST" action="?/startHelloWorld" class="flex items-center justify-between gap-4">
+			<form
+				method="POST"
+				action="?/startHelloWorld"
+				class="flex items-center justify-between gap-4"
+			>
 				<div>
 					<p class="text-sm font-medium text-muted-foreground">Hello World</p>
 					<p class="text-xs text-muted-foreground/80">

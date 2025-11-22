@@ -71,7 +71,7 @@ export async function createTask(task: Task): Promise<void> {
   const serviceUrl = process.env.TASKS_SERVICE_URL ?? "";
   if (!serviceUrl) {
     throw new Error(
-      "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl."
+      "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl.",
     );
   }
 
@@ -99,7 +99,7 @@ export async function createTask(task: Task): Promise<void> {
       postUrl = u.toString();
     } catch (error) {
       throw new Error(
-        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`
+        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
       );
     }
     try {
@@ -112,7 +112,7 @@ export async function createTask(task: Task): Promise<void> {
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
         console.warn(
-          `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`
+          `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`,
         );
       }
     } catch (err) {
@@ -134,7 +134,7 @@ export async function createTask(task: Task): Promise<void> {
 
   const taskPayload = JSON.stringify(task);
   const encodedBody = base64EncodeUrlSafe(
-    new TextEncoder().encode(taskPayload)
+    new TextEncoder().encode(taskPayload),
   );
 
   const createUrl = `https://cloudtasks.googleapis.com/v2/projects/${projectId}/locations/${location}/queues/${queue}/tasks`;
@@ -164,7 +164,7 @@ export async function createTask(task: Task): Promise<void> {
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     console.warn(
-      `Cloud Tasks create failed: ${resp.status} ${resp.statusText} ${text}`
+      `Cloud Tasks create failed: ${resp.status} ${resp.statusText} ${text}`,
     );
     throw new Error("Task creation failed");
   }

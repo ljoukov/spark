@@ -9,8 +9,9 @@ export function getSharp(): SharpModule {
     return cachedSharp;
   }
   const requireSharp = createRequire(import.meta.url);
-  const loaded = requireSharp("sharp") as SharpModule & { default?: SharpModule };
+  const loaded = requireSharp("sharp") as SharpModule & {
+    default?: SharpModule;
+  };
   cachedSharp = loaded.default ?? loaded;
   return cachedSharp;
 }
-

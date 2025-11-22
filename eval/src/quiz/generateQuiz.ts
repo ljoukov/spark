@@ -46,7 +46,9 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
   });
 }
 
-async function readPdfAsQuizSource(filePath: string): Promise<SparkQuizSourceFile> {
+async function readPdfAsQuizSource(
+  filePath: string,
+): Promise<SparkQuizSourceFile> {
   const fileStats = await stat(filePath);
   if (!fileStats.isFile()) {
     throw new Error(`Input path ${filePath} is not a file`);
