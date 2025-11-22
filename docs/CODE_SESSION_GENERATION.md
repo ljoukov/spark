@@ -196,6 +196,7 @@ Prompts below assume structured calls via `generateSession.ts`. Substitute `{{�
 - Story must hint onto problems and quizes which will be in the lesson; quizzes and problems reference the story promise and promised skills. This does NOT have to be super strict, it is ok to hint in the story at one of the aspects, select the most interesting or intribguing or most classical or famous one.
 - Every `coding_blueprints[*].required_skills` appears across the two quizzes.
 - Intro quiz must teach every problem-solving technique needed for p1/p2 (via `covers_techniques`) with theory blocks if a technique or concept is new.
+- Story generation uses lesson context (promised skills, techniques, problem hooks) to foreshadow the key trick and hand off to the warm-up quiz; it must not introduce new advanced concepts.
 - Maintain “easy” difficulty by constraining inputs, providing primers, and keeping solutions straightforward.
 - Ideation prompts (plan/quiz/problem ideas) return Markdown only; final artifacts and checkpoints must be strict JSON.
 - Update `docs/SPEC.md` when UI/UX flows change (e.g., progression structure) to keep the source of truth synchronized.
