@@ -42,7 +42,7 @@ const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const MAX_QUIZ_GRADE_RETRIES = 2;
 const MAX_PROBLEM_GRADE_RETRIES = 2;
 
-const TEXT_MODEL_ID = "gemini-2.5-pro";
+const TEXT_MODEL_ID = "gemini-3-pro-preview";
 
 const StageEnum = z.enum([
   "plan_ideas",
