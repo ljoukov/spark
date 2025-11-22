@@ -294,6 +294,7 @@ function buildSparkUploadQuizPrompt(
     "- Prompts must stand alone without referencing page numbers.",
     "- Provide hints sparingly; they should nudge, not give away the answer.",
     "- Explanations must justify the correct response referencing the source.",
+    "- Formulas: inline `$...$` or block `$$...$$` LaTeX is allowed; stay within KaTeX-supported math (fractions, exponents, subscripts, roots) and avoid LaTeX packages/environments.",
     "- Multiple-choice: supply 3-5 options, uncluttered text, one correct option marked by correctOptionIndex (1-based).",
     "- Type-answer: keep answers short; include acceptableAnswers when multiple phrasings are equivalent.",
     "- Do not include true/false or numeric kinds; stick to multiple-choice and type-answer.",

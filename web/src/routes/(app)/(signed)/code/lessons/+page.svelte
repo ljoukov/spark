@@ -106,9 +106,7 @@
 			<div>
 				<p class="eyebrow">Starter options</p>
 				<h2>Welcome templates</h2>
-				<p class="subtitle">
-					Want a fresh start? Launch any of our built-in starter sessions.
-				</p>
+				<p class="subtitle">Want a fresh start? Launch any of our built-in starter sessions.</p>
 			</div>
 		</header>
 

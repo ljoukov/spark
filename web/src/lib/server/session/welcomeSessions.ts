@@ -94,7 +94,10 @@ async function fetchTemplateSnapshot(sessionId: string) {
 	let docRef = primaryRef;
 
 	if (!primarySnapshot.exists) {
-		const fallbackQuery = await resolveTemplateCollection().where('key', '==', sessionId).limit(1).get();
+		const fallbackQuery = await resolveTemplateCollection()
+			.where('key', '==', sessionId)
+			.limit(1)
+			.get();
 		const [match] = fallbackQuery.docs;
 		if (!match) {
 			throw new Error(`Welcome session template not found for key '${sessionId}'`);
