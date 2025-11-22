@@ -37,6 +37,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ status: 'ok' }, { status: 200 });
 	}
 
+	if (task.type !== 'generateQuiz') {
+		console.warn(`[internal task] unsupported task type: ${task.type}`);
+		return json({ error: 'unsupported_task' }, { status: 400 });
+	}
+
 	const { userId, uploadId, quizId } = task.generateQuiz;
 	console.log(
 		`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`

@@ -20,5 +20,6 @@ export * from "./utils/openaiTTS";
 export * from "./utils/tts";
 export * from "./utils/tasks";
 export * from "./utils/llm";
+export * from "./utils/gemini";
 export * from "./utils/concurrency";
 export * from "./utils/format";

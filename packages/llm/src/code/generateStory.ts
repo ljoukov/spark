@@ -1336,7 +1336,9 @@ export function buildStoryDraftPrompt(
 ): string {
   const contextLines: string[] = [];
   if (lessonContext) {
-    contextLines.push("**Lesson Context (keep the narrative tethered to these):**");
+    contextLines.push(
+      "**Lesson Context (keep the narrative tethered to these):**",
+    );
     contextLines.push(
       `- Session topic seed: "${lessonContext.planTopic}". Story topic: "${topic}".`,
     );
@@ -1844,6 +1846,7 @@ function buildOriginsCapsulePrompt(
     "1. Output exactly two sentences (max 50 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
     '2. Sentence 1: Introduce the classical anchor using a neutral verb ("described", "published", "popularized") with approximate timing and include the phrasing "now known as" before the concept name.',
     '3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as "independently developed", "... and others", or "later published".',
+    "3a. After you finish the second sentence, STOP. Do not add a third sentence, example, parenthetical, or clause separated by a semicolon.",
     "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
     "4a. Use established names from the research (e.g., Reed–Solomon codes); do not invent new titles, aliases, or brand-like labels.",
     '4b. Do not reuse the story title or any fictional/metaphorical label (e.g., "Interstellar Archivist"); keep names strictly factual.',
@@ -1961,13 +1964,21 @@ export async function generateOriginsCapsule(
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       debug,
     });
-    const candidate = raw.replace(/\s+/gu, " ").trim();
+    let candidate = raw.replace(/\s+/gu, " ").trim();
     const structuralIssues: string[] = [];
-    const sentences = candidate
+    let sentences = candidate
       .split(/(?<=[.!?])\s+/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => sentence.length > 0);
-    if (sentences.length !== 2) {
+    const originalSentenceCount = sentences.length;
+    if (sentences.length > 2) {
+      // Auto-trim to first two sentences to avoid pointless retries.
+      sentences = sentences.slice(0, 2);
+      candidate = sentences.join(" ");
+      adapter.log(
+        `[story/origins] trimmed capsule to first two sentences to satisfy structure (original count: ${originalSentenceCount})`,
+      );
+    } else if (sentences.length !== 2) {
       structuralIssues.push(
         `Produce exactly two sentences separated by a single space (you returned ${sentences.length}).`,
       );
@@ -2727,13 +2738,7 @@ export async function generateProseStory(
   );
   const variantResults = await Promise.all(
     variantDrafts.map((variant) =>
-      reviseProseVariant(
-        topic,
-        variant,
-        progress,
-        options,
-        lessonContext,
-      ),
+      reviseProseVariant(topic, variant, progress, options, lessonContext),
     ),
   );
   const judge = await judgeProseVariants(
