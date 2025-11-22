@@ -214,7 +214,65 @@ const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["quizzes"],
   properties: {
-    quizzes: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+    quizzes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        required: ["id", "title", "questions"],
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          topic: { type: Type.STRING },
+          estimatedMinutes: { type: Type.NUMBER },
+          progressKey: { type: Type.STRING },
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ["id", "kind", "prompt"],
+              properties: {
+                id: { type: Type.STRING },
+                kind: {
+                  type: Type.STRING,
+                  enum: ["multiple-choice", "type-answer", "info-card"],
+                },
+                prompt: { type: Type.STRING },
+                hint: { type: Type.STRING },
+                explanation: { type: Type.STRING },
+                correctFeedback: {
+                  type: Type.OBJECT,
+                  properties: {
+                    heading: { type: Type.STRING },
+                    message: { type: Type.STRING },
+                    tone: { type: Type.STRING },
+                  },
+                },
+                options: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    required: ["id", "label", "text"],
+                    properties: {
+                      id: { type: Type.STRING },
+                      label: { type: Type.STRING },
+                      text: { type: Type.STRING },
+                    },
+                  },
+                },
+                correctOptionId: { type: Type.STRING },
+                answer: { type: Type.STRING },
+                acceptableAnswers: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                body: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 
@@ -233,6 +291,7 @@ function buildQuizDefinitionsPrompt(
     "Populate every required field; never emit empty objects or empty strings.",
     "IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
     "JSON schema (informal): { quizzes: [ { id, title, description?, topic?, estimatedMinutes?, progressKey?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint?, explanation?, correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
+    "If you are unsure about any field, copy the draft value instead of leaving it blank.",
     'Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
     "",
     `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
@@ -258,7 +317,7 @@ async function generateQuizDefinitions(
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: QuizDefinitionsPayloadSchema,
     responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
-    maxAttempts: 3,
+    maxAttempts: 4,
     progress,
   });
   return payload.quizzes;
