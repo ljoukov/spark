@@ -168,7 +168,7 @@ const CodingBlueprintSchema = z.object({
 export const SessionPlanSchema = z
   .object({
     topic: z.string().trim().min(1),
-    difficulty: z.literal("easy"),
+    difficulty: z.enum(["easy", "medium", "hard"]),
     assumptions: z.array(z.string().trim().min(1)),
     story: z.object({
       storyTopic: z.string().trim().min(1),
@@ -343,7 +343,7 @@ const CodingProblemTestsSchema = z.object({
 export const CodingProblemSchema = z.object({
   id: z.enum(["p1", "p2"]),
   title: z.string().trim().min(1),
-  difficulty: z.literal("easy"),
+  difficulty: z.enum(["easy", "medium", "hard"]),
   story_callback: z.string().trim().min(1),
   statement_md: z.string().trim().min(1),
   function: z.object({
@@ -534,8 +534,8 @@ function buildPlanIdeasUserPrompt(topic: string, seed?: number): string {
 function buildPlanParseUserPrompt(markdown: string): string {
   return [
     "Schema: {topic, difficulty, assumptions, storyTopic, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
-    `Include assumptions ${JSON.stringify(ASSUMPTIONS)}`,
-    'Set "difficulty" exactly to "easy" (lowercase).',
+    `Include relevant assumptions from ${JSON.stringify(ASSUMPTIONS)}`,
+    'Set "difficulty" to "easy", "medium", or "hard".',
     "Parts must be exactly 1=story, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.",
     "coding_blueprints must have ids p1 and p2.",
     "Output strict JSON only.",
@@ -545,13 +545,30 @@ function buildPlanParseUserPrompt(markdown: string): string {
   ].join("\n");
 }
 
+function buildPlanEditUserPrompt(plan: SessionPlan, grade: PlanGrade): string {
+  return [
+    "The following session plan received a failing grade.",
+    "Please revise the plan to address the reported issues.",
+    "",
+    "Grading Report:",
+    `Pass: ${grade.pass}`,
+    `Issues: ${grade.issues.join("; ")}`,
+    `Missing Skills: ${grade.missing_skills.join("; ")}`,
+    `Suggested Edits: ${grade.suggested_edits.join("; ")}`,
+    "",
+    "Current Plan JSON:",
+    JSON.stringify(plan, null, 2),
+    "",
+    "Return the fully corrected SessionPlan JSON.",
+  ].join("\n");
+}
+
 function buildPlanGradeUserPrompt(plan: SessionPlan): string {
   return [
     "Check rules:",
     "R1 parts ordered;",
     "R2 promised skills cover blueprint requirements;",
     "R3 concepts_to_teach referenced and manageable;",
-    'R5 difficulty "easy".',
     "Output {pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]} JSON only.",
     "",
     "Plan JSON:",
@@ -592,6 +609,7 @@ function buildQuizzesGenerateUserPrompt(
     'Return a JSON object with a single key "quizzes" whose value is an array of exactly two quiz definitions.',
     'Each quiz definition must include "quiz_id" (either "intro_quiz" or "wrap_up_quiz"), optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
     'Every question object must follow the schema: {"id","type","prompt","explanation","tags", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
+    'If a question has only one correct answer, use "mcq" (not "multi"). For "multi", return at least two correct answers in the "correct" array.',
     "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
     "Each quiz must include exactly 4 questions unless overrides provided.",
     "If concepts introduced, add theory block before first related question and tag accordingly.",
@@ -670,7 +688,7 @@ function buildProblemsGenerateUserPrompt(
 ): string {
   return [
     'Return a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
-    'Each problem must include fields: id, title, difficulty (set to "easy"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private_count:int}.',
+    'Each problem must include fields: id, title, difficulty (set to "easy", "medium", or "hard"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private_count:int}.',
     "Represent inputs and outputs as strings (escape newlines with \\n); do not return nested objects for these fields.",
     "Include story_callback, constraints, and at least two examples per problem.",
     "Provide 3-5 public tests per problem and private_count between 3 and 8.",
@@ -1529,6 +1547,37 @@ export class SessionGenerationPipeline {
   async ensurePlanGrade(): Promise<PlanGrade> {
     const entry = await this.ensurePlanGradeInternal();
     return entry.value;
+  }
+
+  async editPlan(
+    currentPlan: SessionPlan,
+    grade: PlanGrade,
+  ): Promise<SessionPlan> {
+    const userPrompt = buildPlanEditUserPrompt(currentPlan, grade);
+    const debugOptions = this.createDebugOptions("plan-edit");
+    this.logger.log("[session/plan-edit] editing plan based on feedback");
+
+    const planJson = await generateJson<SessionPlan>({
+      modelId: TEXT_MODEL_ID,
+      contents: buildSingleUserPrompt(
+        "Fix the session plan based on the grading feedback. Maintain JSON structure.",
+        userPrompt,
+      ),
+      responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
+      schema: SessionPlanSchema,
+      progress: this.logger,
+      debug: debugOptions,
+    });
+
+    await this.writePlanCheckpoint(planJson);
+    const entry: StageCacheEntry<SessionPlan> = {
+      value: planJson,
+      source: "generated",
+    };
+    this.caches.plan = entry;
+
+    await this.invalidateStage("plan_grade");
+    return planJson;
   }
 
   private async ensureQuizIdeasInternal(): Promise<

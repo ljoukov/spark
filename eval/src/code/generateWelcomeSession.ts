@@ -4,6 +4,7 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
+import { Type, type Schema } from "@google/genai";
 
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import {
@@ -19,7 +20,11 @@ import {
   generateStory,
   type GenerateStoryResult,
 } from "@spark/llm/code/generateStory";
-import { getFirebaseAdminFirestore } from "@spark/llm";
+import { generateJson } from "@spark/llm/utils/llm";
+import {
+  getFirebaseAdminFirestore,
+  getFirebaseAdminFirestoreModule,
+} from "@spark/llm";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
 const TEMPLATE_USER_ID = "welcome-templates";
@@ -30,6 +35,8 @@ const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const MAX_PLAN_GRADE_RETRIES = 2;
 const MAX_QUIZ_GRADE_RETRIES = 2;
 const MAX_PROBLEM_GRADE_RETRIES = 2;
+
+const TEXT_MODEL_ID = "gemini-2.5-pro";
 
 const StageEnum = z.enum([
   "plan_ideas",
@@ -85,6 +92,90 @@ type StageContext = {
   problemsGrade?: ProblemsGrade;
   story?: GenerateStoryResult;
 };
+
+const MetadataSchema = z.object({
+  tagline: z.string().trim().min(1),
+  emoji: z.string().trim().min(1),
+});
+
+const METADATA_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["tagline", "emoji"],
+  properties: {
+    tagline: { type: Type.STRING },
+    emoji: { type: Type.STRING },
+  },
+};
+
+async function generateMetadata(
+  topic: string,
+  plan: SessionPlan,
+  progress?: SessionGenerationPipeline["logger"],
+) {
+  const prompt = `
+    Generate a catchy tagline (max 10 words) and a single emoji for a coding session about "${topic}".
+    The session story is about: "${plan.story.storyTopic}".
+    
+    Return JSON with "tagline" and "emoji".
+  `;
+
+  return generateJson<{ tagline: string; emoji: string }>({
+    modelId: TEXT_MODEL_ID,
+    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+    schema: MetadataSchema,
+    responseSchema: METADATA_RESPONSE_SCHEMA,
+    progress,
+  });
+}
+
+function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
+  return plan.parts.map((part) => {
+    const base = {
+      title: part.summary.split(".")[0] || "Session Part", // Simple title extraction
+      summary: part.summary,
+    };
+
+    switch (part.kind) {
+      case "story":
+        return {
+          ...base,
+          id: storyPlanItemId,
+          kind: "media",
+          title: "The Story",
+        };
+      case "intro_quiz":
+        return {
+          ...base,
+          id: "intro_quiz",
+          kind: "quiz",
+          title: "Warm-up",
+        };
+      case "coding_1":
+        return {
+          ...base,
+          id: "p1",
+          kind: "problem",
+          title: "Challenge 1",
+        };
+      case "coding_2":
+        return {
+          ...base,
+          id: "p2",
+          kind: "problem",
+          title: "Challenge 2",
+        };
+      case "wrap_up_quiz":
+        return {
+          ...base,
+          id: "wrap_up_quiz",
+          kind: "quiz",
+          title: "Review",
+        };
+      default:
+        throw new Error(`Unknown plan part kind: ${(part as any).kind}`);
+    }
+  });
+}
 
 function slugifyTopic(topic: string): string {
   const ascii = topic
@@ -182,35 +273,41 @@ function resolveStageSequence(options: CliOptions): StageName[] {
 async function writeTemplateDoc(
   sessionId: string,
   topic: string,
-  context: StageContext,
+  finalData: {
+    plan: unknown[];
+    tagline: string;
+    emoji: string;
+    title?: string;
+  },
 ): Promise<void> {
+  const { FieldValue } = getFirebaseAdminFirestoreModule();
   const templateDoc = getTemplateDocRef(sessionId);
   const payload: Record<string, unknown> = {
     id: sessionId,
     topic,
     updatedAt: Timestamp.now(),
   };
-  if (context.plan) {
-    payload.planDraft = context.plan;
+
+  payload.plan = finalData.plan;
+  payload.tagline = finalData.tagline;
+  payload.emoji = finalData.emoji;
+  if (finalData.title) {
+    payload.title = finalData.title;
   }
-  if (context.planGrade) {
-    payload.planGrade = context.planGrade;
+
+  const draftFieldsToDelete = [
+    "planDraft",
+    "planGrade",
+    "quizzesDraft",
+    "quizzesGrade",
+    "problemsDraft",
+    "problemsGrade",
+    "storyTitle",
+  ];
+  for (const field of draftFieldsToDelete) {
+    payload[field] = FieldValue.delete();
   }
-  if (context.quizzes) {
-    payload.quizzesDraft = context.quizzes;
-  }
-  if (context.quizzesGrade) {
-    payload.quizzesGrade = context.quizzesGrade;
-  }
-  if (context.problems) {
-    payload.problemsDraft = context.problems;
-  }
-  if (context.problemsGrade) {
-    payload.problemsGrade = context.problemsGrade;
-  }
-  if (context.story) {
-    payload.storyTitle = context.story.title;
-  }
+
   await templateDoc.set(payload, { merge: true });
 }
 
@@ -340,35 +437,72 @@ async function main(): Promise<void> {
           }
           case "plan_grade": {
             let lastGrade: PlanGrade | undefined;
+            // 3 edit attempts, if all fail then retry from root (max 2 root retries)
+            const MAX_EDIT_RETRIES = 3;
+            const MAX_ROOT_RETRIES = 2;
+
             for (
-              let attempt = 1;
-              attempt <= MAX_PLAN_GRADE_RETRIES + 1;
-              attempt += 1
+              let rootAttempt = 1;
+              rootAttempt <= MAX_ROOT_RETRIES + 1;
+              rootAttempt++
             ) {
-              const grade = await pipeline.ensurePlanGrade();
-              lastGrade = grade;
-              stageContext.planGrade = grade;
-              const issues =
-                grade.issues.length > 0 ? grade.issues.join(" | ") : "none";
-              progress.log(
-                `[welcome/${targetSessionId}] plan grade attempt ${attempt}: ${grade.pass ? "pass" : "fail"} (issues=${issues})`,
-              );
-              await appendStageLog(baseDir, stage, [
-                `attempt=${attempt}`,
-                `pass=${grade.pass}`,
-                `issues=${issues}`,
-              ]);
-              if (grade.pass) {
+              let passed = false;
+              for (
+                let editAttempt = 1;
+                editAttempt <= MAX_EDIT_RETRIES + 1;
+                editAttempt++
+              ) {
+                const grade = await pipeline.ensurePlanGrade();
+                lastGrade = grade;
+                stageContext.planGrade = grade;
+
+                const issues =
+                  grade.issues.length > 0 ? grade.issues.join(" | ") : "none";
+                progress.log(
+                  `[welcome/${targetSessionId}] plan grade root=${rootAttempt} edit=${editAttempt}: ${grade.pass ? "pass" : "fail"} (issues=${issues})`,
+                );
+                await appendStageLog(baseDir, stage, [
+                  `rootAttempt=${rootAttempt}`,
+                  `editAttempt=${editAttempt}`,
+                  `pass=${grade.pass}`,
+                  `issues=${issues}`,
+                ]);
+
+                if (grade.pass) {
+                  passed = true;
+                  break;
+                }
+
+                if (editAttempt <= MAX_EDIT_RETRIES) {
+                  progress.log(
+                    `[welcome/${targetSessionId}] editing plan based on feedback...`,
+                  );
+                  const currentPlan = await pipeline.ensurePlan();
+                  const newPlan = await pipeline.editPlan(currentPlan, grade);
+                  stageContext.plan = newPlan;
+                }
+              }
+
+              if (passed) {
                 break;
               }
-              if (attempt === MAX_PLAN_GRADE_RETRIES + 1) {
+
+              if (rootAttempt <= MAX_ROOT_RETRIES) {
+                progress.log(
+                  `[welcome/${targetSessionId}] plan generation failed after edits. Retrying from scratch (new ideas)...`,
+                );
+                // Invalidate ideas so we get fresh ones
+                await pipeline.invalidateStage("plan_ideas");
+                // This will also clear 'plan' and 'plan_grade' caches via downstream invalidation
+                // Trigger regeneration
+                await pipeline.ensurePlanIdeas();
+                const newPlan = await pipeline.ensurePlan();
+                stageContext.plan = newPlan;
+              } else {
                 throw new Error(
-                  `Plan grading failed after ${MAX_PLAN_GRADE_RETRIES + 1} attempts`,
+                  `Plan grading failed after ${MAX_ROOT_RETRIES + 1} root attempts (and ${MAX_EDIT_RETRIES} edits per attempt).`,
                 );
               }
-              await pipeline.invalidateStage("plan");
-              const regeneratedPlan = await pipeline.ensurePlan();
-              stageContext.plan = regeneratedPlan;
             }
             if (!lastGrade?.pass) {
               throw new Error("Plan grade did not pass");
@@ -498,13 +632,6 @@ async function main(): Promise<void> {
             if (!lastGrade?.pass) {
               throw new Error("Problems grade did not pass");
             }
-            await writeTemplateDoc(targetSessionId, parsed.topic, stageContext);
-            progress.log(
-              `[welcome/${targetSessionId}] wrote template draft (session data)`,
-            );
-            await appendStageLog(baseDir, stage, [
-              "template doc updated with session drafts",
-            ]);
             break;
           }
           case "story": {
@@ -521,17 +648,16 @@ async function main(): Promise<void> {
               checkpointDir: storyCheckpointDir,
             });
             stageContext.story = story;
-            await writeTemplateDoc(targetSessionId, parsed.topic, stageContext);
             progress.log(
               `[welcome/${targetSessionId}] story ready ("${story.title}")`,
             );
             await appendStageLog(baseDir, stage, [
               `title=${story.title}`,
-              "template doc updated with story",
             ]);
             break;
           }
           case "publish": {
+            const plan = await ensurePlanForStory(stageContext, pipeline);
             if (!stageContext.story) {
               throw new Error(
                 "Cannot publish story assets before generating the story. Run the 'story' stage first.",
@@ -542,7 +668,39 @@ async function main(): Promise<void> {
               parsed.storyPlanItemId,
               stageContext.story,
             );
-            await appendStageLog(baseDir, stage, ["story media copied"]);
+
+            // Generate metadata
+            progress.log(
+              `[welcome/${targetSessionId}] generating metadata (tagline, emoji)...`,
+            );
+            // Reuse pipeline logger
+            const metadata = await generateMetadata(parsed.topic, plan, {
+              log: (msg) => progress.log(msg),
+              startModelCall: (d) => pipeline["logger"].startModelCall(d), // hack to access logger
+              recordModelUsage: (h, c) => pipeline["logger"].recordModelUsage(h, c),
+              finishModelCall: (h) => pipeline["logger"].finishModelCall(h),
+            });
+
+            // Transform plan
+            const finalPlan = convertPlan(plan, parsed.storyPlanItemId);
+
+            await writeTemplateDoc(
+              targetSessionId,
+              parsed.topic,
+              {
+                plan: finalPlan,
+                tagline: metadata.tagline,
+                emoji: metadata.emoji,
+                title: stageContext.story.title,
+              },
+            );
+
+            await appendStageLog(baseDir, stage, [
+              "story media copied",
+              "metadata generated",
+              "template finalized",
+            ]);
+            progress.log(`[welcome/${targetSessionId}] session published!`);
             break;
           }
           default:
