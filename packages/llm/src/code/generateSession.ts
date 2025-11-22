@@ -65,24 +65,6 @@ function buildSingleUserPrompt(
   ];
 }
 
-function stripMarkdownFences(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith("```")) {
-    return raw;
-  }
-  const fenceStart = trimmed.indexOf("\n");
-  if (fenceStart === -1) {
-    return raw;
-  }
-  const withoutOpening = trimmed.slice(fenceStart + 1);
-  const fenceEndIndex = withoutOpening.lastIndexOf("```");
-  if (fenceEndIndex === -1) {
-    return raw;
-  }
-  const inner = withoutOpening.slice(0, fenceEndIndex);
-  return inner.trim();
-}
-
 function normaliseProblemsPayload(payload: unknown): unknown {
   if (
     payload &&
@@ -825,6 +807,17 @@ const QUIZZES_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const QUIZZES_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["quizzes"],
+  properties: {
+    quizzes: {
+      type: Type.ARRAY,
+      items: { type: Type.OBJECT },
+    },
+  },
+};
+
 const PROBLEMS_GRADE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["pass", "issues", "too_hard_reasons", "misaligned_skills"],
@@ -833,6 +826,17 @@ const PROBLEMS_GRADE_RESPONSE_SCHEMA: Schema = {
     issues: { type: Type.ARRAY, items: { type: Type.STRING } },
     too_hard_reasons: { type: Type.ARRAY, items: { type: Type.STRING } },
     misaligned_skills: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+};
+
+const PROBLEMS_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["problems"],
+  properties: {
+    problems: {
+      type: Type.ARRAY,
+      items: { type: Type.OBJECT },
+    },
   },
 };
 
@@ -1689,6 +1693,7 @@ export class SessionGenerationPipeline {
         "Produce final quizzes with concise explanations, optional theory blocks.",
         userPrompt,
       ),
+      responseSchema: QUIZZES_RESPONSE_SCHEMA,
       schema: QuizzesSchema,
       progress: this.logger,
       debug: debugOptions,
@@ -1866,6 +1871,7 @@ export class SessionGenerationPipeline {
         "Produce full beginner-friendly specs with reference solutions and tests.",
         userPrompt,
       ),
+      responseSchema: PROBLEMS_RESPONSE_SCHEMA,
       schema: ProblemsSchema,
       progress: this.logger,
       debug: debugOptions,

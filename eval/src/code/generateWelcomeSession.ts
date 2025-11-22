@@ -32,7 +32,6 @@ const TEMPLATE_ROOT_COLLECTION = "spark-admin";
 const TEMPLATE_ROOT_DOC = "templates";
 const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 
-const MAX_PLAN_GRADE_RETRIES = 2;
 const MAX_QUIZ_GRADE_RETRIES = 2;
 const MAX_PROBLEM_GRADE_RETRIES = 2;
 
@@ -171,8 +170,6 @@ function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
           kind: "quiz",
           title: "Review",
         };
-      default:
-        throw new Error(`Unknown plan part kind: ${(part as any).kind}`);
     }
   });
 }

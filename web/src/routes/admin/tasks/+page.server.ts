@@ -1,10 +1,9 @@
-import { TASKS_API_KEY } from '$env/static/private';
 import { createTask } from '@spark/llm';
 import { fail } from '@sveltejs/kit';
 import type { Actions } from './$types';
 
 export const actions: Actions = {
-	startHelloWorld: async ({ url }) => {
+	startHelloWorld: async () => {
 		try {
 			await createTask({
 				type: 'helloWorld'
