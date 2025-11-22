@@ -1570,6 +1570,7 @@ export function buildSegmentationPrompt(
     "4. For each of the ten `segments`:",
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
     "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
+    "   • Copy narration text verbatim from the story. Do not paraphrase, summarize, or invent new sentences. Do not drop any sentence; keep the original wording in order. If splitting a sentence across slices, duplicate the exact text with no additions, removals, or ellipses.",
     "   • Provide `imagePrompt`, a short, plain description (ideally one sentence) that captures the same moment as the narration slice(s). Focus on who, what, and where. Avoid camera jargon (e.g., close-up, overhead, depth of field) and avoid intricate staging.",
     "5. Keep each `imagePrompt` drawable as a simple single-scene illustration with cartoon-style clarity: emphasise the key action and allow supporting characters or environment to share focus only when the narration calls for it. Prefer everyday settings. Do not invent elaborate props or contrived arrangements.",
     '6. Avoid specificity that causes collapse: do not include exact dates, numeric lists, or spelled-out equations/symbols. Phrases like "a chalkboard filled with formulas" are fine, but never write the actual symbols or digits. Exception: on the poster only, include a single 4-digit year along with the title and protagonist’s name. Keep visible text minimal and period-appropriate (headlines ≤ 4 words; signage/mottos ≤ 6 words). All writing must appear on physical surfaces (paper, chalkboard, signage), never floating in the air.',
@@ -1592,7 +1593,7 @@ export function buildSegmentationPrompt(
     "segmentation prompt:",
     "------------------",
     "Convert the story into alternating-voice narration segments with illustration prompts plus poster and ending prompts, following all rules above.",
-    "Preserve the wording of the story.",
+    "Preserve the wording of the story exactly. Do not rewrite, shorten, or add text.",
   ].join("\n");
 }
 
