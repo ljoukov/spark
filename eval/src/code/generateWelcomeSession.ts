@@ -149,7 +149,16 @@ function clampSummaryWords(summary: string, maxWords = 15): string {
   return words.slice(0, maxWords).join(" ").concat("...");
 }
 
-function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
+function convertPlan(
+  plan: SessionPlan,
+  storyPlanItemId: string,
+  storyTitle: string,
+) {
+  if (!storyTitle || storyTitle.trim().length === 0) {
+    throw new Error(
+      "Missing story title when converting plan; ensure the story is generated first.",
+    );
+  }
   return plan.parts.map((part) => {
     const conciseSummary = clampSummaryWords(part.summary, 15);
     const base = {
@@ -163,7 +172,7 @@ function convertPlan(plan: SessionPlan, storyPlanItemId: string) {
           ...base,
           id: storyPlanItemId,
           kind: "media",
-          title: plan.story.storyTopic || "Story",
+          title: storyTitle,
         };
       case "intro_quiz":
         return {
@@ -827,11 +836,30 @@ async function main(): Promise<void> {
             const plan = await ensurePlanForStory(stageContext, pipeline);
             const storyCheckpointDir = path.join(checkpointDir, "story");
             const storyDebugDir = path.join(debugRootDir, "story");
+            const techniques = await pipeline.ensureProblemTechniques();
+            const problems =
+              stageContext.problems ?? (await pipeline.ensureProblems());
             const story = await generateStory({
               topic: plan.story.storyTopic,
               userId: TEMPLATE_USER_ID,
               sessionId: targetSessionId,
               planItemId: parsed.storyPlanItemId,
+              lessonContext: {
+                planTopic: plan.topic,
+                promisedSkills: plan.promised_skills,
+                techniques,
+                problems: problems.map((problem) => {
+                  const summaryLine =
+                    problem.statement_md.split("\n").find((line) => line.trim()) ??
+                    problem.statement_md.slice(0, 160);
+                  return {
+                    id: problem.id,
+                    title: problem.title,
+                    story_callback: problem.story_callback,
+                    summary: summaryLine.trim(),
+                  };
+                }),
+              },
               progress,
               debugRootDir: storyDebugDir,
               checkpointDir: storyCheckpointDir,
@@ -919,7 +947,12 @@ async function main(): Promise<void> {
             });
 
             // Transform plan
-            const finalPlan = convertPlan(plan, parsed.storyPlanItemId);
+            const storyTitle = stageContext.story.title;
+            const finalPlan = convertPlan(
+              plan,
+              parsed.storyPlanItemId,
+              storyTitle,
+            );
 
             await writeTemplateDoc(targetSessionId, parsed.topic, {
               plan: finalPlan,
