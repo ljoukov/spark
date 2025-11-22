@@ -723,6 +723,40 @@ function buildProblemsGradeUserPrompt(
   ].join("\n");
 }
 
+const PLAN_PART_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["order", "kind", "summary"],
+  propertyOrdering: ["order", "kind", "summary"],
+  properties: {
+    order: { type: Type.NUMBER, minimum: 1, maximum: 5 },
+    kind: {
+      type: Type.STRING,
+      enum: ["story", "intro_quiz", "coding_1", "coding_2", "wrap_up_quiz"],
+    },
+    summary: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODING_BLUEPRINT_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "title", "idea", "required_skills"],
+  propertyOrdering: ["id", "title", "idea", "required_skills", "constraints"],
+  properties: {
+    id: { type: Type.STRING, enum: ["p1", "p2"] },
+    title: { type: Type.STRING, minLength: "1" },
+    idea: { type: Type.STRING, minLength: "1" },
+    required_skills: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    constraints: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING, minLength: "1" },
+    },
+  },
+};
+
 const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: [
@@ -737,7 +771,7 @@ const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
   ],
   properties: {
     topic: { type: Type.STRING, minLength: "1" },
-    difficulty: { type: Type.STRING },
+    difficulty: { type: Type.STRING, enum: ["easy", "medium", "hard"] },
     assumptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING, minLength: "1" },
@@ -751,18 +785,15 @@ const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
     },
     parts: {
       type: Type.ARRAY,
+      minItems: "5",
+      maxItems: "5",
       items: {
-        type: Type.OBJECT,
-        required: ["order", "kind", "summary"],
-        properties: {
-          order: { type: Type.NUMBER },
-          kind: { type: Type.STRING },
-          summary: { type: Type.STRING, minLength: "1" },
-        },
+        ...PLAN_PART_RESPONSE_SCHEMA,
       },
     },
     promised_skills: {
       type: Type.ARRAY,
+      minItems: "1",
       items: { type: Type.STRING, minLength: "1" },
     },
     concepts_to_teach: {
@@ -771,22 +802,10 @@ const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
     },
     coding_blueprints: {
       type: Type.ARRAY,
+      minItems: "2",
+      maxItems: "2",
       items: {
-        type: Type.OBJECT,
-        required: ["id", "title", "idea", "required_skills"],
-        properties: {
-          id: { type: Type.STRING, minLength: "1" },
-          title: { type: Type.STRING, minLength: "1" },
-          idea: { type: Type.STRING, minLength: "1" },
-          required_skills: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING, minLength: "1" },
-          },
-          constraints: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING, minLength: "1" },
-          },
-        },
+        ...CODING_BLUEPRINT_RESPONSE_SCHEMA,
       },
     },
   },
@@ -822,13 +841,131 @@ const QUIZZES_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const QUIZ_QUESTION_BASE_PROPERTIES: Record<string, Schema> = {
+  id: { type: Type.STRING, minLength: "1" },
+  prompt: { type: Type.STRING, minLength: "1" },
+  explanation: { type: Type.STRING, minLength: "1" },
+  tags: {
+    type: Type.ARRAY,
+    minItems: "1",
+    items: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "title", "content_md"],
+  propertyOrdering: ["id", "title", "content_md"],
+  properties: {
+    id: { type: Type.STRING, minLength: "1" },
+    title: { type: Type.STRING, minLength: "1" },
+    content_md: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  propertyOrdering: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_PROPERTIES,
+    type: { type: Type.STRING, enum: ["mcq"] },
+    options: {
+      type: Type.ARRAY,
+      minItems: "2",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    correct: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  propertyOrdering: ["id", "type", "prompt", "options", "correct", "explanation", "tags"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_PROPERTIES,
+    type: { type: Type.STRING, enum: ["multi"] },
+    options: {
+      type: Type.ARRAY,
+      minItems: "2",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+    correct: {
+      type: Type.ARRAY,
+      minItems: "2",
+      items: { type: Type.STRING, minLength: "1" },
+    },
+  },
+};
+
+const QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_PROPERTIES,
+    type: { type: Type.STRING, enum: ["short"] },
+    correct: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_PROPERTIES,
+    type: { type: Type.STRING, enum: ["numeric"] },
+    correct: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  propertyOrdering: ["id", "type", "prompt", "correct", "explanation", "tags"],
+  properties: {
+    ...QUIZ_QUESTION_BASE_PROPERTIES,
+    type: { type: Type.STRING, enum: ["code_reading"] },
+    correct: { type: Type.STRING, minLength: "1" },
+  },
+};
+
 const QUIZZES_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["quizzes"],
+  propertyOrdering: ["quizzes"],
   properties: {
     quizzes: {
       type: Type.ARRAY,
-      items: { type: Type.OBJECT },
+      minItems: "2",
+      maxItems: "2",
+      items: {
+        type: Type.OBJECT,
+        required: ["quiz_id", "questions"],
+        propertyOrdering: ["quiz_id", "theory_blocks", "questions"],
+        properties: {
+          quiz_id: { type: Type.STRING, enum: ["intro_quiz", "wrap_up_quiz"] },
+          theory_blocks: {
+            type: Type.ARRAY,
+            items: QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA,
+          },
+          questions: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: {
+              anyOf: [
+                QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA,
+                QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA,
+              ],
+            },
+          },
+        },
+      },
     },
   },
 };
@@ -844,13 +981,142 @@ const PROBLEMS_GRADE_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const CODING_PROBLEM_FUNCTION_PARAM_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["name", "type"],
+  propertyOrdering: ["name", "type"],
+  properties: {
+    name: { type: Type.STRING, minLength: "1" },
+    type: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODING_PROBLEM_FUNCTION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["name", "signature", "params", "returns"],
+  propertyOrdering: ["name", "signature", "params", "returns"],
+  properties: {
+    name: { type: Type.STRING, minLength: "1" },
+    signature: { type: Type.STRING, minLength: "1" },
+    params: {
+      type: Type.ARRAY,
+      items: CODING_PROBLEM_FUNCTION_PARAM_RESPONSE_SCHEMA,
+    },
+    returns: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODING_PROBLEM_EXAMPLE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["input", "output"],
+  propertyOrdering: ["input", "output", "explanation"],
+  properties: {
+    input: { type: Type.STRING, minLength: "1" },
+    output: { type: Type.STRING, minLength: "1" },
+    explanation: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const CODING_PROBLEM_TEST_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["input", "output"],
+  propertyOrdering: ["input", "output"],
+  properties: {
+    input: { type: Type.STRING, minLength: "1" },
+    output: { type: Type.STRING },
+  },
+};
+
+const CODING_PROBLEM_TESTS_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["public", "private_count"],
+  propertyOrdering: ["public", "private_count"],
+  properties: {
+    public: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: CODING_PROBLEM_TEST_RESPONSE_SCHEMA,
+    },
+    private_count: { type: Type.INTEGER, minimum: 1 },
+  },
+};
+
 const PROBLEMS_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["problems"],
+  propertyOrdering: ["problems"],
   properties: {
     problems: {
       type: Type.ARRAY,
-      items: { type: Type.OBJECT },
+      minItems: "2",
+      maxItems: "2",
+      items: {
+        type: Type.OBJECT,
+        required: [
+          "id",
+          "title",
+          "difficulty",
+          "story_callback",
+          "statement_md",
+          "function",
+          "constraints",
+          "examples",
+          "edge_cases",
+          "hints",
+          "solution_overview_md",
+          "reference_solution_py",
+          "tests",
+        ],
+        propertyOrdering: [
+          "id",
+          "title",
+          "difficulty",
+          "story_callback",
+          "statement_md",
+          "function",
+          "constraints",
+          "examples",
+          "edge_cases",
+          "hints",
+          "solution_overview_md",
+          "reference_solution_py",
+          "tests",
+        ],
+        properties: {
+          id: { type: Type.STRING, enum: ["p1", "p2"] },
+          title: { type: Type.STRING, minLength: "1" },
+          difficulty: {
+            type: Type.STRING,
+            enum: ["easy", "medium", "hard"],
+          },
+          story_callback: { type: Type.STRING, minLength: "1" },
+          statement_md: { type: Type.STRING, minLength: "1" },
+          function: CODING_PROBLEM_FUNCTION_RESPONSE_SCHEMA,
+          constraints: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: { type: Type.STRING, minLength: "1" },
+          },
+          examples: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: CODING_PROBLEM_EXAMPLE_RESPONSE_SCHEMA,
+          },
+          edge_cases: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: { type: Type.STRING, minLength: "1" },
+          },
+          hints: {
+            type: Type.ARRAY,
+            minItems: "1",
+            items: { type: Type.STRING, minLength: "1" },
+          },
+          solution_overview_md: { type: Type.STRING, minLength: "1" },
+          reference_solution_py: { type: Type.STRING, minLength: "1" },
+          tests: CODING_PROBLEM_TESTS_RESPONSE_SCHEMA,
+        },
+      },
     },
   },
 };
