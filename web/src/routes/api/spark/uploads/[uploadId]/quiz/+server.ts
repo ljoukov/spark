@@ -43,7 +43,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		try {
 			body = requestSchema.parse(await request.json());
 		} catch (error) {
-			console.error('Spark quiz rerun: failed to parse body', { error, uploadId: uploadIdResult.data });
+			console.error('Spark quiz rerun: failed to parse body', {
+				error,
+				uploadId: uploadIdResult.data
+			});
 			return json({ error: 'invalid_body', message: 'Body must be valid JSON.' }, { status: 400 });
 		}
 	}

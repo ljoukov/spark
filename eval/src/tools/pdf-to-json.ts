@@ -79,7 +79,8 @@ const PDF_ANALYSIS_RESPONSE_SCHEMA: Schema = {
     pages: {
       type: Type.ARRAY,
       items: PAGE_RESPONSE_SCHEMA,
-      description: "List of page descriptions ordered from the first page to the last page",
+      description:
+        "List of page descriptions ordered from the first page to the last page",
     },
     document_summary: {
       type: Type.STRING,
@@ -96,7 +97,10 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     "Generate structured page-by-page descriptions for a PDF using Gemini",
   );
 
-  program.requiredOption("-i, --input-file <path>", "Path to the PDF file to analyse");
+  program.requiredOption(
+    "-i, --input-file <path>",
+    "Path to the PDF file to analyse",
+  );
 
   const parsed = program.parse(argv, { from: "node" }).opts<{
     inputFile?: string;

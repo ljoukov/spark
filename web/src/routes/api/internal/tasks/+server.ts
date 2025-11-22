@@ -38,12 +38,18 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const { userId, uploadId, quizId } = task.generateQuiz;
-	console.log(`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`);
+	console.log(
+		`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`
+	);
 
 	const firestore = getFirebaseAdminFirestore();
 	const storage = getFirebaseAdminStorage();
 	const { FieldValue } = getFirebaseAdminFirestoreModule();
-	const uploadDocRef = firestore.collection('spark').doc(userId).collection('uploads').doc(uploadId);
+	const uploadDocRef = firestore
+		.collection('spark')
+		.doc(userId)
+		.collection('uploads')
+		.doc(uploadId);
 	const quizDocRef = uploadDocRef.collection('quiz').doc(quizId);
 
 	const fail = async ({ reason, error }: FailureContext) => {

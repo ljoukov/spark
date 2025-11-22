@@ -1719,7 +1719,7 @@ function buildOriginsCapsulePrompt(
     '3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as "independently developed", "... and others", or "later published".',
     "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
     "4a. Use established names from the research (e.g., Reed–Solomon codes); do not invent new titles, aliases, or brand-like labels.",
-    "4b. Do not reuse the story title or any fictional/metaphorical label (e.g., \"Interstellar Archivist\"); keep names strictly factual.",
+    '4b. Do not reuse the story title or any fictional/metaphorical label (e.g., "Interstellar Archivist"); keep names strictly factual.',
     '5. Avoid exclusivity claims ("first", "sole inventor", "coined") unless universally accepted.',
     "6. No citations, quotation marks, or parenthetical lists. Keep to plain prose suitable for narration.",
     '7. Limit to one named individual or institution; mention others only through hedged phrases ("... and others").',
