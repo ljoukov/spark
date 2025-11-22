@@ -361,7 +361,7 @@
 					href={startHref}
 					data-state={ctaState}
 					aria-label={ctaAria}
-					on:click={handlePlanCtaClick}
+					onclick={handlePlanCtaClick}
 				>
 					{ctaIcon}
 					{ctaLabel}
@@ -398,28 +398,28 @@
 				{#if proposalsError}
 					<p class="proposal-error">{proposalsError}</p>
 					<div class="next-dialog__actions">
-						<button
-							class="proposal-action"
-							on:click={() => void fetchProposals()}
-							disabled={proposalsLoading}
-						>
-							Try again
-						</button>
-						<button class="proposal-secondary" on:click={() => (proposalDialogOpen = false)}>
-							Close
-						</button>
-					</div>
-				{:else if proposals.length === 0}
-					<div class="next-dialog__empty">
-						<p>No proposals yet. Try again in a moment.</p>
-						<button
-							class="proposal-action"
-							on:click={() => void fetchProposals()}
-							disabled={proposalsLoading}
-						>
-							Refresh
-						</button>
-					</div>
+							<button
+								class="proposal-action"
+								onclick={() => void fetchProposals()}
+								disabled={proposalsLoading}
+							>
+								Try again
+							</button>
+							<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
+								Close
+							</button>
+						</div>
+					{:else if proposals.length === 0}
+						<div class="next-dialog__empty">
+							<p>No proposals yet. Try again in a moment.</p>
+							<button
+								class="proposal-action"
+								onclick={() => void fetchProposals()}
+								disabled={proposalsLoading}
+							>
+								Refresh
+							</button>
+						</div>
 				{:else}
 					<div class="proposal-grid">
 						{#each proposals as proposal}
@@ -437,23 +437,23 @@
 								<button
 									class="proposal-action"
 									disabled={selectPendingId === proposal.id}
-									on:click={() => void handleProposalPick(proposal.id)}
+									onclick={() => void handleProposalPick(proposal.id)}
 								>
 									{selectPendingId === proposal.id ? 'Starting…' : 'Start this lesson'}
 								</button>
 							</article>
 						{/each}
 					</div>
-					{#if selectionError}
-						<p class="proposal-error">{selectionError}</p>
+						{#if selectionError}
+							<p class="proposal-error">{selectionError}</p>
+						{/if}
+						<div class="next-dialog__actions">
+							<button class="proposal-secondary" onclick={() => (proposalDialogOpen = false)}>
+								Cancel
+							</button>
+						</div>
 					{/if}
-					<div class="next-dialog__actions">
-						<button class="proposal-secondary" on:click={() => (proposalDialogOpen = false)}>
-							Cancel
-						</button>
-					</div>
-				{/if}
-			</div>
+				</div>
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
@@ -512,7 +512,7 @@
 		}
 	}
 
-	.next-dialog {
+	:global(.next-dialog) {
 		max-width: 56rem;
 		width: min(56rem, 92vw);
 		padding: 0;
