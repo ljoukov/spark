@@ -1,4 +1,4 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { fail, isRedirect, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getOrSelectCurrentSession, listSessions } from '$lib/server/session/repo';
 import {
@@ -55,6 +55,9 @@ export const actions: Actions = {
 			const session = await provisionWelcomeSession(user.uid, topic);
 			throw redirect(303, `/code/${session.id}`);
 		} catch (error) {
+			if (isRedirect(error)) {
+				throw error;
+			}
 			console.error('Unable to provision welcome session', error);
 			return fail(500, { error: 'We could not start that session. Please try again.' });
 		}
