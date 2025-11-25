@@ -3,18 +3,28 @@ import {
 	TaskSchema,
 	generateSparkPdfQuizDefinition,
 	getFirebaseAdminFirestore,
-	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName
+	getFirebaseStorageBucketName,
+	generateSession
 } from '@spark/llm';
-import { SparkUploadDocumentSchema, SparkUploadQuizDocumentSchema } from '@spark/schemas';
+import { SparkUploadDocumentSchema, SparkUploadQuizDocumentSchema, type Session } from '@spark/schemas';
+import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
+
+function clampWords(text: string, maxWords: number): string {
+	const words = text.split(/\s+/).filter(Boolean);
+	if (words.length <= maxWords) {
+		return text.trim();
+	}
+	return words.slice(0, maxWords).join(' ').concat('...');
+}
 
 type FailureContext = {
 	reason: string;
 	error?: unknown;
 	userId: string;
-	uploadId: string;
-	quizId: string;
+	uploadId?: string;
+	quizId?: string;
+	sessionId?: string;
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -35,6 +45,107 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (task.type === 'helloWorld') {
 		console.log('[internal task] helloWorld');
 		return json({ status: 'ok' }, { status: 200 });
+	}
+
+	if (task.type === 'generateLesson') {
+		const { userId, sessionId, proposalId, title, tagline, topics, emoji, sourceSessionId } =
+			task.generateLesson;
+		console.log(
+			`[internal task] generateLesson userId=${userId} sessionId=${sessionId} proposalId=${proposalId}`
+		);
+		getFirebaseAdminFirestore();
+
+		const fail = async ({ reason, error }: FailureContext) => {
+			console.error('[internal task] lesson generation failed', {
+				reason,
+				error,
+				userId,
+				sessionId,
+				proposalId
+			});
+			try {
+				await updateSessionStatus(userId, sessionId, 'error');
+			} catch (statusError) {
+				console.error('[internal task] failed to mark session error', statusError);
+			}
+			return json({ status: 'failed', reason }, { status: 500 });
+		};
+
+		try {
+			const result = await generateSession({
+				topic: topics.join(', '),
+				userId,
+				sessionId,
+				storyPlanItemId: 'story'
+			});
+
+			const storyTitle = result.story?.title ?? title;
+			const planItems: Session['plan'] = result.plan.parts.map((part) => {
+				const concise = clampWords(part.summary ?? '', 15);
+				const base = {
+					title: part.summary.split('.')[0] || 'Session Part',
+					summary: concise
+				};
+				switch (part.kind) {
+					case 'story':
+						return {
+							...base,
+							id: 'story',
+							kind: 'media' as const,
+							title: storyTitle ?? 'Story'
+						};
+					case 'intro_quiz':
+						return { ...base, id: 'intro_quiz', kind: 'quiz' as const, title: 'Warm-up' };
+					case 'coding_1': {
+						const problem = result.problems.find((p) => p.id === 'p1');
+						return {
+							...base,
+							id: 'p1',
+							kind: 'problem' as const,
+							title: problem?.title ?? 'Challenge 1'
+						};
+					}
+					case 'coding_2': {
+						const problem = result.problems.find((p) => p.id === 'p2');
+						return {
+							...base,
+							id: 'p2',
+							kind: 'problem' as const,
+							title: problem?.title ?? 'Challenge 2'
+						};
+					}
+					case 'wrap_up_quiz':
+						return {
+							...base,
+							id: 'wrap_up_quiz',
+							kind: 'quiz' as const,
+							title: 'Review'
+						};
+					default:
+						return { ...base, id: part.kind, kind: 'quiz' as const };
+				}
+			});
+
+			const sessionDoc: Session = {
+				id: sessionId,
+				title: title ?? result.plan.topic,
+				summary: result.story?.summary ?? result.plan.topic,
+				tagline: tagline ?? result.plan.topic,
+				emoji,
+				topics,
+				status: 'ready',
+				createdAt: new Date(),
+				plan: planItems,
+				sourceSessionId,
+				sourceProposalId: proposalId
+			};
+
+			await saveSession(userId, sessionDoc);
+		} catch (error) {
+			return await fail({ reason: 'lesson_generation_failed', error, userId, sessionId });
+		}
+
+		return json({ status: 'completed' }, { status: 200 });
 	}
 
 	if (task.type !== 'generateQuiz') {
