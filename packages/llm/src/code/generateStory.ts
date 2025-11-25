@@ -30,7 +30,7 @@ import {
 import { generateStoryFrames } from "./generateFrames";
 
 export const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
-export const IMAGE_MODEL_ID = "gemini-2.5-flash-image" as const;
+export const IMAGE_MODEL_ID = "gemini-3-pro-image-preview" as const;
 
 const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
   "- Wrong medium (e.g. photographic instead of illustrated, monochrome sketches, or heavy text-on-canvas posters).",
