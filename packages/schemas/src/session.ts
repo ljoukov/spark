@@ -119,7 +119,21 @@ export const SessionSchema = z
             .filter((topic) => topic.length > 0),
         })) ?? [];
 
-      const result = {
+      const result: {
+        id: string;
+        title: string;
+        createdAt: Date;
+        plan: PlanItem[];
+        status: SessionStatus;
+        nextLessonProposals: LessonProposal[];
+        summary?: string;
+        tagline?: string;
+        emoji?: string;
+        topics?: string[];
+        sourceSessionId?: string;
+        sourceProposalId?: string;
+        nextLessonProposalsGeneratedAt?: Date;
+      } = {
         id,
         title: resolvedTitle,
         createdAt,
