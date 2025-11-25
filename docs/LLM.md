@@ -22,7 +22,7 @@ It is used across eval tools and session generators.
 ### Shared options
 
 All calls accept:
-- `modelId`: text model (Gemini) or image model (`gemini-2.5-flash-image`).
+- `modelId`: text model (Gemini) or image model (`gemini-3-pro-image-preview`).
 - `contents`: ordered array of `{ role: 'user' | 'model' | 'system' | 'tool'; parts: LlmContentPart[] }` representing the conversation you want to send to Gemini. Each part can be:
   - `{ type: 'text', text: string, thought?: boolean }`
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
@@ -100,7 +100,7 @@ Example layout:
     response.txt
     conversation.html
     prompt-image-001.jpg -> ../media/5f4dcc3b5aa765d61d8327deb882cf99c6e0e5f2fdc1c84064d8f6f1a2b3c4d.jpg
-  gemini-2.5-flash-image/
+  gemini-3-pro-image-preview/
     prompt.txt
     response.txt
     conversation.html
@@ -174,7 +174,7 @@ const contents = [
 ];
 
 const images = await runLlmImageCall({
-  modelId: "gemini-2.5-flash-image",
+  modelId: "gemini-3-pro-image-preview",
   contents,
   imageAspectRatio: "16:9",
   debug: { rootDir: "/tmp/llm-debug", stage: "poster" },
@@ -198,7 +198,7 @@ const images = await runLlmImageCall({
 - When retrying a batch, any images that have already been generated are reattached using the same header to preserve character consistency, and the prompt re-lists every image description while pointing out the indices that still need work.
 
 const reliableImages = await generateImages({
-  modelId: "gemini-2.5-flash-image",
+  modelId: "gemini-3-pro-image-preview",
   stylePrompt: [
     "Bold, colourful flat design avatars with clear lighting and clean shapes.",
     "Keep poses dynamic but readable; maintain consistent proportions across characters.",

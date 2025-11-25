@@ -115,7 +115,7 @@ type LlmCallStage = {
 };
 
 export type LlmTextModelId = GeminiModelId;
-export type LlmImageModelId = "gemini-2.5-flash-image";
+export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 
 type LlmInlineDataPart = {
@@ -1034,7 +1034,7 @@ async function llmStream({
           includeThoughts: true,
           thinkingBudget: 24_576,
         } as const;
-      case "gemini-2.5-flash-image":
+      case "gemini-3-pro-image-preview":
         return undefined;
     }
   })();
