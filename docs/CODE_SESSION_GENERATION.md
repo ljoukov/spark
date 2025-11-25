@@ -57,8 +57,8 @@ Hard code in a variable the following assumption about the student (we will late
 4. Problem-Techniques (JSON list of required techniques per problem id)
 5. Coding-Problem-Ideas (Markdown)
 6. Coding-Problems-Generate (JSON)
-7. Independent solutioning: solve each problem from statement + examples only, validate against generated tests, persist canonical solution
-8. Coding-Problems-Grade (QA JSON)
+7. Coding-Problems-Grade (QA JSON)
+8. Independent solutioning: solve each problem from statement + examples only, validate against generated tests, persist canonical solution
 9. Quiz-Ideas (Markdown coverage referencing techniques and problems)
 10. Quizzes-Generate (JSON)
 11. Quizzes-Grade (QA JSON)
