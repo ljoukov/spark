@@ -130,6 +130,7 @@ const MAX_QUIZ_ATTEMPTS = 3;
 const MAX_QUIZ_GRADE_RETRIES = 2;
 const MAX_PROBLEM_ATTEMPTS = 3;
 const MAX_PROBLEM_GRADE_RETRIES = 2;
+const MAX_PROBLEM_SOLUTION_ATTEMPTS = 2;
 
 const PlanPartSchema = z.object({
   order: z.union([
@@ -420,6 +421,10 @@ type ProblemTechniquesStageValue = {
   techniques: ProblemTechnique[];
 };
 
+type ProblemSolutionsStageValue = {
+  solutions: ProblemSolutions["solutions"];
+};
+
 type QuizIdeasStageValue = {
   markdown: string;
 };
@@ -465,12 +470,13 @@ type SessionGenerationStageName =
   | "plan"
   | "plan_grade"
   | "problem_techniques"
-  | "quiz_ideas"
-  | "quizzes"
-  | "quizzes_grade"
   | "problem_ideas"
   | "problems"
-  | "problems_grade";
+  | "problems_grade"
+  | "problem_solutions"
+  | "quiz_ideas"
+  | "quizzes"
+  | "quizzes_grade";
 
 const SESSION_STAGE_ORDER: readonly SessionGenerationStageName[] = [
   "plan_ideas",
@@ -480,6 +486,7 @@ const SESSION_STAGE_ORDER: readonly SessionGenerationStageName[] = [
   "problem_ideas",
   "problems",
   "problems_grade",
+  "problem_solutions",
   "quiz_ideas",
   "quizzes",
   "quizzes_grade",
@@ -495,6 +502,7 @@ type SessionGenerationPipelineOptions = {
     introQuiz?: number;
     wrapUpQuiz?: number;
   };
+  pythonIndexUrl?: string;
 };
 
 type PlanIdeasCheckpoint = {
@@ -529,6 +537,11 @@ type QuizzesGradeCheckpoint = QuizzesGrade & {
 type ProblemIdeasCheckpoint = {
   topic: string;
   markdown: string;
+};
+
+type ProblemSolutionsCheckpoint = {
+  topic: string;
+  solutions: ProblemSolutions["solutions"];
 };
 
 type ProblemsCheckpoint = {
@@ -1338,6 +1351,289 @@ const PROBLEMS_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+const PROBLEM_SOLUTION_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["solution_py"],
+  properties: {
+    solution_py: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const ProblemSolutionSchema = z.object({
+  solution_py: z.string().trim().min(1),
+});
+
+type ProblemSolution = z.infer<typeof ProblemSolutionSchema>;
+
+const ProblemSolutionEntrySchema = z.object({
+  id: z.enum(["p1", "p2"]),
+  solution_py: z.string().trim().min(1),
+});
+
+const ProblemSolutionsSchema = z
+  .object({
+    topic: z.string().trim().min(1),
+    solutions: z.array(ProblemSolutionEntrySchema).length(2),
+  })
+  .superRefine((data, ctx) => {
+    const ids = new Set(data.solutions.map((solution) => solution.id));
+    if (!ids.has("p1") || !ids.has("p2")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "solutions must include ids p1 and p2",
+      });
+    }
+  });
+
+type ProblemSolutions = z.infer<typeof ProblemSolutionsSchema>;
+
+type SolutionTestFailure = {
+  index: number;
+  message: string;
+};
+
+const PYODIDE_VERSION = "0.28.3";
+const require = createRequire(import.meta.url);
+const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
+const PYODIDE_BASE_DIR = path.dirname(PYODIDE_PACKAGE_JSON_PATH);
+const LOCAL_PYTHON_INDEX_URL = path.join(PYODIDE_BASE_DIR, path.sep);
+const CDN_PYTHON_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const DEFAULT_PYTHON_INDEX_URL = LOCAL_PYTHON_INDEX_URL;
+
+type MutableGlobal = typeof globalThis & {
+  location?: { href: string };
+  self?: typeof globalThis;
+};
+
+function resolvePythonIndexUrl(explicit?: string): string {
+  const fromEnv =
+    process.env.PYODIDE_INDEX_URL ??
+    process.env.PYODIDE_BASE_URL ??
+    process.env.PYTHON_RUNTIME_INDEX_URL;
+  const candidates = [
+    explicit,
+    fromEnv,
+    DEFAULT_PYTHON_INDEX_URL,
+    CDN_PYTHON_INDEX_URL,
+  ].filter((value): value is string =>
+    Boolean(value && value.trim().length > 0),
+  );
+
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    if (
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://") ||
+      trimmed.startsWith("file://")
+    ) {
+      return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+    }
+    if (trimmed.endsWith(path.sep)) {
+      return trimmed;
+    }
+    return `${trimmed}${path.sep}`;
+  }
+
+  return CDN_PYTHON_INDEX_URL;
+}
+
+function ensurePythonEnvironment(indexURL: string): void {
+  const globalObject = globalThis as MutableGlobal;
+  if (!globalObject.location) {
+    globalObject.location = { href: indexURL } as unknown as Location;
+  } else if (!globalObject.location.href) {
+    globalObject.location.href = indexURL;
+  }
+  if (!globalObject.self) {
+    globalObject.self = globalThis as unknown as Window & typeof globalThis;
+  }
+}
+
+let pythonRuntimePromise: ReturnType<typeof loadPyodide> | null = null;
+
+async function ensurePythonRuntime(indexURL?: string) {
+  if (!pythonRuntimePromise) {
+    const resolvedIndex = resolvePythonIndexUrl(indexURL);
+    ensurePythonEnvironment(resolvedIndex);
+    pythonRuntimePromise = loadPyodide({ indexURL: resolvedIndex });
+  }
+  return pythonRuntimePromise;
+}
+
+function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
+  const examples = problem.examples
+    .map((example, index) => {
+      const parts = [
+        `Example ${index + 1}:`,
+        `Input: ${example.input}`,
+        `Output: ${example.output}`,
+      ];
+      if (example.explanation) {
+        parts.push(`Explanation: ${example.explanation}`);
+      }
+      return parts.join("\n");
+    })
+    .join("\n\n");
+
+  const constraints =
+    problem.constraints.length > 0
+      ? problem.constraints.map((constraint) => `- ${constraint}`).join("\n")
+      : "None provided";
+  const edgeCases =
+    problem.edge_cases.length > 0
+      ? problem.edge_cases.map((edge) => `- ${edge}`).join("\n")
+      : "None provided";
+
+  return [
+    `Problem ID: ${problem.id} — ${problem.title}`,
+    "",
+    "Write a correct Python 3 solution using ONLY the statement and examples below.",
+    "Use the exact function signature and return values (no input()/print()).",
+    "Do not include tests, prompts, or markdown fences; return JSON with the key solution_py containing the code string.",
+    "",
+    "Function signature:",
+    problem.function.signature,
+    "",
+    "Problem statement:",
+    problem.statement_md,
+    "",
+    "Constraints:",
+    constraints,
+    "",
+    "Edge cases to consider:",
+    edgeCases,
+    "",
+    "Examples:",
+    examples,
+  ].join("\n");
+}
+
+function extractPythonCode(text: string): string {
+  const fenced =
+    text.match(/```python\s*([\s\S]*?)```/i) ??
+    text.match(/```([\s\S]*?)```/);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+  return text.trim();
+}
+
+async function runSolutionAgainstTests(
+  problem: CodingProblem,
+  solutionSource: string,
+  indexURL?: string,
+): Promise<SolutionTestFailure[]> {
+  const python = await ensurePythonRuntime(indexURL);
+  const paramNames = problem.function.params.map((param) => param.name);
+  const testsJson = JSON.stringify(problem.tests.public);
+  const paramNamesJson = JSON.stringify(paramNames);
+  const functionName = problem.function.name;
+  const script = [
+    "import ast",
+    "import json",
+    "from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict",
+    "import math",
+    "import itertools",
+    "import collections",
+    "import heapq",
+    `param_names = json.loads(${JSON.stringify(paramNamesJson)})`,
+    `tests = json.loads(${JSON.stringify(testsJson)})`,
+    `solution_source = ${JSON.stringify(solutionSource)}`,
+    "failures: List[Dict[str, object]] = []",
+    "global_env: Dict[str, object] = {}",
+    "exec(\"from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict\\nimport math\\nimport itertools\\nimport collections\\nimport heapq\", global_env)",
+    "try:",
+    "    exec(solution_source, global_env)",
+    "except Exception as exc:",
+    "    failures.append({'index': -1, 'message': f'exec error: {exc}'})",
+    `fn = global_env.get(${JSON.stringify(functionName)})`,
+    "if not callable(fn):",
+    "    failures.append({'index': -1, 'message': 'solution did not define the target function'})",
+    "else:",
+    "    def parse_args(raw: str):",
+    "        text = raw.strip()",
+    "        if text == '':",
+    "            return []",
+    "        try:",
+    "            env: Dict[str, object] = {}",
+    "            exec(text, {}, env)",
+    "            values = [env[name] for name in param_names if name in env]",
+    "            if len(values) == len(param_names):",
+    "                return values",
+    "        except Exception:",
+    "            pass",
+    "        try:",
+    "            parsed = ast.literal_eval(text)",
+    "            if isinstance(parsed, dict) and all(name in parsed for name in param_names):",
+    "                return [parsed[name] for name in param_names]",
+    "            if isinstance(parsed, (list, tuple)) and len(parsed) == len(param_names):",
+    "                return list(parsed)",
+    "        except Exception:",
+    "            pass",
+    "        lines = [line for line in text.splitlines() if line.strip()]",
+    "        if len(lines) == len(param_names):",
+    "            parsed_lines = []",
+    "            for line in lines:",
+    "                try:",
+    "                    parsed_lines.append(ast.literal_eval(line))",
+    "                except Exception:",
+    "                    parsed_lines.append(line.strip())",
+    "            return parsed_lines",
+    "        parts = [part for part in text.split(',') if part.strip()]",
+    "        if len(parts) == len(param_names):",
+    "            parsed_parts = []",
+    "            for part in parts:",
+    "                try:",
+    "                    parsed_parts.append(ast.literal_eval(part))",
+    "                except Exception:",
+    "                    parsed_parts.append(part.strip())",
+    "            return parsed_parts",
+    "        if len(param_names) == 1:",
+    "            return [text]",
+    "        raise ValueError('unable to parse inputs for parameters')",
+    "",
+    "    def parse_expected(raw: str):",
+    "        text = raw.strip()",
+    "        try:",
+    "            return ast.literal_eval(text)",
+    "        except Exception:",
+    "            return text",
+    "",
+    "    def values_match(result, expected):",
+    "        if result == expected:",
+    "            return True",
+    "        if isinstance(result, float) and isinstance(expected, float):",
+    "            return abs(result - expected) < 1e-6",
+    "        return str(result).strip() == str(expected).strip()",
+    "",
+    "    for index, test in enumerate(tests):",
+    "        try:",
+    "            args = parse_args(test.get('input', ''))",
+    "            if len(args) != len(param_names):",
+    "                raise ValueError(f'parsed {len(args)} args, expected {len(param_names)}')",
+    "            expected = parse_expected(test.get('output', ''))",
+    "            actual = fn(*args)",
+    "        except Exception as exc:",
+    "            failures.append({'index': index, 'message': str(exc)})",
+    "            continue",
+    "        if not values_match(actual, expected):",
+    "            failures.append({'index': index, 'message': f'expected {repr(expected)} but got {repr(actual)}'})",
+    "",
+    "json.dumps({'failures': failures})",
+  ].join("\n");
+
+  try {
+    const result = await python.runPythonAsync(script);
+    if (typeof result === "string") {
+      const parsed = JSON.parse(result) as { failures?: SolutionTestFailure[] };
+      return parsed.failures ?? [];
+    }
+    return [];
+  } catch (error) {
+    return [{ index: -1, message: errorAsString(error) }];
+  }
+}
+
 export class SessionGenerationPipeline {
   private readonly logger: JobProgressReporter;
 
@@ -1346,6 +1642,7 @@ export class SessionGenerationPipeline {
     plan?: StageCacheEntry<SessionPlan>;
     planGrade?: StageCacheEntry<PlanGrade>;
     problemTechniques?: StageCacheEntry<ProblemTechniquesStageValue>;
+    problemSolutions?: StageCacheEntry<ProblemSolutionsStageValue>;
     quizIdeas?: StageCacheEntry<QuizIdeasStageValue>;
     quizzes?: StageCacheEntry<QuizzesPayload>;
     quizzesGrade?: StageCacheEntry<QuizzesGrade>;
@@ -1382,6 +1679,9 @@ export class SessionGenerationPipeline {
         break;
       case "problem_techniques":
         delete this.caches.problemTechniques;
+        break;
+      case "problem_solutions":
+        delete this.caches.problemSolutions;
         break;
       case "quiz_ideas":
         delete this.caches.quizIdeas;
@@ -1622,6 +1922,61 @@ export class SessionGenerationPipeline {
     });
     this.logger.log(
       `[session/checkpoint] wrote 'problem_techniques' to ${filePath}`,
+    );
+  }
+
+  private async readProblemSolutionsCheckpoint(): Promise<
+    StageReadResult<ProblemSolutionsStageValue> | undefined
+  > {
+    const filePath = this.stageFile("problem_solutions");
+    if (!filePath) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(filePath, { encoding: "utf8" });
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const result = ProblemSolutionsSchema.safeParse(parsed);
+      if (!result.success) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      if (result.data.topic !== this.options.topic) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (topic mismatch)`,
+        );
+        return undefined;
+      }
+      return {
+        value: { solutions: result.data.solutions },
+        filePath,
+      };
+    } catch (error) {
+      if (isEnoent(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async writeProblemSolutionsCheckpoint(
+    value: ProblemSolutionsStageValue,
+  ) {
+    const filePath = this.stageFile("problem_solutions");
+    if (!filePath || !this.checkpointDir) {
+      return;
+    }
+    await mkdir(this.checkpointDir, { recursive: true });
+    const payload: ProblemSolutionsCheckpoint = {
+      topic: this.options.topic,
+      solutions: value.solutions,
+    };
+    await writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: "utf8",
+    });
+    this.logger.log(
+      `[session/checkpoint] wrote 'problem_solutions' to ${filePath}`,
     );
   }
 
@@ -2463,48 +2818,128 @@ export class SessionGenerationPipeline {
       return this.caches.problems;
     }
     const checkpoint = await this.readProblemsCheckpoint();
+    let problemsPayload: ProblemsPayload;
+    let source: StageCacheEntry<ProblemsPayload>["source"] = "generated";
+    let checkpointPath: string | undefined;
     if (checkpoint) {
       this.logger.log(
         `[session/checkpoint] restored 'problems' from ${checkpoint.filePath}`,
       );
-      const entry: StageCacheEntry<ProblemsPayload> = {
-        value: checkpoint.value,
-        source: "checkpoint",
-        checkpointPath: checkpoint.filePath,
-      };
-      this.caches.problems = entry;
-      return entry;
+      problemsPayload = checkpoint.value;
+      source = "checkpoint";
+      checkpointPath = checkpoint.filePath;
+    } else {
+      const plan = await this.ensurePlan();
+      const problemIdeas = await this.ensureProblemIdeas();
+      const techniques = await this.ensureProblemTechniques();
+      const userPrompt = buildProblemsGenerateUserPrompt(
+        plan,
+        problemIdeas.markdown,
+        techniques,
+      );
+      const debugOptions = this.createDebugOptions("problems-generate");
+      this.logger.log("[session/problems] generating coding problems");
+      const rawProblems = await generateJson<ProblemsPayload>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
+          userPrompt,
+        ),
+        responseSchema: PROBLEMS_RESPONSE_SCHEMA,
+        schema: ProblemsSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      const cleaned = normaliseProblemsPayload(rawProblems);
+      problemsPayload = ProblemsSchema.parse(cleaned);
     }
-    const plan = await this.ensurePlan();
-    const problemIdeas = await this.ensureProblemIdeas();
-    const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildProblemsGenerateUserPrompt(
-      plan,
-      problemIdeas.markdown,
-      techniques,
-    );
-    const debugOptions = this.createDebugOptions("problems-generate");
-    this.logger.log("[session/problems] generating coding problems");
-    const rawProblems = await generateJson<ProblemsPayload>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
-        userPrompt,
-      ),
-      responseSchema: PROBLEMS_RESPONSE_SCHEMA,
-      schema: ProblemsSchema,
-      progress: this.logger,
-      debug: debugOptions,
-    });
-    const cleaned = normaliseProblemsPayload(rawProblems);
-    const problems = ProblemsSchema.parse(cleaned);
-    await this.writeProblemsCheckpoint(problems);
+
+    await this.writeProblemsCheckpoint(problemsPayload);
     const entry: StageCacheEntry<ProblemsPayload> = {
-      value: problems,
-      source: "generated",
+      value: problemsPayload,
+      source,
+      checkpointPath,
     };
     this.caches.problems = entry;
     return entry;
+  }
+
+  private async solveProblemsWithIndependentSolver(
+    payload: ProblemsPayload,
+  ): Promise<ProblemsPayload> {
+    const solvedProblems: CodingProblem[] = [];
+    for (const problem of payload.problems) {
+      const solution = await this.generateIndependentSolution(problem);
+      solvedProblems.push({
+        ...problem,
+        reference_solution_py: solution,
+      });
+    }
+    return { ...payload, problems: solvedProblems };
+  }
+
+  private applySolutionsToProblems(
+    problems: readonly CodingProblem[],
+    solutions: ReadonlyArray<ProblemSolutions["solutions"][number]>,
+  ): CodingProblem[] {
+    return problems.map((problem) => {
+      const solved = solutions.find((solution) => solution.id === problem.id);
+      if (!solved) {
+        return problem;
+      }
+      return { ...problem, reference_solution_py: solved.solution_py };
+    });
+  }
+
+  private async generateIndependentSolution(
+    problem: CodingProblem,
+  ): Promise<string> {
+    for (
+      let attempt = 1;
+      attempt <= MAX_PROBLEM_SOLUTION_ATTEMPTS;
+      attempt += 1
+    ) {
+      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_SOLUTION_ATTEMPTS).padStart(2, "0")}`;
+      const debugOptions = this.createDebugOptions(
+        "problem-solution",
+        `${problem.id}-${attemptLabel}`,
+      );
+      const userPrompt = buildProblemSolutionUserPrompt(problem);
+      this.logger.log(
+        `[session/problem-solution] solving ${problem.id} (${attemptLabel})`,
+      );
+      const solutionJson = await generateJson<ProblemSolution>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "Solve the problem using only the provided statement and examples. Return JSON with solution_py containing the Python code.",
+          userPrompt,
+        ),
+        responseSchema: PROBLEM_SOLUTION_RESPONSE_SCHEMA,
+        schema: ProblemSolutionSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      const candidate = extractPythonCode(solutionJson.solution_py);
+      const failures = await runSolutionAgainstTests(
+        problem,
+        candidate,
+        this.options.pythonIndexUrl,
+      );
+      if (failures.length === 0) {
+        return candidate;
+      }
+      const firstFailure = failures[0];
+      const failureSummary =
+        firstFailure && firstFailure.index >= 0
+          ? `test ${firstFailure.index + 1}: ${firstFailure.message}`
+          : firstFailure?.message ?? "unknown failure";
+      this.logger.log(
+        `[session/problem-solution] ${problem.id} ${attemptLabel} failed (${failureSummary})`,
+      );
+    }
+    throw new Error(
+      `Failed to validate independent solution for problem ${problem.id} after ${MAX_PROBLEM_SOLUTION_ATTEMPTS} attempts`,
+    );
   }
 
   async ensureProblems(): Promise<readonly CodingProblem[]> {
@@ -2562,6 +2997,71 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
+  private async ensureProblemSolutionsInternal(): Promise<
+    StageCacheEntry<ProblemSolutionsStageValue>
+  > {
+    if (this.caches.problemSolutions) {
+      return this.caches.problemSolutions;
+    }
+    const checkpoint = await this.readProblemSolutionsCheckpoint();
+    const problemsEntry = await this.ensureProblemsInternal();
+    const problemsPayload = problemsEntry.value;
+    if (checkpoint) {
+      this.logger.log(
+        `[session/checkpoint] restored 'problem_solutions' from ${checkpoint.filePath}`,
+      );
+      const mergedProblems = this.applySolutionsToProblems(
+        problemsPayload.problems,
+        checkpoint.value.solutions,
+      );
+      const mergedPayload: ProblemsPayload = { problems: mergedProblems };
+      await this.writeProblemsCheckpoint(mergedPayload);
+      const mergedProblemsEntry: StageCacheEntry<ProblemsPayload> = {
+        value: mergedPayload,
+        source: problemsEntry.source,
+        checkpointPath: problemsEntry.checkpointPath,
+      };
+      this.caches.problems = mergedProblemsEntry;
+      const entry: StageCacheEntry<ProblemSolutionsStageValue> = {
+        value: checkpoint.value,
+        source: "checkpoint",
+        checkpointPath: checkpoint.filePath,
+      };
+      this.caches.problemSolutions = entry;
+      return entry;
+    }
+
+    const solvedPayload = await this.solveProblemsWithIndependentSolver(
+      problemsPayload,
+    );
+    const solutions: ProblemSolutions["solutions"] = solvedPayload.problems.map(
+      (problem) => ({
+        id: problem.id,
+        solution_py: problem.reference_solution_py,
+      }),
+    );
+    const value: ProblemSolutionsStageValue = { solutions };
+    await this.writeProblemSolutionsCheckpoint(value);
+    await this.writeProblemsCheckpoint(solvedPayload);
+    const updatedProblemsEntry: StageCacheEntry<ProblemsPayload> = {
+      value: solvedPayload,
+      source: problemsEntry.source,
+      checkpointPath: problemsEntry.checkpointPath,
+    };
+    this.caches.problems = updatedProblemsEntry;
+    const entry: StageCacheEntry<ProblemSolutionsStageValue> = {
+      value,
+      source: "generated",
+    };
+    this.caches.problemSolutions = entry;
+    return entry;
+  }
+
+  async ensureProblemSolutions(): Promise<ProblemSolutionsStageValue> {
+    const entry = await this.ensureProblemSolutionsInternal();
+    return entry.value;
+  }
+
   async invalidateStagesAfter(
     stage: SessionGenerationStageName,
   ): Promise<void> {
@@ -2578,6 +3078,49 @@ export class SessionGenerationPipeline {
   }
 }
 
+async function persistProblemSolutionsToFirestore(options: {
+  userId: string;
+  sessionId: string;
+  problems: readonly CodingProblem[];
+  logger: JobProgressReporter;
+}): Promise<void> {
+  const { userId, sessionId, problems, logger } = options;
+  try {
+    const firestore = getFirebaseAdminFirestore();
+    const batch = firestore.batch();
+    const sessionDoc = firestore
+      .collection("spark")
+      .doc(userId)
+      .collection("sessions")
+      .doc(sessionId);
+
+    for (const problem of problems) {
+      const docRef = sessionDoc.collection("solutions").doc(problem.id);
+      batch.set(docRef, {
+        problemId: problem.id,
+        language: "python",
+        solution_py: problem.reference_solution_py,
+        tests_checked: problem.tests.public.length,
+        source: "independent_solver",
+        updatedAt: Timestamp.now(),
+      });
+    }
+
+    await batch.commit();
+    logger.log(
+      `[session/problem-solution] stored ${problems.length} solutions for session '${sessionId}'`,
+    );
+  } catch (error) {
+    const message = errorAsString(error);
+    logger.log(
+      `[session/problem-solution] failed to store solutions in Firestore (${message})`,
+    );
+    throw new Error(
+      `Failed to store problem solutions in Firestore: ${message}`,
+    );
+  }
+}
+
 type SessionGenerationQuestionCounts =
   SessionGenerationPipelineOptions["questionCounts"];
 
@@ -2588,6 +3131,7 @@ export type GenerateSessionOptions = {
   debugRootDir?: string;
   progress?: JobProgressReporter;
   questionCounts?: SessionGenerationQuestionCounts;
+  pythonIndexUrl?: string;
   userId: string;
   sessionId?: string;
   storyPlanItemId: string;
@@ -2610,6 +3154,7 @@ export type GenerateSessionResult = {
 export async function generateSession(
   options: GenerateSessionOptions,
 ): Promise<GenerateSessionResult> {
+  const logger = useProgress(options.progress);
   const includeStory = options.includeStory ?? true;
   const pipeline = new SessionGenerationPipeline({
     topic: options.topic,
@@ -2617,6 +3162,7 @@ export async function generateSession(
     checkpointDir: options.checkpointDir,
     debugRootDir: options.debugRootDir,
     questionCounts: options.questionCounts,
+    pythonIndexUrl: options.pythonIndexUrl,
     progress: options.progress,
   });
 
@@ -2664,6 +3210,9 @@ export async function generateSession(
     throw new Error("Problem generation failed");
   }
 
+  await pipeline.ensureProblemSolutions();
+  problems = await pipeline.ensureProblems();
+
   let quizzes: readonly SessionQuiz[] | undefined;
   let quizzesGrade: QuizzesGrade | undefined;
   for (let attempt = 1; attempt <= 1 + MAX_QUIZ_GRADE_RETRIES; attempt += 1) {
@@ -2686,6 +3235,13 @@ export async function generateSession(
 
   const slug = slugifyTopic(options.topic);
   const sessionId = options.sessionId ?? slug;
+
+  await persistProblemSolutionsToFirestore({
+    userId: options.userId,
+    sessionId,
+    problems,
+    logger,
+  });
 
   const techniques = await pipeline.ensureProblemTechniques();
 
