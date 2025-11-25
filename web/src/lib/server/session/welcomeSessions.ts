@@ -118,6 +118,7 @@ async function fetchTemplateSnapshot(sessionId: string) {
 		tagline: raw.tagline,
 		emoji: raw.emoji,
 		topic: raw.topic,
+		summary: raw.summary,
 		key: raw.key
 	});
 	return { docRef, parsed };
@@ -341,6 +342,7 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				tagline: raw.tagline,
 				emoji: raw.emoji,
 				topic: raw.topic,
+				summary: raw.summary,
 				key: raw.key
 			});
 

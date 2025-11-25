@@ -119,21 +119,38 @@ export const SessionSchema = z
             .filter((topic) => topic.length > 0),
         })) ?? [];
 
-      return {
+      const result = {
         id,
         title: resolvedTitle,
-        summary,
-        tagline,
-        emoji,
         createdAt,
         plan: planItems,
         status: resolvedStatus,
-        topics: sessionTopics,
-        sourceSessionId,
-        sourceProposalId,
         nextLessonProposals: proposals,
-        nextLessonProposalsGeneratedAt,
       };
+
+      if (summary !== undefined) {
+        result.summary = summary;
+      }
+      if (tagline !== undefined) {
+        result.tagline = tagline;
+      }
+      if (emoji !== undefined) {
+        result.emoji = emoji;
+      }
+      if (sessionTopics !== undefined) {
+        result.topics = sessionTopics;
+      }
+      if (sourceSessionId !== undefined) {
+        result.sourceSessionId = sourceSessionId;
+      }
+      if (sourceProposalId !== undefined) {
+        result.sourceProposalId = sourceProposalId;
+      }
+      if (nextLessonProposalsGeneratedAt !== undefined) {
+        result.nextLessonProposalsGeneratedAt = nextLessonProposalsGeneratedAt;
+      }
+
+      return result;
     },
   );
 
