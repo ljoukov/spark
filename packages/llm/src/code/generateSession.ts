@@ -1,7 +1,10 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 
+import { Timestamp } from "firebase-admin/firestore";
 import { Type, type Schema } from "@google/genai";
+import { loadPyodide } from "pyodide";
 import { z } from "zod";
 
 import {
@@ -12,6 +15,7 @@ import {
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
+import { getFirebaseAdminFirestore } from "../utils/firebaseAdmin";
 import { generateStory } from "./generateStory";
 import type { GenerateStoryResult } from "./generateStory";
 
@@ -629,6 +633,9 @@ function buildQuizIdeasUserPrompt(
     `Seed: ${seed ?? "none"}`,
     "",
     "Provide Markdown describing intro and wrap-up quiz coverage that fully teaches the techniques required for the coding problems before students attempt them.",
+    "Learners will see quizzes immediately after the story and BEFORE reading the coding problems, so the quizzes must stand alone without assuming the problem text or solution is known.",
+    "Plan for a thorough warm-up with 15 purposeful questions and a focused review with 10 questions.",
+    "Avoid quoting or previewing the reference solutions; keep the focus on concepts, patterns, and how to reason through the problems.",
     "Include theory primers when a technique or concept is not already covered by assumptions.",
     "List question stems with types and map them to promised skills AND technique ids.",
     "Call out which techniques are introduced in theory blocks vs. practiced in questions (especially in the intro quiz).",
@@ -654,32 +661,33 @@ function buildQuizzesGenerateUserPrompt(
   techniques: readonly ProblemTechnique[],
   questionCounts?: SessionGenerationPipelineOptions["questionCounts"],
 ): string {
-  const introCount = questionCounts?.introQuiz;
-  const wrapCount = questionCounts?.wrapUpQuiz;
+  const introCount =
+    typeof questionCounts?.introQuiz === "number" &&
+    questionCounts.introQuiz > 0
+      ? questionCounts.introQuiz
+      : 15;
+  const wrapCount =
+    typeof questionCounts?.wrapUpQuiz === "number" &&
+    questionCounts.wrapUpQuiz > 0
+      ? questionCounts.wrapUpQuiz
+      : 10;
   const constraints: string[] = [
     'Return a JSON object with a single key "quizzes" whose value is an array of exactly two quiz definitions.',
     'Each quiz definition must include "quiz_id" (either "intro_quiz" or "wrap_up_quiz"), optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
     'Every question object must follow the schema: {"id","type","prompt","explanation","tags","covers_techniques", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
     'If a question has only one correct answer, use "mcq" (not "multi"). For "multi", return at least two correct answers in the "correct" array.',
     "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
-    "Each quiz must include exactly 4 questions unless overrides provided.",
+    `Intro quiz (warm-up) must have exactly ${introCount} questions; pace them from quick comprehension checks to slightly richer applications so the flow stays engaging, not repetitive.`,
+    `Wrap-up quiz must have exactly ${wrapCount} questions to reinforce principles and transfer, not to memorize solutions.`,
     "Intro quiz must teach every technique required for p1/p2 before coding: include at least one intro question per technique and set covers_techniques to the matching ids.",
+    "Quizzes come right after the story and before learners read the coding problems; never assume the problem text is known or refer to \"in problem 1/2\".",
+    "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution.",
     "covers_techniques must use ids from the provided Problem Techniques JSON.",
     "If a technique or concept is not in assumptions, add a concise theory block before its first use.",
     "Tags must include promised skills, concept tags, and technique-aligned tags.",
     "Provide concise explanations that teach the technique being covered.",
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
-  if (typeof introCount === "number" && introCount > 0) {
-    constraints.push(
-      `Override: intro_quiz must have exactly ${introCount} questions.`,
-    );
-  }
-  if (typeof wrapCount === "number" && wrapCount > 0) {
-    constraints.push(
-      `Override: wrap_up_quiz must have exactly ${wrapCount} questions.`,
-    );
-  }
   return [
     constraints.join("\n"),
     "",
@@ -701,12 +709,26 @@ function buildQuizzesGradeUserPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
   techniques: readonly ProblemTechnique[],
+  questionCounts?: SessionGenerationPipelineOptions["questionCounts"],
 ): string {
+  const introCount =
+    typeof questionCounts?.introQuiz === "number" &&
+    questionCounts.introQuiz > 0
+      ? questionCounts.introQuiz
+      : 15;
+  const wrapCount =
+    typeof questionCounts?.wrapUpQuiz === "number" &&
+    questionCounts.wrapUpQuiz > 0
+      ? questionCounts.wrapUpQuiz
+      : 10;
   return [
+    `Fail if intro_quiz does not have exactly ${introCount} questions or wrap_up_quiz does not have exactly ${wrapCount}.`,
     "Ensure all required skills covered.",
     "Ensure theory blocks present when needed for new concepts.",
     "Ensure answers unambiguous and explanations correct.",
     "Ensure every technique required for p1/p2 appears in the intro quiz with at least one question covering it (covers_techniques).",
+    "Ensure quizzes stand alone even if the learner has not read the coding problems; avoid referencing the problem text or quoting reference solutions (code_reading snippets must be fresh teaching examples, not lifted from solutions).",
+    "Flag any question that tests memorization of a provided solution rather than understanding of the underlying principle.",
     "Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]} JSON only.",
     "",
     "Plan JSON:",
@@ -730,6 +752,7 @@ function buildProblemIdeasUserPrompt(
     `Seed: ${seed ?? "none"}`,
     "",
     "Generate Markdown summaries for two easy coding problems aligned with promised skills, story, and the listed techniques.",
+    "The two ideas must be clearly different: the second problem should introduce a distinct goal or wrinkle, not reuse the first problem's framing or be a trivial re-skin.",
     "Include Title, One-line Pitch, Story alignment note, Required Skills, Any New Concept, Example I/O.",
     "Avoid advanced structures unless declared; stay within the techniques provided for each problem id.",
     "",
@@ -752,9 +775,10 @@ function buildProblemsGenerateUserPrompt(
     "Represent inputs and outputs as strings (escape newlines with \\n); do not return nested objects for these fields.",
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
     "Include story_callback, constraints, and at least two examples per problem.",
+    "Keep each problem's statement, hints, examples, and tests unique—never copy or lightly edit content between p1 and p2.",
     "Provide 3-5 public tests per problem and private_count between 3 and 8.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests".',
-    'Problem "p1" must implement the first idea from the Markdown above (connection check). Problem "p2" must implement the second idea (shortest path/path reconstruction). Do not skip the connection-check problem.',
+    'Problem "p1" must implement the first idea from the Markdown above. Problem "p2" must implement the second idea and must NOT repeat or lightly paraphrase the first problem—use a different outcome, inputs/outputs, and function signature so the learner solves two clearly distinct tasks.',
     "Ensure reference_solution_py uses return type hints consistent with the declared function signature.",
     "Solutions must be simple Python 3 that rely only on the listed techniques (do not introduce new advanced techniques).",
     "Do not wrap the JSON in Markdown fences or add commentary.",
@@ -777,6 +801,7 @@ function buildProblemsGradeUserPrompt(
 ): string {
   return [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
+    "Fail if p1 and p2 are not meaningfully different (no reused statements, tests, or function goals).",
     "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
     "Output {pass:boolean, issues:string[], too_hard_reasons:string[], misaligned_skills:string[]} JSON only.",
     "",
@@ -2325,7 +2350,12 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const quizzes = await this.ensureQuizzes();
     const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildQuizzesGradeUserPrompt(plan, quizzes, techniques);
+    const userPrompt = buildQuizzesGradeUserPrompt(
+      plan,
+      quizzes,
+      techniques,
+      this.options.questionCounts,
+    );
     const debugOptions = this.createDebugOptions("quizzes-grade");
     this.logger.log("[session/quizzes-grade] grading quizzes");
     const grade = await generateJson<QuizzesGrade>({
