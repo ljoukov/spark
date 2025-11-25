@@ -53,6 +53,7 @@ const StageEnum = z.enum([
   "problem_ideas",
   "problems",
   "problems_grade",
+  "problem_solutions",
   "quiz_ideas",
   "quizzes",
   "quizzes_grade",
@@ -99,6 +100,7 @@ type StageContext = {
   quizzesGrade?: QuizzesGrade;
   problems?: readonly CodingProblem[];
   problemsGrade?: ProblemsGrade;
+  problemSolutions?: ReadonlyArray<{ id: string; solution_py: string }>;
   story?: GenerateStoryResult;
 };
 
@@ -1220,6 +1222,20 @@ async function main(): Promise<void> {
             if (!lastGrade?.pass) {
               throw new Error("Problems grade did not pass");
             }
+            break;
+          }
+          case "problem_solutions": {
+            const solutions = await pipeline.ensureProblemSolutions();
+            stageContext.problemSolutions = solutions.solutions;
+            // Refresh problems so downstream stages see validated reference solutions.
+            const refreshedProblems = await pipeline.ensureProblems();
+            stageContext.problems = refreshedProblems;
+            progress.log(
+              `[welcome/${targetSessionId}] problem solutions validated (${solutions.solutions.length} problems)`,
+            );
+            await appendStageLog(baseDir, stage, [
+              `validated=${solutions.solutions.length}`,
+            ]);
             break;
           }
           case "story": {
