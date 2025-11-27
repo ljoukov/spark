@@ -329,9 +329,10 @@ export type LlmTextCallOptions = LlmCallBaseOptions & {
   readonly tools?: readonly LlmToolConfig[];
 };
 
+// Gemini does not support tool calls when responseSchema/JSON mode is used, so tools are excluded here.
 export type LlmJsonCallOptions<T> = Omit<
   LlmTextCallOptions,
-  "responseSchema"
+  "responseSchema" | "tools"
 > & {
   readonly schema: z.ZodSchema<T>;
   readonly responseSchema: Schema;
