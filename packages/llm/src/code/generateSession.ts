@@ -2671,6 +2671,38 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
+  private validateQuizCounts(quizzes: QuizzesPayload): void {
+    const introCount =
+      typeof this.options.questionCounts?.introQuiz === "number" &&
+      this.options.questionCounts.introQuiz > 0
+        ? this.options.questionCounts.introQuiz
+        : 15;
+    const wrapCount =
+      typeof this.options.questionCounts?.wrapUpQuiz === "number" &&
+      this.options.questionCounts.wrapUpQuiz > 0
+        ? this.options.questionCounts.wrapUpQuiz
+        : 10;
+    let introQuestions = 0;
+    let wrapQuestions = 0;
+    for (const quiz of quizzes.quizzes) {
+      if (quiz.quiz_id === "intro_quiz") {
+        introQuestions = quiz.questions.length;
+      } else if (quiz.quiz_id === "wrap_up_quiz") {
+        wrapQuestions = quiz.questions.length;
+      }
+    }
+    if (introQuestions !== introCount) {
+      throw new Error(
+        `intro_quiz expected ${introCount} questions but found ${introQuestions}`,
+      );
+    }
+    if (wrapQuestions !== wrapCount) {
+      throw new Error(
+        `wrap_up_quiz expected ${wrapCount} questions but found ${wrapQuestions}`,
+      );
+    }
+  }
+
   private async ensureQuizzesInternal(): Promise<
     StageCacheEntry<QuizzesPayload>
   > {
@@ -2682,6 +2714,7 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/checkpoint] restored 'quizzes' from ${checkpoint.filePath}`,
       );
+      this.validateQuizCounts(checkpoint.value);
       const entry: StageCacheEntry<QuizzesPayload> = {
         value: checkpoint.value,
         source: "checkpoint",
@@ -2714,6 +2747,7 @@ export class SessionGenerationPipeline {
       progress: this.logger,
       debug: debugOptions,
     });
+    this.validateQuizCounts(quizzes);
     await this.writeQuizzesCheckpoint(quizzes);
     const entry: StageCacheEntry<QuizzesPayload> = {
       value: quizzes,
