@@ -794,6 +794,7 @@ function buildProblemIdeasUserPrompt(
     `Seed: ${seed ?? "none"}`,
     "",
     "Generate Markdown summaries for two easy coding problems aligned with promised skills, story, and the listed techniques.",
+    "Use the code execution tool to sanity check any example outputs or recurrence behavior while drafting.",
     "The two ideas must be clearly different: the second problem should introduce a distinct goal, data shape, or algorithmic pattern (new recurrence/state, new constraint, or new objective), not reuse the first problem's framing or be a trivial re-skin.",
     "Ensure problem 2 requires at least one additional required_skill/technique beyond problem 1.",
     "Explicitly note any preconditions/limitations or common pitfalls (e.g., heuristic tests that are one-way, bases that must be coprime, cases that break a recurrence) so they can be enforced in statements and quizzes.",
@@ -824,7 +825,7 @@ function buildProblemsGenerateUserPrompt(
     "Problem p2 must add at least one new technique beyond p1 and use a different algorithmic pattern, recurrence, or data shape (not just larger inputs or the same recurrence in disguise).",
     "Avoid non-deterministic reference behavior. If randomness is needed, include a seed/base-list parameter or otherwise make sampling deterministic so reference_solution_py and tests are reproducible.",
     "Provide 3-5 public tests per problem and private_count between 3 and 8.",
-    "Use the code execution tool to run your proposed reference_solution_py; generate and verify all examples and public tests from that execution, and revise the statement/tests until the code passes them.",
+    "Generate and verify all examples and public tests against your reference_solution_py; revise the statement/tests until the code passes them.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests".',
     'Problem "p1" must implement the first idea from the Markdown above. Problem "p2" must implement the second idea and must NOT repeat or lightly paraphrase the first problem—use a different outcome, inputs/outputs, and function signature so the learner solves two clearly distinct tasks.',
     "If a theorem or heuristic is only one-directional (e.g., Fermat test), do not claim it proves the property. State preconditions (such as base coprime to modulus) and describe the output accordingly (e.g., passes screen vs. guaranteed). Mention known false-positive cases in constraints or hints without changing the required solution difficulty.",
@@ -2859,6 +2860,7 @@ export class SessionGenerationPipeline {
             "Generate two easy ideas aligned with promised skills, story, and the listed techniques.",
             userPrompt,
           ),
+          tools: [{ type: "code-execution" }],
           progress: this.logger,
           debug: debugOptions,
         });
@@ -2926,7 +2928,6 @@ export class SessionGenerationPipeline {
         ),
         responseSchema: PROBLEMS_RESPONSE_SCHEMA,
         schema: ProblemsSchema,
-        tools: [{ type: "code-execution" }],
         progress: this.logger,
         debug: debugOptions,
       });
