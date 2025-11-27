@@ -9,6 +9,7 @@ export * from "./code/generateNarration";
 export * from "./code/generateStory";
 export * from "./code/generateSession";
 export * from "./code/problemValidation";
+export * from "./code/welcomeTemplates";
 export * from "./utils/env";
 export * from "./utils/testUser";
 export * from "./utils/firebaseAdmin";
