@@ -3,11 +3,16 @@ import {
 	TaskSchema,
 	generateSparkPdfQuizDefinition,
 	getFirebaseAdminFirestore,
+	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
 	getFirebaseStorageBucketName,
 	generateSession
 } from '@spark/llm';
-import { SparkUploadDocumentSchema, SparkUploadQuizDocumentSchema, type Session } from '@spark/schemas';
+import {
+	SparkUploadDocumentSchema,
+	SparkUploadQuizDocumentSchema,
+	type Session
+} from '@spark/schemas';
 import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
 
 function clampWords(text: string, maxWords: number): string {
@@ -129,13 +134,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			const sessionDoc: Session = {
 				id: sessionId,
 				title: title ?? result.plan.topic,
-				summary: result.story?.summary ?? result.plan.topic,
+				summary: result.plan.topic,
 				tagline: tagline ?? result.plan.topic,
 				emoji,
 				topics,
 				status: 'ready',
 				createdAt: new Date(),
 				plan: planItems,
+				nextLessonProposals: [],
 				sourceSessionId,
 				sourceProposalId: proposalId
 			};
@@ -148,188 +154,188 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ status: 'completed' }, { status: 200 });
 	}
 
-	if (task.type !== 'generateQuiz') {
-		console.warn(`[internal task] unsupported task type: ${task.type}`);
-		return json({ error: 'unsupported_task' }, { status: 400 });
-	}
+	if (task.type === 'generateQuiz') {
+		const { userId, uploadId, quizId } = task.generateQuiz;
+		console.log(
+			`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`
+		);
 
-	const { userId, uploadId, quizId } = task.generateQuiz;
-	console.log(
-		`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`
-	);
+		const firestore = getFirebaseAdminFirestore();
+		const storage = getFirebaseAdminStorage();
+		const { FieldValue } = getFirebaseAdminFirestoreModule();
+		const uploadDocRef = firestore
+			.collection('spark')
+			.doc(userId)
+			.collection('uploads')
+			.doc(uploadId);
+		const quizDocRef = uploadDocRef.collection('quiz').doc(quizId);
 
-	const firestore = getFirebaseAdminFirestore();
-	const storage = getFirebaseAdminStorage();
-	const { FieldValue } = getFirebaseAdminFirestoreModule();
-	const uploadDocRef = firestore
-		.collection('spark')
-		.doc(userId)
-		.collection('uploads')
-		.doc(uploadId);
-	const quizDocRef = uploadDocRef.collection('quiz').doc(quizId);
-
-	const fail = async ({ reason, error }: FailureContext) => {
-		console.error('[internal task] quiz generation failed', {
-			reason,
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
-		const timestamp = FieldValue.serverTimestamp();
-		try {
-			await firestore.runTransaction(async (tx) => {
-				tx.set(
-					quizDocRef,
-					{
-						status: 'failed',
-						failureReason: reason,
-						updatedAt: timestamp
-					},
-					{ merge: true }
-				);
-				tx.set(
-					uploadDocRef,
-					{
-						status: 'failed',
-						quizStatus: 'failed',
-						latestError: reason,
-						lastUpdatedAt: timestamp
-					},
-					{ merge: true }
-				);
+		const fail = async ({ reason, error }: FailureContext) => {
+			console.error('[internal task] quiz generation failed', {
+				reason,
+				error,
+				userId,
+				uploadId,
+				quizId
 			});
-		} catch (updateError) {
-			console.error('[internal task] failed to persist failure state', {
-				updateError,
+			const timestamp = FieldValue.serverTimestamp();
+			try {
+				await firestore.runTransaction(async (tx) => {
+					tx.set(
+						quizDocRef,
+						{
+							status: 'failed',
+							failureReason: reason,
+							updatedAt: timestamp
+						},
+						{ merge: true }
+					);
+					tx.set(
+						uploadDocRef,
+						{
+							status: 'failed',
+							quizStatus: 'failed',
+							latestError: reason,
+							lastUpdatedAt: timestamp
+						},
+						{ merge: true }
+					);
+				});
+			} catch (updateError) {
+				console.error('[internal task] failed to persist failure state', {
+					updateError,
+					userId,
+					uploadId,
+					quizId
+				});
+			}
+			return json({ status: 'failed', reason }, { status: 500 });
+		};
+
+		const uploadSnap = await uploadDocRef.get();
+		if (!uploadSnap.exists) {
+			return await fail({ reason: 'upload_not_found', userId, uploadId, quizId });
+		}
+
+		let uploadDoc;
+		try {
+			uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data());
+		} catch (error) {
+			return await fail({
+				reason: 'invalid_upload_document',
+				error,
 				userId,
 				uploadId,
 				quizId
 			});
 		}
-		return json({ status: 'failed', reason }, { status: 500 });
-	};
 
-	const uploadSnap = await uploadDocRef.get();
-	if (!uploadSnap.exists) {
-		return await fail({ reason: 'upload_not_found', userId, uploadId, quizId });
-	}
-
-	let uploadDoc;
-	try {
-		uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data());
-	} catch (error) {
-		return await fail({
-			reason: 'invalid_upload_document',
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
-	}
-
-	const quizSnap = await quizDocRef.get();
-	if (!quizSnap.exists) {
-		return await fail({ reason: 'quiz_doc_not_found', userId, uploadId, quizId });
-	}
-
-	let quizDoc;
-	try {
-		quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data());
-	} catch (error) {
-		return await fail({
-			reason: 'invalid_quiz_document',
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
-	}
-
-	const generatingTimestamp = FieldValue.serverTimestamp();
-	try {
-		await firestore.runTransaction(async (tx) => {
-			tx.update(quizDocRef, {
-				status: 'generating',
-				updatedAt: generatingTimestamp,
-				failureReason: FieldValue.delete()
-			});
-			tx.update(uploadDocRef, {
-				status: 'processing',
-				quizStatus: 'generating',
-				lastUpdatedAt: generatingTimestamp,
-				activeQuizId: quizId,
-				quizQuestionCount: quizDoc.requestedQuestionCount,
-				latestError: FieldValue.delete()
-			});
-		});
-	} catch (error) {
-		return await fail({
-			reason: 'status_update_failed',
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
-	}
-
-	let fileBuffer: Buffer;
-	try {
-		const bucket = storage.bucket(getFirebaseStorageBucketName());
-		const fileRef = bucket.file(uploadDoc.storagePath);
-		[fileBuffer] = await fileRef.download();
-		if (!fileBuffer || fileBuffer.length === 0) {
-			throw new Error('downloaded file is empty');
+		const quizSnap = await quizDocRef.get();
+		if (!quizSnap.exists) {
+			return await fail({ reason: 'quiz_doc_not_found', userId, uploadId, quizId });
 		}
-	} catch (error) {
-		return await fail({
-			reason: 'storage_download_failed',
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
+
+		let quizDoc;
+		try {
+			quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data());
+		} catch (error) {
+			return await fail({
+				reason: 'invalid_quiz_document',
+				error,
+				userId,
+				uploadId,
+				quizId
+			});
+		}
+
+		const generatingTimestamp = FieldValue.serverTimestamp();
+		try {
+			await firestore.runTransaction(async (tx) => {
+				tx.update(quizDocRef, {
+					status: 'generating',
+					updatedAt: generatingTimestamp,
+					failureReason: FieldValue.delete()
+				});
+				tx.update(uploadDocRef, {
+					status: 'processing',
+					quizStatus: 'generating',
+					lastUpdatedAt: generatingTimestamp,
+					activeQuizId: quizId,
+					quizQuestionCount: quizDoc.requestedQuestionCount,
+					latestError: FieldValue.delete()
+				});
+			});
+		} catch (error) {
+			return await fail({
+				reason: 'status_update_failed',
+				error,
+				userId,
+				uploadId,
+				quizId
+			});
+		}
+
+		let fileBuffer: Buffer;
+		try {
+			const bucket = storage.bucket(getFirebaseStorageBucketName());
+			const fileRef = bucket.file(uploadDoc.storagePath);
+			[fileBuffer] = await fileRef.download();
+			if (!fileBuffer || fileBuffer.length === 0) {
+				throw new Error('downloaded file is empty');
+			}
+		} catch (error) {
+			return await fail({
+				reason: 'storage_download_failed',
+				error,
+				userId,
+				uploadId,
+				quizId
+			});
+		}
+
+		try {
+			const definition = await generateSparkPdfQuizDefinition({
+				quizId,
+				sources: [
+					{
+						filename: uploadDoc.filename,
+						mimeType: uploadDoc.contentType,
+						data: fileBuffer
+					}
+				],
+				questionCount: quizDoc.requestedQuestionCount
+			});
+
+			const completedTimestamp = FieldValue.serverTimestamp();
+			await firestore.runTransaction(async (tx) => {
+				tx.update(quizDocRef, {
+					status: 'ready',
+					definition,
+					updatedAt: completedTimestamp,
+					failureReason: FieldValue.delete()
+				});
+				tx.update(uploadDocRef, {
+					status: 'ready',
+					quizStatus: 'ready',
+					lastUpdatedAt: completedTimestamp,
+					activeQuizId: quizId,
+					quizQuestionCount: definition.questions.length,
+					latestError: FieldValue.delete()
+				});
+			});
+		} catch (error) {
+			return await fail({
+				reason: 'quiz_generation_failed',
+				error,
+				userId,
+				uploadId,
+				quizId
+			});
+		}
+
+		return json({ status: 'completed' }, { status: 200 });
 	}
 
-	try {
-		const definition = await generateSparkPdfQuizDefinition({
-			quizId,
-			sources: [
-				{
-					filename: uploadDoc.filename,
-					mimeType: uploadDoc.contentType,
-					data: fileBuffer
-				}
-			],
-			questionCount: quizDoc.requestedQuestionCount
-		});
-
-		const completedTimestamp = FieldValue.serverTimestamp();
-		await firestore.runTransaction(async (tx) => {
-			tx.update(quizDocRef, {
-				status: 'ready',
-				definition,
-				updatedAt: completedTimestamp,
-				failureReason: FieldValue.delete()
-			});
-			tx.update(uploadDocRef, {
-				status: 'ready',
-				quizStatus: 'ready',
-				lastUpdatedAt: completedTimestamp,
-				activeQuizId: quizId,
-				quizQuestionCount: definition.questions.length,
-				latestError: FieldValue.delete()
-			});
-		});
-	} catch (error) {
-		return await fail({
-			reason: 'quiz_generation_failed',
-			error,
-			userId,
-			uploadId,
-			quizId
-		});
-	}
-
-	return json({ status: 'completed' }, { status: 200 });
+	console.warn('[internal task] unsupported task type');
+	return json({ error: 'unsupported_task' }, { status: 400 });
 };
