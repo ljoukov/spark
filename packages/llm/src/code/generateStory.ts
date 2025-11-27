@@ -1463,6 +1463,7 @@ ${storyBrief}
 - Avoid exclusivity language. Swap "first" or "sole inventor" claims for hedged phrasing like "credited among early contributors", "independently developed", or "... and others".
 - Limit the narrative to one named figure or institution. When others matter, acknowledge them with neutral hedges instead of listing names.
 - The required concept name must appear in the title and again within the first four sentences of the prose, verbatim. Keep the title aligned with the same entity/concept described in the story.
+- Spell out lesser-known acronyms on first mention (e.g., "Jet Propulsion Laboratory (JPL)"); leave widely known ones like NASA as-is.
 - Introduce the concept "${topic}" within the first four sentences. Include a naming note only when the qualifier is well established and high-confidence.
 - Deliver the insight hint in exactly one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
 - Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
@@ -1594,6 +1595,7 @@ ${feedbackSection}
 - Remove exclusivity claims. The story should never assert "first" or "sole" originators unless the capsule already does so explicitly.
 - Limit the narrative to one named figure or institution; other contributors should appear only as hedged acknowledgements.
 - Keep modern references out of the body. The final paragraph must use one approved template (below) and promise learners they will "learn the details" and "master it in programming challenges" next.
+- Expand lesser-known acronyms on first use (e.g., "Jet Propulsion Laboratory (JPL)"); leave well-known ones like NASA unchanged.
 - Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
 - Run web searches when historical details are uncertain, but fix the prose rather than adding citations. Hedge when evidence is ambiguous.
 - Tone check: at most one or two vivid adjectives across the entire story; vocabulary stays at or below CEFR B2, with any specialised term defined immediately.
