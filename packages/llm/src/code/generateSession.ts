@@ -48,6 +48,22 @@ function useProgress(progress: SessionProgress): JobProgressReporter {
         progress.finishModelCall(handle);
       }
     },
+    startStage(stageName: string) {
+      if (progress && progress.startStage) {
+        return progress.startStage(stageName);
+      }
+      return Symbol("stage");
+    },
+    finishStage(handle: symbol) {
+      if (progress && progress.finishStage) {
+        progress.finishStage(handle);
+      }
+    },
+    setActiveStages(stages: Iterable<string>) {
+      if (progress && progress.setActiveStages) {
+        progress.setActiveStages(stages);
+      }
+    },
   };
 }
 
@@ -716,7 +732,7 @@ function buildQuizzesGenerateUserPrompt(
     `Intro quiz (warm-up) must have exactly ${introCount} questions; pace them from quick comprehension checks to slightly richer applications so the flow stays engaging, not repetitive.`,
     `Wrap-up quiz must have exactly ${wrapCount} questions to reinforce principles and transfer, not to memorize solutions.`,
     "Intro quiz must teach every technique required for p1/p2 before coding: include at least one intro question per technique and set covers_techniques to the matching ids.",
-    "Quizzes come right after the story and before learners read the coding problems; never assume the problem text is known or refer to \"in problem 1/2\".",
+    'Quizzes come right after the story and before learners read the coding problems; never assume the problem text is known or refer to "in problem 1/2".',
     "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution.",
     "covers_techniques must use ids from the provided Problem Techniques JSON.",
     "If a technique or concept is not in assumptions, add a concise theory block before its first use.",
@@ -1556,8 +1572,7 @@ function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
 
 function extractPythonCode(text: string): string {
   const fenced =
-    text.match(/```python\s*([\s\S]*?)```/i) ??
-    text.match(/```([\s\S]*?)```/);
+    text.match(/```python\s*([\s\S]*?)```/i) ?? text.match(/```([\s\S]*?)```/);
   if (fenced && fenced[1]) {
     return fenced[1].trim();
   }
@@ -1587,7 +1602,7 @@ async function runSolutionAgainstTests(
     `solution_source = ${JSON.stringify(solutionSource)}`,
     "failures: List[Dict[str, object]] = []",
     "global_env: Dict[str, object] = {}",
-    "exec(\"from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict\\nimport math\\nimport itertools\\nimport collections\\nimport heapq\", global_env)",
+    'exec("from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict\\nimport math\\nimport itertools\\nimport collections\\nimport heapq", global_env)',
     "try:",
     "    exec(solution_source, global_env)",
     "except Exception as exc:",
@@ -1669,10 +1684,17 @@ async function runSolutionAgainstTests(
   ].join("\n");
 
   try {
-    const result = await python.runPythonAsync(script);
+    const result: unknown = await python.runPythonAsync(script);
     if (typeof result === "string") {
-      const parsed = JSON.parse(result) as { failures?: SolutionTestFailure[] };
-      return parsed.failures ?? [];
+      const parsed: unknown = JSON.parse(result);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "failures" in parsed &&
+        Array.isArray((parsed as { failures?: unknown }).failures)
+      ) {
+        return (parsed as { failures?: SolutionTestFailure[] }).failures ?? [];
+      }
     }
     return [];
   } catch (error) {
@@ -1703,6 +1725,18 @@ export class SessionGenerationPipeline {
 
   private get checkpointDir(): string | undefined {
     return this.options.checkpointDir;
+  }
+
+  private async withStage<T>(
+    stage: SessionGenerationStageName,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const handle = this.logger.startStage(stage);
+    try {
+      return await action();
+    } finally {
+      this.logger.finishStage(handle);
+    }
   }
 
   private stageFile(stage: SessionGenerationStageName): string | undefined {
@@ -2370,51 +2404,53 @@ export class SessionGenerationPipeline {
       return entry;
     }
 
-    for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt += 1) {
-      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PLAN_ATTEMPTS).padStart(2, "0")}`;
-      try {
-        const debugOptions = this.createDebugOptions(
-          "plan-ideas",
-          attemptLabel,
-        );
-        const userPrompt = buildPlanIdeasUserPrompt(
-          this.options.topic,
-          this.options.seed,
-        );
-        this.logger.log(
-          `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
-        );
-        const contents = buildSingleUserPrompt(
-          "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
-          userPrompt,
-        );
-        const markdown = await generateText({
-          modelId: TEXT_MODEL_ID,
-          contents,
-          progress: this.logger,
-          debug: debugOptions,
-        });
-        const value: PlanIdeasStageValue = { markdown };
-        await this.writePlanIdeasCheckpoint(value);
-        const entry: StageCacheEntry<PlanIdeasStageValue> = {
-          value,
-          source: "generated",
-        };
-        this.caches.planIdeas = entry;
-        return entry;
-      } catch (error) {
-        const message = errorAsString(error);
-        this.logger.log(
-          `[session/plan-ideas] attempt ${attempt} failed (${message})`,
-        );
-        if (attempt === MAX_PLAN_ATTEMPTS) {
-          throw new Error(
-            `Plan idea generation failed after ${MAX_PLAN_ATTEMPTS} attempts: ${message}`,
+    return this.withStage("plan_ideas", async () => {
+      for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt += 1) {
+        const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PLAN_ATTEMPTS).padStart(2, "0")}`;
+        try {
+          const debugOptions = this.createDebugOptions(
+            "plan-ideas",
+            attemptLabel,
           );
+          const userPrompt = buildPlanIdeasUserPrompt(
+            this.options.topic,
+            this.options.seed,
+          );
+          this.logger.log(
+            `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
+          );
+          const contents = buildSingleUserPrompt(
+            "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
+            userPrompt,
+          );
+          const markdown = await generateText({
+            modelId: TEXT_MODEL_ID,
+            contents,
+            progress: this.logger,
+            debug: debugOptions,
+          });
+          const value: PlanIdeasStageValue = { markdown };
+          await this.writePlanIdeasCheckpoint(value);
+          const entry: StageCacheEntry<PlanIdeasStageValue> = {
+            value,
+            source: "generated",
+          };
+          this.caches.planIdeas = entry;
+          return entry;
+        } catch (error) {
+          const message = errorAsString(error);
+          this.logger.log(
+            `[session/plan-ideas] attempt ${attempt} failed (${message})`,
+          );
+          if (attempt === MAX_PLAN_ATTEMPTS) {
+            throw new Error(
+              `Plan idea generation failed after ${MAX_PLAN_ATTEMPTS} attempts: ${message}`,
+            );
+          }
         }
       }
-    }
-    throw new Error("Plan idea generation failed");
+      throw new Error("Plan idea generation failed");
+    });
   }
 
   async ensurePlanIdeas(): Promise<PlanIdeasStageValue> {
@@ -2441,27 +2477,29 @@ export class SessionGenerationPipeline {
     }
 
     const { value: planIdeas } = await this.ensurePlanIdeasInternal();
-    const userPrompt = buildPlanParseUserPrompt(planIdeas.markdown);
-    const debugOptions = this.createDebugOptions("plan-parse");
-    this.logger.log("[session/plan] parsing ideas into plan JSON");
-    const planJson = await generateJson<SessionPlan>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
-        userPrompt,
-      ),
-      responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
-      schema: SessionPlanSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("plan", async () => {
+      const userPrompt = buildPlanParseUserPrompt(planIdeas.markdown);
+      const debugOptions = this.createDebugOptions("plan-parse");
+      this.logger.log("[session/plan] parsing ideas into plan JSON");
+      const planJson = await generateJson<SessionPlan>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
+          userPrompt,
+        ),
+        responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
+        schema: SessionPlanSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      await this.writePlanCheckpoint(planJson);
+      const entry: StageCacheEntry<SessionPlan> = {
+        value: planJson,
+        source: "generated",
+      };
+      this.caches.plan = entry;
+      return entry;
     });
-    await this.writePlanCheckpoint(planJson);
-    const entry: StageCacheEntry<SessionPlan> = {
-      value: planJson,
-      source: "generated",
-    };
-    this.caches.plan = entry;
-    return entry;
   }
 
   async ensurePlan(): Promise<SessionPlan> {
@@ -2487,24 +2525,29 @@ export class SessionGenerationPipeline {
       return entry;
     }
     const plan = await this.ensurePlan();
-    const userPrompt = buildPlanGradeUserPrompt(plan);
-    const debugOptions = this.createDebugOptions("plan-grade");
-    this.logger.log("[session/plan-grade] grading plan");
-    const grade = await generateJson<PlanGrade>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt("Rubric QA, diagnose only.", userPrompt),
-      responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
-      schema: PlanGradeSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("plan_grade", async () => {
+      const userPrompt = buildPlanGradeUserPrompt(plan);
+      const debugOptions = this.createDebugOptions("plan-grade");
+      this.logger.log("[session/plan-grade] grading plan");
+      const grade = await generateJson<PlanGrade>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "Rubric QA, diagnose only.",
+          userPrompt,
+        ),
+        responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
+        schema: PlanGradeSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      await this.writePlanGradeCheckpoint(grade);
+      const entry: StageCacheEntry<PlanGrade> = {
+        value: grade,
+        source: "generated",
+      };
+      this.caches.planGrade = entry;
+      return entry;
     });
-    await this.writePlanGradeCheckpoint(grade);
-    const entry: StageCacheEntry<PlanGrade> = {
-      value: grade,
-      source: "generated",
-    };
-    this.caches.planGrade = entry;
-    return entry;
   }
 
   async ensurePlanGrade(): Promise<PlanGrade> {
@@ -2531,31 +2574,33 @@ export class SessionGenerationPipeline {
       this.caches.problemTechniques = entry;
       return entry;
     }
-    const plan = await this.ensurePlan();
-    const userPrompt = buildProblemTechniquesUserPrompt(plan);
-    const debugOptions = this.createDebugOptions("problem-techniques");
-    this.logger.log("[session/problem-techniques] extracting techniques");
-    const payload = await generateJson<ProblemTechniquesPayload>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "List concrete techniques learners must know before solving the problems.",
-        userPrompt,
-      ),
-      responseSchema: PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
-      schema: ProblemTechniquesSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("problem_techniques", async () => {
+      const plan = await this.ensurePlan();
+      const userPrompt = buildProblemTechniquesUserPrompt(plan);
+      const debugOptions = this.createDebugOptions("problem-techniques");
+      this.logger.log("[session/problem-techniques] extracting techniques");
+      const payload = await generateJson<ProblemTechniquesPayload>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "List concrete techniques learners must know before solving the problems.",
+          userPrompt,
+        ),
+        responseSchema: PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
+        schema: ProblemTechniquesSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      const value: ProblemTechniquesStageValue = {
+        techniques: payload.techniques,
+      };
+      await this.writeProblemTechniquesCheckpoint(value);
+      const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
+        value,
+        source: "generated",
+      };
+      this.caches.problemTechniques = entry;
+      return entry;
     });
-    const value: ProblemTechniquesStageValue = {
-      techniques: payload.techniques,
-    };
-    await this.writeProblemTechniquesCheckpoint(value);
-    const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
-      value,
-      source: "generated",
-    };
-    this.caches.problemTechniques = entry;
-    return entry;
   }
 
   async ensureProblemTechniques(): Promise<ProblemTechnique[]> {
@@ -2618,53 +2663,55 @@ export class SessionGenerationPipeline {
     const planIdeas = await this.ensurePlanIdeas();
     const techniques = await this.ensureProblemTechniques();
     const problems = await this.ensureProblems();
-    for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
-      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
-      try {
-        const debugOptions = this.createDebugOptions(
-          "quiz-ideas",
-          attemptLabel,
-        );
-        const userPrompt = buildQuizIdeasUserPrompt(
-          plan,
-          techniques,
-          problems,
-          planIdeas.markdown,
-          this.options.seed,
-        );
-        this.logger.log(
-          `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
-        );
-        const coverageMarkdown = await generateText({
-          modelId: TEXT_MODEL_ID,
-          contents: buildSingleUserPrompt(
-            "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding.",
-            userPrompt,
-          ),
-          progress: this.logger,
-          debug: debugOptions,
-        });
-        const value: QuizIdeasStageValue = { markdown: coverageMarkdown };
-        await this.writeQuizIdeasCheckpoint(value);
-        const entry: StageCacheEntry<QuizIdeasStageValue> = {
-          value,
-          source: "generated",
-        };
-        this.caches.quizIdeas = entry;
-        return entry;
-      } catch (error) {
-        const message = errorAsString(error);
-        this.logger.log(
-          `[session/quiz-ideas] attempt ${attempt} failed (${message})`,
-        );
-        if (attempt === MAX_QUIZ_ATTEMPTS) {
-          throw new Error(
-            `Quiz idea generation failed after ${MAX_QUIZ_ATTEMPTS} attempts: ${message}`,
+    return this.withStage("quiz_ideas", async () => {
+      for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
+        const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
+        try {
+          const debugOptions = this.createDebugOptions(
+            "quiz-ideas",
+            attemptLabel,
           );
+          const userPrompt = buildQuizIdeasUserPrompt(
+            plan,
+            techniques,
+            problems,
+            planIdeas.markdown,
+            this.options.seed,
+          );
+          this.logger.log(
+            `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
+          );
+          const coverageMarkdown = await generateText({
+            modelId: TEXT_MODEL_ID,
+            contents: buildSingleUserPrompt(
+              "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding.",
+              userPrompt,
+            ),
+            progress: this.logger,
+            debug: debugOptions,
+          });
+          const value: QuizIdeasStageValue = { markdown: coverageMarkdown };
+          await this.writeQuizIdeasCheckpoint(value);
+          const entry: StageCacheEntry<QuizIdeasStageValue> = {
+            value,
+            source: "generated",
+          };
+          this.caches.quizIdeas = entry;
+          return entry;
+        } catch (error) {
+          const message = errorAsString(error);
+          this.logger.log(
+            `[session/quiz-ideas] attempt ${attempt} failed (${message})`,
+          );
+          if (attempt === MAX_QUIZ_ATTEMPTS) {
+            throw new Error(
+              `Quiz idea generation failed after ${MAX_QUIZ_ATTEMPTS} attempts: ${message}`,
+            );
+          }
         }
       }
-    }
-    throw new Error("Quiz idea generation failed");
+      throw new Error("Quiz idea generation failed");
+    });
   }
 
   async ensureQuizIdeas(): Promise<QuizIdeasStageValue> {
@@ -2728,34 +2775,36 @@ export class SessionGenerationPipeline {
     const quizIdeas = await this.ensureQuizIdeas();
     const techniques = await this.ensureProblemTechniques();
     const problems = await this.ensureProblems();
-    const userPrompt = buildQuizzesGenerateUserPrompt(
-      plan,
-      quizIdeas.markdown,
-      problems,
-      techniques,
-      this.options.questionCounts,
-    );
-    const debugOptions = this.createDebugOptions("quizzes-generate");
-    this.logger.log("[session/quizzes] generating quiz JSON");
-    const quizzes = await generateJson<QuizzesPayload>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.",
-        userPrompt,
-      ),
-      responseSchema: QUIZZES_RESPONSE_SCHEMA,
-      schema: QuizzesSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("quizzes", async () => {
+      const userPrompt = buildQuizzesGenerateUserPrompt(
+        plan,
+        quizIdeas.markdown,
+        problems,
+        techniques,
+        this.options.questionCounts,
+      );
+      const debugOptions = this.createDebugOptions("quizzes-generate");
+      this.logger.log("[session/quizzes] generating quiz JSON");
+      const quizzes = await generateJson<QuizzesPayload>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.",
+          userPrompt,
+        ),
+        responseSchema: QUIZZES_RESPONSE_SCHEMA,
+        schema: QuizzesSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      this.validateQuizCounts(quizzes);
+      await this.writeQuizzesCheckpoint(quizzes);
+      const entry: StageCacheEntry<QuizzesPayload> = {
+        value: quizzes,
+        source: "generated",
+      };
+      this.caches.quizzes = entry;
+      return entry;
     });
-    this.validateQuizCounts(quizzes);
-    await this.writeQuizzesCheckpoint(quizzes);
-    const entry: StageCacheEntry<QuizzesPayload> = {
-      value: quizzes,
-      source: "generated",
-    };
-    this.caches.quizzes = entry;
-    return entry;
   }
 
   async ensureQuizzes(): Promise<readonly SessionQuiz[]> {
@@ -2785,32 +2834,34 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const quizzes = await this.ensureQuizzes();
     const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildQuizzesGradeUserPrompt(
-      plan,
-      quizzes,
-      techniques,
-      this.options.questionCounts,
-    );
-    const debugOptions = this.createDebugOptions("quizzes-grade");
-    this.logger.log("[session/quizzes-grade] grading quizzes");
-    const grade = await generateJson<QuizzesGrade>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
-        userPrompt,
-      ),
-      responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
-      schema: QuizzesGradeSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("quizzes_grade", async () => {
+      const userPrompt = buildQuizzesGradeUserPrompt(
+        plan,
+        quizzes,
+        techniques,
+        this.options.questionCounts,
+      );
+      const debugOptions = this.createDebugOptions("quizzes-grade");
+      this.logger.log("[session/quizzes-grade] grading quizzes");
+      const grade = await generateJson<QuizzesGrade>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
+          userPrompt,
+        ),
+        responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
+        schema: QuizzesGradeSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      await this.writeQuizzesGradeCheckpoint(grade);
+      const entry: StageCacheEntry<QuizzesGrade> = {
+        value: grade,
+        source: "generated",
+      };
+      this.caches.quizzesGrade = entry;
+      return entry;
     });
-    await this.writeQuizzesGradeCheckpoint(grade);
-    const entry: StageCacheEntry<QuizzesGrade> = {
-      value: grade,
-      source: "generated",
-    };
-    this.caches.quizzesGrade = entry;
-    return entry;
   }
 
   async ensureQuizzesGrade(): Promise<QuizzesGrade> {
@@ -2839,52 +2890,54 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     const techniques = await this.ensureProblemTechniques();
-    for (let attempt = 1; attempt <= MAX_PROBLEM_ATTEMPTS; attempt += 1) {
-      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_ATTEMPTS).padStart(2, "0")}`;
-      try {
-        const debugOptions = this.createDebugOptions(
-          "problem-ideas",
-          attemptLabel,
-        );
-        const userPrompt = buildProblemIdeasUserPrompt(
-          plan,
-          techniques,
-          this.options.seed,
-        );
-        this.logger.log(
-          `[session/problem-ideas] generating markdown (${attemptLabel})`,
-        );
-        const markdown = await generateText({
-          modelId: TEXT_MODEL_ID,
-          contents: buildSingleUserPrompt(
-            "Generate two easy ideas aligned with promised skills, story, and the listed techniques.",
-            userPrompt,
-          ),
-          tools: [{ type: "code-execution" }],
-          progress: this.logger,
-          debug: debugOptions,
-        });
-        const value: ProblemIdeasStageValue = { markdown };
-        await this.writeProblemIdeasCheckpoint(value);
-        const entry: StageCacheEntry<ProblemIdeasStageValue> = {
-          value,
-          source: "generated",
-        };
-        this.caches.problemIdeas = entry;
-        return entry;
-      } catch (error) {
-        const message = errorAsString(error);
-        this.logger.log(
-          `[session/problem-ideas] attempt ${attempt} failed (${message})`,
-        );
-        if (attempt === MAX_PROBLEM_ATTEMPTS) {
-          throw new Error(
-            `Problem idea generation failed after ${MAX_PROBLEM_ATTEMPTS} attempts: ${message}`,
+    return this.withStage("problem_ideas", async () => {
+      for (let attempt = 1; attempt <= MAX_PROBLEM_ATTEMPTS; attempt += 1) {
+        const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_ATTEMPTS).padStart(2, "0")}`;
+        try {
+          const debugOptions = this.createDebugOptions(
+            "problem-ideas",
+            attemptLabel,
           );
+          const userPrompt = buildProblemIdeasUserPrompt(
+            plan,
+            techniques,
+            this.options.seed,
+          );
+          this.logger.log(
+            `[session/problem-ideas] generating markdown (${attemptLabel})`,
+          );
+          const markdown = await generateText({
+            modelId: TEXT_MODEL_ID,
+            contents: buildSingleUserPrompt(
+              "Generate two easy ideas aligned with promised skills, story, and the listed techniques.",
+              userPrompt,
+            ),
+            tools: [{ type: "code-execution" }],
+            progress: this.logger,
+            debug: debugOptions,
+          });
+          const value: ProblemIdeasStageValue = { markdown };
+          await this.writeProblemIdeasCheckpoint(value);
+          const entry: StageCacheEntry<ProblemIdeasStageValue> = {
+            value,
+            source: "generated",
+          };
+          this.caches.problemIdeas = entry;
+          return entry;
+        } catch (error) {
+          const message = errorAsString(error);
+          this.logger.log(
+            `[session/problem-ideas] attempt ${attempt} failed (${message})`,
+          );
+          if (attempt === MAX_PROBLEM_ATTEMPTS) {
+            throw new Error(
+              `Problem idea generation failed after ${MAX_PROBLEM_ATTEMPTS} attempts: ${message}`,
+            );
+          }
         }
       }
-    }
-    throw new Error("Problem idea generation failed");
+      throw new Error("Problem idea generation failed");
+    });
   }
 
   async ensureProblemIdeas(): Promise<ProblemIdeasStageValue> {
@@ -2910,29 +2963,31 @@ export class SessionGenerationPipeline {
       source = "checkpoint";
       checkpointPath = checkpoint.filePath;
     } else {
-      const plan = await this.ensurePlan();
-      const problemIdeas = await this.ensureProblemIdeas();
-      const techniques = await this.ensureProblemTechniques();
-      const userPrompt = buildProblemsGenerateUserPrompt(
-        plan,
-        problemIdeas.markdown,
-        techniques,
-      );
-      const debugOptions = this.createDebugOptions("problems-generate");
-      this.logger.log("[session/problems] generating coding problems");
-      const rawProblems = await generateJson<ProblemsPayload>({
-        modelId: TEXT_MODEL_ID,
-        contents: buildSingleUserPrompt(
-          "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
-          userPrompt,
-        ),
-        responseSchema: PROBLEMS_RESPONSE_SCHEMA,
-        schema: ProblemsSchema,
-        progress: this.logger,
-        debug: debugOptions,
+      problemsPayload = await this.withStage("problems", async () => {
+        const plan = await this.ensurePlan();
+        const problemIdeas = await this.ensureProblemIdeas();
+        const techniques = await this.ensureProblemTechniques();
+        const userPrompt = buildProblemsGenerateUserPrompt(
+          plan,
+          problemIdeas.markdown,
+          techniques,
+        );
+        const debugOptions = this.createDebugOptions("problems-generate");
+        this.logger.log("[session/problems] generating coding problems");
+        const rawProblems = await generateJson<ProblemsPayload>({
+          modelId: TEXT_MODEL_ID,
+          contents: buildSingleUserPrompt(
+            "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
+            userPrompt,
+          ),
+          responseSchema: PROBLEMS_RESPONSE_SCHEMA,
+          schema: ProblemsSchema,
+          progress: this.logger,
+          debug: debugOptions,
+        });
+        const cleaned = normaliseProblemsPayload(rawProblems);
+        return ProblemsSchema.parse(cleaned);
       });
-      const cleaned = normaliseProblemsPayload(rawProblems);
-      problemsPayload = ProblemsSchema.parse(cleaned);
     }
 
     await this.writeProblemsCheckpoint(problemsPayload);
@@ -3013,7 +3068,7 @@ export class SessionGenerationPipeline {
       const failureSummary =
         firstFailure && firstFailure.index >= 0
           ? `test ${firstFailure.index + 1}: ${firstFailure.message}`
-          : firstFailure?.message ?? "unknown failure";
+          : (firstFailure?.message ?? "unknown failure");
       this.logger.log(
         `[session/problem-solution] ${problem.id} ${attemptLabel} failed (${failureSummary})`,
       );
@@ -3050,27 +3105,33 @@ export class SessionGenerationPipeline {
     const plan = await this.ensurePlan();
     const problems = await this.ensureProblems();
     const techniques = await this.ensureProblemTechniques();
-    const userPrompt = buildProblemsGradeUserPrompt(plan, problems, techniques);
-    const debugOptions = this.createDebugOptions("problems-grade");
-    this.logger.log("[session/problems-grade] grading coding problems");
-    const grade = await generateJson<ProblemsGrade>({
-      modelId: TEXT_MODEL_ID,
-      contents: buildSingleUserPrompt(
-        "QA problems for alignment, clarity, difficulty, and technique alignment.",
-        userPrompt,
-      ),
-      responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
-      schema: ProblemsGradeSchema,
-      progress: this.logger,
-      debug: debugOptions,
+    return this.withStage("problems_grade", async () => {
+      const userPrompt = buildProblemsGradeUserPrompt(
+        plan,
+        problems,
+        techniques,
+      );
+      const debugOptions = this.createDebugOptions("problems-grade");
+      this.logger.log("[session/problems-grade] grading coding problems");
+      const grade = await generateJson<ProblemsGrade>({
+        modelId: TEXT_MODEL_ID,
+        contents: buildSingleUserPrompt(
+          "QA problems for alignment, clarity, difficulty, and technique alignment.",
+          userPrompt,
+        ),
+        responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
+        schema: ProblemsGradeSchema,
+        progress: this.logger,
+        debug: debugOptions,
+      });
+      await this.writeProblemsGradeCheckpoint(grade);
+      const entry: StageCacheEntry<ProblemsGrade> = {
+        value: grade,
+        source: "generated",
+      };
+      this.caches.problemsGrade = entry;
+      return entry;
     });
-    await this.writeProblemsGradeCheckpoint(grade);
-    const entry: StageCacheEntry<ProblemsGrade> = {
-      value: grade,
-      source: "generated",
-    };
-    this.caches.problemsGrade = entry;
-    return entry;
   }
 
   async ensureProblemsGrade(): Promise<ProblemsGrade> {
@@ -3112,30 +3173,30 @@ export class SessionGenerationPipeline {
       return entry;
     }
 
-    const solvedPayload = await this.solveProblemsWithIndependentSolver(
-      problemsPayload,
-    );
-    const solutions: ProblemSolutions["solutions"] = solvedPayload.problems.map(
-      (problem) => ({
-        id: problem.id,
-        solution_py: problem.reference_solution_py,
-      }),
-    );
-    const value: ProblemSolutionsStageValue = { solutions };
-    await this.writeProblemSolutionsCheckpoint(value);
-    await this.writeProblemsCheckpoint(solvedPayload);
-    const updatedProblemsEntry: StageCacheEntry<ProblemsPayload> = {
-      value: solvedPayload,
-      source: problemsEntry.source,
-      checkpointPath: problemsEntry.checkpointPath,
-    };
-    this.caches.problems = updatedProblemsEntry;
-    const entry: StageCacheEntry<ProblemSolutionsStageValue> = {
-      value,
-      source: "generated",
-    };
-    this.caches.problemSolutions = entry;
-    return entry;
+    return this.withStage("problem_solutions", async () => {
+      const solvedPayload =
+        await this.solveProblemsWithIndependentSolver(problemsPayload);
+      const solutions: ProblemSolutions["solutions"] =
+        solvedPayload.problems.map((problem) => ({
+          id: problem.id,
+          solution_py: problem.reference_solution_py,
+        }));
+      const value: ProblemSolutionsStageValue = { solutions };
+      await this.writeProblemSolutionsCheckpoint(value);
+      await this.writeProblemsCheckpoint(solvedPayload);
+      const updatedProblemsEntry: StageCacheEntry<ProblemsPayload> = {
+        value: solvedPayload,
+        source: problemsEntry.source,
+        checkpointPath: problemsEntry.checkpointPath,
+      };
+      this.caches.problems = updatedProblemsEntry;
+      const entry: StageCacheEntry<ProblemSolutionsStageValue> = {
+        value,
+        source: "generated",
+      };
+      this.caches.problemSolutions = entry;
+      return entry;
+    });
   }
 
   async ensureProblemSolutions(): Promise<ProblemSolutionsStageValue> {

@@ -47,8 +47,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const welcomeTemplates = (await listWelcomeSessionOptions()).map((template) => {
-		const existingLesson =
-			lessonsById.get(template.sessionId) ?? lessonsById.get(template.key);
+		const existingLesson = lessonsById.get(template.sessionId) ?? lessonsById.get(template.key);
 		return {
 			...template,
 			existingLessonStatus: existingLesson?.status ?? null

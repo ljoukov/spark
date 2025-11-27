@@ -8,6 +8,7 @@ const ANSI_RED = "\u001b[31m";
 export type StatusMode = "interactive" | "plain" | "off";
 
 export type ModelCallHandle = symbol;
+export type StageHandle = symbol;
 
 export type LlmUsageChunk = {
   readonly modelVersion?: string;
@@ -23,6 +24,9 @@ export type JobProgressReporter = {
   }): ModelCallHandle;
   recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void;
   finishModelCall(handle: ModelCallHandle): void;
+  startStage(stageName: string): StageHandle;
+  finishStage(handle: StageHandle): void;
+  setActiveStages?(stages: Iterable<string>): void;
 };
 
 export type JobContext = {
@@ -205,6 +209,10 @@ class ProgressDisplay {
   private readonly useColor: boolean;
   private readonly labelDisplay: string;
   private lastRenderTime = 0;
+  private readonly activeStages = new Map<
+    StageHandle,
+    { label: string; reporterId: symbol; startedAt: number }
+  >();
 
   constructor(
     totalJobs: number,
@@ -254,9 +262,12 @@ class ProgressDisplay {
     this.render(this.mode === "interactive");
   }
 
-  jobCompleted(): void {
+  jobCompleted(reporterId?: symbol): void {
     if (this.mode === "off") {
       return;
+    }
+    if (reporterId) {
+      this.clearStagesForReporter(reporterId);
     }
     if (this.runningJobs > 0) {
       this.runningJobs -= 1;
@@ -314,18 +325,23 @@ class ProgressDisplay {
     this.dirty = true;
   }
 
-  createReporter(): JobProgressReporter {
+  createReporter(): { reporter: JobProgressReporter; reporterId: symbol } {
     if (this.mode === "off") {
-      return {
+      const reporter: JobProgressReporter = {
         log: (message) => {
           console.log(message);
         },
         startModelCall: () => Symbol("model-call"),
         recordModelUsage: () => {},
         finishModelCall: () => {},
+        startStage: () => Symbol("stage"),
+        finishStage: () => {},
+        setActiveStages: () => {},
       };
+      return { reporter, reporterId: Symbol("reporter") };
     }
-    return {
+    const reporterId = Symbol("reporter");
+    const reporter: JobProgressReporter = {
       log: (message) => {
         this.log(message);
       },
@@ -337,7 +353,104 @@ class ProgressDisplay {
       finishModelCall: (handle) => {
         this.finishModelCall(handle);
       },
+      startStage: (stageName) => this.startStage(reporterId, stageName),
+      finishStage: (handle) => {
+        this.finishStage(reporterId, handle);
+      },
+      setActiveStages: (stages) => {
+        this.setActiveStagesForReporter(reporterId, stages);
+      },
     };
+    return { reporter, reporterId };
+  }
+
+  private startStage(reporterId: symbol, stageName: string): StageHandle {
+    const name = stageName.trim() || "stage";
+    const handle: StageHandle = Symbol("stage");
+    this.activeStages.set(handle, {
+      label: name,
+      reporterId,
+      startedAt: Date.now(),
+    });
+    this.dirty = true;
+    this.render(this.mode === "interactive");
+    return handle;
+  }
+
+  private finishStage(reporterId: symbol, handle: StageHandle): void {
+    const entry = this.activeStages.get(handle);
+    if (!entry || entry.reporterId !== reporterId) {
+      return;
+    }
+    this.activeStages.delete(handle);
+    this.dirty = true;
+    this.render(this.mode === "interactive");
+  }
+
+  private clearStagesForReporter(reporterId: symbol): void {
+    let changed = false;
+    for (const [handle, entry] of Array.from(this.activeStages.entries())) {
+      if (entry.reporterId === reporterId) {
+        this.activeStages.delete(handle);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.dirty = true;
+      this.render(this.mode === "interactive");
+    }
+  }
+
+  private setActiveStagesForReporter(
+    reporterId: symbol,
+    stages: Iterable<string>,
+  ): void {
+    let changed = false;
+    for (const [handle, entry] of Array.from(this.activeStages.entries())) {
+      if (entry.reporterId === reporterId) {
+        this.activeStages.delete(handle);
+        changed = true;
+      }
+    }
+    const timestamp = Date.now();
+    let offset = 0;
+    for (const rawStage of stages) {
+      const stage = rawStage.trim();
+      if (stage.length === 0) {
+        continue;
+      }
+      const handle: StageHandle = Symbol("stage");
+      this.activeStages.set(handle, {
+        label: stage,
+        reporterId,
+        startedAt: timestamp + offset,
+      });
+      offset += 1;
+      changed = true;
+    }
+    if (changed) {
+      this.dirty = true;
+      this.render(this.mode === "interactive");
+    }
+  }
+
+  private formatStages(): string {
+    if (this.activeStages.size === 0) {
+      return "n/a";
+    }
+    const seen = new Set<string>();
+    const ordered = Array.from(this.activeStages.values()).sort(
+      (a, b) => a.startedAt - b.startedAt,
+    );
+    const labels: string[] = [];
+    for (const entry of ordered) {
+      if (seen.has(entry.label)) {
+        continue;
+      }
+      seen.add(entry.label);
+      labels.push(entry.label);
+    }
+    return labels.join(", ");
   }
 
   private render(force = false): void {
@@ -367,18 +480,15 @@ class ProgressDisplay {
       0,
     );
     const metrics = this.metrics.getSnapshot();
-    const charsSpeedDisplay = formatNumber(Math.round(metrics.charsPerSecond));
-    const downloadSpeedDisplay = formatBytes(
-      Math.round(metrics.downloadBytesPerSecond),
-    );
-    const line =
-      `${this.labelDisplay} ${percent}% | ${this.completedJobs} / ${this.totalJobs}` +
-      ` | ${waitingJobs} waiting` +
-      ` | chars ${formatNumber(metrics.totalChars)}` +
-      ` | up ${formatBytes(metrics.totalUploadBytes)}` +
-      ` | down ${formatBytes(metrics.totalDownloadBytes)}` +
-      ` | speed ${charsSpeedDisplay} chars/s ↓ ${downloadSpeedDisplay}/s` +
-      ` | ${formatPerModel(metrics.perModel)}`;
+    const stageDisplay = this.formatStages();
+    const lineParts = [
+      `${this.labelDisplay} ${percent}%`,
+      `${this.completedJobs} / ${this.totalJobs}`,
+      `${waitingJobs} waiting`,
+      `stages ${stageDisplay}`,
+      `models ${formatPerModelChars(metrics.perModel)}`,
+    ];
+    const line = lineParts.join(" | ");
     this.writeLine(line);
     this.lastRenderTime = now;
   }
@@ -502,7 +612,7 @@ export async function runJobsWithConcurrency<I, O>({
       }
       const item = items[currentIndex];
       const id = getId(item, currentIndex);
-      const reporter = progressDisplay.createReporter();
+      const { reporter, reporterId } = progressDisplay.createReporter();
       progressDisplay.jobStarted();
       try {
         const result = await handler(item, {
@@ -515,11 +625,14 @@ export async function runJobsWithConcurrency<I, O>({
             recordModelUsage: (handle, chunk) =>
               reporter.recordModelUsage(handle, chunk),
             finishModelCall: (handle) => reporter.finishModelCall(handle),
+            startStage: (stageName) => reporter.startStage(stageName),
+            finishStage: (handle) => reporter.finishStage(handle),
+            setActiveStages: (stages) => reporter.setActiveStages?.(stages),
           },
         });
         results[currentIndex] = result;
       } finally {
-        progressDisplay.jobCompleted();
+        progressDisplay.jobCompleted(reporterId);
       }
     }
   };
@@ -535,36 +648,19 @@ export async function runJobsWithConcurrency<I, O>({
   return results;
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
-  }
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  const decimals = value >= 10 || unitIndex === 0 ? 0 : 1;
-  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
-}
-
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
     Math.max(0, Math.floor(value)),
   );
 }
 
-function formatPerModel(perModel: MetricsSnapshot["perModel"]): string {
+function formatPerModelChars(perModel: MetricsSnapshot["perModel"]): string {
   if (perModel.length === 0) {
-    return "models: n/a";
+    return "n/a";
   }
   const entries = perModel.map((entry) => {
     const chars = formatNumber(entry.outputChars);
-    const up = formatBytes(entry.uploadBytes);
-    const down = formatBytes(entry.downloadBytes);
-    return `${entry.modelId.replace("gemini-", "")}: chars ${chars} up ${up} down ${down}`;
+    return `${entry.modelId.replace("gemini-", "")}: ${chars} chars`;
   });
-  return `models: ${entries.join(", ")}`;
+  return entries.join(", ");
 }
