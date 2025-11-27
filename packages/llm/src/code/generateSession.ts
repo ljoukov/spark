@@ -120,6 +120,27 @@ function normaliseProblemsPayload(payload: unknown): unknown {
               ...(fn as Record<string, unknown>),
               returns,
             },
+            tests: (() => {
+              const tests = (problem as { tests?: unknown }).tests;
+              if (
+                tests &&
+                typeof tests === "object" &&
+                "private" in tests &&
+                Array.isArray((tests as { private?: unknown[] }).private)
+              ) {
+                const privateTests = (tests as { private: unknown[] }).private;
+                const privateCount = Number.isFinite(
+                  (tests as { private_count?: unknown }).private_count,
+                )
+                  ? (tests as { private_count?: number }).private_count
+                  : privateTests.length;
+                return {
+                  ...(tests as Record<string, unknown>),
+                  private_count: privateCount,
+                };
+              }
+              return (problem as { tests?: unknown }).tests;
+            })(),
           };
         }
       }
@@ -354,17 +375,50 @@ const CodingProblemExampleSchema = z.object({
   explanation: z.string().trim().min(1).optional(),
 });
 
-const CodingProblemTestsSchema = z.object({
-  public: z
-    .array(
-      z.object({
-        input: z.string().trim().min(1),
-        output: z.string().transform((value) => value.trim()),
-      }),
-    )
-    .min(1),
-  private_count: z.number().int().min(1),
-});
+const CodingProblemTestsSchema = z
+  .object({
+    public: z
+      .array(
+        z.object({
+          input: z.string().trim().min(1),
+          output: z.string().transform((value) => value.trim()),
+        }),
+      )
+      .min(1),
+    private: z
+      .array(
+        z.object({
+          input: z.string().trim().min(1),
+          output: z.string().transform((value) => value.trim()),
+        }),
+      )
+      .min(1)
+      .max(10)
+      .optional(),
+    private_count: z.number().int().min(1).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const privateTests = Array.isArray(value.private) ? value.private : [];
+    const hasPrivateList = privateTests.length > 0;
+    if (!hasPrivateList && typeof value.private_count !== "number") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["private"],
+        message: "Provide private tests or private_count",
+      });
+      return;
+    }
+    if (hasPrivateList && typeof value.private_count === "number") {
+      const count = privateTests.length;
+      if (value.private_count !== count) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["private_count"],
+          message: `private_count ${value.private_count} must match private length ${count}`,
+        });
+      }
+    }
+  });
 
 export const CodingProblemSchema = z.object({
   id: z.enum(["p1", "p2"]),
@@ -833,14 +887,14 @@ function buildProblemsGenerateUserPrompt(
 ): string {
   return [
     'Return a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
-    'Each problem must include fields: id, title, difficulty (set to "easy", "medium", or "hard"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private_count:int}.',
+    'Each problem must include fields: id, title, difficulty (set to "easy", "medium", or "hard"), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.',
     "Represent inputs and outputs as strings (escape newlines with \\n); do not return nested objects for these fields.",
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
     "Include story_callback, constraints, and at least two examples per problem.",
     "Keep each problem's statement, hints, examples, and tests unique—never copy or lightly edit content between p1 and p2.",
     "Problem p2 must add at least one new technique beyond p1 and use a different algorithmic pattern, recurrence, or data shape (not just larger inputs or the same recurrence in disguise).",
     "Avoid non-deterministic reference behavior. If randomness is needed, include a seed/base-list parameter or otherwise make sampling deterministic so reference_solution_py and tests are reproducible.",
-    "Provide 3-5 public tests per problem and private_count between 3 and 8.",
+    "Provide 3-5 public tests per problem and 3-8 private tests per problem; set private_count to match the number of private tests.",
     "Generate and verify all examples and public tests against your reference_solution_py; revise the statement/tests until the code passes them.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests".',
     'Problem "p1" must implement the first idea from the Markdown above. Problem "p2" must implement the second idea and must NOT repeat or lightly paraphrase the first problem—use a different outcome, inputs/outputs, and function signature so the learner solves two clearly distinct tasks.',
@@ -1321,12 +1375,16 @@ const CODING_PROBLEM_TEST_RESPONSE_SCHEMA: Schema = {
 
 const CODING_PROBLEM_TESTS_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  required: ["public", "private_count"],
-  propertyOrdering: ["public", "private_count"],
+  required: ["public"],
+  propertyOrdering: ["public", "private", "private_count"],
   properties: {
     public: {
       type: Type.ARRAY,
       minItems: "1",
+      items: CODING_PROBLEM_TEST_RESPONSE_SCHEMA,
+    },
+    private: {
+      type: Type.ARRAY,
       items: CODING_PROBLEM_TEST_RESPONSE_SCHEMA,
     },
     private_count: { type: Type.INTEGER, minimum: 1 },
@@ -1412,12 +1470,6 @@ const PROBLEMS_RESPONSE_SCHEMA: Schema = {
     },
   },
 };
-
-const ProblemSolutionSchema = z.object({
-  solution_py: z.string().trim().min(1),
-});
-
-type ProblemSolution = z.infer<typeof ProblemSolutionSchema>;
 
 const ProblemSolutionEntrySchema = z.object({
   id: z.enum(["p1", "p2"]),
@@ -1583,7 +1635,10 @@ async function runSolutionAgainstTests(
 ): Promise<SolutionTestFailure[]> {
   const python = await ensurePythonRuntime(indexURL);
   const paramNames = problem.function.params.map((param) => param.name);
-  const testsJson = JSON.stringify(problem.tests.public);
+  const testsJson = JSON.stringify([
+    ...problem.tests.public,
+    ...(problem.tests.private ?? []),
+  ]);
   const paramNamesJson = JSON.stringify(paramNames);
   const functionName = problem.function.name;
   const script = [
@@ -3236,11 +3291,13 @@ async function persistProblemSolutionsToFirestore(options: {
 
     for (const problem of problems) {
       const docRef = sessionDoc.collection("solutions").doc(problem.id);
+      const publicCount = problem.tests.public.length;
+      const privateCount = problem.tests.private?.length ?? 0;
       batch.set(docRef, {
         problemId: problem.id,
         language: "python",
         solution_py: problem.reference_solution_py,
-        tests_checked: problem.tests.public.length,
+        tests_checked: publicCount + privateCount,
         source: "independent_solver",
         updatedAt: Timestamp.now(),
       });

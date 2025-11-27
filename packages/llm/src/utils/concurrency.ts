@@ -472,23 +472,17 @@ class ProgressDisplay {
     ) {
       return;
     }
-    const rawPercent = (this.completedJobs / this.totalJobs) * 100;
-    const percent =
-      this.completedJobs >= this.totalJobs ? 100 : Math.round(rawPercent);
-    const waitingJobs = Math.max(
-      this.totalJobs - this.completedJobs - this.runningJobs,
-      0,
-    );
     const metrics = this.metrics.getSnapshot();
     const stageDisplay = this.formatStages();
     const lineParts = [
-      `${this.labelDisplay} ${percent}%`,
-      `${this.completedJobs} / ${this.totalJobs}`,
-      `${waitingJobs} waiting`,
-      `stages ${stageDisplay}`,
-      `models ${formatPerModelChars(metrics.perModel)}`,
-    ];
-    const line = lineParts.join(" | ");
+      this.labelDisplay,
+      `stages: ${stageDisplay}`,
+      formatPerModelChars(metrics.perModel),
+    ].filter((part) => part.trim().length > 0);
+    const line =
+      lineParts.length > 1
+        ? `${lineParts[0]} ${lineParts.slice(1).join(" | ")}`
+        : lineParts[0];
     this.writeLine(line);
     this.lastRenderTime = now;
   }
@@ -656,7 +650,7 @@ function formatNumber(value: number): string {
 
 function formatPerModelChars(perModel: MetricsSnapshot["perModel"]): string {
   if (perModel.length === 0) {
-    return "n/a";
+    return "";
   }
   const entries = perModel.map((entry) => {
     const chars = formatNumber(entry.outputChars);
