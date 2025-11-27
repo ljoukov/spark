@@ -2539,6 +2539,7 @@ async function reviseProseVariant(
   lessonContext?: StoryLessonContext,
 ): Promise<StoryProseVariantCandidate> {
   const adapter = useProgress(progress);
+  let draftForRevision: StoryProseDraftResult = variant.draft;
   let feedback: string | undefined;
   let revision: StoryProseRevisionResult | undefined;
   for (let attempt = 1; attempt <= PROSE_REVISION_MAX_ATTEMPTS; attempt += 1) {
@@ -2560,7 +2561,7 @@ async function reviseProseVariant(
     );
     const candidate = await generateStoryProseRevision(
       topic,
-      variant.draft,
+      draftForRevision,
       variant.originsCapsule,
       progress,
       revisionOptions,
@@ -2598,15 +2599,23 @@ async function reviseProseVariant(
       validation.blockers,
       candidate.fixChecklist,
     );
-    feedback = buildValidationFeedback(validation.issues, validation.blockers);
+    const validationFeedback = buildValidationFeedback(
+      validation.issues,
+      validation.blockers,
+    );
+    let nextFeedback = validationFeedback;
     if (checklistMismatches.length > 0) {
-      feedback = [
+      nextFeedback = [
         "Update the fixChecklist so it reflects unresolved blockers:",
         ...checklistMismatches,
         "",
-        feedback,
+        validationFeedback,
       ].join("\n");
     }
+    feedback = feedback
+      ? `${feedback}\n\nDo not lose prior fixes. Also address:\n${nextFeedback}`
+      : nextFeedback;
+    draftForRevision = candidate;
   }
   if (!revision) {
     throw new Error(
