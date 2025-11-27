@@ -2010,26 +2010,64 @@ async function validateOriginsCapsule(
     capsule,
     researchContext,
   );
-  const debug = options?.debugRootDir
-    ? {
-        rootDir: options.debugRootDir,
-        stage:
-          combineDebugSegments(
-            options.debugSubStage ?? "origins",
-            attemptLabel,
-            "validation",
-          ) ?? `origins/${attemptLabel ?? "validation"}/validation`,
+  const promptWithSchema = [
+    prompt,
+    "",
+    "Return strict JSON matching this schema:",
+    '{"verdict":"pass"|"fail","issues":[{"summary":"string","recommendation":"string"}]}',
+    "Do not wrap in Markdown or commentary.",
+  ].join("\n");
+  let lastError: unknown;
+  for (
+    let attempt = 1;
+    attempt <= ORIGINS_CAPSULE_VALIDATION_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    const validationAttemptLabel = `validation-${String(attempt).padStart(2, "0")}-of-${String(ORIGINS_CAPSULE_VALIDATION_MAX_ATTEMPTS).padStart(2, "0")}`;
+    const debug = options?.debugRootDir
+      ? {
+          rootDir: options.debugRootDir,
+          stage:
+            combineDebugSegments(
+              options.debugSubStage ?? "origins",
+              attemptLabel,
+              validationAttemptLabel,
+            ) ??
+            `origins/${attemptLabel ?? "validation"}/${validationAttemptLabel}`,
+        }
+      : undefined;
+    try {
+      const raw = await generateText({
+        progress: adapter,
+        modelId: TEXT_MODEL_ID,
+        contents: [{ role: "user", parts: [{ type: "text", text: promptWithSchema }] }],
+        tools: [{ type: "web-search" }],
+        debug,
+      });
+      let text = raw.trim();
+      const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+      if (fenced?.[1]) {
+        text = fenced[1].trim();
       }
-    : undefined;
-  return generateJson<OriginsCapsuleValidationResponse>({
-    progress: adapter,
-    modelId: TEXT_MODEL_ID,
-    contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseSchema: ORIGINS_CAPSULE_VALIDATION_RESPONSE_SCHEMA,
-    schema: OriginsCapsuleValidationResponseSchema,
-    tools: [{ type: "web-search" }],
-    debug,
-  });
+      if (!text.startsWith("{") && text.includes("{")) {
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (lastBrace > firstBrace) {
+          text = text.slice(firstBrace, lastBrace + 1).trim();
+        }
+      }
+      const parsed = JSON.parse(text);
+      return OriginsCapsuleValidationResponseSchema.parse(parsed);
+    } catch (error) {
+      lastError = error;
+      adapter.log(
+        `[story/origins-validation] attempt ${attempt} of ${ORIGINS_CAPSULE_VALIDATION_MAX_ATTEMPTS} failed (${errorAsString(error)})`,
+      );
+    }
+  }
+  throw new Error(
+    `Origins capsule validation failed after ${ORIGINS_CAPSULE_VALIDATION_MAX_ATTEMPTS} attempts${lastError ? `: ${errorAsString(lastError)}` : ""}`,
+  );
 }
 
 export async function generateOriginsCapsule(
@@ -2469,6 +2507,7 @@ function buildValidationFeedback(
 }
 
 const ORIGINS_CAPSULE_MAX_ATTEMPTS = 5;
+const ORIGINS_CAPSULE_VALIDATION_MAX_ATTEMPTS = 3;
 const IDEA_GENERATION_MAX_ATTEMPTS = 3;
 const PROSE_DRAFT_MAX_ATTEMPTS = 3;
 const PROSE_REVISION_MAX_ATTEMPTS = 5;
