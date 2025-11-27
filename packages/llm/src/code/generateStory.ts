@@ -1241,6 +1241,39 @@ export function buildStoryIdeaPrompt(
       "- The story should foreshadow the key trick(s) and end with a line that tees up the warm-up quiz to explore them next.",
       "- Do not introduce advanced concepts beyond these techniques/skills/assumptions.",
     );
+    if (lessonContext.storyHook) {
+      const hook = lessonContext.storyHook;
+      contextLines.push("**Historical Hook (must stay anchored):**");
+      contextLines.push("- Do not change the protagonist or setting; keep the story grounded in this hook.");
+      if (hook.protagonist) {
+        contextLines.push(`- Protagonist: ${hook.protagonist}`);
+      }
+      if (hook.anchor_event || hook.anchor_year || hook.anchor_place) {
+        const anchorParts = [
+          hook.anchor_event,
+          hook.anchor_year,
+          hook.anchor_place,
+        ].filter(Boolean);
+        if (anchorParts.length > 0) {
+          contextLines.push(`- Anchor event: ${anchorParts.join(" — ")}`);
+        }
+      }
+      if (hook.stakes) {
+        contextLines.push(`- Stakes: ${hook.stakes}`);
+      }
+      if (hook.analogy_seed) {
+        contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
+      }
+      if (hook.visual_motif) {
+        contextLines.push(`- Visual motif: ${hook.visual_motif}`);
+      }
+      if (hook.modern_tie_in) {
+        contextLines.push(`- Modern tie-in domain: ${hook.modern_tie_in}`);
+      }
+      if (hook.naming_note) {
+        contextLines.push(`- Naming note: ${hook.naming_note}`);
+      }
+    }
   }
   return `### **Prompt 1: The Story Architect's Brief**
 
@@ -1374,6 +1407,39 @@ export function buildStoryDraftPrompt(
       "- Close with a line that hands off to the warm-up quiz to explore the hinted trick(s).",
       "- Do not introduce new advanced concepts beyond these skills/techniques/assumptions.",
     );
+    if (lessonContext.storyHook) {
+      const hook = lessonContext.storyHook;
+      contextLines.push("**Historical Hook (do not drift):**");
+      contextLines.push("- Keep the same protagonist and setting described here; do not swap them.");
+      if (hook.protagonist) {
+        contextLines.push(`- Protagonist: ${hook.protagonist}`);
+      }
+      if (hook.anchor_event || hook.anchor_year || hook.anchor_place) {
+        const anchorParts = [
+          hook.anchor_event,
+          hook.anchor_year,
+          hook.anchor_place,
+        ].filter(Boolean);
+        if (anchorParts.length > 0) {
+          contextLines.push(`- Anchor event: ${anchorParts.join(" — ")}`);
+        }
+      }
+      if (hook.stakes) {
+        contextLines.push(`- Stakes: ${hook.stakes}`);
+      }
+      if (hook.analogy_seed) {
+        contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
+      }
+      if (hook.visual_motif) {
+        contextLines.push(`- Visual motif: ${hook.visual_motif}`);
+      }
+      if (hook.modern_tie_in) {
+        contextLines.push(`- Modern tie-in domain: ${hook.modern_tie_in}`);
+      }
+      if (hook.naming_note) {
+        contextLines.push(`- Naming note: ${hook.naming_note}`);
+      }
+    }
   }
   return `### **Prompt 2: The Narrative Weaver**
 
@@ -1473,6 +1539,39 @@ export function buildStoryRevisionPrompt(
     contextLines.push(
       "- Maintain a final line that hands off to the warm-up quiz to explore the hinted trick(s).",
     );
+    if (lessonContext.storyHook) {
+      const hook = lessonContext.storyHook;
+      contextLines.push("**Historical Hook (must be preserved):**");
+      contextLines.push("- Keep the protagonist and setting fixed; do not invent new anchors.");
+      if (hook.protagonist) {
+        contextLines.push(`- Protagonist: ${hook.protagonist}`);
+      }
+      if (hook.anchor_event || hook.anchor_year || hook.anchor_place) {
+        const anchorParts = [
+          hook.anchor_event,
+          hook.anchor_year,
+          hook.anchor_place,
+        ].filter(Boolean);
+        if (anchorParts.length > 0) {
+          contextLines.push(`- Anchor event: ${anchorParts.join(" — ")}`);
+        }
+      }
+      if (hook.stakes) {
+        contextLines.push(`- Stakes: ${hook.stakes}`);
+      }
+      if (hook.analogy_seed) {
+        contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
+      }
+      if (hook.visual_motif) {
+        contextLines.push(`- Visual motif: ${hook.visual_motif}`);
+      }
+      if (hook.modern_tie_in) {
+        contextLines.push(`- Modern tie-in domain: ${hook.modern_tie_in}`);
+      }
+      if (hook.naming_note) {
+        contextLines.push(`- Naming note: ${hook.naming_note}`);
+      }
+    }
   }
   return `### **Prompt 3: The Narrative Editor's Cut**
 
@@ -3755,6 +3854,18 @@ type StoryLessonContext = {
     story_callback?: string;
     summary?: string;
   }[];
+  storyHook?: {
+    storyTopic: string;
+    protagonist?: string;
+    anchor_event?: string;
+    anchor_year?: string;
+    anchor_place?: string;
+    stakes?: string;
+    analogy_seed?: string;
+    modern_tie_in?: string;
+    visual_motif?: string;
+    naming_note?: string;
+  };
 };
 
 type NarrationStageValue = {
