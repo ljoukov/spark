@@ -1413,14 +1413,6 @@ const PROBLEMS_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-const PROBLEM_SOLUTION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["solution_py"],
-  properties: {
-    solution_py: { type: Type.STRING, minLength: "1" },
-  },
-};
-
 const ProblemSolutionSchema = z.object({
   solution_py: z.string().trim().min(1),
 });
@@ -1551,7 +1543,8 @@ function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
     "",
     "Write a correct Python 3 solution using ONLY the statement and examples below.",
     "Use the exact function signature and return values (no input()/print()).",
-    "Do not include tests, prompts, or markdown fences; return JSON with the key solution_py containing the code string.",
+    "Use the code execution tool to verify your solution against the examples. If any example fails, fix the code and re-run until it passes.",
+    "Respond in plain text, wrapping only the final code in <CODE>...</CODE> tags. Do not return JSON, markdown fences, or any other text.",
     "",
     "Function signature:",
     problem.function.signature,
@@ -1571,6 +1564,10 @@ function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
 }
 
 function extractPythonCode(text: string): string {
+  const tagged = text.match(/<CODE>([\s\S]*?)<\/CODE>/i);
+  if (tagged && tagged[1]) {
+    return tagged[1].trim();
+  }
   const fenced =
     text.match(/```python\s*([\s\S]*?)```/i) ?? text.match(/```([\s\S]*?)```/);
   if (fenced && fenced[1]) {
@@ -1627,6 +1624,8 @@ async function runSolutionAgainstTests(
     "            parsed = ast.literal_eval(text)",
     "            if isinstance(parsed, dict) and all(name in parsed for name in param_names):",
     "                return [parsed[name] for name in param_names]",
+    "            if len(param_names) == 1:",
+    "                return [parsed]",
     "            if isinstance(parsed, (list, tuple)) and len(parsed) == len(param_names):",
     "                return list(parsed)",
     "        except Exception:",
@@ -3044,18 +3043,17 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/problem-solution] solving ${problem.id} (${attemptLabel})`,
       );
-      const solutionJson = await generateJson<ProblemSolution>({
+      const solutionText = await generateText({
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
-          "Solve the problem using only the provided statement and examples. Return JSON with solution_py containing the Python code.",
+          "Solve the problem using only the provided statement and examples. Use the code execution tool to verify; wrap ONLY the final code in <CODE>...</CODE>.",
           userPrompt,
         ),
-        responseSchema: PROBLEM_SOLUTION_RESPONSE_SCHEMA,
-        schema: ProblemSolutionSchema,
+        tools: [{ type: "code-execution" }],
         progress: this.logger,
         debug: debugOptions,
       });
-      const candidate = extractPythonCode(solutionJson.solution_py);
+      const candidate = extractPythonCode(solutionText);
       const failures = await runSolutionAgainstTests(
         problem,
         candidate,
