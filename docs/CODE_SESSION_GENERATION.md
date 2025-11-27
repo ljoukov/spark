@@ -47,7 +47,7 @@ Hard code in a variable the following assumption about the student (we will late
 - `hints: string[]`
 - `solution_overview_md: string`
 - `reference_solution_py: string`
-- `tests: { public: Array<{ input: string; output: string }>; private_count: number }`
+- `tests: { public: Array<{ input: string; output: string }>; private: Array<{ input: string; output: string }>; private_count: number }`
 
 ## Pipeline
 
