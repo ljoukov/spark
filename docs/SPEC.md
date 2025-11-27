@@ -64,7 +64,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ### Admin UI
 
-- `/admin/tasks` exposes manual task triggers for operators. The initial control is a "Run task" button that enqueues the `helloWorld` task and expects to see `Hello World` in the server logs, confirming API key + queue configuration end to end.
+- `/admin/tasks` exposes manual task triggers for operators. Controls include a "Run task" button that enqueues the `helloWorld` task (expects to see `Hello World` in the server logs) and a "Generate welcome session" form that accepts a topic string and queues `generateWelcomeSession` to publish a new template under `spark-admin/templates/sessions`.
 
 ### 3.1 Data Flow
 

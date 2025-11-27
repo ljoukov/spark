@@ -6,7 +6,8 @@ import {
 	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
 	getFirebaseStorageBucketName,
-	generateSession
+	generateSession,
+	generateWelcomeSessionTemplate
 } from '@spark/llm';
 import {
 	SparkUploadDocumentSchema,
@@ -50,6 +51,18 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (task.type === 'helloWorld') {
 		console.log('[internal task] helloWorld');
 		return json({ status: 'ok' }, { status: 200 });
+	}
+
+	if (task.type === 'generateWelcomeSession') {
+		const { topic } = task.generateWelcomeSession;
+		console.log(`[internal task] generateWelcomeSession topic="${topic}"`);
+		try {
+			const result = await generateWelcomeSessionTemplate({ topic });
+			return json({ status: 'completed', sessionId: result.sessionId }, { status: 200 });
+		} catch (error) {
+			console.error('Failed to generate welcome session', { error, topic });
+			return json({ status: 'failed', reason: 'welcome_generation_failed' }, { status: 500 });
+		}
 	}
 
 	if (task.type === 'generateLesson') {
