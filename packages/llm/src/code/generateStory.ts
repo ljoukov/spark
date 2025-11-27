@@ -87,6 +87,22 @@ function useProgress(progress: StoryProgress): JobProgressReporter {
         progress.finishModelCall(handle);
       }
     },
+    startStage(stageName: string) {
+      if (progress && progress.startStage) {
+        return progress.startStage(stageName);
+      }
+      return Symbol("stage");
+    },
+    finishStage(handle: symbol) {
+      if (progress && progress.finishStage) {
+        progress.finishStage(handle);
+      }
+    },
+    setActiveStages(stages: Iterable<string>) {
+      if (progress && progress.setActiveStages) {
+        progress.setActiveStages(stages);
+      }
+    },
   };
 }
 
@@ -645,30 +661,6 @@ const OriginsCapsuleValidationResponseSchema = z.object({
 type OriginsCapsuleValidationResponse = z.infer<
   typeof OriginsCapsuleValidationResponseSchema
 >;
-
-const ORIGINS_CAPSULE_VALIDATION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["verdict"],
-  propertyOrdering: ["verdict", "issues"],
-  properties: {
-    verdict: {
-      type: Type.STRING,
-      enum: ["pass", "fail"],
-    },
-    issues: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["summary", "recommendation"],
-        propertyOrdering: ["summary", "recommendation"],
-        properties: {
-          summary: { type: Type.STRING, minLength: "1" },
-          recommendation: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-  },
-};
 
 export type StoryProseVariantLabel = "variant_a" | "variant_b";
 
@@ -1244,7 +1236,9 @@ export function buildStoryIdeaPrompt(
     if (lessonContext.storyHook) {
       const hook = lessonContext.storyHook;
       contextLines.push("**Historical Hook (must stay anchored):**");
-      contextLines.push("- Do not change the protagonist or setting; keep the story grounded in this hook.");
+      contextLines.push(
+        "- Do not change the protagonist or setting; keep the story grounded in this hook.",
+      );
       if (hook.protagonist) {
         contextLines.push(`- Protagonist: ${hook.protagonist}`);
       }
@@ -1410,7 +1404,9 @@ export function buildStoryDraftPrompt(
     if (lessonContext.storyHook) {
       const hook = lessonContext.storyHook;
       contextLines.push("**Historical Hook (do not drift):**");
-      contextLines.push("- Keep the same protagonist and setting described here; do not swap them.");
+      contextLines.push(
+        "- Keep the same protagonist and setting described here; do not swap them.",
+      );
       if (hook.protagonist) {
         contextLines.push(`- Protagonist: ${hook.protagonist}`);
       }
@@ -1543,7 +1539,9 @@ export function buildStoryRevisionPrompt(
     if (lessonContext.storyHook) {
       const hook = lessonContext.storyHook;
       contextLines.push("**Historical Hook (must be preserved):**");
-      contextLines.push("- Keep the protagonist and setting fixed; do not invent new anchors.");
+      contextLines.push(
+        "- Keep the protagonist and setting fixed; do not invent new anchors.",
+      );
       if (hook.protagonist) {
         contextLines.push(`- Protagonist: ${hook.protagonist}`);
       }
@@ -2040,7 +2038,9 @@ async function validateOriginsCapsule(
       const raw = await generateText({
         progress: adapter,
         modelId: TEXT_MODEL_ID,
-        contents: [{ role: "user", parts: [{ type: "text", text: promptWithSchema }] }],
+        contents: [
+          { role: "user", parts: [{ type: "text", text: promptWithSchema }] },
+        ],
         tools: [{ type: "web-search" }],
         debug,
       });
@@ -2056,7 +2056,7 @@ async function validateOriginsCapsule(
           text = text.slice(firstBrace, lastBrace + 1).trim();
         }
       }
-      const parsed = JSON.parse(text);
+      const parsed: unknown = JSON.parse(text);
       return OriginsCapsuleValidationResponseSchema.parse(parsed);
     } catch (error) {
       lastError = error;
@@ -3467,180 +3467,189 @@ export async function generateImageSets(
   const runImageSet = async (
     imageSetLabel: "set_a" | "set_b",
   ): Promise<StoryImageSet> => {
-    const frameNarrationByIndex = new Map<number, readonly string[]>();
-    for (const entry of panelEntries) {
-      const narrationLines =
-        narrationsByIndex.get(entry.index) ?? entry.narration ?? [];
-      frameNarrationByIndex.set(entry.index, narrationLines);
-    }
-    let lastError: unknown;
+    const stageHandle = adapter.startStage
+      ? adapter.startStage(`images/${imageSetLabel}`)
+      : Symbol("stage");
+    try {
+      const frameNarrationByIndex = new Map<number, readonly string[]>();
+      for (const entry of panelEntries) {
+        const narrationLines =
+          narrationsByIndex.get(entry.index) ?? entry.narration ?? [];
+        frameNarrationByIndex.set(entry.index, narrationLines);
+      }
+      let lastError: unknown;
 
-    for (
-      let attempt = 1;
-      attempt <= IMAGE_SET_GENERATE_MAX_ATTEMPTS;
-      attempt += 1
-    ) {
-      const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(
-        IMAGE_SET_GENERATE_MAX_ATTEMPTS,
-      ).padStart(2, "0")}`;
-      const attemptLogPrefix = `[story/image-sets/${imageSetLabel}] [${attemptLabel}]`;
-      const logWithAttempt = (message: string) => {
-        adapter.log(`${attemptLogPrefix} ${message}`);
-      };
-      const attemptDebug = (subStage: string): LlmDebugOptions | undefined =>
-        buildDebug(`${imageSetLabel}/${attemptLabel}/${subStage}`);
+      for (
+        let attempt = 1;
+        attempt <= IMAGE_SET_GENERATE_MAX_ATTEMPTS;
+        attempt += 1
+      ) {
+        const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(
+          IMAGE_SET_GENERATE_MAX_ATTEMPTS,
+        ).padStart(2, "0")}`;
+        const attemptLogPrefix = `[story/image-sets/${imageSetLabel}] [${attemptLabel}]`;
+        const logWithAttempt = (message: string) => {
+          adapter.log(`${attemptLogPrefix} ${message}`);
+        };
+        const attemptDebug = (subStage: string): LlmDebugOptions | undefined =>
+          buildDebug(`${imageSetLabel}/${attemptLabel}/${subStage}`);
 
-      try {
-        logWithAttempt(
-          `generating main frames (${panelEntries.length} prompts)`,
-        );
-        const mainImageParts = await generateStoryFrames({
-          progress: adapter,
-          imageModelId: IMAGE_MODEL_ID,
-          gradingModelId: TEXT_MODEL_ID,
-          stylePrompt,
-          imagePrompts: panelEntries.map((entry) => entry.prompt),
-          batchSize: 5,
-          overlapSize: 3,
-          gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
-          imageAspectRatio: "16:9",
-          frameNarrationByIndex,
-          debug: attemptDebug("main"),
-        });
-
-        const imagesByIndex = new Map<number, GeneratedStoryImage>();
-        for (let index = 0; index < panelEntries.length; index += 1) {
-          const entry = panelEntries[index];
-          const part = mainImageParts[index];
-          if (!part) {
-            continue;
-          }
-          imagesByIndex.set(entry.index, {
-            index: entry.index,
-            mimeType: part.mimeType ?? "image/png",
-            data: part.data,
-          });
+        try {
           logWithAttempt(
-            `received image ${entry.index} (${part.data.length} bytes)`,
+            `generating main frames (${panelEntries.length} prompts)`,
           );
-        }
+          const mainImageParts = await generateStoryFrames({
+            progress: adapter,
+            imageModelId: IMAGE_MODEL_ID,
+            gradingModelId: TEXT_MODEL_ID,
+            stylePrompt,
+            imagePrompts: panelEntries.map((entry) => entry.prompt),
+            batchSize: 5,
+            overlapSize: 3,
+            gradeCatastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
+            imageAspectRatio: "16:9",
+            frameNarrationByIndex,
+            debug: attemptDebug("main"),
+          });
 
-        const posterReferences = mainImageParts.slice(0, 4);
-        logWithAttempt("generating poster candidates (4 variants)");
-        const posterCandidatePromises = Array.from({ length: 4 }).map(
-          async (_, offset) => {
-            const candidateIndex = offset + 1;
-            const image = await generateSingleImage({
-              progress: adapter,
-              modelId: IMAGE_MODEL_ID,
-              stylePrompt,
-              styleImages: posterReferences,
-              prompt: posterEntry.prompt,
-              maxAttempts: 4,
-              imageAspectRatio: "16:9",
-              debug: attemptDebug(`poster/candidate_${candidateIndex}`),
+          const imagesByIndex = new Map<number, GeneratedStoryImage>();
+          for (let index = 0; index < panelEntries.length; index += 1) {
+            const entry = panelEntries[index];
+            const part = mainImageParts[index];
+            if (!part) {
+              continue;
+            }
+            imagesByIndex.set(entry.index, {
+              index: entry.index,
+              mimeType: part.mimeType ?? "image/png",
+              data: part.data,
             });
             logWithAttempt(
-              `poster candidate ${candidateIndex} (${image.data.length} bytes)`,
+              `received image ${entry.index} (${part.data.length} bytes)`,
             );
-            return { candidateIndex, image };
-          },
-        );
-        const posterCandidates = await Promise.all(posterCandidatePromises);
-        const posterSelection = await selectPosterCandidate({
-          prompt: posterEntry.prompt,
-          stylePrompt,
-          styleReferences: posterReferences,
-          candidates: posterCandidates,
-          catastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
-          progress: adapter,
-          gradingModelId: TEXT_MODEL_ID,
-          debug: attemptDebug("poster/select"),
-        });
-        const winningPoster = posterCandidates.find(
-          (candidate) =>
-            candidate.candidateIndex === posterSelection.winnerCandidateIndex,
-        );
-        if (!winningPoster) {
-          throw new Error(
-            `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`,
-          );
-        }
-        imagesByIndex.set(posterIndex, {
-          index: posterIndex,
-          mimeType: winningPoster.image.mimeType ?? "image/png",
-          data: winningPoster.image.data,
-        });
-        logWithAttempt(
-          `selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`,
-        );
-        for (const finding of posterSelection.catastrophicFindings) {
-          logWithAttempt(
-            `poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`,
-          );
-        }
-
-        const endingReferences = mainImageParts.slice(
-          Math.max(mainImageParts.length - 4, 0),
-        );
-        logWithAttempt("generating end card");
-        const endingPart = await generateSingleImage({
-          progress: adapter,
-          modelId: IMAGE_MODEL_ID,
-          stylePrompt,
-          styleImages: endingReferences,
-          prompt: endingEntry.prompt,
-          maxAttempts: 4,
-          imageAspectRatio: "16:9",
-          debug: attemptDebug("ending"),
-        });
-        imagesByIndex.set(endingIndex, {
-          index: endingIndex,
-          mimeType: endingPart.mimeType ?? "image/png",
-          data: endingPart.data,
-        });
-        logWithAttempt(
-          `received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
-        );
-
-        const orderedImages: GeneratedStoryImage[] = [];
-        const appendImageIfPresent = (targetIndex: number) => {
-          const image = imagesByIndex.get(targetIndex);
-          if (image) {
-            orderedImages.push(image);
           }
-        };
 
-        appendImageIfPresent(posterIndex);
-        for (const entry of panelEntries) {
-          appendImageIfPresent(entry.index);
-        }
-        appendImageIfPresent(endingIndex);
+          const posterReferences = mainImageParts.slice(0, 4);
+          logWithAttempt("generating poster candidates (4 variants)");
+          const posterCandidatePromises = Array.from({ length: 4 }).map(
+            async (_, offset) => {
+              const candidateIndex = offset + 1;
+              const image = await generateSingleImage({
+                progress: adapter,
+                modelId: IMAGE_MODEL_ID,
+                stylePrompt,
+                styleImages: posterReferences,
+                prompt: posterEntry.prompt,
+                maxAttempts: 4,
+                imageAspectRatio: "16:9",
+                debug: attemptDebug(`poster/candidate_${candidateIndex}`),
+              });
+              logWithAttempt(
+                `poster candidate ${candidateIndex} (${image.data.length} bytes)`,
+              );
+              return { candidateIndex, image };
+            },
+          );
+          const posterCandidates = await Promise.all(posterCandidatePromises);
+          const posterSelection = await selectPosterCandidate({
+            prompt: posterEntry.prompt,
+            stylePrompt,
+            styleReferences: posterReferences,
+            candidates: posterCandidates,
+            catastrophicDescription: STORY_FRAME_CATASTROPHIC_DESCRIPTION,
+            progress: adapter,
+            gradingModelId: TEXT_MODEL_ID,
+            debug: attemptDebug("poster/select"),
+          });
+          const winningPoster = posterCandidates.find(
+            (candidate) =>
+              candidate.candidateIndex === posterSelection.winnerCandidateIndex,
+          );
+          if (!winningPoster) {
+            throw new Error(
+              `Poster selection returned candidate ${posterSelection.winnerCandidateIndex}, but no matching image was generated`,
+            );
+          }
+          imagesByIndex.set(posterIndex, {
+            index: posterIndex,
+            mimeType: winningPoster.image.mimeType ?? "image/png",
+            data: winningPoster.image.data,
+          });
+          logWithAttempt(
+            `selected poster candidate ${posterSelection.winnerCandidateIndex} – ${posterSelection.reasoning}`,
+          );
+          for (const finding of posterSelection.catastrophicFindings) {
+            logWithAttempt(
+              `poster candidate ${finding.candidateIndex} flagged as catastrophic: ${finding.reason}`,
+            );
+          }
 
-        logWithAttempt("completed image set generation");
-        return {
-          imageSetLabel,
-          images: orderedImages,
-        };
-      } catch (error) {
-        lastError = error;
-        const message = errorAsString(error);
-        logWithAttempt(`failed: ${message}`);
-        if (attempt === IMAGE_SET_GENERATE_MAX_ATTEMPTS) {
-          throw error instanceof Error ? error : new Error(message);
+          const endingReferences = mainImageParts.slice(
+            Math.max(mainImageParts.length - 4, 0),
+          );
+          logWithAttempt("generating end card");
+          const endingPart = await generateSingleImage({
+            progress: adapter,
+            modelId: IMAGE_MODEL_ID,
+            stylePrompt,
+            styleImages: endingReferences,
+            prompt: endingEntry.prompt,
+            maxAttempts: 4,
+            imageAspectRatio: "16:9",
+            debug: attemptDebug("ending"),
+          });
+          imagesByIndex.set(endingIndex, {
+            index: endingIndex,
+            mimeType: endingPart.mimeType ?? "image/png",
+            data: endingPart.data,
+          });
+          logWithAttempt(
+            `received ending image ${endingIndex} (${endingPart.data.length} bytes)`,
+          );
+
+          const orderedImages: GeneratedStoryImage[] = [];
+          const appendImageIfPresent = (targetIndex: number) => {
+            const image = imagesByIndex.get(targetIndex);
+            if (image) {
+              orderedImages.push(image);
+            }
+          };
+
+          appendImageIfPresent(posterIndex);
+          for (const entry of panelEntries) {
+            appendImageIfPresent(entry.index);
+          }
+          appendImageIfPresent(endingIndex);
+
+          logWithAttempt("completed image set generation");
+          return {
+            imageSetLabel,
+            images: orderedImages,
+          };
+        } catch (error) {
+          lastError = error;
+          const message = errorAsString(error);
+          logWithAttempt(`failed: ${message}`);
+          if (attempt === IMAGE_SET_GENERATE_MAX_ATTEMPTS) {
+            throw error instanceof Error ? error : new Error(message);
+          }
+          logWithAttempt("retrying after failure");
+          continue;
         }
-        logWithAttempt("retrying after failure");
-        continue;
+      }
+
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(
+            `Image set generation failed for ${imageSetLabel}${
+              lastError ? `: ${errorAsString(lastError)}` : ""
+            }`,
+          );
+    } finally {
+      if (adapter.finishStage) {
+        adapter.finishStage(stageHandle);
       }
     }
-
-    throw lastError instanceof Error
-      ? lastError
-      : new Error(
-          `Image set generation failed for ${imageSetLabel}${
-            lastError ? `: ${errorAsString(lastError)}` : ""
-          }`,
-        );
   };
 
   // Generate both image sets in parallel to reduce wall-clock time.
@@ -3956,6 +3965,18 @@ export class StoryGenerationPipeline {
 
   private get checkpointDir(): string | undefined {
     return this.options.checkpointDir;
+  }
+
+  private async withStage<T>(
+    stage: StoryGenerationStageName,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const handle = this.logger.startStage(stage);
+    try {
+      return await action();
+    } finally {
+      this.logger.finishStage(handle);
+    }
   }
 
   private stageFile(stage: StoryGenerationStageName): string | undefined {
@@ -4546,24 +4567,27 @@ export class StoryGenerationPipeline {
       return entry;
     }
     await this.invalidateAfter("idea");
-    const idea = await generateStoryIdea(
-      this.options.topic,
-      this.options.lessonContext,
-      this.options.progress,
-      {
-        debugRootDir: this.options.debugRootDir,
-      },
-    );
-    const checkpointPath = await this.writeIdeaCheckpoint(idea);
-    const entry: StageCacheEntry<StoryIdeaResult> = {
-      value: idea,
-      source: "generated",
-      checkpointPath,
-    };
+    const entry = await this.withStage("idea", async () => {
+      const idea = await generateStoryIdea(
+        this.options.topic,
+        this.options.lessonContext,
+        this.options.progress,
+        {
+          debugRootDir: this.options.debugRootDir,
+        },
+      );
+      const checkpointPath = await this.writeIdeaCheckpoint(idea);
+      const stageEntry: StageCacheEntry<StoryIdeaResult> = {
+        value: idea,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(`[story/checkpoint] wrote 'idea' to ${checkpointPath}`);
+      }
+      return stageEntry;
+    });
     this.caches.idea = entry;
-    if (checkpointPath) {
-      this.logger.log(`[story/checkpoint] wrote 'idea' to ${checkpointPath}`);
-    }
     return entry;
   }
 
@@ -4591,24 +4615,27 @@ export class StoryGenerationPipeline {
     const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
       ? { debugRootDir: this.options.debugRootDir, debugSubStage: "origins" }
       : undefined;
-    const capsule = await generateOriginsCapsule(
-      this.options.topic,
-      idea,
-      this.options.progress,
-      baseDebug,
-    );
-    const checkpointPath = await this.writeOriginsCapsuleCheckpoint(capsule);
-    const entry: StageCacheEntry<StoryOriginsCapsule> = {
-      value: capsule,
-      source: "generated",
-      checkpointPath,
-    };
-    this.caches.originsCapsule = entry;
-    if (checkpointPath) {
-      this.logger.log(
-        `[story/checkpoint] wrote 'origins_capsule' to ${checkpointPath}`,
+    const entry = await this.withStage("origins_capsule", async () => {
+      const capsule = await generateOriginsCapsule(
+        this.options.topic,
+        idea,
+        this.options.progress,
+        baseDebug,
       );
-    }
+      const checkpointPath = await this.writeOriginsCapsuleCheckpoint(capsule);
+      const stageEntry: StageCacheEntry<StoryOriginsCapsule> = {
+        value: capsule,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'origins_capsule' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
+    });
+    this.caches.originsCapsule = entry;
     return entry;
   }
 
@@ -4637,29 +4664,34 @@ export class StoryGenerationPipeline {
     const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
       ? { debugRootDir: this.options.debugRootDir }
       : undefined;
-    const drafts = await Promise.all(
-      STORY_PROSE_VARIANT_LABELS.map((label) =>
-        prepareProseVariantDraft(
-          this.options.topic,
-          label,
-          idea,
-          originsCapsule,
-          this.options.progress,
-          baseDebug,
-          this.options.lessonContext,
+    const entry = await this.withStage("prose", async () => {
+      const drafts = await Promise.all(
+        STORY_PROSE_VARIANT_LABELS.map((label) =>
+          prepareProseVariantDraft(
+            this.options.topic,
+            label,
+            idea,
+            originsCapsule,
+            this.options.progress,
+            baseDebug,
+            this.options.lessonContext,
+          ),
         ),
-      ),
-    );
-    const checkpointPath = await this.writeProseCheckpoint(drafts);
-    const entry: StageCacheEntry<StoryProseDraftVariant[]> = {
-      value: drafts,
-      source: "generated",
-      checkpointPath,
-    };
+      );
+      const checkpointPath = await this.writeProseCheckpoint(drafts);
+      const stageEntry: StageCacheEntry<StoryProseDraftVariant[]> = {
+        value: drafts,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'prose' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
+    });
     this.caches.proseDraft = entry;
-    if (checkpointPath) {
-      this.logger.log(`[story/checkpoint] wrote 'prose' to ${checkpointPath}`);
-    }
     return entry;
   }
 
@@ -4682,81 +4714,84 @@ export class StoryGenerationPipeline {
       return entry;
     }
     await this.invalidateAfter("prose-revision");
-    const draftEntry = await this.ensureProseDraft();
-    const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
-      ? { debugRootDir: this.options.debugRootDir }
-      : undefined;
-    const variantResults = await Promise.all(
-      draftEntry.value.map((variant) =>
-        reviseProseVariant(
-          this.options.topic,
-          variant,
-          this.options.progress,
-          baseDebug,
-          this.options.lessonContext,
+    const entry = await this.withStage("prose-revision", async () => {
+      const draftEntry = await this.ensureProseDraft();
+      const baseDebug: StoryDebugOptions | undefined = this.options.debugRootDir
+        ? { debugRootDir: this.options.debugRootDir }
+        : undefined;
+      const variantResults = await Promise.all(
+        draftEntry.value.map((variant) =>
+          reviseProseVariant(
+            this.options.topic,
+            variant,
+            this.options.progress,
+            baseDebug,
+            this.options.lessonContext,
+          ),
         ),
-      ),
-    );
-    const judge = await judgeProseVariants(
-      this.options.topic,
-      variantResults,
-      this.options.progress,
-      baseDebug,
-    );
-    const winning = variantResults.find(
-      (variant) => variant.label === judge.verdict,
-    );
-    if (!winning) {
-      throw new Error(
-        `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
       );
-    }
-    const metadata: StoryProseResult["metadata"] = {
-      ideaBrief: winning.idea.brief,
-      draftText: winning.draft.text,
-      originsCapsule: winning.originsCapsule.text,
-      analysis: winning.revision.analysis,
-      improvementSummary: winning.revision.improvementSummary,
-      fixChecklist: winning.revision.fixChecklist,
-      validation: winning.revision.validation,
-      variantLabel: judge.verdict,
-      variants: variantResults.map((variant) => ({
-        label: variant.label,
-        ideaBrief: variant.idea.brief,
-        draftText: variant.draft.text,
-        originsCapsule: variant.originsCapsule.text,
-        text: variant.revision.text,
-        analysis: variant.revision.analysis,
-        improvementSummary: variant.revision.improvementSummary,
-        fixChecklist: variant.revision.fixChecklist,
-        validation: variant.revision.validation,
-      })),
-      judge,
-    };
-    const value: StoryProseRevisionResult = {
-      text: winning.revision.text,
-      analysis: winning.revision.analysis,
-      improvementSummary: winning.revision.improvementSummary,
-      fixChecklist: winning.revision.fixChecklist,
-      validation: winning.revision.validation,
-      metadata,
-    };
-    const checkpointPath = await this.writeProseRevisionCheckpoint({
-      winning,
-      variants: variantResults,
-      judge,
+      const judge = await judgeProseVariants(
+        this.options.topic,
+        variantResults,
+        this.options.progress,
+        baseDebug,
+      );
+      const winning = variantResults.find(
+        (variant) => variant.label === judge.verdict,
+      );
+      if (!winning) {
+        throw new Error(
+          `Variant judge returned verdict ${judge.verdict}, but no matching variant was produced`,
+        );
+      }
+      const metadata: StoryProseResult["metadata"] = {
+        ideaBrief: winning.idea.brief,
+        draftText: winning.draft.text,
+        originsCapsule: winning.originsCapsule.text,
+        analysis: winning.revision.analysis,
+        improvementSummary: winning.revision.improvementSummary,
+        fixChecklist: winning.revision.fixChecklist,
+        validation: winning.revision.validation,
+        variantLabel: judge.verdict,
+        variants: variantResults.map((variant) => ({
+          label: variant.label,
+          ideaBrief: variant.idea.brief,
+          draftText: variant.draft.text,
+          originsCapsule: variant.originsCapsule.text,
+          text: variant.revision.text,
+          analysis: variant.revision.analysis,
+          improvementSummary: variant.revision.improvementSummary,
+          fixChecklist: variant.revision.fixChecklist,
+          validation: variant.revision.validation,
+        })),
+        judge,
+      };
+      const value: StoryProseRevisionResult = {
+        text: winning.revision.text,
+        analysis: winning.revision.analysis,
+        improvementSummary: winning.revision.improvementSummary,
+        fixChecklist: winning.revision.fixChecklist,
+        validation: winning.revision.validation,
+        metadata,
+      };
+      const checkpointPath = await this.writeProseRevisionCheckpoint({
+        winning,
+        variants: variantResults,
+        judge,
+      });
+      const stageEntry: StageCacheEntry<StoryProseRevisionResult> = {
+        value,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'prose-revision' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
     });
-    const entry: StageCacheEntry<StoryProseRevisionResult> = {
-      value,
-      source: "generated",
-      checkpointPath,
-    };
     this.caches.prose = entry;
-    if (checkpointPath) {
-      this.logger.log(
-        `[story/checkpoint] wrote 'prose-revision' to ${checkpointPath}`,
-      );
-    }
     return entry;
   }
 
@@ -4779,26 +4814,30 @@ export class StoryGenerationPipeline {
     }
     await this.invalidateAfter("segmentation");
     const { value: prose } = await this.ensureProse();
-    const segmentation = await generateStorySegmentation(
-      prose.text,
-      this.options.topic,
-      this.options.progress,
-      {
-        debugRootDir: this.options.debugRootDir,
-      },
-    );
-    const checkpointPath = await this.writeSegmentationCheckpoint(segmentation);
-    const entry: StageCacheEntry<StorySegmentation> = {
-      value: segmentation,
-      source: "generated",
-      checkpointPath,
-    };
-    this.caches.segmentation = entry;
-    if (checkpointPath) {
-      this.logger.log(
-        `[story/checkpoint] wrote 'segmentation' to ${checkpointPath}`,
+    const entry = await this.withStage("segmentation", async () => {
+      const segmentation = await generateStorySegmentation(
+        prose.text,
+        this.options.topic,
+        this.options.progress,
+        {
+          debugRootDir: this.options.debugRootDir,
+        },
       );
-    }
+      const checkpointPath =
+        await this.writeSegmentationCheckpoint(segmentation);
+      const stageEntry: StageCacheEntry<StorySegmentation> = {
+        value: segmentation,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'segmentation' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
+    });
+    this.caches.segmentation = entry;
     return entry;
   }
 
@@ -4824,28 +4863,31 @@ export class StoryGenerationPipeline {
     await this.invalidateAfter("segmentation_correction");
     const { value: prose } = await this.ensureProse();
     const { value: draft } = await this.ensureSegmentation();
-    const corrected = await correctStorySegmentation(
-      prose.text,
-      this.options.topic,
-      draft,
-      this.options.progress,
-      {
-        debugRootDir: this.options.debugRootDir,
-      },
-    );
-    const checkpointPath =
-      await this.writeCorrectedSegmentationCheckpoint(corrected);
-    const entry: StageCacheEntry<StorySegmentation> = {
-      value: corrected,
-      source: "generated",
-      checkpointPath,
-    };
-    this.caches.segmentationCorrection = entry;
-    if (checkpointPath) {
-      this.logger.log(
-        `[story/checkpoint] wrote 'segmentation_correction' to ${checkpointPath}`,
+    const entry = await this.withStage("segmentation_correction", async () => {
+      const corrected = await correctStorySegmentation(
+        prose.text,
+        this.options.topic,
+        draft,
+        this.options.progress,
+        {
+          debugRootDir: this.options.debugRootDir,
+        },
       );
-    }
+      const checkpointPath =
+        await this.writeCorrectedSegmentationCheckpoint(corrected);
+      const stageEntry: StageCacheEntry<StorySegmentation> = {
+        value: corrected,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'segmentation_correction' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
+    });
+    this.caches.segmentationCorrection = entry;
     return entry;
   }
 
@@ -4868,21 +4910,26 @@ export class StoryGenerationPipeline {
     }
     await this.invalidateAfter("images");
     const { value: segmentation } = await this.ensureSegmentationCorrection();
-    const images = await generateStoryImages(
-      segmentation,
-      this.options.progress,
-      { debugRootDir: this.options.debugRootDir },
-    );
-    const checkpointPath = await this.writeImagesCheckpoint(images);
-    const entry: StageCacheEntry<StoryImagesResult> = {
-      value: images,
-      source: "generated",
-      checkpointPath,
-    };
+    const entry = await this.withStage("images", async () => {
+      const images = await generateStoryImages(
+        segmentation,
+        this.options.progress,
+        { debugRootDir: this.options.debugRootDir },
+      );
+      const checkpointPath = await this.writeImagesCheckpoint(images);
+      const stageEntry: StageCacheEntry<StoryImagesResult> = {
+        value: images,
+        source: "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
+        this.logger.log(
+          `[story/checkpoint] wrote 'images' to ${checkpointPath}`,
+        );
+      }
+      return stageEntry;
+    });
     this.caches.images = entry;
-    if (checkpointPath) {
-      this.logger.log(`[story/checkpoint] wrote 'images' to ${checkpointPath}`);
-    }
     return entry;
   }
 
@@ -4904,65 +4951,105 @@ export class StoryGenerationPipeline {
       );
     }
 
-    const { value: segmentation } = await this.ensureSegmentationCorrection();
-    const { value: images } = await this.ensureImages();
-    const userId = this.requireContext("userId");
-    const sessionId = this.requireContext("sessionId");
-    const planItemId = this.requireContext("planItemId");
-    const storageBucket = getFirebaseStorageBucketName();
+    const entry = await this.withStage("narration", async () => {
+      const { value: segmentation } = await this.ensureSegmentationCorrection();
+      const { value: images } = await this.ensureImages();
+      const userId = this.requireContext("userId");
+      const sessionId = this.requireContext("sessionId");
+      const planItemId = this.requireContext("planItemId");
+      const storageBucket = getFirebaseStorageBucketName();
 
-    const totalSegments = segmentation.segments.length;
-    const interiorImages = images.images
-      .filter((image) => image.index >= 1)
-      .filter((image) => image.index <= totalSegments)
-      .sort((a, b) => a.index - b.index);
+      const totalSegments = segmentation.segments.length;
+      const interiorImages = images.images
+        .filter((image) => image.index >= 1)
+        .filter((image) => image.index <= totalSegments)
+        .sort((a, b) => a.index - b.index);
 
-    if (interiorImages.length !== totalSegments) {
-      throw new Error(
-        `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
+      if (interiorImages.length !== totalSegments) {
+        throw new Error(
+          `Expected ${totalSegments} interior images, found ${interiorImages.length}`,
+        );
+      }
+
+      const endingImageIndex = totalSegments + 1;
+      const posterImageIndex = totalSegments + 2;
+      const endingImage = images.images.find(
+        (image) => image.index === endingImageIndex,
       );
-    }
-
-    const endingImageIndex = totalSegments + 1;
-    const posterImageIndex = totalSegments + 2;
-    const endingImage = images.images.find(
-      (image) => image.index === endingImageIndex,
-    );
-    if (!endingImage) {
-      throw new Error(
-        `Expected ending image at index ${endingImageIndex}, but none was provided`,
+      if (!endingImage) {
+        throw new Error(
+          `Expected ending image at index ${endingImageIndex}, but none was provided`,
+        );
+      }
+      const posterImage = images.images.find(
+        (image) => image.index === posterImageIndex,
       );
-    }
-    const posterImage = images.images.find(
-      (image) => image.index === posterImageIndex,
-    );
-    if (!posterImage) {
-      throw new Error(
-        `Expected poster image at index ${posterImageIndex}, but none was provided`,
+      if (!posterImage) {
+        throw new Error(
+          `Expected poster image at index ${posterImageIndex}, but none was provided`,
+        );
+      }
+
+      const storage = getFirebaseAdminStorage();
+      const bucket = storage.bucket(storageBucket);
+
+      const sharpModule = getSharp();
+      const totalImages = interiorImages.length;
+      const uploadConcurrency = Math.min(8, totalImages);
+      this.logger.log(
+        `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
       );
-    }
+      const storagePaths = new Array<string>(totalImages);
 
-    const storage = getFirebaseAdminStorage();
-    const bucket = storage.bucket(storageBucket);
-
-    const sharpModule = getSharp();
-    const totalImages = interiorImages.length;
-    const uploadConcurrency = Math.min(8, totalImages);
-    this.logger.log(
-      `[story/images] uploading ${totalImages} images with concurrency ${uploadConcurrency}`,
-    );
-    const storagePaths = new Array<string>(totalImages);
-
-    let nextImageIndex = 0;
-    const uploadWorker = async (workerId: number): Promise<void> => {
-      // Sequentially claim the next image index; JavaScript's single-threaded model keeps this safe.
-      while (true) {
-        const currentIndex = nextImageIndex;
-        nextImageIndex += 1;
-        if (currentIndex >= totalImages) {
-          return;
+      let nextImageIndex = 0;
+      const uploadWorker = async (workerId: number): Promise<void> => {
+        while (true) {
+          const currentIndex = nextImageIndex;
+          nextImageIndex += 1;
+          if (currentIndex >= totalImages) {
+            return;
+          }
+          const image = interiorImages[currentIndex];
+          const jpegBuffer = await sharpModule(image.data)
+            .jpeg({
+              quality: 92,
+              progressive: true,
+              chromaSubsampling: "4:4:4",
+            })
+            .toBuffer();
+          const storagePath = buildImageStoragePath(
+            userId,
+            sessionId,
+            planItemId,
+            currentIndex + 1,
+            "jpg",
+            this.options.storagePrefix,
+          );
+          const file = bucket.file(storagePath);
+          await file.save(jpegBuffer, {
+            resumable: false,
+            metadata: {
+              contentType: "image/jpeg",
+              cacheControl: "public, max-age=0",
+            },
+          });
+          storagePaths[currentIndex] = normaliseStoragePath(storagePath);
+          this.logger.log(
+            `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
+          );
         }
-        const image = interiorImages[currentIndex];
+      };
+
+      await Promise.all(
+        Array.from({ length: uploadConcurrency }, (_, workerId) =>
+          uploadWorker(workerId),
+        ),
+      );
+
+      const uploadSupplementaryImage = async (
+        image: GeneratedStoryImage,
+        kind: "poster" | "ending",
+      ): Promise<StorySupplementaryImage> => {
         const jpegBuffer = await sharpModule(image.data)
           .jpeg({
             quality: 92,
@@ -4970,12 +5057,11 @@ export class StoryGenerationPipeline {
             chromaSubsampling: "4:4:4",
           })
           .toBuffer();
-        const storagePath = buildImageStoragePath(
+        const storagePath = buildSupplementaryImageStoragePath(
           userId,
           sessionId,
           planItemId,
-          currentIndex + 1,
-          "jpg",
+          kind,
           this.options.storagePrefix,
         );
         const file = bucket.file(storagePath);
@@ -4986,128 +5072,93 @@ export class StoryGenerationPipeline {
             cacheControl: "public, max-age=0",
           },
         });
-        storagePaths[currentIndex] = normaliseStoragePath(storagePath);
         this.logger.log(
-          `[story/images] worker ${workerId + 1}/${uploadConcurrency} saved image ${currentIndex + 1}/${totalImages} to /${storagePath}`,
+          `[story/images] saved ${kind} image to /${storagePath}`,
+        );
+        return {
+          storagePath: normaliseStoragePath(storagePath),
+        };
+      };
+
+      const [posterReference, endingReference] = await Promise.all([
+        uploadSupplementaryImage(posterImage, "poster"),
+        uploadSupplementaryImage(endingImage, "ending"),
+      ]);
+
+      const segments = toMediaSegments(segmentation, storagePaths);
+      const narrationProgressLabel =
+        this.options.audioProgressLabel ?? planItemId;
+      const cachedPublishResult = checkpoint?.value.publishResult;
+
+      if (cachedPublishResult) {
+        const firestore = getFirebaseAdminFirestore();
+        const docRef = firestore.doc(cachedPublishResult.documentPath);
+        const docSnapshot = await docRef.get();
+        if (docSnapshot.exists) {
+          this.logger.log(
+            `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,
+          );
+          const stageValue: NarrationStageValue = {
+            publishResult: cachedPublishResult,
+            storagePaths,
+            posterImage: posterReference,
+            endingImage: endingReference,
+          };
+          const checkpointPath =
+            await this.writeNarrationCheckpoint(stageValue);
+          const stageEntry: StageCacheEntry<NarrationStageValue> = {
+            value: stageValue,
+            source: "checkpoint",
+            checkpointPath,
+          };
+          if (checkpointPath) {
+            this.logger.log(
+              `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
+            );
+          }
+          return stageEntry;
+        }
+        this.logger.log(
+          `[story/narration] cached media document ${cachedPublishResult.documentPath} missing; regenerating audio`,
         );
       }
-    };
 
-    await Promise.all(
-      Array.from({ length: uploadConcurrency }, (_, workerId) =>
-        uploadWorker(workerId),
-      ),
-    );
-
-    const uploadSupplementaryImage = async (
-      image: GeneratedStoryImage,
-      kind: "poster" | "ending",
-    ): Promise<StorySupplementaryImage> => {
-      const jpegBuffer = await sharpModule(image.data)
-        .jpeg({
-          quality: 92,
-          progressive: true,
-          chromaSubsampling: "4:4:4",
-        })
-        .toBuffer();
-      const storagePath = buildSupplementaryImageStoragePath(
+      this.logger.log(
+        `[story/narration] publishing ${segments.length} segments to storage bucket ${storageBucket}`,
+      );
+      const publishResult = await synthesizeAndPublishNarration({
         userId,
         sessionId,
         planItemId,
-        kind,
-        this.options.storagePrefix,
-      );
-      const file = bucket.file(storagePath);
-      await file.save(jpegBuffer, {
-        resumable: false,
-        metadata: {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=0",
-        },
+        segments,
+        posterImage: posterReference,
+        endingImage: endingReference,
+        progress: createConsoleProgress(narrationProgressLabel),
       });
-      this.logger.log(`[story/images] saved ${kind} image to /${storagePath}`);
-      return {
-        storagePath: normaliseStoragePath(storagePath),
+
+      const stageValue: NarrationStageValue = {
+        publishResult,
+        storagePaths,
+        posterImage: posterReference,
+        endingImage: endingReference,
       };
-    };
-
-    const [posterReference, endingReference] = await Promise.all([
-      uploadSupplementaryImage(posterImage, "poster"),
-      uploadSupplementaryImage(endingImage, "ending"),
-    ]);
-
-    const segments = toMediaSegments(segmentation, storagePaths);
-    const narrationProgressLabel =
-      this.options.audioProgressLabel ?? planItemId;
-    const cachedPublishResult = checkpoint?.value.publishResult;
-
-    if (cachedPublishResult) {
-      const firestore = getFirebaseAdminFirestore();
-      const docRef = firestore.doc(cachedPublishResult.documentPath);
-      const docSnapshot = await docRef.get();
-      if (docSnapshot.exists) {
+      const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
+      const stageEntry: StageCacheEntry<NarrationStageValue> = {
+        value: stageValue,
+        source: restoredCheckpointPath ? "checkpoint" : "generated",
+        checkpointPath,
+      };
+      if (checkpointPath) {
         this.logger.log(
-          `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,
+          `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
         );
-        const stageValue: NarrationStageValue = {
-          publishResult: cachedPublishResult,
-          storagePaths,
-          posterImage: posterReference,
-          endingImage: endingReference,
-        };
-        const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
-        const entry: StageCacheEntry<NarrationStageValue> = {
-          value: stageValue,
-          source: "checkpoint",
-          checkpointPath,
-        };
-        this.caches.narration = entry;
-        if (checkpointPath) {
-          this.logger.log(
-            `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
-          );
-        }
-        return entry;
       }
       this.logger.log(
-        `[story/narration] cached media document ${cachedPublishResult.documentPath} missing; regenerating audio`,
+        `[story/narration] ensured media doc ${stageValue.publishResult.documentPath}`,
       );
-    }
-
-    this.logger.log(
-      `[story/narration] publishing ${segments.length} segments to storage bucket ${storageBucket}`,
-    );
-    const publishResult = await synthesizeAndPublishNarration({
-      userId,
-      sessionId,
-      planItemId,
-      segments,
-      posterImage: posterReference,
-      endingImage: endingReference,
-      progress: createConsoleProgress(narrationProgressLabel),
+      return stageEntry;
     });
-
-    const stageValue: NarrationStageValue = {
-      publishResult,
-      storagePaths,
-      posterImage: posterReference,
-      endingImage: endingReference,
-    };
-    const checkpointPath = await this.writeNarrationCheckpoint(stageValue);
-    const entry: StageCacheEntry<NarrationStageValue> = {
-      value: stageValue,
-      source: restoredCheckpointPath ? "checkpoint" : "generated",
-      checkpointPath,
-    };
     this.caches.narration = entry;
-    if (checkpointPath) {
-      this.logger.log(
-        `[story/checkpoint] wrote 'narration' to ${checkpointPath}`,
-      );
-    }
-    this.logger.log(
-      `[story/narration] ensured media doc ${stageValue.publishResult.documentPath}`,
-    );
     return entry;
   }
 }

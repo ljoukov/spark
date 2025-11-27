@@ -26,7 +26,10 @@ import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
 } from "@spark/llm";
-import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
+import {
+  runJobsWithConcurrency,
+  type JobProgressReporter,
+} from "@spark/llm/utils/concurrency";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
@@ -984,6 +987,9 @@ async function main(): Promise<void> {
         debugRootDir,
         progress,
       });
+      const pipelineLogger = pipeline[
+        "logger"
+      ] as unknown as JobProgressReporter;
 
       for (const stage of stageSequence) {
         progress.log(`[welcome/${targetSessionId}] stage: ${stage}`);
@@ -1325,7 +1331,7 @@ async function main(): Promise<void> {
             const codeProblems = await generateCodeProblems(
               plan,
               problems,
-              pipeline["logger"],
+              pipelineLogger,
             );
             const problemSlugs = new Set(
               codeProblems.map((problem) => problem.slug),
@@ -1345,14 +1351,11 @@ async function main(): Promise<void> {
             progress.log(
               `[welcome/${targetSessionId}] generating metadata (tagline, emoji)...`,
             );
-            // Reuse pipeline logger
-            const metadata = await generateMetadata(parsed.topic, plan, {
-              log: (msg) => progress.log(msg),
-              startModelCall: (d) => pipeline["logger"].startModelCall(d), // hack to access logger
-              recordModelUsage: (h, c) =>
-                pipeline["logger"].recordModelUsage(h, c),
-              finishModelCall: (h) => pipeline["logger"].finishModelCall(h),
-            });
+            const metadata = await generateMetadata(
+              parsed.topic,
+              plan,
+              pipelineLogger,
+            );
 
             // Transform plan
             const storyTitle = stageContext.story.title;
