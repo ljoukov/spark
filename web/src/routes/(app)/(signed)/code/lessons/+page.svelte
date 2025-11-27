@@ -3,10 +3,12 @@
 
 	type WelcomeTemplate = {
 		key: string;
+		sessionId: string;
 		title: string;
 		tagline?: string | null;
 		emoji?: string | null;
 		posterImageUrl?: string | null;
+		existingLessonStatus?: string | null;
 	};
 
 	const statusLabels: Record<string, string> = {
@@ -38,6 +40,13 @@
 			return 0;
 		}
 		return Math.min(100, Math.max(0, Math.round((completed / total) * 100)));
+	}
+
+	function resolveTemplateCta(template: WelcomeTemplate): string {
+		if (template.existingLessonStatus && template.existingLessonStatus !== 'completed') {
+			return 'Continue';
+		}
+		return 'Start';
 	}
 </script>
 
@@ -127,26 +136,28 @@
 				{#each templates as template}
 					<form method="POST" action="?/start" class="template-card">
 						<input type="hidden" name="topic" value={template.key} />
-						{#if template.posterImageUrl}
-							<img
-								src={template.posterImageUrl}
-								alt=""
-								class="template-poster"
-								loading="lazy"
-								decoding="async"
-							/>
-						{:else}
-							<div class="template-emoji" aria-hidden="true">
-								{template.emoji ?? '🚀'}
-							</div>
-						{/if}
+						<div class="template-visual">
+							{#if template.posterImageUrl}
+								<img
+									src={template.posterImageUrl}
+									alt=""
+									class="template-poster"
+									loading="lazy"
+									decoding="async"
+								/>
+							{:else}
+								<div class="template-emoji" aria-hidden="true">
+									{template.emoji ?? '🚀'}
+								</div>
+							{/if}
+						</div>
 						<div class="template-body">
 							<h3>{template.title}</h3>
 							{#if template.tagline}
 								<p class="template-tagline">{template.tagline}</p>
 							{/if}
 						</div>
-						<button type="submit" class="template-action">Start lesson</button>
+						<button type="submit" class="template-action">{resolveTemplateCta(template)}</button>
 					</form>
 				{/each}
 			</div>
@@ -411,15 +422,29 @@
 		box-shadow: 0 18px 50px -44px rgba(15, 23, 42, 0.45);
 	}
 
-	.template-poster {
+	.template-visual {
+		position: relative;
 		width: 100%;
-		height: 9rem;
-		object-fit: cover;
+		aspect-ratio: 16 / 9;
 		border-radius: 0.85rem;
 		border: 1px solid rgba(148, 163, 184, 0.24);
+		overflow: hidden;
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--app-content-bg) 82%, transparent);
+	}
+
+	.template-poster {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
 	}
 
 	.template-emoji {
+		display: grid;
+		place-items: center;
+		width: 100%;
+		height: 100%;
 		font-size: 1.6rem;
 		line-height: 1;
 	}

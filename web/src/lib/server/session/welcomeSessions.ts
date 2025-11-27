@@ -29,6 +29,7 @@ export type WelcomeSessionKey = string;
 
 export type WelcomeSessionOption = {
 	key: WelcomeSessionKey;
+	sessionId: string;
 	title: string;
 	tagline: string;
 	emoji: string;
@@ -357,6 +358,7 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 
 			options.push({
 				key: parsed.key ?? parsed.id,
+				sessionId: session.id,
 				title: session.title,
 				tagline: parsed.tagline,
 				emoji: parsed.emoji,

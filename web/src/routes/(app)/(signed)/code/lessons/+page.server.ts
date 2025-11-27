@@ -24,7 +24,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const states = await Promise.all(
 		sessions.map((session) => getSessionState(user.uid, session.id))
 	);
-	const welcomeTemplates = await listWelcomeSessionOptions();
 
 	const lessons = sessions.map((session, index) => {
 		const state = states[index];
@@ -39,6 +38,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 			createdAt: session.createdAt.toISOString(),
 			completed,
 			total
+		};
+	});
+
+	const lessonsById = new Map<string, { status: (typeof lessons)[number]['status'] }>();
+	for (const lesson of lessons) {
+		lessonsById.set(lesson.id, { status: lesson.status });
+	}
+
+	const welcomeTemplates = (await listWelcomeSessionOptions()).map((template) => {
+		const existingLesson =
+			lessonsById.get(template.sessionId) ?? lessonsById.get(template.key);
+		return {
+			...template,
+			existingLessonStatus: existingLesson?.status ?? null
 		};
 	});
 
