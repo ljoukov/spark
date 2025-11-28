@@ -8,7 +8,9 @@ import { inspect } from "node:util";
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
   FinishReason,
+  ThinkingLevel,
   type Content,
+  type GenerateContentConfig,
   type GroundingMetadata,
   type Part,
   type Schema,
@@ -97,20 +99,7 @@ function estimateInlineBytes(data: string): number {
   }
 }
 
-type GeminiCallConfig = {
-  thinkingConfig?: {
-    includeThoughts: true;
-    thinkingBudget?: number;
-    thinkingLevel?: "HIGH" | "LOW";
-  };
-  responseMimeType?: string;
-  responseSchema?: Schema;
-  responseModalities?: string[];
-  imageConfig?: {
-    aspectRatio: string;
-  };
-  tools?: Tool[];
-};
+type GeminiCallConfig = GenerateContentConfig;
 
 type LlmCallStage = {
   readonly label: string;
@@ -1037,25 +1026,25 @@ async function llmStream({
     convertLlmContentToGoogleContent,
   );
   const config: GeminiCallConfig = {};
-  const thinkingConfig = (() => {
+  const thinkingConfig: GeminiCallConfig["thinkingConfig"] = (() => {
     switch (options.modelId) {
       case "gemini-3-pro-preview":
         return {
           includeThoughts: true,
-          thinkingLevel: "HIGH",
+          thinkingLevel: ThinkingLevel.HIGH,
         } as const;
       case "gemini-2.5-pro":
         return {
           includeThoughts: true,
           thinkingBudget: 32_768,
-          thinkingLevel: "HIGH",
+          thinkingLevel: ThinkingLevel.HIGH,
         } as const;
       case "gemini-flash-latest":
       case "gemini-flash-lite-latest":
         return {
           includeThoughts: true,
           thinkingBudget: 24_576,
-          thinkingLevel: "HIGH",
+          thinkingLevel: ThinkingLevel.HIGH,
         } as const;
       case "gemini-3-pro-image-preview":
         return undefined;

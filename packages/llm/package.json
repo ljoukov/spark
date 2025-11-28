@@ -21,13 +21,13 @@
     "dist"
   ],
   "dependencies": {
+    "@google/genai": "^1.30.0",
     "@spark/schemas": "file:../schemas",
-    "@google/genai": "^1.21.0",
     "execa": "^9.6.0",
-    "google-auth-library": "^9.15.1",
     "firebase-admin": "^13.5.0",
-    "sharp": "^0.33.5",
+    "google-auth-library": "^9.15.1",
     "openai": "^6.3.0",
+    "sharp": "^0.33.5",
     "zod": "^4.1.11"
   },
   "devDependencies": {

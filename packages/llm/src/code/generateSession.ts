@@ -69,7 +69,7 @@ function useProgress(progress: SessionProgress): JobProgressReporter {
 
 function buildSingleUserPrompt(
   systemInstruction: string,
-  userPrompt: string
+  userPrompt: string,
 ): LlmContent[] {
   const trimmedSystem = systemInstruction.trim();
   const trimmedUser = userPrompt.trim();
@@ -130,7 +130,7 @@ function normaliseProblemsPayload(payload: unknown): unknown {
               ) {
                 const privateTests = (tests as { private: unknown[] }).private;
                 const privateCount = Number.isFinite(
-                  (tests as { private_count?: unknown }).private_count
+                  (tests as { private_count?: unknown }).private_count,
                 )
                   ? (tests as { private_count?: number }).private_count
                   : privateTests.length;
@@ -291,7 +291,7 @@ export const SessionPlanSchema = z
       .array(z.string().trim().min(1).max(PLAN_LIMITS.promisedSkill))
       .min(1),
     concepts_to_teach: z.array(
-      z.string().trim().min(1).max(PLAN_LIMITS.concept)
+      z.string().trim().min(1).max(PLAN_LIMITS.concept),
     ),
     coding_blueprints: z.array(CodingBlueprintSchema).length(2),
   })
@@ -454,7 +454,7 @@ const CodingProblemTestsSchema = z
         z.object({
           input: z.string().trim().min(1),
           output: z.string().transform((value) => value.trim()),
-        })
+        }),
       )
       .min(1),
     private: z
@@ -462,7 +462,7 @@ const CodingProblemTestsSchema = z
         z.object({
           input: z.string().trim().min(1),
           output: z.string().transform((value) => value.trim()),
-        })
+        }),
       )
       .min(1)
       .max(10)
@@ -600,7 +600,7 @@ function isEnoent(error: unknown): boolean {
     error &&
       typeof error === "object" &&
       "code" in error &&
-      (error as { code?: string }).code === "ENOENT"
+      (error as { code?: string }).code === "ENOENT",
   );
 }
 
@@ -804,7 +804,7 @@ function buildQuizIdeasUserPrompt(
   techniques: readonly ProblemTechnique[],
   problems: readonly CodingProblem[],
   markdownPlanIdeas: string,
-  seed?: number
+  seed?: number,
 ): string {
   return [
     `Topic: "${plan.topic}"`,
@@ -839,7 +839,7 @@ function buildQuizzesGenerateUserPrompt(
   coverageMarkdown: string,
   problems: readonly CodingProblem[],
   techniques: readonly ProblemTechnique[],
-  questionCounts?: SessionGenerationPipelineOptions["questionCounts"]
+  questionCounts?: SessionGenerationPipelineOptions["questionCounts"],
 ): string {
   const introCount =
     typeof questionCounts?.introQuiz === "number" &&
@@ -892,7 +892,7 @@ function buildQuizzesGradeUserPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
   techniques: readonly ProblemTechnique[],
-  questionCounts?: SessionGenerationPipelineOptions["questionCounts"]
+  questionCounts?: SessionGenerationPipelineOptions["questionCounts"],
 ): string {
   const introCount =
     typeof questionCounts?.introQuiz === "number" &&
@@ -931,7 +931,7 @@ function buildQuizzesGradeUserPrompt(
 function buildProblemIdeasUserPrompt(
   plan: SessionPlan,
   techniques: readonly ProblemTechnique[],
-  seed?: number
+  seed?: number,
 ): string {
   return [
     `Topic: "${plan.topic}"`,
@@ -975,7 +975,7 @@ function buildProblemIdeasUserPrompt(
 function buildProblemsGenerateUserPrompt(
   plan: SessionPlan,
   problemIdeasMarkdown: string,
-  techniques: readonly ProblemTechnique[]
+  techniques: readonly ProblemTechnique[],
 ): string {
   return [
     'Parse the "Problem Specs Markdown" below (sections "### p1" and "### p2") into a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
@@ -1000,7 +1000,7 @@ function buildProblemsGenerateUserPrompt(
 function buildProblemsGradeUserPrompt(
   plan: SessionPlan,
   problems: readonly CodingProblem[],
-  techniques: readonly ProblemTechnique[]
+  techniques: readonly ProblemTechnique[],
 ): string {
   return [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
@@ -1680,7 +1680,7 @@ function resolvePythonIndexUrl(explicit?: string): string {
     DEFAULT_PYTHON_INDEX_URL,
     CDN_PYTHON_INDEX_URL,
   ].filter((value): value is string =>
-    Boolean(value && value.trim().length > 0)
+    Boolean(value && value.trim().length > 0),
   );
 
   for (const candidate of candidates) {
@@ -1789,7 +1789,7 @@ function extractPythonCode(text: string): string {
 export async function runSolutionAgainstTests(
   problem: CodingProblem,
   solutionSource: string,
-  indexURL?: string
+  indexURL?: string,
 ): Promise<SolutionTestFailure[]> {
   const python = await ensurePythonRuntime(indexURL);
   const paramNames = problem.function.params.map((param) => param.name);
@@ -1993,7 +1993,7 @@ export class SessionGenerationPipeline {
 
   private async withStage<T>(
     stage: SessionGenerationStageName,
-    action: () => Promise<T>
+    action: () => Promise<T>,
   ): Promise<T> {
     const handle = this.logger.startStage(stage);
     try {
@@ -2049,7 +2049,7 @@ export class SessionGenerationPipeline {
   }
 
   private async invalidateDownstreamStages(
-    stage: SessionGenerationStageName
+    stage: SessionGenerationStageName,
   ): Promise<void> {
     const index = SESSION_STAGE_ORDER.indexOf(stage);
     if (index === -1) {
@@ -2078,13 +2078,13 @@ export class SessionGenerationPipeline {
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       if (result.data.topic !== this.options.topic) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -2129,14 +2129,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = SessionPlanSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2178,14 +2178,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = PlanGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2227,13 +2227,13 @@ export class SessionGenerationPipeline {
       const result = ProblemTechniquesSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       if (result.data.topic !== this.options.topic) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -2250,7 +2250,7 @@ export class SessionGenerationPipeline {
   }
 
   private async writeProblemTechniquesCheckpoint(
-    value: ProblemTechniquesStageValue
+    value: ProblemTechniquesStageValue,
   ) {
     const filePath = this.stageFile("problem_techniques");
     if (!filePath || !this.checkpointDir) {
@@ -2265,7 +2265,7 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(
-      `[session/checkpoint] wrote 'problem_techniques' to ${filePath}`
+      `[session/checkpoint] wrote 'problem_techniques' to ${filePath}`,
     );
   }
 
@@ -2282,13 +2282,13 @@ export class SessionGenerationPipeline {
       const result = ProblemSolutionsSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       if (result.data.topic !== this.options.topic) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -2305,7 +2305,7 @@ export class SessionGenerationPipeline {
   }
 
   private async writeProblemSolutionsCheckpoint(
-    value: ProblemSolutionsStageValue
+    value: ProblemSolutionsStageValue,
   ) {
     const filePath = this.stageFile("problem_solutions");
     if (!filePath || !this.checkpointDir) {
@@ -2320,7 +2320,7 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(
-      `[session/checkpoint] wrote 'problem_solutions' to ${filePath}`
+      `[session/checkpoint] wrote 'problem_solutions' to ${filePath}`,
     );
   }
 
@@ -2337,13 +2337,13 @@ export class SessionGenerationPipeline {
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       if (result.data.topic !== this.options.topic) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -2388,14 +2388,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = QuizzesSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2440,14 +2440,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = QuizzesGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2474,7 +2474,7 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(
-      `[session/checkpoint] wrote 'quizzes_grade' to ${filePath}`
+      `[session/checkpoint] wrote 'quizzes_grade' to ${filePath}`,
     );
   }
 
@@ -2491,13 +2491,13 @@ export class SessionGenerationPipeline {
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
       if (result.data.topic !== this.options.topic) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
@@ -2524,7 +2524,7 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(
-      `[session/checkpoint] wrote 'problem_ideas' to ${filePath}`
+      `[session/checkpoint] wrote 'problem_ideas' to ${filePath}`,
     );
   }
 
@@ -2544,14 +2544,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = ProblemsSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2596,14 +2596,14 @@ export class SessionGenerationPipeline {
         checkpointTopic !== this.options.topic
       ) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (topic mismatch)`
+          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (topic mismatch)`,
         );
         return undefined;
       }
       const result = ProblemsGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
-          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (schema mismatch)`
+          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (schema mismatch)`,
         );
         return undefined;
       }
@@ -2630,13 +2630,13 @@ export class SessionGenerationPipeline {
       encoding: "utf8",
     });
     this.logger.log(
-      `[session/checkpoint] wrote 'problems_grade' to ${filePath}`
+      `[session/checkpoint] wrote 'problems_grade' to ${filePath}`,
     );
   }
 
   private createDebugOptions(
     stage: string,
-    subStage?: string
+    subStage?: string,
   ): LlmDebugOptions | undefined {
     if (!this.options.debugRootDir) {
       return undefined;
@@ -2657,7 +2657,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readPlanIdeasCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'plan_ideas' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'plan_ideas' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<PlanIdeasStageValue> = {
         value: checkpoint.value,
@@ -2674,18 +2674,18 @@ export class SessionGenerationPipeline {
         try {
           const debugOptions = this.createDebugOptions(
             "plan-ideas",
-            attemptLabel
+            attemptLabel,
           );
           const userPrompt = buildPlanIdeasUserPrompt(
             this.options.topic,
-            this.options.seed
+            this.options.seed,
           );
           this.logger.log(
-            `[session/plan-ideas] generating plan ideas (${attemptLabel})`
+            `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
           );
           const contents = buildSingleUserPrompt(
             "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
-            userPrompt
+            userPrompt,
           );
           const markdown = await generateText({
             modelId: TEXT_MODEL_ID,
@@ -2704,11 +2704,11 @@ export class SessionGenerationPipeline {
         } catch (error) {
           const message = errorAsString(error);
           this.logger.log(
-            `[session/plan-ideas] attempt ${attempt} failed (${message})`
+            `[session/plan-ideas] attempt ${attempt} failed (${message})`,
           );
           if (attempt === MAX_PLAN_ATTEMPTS) {
             throw new Error(
-              `Plan idea generation failed after ${MAX_PLAN_ATTEMPTS} attempts: ${message}`
+              `Plan idea generation failed after ${MAX_PLAN_ATTEMPTS} attempts: ${message}`,
             );
           }
         }
@@ -2729,7 +2729,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readPlanCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'plan' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'plan' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<SessionPlan> = {
         value: checkpoint.value,
@@ -2749,7 +2749,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
         schema: SessionPlanSchema,
@@ -2778,7 +2778,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readPlanGradeCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'plan_grade' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'plan_grade' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<PlanGrade> = {
         value: checkpoint.value,
@@ -2797,7 +2797,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "Rubric QA, diagnose only.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
         schema: PlanGradeSchema,
@@ -2828,7 +2828,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readProblemTechniquesCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'problem_techniques' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'problem_techniques' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<ProblemTechniquesStageValue> = {
         value: checkpoint.value,
@@ -2847,7 +2847,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "List concrete techniques learners must know before solving the problems.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
         schema: ProblemTechniquesSchema,
@@ -2874,7 +2874,7 @@ export class SessionGenerationPipeline {
 
   async editPlan(
     currentPlan: SessionPlan,
-    grade: PlanGrade
+    grade: PlanGrade,
   ): Promise<SessionPlan> {
     const userPrompt = buildPlanEditUserPrompt(currentPlan, grade);
     const debugOptions = this.createDebugOptions("plan-edit");
@@ -2884,7 +2884,7 @@ export class SessionGenerationPipeline {
       modelId: TEXT_MODEL_ID,
       contents: buildSingleUserPrompt(
         "Fix the session plan based on the grading feedback. Maintain JSON structure.",
-        userPrompt
+        userPrompt,
       ),
       responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
       schema: SessionPlanSchema,
@@ -2912,7 +2912,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readQuizIdeasCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'quiz_ideas' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'quiz_ideas' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<QuizIdeasStageValue> = {
         value: checkpoint.value,
@@ -2933,23 +2933,23 @@ export class SessionGenerationPipeline {
         try {
           const debugOptions = this.createDebugOptions(
             "quiz-ideas",
-            attemptLabel
+            attemptLabel,
           );
           const userPrompt = buildQuizIdeasUserPrompt(
             plan,
             techniques,
             problems,
             planIdeas.markdown,
-            this.options.seed
+            this.options.seed,
           );
           this.logger.log(
-            `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`
+            `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
           );
           const coverageMarkdown = await generateText({
             modelId: TEXT_MODEL_ID,
             contents: buildSingleUserPrompt(
               "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding.",
-              userPrompt
+              userPrompt,
             ),
             progress: this.logger,
             debug: debugOptions,
@@ -2965,11 +2965,11 @@ export class SessionGenerationPipeline {
         } catch (error) {
           const message = errorAsString(error);
           this.logger.log(
-            `[session/quiz-ideas] attempt ${attempt} failed (${message})`
+            `[session/quiz-ideas] attempt ${attempt} failed (${message})`,
           );
           if (attempt === MAX_QUIZ_ATTEMPTS) {
             throw new Error(
-              `Quiz idea generation failed after ${MAX_QUIZ_ATTEMPTS} attempts: ${message}`
+              `Quiz idea generation failed after ${MAX_QUIZ_ATTEMPTS} attempts: ${message}`,
             );
           }
         }
@@ -3005,12 +3005,12 @@ export class SessionGenerationPipeline {
     }
     if (introQuestions !== introCount) {
       throw new Error(
-        `intro_quiz expected ${introCount} questions but found ${introQuestions}`
+        `intro_quiz expected ${introCount} questions but found ${introQuestions}`,
       );
     }
     if (wrapQuestions !== wrapCount) {
       throw new Error(
-        `wrap_up_quiz expected ${wrapCount} questions but found ${wrapQuestions}`
+        `wrap_up_quiz expected ${wrapCount} questions but found ${wrapQuestions}`,
       );
     }
   }
@@ -3024,7 +3024,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readQuizzesCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'quizzes' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'quizzes' from ${checkpoint.filePath}`,
       );
       this.validateQuizCounts(checkpoint.value);
       const entry: StageCacheEntry<QuizzesPayload> = {
@@ -3045,7 +3045,7 @@ export class SessionGenerationPipeline {
         quizIdeas.markdown,
         problems,
         techniques,
-        this.options.questionCounts
+        this.options.questionCounts,
       );
       const debugOptions = this.createDebugOptions("quizzes-generate");
       this.logger.log("[session/quizzes] generating quiz JSON");
@@ -3053,7 +3053,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: QUIZZES_RESPONSE_SCHEMA,
         schema: QuizzesSchema,
@@ -3085,7 +3085,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readQuizzesGradeCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'quizzes_grade' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'quizzes_grade' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<QuizzesGrade> = {
         value: checkpoint.value,
@@ -3103,7 +3103,7 @@ export class SessionGenerationPipeline {
         plan,
         quizzes,
         techniques,
-        this.options.questionCounts
+        this.options.questionCounts,
       );
       const debugOptions = this.createDebugOptions("quizzes-grade");
       this.logger.log("[session/quizzes-grade] grading quizzes");
@@ -3111,7 +3111,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
         schema: QuizzesGradeSchema,
@@ -3142,7 +3142,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readProblemIdeasCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'problem_ideas' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'problem_ideas' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<ProblemIdeasStageValue> = {
         value: checkpoint.value,
@@ -3160,21 +3160,21 @@ export class SessionGenerationPipeline {
         try {
           const debugOptions = this.createDebugOptions(
             "problem-ideas",
-            attemptLabel
+            attemptLabel,
           );
           const userPrompt = buildProblemIdeasUserPrompt(
             plan,
             techniques,
-            this.options.seed
+            this.options.seed,
           );
           this.logger.log(
-            `[session/problem-ideas] generating markdown (${attemptLabel})`
+            `[session/problem-ideas] generating markdown (${attemptLabel})`,
           );
           const markdown = await generateText({
             modelId: TEXT_MODEL_ID,
             contents: buildSingleUserPrompt(
               "Generate full Problem Specs Markdown (p1 and p2) with verified examples and tests.",
-              userPrompt
+              userPrompt,
             ),
             tools: [{ type: "code-execution" }],
             progress: this.logger,
@@ -3191,11 +3191,11 @@ export class SessionGenerationPipeline {
         } catch (error) {
           const message = errorAsString(error);
           this.logger.log(
-            `[session/problem-ideas] attempt ${attempt} failed (${message})`
+            `[session/problem-ideas] attempt ${attempt} failed (${message})`,
           );
           if (attempt === MAX_PROBLEM_ATTEMPTS) {
             throw new Error(
-              `Problem idea generation failed after ${MAX_PROBLEM_ATTEMPTS} attempts: ${message}`
+              `Problem idea generation failed after ${MAX_PROBLEM_ATTEMPTS} attempts: ${message}`,
             );
           }
         }
@@ -3221,7 +3221,7 @@ export class SessionGenerationPipeline {
     let checkpointPath: string | undefined;
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'problems' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'problems' from ${checkpoint.filePath}`,
       );
       problemsPayload = checkpoint.value;
       source = "checkpoint";
@@ -3234,7 +3234,7 @@ export class SessionGenerationPipeline {
         const userPrompt = buildProblemsGenerateUserPrompt(
           plan,
           problemIdeas.markdown,
-          techniques
+          techniques,
         );
         const debugOptions = this.createDebugOptions("problems-generate");
         this.logger.log("[session/problems] generating coding problems");
@@ -3242,7 +3242,7 @@ export class SessionGenerationPipeline {
           modelId: TEXT_MODEL_ID,
           contents: buildSingleUserPrompt(
             "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
-            userPrompt
+            userPrompt,
           ),
           responseSchema: PROBLEMS_RESPONSE_SCHEMA,
           schema: ProblemsSchema,
@@ -3265,7 +3265,7 @@ export class SessionGenerationPipeline {
   }
 
   private async solveProblemsWithIndependentSolver(
-    payload: ProblemsPayload
+    payload: ProblemsPayload,
   ): Promise<ProblemsPayload> {
     const solvedProblems: CodingProblem[] = [];
     for (const problem of payload.problems) {
@@ -3280,7 +3280,7 @@ export class SessionGenerationPipeline {
 
   private applySolutionsToProblems(
     problems: readonly CodingProblem[],
-    solutions: ReadonlyArray<ProblemSolutions["solutions"][number]>
+    solutions: ReadonlyArray<ProblemSolutions["solutions"][number]>,
   ): CodingProblem[] {
     return problems.map((problem) => {
       const solved = solutions.find((solution) => solution.id === problem.id);
@@ -3292,7 +3292,7 @@ export class SessionGenerationPipeline {
   }
 
   private async generateIndependentSolution(
-    problem: CodingProblem
+    problem: CodingProblem,
   ): Promise<string> {
     for (
       let attempt = 1;
@@ -3302,17 +3302,17 @@ export class SessionGenerationPipeline {
       const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PROBLEM_SOLUTION_ATTEMPTS).padStart(2, "0")}`;
       const debugOptions = this.createDebugOptions(
         "problem-solution",
-        `${problem.id}-${attemptLabel}`
+        `${problem.id}-${attemptLabel}`,
       );
       const userPrompt = buildProblemSolutionUserPrompt(problem);
       this.logger.log(
-        `[session/problem-solution] solving ${problem.id} (${attemptLabel})`
+        `[session/problem-solution] solving ${problem.id} (${attemptLabel})`,
       );
       const solutionText = await generateText({
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "Solve the problem using only the provided statement and examples. Use the code execution tool to verify; wrap ONLY the final code in <CODE>...</CODE>.",
-          userPrompt
+          userPrompt,
         ),
         tools: [{ type: "code-execution" }],
         progress: this.logger,
@@ -3322,7 +3322,7 @@ export class SessionGenerationPipeline {
       const failures = await runSolutionAgainstTests(
         problem,
         candidate,
-        this.options.pythonIndexUrl
+        this.options.pythonIndexUrl,
       );
       if (failures.length === 0) {
         return candidate;
@@ -3333,11 +3333,11 @@ export class SessionGenerationPipeline {
           ? `test ${firstFailure.index + 1}: ${firstFailure.message}`
           : (firstFailure?.message ?? "unknown failure");
       this.logger.log(
-        `[session/problem-solution] ${problem.id} ${attemptLabel} failed (${failureSummary})`
+        `[session/problem-solution] ${problem.id} ${attemptLabel} failed (${failureSummary})`,
       );
     }
     throw new Error(
-      `Failed to validate independent solution for problem ${problem.id} after ${MAX_PROBLEM_SOLUTION_ATTEMPTS} attempts`
+      `Failed to validate independent solution for problem ${problem.id} after ${MAX_PROBLEM_SOLUTION_ATTEMPTS} attempts`,
     );
   }
 
@@ -3355,7 +3355,7 @@ export class SessionGenerationPipeline {
     const checkpoint = await this.readProblemsGradeCheckpoint();
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'problems_grade' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'problems_grade' from ${checkpoint.filePath}`,
       );
       const entry: StageCacheEntry<ProblemsGrade> = {
         value: checkpoint.value,
@@ -3372,7 +3372,7 @@ export class SessionGenerationPipeline {
       const userPrompt = buildProblemsGradeUserPrompt(
         plan,
         problems,
-        techniques
+        techniques,
       );
       const debugOptions = this.createDebugOptions("problems-grade");
       this.logger.log("[session/problems-grade] grading coding problems");
@@ -3380,7 +3380,7 @@ export class SessionGenerationPipeline {
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
           "QA problems for alignment, clarity, difficulty, and technique alignment.",
-          userPrompt
+          userPrompt,
         ),
         responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
         schema: ProblemsGradeSchema,
@@ -3413,11 +3413,11 @@ export class SessionGenerationPipeline {
     const problemsPayload = problemsEntry.value;
     if (checkpoint) {
       this.logger.log(
-        `[session/checkpoint] restored 'problem_solutions' from ${checkpoint.filePath}`
+        `[session/checkpoint] restored 'problem_solutions' from ${checkpoint.filePath}`,
       );
       const mergedProblems = this.applySolutionsToProblems(
         problemsPayload.problems,
-        checkpoint.value.solutions
+        checkpoint.value.solutions,
       );
       const mergedPayload: ProblemsPayload = { problems: mergedProblems };
       await this.writeProblemsCheckpoint(mergedPayload);
@@ -3468,7 +3468,7 @@ export class SessionGenerationPipeline {
   }
 
   async invalidateStagesAfter(
-    stage: SessionGenerationStageName
+    stage: SessionGenerationStageName,
   ): Promise<void> {
     await this.invalidateDownstreamStages(stage);
   }
@@ -3515,15 +3515,15 @@ async function persistProblemSolutionsToFirestore(options: {
 
     await batch.commit();
     logger.log(
-      `[session/problem-solution] stored ${problems.length} solutions for session '${sessionId}'`
+      `[session/problem-solution] stored ${problems.length} solutions for session '${sessionId}'`,
     );
   } catch (error) {
     const message = errorAsString(error);
     logger.log(
-      `[session/problem-solution] failed to store solutions in Firestore (${message})`
+      `[session/problem-solution] failed to store solutions in Firestore (${message})`,
     );
     throw new Error(
-      `Failed to store problem solutions in Firestore: ${message}`
+      `Failed to store problem solutions in Firestore: ${message}`,
     );
   }
 }
@@ -3559,7 +3559,7 @@ export type GenerateSessionResult = {
 };
 
 export async function generateSession(
-  options: GenerateSessionOptions
+  options: GenerateSessionOptions,
 ): Promise<GenerateSessionResult> {
   const logger = useProgress(options.progress);
   const includeStory = options.includeStory ?? true;
@@ -3583,7 +3583,7 @@ export async function generateSession(
     }
     if (attempt === 1 + MAX_PLAN_GRADE_RETRIES) {
       throw new Error(
-        `Plan grading failed after ${MAX_PLAN_GRADE_RETRIES + 1} attempts: ${planGrade.issues.join("; ")}`
+        `Plan grading failed after ${MAX_PLAN_GRADE_RETRIES + 1} attempts: ${planGrade.issues.join("; ")}`,
       );
     }
     await pipeline.invalidateStage("plan");
@@ -3607,7 +3607,7 @@ export async function generateSession(
     }
     if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
       throw new Error(
-        `Problem grading failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${problemsGrade.issues.join("; ")}`
+        `Problem grading failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${problemsGrade.issues.join("; ")}`,
       );
     }
     await pipeline.invalidateStage("problems");
@@ -3630,7 +3630,7 @@ export async function generateSession(
     }
     if (attempt === 1 + MAX_QUIZ_GRADE_RETRIES) {
       throw new Error(
-        `Quiz grading failed after ${MAX_QUIZ_GRADE_RETRIES + 1} attempts: ${quizzesGrade.issues.join("; ")}`
+        `Quiz grading failed after ${MAX_QUIZ_GRADE_RETRIES + 1} attempts: ${quizzesGrade.issues.join("; ")}`,
       );
     }
     await pipeline.invalidateStage("quizzes");

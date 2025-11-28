@@ -4,7 +4,8 @@ import type { CodingProblem } from "../src/code/generateSession";
 const dummyServiceAccount = JSON.stringify({
   project_id: "test-project",
   client_email: "test@example.com",
-  private_key: "-----BEGIN PRIVATE KEY-----\\nTESTKEY\\n-----END PRIVATE KEY-----",
+  private_key:
+    "-----BEGIN PRIVATE KEY-----\\nTESTKEY\\n-----END PRIVATE KEY-----",
 });
 
 if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
@@ -82,7 +83,6 @@ def calculate_paperwork(n: int, memo: dict = None) -> int:
   });
 
   it("parses comma-separated named arguments at top level", async () => {
-    const grid = ["ABC", "DEF", "GHI"];
     const problem = buildProblem({
       function: {
         name: "get_value",
@@ -116,7 +116,8 @@ def get_value(grid: list[str], row: int, col: int) -> str:
       id: "p2",
       function: {
         name: "first_char",
-        signature: "def first_char(grid: list[str], row: int, col: int) -> str:",
+        signature:
+          "def first_char(grid: list[str], row: int, col: int) -> str:",
         params: [
           { name: "grid", type: "list[str]" },
           { name: "row", type: "int" },
