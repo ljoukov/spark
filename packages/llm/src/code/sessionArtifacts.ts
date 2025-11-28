@@ -26,14 +26,6 @@ const SessionMetadataSchema = z.object({
   summary: z.string().trim().min(1),
 });
 
-function clampSummaryWords(summary: string, maxWords = 15): string {
-  const words = summary.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) {
-    return summary.trim();
-  }
-  return words.slice(0, maxWords).join(" ").concat("...");
-}
-
 const QuizDefinitionsPayloadSchema = z.object({
   quizzes: z.array(QuizDefinitionSchema),
 });
@@ -597,10 +589,9 @@ export function convertSessionPlanToItems(
   }
   const storyTitle = session.story?.title ?? session.plan.story.storyTopic;
   const parts = session.plan.parts.map((part) => {
-    const conciseSummary = clampSummaryWords(part.summary, 15);
     const base = {
-      title: part.summary.split(".")[0] || "Session Part",
-      summary: conciseSummary,
+      title: part.summary,
+      summary: part.summary,
     };
 
     switch (part.kind) {
@@ -616,7 +607,6 @@ export function convertSessionPlanToItems(
           ...base,
           id: "intro_quiz",
           kind: "quiz" as const,
-          title: "Warm-up",
         };
       case "coding_1": {
         return {
@@ -639,7 +629,6 @@ export function convertSessionPlanToItems(
           ...base,
           id: "wrap_up_quiz",
           kind: "quiz" as const,
-          title: "Review",
         };
     }
   });
