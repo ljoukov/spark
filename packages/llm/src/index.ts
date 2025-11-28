@@ -8,6 +8,7 @@ export * from "./code/generateFrames";
 export * from "./code/generateNarration";
 export * from "./code/generateStory";
 export * from "./code/generateSession";
+export * from "./code/sessionArtifacts";
 export * from "./code/problemValidation";
 export * from "./code/welcomeTemplates";
 export * from "./utils/env";

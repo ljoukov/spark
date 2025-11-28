@@ -2,11 +2,15 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import {
 	TaskSchema,
 	generateSparkPdfQuizDefinition,
+	generateCodeProblems,
+	generateSessionMetadata,
+	convertSessionPlanToItems,
 	getFirebaseAdminFirestore,
 	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
 	getFirebaseStorageBucketName,
 	generateSession,
+	generateQuizDefinitions,
 	generateWelcomeSessionTemplate
 } from '@spark/llm';
 import {
@@ -14,15 +18,9 @@ import {
 	SparkUploadQuizDocumentSchema,
 	type Session
 } from '@spark/schemas';
+import { saveUserProblem } from '$lib/server/code/problemRepo';
+import { saveUserQuiz } from '$lib/server/quiz/repo';
 import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
-
-function clampWords(text: string, maxWords: number): string {
-	const words = text.split(/\s+/).filter(Boolean);
-	if (words.length <= maxWords) {
-		return text.trim();
-	}
-	return words.slice(0, maxWords).join(' ').concat('...');
-}
 
 type FailureContext = {
 	reason: string;
@@ -97,59 +95,42 @@ export const POST: RequestHandler = async ({ request }) => {
 				storyPlanItemId: 'story'
 			});
 
-			const storyTitle = result.story?.title ?? title;
-			const planItems: Session['plan'] = result.plan.parts.map((part) => {
-				const concise = clampWords(part.summary ?? '', 15);
-				const base = {
-					title: part.summary.split('.')[0] || 'Session Part',
-					summary: concise
-				};
-				switch (part.kind) {
-					case 'story':
-						return {
-							...base,
-							id: 'story',
-							kind: 'media' as const,
-							title: storyTitle ?? 'Story'
-						};
-					case 'intro_quiz':
-						return { ...base, id: 'intro_quiz', kind: 'quiz' as const, title: 'Warm-up' };
-					case 'coding_1': {
-						const problem = result.problems.find((p) => p.id === 'p1');
-						return {
-							...base,
-							id: 'p1',
-							kind: 'problem' as const,
-							title: problem?.title ?? 'Challenge 1'
-						};
-					}
-					case 'coding_2': {
-						const problem = result.problems.find((p) => p.id === 'p2');
-						return {
-							...base,
-							id: 'p2',
-							kind: 'problem' as const,
-							title: problem?.title ?? 'Challenge 2'
-						};
-					}
-					case 'wrap_up_quiz':
-						return {
-							...base,
-							id: 'wrap_up_quiz',
-							kind: 'quiz' as const,
-							title: 'Review'
-						};
-					default:
-						return { ...base, id: part.kind, kind: 'quiz' as const };
-				}
+			const metadata = await generateSessionMetadata({
+				topic: result.plan.topic,
+				plan: result.plan,
+				storyTitle: result.story?.title
 			});
+
+			const quizDefinitions = await generateQuizDefinitions(result.plan, result.quizzes);
+			const filteredQuizDefinitions = quizDefinitions.filter(
+				(quiz) => quiz.id === 'intro_quiz' || quiz.id === 'wrap_up_quiz'
+			);
+			const missingQuizId = ['intro_quiz', 'wrap_up_quiz'].find((required) =>
+				filteredQuizDefinitions.every((quiz) => quiz.id !== required)
+			);
+			if (missingQuizId) {
+				throw new Error(`quiz definitions missing required id '${missingQuizId}'`);
+			}
+
+			const codeProblems = await generateCodeProblems(result.plan, result.problems);
+			const filteredProblems = codeProblems.filter(
+				(problem) => problem.slug === 'p1' || problem.slug === 'p2'
+			);
+			const missingProblemId = ['p1', 'p2'].find((required) =>
+				filteredProblems.every((problem) => problem.slug !== required)
+			);
+			if (missingProblemId) {
+				throw new Error(`code problems missing required slug '${missingProblemId}'`);
+			}
+
+			const { plan: planItems } = convertSessionPlanToItems(result, 'story');
 
 			const sessionDoc: Session = {
 				id: sessionId,
 				title: title ?? result.plan.topic,
-				summary: result.plan.topic,
-				tagline: tagline ?? result.plan.topic,
-				emoji,
+				summary: metadata.summary,
+				tagline: tagline ?? metadata.tagline,
+				emoji: emoji ?? metadata.emoji,
 				topics,
 				status: 'ready',
 				createdAt: new Date(),
@@ -160,6 +141,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			};
 
 			await saveSession(userId, sessionDoc);
+			await Promise.all(
+				filteredQuizDefinitions.map(async (quiz) => {
+					await saveUserQuiz(userId, sessionId, quiz);
+				})
+			);
+			await Promise.all(
+				filteredProblems.map(async (problem) => {
+					await saveUserProblem(userId, sessionId, problem);
+				})
+			);
 		} catch (error) {
 			return await fail({ reason: 'lesson_generation_failed', error, userId, sessionId });
 		}
