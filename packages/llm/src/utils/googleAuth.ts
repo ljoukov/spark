@@ -1,4 +1,8 @@
-import { GoogleAuth, type GoogleAuthOptions } from "google-auth-library";
+import {
+  GoogleAuth,
+  type AnyAuthClient,
+  type GoogleAuthOptions,
+} from "google-auth-library";
 import { z } from "zod";
 
 import { loadLocalEnv } from "./env";
@@ -26,7 +30,7 @@ const ServiceAccountSchema = z
 
 let cachedServiceAccount: GoogleServiceAccount | null = null;
 
-const authClientCache = new Map<string, GoogleAuth>();
+const authClientCache = new Map<string, GoogleAuth<AnyAuthClient>>();
 
 export function parseGoogleServiceAccount(input: string): GoogleServiceAccount {
   let parsed: unknown;
@@ -75,7 +79,7 @@ function normaliseScopes(
 
 export function getGoogleAuthOptions(
   scopes?: string | readonly string[],
-): GoogleAuthOptions {
+): GoogleAuthOptions<AnyAuthClient> {
   const serviceAccount = getGoogleServiceAccount();
   const normalisedScopes = normaliseScopes(scopes);
   return {
@@ -88,7 +92,9 @@ export function getGoogleAuthOptions(
   };
 }
 
-export function getGoogleAuth(scopes?: string | readonly string[]): GoogleAuth {
+export function getGoogleAuth(
+  scopes?: string | readonly string[],
+): GoogleAuth<AnyAuthClient> {
   const normalised = normaliseScopes(scopes);
   const key = (normalised ?? []).join(" ");
   const cached = authClientCache.get(key);

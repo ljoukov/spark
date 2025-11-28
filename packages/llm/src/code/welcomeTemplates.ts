@@ -405,10 +405,11 @@ function rawSubsectionsToQuizzes(
           tone: "info" as const,
         };
         if (kind === "type-answer") {
-          const acceptableAnswers =
-            asArray<string>(rq.acceptableAnswers).filter(
-              (value) => typeof value === "string" && value.trim().length > 0,
-            );
+          const acceptableAnswers = asArray<string>(
+            rq.acceptableAnswers,
+          ).filter(
+            (value) => typeof value === "string" && value.trim().length > 0,
+          );
           return {
             kind,
             ...base,
@@ -456,10 +457,7 @@ function rawSubsectionsToQuizzes(
           kind: "multiple-choice",
           ...base,
           options,
-          correctOptionId: asString(
-            rq.correctOptionId,
-            options[0]?.id ?? "A",
-          )!,
+          correctOptionId: asString(rq.correctOptionId, options[0]?.id ?? "A")!,
           correctFeedback,
         };
       },
@@ -488,14 +486,14 @@ function buildCodeProblemsPrompt(
     "- slug: string (use 'p1' and 'p2' respectively; do not invent other slugs)",
     "- title: string",
     "- topics: string[] (2-4 concise topics)",
-    '- difficulty: \"warmup\" | \"intro\" | \"easy\" | \"medium\" | \"hard\" (use \"easy\" or \"medium\" here as appropriate)',
+    '- difficulty: "warmup" | "intro" | "easy" | "medium" | "hard" (use "easy" or "medium" here as appropriate)',
     "- description: markdown string (problem statement)",
     "- inputFormat: markdown string",
     "- constraints: string[] (plain bullet strings)",
     "- examples: exactly 3 items, each with { title, input, output, explanation }",
     "- tests: 10-14 items, each with { input, output, explanation }; tests[0-2] must MATCH examples[0-2] exactly",
     "- hints: exactly 3 markdown strings, ordered",
-    '- solution: { language: \"python\", code: string } (full reference solution)',
+    '- solution: { language: "python", code: string } (full reference solution)',
     "- metadataVersion: 1",
     "",
     "STRICT rules:",
@@ -816,9 +814,7 @@ export async function generateWelcomeSessionTemplate(
     filteredQuizzes.every((quiz) => quiz.id !== required),
   );
   if (missingQuizId) {
-    throw new Error(
-      `quiz definitions missing required id '${missingQuizId as string}'`,
-    );
+    throw new Error(`quiz definitions missing required id '${missingQuizId}'`);
   }
 
   const codeProblems = await generateCodeProblems(
@@ -833,7 +829,7 @@ export async function generateWelcomeSessionTemplate(
   );
   if (missingProblemId) {
     throw new Error(
-      `code problems missing required slug '${missingProblemId as string}'`,
+      `code problems missing required slug '${missingProblemId}'`,
     );
   }
 
