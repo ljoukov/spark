@@ -1,6 +1,4 @@
 import { clearInterval, setInterval } from "node:timers";
-
-const SPEED_WINDOW_MS = 10_000;
 const ANSI_RESET = "\u001b[0m";
 const ANSI_GRAY = "\u001b[90m";
 const ANSI_RED = "\u001b[31m";
@@ -10,10 +8,32 @@ export type StatusMode = "interactive" | "plain" | "off";
 export type ModelCallHandle = symbol;
 export type StageHandle = symbol;
 
+export type LlmUsageTokenUpdate = {
+  readonly promptTokens?: number;
+  readonly cachedTokens?: number;
+  readonly responseTokens?: number;
+  readonly responseImageTokens?: number;
+  readonly thinkingTokens?: number;
+  readonly totalTokens?: number;
+  readonly toolUsePromptTokens?: number;
+};
+
 export type LlmUsageChunk = {
   readonly modelVersion?: string;
-  readonly outputCharsDelta?: number;
-  readonly outputBytesDelta?: number;
+  readonly prompt?: {
+    readonly textChars?: number;
+    readonly imageCount?: number;
+    readonly imageBytes?: number;
+  };
+  readonly response?: {
+    readonly textCharsDelta?: number;
+    readonly imageCountDelta?: number;
+    readonly imageBytesDelta?: number;
+  };
+  readonly thinking?: {
+    readonly textCharsDelta?: number;
+  };
+  readonly tokens?: LlmUsageTokenUpdate;
 };
 
 export type JobProgressReporter = {
@@ -21,6 +41,7 @@ export type JobProgressReporter = {
   startModelCall(details: {
     modelId: string;
     uploadBytes: number;
+    imageSize?: string;
   }): ModelCallHandle;
   recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void;
   finishModelCall(handle: ModelCallHandle): void;
@@ -45,90 +66,258 @@ export type JobRunnerOptions<I, O> = {
   readonly output?: NodeJS.WriteStream;
 };
 
-type PerModelMetrics = {
-  uploadBytes: number;
-  downloadBytes: number;
-  outputChars: number;
+type TokenTotals = {
+  prompt: number;
+  cached: number;
+  responseText: number;
+  responseImages: number;
+  thinking: number;
+  total: number;
+  toolUse: number;
 };
 
 type MetricsSnapshot = {
-  readonly totalChars: number;
-  readonly totalUploadBytes: number;
-  readonly totalDownloadBytes: number;
+  readonly promptChars: number;
+  readonly promptImages: number;
+  readonly promptImageBytes: number;
+  readonly responseChars: number;
+  readonly responseImages: number;
+  readonly responseImageBytes: number;
+  readonly thinkingChars: number;
+  readonly tokens: TokenTotals;
+  readonly costUsd: number;
   readonly activeCalls: number;
-  readonly charsPerSecond: number;
-  readonly downloadBytesPerSecond: number;
-  readonly perModel: Array<{
-    readonly modelId: string;
-    readonly uploadBytes: number;
-    readonly downloadBytes: number;
-    readonly outputChars: number;
-  }>;
+  readonly modelsUsed: readonly string[];
 };
 
-class MetricsTracker {
-  private totalChars = 0;
-  private totalUploadBytes = 0;
-  private totalDownloadBytes = 0;
-  private activeCalls = 0;
-  private readonly perModel = new Map<string, PerModelMetrics>();
-  private readonly callInfo = new Map<
-    ModelCallHandle,
-    { readonly modelId: string; modelVersion?: string }
-  >();
-  private readonly charWindow: Array<{ timestamp: number; chars: number }> = [];
-  private readonly downloadWindow: Array<{ timestamp: number; bytes: number }> =
-    [];
+type CallTokenState = {
+  promptTokens: number;
+  cachedTokens: number;
+  responseTokens: number;
+  responseImageTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+  toolUsePromptTokens: number;
+};
 
-  startCall(modelId: string, uploadBytes: number): ModelCallHandle {
-    const handle: ModelCallHandle = Symbol("model-call");
-    this.callInfo.set(handle, { modelId });
-    this.activeCalls += 1;
-    const metrics = this.perModel.get(modelId) ?? {
-      uploadBytes: 0,
-      downloadBytes: 0,
-      outputChars: 0,
-    };
-    this.perModel.set(modelId, metrics);
-    if (uploadBytes > 0) {
-      this.totalUploadBytes += uploadBytes;
-      metrics.uploadBytes += uploadBytes;
+type CallUsageState = {
+  modelId: string;
+  modelVersion?: string;
+  requestImageSize?: string;
+  promptChars: number;
+  promptImages: number;
+  promptImageBytes: number;
+  responseChars: number;
+  responseImages: number;
+  responseImageBytes: number;
+  thinkingChars: number;
+  tokens: CallTokenState;
+  appliedCostUsd: number;
+};
+
+const PRO_PREVIEW_THRESHOLD = 200_000; // prompt token count threshold for higher tier pricing
+const PRO_PREVIEW_INPUT_RATE_LOW = 2 / 1_000_000; // $2 per 1M input tokens
+const PRO_PREVIEW_INPUT_RATE_HIGH = 4 / 1_000_000; // $4 per 1M input tokens (large prompts)
+const PRO_PREVIEW_OUTPUT_RATE_LOW = 12 / 1_000_000; // $12 per 1M output/thinking tokens
+const PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000; // $18 per 1M output/thinking tokens (large prompts)
+const PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000; // $0.20 per 1M cached tokens
+const PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000; // $0.40 per 1M cached tokens (large prompts)
+
+const IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000; // $2 per 1M input tokens (text/image)
+const IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000; // $12 per 1M text/thinking tokens
+const IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000; // $120 per 1M image tokens
+const IMAGE_PREVIEW_IMAGE_PRICES: Record<string, number> = {
+  "1K": 0.134,
+  "2K": 0.134,
+  "4K": 0.24,
+};
+const IMAGE_PREVIEW_CACHED_RATE = 0.2 / 1_000_000; // $0.20 per 1M cached tokens
+
+function createEmptyTokenState(): CallTokenState {
+  return {
+    promptTokens: 0,
+    cachedTokens: 0,
+    responseTokens: 0,
+    responseImageTokens: 0,
+    thinkingTokens: 0,
+    totalTokens: 0,
+    toolUsePromptTokens: 0,
+  };
+}
+
+function resolveNumber(next: number | undefined, prev: number): number {
+  if (typeof next === "number" && Number.isFinite(next)) {
+    return Math.max(0, next);
+  }
+  return prev;
+}
+
+function resolvePricingModel(
+  modelId: string,
+): "pro-preview" | "image-preview" | undefined {
+  if (modelId.includes("image-preview")) {
+    return "image-preview";
+  }
+  if (modelId.includes("gemini-3-pro")) {
+    return "pro-preview";
+  }
+  return undefined;
+}
+
+function calculateCallCost({
+  modelId,
+  tokens,
+  responseImages,
+  imageSize,
+}: {
+  modelId: string;
+  tokens: CallTokenState;
+  responseImages: number;
+  imageSize?: string;
+}): number {
+  const pricingModel = resolvePricingModel(modelId);
+  if (!pricingModel) {
+    return 0;
+  }
+  const promptTokens = tokens.promptTokens + (tokens.toolUsePromptTokens ?? 0);
+  const cachedTokens = tokens.cachedTokens;
+  const nonCachedPrompt = Math.max(0, promptTokens - cachedTokens);
+  const responseImageTokens = tokens.responseImageTokens;
+  const responseTokensRaw = tokens.responseTokens;
+  const responseTextTokens = Math.max(
+    0,
+    responseTokensRaw - responseImageTokens,
+  );
+  const thinkingTokens = tokens.thinkingTokens;
+
+  if (pricingModel === "pro-preview") {
+    const useHighTier = promptTokens > PRO_PREVIEW_THRESHOLD;
+    const inputRate = useHighTier
+      ? PRO_PREVIEW_INPUT_RATE_HIGH
+      : PRO_PREVIEW_INPUT_RATE_LOW;
+    const cachedRate = useHighTier
+      ? PRO_PREVIEW_CACHED_RATE_HIGH
+      : PRO_PREVIEW_CACHED_RATE_LOW;
+    const outputRate = useHighTier
+      ? PRO_PREVIEW_OUTPUT_RATE_HIGH
+      : PRO_PREVIEW_OUTPUT_RATE_LOW;
+    const inputCost = nonCachedPrompt * inputRate;
+    const cachedCost = cachedTokens * cachedRate;
+    const outputTokens = tokens.responseTokens + thinkingTokens;
+    const outputCost = outputTokens * outputRate;
+    return inputCost + cachedCost + outputCost;
+  }
+
+  const imageRate =
+    imageSize && IMAGE_PREVIEW_IMAGE_PRICES[imageSize]
+      ? IMAGE_PREVIEW_IMAGE_PRICES[imageSize]
+      : IMAGE_PREVIEW_IMAGE_PRICES["2K"];
+  const tokensPerImage =
+    IMAGE_PREVIEW_OUTPUT_IMAGE_RATE > 0
+      ? imageRate / IMAGE_PREVIEW_OUTPUT_IMAGE_RATE
+      : 0;
+  let responseTextForPricing = responseTextTokens;
+  let imageTokensForPricing = responseImageTokens;
+  if (imageTokensForPricing <= 0 && responseImages > 0 && tokensPerImage > 0) {
+    const estimatedImageTokens = responseImages * tokensPerImage;
+    imageTokensForPricing = estimatedImageTokens;
+    if (responseTextForPricing >= estimatedImageTokens) {
+      responseTextForPricing -= estimatedImageTokens;
     }
+  }
+  const inputCost = nonCachedPrompt * IMAGE_PREVIEW_INPUT_RATE;
+  const cachedCost = cachedTokens * IMAGE_PREVIEW_CACHED_RATE;
+  const textOutputCost =
+    (responseTextForPricing + thinkingTokens) * IMAGE_PREVIEW_OUTPUT_TEXT_RATE;
+  const imageOutputCost =
+    imageTokensForPricing * IMAGE_PREVIEW_OUTPUT_IMAGE_RATE;
+  return inputCost + cachedCost + textOutputCost + imageOutputCost;
+}
+
+class MetricsTracker {
+  private promptChars = 0;
+  private promptImages = 0;
+  private promptImageBytes = 0;
+  private responseChars = 0;
+  private responseImages = 0;
+  private responseImageBytes = 0;
+  private thinkingChars = 0;
+  private readonly tokens: TokenTotals = {
+    prompt: 0,
+    cached: 0,
+    responseText: 0,
+    responseImages: 0,
+    thinking: 0,
+    total: 0,
+    toolUse: 0,
+  };
+  private costUsd = 0;
+  private activeCalls = 0;
+  private readonly modelsUsed = new Set<string>();
+  private readonly callInfo = new Map<ModelCallHandle, CallUsageState>();
+
+  startCall(
+    modelId: string,
+    _uploadBytes: number,
+    imageSize?: string,
+  ): ModelCallHandle {
+    const handle: ModelCallHandle = Symbol("model-call");
+    this.activeCalls += 1;
+    this.modelsUsed.add(modelId);
+    this.callInfo.set(handle, {
+      modelId,
+      requestImageSize: imageSize,
+      promptChars: 0,
+      promptImages: 0,
+      promptImageBytes: 0,
+      responseChars: 0,
+      responseImages: 0,
+      responseImageBytes: 0,
+      thinkingChars: 0,
+      tokens: createEmptyTokenState(),
+      appliedCostUsd: 0,
+    });
     return handle;
   }
 
   recordUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
-    const info = this.callInfo.get(handle);
-    if (!info) {
+    const state = this.callInfo.get(handle);
+    if (!state) {
       return;
     }
-    const metrics = this.perModel.get(info.modelId) ?? {
-      uploadBytes: 0,
-      downloadBytes: 0,
-      outputChars: 0,
-    };
-    this.perModel.set(info.modelId, metrics);
-    const timestamp = Date.now();
-    const charDelta = Math.max(0, chunk.outputCharsDelta ?? 0);
-    const byteDelta = Math.max(0, chunk.outputBytesDelta ?? 0);
-    if (charDelta > 0) {
-      this.totalChars += charDelta;
-      metrics.outputChars += charDelta;
-      this.charWindow.push({
-        timestamp,
-        chars: charDelta,
-      });
-    }
-    if (byteDelta > 0) {
-      this.totalDownloadBytes += byteDelta;
-      metrics.downloadBytes += byteDelta;
-      this.downloadWindow.push({
-        timestamp,
-        bytes: byteDelta,
-      });
-    }
     if (chunk.modelVersion) {
-      info.modelVersion = chunk.modelVersion;
+      state.modelVersion = chunk.modelVersion;
+      this.modelsUsed.add(chunk.modelVersion);
+    }
+    if (chunk.prompt) {
+      const textChars = Math.max(0, chunk.prompt.textChars ?? 0);
+      const imageCount = Math.max(0, chunk.prompt.imageCount ?? 0);
+      const imageBytes = Math.max(0, chunk.prompt.imageBytes ?? 0);
+      this.promptChars += textChars;
+      this.promptImages += imageCount;
+      this.promptImageBytes += imageBytes;
+      state.promptChars += textChars;
+      state.promptImages += imageCount;
+      state.promptImageBytes += imageBytes;
+    }
+    if (chunk.response) {
+      const textDelta = Math.max(0, chunk.response.textCharsDelta ?? 0);
+      const imageDelta = Math.max(0, chunk.response.imageCountDelta ?? 0);
+      const imageBytesDelta = Math.max(0, chunk.response.imageBytesDelta ?? 0);
+      this.responseChars += textDelta;
+      this.responseImages += imageDelta;
+      this.responseImageBytes += imageBytesDelta;
+      state.responseChars += textDelta;
+      state.responseImages += imageDelta;
+      state.responseImageBytes += imageBytesDelta;
+    }
+    if (chunk.thinking) {
+      const thinkingDelta = Math.max(0, chunk.thinking.textCharsDelta ?? 0);
+      this.thinkingChars += thinkingDelta;
+      state.thinkingChars += thinkingDelta;
+    }
+    if (chunk.tokens) {
+      this.applyTokenUpdate(state, chunk.tokens);
     }
   }
 
@@ -139,57 +328,113 @@ class MetricsTracker {
   }
 
   getSnapshot(): MetricsSnapshot {
-    const now = Date.now();
-    this.trimWindow(this.charWindow, now);
-    this.trimWindow(this.downloadWindow, now);
-    const charsWindowTotal = this.charWindow.reduce(
-      (acc, entry) => acc + entry.chars,
-      0,
-    );
-    const downloadWindowTotal = this.downloadWindow.reduce(
-      (acc, entry) => acc + entry.bytes,
-      0,
-    );
-    const charWindowStart =
-      this.charWindow.length > 0 ? this.charWindow[0].timestamp : now;
-    const downloadWindowStart =
-      this.downloadWindow.length > 0 ? this.downloadWindow[0].timestamp : now;
-    const charsElapsedSeconds = Math.max((now - charWindowStart) / 1000, 1);
-    const downloadElapsedSeconds = Math.max(
-      (now - downloadWindowStart) / 1000,
-      1,
-    );
-    const charsPerSecond = charsWindowTotal / charsElapsedSeconds;
-    const downloadBytesPerSecond = downloadWindowTotal / downloadElapsedSeconds;
-    const perModel = Array.from(this.perModel.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([modelId, metrics]) => ({
-        modelId,
-        uploadBytes: metrics.uploadBytes,
-        downloadBytes: metrics.downloadBytes,
-        outputChars: metrics.outputChars,
-      }));
     return {
-      totalChars: this.totalChars,
-      totalUploadBytes: this.totalUploadBytes,
-      totalDownloadBytes: this.totalDownloadBytes,
+      promptChars: this.promptChars,
+      promptImages: this.promptImages,
+      promptImageBytes: this.promptImageBytes,
+      responseChars: this.responseChars,
+      responseImages: this.responseImages,
+      responseImageBytes: this.responseImageBytes,
+      thinkingChars: this.thinkingChars,
+      tokens: { ...this.tokens },
+      costUsd: this.costUsd,
       activeCalls: this.activeCalls,
-      charsPerSecond,
-      downloadBytesPerSecond,
-      perModel,
+      modelsUsed: Array.from(this.modelsUsed).sort(),
     };
   }
 
-  private trimWindow<T extends { timestamp: number }>(
-    window: T[],
-    now: number,
+  private applyTokenUpdate(
+    state: CallUsageState,
+    tokens: LlmUsageTokenUpdate,
   ): void {
-    while (window.length > 0) {
-      const first = window[0];
-      if (!first || first.timestamp > now - SPEED_WINDOW_MS) {
-        break;
-      }
-      window.shift();
+    const previous = state.tokens;
+    const resolvedPromptTokens = resolveNumber(
+      tokens.promptTokens,
+      previous.promptTokens,
+    );
+    const resolvedCachedTokens = resolveNumber(
+      tokens.cachedTokens,
+      previous.cachedTokens,
+    );
+    const resolvedResponseTokens = resolveNumber(
+      tokens.responseTokens,
+      previous.responseTokens,
+    );
+    const resolvedResponseImageTokens = resolveNumber(
+      tokens.responseImageTokens,
+      previous.responseImageTokens,
+    );
+    const resolvedThinkingTokens = resolveNumber(
+      tokens.thinkingTokens,
+      previous.thinkingTokens,
+    );
+    const resolvedToolUseTokens = resolveNumber(
+      tokens.toolUsePromptTokens,
+      previous.toolUsePromptTokens,
+    );
+    const computedTotal =
+      resolvedPromptTokens +
+      resolvedResponseTokens +
+      resolvedThinkingTokens +
+      resolvedToolUseTokens;
+    const resolvedTotalTokens = resolveNumber(
+      tokens.totalTokens ?? computedTotal,
+      previous.totalTokens,
+    );
+    const next: CallTokenState = {
+      promptTokens: resolvedPromptTokens,
+      cachedTokens: resolvedCachedTokens,
+      responseTokens: resolvedResponseTokens,
+      responseImageTokens: resolvedResponseImageTokens,
+      thinkingTokens: resolvedThinkingTokens,
+      totalTokens: resolvedTotalTokens,
+      toolUsePromptTokens: resolvedToolUseTokens,
+    };
+
+    const promptDelta = Math.max(0, next.promptTokens - previous.promptTokens);
+    const cachedDelta = Math.max(0, next.cachedTokens - previous.cachedTokens);
+    const responseImageDelta = Math.max(
+      0,
+      next.responseImageTokens - previous.responseImageTokens,
+    );
+    const prevResponseText = Math.max(
+      0,
+      previous.responseTokens - previous.responseImageTokens,
+    );
+    const nextResponseText = Math.max(
+      0,
+      next.responseTokens - next.responseImageTokens,
+    );
+    const responseTextDelta = Math.max(0, nextResponseText - prevResponseText);
+    const thinkingDelta = Math.max(
+      0,
+      next.thinkingTokens - previous.thinkingTokens,
+    );
+    const totalDelta = Math.max(0, next.totalTokens - previous.totalTokens);
+    const toolUseDelta = Math.max(
+      0,
+      next.toolUsePromptTokens - previous.toolUsePromptTokens,
+    );
+
+    this.tokens.prompt += promptDelta;
+    this.tokens.cached += cachedDelta;
+    this.tokens.responseImages += responseImageDelta;
+    this.tokens.responseText += responseTextDelta;
+    this.tokens.thinking += thinkingDelta;
+    this.tokens.total += totalDelta;
+    this.tokens.toolUse += toolUseDelta;
+
+    state.tokens = next;
+    const callCost = calculateCallCost({
+      modelId: state.modelVersion ?? state.modelId,
+      tokens: next,
+      responseImages: state.responseImages,
+      imageSize: state.requestImageSize,
+    });
+    const costDelta = Math.max(0, callCost - state.appliedCostUsd);
+    if (costDelta > 0) {
+      this.costUsd += costDelta;
+      state.appliedCostUsd = callCost;
     }
   }
 }
@@ -277,12 +522,16 @@ class ProgressDisplay {
     this.render(this.mode === "interactive");
   }
 
-  startModelCall(modelId: string, uploadBytes: number): ModelCallHandle {
+  startModelCall(
+    modelId: string,
+    uploadBytes: number,
+    imageSize?: string,
+  ): ModelCallHandle {
     if (this.mode === "off") {
       return Symbol("model-call");
     }
     this.dirty = true;
-    return this.metrics.startCall(modelId, uploadBytes);
+    return this.metrics.startCall(modelId, uploadBytes, imageSize);
   }
 
   recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
@@ -331,7 +580,10 @@ class ProgressDisplay {
         log: (message) => {
           console.log(message);
         },
-        startModelCall: () => Symbol("model-call"),
+        startModelCall: (details) => {
+          void details;
+          return Symbol("model-call");
+        },
         recordModelUsage: () => {},
         finishModelCall: () => {},
         startStage: () => Symbol("stage"),
@@ -345,8 +597,8 @@ class ProgressDisplay {
       log: (message) => {
         this.log(message);
       },
-      startModelCall: ({ modelId, uploadBytes }) =>
-        this.startModelCall(modelId, uploadBytes),
+      startModelCall: ({ modelId, uploadBytes, imageSize }) =>
+        this.startModelCall(modelId, uploadBytes, imageSize),
       recordModelUsage: (handle, chunk) => {
         this.recordModelUsage(handle, chunk);
       },
@@ -474,10 +726,11 @@ class ProgressDisplay {
     }
     const metrics = this.metrics.getSnapshot();
     const stageDisplay = this.formatStages();
+    const usageSummary = formatUsageSummary(metrics);
     const lineParts = [
       this.labelDisplay,
       `stages: ${stageDisplay}`,
-      formatPerModelChars(metrics.perModel),
+      usageSummary,
     ].filter((part) => part.trim().length > 0);
     const line =
       lineParts.length > 1
@@ -648,13 +901,96 @@ function formatNumber(value: number): string {
   );
 }
 
-function formatPerModelChars(perModel: MetricsSnapshot["perModel"]): string {
-  if (perModel.length === 0) {
-    return "";
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0B";
   }
-  const entries = perModel.map((entry) => {
-    const chars = formatNumber(entry.outputChars);
-    return `${entry.modelId.replace("gemini-", "")}: ${chars} chars`;
-  });
-  return entries.join(", ");
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const fractionDigits = value >= 10 ? 0 : 1;
+  return `${value.toFixed(fractionDigits)}${units[unitIndex]}`;
+}
+
+function formatCurrency(value: number): string {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: safeValue < 1 ? 4 : 2,
+    maximumFractionDigits: safeValue < 1 ? 4 : 2,
+  }).format(safeValue);
+}
+
+function formatUsageSummary(metrics: MetricsSnapshot): string {
+  const sections: string[] = [];
+
+  const promptParts: string[] = [];
+  if (metrics.promptChars > 0) {
+    promptParts.push(`${formatNumber(metrics.promptChars)} chars`);
+  }
+  if (metrics.promptImages > 0) {
+    const bytes =
+      metrics.promptImageBytes > 0
+        ? ` (${formatBytes(metrics.promptImageBytes)})`
+        : "";
+    promptParts.push(`${formatNumber(metrics.promptImages)} imgs${bytes}`);
+  } else if (metrics.promptImageBytes > 0) {
+    promptParts.push(formatBytes(metrics.promptImageBytes));
+  }
+  const promptTokenTotal = metrics.tokens.prompt + metrics.tokens.toolUse;
+  if (promptTokenTotal > 0) {
+    promptParts.push(`${formatNumber(promptTokenTotal)} tok`);
+  }
+  if (metrics.tokens.cached > 0) {
+    promptParts.push(`cached: ${formatNumber(metrics.tokens.cached)} tok`);
+  }
+  if (promptParts.length > 0) {
+    sections.push(`prompt: ${promptParts.join(", ")}`);
+  }
+
+  const thinkingParts: string[] = [];
+  if (metrics.thinkingChars > 0) {
+    thinkingParts.push(`${formatNumber(metrics.thinkingChars)} chars`);
+  }
+  if (metrics.tokens.thinking > 0) {
+    thinkingParts.push(`${formatNumber(metrics.tokens.thinking)} tok`);
+  }
+  if (thinkingParts.length > 0) {
+    sections.push(`thinking: ${thinkingParts.join(", ")}`);
+  }
+
+  const responseParts: string[] = [];
+  if (metrics.responseChars > 0) {
+    responseParts.push(`${formatNumber(metrics.responseChars)} chars`);
+  }
+  if (metrics.responseImages > 0) {
+    const bytes =
+      metrics.responseImageBytes > 0
+        ? ` (${formatBytes(metrics.responseImageBytes)})`
+        : "";
+    responseParts.push(`${formatNumber(metrics.responseImages)} imgs${bytes}`);
+  } else if (metrics.responseImageBytes > 0) {
+    responseParts.push(formatBytes(metrics.responseImageBytes));
+  }
+  const responseTokens =
+    metrics.tokens.responseText + metrics.tokens.responseImages;
+  if (responseTokens > 0) {
+    responseParts.push(`${formatNumber(responseTokens)} tok`);
+  }
+  if (responseParts.length > 0) {
+    sections.push(`response: ${responseParts.join(", ")}`);
+  }
+
+  if (metrics.costUsd > 0) {
+    sections.push(`cost: ${formatCurrency(metrics.costUsd)}`);
+  }
+  if (metrics.modelsUsed.length > 0) {
+    sections.push(`models: ${metrics.modelsUsed.join(", ")}`);
+  }
+  return sections.join(" | ");
 }

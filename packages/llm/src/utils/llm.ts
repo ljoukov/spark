@@ -20,7 +20,7 @@ import { runGeminiCall, type GeminiModelId } from "./gemini";
 import { z } from "zod";
 import { getSharp } from "./sharp";
 
-import type { JobProgressReporter } from "./concurrency";
+import type { JobProgressReporter, LlmUsageTokenUpdate } from "./concurrency";
 import { formatMillis } from "./format";
 
 function estimateUploadBytes(parts: readonly LlmContentPart[]): number {
@@ -109,6 +109,7 @@ type LlmCallStage = {
 export type LlmTextModelId = GeminiModelId;
 export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
+export type LlmImageSize = "1K" | "2K" | "4K";
 
 type LlmInlineDataPart = {
   type: "inlineData";
@@ -216,6 +217,21 @@ function extractVisibleText(content: LlmContent | undefined): string {
   return text.trim();
 }
 
+function extractSnapshotText(content: LlmContent | undefined): string {
+  if (!content) {
+    return "";
+  }
+  const segments: string[] = [];
+  for (const part of content.parts) {
+    if (part.type !== "text") {
+      continue;
+    }
+    const prefix = part.thought === true ? "[thought] " : "";
+    segments.push(`${prefix}${part.text}`);
+  }
+  return segments.join("\n\n").trim();
+}
+
 function normalizeJsonText(rawText: string): string {
   let text = rawText.trim();
 
@@ -305,11 +321,39 @@ function extractImages(content: LlmContent | undefined): LlmImageData[] {
   return images;
 }
 
+type PromptStats = {
+  textChars: number;
+  imageCount: number;
+  imageBytes: number;
+};
+
+function summarisePromptStats(contents: readonly LlmContent[]): PromptStats {
+  let textChars = 0;
+  let imageCount = 0;
+  let imageBytes = 0;
+  for (const content of contents) {
+    for (const part of content.parts) {
+      if (part.type === "text") {
+        textChars += part.text.length;
+        continue;
+      }
+      imageCount += 1;
+      imageBytes += estimateInlineBytes(part.data);
+    }
+  }
+  return {
+    textChars,
+    imageCount,
+    imageBytes,
+  };
+}
+
 export type LlmCallBaseOptions = {
   readonly modelId: LlmModelId;
   readonly contents: readonly LlmContent[];
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
+  readonly imageSize?: LlmImageSize;
 };
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
@@ -346,6 +390,7 @@ export class LlmJsonCallError extends Error {
 export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
   readonly contents?: never;
   readonly imageAspectRatio?: string;
+  readonly imageSize?: LlmImageSize;
   readonly stylePrompt: string;
   readonly styleImages?: readonly LlmImageData[];
   readonly imagePrompts: readonly string[];
@@ -373,7 +418,10 @@ function createFallbackProgress(label: string): JobProgressReporter {
     log: (message) => {
       console.log(`[${label}] ${message}`);
     },
-    startModelCall: () => Symbol("model-call"),
+    startModelCall: (details) => {
+      void details;
+      return Symbol("model-call");
+    },
     recordModelUsage: () => {},
     finishModelCall: () => {},
     startStage: () => Symbol("stage"),
@@ -940,6 +988,115 @@ function buildConversationHtml({
   return html.join("\n");
 }
 
+function toMaybeNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function sumModalityTokenCounts(details: unknown, modality: string): number {
+  if (!Array.isArray(details)) {
+    return 0;
+  }
+  let total = 0;
+  for (const entry of details) {
+    const entryModality = (entry as { modality?: unknown }).modality;
+    if (typeof entryModality !== "string") {
+      continue;
+    }
+    if (entryModality.toUpperCase() !== modality.toUpperCase()) {
+      continue;
+    }
+    const tokenCount = toMaybeNumber(
+      (entry as { tokenCount?: unknown }).tokenCount,
+    );
+    if (tokenCount !== undefined && tokenCount > 0) {
+      total += tokenCount;
+    }
+  }
+  return total;
+}
+
+function mergeTokenUpdates(
+  current: LlmUsageTokenUpdate | undefined,
+  next: LlmUsageTokenUpdate | undefined,
+): LlmUsageTokenUpdate | undefined {
+  if (!next) {
+    return current;
+  }
+  if (!current) {
+    return next;
+  }
+  return {
+    promptTokens: next.promptTokens ?? current.promptTokens,
+    cachedTokens: next.cachedTokens ?? current.cachedTokens,
+    responseTokens: next.responseTokens ?? current.responseTokens,
+    responseImageTokens:
+      next.responseImageTokens ?? current.responseImageTokens,
+    thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
+    totalTokens: next.totalTokens ?? current.totalTokens,
+    toolUsePromptTokens:
+      next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+  };
+}
+
+function extractUsageTokens(usage: unknown): LlmUsageTokenUpdate | undefined {
+  if (!usage || typeof usage !== "object") {
+    return undefined;
+  }
+  const promptTokens = toMaybeNumber(
+    (usage as { promptTokenCount?: unknown }).promptTokenCount,
+  );
+  const cachedTokens = toMaybeNumber(
+    (usage as { cachedContentTokenCount?: unknown }).cachedContentTokenCount,
+  );
+  const responseTokens = toMaybeNumber(
+    (usage as { candidatesTokenCount?: unknown }).candidatesTokenCount ??
+      (usage as { responseTokenCount?: unknown }).responseTokenCount,
+  );
+  const thinkingTokens = toMaybeNumber(
+    (usage as { thoughtsTokenCount?: unknown }).thoughtsTokenCount,
+  );
+  const totalTokens = toMaybeNumber(
+    (usage as { totalTokenCount?: unknown }).totalTokenCount,
+  );
+  const toolUsePromptTokens = toMaybeNumber(
+    (usage as { toolUsePromptTokenCount?: unknown }).toolUsePromptTokenCount,
+  );
+  const responseDetails =
+    (usage as { candidatesTokensDetails?: unknown }).candidatesTokensDetails ??
+    (usage as { responseTokensDetails?: unknown }).responseTokensDetails;
+  const responseImageTokens = sumModalityTokenCounts(responseDetails, "IMAGE");
+  if (
+    promptTokens === undefined &&
+    cachedTokens === undefined &&
+    responseTokens === undefined &&
+    responseImageTokens === 0 &&
+    thinkingTokens === undefined &&
+    totalTokens === undefined &&
+    toolUsePromptTokens === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    promptTokens,
+    cachedTokens,
+    responseTokens,
+    responseImageTokens:
+      responseImageTokens > 0 ? responseImageTokens : undefined,
+    thinkingTokens,
+    totalTokens,
+    toolUsePromptTokens,
+  };
+}
+
 function buildCallStage({
   modelId,
   debug,
@@ -964,6 +1121,7 @@ type LlmStreamCallOptions = LlmCallBaseOptions & {
   readonly responseSchema?: Schema;
   readonly responseModalities?: readonly string[];
   readonly imageAspectRatio?: string;
+  readonly imageSize?: LlmImageSize;
   readonly tools?: readonly LlmToolConfig[];
 };
 
@@ -1062,8 +1220,17 @@ async function llmStream({
   if (options.responseModalities) {
     config.responseModalities = Array.from(options.responseModalities);
   }
-  if (options.imageAspectRatio) {
-    config.imageConfig = { aspectRatio: options.imageAspectRatio };
+  const effectiveImageSize =
+    options.modelId === "gemini-3-pro-image-preview"
+      ? (options.imageSize ?? "2K")
+      : options.imageSize;
+  if (options.imageAspectRatio || effectiveImageSize) {
+    config.imageConfig = {
+      ...(options.imageAspectRatio
+        ? { aspectRatio: options.imageAspectRatio }
+        : {}),
+      ...(effectiveImageSize ? { imageSize: effectiveImageSize } : {}),
+    };
   }
   // temperature is intentionally not configurable in this wrapper.
   const geminiTools = toGeminiTools(options.tools);
@@ -1143,10 +1310,28 @@ async function llmStream({
       });
     }
 
+    const promptStats = summarisePromptStats(promptContents);
     const callHandle = reporter.startModelCall({
       modelId: options.modelId,
       uploadBytes,
+      imageSize: effectiveImageSize,
     });
+    if (
+      promptStats.textChars > 0 ||
+      promptStats.imageCount > 0 ||
+      promptStats.imageBytes > 0
+    ) {
+      reporter.recordModelUsage(callHandle, {
+        prompt: {
+          textChars:
+            promptStats.textChars > 0 ? promptStats.textChars : undefined,
+          imageCount:
+            promptStats.imageCount > 0 ? promptStats.imageCount : undefined,
+          imageBytes:
+            promptStats.imageBytes > 0 ? promptStats.imageBytes : undefined,
+        },
+      });
+    }
 
     const startedAt = Date.now();
     let resolvedModelVersion: string = options.modelId;
@@ -1155,6 +1340,7 @@ async function llmStream({
     let blocked = false;
     let responseGroundingMetadata: GroundingMetadata | undefined;
     let imageCounter = 0;
+    let latestUsageTokens: LlmUsageTokenUpdate | undefined;
 
     const appendTextPart = (text: string, isThought: boolean): void => {
       if (text.length === 0) {
@@ -1203,9 +1389,16 @@ async function llmStream({
 
     const accumulateContent = (
       content: LlmContent,
-    ): { charDelta: number; byteDelta: number } => {
-      let charDelta = 0;
-      let byteDelta = 0;
+    ): {
+      responseText: number;
+      responseImages: number;
+      responseImageBytes: number;
+      thinkingText: number;
+    } => {
+      let responseText = 0;
+      let responseImages = 0;
+      let responseImageBytes = 0;
+      let thinkingText = 0;
       if (!responseRole) {
         responseRole = content.role;
       }
@@ -1213,13 +1406,18 @@ async function llmStream({
         if (part.type === "text") {
           const text = part.text;
           appendTextPart(text, part.thought === true);
-          charDelta += text.length;
+          if (part.thought === true) {
+            thinkingText += text.length;
+          } else {
+            responseText += text.length;
+          }
         } else {
           appendInlinePart(part.data, part.mimeType);
-          byteDelta += estimateInlineBytes(part.data);
+          responseImages += 1;
+          responseImageBytes += estimateInlineBytes(part.data);
         }
       }
-      return { charDelta, byteDelta };
+      return { responseText, responseImages, responseImageBytes, thinkingText };
     };
 
     try {
@@ -1237,9 +1435,15 @@ async function llmStream({
           if (chunk.promptFeedback?.blockReason) {
             blocked = true;
           }
+          latestUsageTokens = mergeTokenUpdates(
+            latestUsageTokens,
+            extractUsageTokens(chunk.usageMetadata),
+          );
           const candidates = chunk.candidates;
-          let chunkCharDelta = 0;
-          let chunkByteDelta = 0;
+          let chunkResponseText = 0;
+          let chunkResponseImages = 0;
+          let chunkResponseImageBytes = 0;
+          let chunkThinkingText = 0;
           if (candidates !== undefined && candidates.length > 0) {
             const primary = candidates[0];
             if (isModerationFinish(primary.finishReason)) {
@@ -1257,8 +1461,10 @@ async function llmStream({
                 const content =
                   convertGoogleContentToLlmContent(candidateContent);
                 const deltas = accumulateContent(content);
-                chunkCharDelta += deltas.charDelta;
-                chunkByteDelta += deltas.byteDelta;
+                chunkResponseText += deltas.responseText;
+                chunkResponseImages += deltas.responseImages;
+                chunkResponseImageBytes += deltas.responseImageBytes;
+                chunkThinkingText += deltas.thinkingText;
               } catch (error) {
                 log(
                   `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
@@ -1266,11 +1472,36 @@ async function llmStream({
               }
             }
           }
-          if (chunkCharDelta > 0 || chunkByteDelta > 0) {
+          if (
+            chunkResponseText > 0 ||
+            chunkResponseImages > 0 ||
+            chunkResponseImageBytes > 0 ||
+            chunkThinkingText > 0 ||
+            chunk.modelVersion
+          ) {
             reporter.recordModelUsage(callHandle, {
               modelVersion: chunk.modelVersion,
-              outputCharsDelta: chunkCharDelta > 0 ? chunkCharDelta : undefined,
-              outputBytesDelta: chunkByteDelta > 0 ? chunkByteDelta : undefined,
+              response:
+                chunkResponseText > 0 ||
+                chunkResponseImages > 0 ||
+                chunkResponseImageBytes > 0
+                  ? {
+                      textCharsDelta:
+                        chunkResponseText > 0 ? chunkResponseText : undefined,
+                      imageCountDelta:
+                        chunkResponseImages > 0
+                          ? chunkResponseImages
+                          : undefined,
+                      imageBytesDelta:
+                        chunkResponseImageBytes > 0
+                          ? chunkResponseImageBytes
+                          : undefined,
+                    }
+                  : undefined,
+              thinking:
+                chunkThinkingText > 0
+                  ? { textCharsDelta: chunkThinkingText }
+                  : undefined,
             });
           }
         }
@@ -1278,6 +1509,12 @@ async function llmStream({
           responseGroundingMetadata = latestGroundingMetadata;
         }
       });
+      if (latestUsageTokens || resolvedModelVersion !== options.modelId) {
+        reporter.recordModelUsage(callHandle, {
+          modelVersion: resolvedModelVersion,
+          tokens: latestUsageTokens,
+        });
+      }
     } finally {
       reporter.finishModelCall(callHandle);
     }
@@ -1298,7 +1535,7 @@ async function llmStream({
         : undefined;
 
     if (stage.debugDir || debugLogDir) {
-      const trimmedResponseText = extractVisibleText(responseContent);
+      const trimmedResponseText = extractSnapshotText(responseContent);
       const snapshotSummary: readonly string[] = [
         `Model: ${resolvedModelVersion}`,
         `Elapsed: ${formatMillis(elapsedMs)}`,
@@ -1540,6 +1777,7 @@ export async function generateImages(
     modelId,
     debug,
     imageAspectRatio,
+    imageSize = "2K",
   } = options;
 
   type PromptEntry = { index: number; prompt: string };
@@ -1648,6 +1886,7 @@ export async function generateImages(
         debug,
         responseModalities: ["IMAGE", "TEXT"],
         imageAspectRatio,
+        imageSize,
       },
       attempt,
       maxAttempts,
