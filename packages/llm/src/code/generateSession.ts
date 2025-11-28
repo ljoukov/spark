@@ -32,7 +32,11 @@ function useProgress(progress: SessionProgress): JobProgressReporter {
         console.log(message);
       }
     },
-    startModelCall(details: { modelId: string; uploadBytes: number }) {
+    startModelCall(details: {
+      modelId: string;
+      uploadBytes: number;
+      imageSize?: string;
+    }) {
       if (progress) {
         return progress.startModelCall(details);
       }
