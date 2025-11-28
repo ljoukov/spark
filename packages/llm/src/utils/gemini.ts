@@ -1,5 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import type { Content, GenerateContentResponse, Part } from "@google/genai";
+import type {
+  Content,
+  GenerateContentResponse,
+  GoogleGenAIOptions,
+  Part,
+} from "@google/genai";
 
 import { getGoogleAuthOptions, getGoogleServiceAccount } from "./googleAuth";
 
@@ -100,11 +105,14 @@ async function getGeminiClient(): Promise<GoogleGenAI> {
     clientPromise = Promise.resolve().then(() => {
       const projectId = resolveProjectId();
       const location = resolveLocation();
+      const googleAuthOptions = getGoogleAuthOptions(CLOUD_PLATFORM_SCOPE);
       return new GoogleGenAI({
         vertexai: true,
         project: projectId,
         location,
-        googleAuthOptions: getGoogleAuthOptions(CLOUD_PLATFORM_SCOPE),
+        googleAuthOptions: googleAuthOptions as unknown as NonNullable<
+          GoogleGenAIOptions["googleAuthOptions"]
+        >,
       });
     });
   }
