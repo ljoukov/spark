@@ -519,6 +519,39 @@ export const CodingProblemSchema = z.object({
 
 export type CodingProblem = z.infer<typeof CodingProblemSchema>;
 
+const ProblemPlanItemSchema = CodingProblemSchema.pick({
+  id: true,
+  title: true,
+});
+
+export type ProblemPlanItem = z.infer<typeof ProblemPlanItemSchema>;
+
+export const ProblemPlanItemsSchema = z
+  .array(ProblemPlanItemSchema)
+  .superRefine((value, ctx) => {
+    const seen = new Set<ProblemPlanItem["id"]>();
+    const missing = new Set<ProblemPlanItem["id"]>(["p1", "p2"]);
+    value.forEach((problem, index) => {
+      if (seen.has(problem.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, "id"],
+          message: `duplicate problem id '${problem.id}'`,
+        });
+        return;
+      }
+      seen.add(problem.id);
+      missing.delete(problem.id);
+    });
+    if (missing.size > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["problems"],
+        message: `problems must include ids ${Array.from(missing).join(", ")}`,
+      });
+    }
+  });
+
 const ProblemsSchema = z.object({
   problems: z.array(CodingProblemSchema).superRefine((value, ctx) => {
     const ids = new Set<string>();
@@ -3623,6 +3656,7 @@ export async function generateSession(
 
   await pipeline.ensureProblemSolutions();
   problems = await pipeline.ensureProblems();
+  ProblemPlanItemsSchema.parse(problems);
 
   let quizzes: readonly SessionQuiz[] | undefined;
   let quizzesGrade: QuizzesGrade | undefined;
