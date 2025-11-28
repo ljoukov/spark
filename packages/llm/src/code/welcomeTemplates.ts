@@ -5,9 +5,10 @@ import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
 } from "../utils/firebaseAdmin";
-import { generateSession, type SessionPlan } from "./generateSession";
+import { generateSession } from "./generateSession";
 import type { GenerateStoryResult } from "./generateStory";
 import {
+  convertSessionPlanToItems,
   generateCodeProblems,
   generateSessionMetadata,
   generateQuizDefinitions,
@@ -38,66 +39,6 @@ function slugifyTopic(topic: string): string {
   const collapsed = ascii.replace(/\\s+/g, "-").replace(/-+/g, "-");
   const trimmed = collapsed.replace(/^-+|-+$/g, "");
   return trimmed.slice(0, 60) || "session";
-}
-
-function clampSummaryWords(summary: string, maxWords = 15): string {
-  const words = summary.split(/\\s+/).filter(Boolean);
-  if (words.length <= maxWords) {
-    return summary.trim();
-  }
-  return words.slice(0, maxWords).join(" ").concat("...");
-}
-
-function convertPlan(
-  plan: SessionPlan,
-  storyPlanItemId: string,
-  storyTitle: string,
-) {
-  return plan.parts.map((part) => {
-    const conciseSummary = clampSummaryWords(part.summary, 15);
-    const base = {
-      title: part.summary.split(".")[0] || "Session Part",
-      summary: conciseSummary,
-    };
-
-    switch (part.kind) {
-      case "story":
-        return {
-          ...base,
-          id: storyPlanItemId,
-          kind: "media" as const,
-          title: storyTitle,
-        };
-      case "intro_quiz":
-        return {
-          ...base,
-          id: "intro_quiz",
-          kind: "quiz" as const,
-          title: "Warm-up",
-        };
-      case "coding_1":
-        return {
-          ...base,
-          id: "p1",
-          kind: "problem" as const,
-          title: "Challenge 1",
-        };
-      case "coding_2":
-        return {
-          ...base,
-          id: "p2",
-          kind: "problem" as const,
-          title: "Challenge 2",
-        };
-      case "wrap_up_quiz":
-        return {
-          ...base,
-          id: "wrap_up_quiz",
-          kind: "quiz" as const,
-          title: "Review",
-        };
-    }
-  });
 }
 
 function getTemplateDocRef(sessionId: string) {
@@ -280,8 +221,10 @@ export async function generateWelcomeSessionTemplate(
     plan: generation.plan,
     storyTitle: generation.story?.title,
   });
-  const storyTitle = generation.story.title;
-  const finalPlan = convertPlan(generation.plan, storyPlanItemId, storyTitle);
+  const { plan: finalPlan, storyTitle } = convertSessionPlanToItems(
+    generation,
+    storyPlanItemId,
+  );
 
   await copyStoryToTemplate(sessionId, storyPlanItemId, generation.story);
 

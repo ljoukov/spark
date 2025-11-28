@@ -63,14 +63,6 @@ function slugifyTopic(topic: string): string {
   return trimmed.slice(0, 60) || "session";
 }
 
-function clampSummaryWords(summary: string, maxWords = 15): string {
-  const words = summary.split(/\\s+/).filter(Boolean);
-  if (words.length <= maxWords) {
-    return summary.trim();
-  }
-  return words.slice(0, maxWords).join(" ").concat("...");
-}
-
 function getTemplateDocRef(sessionId: string) {
   const firestore = getFirebaseAdminFirestore();
   return firestore

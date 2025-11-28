@@ -10,11 +10,12 @@ import {
 import { z } from "zod";
 
 import { generateJson } from "../utils/llm";
-import type {
-  CodingProblem,
-  GenerateSessionResult,
-  SessionPlan,
-  SessionQuiz,
+import {
+  ProblemPlanItemsSchema,
+  type CodingProblem,
+  type GenerateSessionResult,
+  type SessionPlan,
+  type SessionQuiz,
 } from "./generateSession";
 
 const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
@@ -586,6 +587,14 @@ export function convertSessionPlanToItems(
   session: GenerateSessionResult,
   storyPlanItemId: string,
 ): { plan: PlanItem[]; storyTitle: string } {
+  const problems = ProblemPlanItemsSchema.parse(session.problems);
+  const problemTitles: Record<"p1" | "p2", string> = {
+    p1: "",
+    p2: "",
+  };
+  for (const problem of problems) {
+    problemTitles[problem.id] = problem.title;
+  }
   const storyTitle = session.story?.title ?? session.plan.story.storyTopic;
   const parts = session.plan.parts.map((part) => {
     const conciseSummary = clampSummaryWords(part.summary, 15);
@@ -610,21 +619,19 @@ export function convertSessionPlanToItems(
           title: "Warm-up",
         };
       case "coding_1": {
-        const problem = session.problems.find((p) => p.id === "p1");
         return {
           ...base,
           id: "p1",
           kind: "problem" as const,
-          title: problem?.title ?? "Challenge 1",
+          title: problemTitles.p1,
         };
       }
       case "coding_2": {
-        const problem = session.problems.find((p) => p.id === "p2");
         return {
           ...base,
           id: "p2",
           kind: "problem" as const,
-          title: problem?.title ?? "Challenge 2",
+          title: problemTitles.p2,
         };
       }
       case "wrap_up_quiz":
