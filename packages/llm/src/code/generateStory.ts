@@ -12,6 +12,7 @@ import {
   type LlmContentPart,
   type LlmImageData,
   type LlmDebugOptions,
+  type LlmImageSize,
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
@@ -71,7 +72,11 @@ function useProgress(progress: StoryProgress): JobProgressReporter {
         console.log(message);
       }
     },
-    startModelCall(details: { modelId: string; uploadBytes: number }) {
+    startModelCall(details: {
+      modelId: string;
+      uploadBytes: number;
+      imageSize?: string;
+    }) {
       if (progress) {
         return progress.startModelCall(details);
       }
@@ -3244,6 +3249,7 @@ type SingleImageGenerationOptions = {
   styleImages?: readonly LlmImageData[];
   maxAttempts?: number;
   imageAspectRatio?: string;
+  imageSize?: LlmImageSize;
   progress: JobProgressReporter;
   modelId: typeof IMAGE_MODEL_ID;
   debug?: LlmDebugOptions;
@@ -3264,6 +3270,7 @@ async function generateSingleImage(
     imagePrompts: [trimmedPrompt],
     maxAttempts: options.maxAttempts ?? 4,
     imageAspectRatio: options.imageAspectRatio,
+    imageSize: options.imageSize,
     debug: options.debug,
   });
   const image = parts[0];

@@ -49,19 +49,24 @@ When you need to explain the expected shape inside a prompt, describe it in clea
 ## Progress and Metrics
 
 The wrappers report per-call usage to a `JobProgressReporter`:
-- `startModelCall({ modelId, uploadBytes })` begins a call
-- `recordModelUsage(handle, { outputCharsDelta?, outputBytesDelta? })` records streaming deltas
+- `startModelCall({ modelId, uploadBytes, imageSize? })` begins a call
+- `recordModelUsage(handle, { prompt?, response?, thinking?, tokens?, modelVersion? })` records streaming deltas and final usage metadata
 - `finishModelCall(handle)` ends a call
 
-The default reporter used by our concurrency display aggregates across all calls and renders a single line like:
+`recordModelUsage` accepts:
+- `prompt`: `{ textChars?, imageCount?, imageBytes? }`
+- `response`: `{ textCharsDelta?, imageCountDelta?, imageBytesDelta? }`
+- `thinking`: `{ textCharsDelta? }`
+- `tokens`: `{ promptTokens?, cachedTokens?, responseTokens?, responseImageTokens?, thinkingTokens?, totalTokens?, toolUsePromptTokens? }`
+- `modelVersion?`: the resolved Gemini model version for the call
 
-```
-[label] 42% | 3 / 7 | 1 waiting | chars 12,345 | up 3.1 KB | down 5.6 KB | speed 950 chars/s ↓ 1.2 KB/s | models: 2.5-pro: chars 12,345 up 3.1 KB down 5.6 KB
-```
+The default reporter aggregates across all calls and renders a single line that lists active stages plus any non-zero totals (prompt/res/thinking stats, images and bytes, tokens, cost, and the unique models seen). Example:
+
+`[label] stages: narration, frames | prompt: 8,400 chars, 6 imgs (1.2MB), 9,200 tok | thinking: 2,500 chars, 2,700 tok | response: 7,100 chars, 10 imgs (3.5MB), 6,800 tok | cost: $0.34 | models: gemini-3-pro-preview, gemini-3-pro-image-preview`
 
 Notes:
-- Thinking tokens are included in `chars` and `speed` metrics. Visible response text still determines the returned value from `generateText`.
-- Per-model periodic "progress …" logs are intentionally suppressed to avoid console spam; only the aggregate display updates continuously, plus a final per-call completion line.
+- Thinking tokens are reported separately (text and tokens) and are included in the final cost calculation. Visible response text still determines the returned value from `generateText`.
+- Zero-value stats are omitted from the status line to keep it readable.
 
 ## Debug Snapshots (Prompts and Responses)
 

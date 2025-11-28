@@ -9,6 +9,7 @@ import {
   type LlmDebugOptions,
   type LlmImageData,
   type LlmImageModelId,
+  type LlmImageSize,
   type LlmTextModelId,
 } from "../utils/llm";
 import type { JobProgressReporter } from "../utils/concurrency";
@@ -301,6 +302,7 @@ type GenerateStoryFramesOptions = {
   progress: JobProgressReporter;
   debug?: LlmDebugOptions;
   imageAspectRatio?: string;
+  imageSize?: LlmImageSize;
   frameNarrationByIndex?: ReadonlyMap<number, readonly string[]>;
 };
 
@@ -944,6 +946,7 @@ export async function generateStoryFrames(
     styleImages,
     debug,
     imageAspectRatio,
+    imageSize,
     frameNarrationByIndex,
   } = options;
 
@@ -1034,6 +1037,7 @@ export async function generateStoryFrames(
             imagePrompts: batch.prompts,
             maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
             imageAspectRatio,
+            imageSize,
             debug: extendDebug(debug, generateDebugSuffix),
           });
         } else {
@@ -1047,6 +1051,7 @@ export async function generateStoryFrames(
               imagePrompts: [batch.prompts[i]],
               maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
               imageAspectRatio,
+              imageSize,
               debug: extendDebug(
                 debug,
                 `${generateDebugSuffix}/frame-${padNumber(
@@ -1080,6 +1085,7 @@ export async function generateStoryFrames(
                 imagePrompts: [batch.prompts[i]],
                 maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
                 imageAspectRatio,
+                imageSize,
                 debug: extendDebug(
                   debug,
                   `${generateDebugSuffix}/fill-frame-${padNumber(
@@ -1357,6 +1363,7 @@ export async function generateStoryFrames(
                 imagePrompts: [batch.prompts[localIndex]],
                 maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
                 imageAspectRatio,
+                imageSize,
                 debug: extendDebug(
                   debug,
                   `batch-${padNumber(
