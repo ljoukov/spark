@@ -17,7 +17,7 @@
 			<Card.Title>Tasks</Card.Title>
 			<Card.Description>Fire background jobs in the Spark task queue.</Card.Description>
 		</Card.Header>
-	<Card.Content class="space-y-4">
+		<Card.Content class="space-y-4">
 			{#if hasSuccess}
 				<p
 					class="rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
