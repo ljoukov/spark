@@ -17,13 +17,13 @@ const VoiceSchema = z
     ssmlGender: z.string().min(1).optional(),
     naturalSampleRateHertz: z.number().int().positive().optional(),
   })
-  .passthrough();
+  .loose();
 
 const ListVoicesResponseSchema = z
   .object({
     voices: z.array(VoiceSchema).optional(),
   })
-  .passthrough();
+  .loose();
 
 const SynthesizeResponseSchema = z
   .object({
@@ -38,7 +38,7 @@ const SynthesizeResponseSchema = z
         effectsProfileId: z.array(z.string()).optional(),
         voiceProfile: z.string().optional(),
       })
-      .passthrough()
+      .loose()
       .optional(),
     timepoints: z
       .array(
@@ -47,11 +47,11 @@ const SynthesizeResponseSchema = z
             markName: z.string().optional(),
             timeSeconds: z.number().optional(),
           })
-          .passthrough(),
+          .loose(),
       )
       .optional(),
   })
-  .passthrough();
+  .loose();
 
 export type GoogleTextToSpeechVoice = z.infer<typeof VoiceSchema>;
 
