@@ -29,6 +29,7 @@ import {
   synthesizeAndPublishNarration,
 } from "./generateNarration";
 import { generateStoryFrames } from "./generateFrames";
+import { STORY_IMAGE_GRADING_PROMPT } from "./imageGradingPrompt";
 
 export const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
 export const IMAGE_MODEL_ID = "gemini-3-pro-image-preview" as const;
@@ -3253,6 +3254,7 @@ type SingleImageGenerationOptions = {
   progress: JobProgressReporter;
   modelId: typeof IMAGE_MODEL_ID;
   debug?: LlmDebugOptions;
+  imageGradingPrompt: string;
 };
 
 async function generateSingleImage(
@@ -3268,6 +3270,7 @@ async function generateSingleImage(
     stylePrompt: options.stylePrompt,
     styleImages: options.styleImages,
     imagePrompts: [trimmedPrompt],
+    imageGradingPrompt: options.imageGradingPrompt,
     maxAttempts: options.maxAttempts ?? 4,
     imageAspectRatio: options.imageAspectRatio,
     imageSize: options.imageSize,
@@ -3547,6 +3550,7 @@ export async function generateImageSets(
                 stylePrompt,
                 styleImages: posterReferences,
                 prompt: posterEntry.prompt,
+                imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
                 maxAttempts: 4,
                 imageAspectRatio: "16:9",
                 debug: attemptDebug(`poster/candidate_${candidateIndex}`),
@@ -3601,6 +3605,7 @@ export async function generateImageSets(
             stylePrompt,
             styleImages: endingReferences,
             prompt: endingEntry.prompt,
+            imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
             maxAttempts: 4,
             imageAspectRatio: "16:9",
             debug: attemptDebug("ending"),

@@ -13,6 +13,7 @@ import {
   type LlmTextModelId,
 } from "../utils/llm";
 import type { JobProgressReporter } from "../utils/concurrency";
+import { STORY_IMAGE_GRADING_PROMPT } from "./imageGradingPrompt";
 
 const IMAGE_GENERATION_MAX_ATTEMPTS = 4;
 const BATCH_GENERATE_MAX_ATTEMPTS = 3;
@@ -1035,6 +1036,7 @@ export async function generateStoryFrames(
             stylePrompt,
             styleImages: attemptStyleImages,
             imagePrompts: batch.prompts,
+            imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
             maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
             imageAspectRatio,
             imageSize,
@@ -1049,6 +1051,7 @@ export async function generateStoryFrames(
               stylePrompt,
               styleImages: attemptStyleImages,
               imagePrompts: [batch.prompts[i]],
+              imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
               maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
               imageAspectRatio,
               imageSize,
@@ -1083,6 +1086,7 @@ export async function generateStoryFrames(
                 stylePrompt,
                 styleImages: attemptStyleImages,
                 imagePrompts: [batch.prompts[i]],
+                imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
                 maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
                 imageAspectRatio,
                 imageSize,
@@ -1361,6 +1365,7 @@ export async function generateStoryFrames(
                 stylePrompt,
                 styleImages: styleImagesForRedo,
                 imagePrompts: [batch.prompts[localIndex]],
+                imageGradingPrompt: STORY_IMAGE_GRADING_PROMPT,
                 maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
                 imageAspectRatio,
                 imageSize,
