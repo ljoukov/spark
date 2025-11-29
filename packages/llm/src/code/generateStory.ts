@@ -1459,13 +1459,14 @@ ${originsCapsule}
 ${storyBrief}
 ============================================
 
-**Guardrails You Must Obey:**
-- Place the Origins Capsule in the first half of the story. Preserve every name, title, and timing nuance exactly—even if you lightly rephrase the sentences.
-- Use neutral naming language such as "now known as", "often called", or "widely referred to as". Never claim anyone "coined", "named", "invented", or held sole credit unless the capsule already asserts it.
-- Avoid exclusivity language. Swap "first" or "sole inventor" claims for hedged phrasing like "credited among early contributors", "independently developed", or "... and others".
-- Limit the narrative to one named figure or institution. When others matter, acknowledge them with neutral hedges instead of listing names.
-- The required concept name must appear in the title and again within the first four sentences of the prose, verbatim. Keep the title aligned with the same entity/concept described in the story.
-- Spell out lesser-known acronyms on first mention (e.g., "Jet Propulsion Laboratory (JPL)"); leave widely known ones like NASA as-is.
+  **Guardrails You Must Obey:**
+  - Place the Origins Capsule in the first half of the story. Preserve every name, title, and timing nuance exactly—even if you lightly rephrase the sentences.
+  - Use neutral naming language such as "now known as", "often called", or "widely referred to as". Never claim anyone "coined", "named", "invented", or held sole credit unless the capsule already asserts it.
+  - Avoid exclusivity language. Swap "first" or "sole inventor" claims for hedged phrasing like "credited among early contributors", "independently developed", or "... and others".
+  - Do not claim historical figures used formal binary search/halving algorithms unless mainstream consensus supports it. For artillery/bracketing analogies, describe them as later teaching comparisons, not documented tactics.
+  - Limit the narrative to one named figure or institution. When others matter, acknowledge them with neutral hedges instead of listing names.
+  - The required concept name must appear in the title and again within the first four sentences of the prose, verbatim. Keep the title aligned with the same entity/concept described in the story.
+  - Spell out lesser-known acronyms on first mention (e.g., "Jet Propulsion Laboratory (JPL)"); leave widely known ones like NASA as-is.
 - Introduce the concept "${topic}" within the first four sentences. Include a naming note only when the qualifier is well established and high-confidence.
 - Deliver the insight hint in exactly one or two sentences using plain nouns: start with the core pattern, then optionally contrast what happens when the condition holds versus when it breaks. Absolutely no equations, variables, or step-by-step instructions.
 - Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
@@ -2117,14 +2118,20 @@ export async function generateOriginsCapsule(
       .split(/(?<=[.!?])\s+/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => sentence.length > 0);
+    let adjustedCandidate = candidate;
     const sentenceCount = sentences.length;
-    if (sentenceCount < 2 || sentenceCount > 3) {
+    if (sentenceCount > 3) {
+      adjustedCandidate = sentences.slice(0, 3).join(" ");
+      adapter.log(
+        `[story/origins] trimmed capsule to first three sentences to satisfy structure (original count: ${sentenceCount})`,
+      );
+    } else if (sentenceCount < 2) {
       structuralIssues.push(
         `Produce two or three sentences separated by a single space (you returned ${sentenceCount}).`,
       );
     }
-    const wordCount = candidate.length
-      ? candidate.split(/\s+/u).filter((word) => word.length > 0).length
+    const wordCount = adjustedCandidate.length
+      ? adjustedCandidate.split(/\s+/u).filter((word) => word.length > 0).length
       : 0;
     if (wordCount === 0) {
       structuralIssues.push("The capsule was empty.");
@@ -2147,7 +2154,7 @@ export async function generateOriginsCapsule(
 
     const validation = await validateOriginsCapsule(
       topic,
-      candidate,
+      adjustedCandidate,
       researchContext,
       progress,
       options,
