@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -17,6 +18,7 @@ import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
 } from "@spark/llm";
+import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
 
@@ -60,7 +62,17 @@ function slugifyTopic(topic: string): string {
     .toLowerCase();
   const collapsed = ascii.replace(/\\s+/g, "-").replace(/-+/g, "-");
   const trimmed = collapsed.replace(/^-+|-+$/g, "");
-  return trimmed.slice(0, 60) || "session";
+  const baseSlug = trimmed || "session";
+  const maxLength = 25;
+  if (baseSlug.length <= maxLength) {
+    return baseSlug;
+  }
+  const hash = createHash("sha256").update(topic).digest("hex").slice(0, 6);
+  const maxBaseLength = Math.max(1, maxLength - (hash.length + 1));
+  const truncated = baseSlug.slice(0, maxBaseLength).replace(/^-+|-+$/g, "");
+  const safeBase =
+    truncated.length > 0 ? truncated : "session".slice(0, maxBaseLength);
+  return `${safeBase}-${hash}`;
 }
 
 function getTemplateDocRef(sessionId: string) {
@@ -259,14 +271,26 @@ async function main(): Promise<void> {
     `[welcome] generating session for topic "${parsed.topic}" (sessionId=${sessionId})`,
   );
 
-  const session = await generateSession({
-    topic: parsed.topic,
-    seed: parsed.seed,
-    checkpointDir,
-    debugRootDir,
-    userId: TEMPLATE_USER_ID,
-    sessionId,
-    storyPlanItemId: parsed.storyPlanItemId,
+  const [session] = await runJobsWithConcurrency<
+    "welcome-session",
+    Awaited<ReturnType<typeof generateSession>>
+  >({
+    items: ["welcome-session"],
+    concurrency: 1,
+    getId: () => sessionId,
+    label: `[welcome/${sessionId}]`,
+    handler: async (_item, { progress }) => {
+      return generateSession({
+        topic: parsed.topic,
+        seed: parsed.seed,
+        checkpointDir,
+        debugRootDir,
+        userId: TEMPLATE_USER_ID,
+        sessionId,
+        storyPlanItemId: parsed.storyPlanItemId,
+        progress,
+      });
+    },
   });
 
   const metadata = await generateSessionMetadata({
