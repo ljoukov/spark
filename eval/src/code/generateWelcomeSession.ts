@@ -53,29 +53,6 @@ const optionsSchema = z.object({
   debugRootDir: z.string().trim().optional(),
 });
 
-function stripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    const arrayValue = value as unknown[];
-    const mapped = arrayValue.map((item) => stripUndefined(item));
-    return mapped as unknown as T;
-  }
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    value.constructor === Object
-  ) {
-    const result: Record<string, unknown> = {};
-    for (const [key, entryValue] of Object.entries(value)) {
-      if (entryValue === undefined) {
-        continue;
-      }
-      result[key] = stripUndefined(entryValue);
-    }
-    return result as T;
-  }
-  return value;
-}
-
 function slugifyTopic(topic: string): string {
   const ascii = topic
     .normalize("NFKD")
@@ -152,7 +129,7 @@ async function writeQuizzesToTemplate(
     const target = templateDoc.collection("quiz").doc(quiz.id);
     const { id, ...rest } = quiz;
     void id;
-    batch.set(target, stripUndefined(rest));
+    batch.set(target, rest);
   }
 
   await batch.commit();
@@ -173,7 +150,7 @@ async function writeProblemsToTemplate(
     const target = templateDoc.collection("code").doc(problem.slug);
     const { slug, ...rest } = problem;
     void slug;
-    batch.set(target, stripUndefined(rest));
+    batch.set(target, rest);
   }
 
   await batch.commit();
@@ -224,7 +201,7 @@ async function writeTemplateDoc(
     payload[field] = FieldValue.delete();
   }
 
-  await templateDoc.set(stripUndefined(payload), { merge: true });
+  await templateDoc.set(payload, { merge: true });
 }
 
 async function main(): Promise<void> {
