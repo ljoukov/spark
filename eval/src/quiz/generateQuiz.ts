@@ -86,7 +86,7 @@ async function main(argv: readonly string[]): Promise<void> {
     label: "[quiz]",
     handler: async (item, { progress }) => {
       progress.log(
-        `starting quiz generation for ${item.source.filename} (${SPARK_UPLOAD_QUIZ_QUESTION_COUNT} questions)`,
+        `starting quiz generation for ${item.source.filename} (${SPARK_UPLOAD_QUIZ_QUESTION_COUNT.toString()} questions)`,
       );
       const quizId = randomUUID();
       const definition = await generateSparkPdfQuizDefinition({
@@ -105,7 +105,7 @@ async function main(argv: readonly string[]): Promise<void> {
   console.log(JSON.stringify(quizDefinition, null, 2));
 }
 
-void main(process.argv).catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+void main(process.argv).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
