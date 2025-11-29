@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { type CodeProblem, type QuizDefinition } from "@spark/schemas";
 import { z } from "zod";
 
@@ -38,7 +40,17 @@ function slugifyTopic(topic: string): string {
     .toLowerCase();
   const collapsed = ascii.replace(/\\s+/g, "-").replace(/-+/g, "-");
   const trimmed = collapsed.replace(/^-+|-+$/g, "");
-  return trimmed.slice(0, 60) || "session";
+  const baseSlug = trimmed || "session";
+  const maxLength = 25;
+  if (baseSlug.length <= maxLength) {
+    return baseSlug;
+  }
+  const hash = createHash("sha256").update(topic).digest("hex").slice(0, 6);
+  const maxBaseLength = Math.max(1, maxLength - (hash.length + 1));
+  const truncated = baseSlug.slice(0, maxBaseLength).replace(/^-+|-+$/g, "");
+  const safeBase =
+    truncated.length > 0 ? truncated : "session".slice(0, maxBaseLength);
+  return `${safeBase}-${hash}`;
 }
 
 function getTemplateDocRef(sessionId: string) {
