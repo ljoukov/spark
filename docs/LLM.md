@@ -83,11 +83,12 @@ If `debug.rootDir` is provided, each call writes snapshots under:
 Generated files:
 - `request.txt`: A metadata snapshot of the outbound request (model ID, attempt counters, estimated upload bytes, and the Gemini config JSON).
 - `prompt.txt`: A human-readable listing of request parts (text content and inline-data byte counts).
-- `response.txt`: Summary header followed by:
+- `response.txt`: Summary header (model + elapsed + token counts + input/output media stats + estimated cost) followed by:
   - “===== Response =====” with concatenated text (for image calls this may be empty or include accompanying text)
   - “===== Content =====” with a structured dump of the final parts when available. Inline image entries now include a short six-character SHA in the header so you can match parts with filenames.
 - Prompt inline images are converted to JPEG when possible and stored once under `{rootDir}/media/{sha256}.jpg`. For convenience, a symlink named `prompt-image-001.jpg` (incrementing per prompt) is placed inside each debug directory pointing back to the shared media file, and the short label recorded in `prompt.txt` (e.g. `prompt-image-001-abc123`) still shows the hash fragment.
 - For image calls, output images follow the same flow: each converted buffer is written to `{rootDir}/media/{sha256}.jpg` with per-directory symlinks like `image-001.jpg`. The short label recorded in `response.txt` (e.g. `image-001-def456`) references the same hash for cross-checking.
+- `response.txt` is streamed to disk while receiving the model output (buffered in ~200 character chunks and flushed again when the stream ends) so you can inspect partial responses if a call fails mid-way.
 - `conversation.html`: A lightweight viewer showing the prompt and response sequence (roles, text, and `<img>` tags that point to the saved image files in the same directory).
 - `exception.txt`: Written only when a call throws. Includes the error message, stack trace, timestamp, attempt counters, and model ID for the failed request.
 - When debugging is enabled, an immutable copy of the prompt, response, and any image files is also written to `{rootDir}/log/{iso-timestamp}/` (the timestamp is generated when the call starts).
