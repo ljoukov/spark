@@ -1458,7 +1458,6 @@ async function llmStream({
         return {
           includeThoughts: true,
           thinkingBudget: 24_576,
-          thinkingLevel: ThinkingLevel.HIGH,
         } as const;
       case "gemini-3-pro-image-preview":
         return undefined;
