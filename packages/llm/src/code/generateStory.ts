@@ -2111,9 +2111,9 @@ export async function generateOriginsCapsule(
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       debug,
     });
-    let candidate = raw.replace(/\s+/gu, " ").trim();
+    const candidate = raw.replace(/\s+/gu, " ").trim();
     const structuralIssues: string[] = [];
-    let sentences = candidate
+    const sentences = candidate
       .split(/(?<=[.!?])\s+/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => sentence.length > 0);

@@ -1922,7 +1922,7 @@ export async function generateSession(
         `Plan grading failed after ${MAX_PLAN_GRADE_RETRIES + 1} attempts: ${planGrade.issues.join("; ")}`,
       );
     }
-    await pipeline.invalidateStage("plan");
+    plan = await pipeline.editPlan(plan, planGrade);
   }
 
   if (!plan || !planGrade) {
