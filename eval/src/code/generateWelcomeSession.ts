@@ -55,7 +55,9 @@ const optionsSchema = z.object({
 
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
-    return value.map((item) => stripUndefined(item)) as unknown as T;
+    const arrayValue = value as unknown[];
+    const mapped = arrayValue.map((item) => stripUndefined(item));
+    return mapped as unknown as T;
   }
   if (
     value !== null &&
