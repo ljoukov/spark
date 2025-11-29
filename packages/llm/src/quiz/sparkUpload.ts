@@ -248,7 +248,10 @@ export function convertSparkUploadPayloadToQuizDefinition(
   });
 
   const title = payload.title.trim();
-  const description = payload.description?.trim();
+  const description =
+    payload.description?.trim() && payload.description.trim().length > 0
+      ? payload.description.trim()
+      : title;
   const topic =
     payload.topic?.trim() ||
     payload.subject?.trim() ||
@@ -257,9 +260,9 @@ export function convertSparkUploadPayloadToQuizDefinition(
   const quiz: QuizDefinition = {
     id: options.quizId,
     title: title.length > 0 ? title : "Spark Quiz",
-    description:
-      description && description.length > 0 ? description : undefined,
+    description,
     topic: topic && topic.length > 0 ? topic : undefined,
+    progressKey: options.quizId,
     questions,
   };
 
