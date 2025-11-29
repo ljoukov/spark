@@ -13,6 +13,6 @@
     "repo:lint": "npm run lint --workspace eval && npm run lint --workspace web && npm run lint --workspace @spark/llm && npm run lint --workspace @spark/schemas",
     "repo:typecheck": "npm run typecheck --workspace eval && npm run typecheck --workspace web && npm run typecheck --workspace @spark/llm && npm run typecheck --workspace @spark/schemas",
     "repo:check": "npm run repo:format && npm run repo:lint && npm run repo:typecheck",
-    "check": "npm run repo:check"
+    "check": "NODE_OPTIONS=\"--trace-warnings --trace-deprecation --throw-deprecation\" npm run repo:check"
   }
 }
