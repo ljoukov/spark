@@ -15,7 +15,7 @@ It is used across eval tools and session generators.
 - `runLlmImageCall(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
   - Streams images (and optional text) and returns image buffers.
 - `generateImages(options): Promise<Array<{ mimeType?: string; data: Buffer }>>`
-  - Attempts to produce one image per entry in `imagePrompts`, defaulting to four attempts and re-prompting with the remaining prompts plus the expected output format when needed.
+  - Attempts to produce one image per entry in `imagePrompts`, retrying remaining prompts up to four attempts and grading each candidate with `gemini-flash-latest` (JSON pass/fail) using the supplied `imageGradingPrompt`.
 - `generateJson<T>(options): Promise<T>`
   - Like `generateText` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
 
@@ -185,36 +185,34 @@ const images = await runLlmImageCall({
   debug: { rootDir: "/tmp/llm-debug", stage: "poster" },
 });
 
-`generateImages` composes its own request prompt. Supply:
-- `stylePrompt`: ordered list of strings describing the shared art direction.
+`generateImages` composes its own request prompt and grades each returned image before returning it. Supply:
+- `stylePrompt`: string describing the shared art direction (multi-line strings are fine).
 - `imagePrompts`: ordered list of per-image descriptions; the function returns one image per entry, in order.
-- `maxAttempts?`: defaults to `4`. Each prompt can be attempted up to this many times before we give up on it.
-- `batchSize?`: defaults to `4`. Prompts are submitted in batches of this size; omitted images are retried in the next batch before new prompts are added.
-- `referenceImages?`: ordered list of `{ mimeType?: string; data: Buffer }` used as style references. When present, the prompt includes them immediately after the style text with the header:
+- `imageGradingPrompt`: concise rubric for the pass/fail grader run on `gemini-flash-latest`.
+- `styleImages?`: ordered list of `{ mimeType?: string; data: Buffer }` used as style references.
+- `maxAttempts?`: defaults to `4`. Remaining prompts (including any that failed grading) are retried up to this many times.
+- `imageAspectRatio?`, `imageSize?`, `progress?`, `debug?`.
 
-  ```
-  ------
-  Please consistently follow the characters from earlier frames:
-  <styleImage1>
-  ...
-  <styleImageN>
-  ------
-  ```
-- When retrying a batch, any images that have already been generated are reattached using the same header to preserve character consistency, and the prompt re-lists every image description while pointing out the indices that still need work.
+Use `generateImageInBatches` when you need overlapping style references across a long list of prompts.
 
+```ts
 const reliableImages = await generateImages({
   modelId: "gemini-3-pro-image-preview",
   stylePrompt: [
     "Bold, colourful flat design avatars with clear lighting and clean shapes.",
     "Keep poses dynamic but readable; maintain consistent proportions across characters.",
-  ],
+  ].join("\n"),
+  styleImages: referenceImages, // optional style references
   imagePrompts: [
     "A cheerful robotics engineer adjusting a small drone on a workbench.",
     "A confident data scientist presenting charts on a holographic display.",
     "An adventurous explorer holding a compass at the edge of a jungle.",
     "A friendly teacher welcoming students into a bright classroom.",
   ],
+  imageGradingPrompt:
+    "Pass if the image is a single scene matching the prompt subjects/actions and required props; otherwise fail.",
   maxAttempts: 4,
+  imageAspectRatio: "16:9",
   debug: { rootDir: "/tmp/llm-debug", stage: "avatars" },
 });
 ```

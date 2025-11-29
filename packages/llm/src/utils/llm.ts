@@ -7,6 +7,7 @@ import { inspect } from "node:util";
 // NOTE: Keep docs/LLM.md in sync with any API changes to this file.
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
+  Type,
   FinishReason,
   ThinkingLevel,
   type Content,
@@ -391,6 +392,7 @@ export type LlmGenerateImagesOptions = Omit<LlmCallBaseOptions, "contents"> & {
   readonly contents?: never;
   readonly imageAspectRatio?: string;
   readonly imageSize?: LlmImageSize;
+  readonly imageGradingPrompt: string;
   readonly stylePrompt: string;
   readonly styleImages?: readonly LlmImageData[];
   readonly imagePrompts: readonly string[];
@@ -1765,6 +1767,82 @@ export async function generateJson<T>(
   throw new LlmJsonCallError("LLM JSON call failed", failures);
 }
 
+const IMAGE_GRADE_SCHEMA = z.enum(["pass", "fail"]);
+
+const IMAGE_GRADE_RESPONSE_SCHEMA: Schema = {
+  type: Type.STRING,
+  enum: ["pass", "fail"],
+};
+
+const IMAGE_GRADING_MODEL_ID: LlmTextModelId = "gemini-flash-latest";
+
+function appendDebugSubStage(
+  debug: LlmDebugOptions | undefined,
+  suffix: string,
+): LlmDebugOptions | undefined {
+  if (!debug) {
+    return undefined;
+  }
+  const cleaned = suffix.trim();
+  const nextSubStage = debug.subStage
+    ? `${debug.subStage}/${cleaned}`
+    : cleaned;
+  return {
+    ...debug,
+    subStage: nextSubStage,
+  };
+}
+
+function buildImageGradingContents(params: {
+  gradingPrompt: string;
+  imagePrompt: string;
+  image: LlmImageData;
+}): LlmContent[] {
+  const { gradingPrompt, imagePrompt, image } = params;
+  const parts: LlmContentPart[] = [
+    {
+      type: "text",
+      text: [
+        gradingPrompt,
+        "",
+        "Image prompt to grade:",
+        imagePrompt,
+        "",
+        'Respond with the JSON string "pass" or "fail".',
+      ].join("\n"),
+    },
+    {
+      type: "inlineData",
+      data: image.data.toString("base64"),
+      mimeType: image.mimeType ?? "image/png",
+    },
+  ];
+  return [{ role: "user", parts }];
+}
+
+async function gradeGeneratedImage(params: {
+  gradingPrompt: string;
+  imagePrompt: string;
+  image: LlmImageData;
+  progress: JobProgressReporter;
+  debug: LlmDebugOptions | undefined;
+}): Promise<z.infer<typeof IMAGE_GRADE_SCHEMA>> {
+  const contents = buildImageGradingContents({
+    gradingPrompt: params.gradingPrompt,
+    imagePrompt: params.imagePrompt,
+    image: params.image,
+  });
+  const result = await generateJson({
+    progress: params.progress,
+    modelId: IMAGE_GRADING_MODEL_ID,
+    contents,
+    schema: IMAGE_GRADE_SCHEMA,
+    responseSchema: IMAGE_GRADE_RESPONSE_SCHEMA,
+    debug: params.debug,
+  });
+  return result;
+}
+
 export async function generateImages(
   options: LlmGenerateImagesOptions,
 ): Promise<LlmImageData[]> {
@@ -1772,6 +1850,7 @@ export async function generateImages(
     stylePrompt,
     styleImages,
     imagePrompts,
+    imageGradingPrompt,
     maxAttempts = 4,
     progress,
     modelId,
@@ -1797,10 +1876,31 @@ export async function generateImages(
     },
   );
 
+  const gradingPrompt = imageGradingPrompt.trim();
+  if (!gradingPrompt) {
+    throw new Error("imageGradingPrompt must be a non-empty string");
+  }
+
   const numImages = promptEntries.length;
   if (numImages <= 0) {
     return [];
   }
+
+  const orderedEntries = [...promptEntries];
+  const resolvedImages = new Map<number, LlmImageData>();
+  const removeResolvedEntries = (resolved: ReadonlySet<number>) => {
+    if (resolved.size === 0) {
+      return;
+    }
+    for (let i = promptEntries.length - 1; i >= 0; i -= 1) {
+      const entry = promptEntries[i];
+      if (resolved.has(entry.index)) {
+        promptEntries.splice(i, 1);
+      }
+    }
+  };
+
+  const reporter = progress ?? createFallbackProgress(debug?.stage ?? modelId);
 
   const addText = (parts: LlmContentPart[], text: string) => {
     const lastPart = parts[parts.length - 1];
@@ -1869,8 +1969,6 @@ export async function generateImages(
     ];
   };
 
-  const collectedImages: LlmImageData[] = [];
-
   const contents: LlmContent[] = [
     {
       role: "user",
@@ -1882,7 +1980,7 @@ export async function generateImages(
       options: {
         modelId,
         contents,
-        progress,
+        progress: reporter,
         debug,
         responseModalities: ["IMAGE", "TEXT"],
         imageAspectRatio,
@@ -1896,12 +1994,35 @@ export async function generateImages(
       continue;
     }
     const images = extractImages(content);
-    if (images.length > 0) {
-      collectedImages.push(...images);
-      const completedCount = Math.min(images.length, promptEntries.length);
-      if (completedCount > 0) {
-        promptEntries.splice(0, completedCount);
+    if (images.length > 0 && promptEntries.length > 0) {
+      const assignedCount = Math.min(images.length, promptEntries.length);
+      const pendingAssignments = promptEntries.slice(0, assignedCount);
+      const assignedImages = images.slice(0, assignedCount);
+      const gradeResults = await Promise.all(
+        pendingAssignments.map((entry, index) =>
+          gradeGeneratedImage({
+            gradingPrompt,
+            imagePrompt: entry.prompt,
+            image: assignedImages[index],
+            progress: reporter,
+            debug: appendDebugSubStage(debug, `grade-image-${entry.index}`),
+          }),
+        ),
+      );
+      const passedEntries = new Set<number>();
+      for (let i = 0; i < gradeResults.length; i += 1) {
+        const grade = gradeResults[i];
+        const entry = pendingAssignments[i];
+        if (grade === "pass") {
+          resolvedImages.set(entry.index, assignedImages[i]);
+          passedEntries.add(entry.index);
+        } else {
+          reporter.log(
+            `Image ${entry.index} failed grading; retrying generation.`,
+          );
+        }
       }
+      removeResolvedEntries(passedEntries);
     }
     if (promptEntries.length === 0) {
       break;
@@ -1913,7 +2034,15 @@ export async function generateImages(
     });
   }
 
-  return collectedImages.slice(0, numImages);
+  const orderedImages: LlmImageData[] = [];
+  for (const entry of orderedEntries) {
+    const image = resolvedImages.get(entry.index);
+    if (image) {
+      orderedImages.push(image);
+    }
+  }
+
+  return orderedImages.slice(0, numImages);
 }
 
 export async function generateImageInBatches(
