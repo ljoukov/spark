@@ -67,11 +67,12 @@ async function main(argv: readonly string[]): Promise<void> {
     languageCode: options.locale,
   });
 
+  const filterValue = options.filter?.toLowerCase();
   const filteredVoices =
-    options.filter === undefined
+    filterValue === undefined
       ? voices
       : voices.filter((voice) =>
-          voice.name.toLowerCase().includes(options.filter!.toLowerCase()),
+          voice.name.toLowerCase().includes(filterValue),
         );
 
   const genderGroups = new Map<string, string[]>();
@@ -112,7 +113,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const headerParts = [
     `Voices for ${options.locale}`,
     options.filter ? `filter "${options.filter}"` : null,
-    `(${filteredVoices.length} found)`,
+    `(${filteredVoices.length.toString()} found)`,
   ]
     .filter((value): value is string => value !== null)
     .join(" ");
@@ -123,14 +124,14 @@ async function main(argv: readonly string[]): Promise<void> {
   );
 
   for (const [gender, voicesForGender] of genders) {
-    console.log(`${gender} (${voicesForGender.length})`);
+    console.log(`${gender} (${voicesForGender.length.toString()})`);
     for (const voiceName of voicesForGender) {
       console.log(`  ${voiceName}`);
     }
   }
 }
 
-void main(process.argv).catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+void main(process.argv).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

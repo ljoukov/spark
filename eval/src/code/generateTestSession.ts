@@ -972,15 +972,14 @@ async function seedContent(
   const stateRef = userRef.collection("state").doc(session.id);
   const sessionRef = userRef.collection("sessions").doc(session.id);
 
+  const initialItems: Record<string, SessionState["items"][string]> = {};
+  for (const item of session.plan) {
+    initialItems[item.id] = { status: "not_started" };
+  }
+
   const initialState: SessionState = SessionStateSchema.parse({
     sessionId: session.id,
-    items: session.plan.reduce<Record<string, SessionState["items"][string]>>(
-      (acc, item) => {
-        acc[item.id] = { status: "not_started" };
-        return acc;
-      },
-      {} as Record<string, SessionState["items"][string]>,
-    ),
+    items: initialItems,
     lastUpdatedAt: Timestamp.now(),
   });
 
@@ -1204,23 +1203,15 @@ async function main(): Promise<void> {
 
   const context: StageContext = {};
 
+  const stageHandlers: Record<StageName, () => Promise<void>> = {
+    validate: () => runValidateStage(context, runtime, options),
+    story: () => runStoryStage(context, runtime),
+    seed: () => runSeedStage(context, runtime),
+    publish: () => runPublishStage(context, runtime),
+  };
+
   for (const stage of stageSequence) {
-    switch (stage) {
-      case "validate":
-        await runValidateStage(context, runtime, options);
-        break;
-      case "story":
-        await runStoryStage(context, runtime);
-        break;
-      case "seed":
-        await runSeedStage(context, runtime);
-        break;
-      case "publish":
-        await runPublishStage(context, runtime);
-        break;
-      default:
-        throw new Error(`Unsupported stage '${stage}'`);
-    }
+    await stageHandlers[stage]();
   }
 
   console.log(
@@ -1230,12 +1221,14 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   if (error instanceof ProblemValidationError) {
     console.error("Canonical solution validation failed:");
     for (const issue of error.issues) {
       const label =
-        issue.testIndex >= 0 ? `test ${issue.testIndex + 1}` : "validation";
+        issue.testIndex >= 0
+          ? `test ${String(issue.testIndex + 1)}`
+          : "validation";
       console.error(`- ${issue.slug} (${label}): ${issue.message}`);
     }
   } else {
