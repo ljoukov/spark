@@ -1945,14 +1945,15 @@ function buildOriginsCapsulePrompt(
   return [
     "### Origins Capsule Forge",
     "",
-    `**Role:** Craft a two-sentence Origins Capsule for the concept "${topic}" using the validated research below.`,
+    `**Role:** Craft a concise Origins Capsule (2-3 sentences) for the concept "${topic}" using the validated research below.`,
     "**Audience:** 12–16 year olds who need a reliable, memorable anchor.",
     "",
     "**Mission Parameters:**",
-    "1. Output exactly two sentences (max 50 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
+    "1. Output two or three sentences (max 70 words total) in a single paragraph—no bullet lists, no numbering, no extra commentary.",
     '2. Sentence 1: Introduce the classical anchor using a neutral verb ("described", "published", "popularized") with approximate timing and include the phrasing "now known as" before the concept name.',
     '3. Sentence 2: Add nuance acknowledging parallel work or later developments using hedged language such as "independently developed", "... and others", or "later published".',
-    "3a. After you finish the second sentence, STOP. Do not add a third sentence, example, parenthetical, or clause separated by a semicolon.",
+    "3a. Optional sentence 3: Smooth the handoff by clarifying why the idea mattered or hinting at its later impact. Do not add new named figures.",
+    "3b. After you finish the final sentence, STOP. Do not add extra sentences, examples, parentheticals, or clauses separated by a semicolon.",
     "4. Prefer widely taught, mainstream attributions. When confidence is low, hedge or omit the name instead of asserting it.",
     "4a. Use established names from the research (e.g., Reed–Solomon codes); do not invent new titles, aliases, or brand-like labels.",
     '4b. Do not reuse the story title or any fictional/metaphorical label (e.g., "Interstellar Archivist"); keep names strictly factual.',
@@ -1963,7 +1964,7 @@ function buildOriginsCapsulePrompt(
     "**Validated Research Extract:**",
     researchContext,
     "",
-    "Return only the two-sentence capsule with standard punctuation.",
+    "Return only the 2-3 sentence capsule with standard punctuation.",
   ]
     .filter((segment) => segment !== "")
     .join("\n");
@@ -1977,7 +1978,7 @@ function buildOriginsCapsuleValidationPrompt(
   return [
     "### Origins Capsule Fact-Check",
     "",
-    "You are verifying a two-sentence Origins Capsule before it is locked for downstream prompts.",
+    "You are verifying a short Origins Capsule (2-3 sentences, max 70 words) before it is locked for downstream prompts.",
     "",
     "**Capsule Under Review:**",
     capsule,
@@ -2116,17 +2117,10 @@ export async function generateOriginsCapsule(
       .split(/(?<=[.!?])\s+/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => sentence.length > 0);
-    const originalSentenceCount = sentences.length;
-    if (sentences.length > 2) {
-      // Auto-trim to first two sentences to avoid pointless retries.
-      sentences = sentences.slice(0, 2);
-      candidate = sentences.join(" ");
-      adapter.log(
-        `[story/origins] trimmed capsule to first two sentences to satisfy structure (original count: ${originalSentenceCount})`,
-      );
-    } else if (sentences.length !== 2) {
+    const sentenceCount = sentences.length;
+    if (sentenceCount < 2 || sentenceCount > 3) {
       structuralIssues.push(
-        `Produce exactly two sentences separated by a single space (you returned ${sentences.length}).`,
+        `Produce two or three sentences separated by a single space (you returned ${sentenceCount}).`,
       );
     }
     const wordCount = candidate.length
@@ -2135,9 +2129,9 @@ export async function generateOriginsCapsule(
     if (wordCount === 0) {
       structuralIssues.push("The capsule was empty.");
     }
-    if (wordCount > 50) {
+    if (wordCount > 70) {
       structuralIssues.push(
-        `Reduce the word count to 50 or fewer (current count: ${wordCount}).`,
+        `Reduce the word count to 70 or fewer (current count: ${wordCount}).`,
       );
     }
     if (structuralIssues.length > 0) {
