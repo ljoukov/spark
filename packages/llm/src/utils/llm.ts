@@ -1,6 +1,14 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { mkdir, rm, writeFile, rename, stat, symlink } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  rm,
+  writeFile,
+  rename,
+  stat,
+  symlink,
+} from "node:fs/promises";
 import path from "node:path";
 import { inspect } from "node:util";
 
@@ -863,6 +871,252 @@ async function writeTextResponseSnapshot({
   await writeFile(pathname, sections.join("\n"), { encoding: "utf8" });
 }
 
+class IncrementalResponseSnapshotWriter {
+  private readonly paths: readonly string[];
+  private readonly flushThreshold: number;
+  private buffer = "";
+  private lastThought: boolean | undefined;
+  private pending: Promise<void> = Promise.resolve();
+  private started = false;
+
+  constructor(paths: readonly string[], flushThreshold = 200) {
+    this.paths = paths;
+    this.flushThreshold = flushThreshold;
+  }
+
+  async start(summary: readonly string[]): Promise<void> {
+    if (this.paths.length === 0) {
+      return;
+    }
+    const headerLines = [...summary, "===== Response =====", ""];
+    const header = headerLines.join("\n");
+    await Promise.all(
+      this.paths.map(async (pathname) => {
+        await mkdir(path.dirname(pathname), { recursive: true });
+        await writeFile(pathname, header, { encoding: "utf8" });
+      }),
+    );
+    this.started = true;
+  }
+
+  appendText(text: string, { isThought }: { isThought: boolean }): void {
+    if (!this.started || this.paths.length === 0 || text.length === 0) {
+      return;
+    }
+    const needsSeparator =
+      this.lastThought !== undefined && this.lastThought !== isThought;
+    if (needsSeparator) {
+      this.buffer += "\n\n";
+    }
+    const needsPrefix = isThought && this.lastThought !== true;
+    if (needsPrefix) {
+      this.buffer += "[thought] ";
+    }
+    this.buffer += text;
+    this.lastThought = isThought;
+    if (this.buffer.length >= this.flushThreshold) {
+      this.queueFlush();
+    }
+  }
+
+  flush(): void {
+    this.queueFlush();
+  }
+
+  async complete(): Promise<void> {
+    if (this.buffer.length > 0) {
+      this.queueFlush();
+    }
+    await this.pending;
+  }
+
+  private queueFlush(): void {
+    if (this.buffer.length === 0 || this.paths.length === 0) {
+      return;
+    }
+    const chunk = this.buffer;
+    this.buffer = "";
+    this.pending = this.pending.then(async () => {
+      await Promise.all(
+        this.paths.map(async (pathname) => {
+          await appendFile(pathname, chunk, { encoding: "utf8" });
+        }),
+      );
+    });
+  }
+}
+
+type ResponseSnapshotStats = {
+  readonly responseTextChars: number;
+  readonly responseImages: number;
+  readonly responseImageBytes: number;
+  readonly thinkingChars: number;
+};
+
+function formatOptionalNumber(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+  return value.toLocaleString("en-US");
+}
+
+function formatCurrencyUsd(value: number): string {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: safeValue < 1 ? 4 : 2,
+    maximumFractionDigits: safeValue < 1 ? 4 : 2,
+  }).format(safeValue);
+}
+
+function buildTokenSummaryLine(usage: LlmUsageTokenUpdate | undefined): string {
+  if (!usage) {
+    return "Tokens: n/a";
+  }
+  return [
+    "Tokens:",
+    `prompt=${formatOptionalNumber(usage.promptTokens)}`,
+    `cached=${formatOptionalNumber(usage.cachedTokens)}`,
+    `response=${formatOptionalNumber(usage.responseTokens)}`,
+    `response_images=${formatOptionalNumber(usage.responseImageTokens)}`,
+    `thinking=${formatOptionalNumber(usage.thinkingTokens)}`,
+    `tool_use_prompt=${formatOptionalNumber(usage.toolUsePromptTokens)}`,
+    `total=${formatOptionalNumber(usage.totalTokens)}`,
+  ].join(" ");
+}
+
+function buildPromptMediaSummaryLine({
+  promptStats,
+  uploadBytes,
+}: {
+  promptStats: PromptStats;
+  uploadBytes: number;
+}): string {
+  return [
+    "Input:",
+    `text_chars=${formatOptionalNumber(promptStats.textChars)}`,
+    `images=${formatOptionalNumber(promptStats.imageCount)}`,
+    `image_bytes=${formatOptionalNumber(promptStats.imageBytes)}`,
+    `upload_bytes=${formatOptionalNumber(uploadBytes)}`,
+  ].join(" ");
+}
+
+function buildResponseMediaSummaryLine(stats: ResponseSnapshotStats): string {
+  return [
+    "Output:",
+    `text_chars=${formatOptionalNumber(stats.responseTextChars)}`,
+    `thinking_chars=${formatOptionalNumber(stats.thinkingChars)}`,
+    `images=${formatOptionalNumber(stats.responseImages)}`,
+    `image_bytes=${formatOptionalNumber(stats.responseImageBytes)}`,
+  ].join(" ");
+}
+
+const COST_PRO_PREVIEW_THRESHOLD = 200_000;
+const COST_PRO_PREVIEW_INPUT_RATE_LOW = 2 / 1_000_000;
+const COST_PRO_PREVIEW_INPUT_RATE_HIGH = 4 / 1_000_000;
+const COST_PRO_PREVIEW_OUTPUT_RATE_LOW = 12 / 1_000_000;
+const COST_PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000;
+const COST_PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000;
+const COST_PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000;
+
+const COST_IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000;
+const COST_IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000;
+const COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000;
+const COST_IMAGE_PREVIEW_IMAGE_PRICES: Record<string, number> = {
+  "1K": 0.134,
+  "2K": 0.134,
+  "4K": 0.24,
+};
+const COST_IMAGE_PREVIEW_CACHED_RATE = 0.2 / 1_000_000;
+
+function resolveUsageNumber(value: number | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, value);
+  }
+  return 0;
+}
+
+function estimateCallCostUsd({
+  modelId,
+  tokens,
+  responseImages,
+  imageSize,
+}: {
+  modelId: string;
+  tokens: LlmUsageTokenUpdate | undefined;
+  responseImages: number;
+  imageSize?: string;
+}): number {
+  if (!tokens) {
+    return 0;
+  }
+  const promptTokens = resolveUsageNumber(tokens.promptTokens);
+  const cachedTokens = resolveUsageNumber(tokens.cachedTokens);
+  const responseTokens = resolveUsageNumber(tokens.responseTokens);
+  const responseImageTokens = resolveUsageNumber(tokens.responseImageTokens);
+  const thinkingTokens = resolveUsageNumber(tokens.thinkingTokens);
+  const toolUsePromptTokens = resolveUsageNumber(tokens.toolUsePromptTokens);
+  const promptTokenTotal = promptTokens + toolUsePromptTokens;
+  const nonCachedPrompt = Math.max(0, promptTokenTotal - cachedTokens);
+  const pricingModel = (() => {
+    if (modelId.includes("image-preview")) {
+      return "image-preview" as const;
+    }
+    if (modelId.includes("gemini-3-pro")) {
+      return "pro-preview" as const;
+    }
+    return undefined;
+  })();
+  if (pricingModel === "pro-preview") {
+    const useHighTier = promptTokenTotal > COST_PRO_PREVIEW_THRESHOLD;
+    const inputRate = useHighTier
+      ? COST_PRO_PREVIEW_INPUT_RATE_HIGH
+      : COST_PRO_PREVIEW_INPUT_RATE_LOW;
+    const cachedRate = useHighTier
+      ? COST_PRO_PREVIEW_CACHED_RATE_HIGH
+      : COST_PRO_PREVIEW_CACHED_RATE_LOW;
+    const outputRate = useHighTier
+      ? COST_PRO_PREVIEW_OUTPUT_RATE_HIGH
+      : COST_PRO_PREVIEW_OUTPUT_RATE_LOW;
+    const inputCost = nonCachedPrompt * inputRate;
+    const cachedCost = cachedTokens * cachedRate;
+    const outputTokens = responseTokens + thinkingTokens;
+    const outputCost = outputTokens * outputRate;
+    return inputCost + cachedCost + outputCost;
+  }
+  if (pricingModel !== "image-preview") {
+    return 0;
+  }
+  const resolvedImageSize =
+    imageSize && COST_IMAGE_PREVIEW_IMAGE_PRICES[imageSize] ? imageSize : "2K";
+  const imageRate = COST_IMAGE_PREVIEW_IMAGE_PRICES[resolvedImageSize];
+  const tokensPerImage =
+    COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE > 0
+      ? imageRate / COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE
+      : 0;
+  let responseTextForPricing = Math.max(
+    0,
+    responseTokens - responseImageTokens,
+  );
+  let imageTokensForPricing = responseImageTokens;
+  if (imageTokensForPricing <= 0 && responseImages > 0 && tokensPerImage > 0) {
+    const estimatedImageTokens = responseImages * tokensPerImage;
+    imageTokensForPricing = estimatedImageTokens;
+    if (responseTextForPricing >= estimatedImageTokens) {
+      responseTextForPricing -= estimatedImageTokens;
+    }
+  }
+  const textOutputCost =
+    (responseTextForPricing + thinkingTokens) *
+    COST_IMAGE_PREVIEW_OUTPUT_TEXT_RATE;
+  const inputCost = nonCachedPrompt * COST_IMAGE_PREVIEW_INPUT_RATE;
+  const cachedCost = cachedTokens * COST_IMAGE_PREVIEW_CACHED_RATE;
+  const imageOutputCost =
+    imageTokensForPricing * COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE;
+  return inputCost + cachedCost + textOutputCost + imageOutputCost;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     switch (char) {
@@ -1240,6 +1494,15 @@ async function llmStream({
     config.tools = geminiTools;
   }
 
+  const responseSnapshotWriter = new IncrementalResponseSnapshotWriter(
+    Array.from(
+      new Set(
+        [stage.debugDir, debugLogDir]
+          .filter((dir): dir is string => typeof dir === "string")
+          .map((dir) => path.join(dir, "response.txt")),
+      ),
+    ),
+  );
   const debugWriteTasks: Array<Promise<void>> = [];
 
   try {
@@ -1334,6 +1597,13 @@ async function llmStream({
         },
       });
     }
+    await responseSnapshotWriter.start([
+      `Model: ${options.modelId}`,
+      "Elapsed: streaming...",
+      buildPromptMediaSummaryLine({ promptStats, uploadBytes }),
+      "Tokens: pending",
+      "Estimated cost: pending",
+    ]);
 
     const startedAt = Date.now();
     let resolvedModelVersion: string = options.modelId;
@@ -1343,6 +1613,10 @@ async function llmStream({
     let responseGroundingMetadata: GroundingMetadata | undefined;
     let imageCounter = 0;
     let latestUsageTokens: LlmUsageTokenUpdate | undefined;
+    let responseTextChars = 0;
+    let responseImages = 0;
+    let responseImageBytes = 0;
+    let thinkingTextChars = 0;
 
     const appendTextPart = (text: string, isThought: boolean): void => {
       if (text.length === 0) {
@@ -1353,6 +1627,7 @@ async function llmStream({
         text,
         thought: isThought ? true : undefined,
       });
+      responseSnapshotWriter.appendText(text, { isThought });
     };
 
     const appendInlinePart = (
@@ -1467,6 +1742,10 @@ async function llmStream({
                 chunkResponseImages += deltas.responseImages;
                 chunkResponseImageBytes += deltas.responseImageBytes;
                 chunkThinkingText += deltas.thinkingText;
+                responseTextChars += deltas.responseText;
+                responseImages += deltas.responseImages;
+                responseImageBytes += deltas.responseImageBytes;
+                thinkingTextChars += deltas.thinkingText;
               } catch (error) {
                 log(
                   `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
@@ -1505,6 +1784,9 @@ async function llmStream({
                   ? { textCharsDelta: chunkThinkingText }
                   : undefined,
             });
+            if (chunkResponseText > 0 || chunkThinkingText > 0) {
+              responseSnapshotWriter.flush();
+            }
           }
         }
         if (latestGroundingMetadata) {
@@ -1526,6 +1808,7 @@ async function llmStream({
       `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`,
     );
 
+    await responseSnapshotWriter.complete();
     await Promise.all(debugWriteTasks);
     const mergedParts = mergeConsecutiveTextParts(responseParts);
     const responseContent =
@@ -1535,12 +1818,32 @@ async function llmStream({
             parts: mergedParts,
           }
         : undefined;
+    const responseStats: ResponseSnapshotStats = {
+      responseTextChars,
+      responseImages,
+      responseImageBytes,
+      thinkingChars: thinkingTextChars,
+    };
+    const costUsd = estimateCallCostUsd({
+      modelId: resolvedModelVersion,
+      tokens: latestUsageTokens,
+      responseImages,
+      imageSize: effectiveImageSize,
+    });
 
     if (stage.debugDir || debugLogDir) {
       const trimmedResponseText = extractSnapshotText(responseContent);
+      const costSummary =
+        latestUsageTokens !== undefined
+          ? `Estimated cost: ${formatCurrencyUsd(costUsd)}`
+          : "Estimated cost: n/a";
       const snapshotSummary: readonly string[] = [
         `Model: ${resolvedModelVersion}`,
         `Elapsed: ${formatMillis(elapsedMs)}`,
+        buildTokenSummaryLine(latestUsageTokens),
+        buildPromptMediaSummaryLine({ promptStats, uploadBytes }),
+        buildResponseMediaSummaryLine(responseStats),
+        costSummary,
       ];
       const snapshotContents = responseContent ? [responseContent] : undefined;
       if (stage.debugDir) {
@@ -1602,6 +1905,15 @@ async function llmStream({
       feedback: blocked ? { blockedReason: "blocked" } : undefined,
     };
   } catch (error) {
+    try {
+      await responseSnapshotWriter.complete();
+    } catch (writeError) {
+      log(
+        `failed to flush response snapshot: ${
+          writeError instanceof Error ? writeError.message : String(writeError)
+        }`,
+      );
+    }
     await Promise.allSettled(debugWriteTasks);
     if (debugOutputDirs.length > 0) {
       const exceptionSnapshot = buildExceptionSnapshot({
