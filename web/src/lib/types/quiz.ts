@@ -65,9 +65,9 @@ export type QuizProgressStep = {
 export type QuizDefinition = {
 	id: string;
 	title: string;
-	description?: string;
+	description: string;
 	topic?: string;
 	estimatedMinutes?: number;
-	progressKey?: string;
+	progressKey: string;
 	questions: QuizQuestion[];
 };
