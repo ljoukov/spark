@@ -3731,6 +3731,7 @@ export async function judgeImageSets(
   const response = await generateJson<ImageSetJudgeResponse>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
+    maxAttempts: 5,
     contents: [{ role: "user", parts }],
     responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
     schema: ImageSetJudgeResponseSchema,
