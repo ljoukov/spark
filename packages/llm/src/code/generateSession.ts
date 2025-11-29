@@ -1627,9 +1627,39 @@ export class SessionGenerationPipeline {
     });
   }
 
+  private summariseSolutionFailures(
+    problem: CodingProblem,
+    failures: ReadonlyArray<{ index: number; message: string }>,
+  ): string {
+    if (failures.length === 0) {
+      return "";
+    }
+    const tests = [...problem.tests.public, ...(problem.tests.private ?? [])];
+    const publicCount = problem.tests.public.length;
+    const lines: string[] = [
+      "Previous attempt failed the following tests. Fix the logic to satisfy these cases and re-run them with the code execution tool before returning the final <CODE> block:",
+    ];
+    for (const failure of failures) {
+      if (failure.index < 0 || failure.index >= tests.length) {
+        lines.push(`- setup: ${failure.message}`);
+        continue;
+      }
+      const test = tests[failure.index];
+      const label =
+        failure.index < publicCount
+          ? `public test #${failure.index + 1}`
+          : `private test #${failure.index - publicCount + 1}`;
+      lines.push(
+        `- ${label} (input: ${test.input} => expected: ${test.output}) - ${failure.message}`,
+      );
+    }
+    return lines.join("\n");
+  }
+
   private async generateIndependentSolution(
     problem: CodingProblem,
   ): Promise<string> {
+    let previousFailures: { index: number; message: string }[] | null = null;
     for (
       let attempt = 1;
       attempt <= MAX_PROBLEM_SOLUTION_ATTEMPTS;
@@ -1640,7 +1670,11 @@ export class SessionGenerationPipeline {
         "problem-solution",
         `${problem.id}-${attemptLabel}`,
       );
-      const userPrompt = buildProblemSolutionUserPrompt(problem);
+      const failureNote =
+        previousFailures && previousFailures.length > 0
+          ? `\n\n${this.summariseSolutionFailures(problem, previousFailures)}`
+          : "";
+      const userPrompt = `${buildProblemSolutionUserPrompt(problem)}${failureNote}`;
       this.logger.log(
         `[session/problem-solution] solving ${problem.id} (${attemptLabel})`,
       );
@@ -1671,6 +1705,7 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/problem-solution] ${problem.id} ${attemptLabel} failed (${failureSummary})`,
       );
+      previousFailures = failures;
     }
     throw new Error(
       `Failed to validate independent solution for problem ${problem.id} after ${MAX_PROBLEM_SOLUTION_ATTEMPTS} attempts`,
