@@ -57,22 +57,24 @@ function slugifyTopic(topic: string): string {
   const ascii = topic
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9\\s-]/g, " ")
+    .replace(/[^a-zA-Z0-9\s-]/g, " ")
     .trim()
     .toLowerCase();
-  const collapsed = ascii.replace(/\\s+/g, "-").replace(/-+/g, "-");
+  const collapsed = ascii.replace(/\s+/g, "-").replace(/-+/g, "-");
   const trimmed = collapsed.replace(/^-+|-+$/g, "");
   const baseSlug = trimmed || "session";
   const maxLength = 25;
   if (baseSlug.length <= maxLength) {
     return baseSlug;
   }
+  let cutoff = maxLength;
+  while (cutoff < baseSlug.length && baseSlug[cutoff] !== "-") {
+    cutoff += 1;
+  }
   const hash = createHash("sha256").update(topic).digest("hex").slice(0, 6);
-  const maxBaseLength = Math.max(1, maxLength - (hash.length + 1));
-  const truncated = baseSlug.slice(0, maxBaseLength).replace(/^-+|-+$/g, "");
-  const safeBase =
-    truncated.length > 0 ? truncated : "session".slice(0, maxBaseLength);
-  return `${safeBase}-${hash}`;
+  const prefix = baseSlug.slice(0, cutoff).replace(/-+$/g, "");
+  const safePrefix = prefix.length > 0 ? prefix : baseSlug.slice(0, maxLength);
+  return `${safePrefix}-${hash}`;
 }
 
 function getTemplateDocRef(sessionId: string) {
