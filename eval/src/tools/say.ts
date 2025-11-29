@@ -52,10 +52,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     locale: string;
     encoding: string;
   }>();
-  const text = parsed.args
-    .map((arg) => String(arg))
-    .join(" ")
-    .trim();
+  const text = parsed.args.join(" ").trim();
 
   return CliOptionsSchema.parse({
     voice: opts.voice,
@@ -155,7 +152,7 @@ async function main(argv: readonly string[]): Promise<void> {
   );
 }
 
-void main(process.argv).catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+void main(process.argv).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

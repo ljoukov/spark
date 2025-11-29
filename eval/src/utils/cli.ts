@@ -28,10 +28,10 @@ export function createIntegerParser({
       throw new Error(`Invalid ${name} value: ${raw}`);
     }
     if (min !== undefined && value < min) {
-      throw new Error(`${name} must be >= ${min}`);
+      throw new Error(`${name} must be >= ${min.toString()}`);
     }
     if (max !== undefined && value > max) {
-      throw new Error(`${name} must be <= ${max}`);
+      throw new Error(`${name} must be <= ${max.toString()}`);
     }
     return value;
   };

@@ -3473,35 +3473,33 @@ async function executeStages(
     contexts.set(blueprint.sessionId, contexts.get(blueprint.sessionId) ?? {});
   }
 
+  const stageHandlers: Record<StageName, () => Promise<void>> = {
+    validate: () => runValidateStage(contexts, blueprints, options),
+    story: async () => {
+      for (const blueprint of blueprints) {
+        const context = contexts.get(blueprint.sessionId) ?? {};
+        contexts.set(blueprint.sessionId, context);
+        await runStoryStage(context, blueprint, runtime);
+      }
+    },
+    seed: async () => {
+      for (const blueprint of blueprints) {
+        const context = contexts.get(blueprint.sessionId) ?? {};
+        contexts.set(blueprint.sessionId, context);
+        await runSeedStage(context, blueprint, runtime);
+      }
+    },
+    publish: async () => {
+      for (const blueprint of blueprints) {
+        const context = contexts.get(blueprint.sessionId) ?? {};
+        contexts.set(blueprint.sessionId, context);
+        await runPublishStage(context, blueprint, runtime);
+      }
+    },
+  };
+
   for (const stage of stageSequence) {
-    switch (stage) {
-      case "validate":
-        await runValidateStage(contexts, blueprints, options);
-        break;
-      case "story":
-        for (const blueprint of blueprints) {
-          const context = contexts.get(blueprint.sessionId) ?? {};
-          contexts.set(blueprint.sessionId, context);
-          await runStoryStage(context, blueprint, runtime);
-        }
-        break;
-      case "seed":
-        for (const blueprint of blueprints) {
-          const context = contexts.get(blueprint.sessionId) ?? {};
-          contexts.set(blueprint.sessionId, context);
-          await runSeedStage(context, blueprint, runtime);
-        }
-        break;
-      case "publish":
-        for (const blueprint of blueprints) {
-          const context = contexts.get(blueprint.sessionId) ?? {};
-          contexts.set(blueprint.sessionId, context);
-          await runPublishStage(context, blueprint, runtime);
-        }
-        break;
-      default:
-        throw new Error(`Unsupported stage '${stage}'`);
-    }
+    await stageHandlers[stage]();
   }
 
   logCompletedStages(
@@ -3565,12 +3563,14 @@ export async function main(
   await executeStages(selectedBlueprints, options);
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   if (error instanceof ProblemValidationError) {
     console.error("Canonical solution validation failed:");
     for (const issue of error.issues) {
       const label =
-        issue.testIndex >= 0 ? `test ${issue.testIndex + 1}` : "validation";
+        issue.testIndex >= 0
+          ? `test ${String(issue.testIndex + 1)}`
+          : "validation";
       console.error(`- ${issue.slug} (${label}): ${issue.message}`);
     }
   } else {

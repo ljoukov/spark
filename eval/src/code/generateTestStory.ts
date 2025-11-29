@@ -149,7 +149,7 @@ async function loadImageSetsFromDisk(
   const jsonPath = path.join(resolveCheckpointsDir(outDir), "image-sets.json");
   try {
     const raw = await readFile(jsonPath, { encoding: "utf8" });
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     const checkpoint = ImageSetsCheckpointSchema.parse(parsed);
     return checkpoint.imageSets;
   } catch (error: unknown) {
@@ -231,169 +231,159 @@ async function main(): Promise<void> {
         return imageSetsSerialised;
       };
 
+      const stageHandlers: Record<StageName, () => Promise<void>> = {
+        prose: async () => {
+          const result = await pipeline.ensureProse();
+          const textLength = result.value.text.length;
+          progress.log(
+            `[story] prose ready (${textLength.toString()} chars, source ${result.source})`,
+          );
+          imageSetsSerialised = undefined;
+        },
+        segmentation: async () => {
+          const result = await pipeline.ensureSegmentation();
+          const segmentCount = result.value.segments.length;
+          progress.log(
+            `[story] segmentation ready (${segmentCount.toString()} segments, source ${result.source})`,
+          );
+          imageSetsSerialised = undefined;
+        },
+        segmentation_correction: async () => {
+          const result = await pipeline.ensureSegmentationCorrection();
+          const segmentCount = result.value.segments.length;
+          progress.log(
+            `[story] corrected segmentation ready (${segmentCount.toString()} segments, source ${result.source})`,
+          );
+          imageSetsSerialised = undefined;
+        },
+        images: async () => {
+          const result = await pipeline.ensureImages();
+          const imageCount = result.value.images.length;
+          progress.log(
+            `[story] selected image set with ${imageCount.toString()} images (source ${result.source})`,
+          );
+        },
+        publish: async () => {
+          const result = await pipeline.ensureNarration();
+          progress.log(
+            `[story] published narration to ${result.value.publishResult.storagePath} (doc ${result.value.publishResult.documentPath}, source ${result.source})`,
+          );
+        },
+        audio: async () => {
+          const { value: segmentation } =
+            await pipeline.ensureSegmentationCorrection();
+          const mediaSegments = segmentationToMediaSegments(segmentation);
+          if (mediaSegments.length === 0) {
+            throw new Error(
+              "Cannot generate narration audio without at least one segment.",
+            );
+          }
+
+          const audioOutputDir = path.join(outDir, "audio");
+          await mkdir(audioOutputDir, { recursive: true });
+
+          const persistSegmentsDir = path.join(audioOutputDir, "segments");
+          await rm(persistSegmentsDir, { recursive: true, force: true });
+
+          const audioRelativePath = path
+            .join("audio", "story.mp3")
+            .replace(/\\/g, "/");
+          const audioOutputPath = path.join(outDir, audioRelativePath);
+
+          const audioResult = await generateSessionAudio({
+            segments: mediaSegments,
+            outputFilePath: audioOutputPath,
+            persistSegmentsDir,
+            progress: createConsoleProgress("story/audio"),
+          });
+
+          const toRelative = (filePath: string): string => {
+            const relative = path.relative(outDir, filePath);
+            if (
+              !relative ||
+              relative.startsWith("..") ||
+              path.isAbsolute(relative)
+            ) {
+              return filePath.replace(/\\/g, "/");
+            }
+            return relative.replace(/\\/g, "/");
+          };
+
+          const audioCheckpoint = {
+            inputSegments: mediaSegments,
+            output: {
+              file: audioRelativePath,
+              durationSec: audioResult.totalDurationSec,
+              totalBytes: audioResult.totalBytes,
+              mimeType: audioResult.outputMimeType,
+              sampleRate: audioResult.sampleRate,
+              channels: audioResult.channels,
+              slideOffsets: audioResult.slideOffsets,
+              slideDurations: audioResult.slideDurations,
+              lineOffsets: audioResult.lineOffsets,
+              lineDurations: audioResult.lineDurations,
+            },
+            segmentFiles: audioResult.segmentFiles.map(toRelative),
+          };
+
+          AudioCheckpointSchema.parse(audioCheckpoint);
+          const saved = await writeCheckpoint(outDir, "audio", audioCheckpoint);
+          const durationLabel = formatDurationSeconds(
+            audioResult.totalDurationSec,
+          );
+          const sizeLabel = formatByteSize(audioResult.totalBytes);
+          progress.log(
+            `[story] audio ready at ${audioRelativePath} (${durationLabel}, ${sizeLabel})`,
+          );
+          progress.log(`[story] wrote checkpoint ${saved}`);
+        },
+        "image-sets": async () => {
+          const { value: segmentation } =
+            await pipeline.ensureSegmentationCorrection();
+          const imageSets = await generateImageSets(segmentation, progress, {
+            debugRootDir,
+          });
+          imageSetsSerialised = serialiseStoryImageSets(imageSets);
+          const imageSetsCheckpoint: ImageSetsCheckpoint = {
+            imageSets: imageSetsSerialised,
+          };
+          const saved = await writeCheckpoint(
+            outDir,
+            "image-sets",
+            imageSetsCheckpoint,
+          );
+          progress.log(`[story] wrote checkpoint ${saved}`);
+        },
+        "images-judge": async () => {
+          const { value: segmentation } =
+            await pipeline.ensureSegmentationCorrection();
+          const serialisedSets = await ensureImageSets();
+          const imageSets: StoryImageSet[] =
+            deserialiseStoryImageSets(serialisedSets);
+          const judgement = await judgeImageSets(
+            imageSets,
+            segmentation,
+            progress,
+            {
+              debugRootDir,
+            },
+          );
+          const judgeCheckpoint: ImageJudgeCheckpoint = {
+            selectedSet: judgement.winningImageSetLabel,
+          };
+          ImageJudgeCheckpointSchema.parse(judgeCheckpoint);
+          const saved = await writeCheckpoint(
+            outDir,
+            "images-judge",
+            judgeCheckpoint,
+          );
+          progress.log(`[story] wrote checkpoint ${saved}`);
+        },
+      };
+
       for (const stage of stages) {
         progress.log(`[story] stage: ${stage}`);
-        switch (stage) {
-          case "prose": {
-            const result = await pipeline.ensureProse();
-            progress.log(
-              `[story] prose ready (${result.value.text.length} chars, source ${result.source})`,
-            );
-            imageSetsSerialised = undefined;
-            break;
-          }
-          case "segmentation": {
-            const result = await pipeline.ensureSegmentation();
-            progress.log(
-              `[story] segmentation ready (${result.value.segments.length} segments, source ${result.source})`,
-            );
-            imageSetsSerialised = undefined;
-            break;
-          }
-          case "segmentation_correction": {
-            const result = await pipeline.ensureSegmentationCorrection();
-            progress.log(
-              `[story] corrected segmentation ready (${result.value.segments.length} segments, source ${result.source})`,
-            );
-            imageSetsSerialised = undefined;
-            break;
-          }
-          case "images": {
-            const result = await pipeline.ensureImages();
-            progress.log(
-              `[story] selected image set with ${result.value.images.length} images (source ${result.source})`,
-            );
-            break;
-          }
-          case "publish": {
-            const result = await pipeline.ensureNarration();
-            progress.log(
-              `[story] published narration to ${result.value.publishResult.storagePath} (doc ${result.value.publishResult.documentPath}, source ${result.source})`,
-            );
-            break;
-          }
-          case "audio": {
-            const { value: segmentation } =
-              await pipeline.ensureSegmentationCorrection();
-            const mediaSegments = segmentationToMediaSegments(segmentation);
-            if (mediaSegments.length === 0) {
-              throw new Error(
-                "Cannot generate narration audio without at least one segment.",
-              );
-            }
-
-            const audioOutputDir = path.join(outDir, "audio");
-            await mkdir(audioOutputDir, { recursive: true });
-
-            const persistSegmentsDir = path.join(audioOutputDir, "segments");
-            await rm(persistSegmentsDir, { recursive: true, force: true });
-
-            const audioRelativePath = path
-              .join("audio", "story.mp3")
-              .replace(/\\/g, "/");
-            const audioOutputPath = path.join(outDir, audioRelativePath);
-
-            const audioResult = await generateSessionAudio({
-              segments: mediaSegments,
-              outputFilePath: audioOutputPath,
-              persistSegmentsDir,
-              progress: createConsoleProgress("story/audio"),
-            });
-
-            const toRelative = (filePath: string): string => {
-              const relative = path.relative(outDir, filePath);
-              if (
-                !relative ||
-                relative.startsWith("..") ||
-                path.isAbsolute(relative)
-              ) {
-                return filePath.replace(/\\/g, "/");
-              }
-              return relative.replace(/\\/g, "/");
-            };
-
-            const audioCheckpoint = {
-              inputSegments: mediaSegments,
-              output: {
-                file: audioRelativePath,
-                durationSec: audioResult.totalDurationSec,
-                totalBytes: audioResult.totalBytes,
-                mimeType: audioResult.outputMimeType,
-                sampleRate: audioResult.sampleRate,
-                channels: audioResult.channels,
-                slideOffsets: audioResult.slideOffsets,
-                slideDurations: audioResult.slideDurations,
-                lineOffsets: audioResult.lineOffsets,
-                lineDurations: audioResult.lineDurations,
-              },
-              segmentFiles: audioResult.segmentFiles.map(toRelative),
-            };
-
-            AudioCheckpointSchema.parse(audioCheckpoint);
-            const saved = await writeCheckpoint(
-              outDir,
-              "audio",
-              audioCheckpoint,
-            );
-            const durationLabel = formatDurationSeconds(
-              audioResult.totalDurationSec,
-            );
-            const sizeLabel = formatByteSize(audioResult.totalBytes);
-            progress.log(
-              `[story] audio ready at ${audioRelativePath} (${durationLabel}, ${sizeLabel})`,
-            );
-            progress.log(`[story] wrote checkpoint ${saved}`);
-            break;
-          }
-          case "image-sets": {
-            const { value: segmentation } =
-              await pipeline.ensureSegmentationCorrection();
-            const imageSets = await generateImageSets(segmentation, progress, {
-              debugRootDir,
-            });
-            imageSetsSerialised = serialiseStoryImageSets(imageSets);
-            const imageSetsCheckpoint: ImageSetsCheckpoint = {
-              imageSets: imageSetsSerialised,
-            };
-            const saved = await writeCheckpoint(
-              outDir,
-              "image-sets",
-              imageSetsCheckpoint,
-            );
-            progress.log(`[story] wrote checkpoint ${saved}`);
-            break;
-          }
-          case "images-judge": {
-            const { value: segmentation } =
-              await pipeline.ensureSegmentationCorrection();
-            const serialisedSets = await ensureImageSets();
-            const imageSets: StoryImageSet[] =
-              deserialiseStoryImageSets(serialisedSets);
-            const judgement = await judgeImageSets(
-              imageSets,
-              segmentation,
-              progress,
-              {
-                debugRootDir,
-              },
-            );
-            const judgeCheckpoint: ImageJudgeCheckpoint = {
-              selectedSet: judgement.winningImageSetLabel,
-            };
-            ImageJudgeCheckpointSchema.parse(judgeCheckpoint);
-            const saved = await writeCheckpoint(
-              outDir,
-              "images-judge",
-              judgeCheckpoint,
-            );
-            progress.log(`[story] wrote checkpoint ${saved}`);
-            break;
-          }
-          default: {
-            const exhaustiveCheck: never = stage;
-            throw new Error(`Unknown stage encountered: ${exhaustiveCheck}`);
-          }
-        }
+        await stageHandlers[stage]();
       }
 
       progress.log("[story] generation finished");
@@ -403,7 +393,7 @@ async function main(): Promise<void> {
   console.log("[story] artifacts ready in", outDir);
 }
 
-void main().catch((error) => {
+void main().catch((error: unknown) => {
   console.error("[story] generation failed:", error);
   process.exitCode = 1;
 });

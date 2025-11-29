@@ -196,7 +196,7 @@ async function main(argv: readonly string[]): Promise<void> {
   console.log(JSON.stringify(analysis, null, 2));
 }
 
-void main(process.argv).catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+void main(process.argv).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

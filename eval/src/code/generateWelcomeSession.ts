@@ -134,7 +134,7 @@ async function writeQuizzesToTemplate(
 
   await batch.commit();
   console.log(
-    `[welcome/${sessionId}] published ${quizzes.length} quizzes to template`,
+    `[welcome/${sessionId}] published ${String(quizzes.length)} quizzes to template`,
   );
 }
 
@@ -155,7 +155,7 @@ async function writeProblemsToTemplate(
 
   await batch.commit();
   console.log(
-    `[welcome/${sessionId}] published ${problems.length} problems to template`,
+    `[welcome/${sessionId}] published ${String(problems.length)} problems to template`,
   );
 }
 
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
   console.log(`[welcome/${sessionId}] generation complete`);
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error("[welcome] generation failed", error);
   process.exitCode = 1;
 });

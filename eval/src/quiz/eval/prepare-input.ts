@@ -74,30 +74,31 @@ const MATERIAL_TYPES = ["study", "revision", "test", "other"] as const;
 const CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
 const DEFAULT_CONFIDENCE: (typeof CONFIDENCE_LEVELS)[number] = "medium";
 
-const CONFIDENCE_SYNONYMS: Record<string, (typeof CONFIDENCE_LEVELS)[number]> =
-  {
-    high: "high",
-    "highly confident": "high",
-    "very high": "high",
-    strong: "high",
-    certain: "high",
-    confident: "high",
-    assured: "high",
-    medium: "medium",
-    moderate: "medium",
-    average: "medium",
-    balanced: "medium",
-    steady: "medium",
-    low: "low",
-    "fairly low": "low",
-    weak: "low",
-    uncertain: "low",
-    unsure: "low",
-    doubtful: "low",
-    unknown: "low",
-    limited: "low",
-    minimal: "low",
-  };
+const CONFIDENCE_SYNONYMS: Partial<
+  Record<string, (typeof CONFIDENCE_LEVELS)[number]>
+> = {
+  high: "high",
+  "highly confident": "high",
+  "very high": "high",
+  strong: "high",
+  certain: "high",
+  confident: "high",
+  assured: "high",
+  medium: "medium",
+  moderate: "medium",
+  average: "medium",
+  balanced: "medium",
+  steady: "medium",
+  low: "low",
+  "fairly low": "low",
+  weak: "low",
+  uncertain: "low",
+  unsure: "low",
+  doubtful: "low",
+  unknown: "low",
+  limited: "low",
+  minimal: "low",
+};
 
 function normaliseConfidenceInput(value: unknown): unknown {
   if (value === undefined || value === null) {
@@ -314,7 +315,7 @@ type CacheEntry = {
   updatedAt?: string;
 };
 
-type CacheData = Record<string, CacheEntry>;
+type CacheData = Partial<Record<string, CacheEntry>>;
 
 type JobResult = {
   file: SampleFile;
@@ -436,7 +437,7 @@ async function loadCache(cachePath: string): Promise<CacheData> {
     if (!raw.trim()) {
       return {};
     }
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     const validated = CacheSchema.parse(parsed);
     const result: CacheData = {};
     for (const [rel, entry] of Object.entries(validated)) {
@@ -448,7 +449,7 @@ async function loadCache(cachePath: string): Promise<CacheData> {
     }
     return result;
   } catch (error: unknown) {
-    const code = (error as NodeJS.ErrnoException)?.code;
+    const code = readErrorCode(error);
     if (code === "ENOENT") {
       return {};
     }
@@ -474,6 +475,14 @@ function formatError(error: unknown): string {
   } catch {
     return String(error);
   }
+}
+
+function readErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const { code } = error as Partial<NodeJS.ErrnoException>;
+  return typeof code === "string" ? code : undefined;
 }
 
 async function classifyBatch({
@@ -518,7 +527,7 @@ async function classifyBatch({
           classification,
           modelVersion: GEMINI_MODEL_ID,
         } satisfies JobResult;
-      } catch (error) {
+      } catch (error: unknown) {
         const message = formatError(error);
         context.progress.log(`Failed ${file.relativePath}: ${message}`);
         return { file, error };
@@ -532,11 +541,7 @@ async function classifyBatch({
 function derivePageBucket(
   numberOfPages?: number,
 ): (typeof PAGE_BUCKETS)[number] {
-  if (
-    !Number.isFinite(numberOfPages) ||
-    numberOfPages === undefined ||
-    numberOfPages === null
-  ) {
+  if (typeof numberOfPages !== "number" || !Number.isFinite(numberOfPages)) {
     return "50plus_pages";
   }
   const value = Math.max(1, Math.floor(numberOfPages));
@@ -641,7 +646,7 @@ async function rmIfExists(target: string): Promise<void> {
   try {
     await rm(target, { force: true });
   } catch (error: unknown) {
-    const code = (error as NodeJS.ErrnoException)?.code;
+    const code = readErrorCode(error);
     if (code !== "ENOENT") {
       throw error;
     }
@@ -771,7 +776,7 @@ function printCountSection({
   const total = Array.from(map.values()).reduce((sum, value) => sum + value, 0);
   for (const [key, count] of formatCountEntries(map, { sortByKey })) {
     const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-    console.log(`    ${key}: ${count} (${percentage}%)`);
+    console.log(`    ${key}: ${count.toString()} (${percentage.toString()}%)`);
   }
 }
 
@@ -801,12 +806,12 @@ async function main(): Promise<void> {
     try {
       const classification = normaliseClassification(cached.classification);
       alreadyClassified.push({ file, classification });
-    } catch (error) {
+    } catch (error: unknown) {
       console.warn(
         `[cache] Discarding invalid cache entry for ${file.relativePath}:`,
         error,
       );
-      delete cacheData[file.relativePath];
+      cacheData[file.relativePath] = undefined;
       pending.push(file);
     }
   }
@@ -816,7 +821,7 @@ async function main(): Promise<void> {
     const snapshot = JSON.parse(JSON.stringify(cacheData)) as CacheData;
     cacheWriteChain = cacheWriteChain
       .then(() => writeCache(cachePath, snapshot))
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error(`[cache] Failed to write ${cachePath}:`, error);
       });
   };
@@ -851,7 +856,7 @@ async function main(): Promise<void> {
     const retryTargets = failures.map((result) => result.file);
     retriedCount = retryTargets.length;
     console.log(
-      `Retrying ${retriedCount} failed file${retriedCount === 1 ? "" : "s"}...`,
+      `Retrying ${retriedCount.toString()} failed file${retriedCount === 1 ? "" : "s"}...`,
     );
     failures.length = 0;
     const retryResults = await classifyBatch({
@@ -904,8 +909,9 @@ async function main(): Promise<void> {
 
   const cachedCount = alreadyClassified.length;
   const newCount = newlyClassified.length;
+  const processedCount = placed.length;
   console.log(
-    `\nProcessed ${placed.length} files (cached ${cachedCount}, new ${newCount}). Output directory: ${options.dst}`,
+    `\nProcessed ${processedCount.toString()} files (cached ${cachedCount.toString()}, new ${newCount.toString()}). Output directory: ${options.dst}`,
   );
   if (!options.dryRun && (cachedCount > 0 || newCount > 0)) {
     console.log(`Cache file: ${cachePath}`);
@@ -917,7 +923,7 @@ async function main(): Promise<void> {
   }
   if (allClassified.length > 0) {
     console.log(
-      `Category breakdown (${allClassified.length} classified files):`,
+      `Category breakdown (${allClassified.length.toString()} classified files):`,
     );
     printCountSection({ label: "Boards", map: boardCounts });
     printCountSection({ label: "Grade buckets", map: gradeCounts });
@@ -930,7 +936,7 @@ async function main(): Promise<void> {
   }
   if (retriedCount > 0) {
     console.log(
-      `Retry completed: ${retriedCount} attempted, ${retrySuccessCount} succeeded on retry.`,
+      `Retry completed: ${retriedCount.toString()} attempted, ${retrySuccessCount.toString()} succeeded on retry.`,
     );
   }
   if (failures.length > 0) {
@@ -951,12 +957,12 @@ async function main(): Promise<void> {
       ? `Details written to ${errorLogPath}.`
       : `Details would be written to ${errorLogPath} (dry run).`;
     console.warn(
-      `Skipped ${failures.length} files due to classification errors. ${destinationNote}`,
+      `Skipped ${failures.length.toString()} files due to classification errors. ${destinationNote}`,
     );
   }
 }
 
-void main().catch((error) => {
+void main().catch((error: unknown) => {
   console.error("Classification failed:", error);
   process.exit(1);
 });
