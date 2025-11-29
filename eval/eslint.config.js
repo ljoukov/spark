@@ -19,7 +19,8 @@ export default tseslint.config(
 			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/restrict-template-expressions': 'off',
 			'@typescript-eslint/unbound-method': 'off',
-			'@typescript-eslint/only-throw-error': 'off'
+			'@typescript-eslint/only-throw-error': 'off',
+			'@typescript-eslint/no-deprecated': 'error'
 		}
 	}
 );

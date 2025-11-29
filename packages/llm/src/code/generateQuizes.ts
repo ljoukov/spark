@@ -70,7 +70,7 @@ export const QuizzesSchema = z.object({
     for (const quiz of value) {
       if (seen.has(quiz.quiz_id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `duplicate quiz_id '${quiz.quiz_id}'`,
         });
       }
@@ -78,7 +78,7 @@ export const QuizzesSchema = z.object({
     }
     if (!seen.has("intro_quiz") || !seen.has("wrap_up_quiz")) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "quizzes must include intro_quiz and wrap_up_quiz",
       });
     }

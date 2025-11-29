@@ -289,7 +289,7 @@ const StoryIdeaDataSchema = StoryIdeaDataSchemaBase.superRefine(
     const expectedIds = new Set(STORY_IDEA_CANDIDATE_IDS);
     if (ids.length !== expectedIds.size) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `Expected exactly ${expectedIds.size} candidates (one per identifier).`,
         path: ["candidates"],
       });
@@ -298,7 +298,7 @@ const StoryIdeaDataSchema = StoryIdeaDataSchemaBase.superRefine(
     for (const expectedId of expectedIds) {
       if (!ids.includes(expectedId)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Missing candidate with id '${expectedId}'.`,
           path: ["candidates"],
         });

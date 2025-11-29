@@ -376,7 +376,7 @@ export type LlmJsonCallOptions<T> = Omit<
   LlmTextCallOptions,
   "responseSchema" | "tools"
 > & {
-  readonly schema: z.ZodSchema<T>;
+  readonly schema: z.ZodType<T>;
   readonly responseSchema: Schema;
   readonly maxAttempts?: number;
   readonly maxRetries?: number;

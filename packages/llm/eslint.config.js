@@ -15,6 +15,8 @@ export default tseslint.config(
 			}
 		},
 		files: ['src/**/*.ts', 'tests/**/*.ts'],
-		rules: {}
+		rules: {
+			'@typescript-eslint/no-deprecated': 'error'
+		}
 	}
 );

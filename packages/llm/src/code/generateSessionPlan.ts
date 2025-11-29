@@ -53,7 +53,7 @@ const PlanPartSchema = z.object({
       const words = value.split(/\s+/).filter((part) => part.length > 0);
       if (words.length > 15) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "summary must be 15 words or fewer",
         });
       }
@@ -145,7 +145,7 @@ export const SessionPlanSchema = z
     }
     if (requiredIds.size > 0) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `coding_blueprints missing ids: ${Array.from(requiredIds).join(", ")}`,
       });
     }
@@ -160,13 +160,13 @@ export const SessionPlanSchema = z
       const expectedOrder = index + 1;
       if (part.order !== expectedOrder) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `parts[${index}] order expected ${expectedOrder} but received ${part.order}`,
         });
       }
       if (part.kind !== expectedKinds[index]) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `parts[${index}] kind expected ${expectedKinds[index]} but received ${part.kind}`,
         });
       }

@@ -44,7 +44,7 @@ const SparkMultipleChoiceQuestionSchema = z
   .superRefine((value, ctx) => {
     if (value.correctOptionIndex > value.options.length) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "correctOptionIndex must reference an existing option",
         path: ["correctOptionIndex"],
       });

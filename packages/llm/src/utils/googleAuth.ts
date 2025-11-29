@@ -17,7 +17,7 @@ export type GoogleServiceAccount = {
 const ServiceAccountSchema = z
   .object({
     project_id: z.string().min(1),
-    client_email: z.string().email(),
+    client_email: z.email(),
     private_key: z.string().min(1),
     token_uri: z.string().optional(),
   })
