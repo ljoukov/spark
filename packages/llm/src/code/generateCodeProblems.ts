@@ -49,7 +49,7 @@ const CodingProblemTestsSchema = z
     const hasPrivateList = privateTests.length > 0;
     if (!hasPrivateList && typeof value.private_count !== "number") {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["private"],
         message: "Provide private tests or private_count",
       });
@@ -59,7 +59,7 @@ const CodingProblemTestsSchema = z
       const count = privateTests.length;
       if (value.private_count !== count) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["private_count"],
           message: `private_count ${value.private_count} must match private length ${count}`,
         });
@@ -105,7 +105,7 @@ export const ProblemPlanItemsSchema = z
     value.forEach((problem, index) => {
       if (seen.has(problem.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: [index, "id"],
           message: `duplicate problem id '${problem.id}'`,
         });
@@ -116,7 +116,7 @@ export const ProblemPlanItemsSchema = z
     });
     if (missing.size > 0) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["problems"],
         message: `problems must include ids ${Array.from(missing).join(", ")}`,
       });
@@ -129,7 +129,7 @@ const ProblemsSchema = z.object({
     for (const problem of value) {
       if (ids.has(problem.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `duplicate problem id '${problem.id}'`,
         });
       }
@@ -137,7 +137,7 @@ const ProblemsSchema = z.object({
     }
     if (!ids.has("p1") || !ids.has("p2")) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "problems must include ids p1 and p2",
       });
     }
@@ -553,7 +553,7 @@ export const ProblemSolutionsSchema = z
     const ids = new Set(data.solutions.map((solution) => solution.id));
     if (!ids.has("p1") || !ids.has("p2")) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "solutions must include ids p1 and p2",
       });
     }
