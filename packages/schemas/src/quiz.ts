@@ -61,10 +61,10 @@ export type QuizFeedback = z.infer<typeof QuizFeedbackSchema>;
 export const QuizDefinitionSchema = z.object({
   id: trimmedString,
   title: trimmedString,
-  description: z.string().optional(),
+  description: trimmedString,
   topic: z.string().optional(),
   estimatedMinutes: z.number().int().positive().optional(),
-  progressKey: z.string().optional(),
+  progressKey: trimmedString,
   questions: z.array(QuizQuestionSchema).min(1),
 });
 

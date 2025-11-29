@@ -225,32 +225,6 @@ async function writeTemplateDoc(
   await templateDoc.set(stripUndefined(payload), { merge: true });
 }
 
-function normaliseQuizDefinition(
-  quiz: (typeof QuizDefinitionSchema)["_output"],
-  plan: { id: string; summary?: string; title?: string }[],
-): (typeof QuizDefinitionSchema)["_output"] {
-  const planSummaryById: Record<string, string | undefined> = {};
-  for (const item of plan) {
-    planSummaryById[item.id] = item.summary ?? item.title;
-  }
-
-  const progressKey =
-    quiz.progressKey ??
-    (quiz.id === "intro_quiz"
-      ? "primer"
-      : quiz.id === "wrap_up_quiz"
-        ? "wrap"
-        : quiz.id);
-  const description =
-    quiz.description ?? planSummaryById[quiz.id] ?? quiz.title;
-
-  return {
-    ...quiz,
-    progressKey,
-    description,
-  };
-}
-
 async function main(): Promise<void> {
   ensureEvalEnvLoaded();
 
@@ -379,9 +353,6 @@ async function main(): Promise<void> {
     session,
     parsed.storyPlanItemId,
   );
-  const quizzesWithDefaults = filteredQuizzes.map((quiz) =>
-    normaliseQuizDefinition(quiz, plan),
-  );
 
   await writeTemplateDoc(sessionId, parsed.topic, {
     plan,
@@ -390,7 +361,7 @@ async function main(): Promise<void> {
     summary: metadata.summary,
     title: storyTitle,
   });
-  await writeQuizzesToTemplate(sessionId, quizzesWithDefaults);
+  await writeQuizzesToTemplate(sessionId, filteredQuizzes);
   await writeProblemsToTemplate(sessionId, filteredProblems);
 
   if (session.story) {
