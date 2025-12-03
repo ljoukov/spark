@@ -51,6 +51,7 @@ const optionsSchema = z.object({
     .default(DEFAULT_STORY_PLAN_ITEM_ID),
   checkpointDir: z.string().trim().optional(),
   debugRootDir: z.string().trim().optional(),
+  noStory: z.boolean().optional(),
 });
 
 function slugifyTopic(topic: string): string {
@@ -229,6 +230,7 @@ async function main(): Promise<void> {
     .requiredOption("--topic <topic>", "Topic for the welcome session")
     .option("--session-id <id>", "Override the generated session id")
     .option("--seed <int>", "Seed for deterministic prompting")
+    .option("--no-story", "Skip story generation")
     .option(
       "--story-plan-item-id <id>",
       "Plan item id used for the story media",
@@ -252,6 +254,7 @@ async function main(): Promise<void> {
     storyPlanItemId?: string;
     checkpointDir?: string;
     debugRootDir?: string;
+    noStory?: boolean;
   }>();
 
   const parsed = optionsSchema.parse({
@@ -261,6 +264,7 @@ async function main(): Promise<void> {
     storyPlanItemId: raw.storyPlanItemId,
     checkpointDir: raw.checkpointDir,
     debugRootDir: raw.debugRootDir,
+    noStory: raw.noStory,
   });
 
   const sessionId = parsed.sessionId ?? slugifyTopic(parsed.topic);
@@ -308,6 +312,7 @@ async function main(): Promise<void> {
         sessionId,
         storyPlanItemId: parsed.storyPlanItemId,
         progress,
+        includeStory: parsed.noStory === true ? false : undefined,
       });
     },
   });
