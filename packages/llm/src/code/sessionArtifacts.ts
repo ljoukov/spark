@@ -267,12 +267,13 @@ function buildQuizDefinitionsPrompt(
     `Return exactly ${quizCount} quiz objects (same order as provided) and nothing else.`,
     "Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
     "Each quiz should have 4-5 concise questions with short explanations; include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
+    "Every graded question MUST include a short hint and a short explanation (1-2 sentences each). Do not omit these fields or leave them blank.",
     "Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
     "Keep prompts short, avoid jargon, and stick to the promised skills.",
     "Populate every required field; never emit empty objects or empty strings. Every quiz must include a non-empty description and progressKey.",
     "IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
-    "JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint?, explanation?, correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
-    "If you are unsure about any field, copy the draft value instead of leaving it blank.",
+    "JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
+    "If you are unsure about any field, copy the draft value instead of leaving it blank, and still provide a helpful hint/explanation.",
     'Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
     "",
     `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
@@ -360,8 +361,12 @@ function rawSubsectionsToQuizzes(
             `${id}_${kind.replace(/[^a-z0-9]+/gi, "_")}_${questionIndex + 1}`,
           ) ?? `q_${questionIndex + 1}`;
         const prompt = asString(rq.prompt, "Edit to add prompt")!;
-        const hint = asString(rq.hint);
-        const explanation = asString(rq.explanation);
+        const hint =
+          asString(rq.hint) ??
+          "Hint: use the main concept from this lesson to narrow the choices.";
+        const explanation =
+          asString(rq.explanation) ??
+          "The correct answer follows directly from the key idea in the prompt.";
 
         if (kind === "info-card") {
           const body = asString(rq.body, explanation ?? "Concept primer")!;

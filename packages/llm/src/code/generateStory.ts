@@ -1600,6 +1600,7 @@ ${feedbackSection}
 - Remove exclusivity claims. The story should never assert "first" or "sole" originators unless the capsule already does so explicitly.
 - Limit the narrative to one named figure or institution; other contributors should appear only as hedged acknowledgements.
 - Keep modern references out of the body. The final paragraph must use one approved template (below) and promise learners they will "learn the details" and "master it in programming challenges" next.
+- Do not invent causal links from the historical anecdote to modern computing (e.g., implying algorithms were formalised from field repairs or cutting telegraph lines). If evidence is thin, drop the claim and use a hedged modern template only.
 - Expand lesser-known acronyms on first use (e.g., "Jet Propulsion Laboratory (JPL)"); leave well-known ones like NASA unchanged.
 - Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
 - Run web searches when historical details are uncertain, but fix the prose rather than adding citations. Hedge when evidence is ambiguous.
@@ -2418,6 +2419,9 @@ function buildBlockerMessages(
     messages.push(
       "Switch the ending to one of the approved hedged modern-connection templates.",
     );
+    messages.push(
+      "Remove any speculative lineage between historical troubleshooting and modern computing; do not claim algorithms were formalised from ad-hoc field tricks.",
+    );
   }
   const datePrecision = blockers.datePrecision;
   if (
@@ -2504,6 +2508,14 @@ function buildValidationFeedback(
       return lines.join("\n");
     });
     sections.push("Detailed fact-check notes:", ...detailed);
+  }
+  const hasModernOverclaim = issues.some(
+    (issue) => issue.tag === "modernTieInOverclaim",
+  );
+  if (hasModernOverclaim) {
+    sections.push(
+      "Modern tie-in guardrail: remove any invented lineage between the historical anecdote and modern computing. Use a hedged, template-based ending only; if a modern link is shaky, omit it rather than overclaiming.",
+    );
   }
 
   if (sections.length === 0) {
