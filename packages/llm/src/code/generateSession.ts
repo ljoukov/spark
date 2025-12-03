@@ -241,6 +241,23 @@ const SESSION_STAGE_ORDER: readonly SessionGenerationStageName[] = [
   "quizzes_grade",
 ];
 
+class ProblemReferenceSolutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProblemReferenceSolutionError";
+  }
+}
+
+class IndependentSolutionFailureError extends Error {
+  constructor(
+    readonly problemId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "IndependentSolutionFailureError";
+  }
+}
+
 type SessionGenerationPipelineOptions = {
   topic: string;
   seed?: number;
@@ -1545,6 +1562,38 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
+  private async validateReferenceSolutions(
+    payload: ProblemsPayload,
+  ): Promise<void> {
+    const failures: string[] = [];
+    for (const problem of payload.problems) {
+      const result = await runSolutionAgainstTests(
+        problem,
+        problem.reference_solution_py,
+        this.options.pythonIndexUrl,
+      );
+      if (result.length === 0) {
+        continue;
+      }
+      const summary = result
+        .map((failure) => {
+          const label =
+            failure.index >= 0
+              ? `test ${failure.index + 1}`
+              : "setup";
+          return `${problem.id} ${label}: ${failure.message}`;
+        })
+        .join("; ");
+      failures.push(summary);
+    }
+    if (failures.length === 0) {
+      return;
+    }
+    throw new ProblemReferenceSolutionError(
+      `Reference solution validation failed (${failures.join("; ")})`,
+    );
+  }
+
   private async ensureProblemsInternal(): Promise<
     StageCacheEntry<ProblemsPayload>
   > {
@@ -1590,6 +1639,8 @@ export class SessionGenerationPipeline {
       });
     }
 
+    this.logger.log("[session/problems] validating reference solutions");
+    await this.validateReferenceSolutions(problemsPayload);
     await this.writeProblemsCheckpoint(problemsPayload);
     const entry: StageCacheEntry<ProblemsPayload> = {
       value: problemsPayload,
@@ -1707,7 +1758,8 @@ export class SessionGenerationPipeline {
       );
       previousFailures = failures;
     }
-    throw new Error(
+    throw new IndependentSolutionFailureError(
+      problem.id,
       `Failed to validate independent solution for problem ${problem.id} after ${MAX_PROBLEM_SOLUTION_ATTEMPTS} attempts`,
     );
   }
@@ -1929,6 +1981,34 @@ export type GenerateSessionResult = {
   story?: GenerateStoryResult;
 };
 
+async function solveProblemsWithRetries(options: {
+  pipeline: SessionGenerationPipeline;
+  logger: JobProgressReporter;
+}): Promise<boolean> {
+  const { pipeline, logger } = options;
+  for (let attempt = 1; attempt <= MAX_PROBLEM_ATTEMPTS; attempt += 1) {
+    try {
+      await pipeline.ensureProblemSolutions();
+      return true;
+    } catch (error) {
+      if (error instanceof IndependentSolutionFailureError) {
+        logger.log(
+          `[session/problem-solution] independent solver failed for ${error.problemId} (attempt ${attempt} of ${MAX_PROBLEM_ATTEMPTS})`,
+        );
+        if (attempt === MAX_PROBLEM_ATTEMPTS) {
+          logger.log(
+            `[session/problem-solution] exhausted solver retries for ${error.problemId}`,
+          );
+          return false;
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+  return false;
+}
+
 export async function generateSession(
   options: GenerateSessionOptions,
 ): Promise<GenerateSessionResult> {
@@ -1971,10 +2051,37 @@ export async function generateSession(
     attempt <= 1 + MAX_PROBLEM_GRADE_RETRIES;
     attempt += 1
   ) {
-    problems = await pipeline.ensureProblems();
+    try {
+      problems = await pipeline.ensureProblems();
+    } catch (error) {
+      if (error instanceof ProblemReferenceSolutionError) {
+        logger.log(
+          `[session/problems] reference solution check failed (attempt ${attempt} of ${MAX_PROBLEM_GRADE_RETRIES + 1}): ${error.message}`,
+        );
+        if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
+          throw new Error(
+            `Problem generation failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${error.message}`,
+          );
+        }
+        await pipeline.invalidateStage("problem_ideas");
+        await pipeline.invalidateStage("problems");
+        continue;
+      }
+      throw error;
+    }
     problemsGrade = await pipeline.ensureProblemsGrade();
     if (problemsGrade.pass) {
-      break;
+      const solved = await solveProblemsWithRetries({ pipeline, logger });
+      if (solved) {
+        break;
+      }
+      if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
+        throw new Error(
+          `Problem solving failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts`,
+        );
+      }
+      await pipeline.invalidateStage("problems");
+      continue;
     }
     if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
       throw new Error(
@@ -1988,7 +2095,6 @@ export async function generateSession(
     throw new Error("Problem generation failed");
   }
 
-  await pipeline.ensureProblemSolutions();
   problems = await pipeline.ensureProblems();
   ProblemPlanItemsSchema.parse(problems);
 

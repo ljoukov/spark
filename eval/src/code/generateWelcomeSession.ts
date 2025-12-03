@@ -86,6 +86,23 @@ function getTemplateDocRef(sessionId: string) {
     .doc(sessionId);
 }
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (val === undefined) {
+        continue;
+      }
+      result[key] = stripUndefined(val);
+    }
+    return result as unknown as T;
+  }
+  return value;
+}
+
 async function copyStoryToTemplate(
   sessionId: string,
   planItemId: string,
@@ -129,7 +146,7 @@ async function writeQuizzesToTemplate(
     const target = templateDoc.collection("quiz").doc(quiz.id);
     const { id, ...rest } = quiz;
     void id;
-    batch.set(target, rest);
+    batch.set(target, stripUndefined(rest));
   }
 
   await batch.commit();
@@ -150,7 +167,7 @@ async function writeProblemsToTemplate(
     const target = templateDoc.collection("code").doc(problem.slug);
     const { slug, ...rest } = problem;
     void slug;
-    batch.set(target, rest);
+    batch.set(target, stripUndefined(rest));
   }
 
   await batch.commit();
@@ -201,7 +218,7 @@ async function writeTemplateDoc(
     payload[field] = FieldValue.delete();
   }
 
-  await templateDoc.set(payload, { merge: true });
+  await templateDoc.set(stripUndefined(payload), { merge: true });
 }
 
 async function main(): Promise<void> {

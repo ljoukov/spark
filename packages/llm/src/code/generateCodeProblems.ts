@@ -9,7 +9,7 @@ import { errorAsString } from "../utils/error";
 
 export const MAX_PROBLEM_ATTEMPTS = 3;
 export const MAX_PROBLEM_GRADE_RETRIES = 2;
-export const MAX_PROBLEM_SOLUTION_ATTEMPTS = 2;
+export const MAX_PROBLEM_SOLUTION_ATTEMPTS = 3;
 
 const CodingProblemFunctionParamSchema = z.object({
   name: z.string().trim().min(1),
@@ -231,6 +231,8 @@ export function buildProblemIdeasUserPrompt(
     "- Public tests: (3-5 cases; list as input => output)",
     "- Private tests: (3-8 cases; list as input => output)",
     "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool; fix the spec until they pass.",
+    "Spell out boundary behaviors so tests cannot imply hidden rules (e.g., whether a Rosette on the final index grants another turn, or how off-board moves behave) and ensure the reference solution matches that rule exactly.",
+    "If any test fails when executed against the reference solution, revise the test/spec/solution until they are consistent—never return a failing test.",
     "The two problems must be clearly different: p2 must introduce a distinct goal/data shape/recurrence and require at least one additional technique beyond p1 (not a trivial re-skin).",
     "Explicitly call out any preconditions/limitations/pitfalls inside the Statement, Constraints, or Hints (e.g., one-way heuristics, coprime requirements, recurrence break cases, reproducibility if randomness is involved).",
     "Avoid non-deterministic behavior; if sampling is needed, include a seed or fixed witness list so tests are stable.",
