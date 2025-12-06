@@ -24,7 +24,7 @@
 
 	export let data: PageData;
 
-	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
+const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState: PlanItemState | null = data.planItemState ?? null;
 	const stopSessionState = sessionStateStore.subscribe((value) => {
 		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;

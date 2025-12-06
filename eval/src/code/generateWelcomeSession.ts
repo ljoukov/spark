@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
@@ -52,6 +52,7 @@ const optionsSchema = z.object({
   checkpointDir: z.string().trim().optional(),
   debugRootDir: z.string().trim().optional(),
   noStory: z.boolean().optional(),
+  story: z.boolean().optional(),
 });
 
 function slugifyTopic(topic: string): string {
@@ -102,6 +103,27 @@ function stripUndefined<T>(value: T): T {
     return result as unknown as T;
   }
   return value;
+}
+
+async function readCheckpoint<T>(filePath: string): Promise<T | undefined> {
+  try {
+    const raw = await readFile(filePath, { encoding: "utf8" });
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function writeCheckpoint<T>(
+  filePath: string,
+  value: T,
+): Promise<void> {
+  const json = JSON.stringify(value, null, 2);
+  await writeFile(filePath, json, { encoding: "utf8" });
 }
 
 async function copyStoryToTemplate(
@@ -255,6 +277,7 @@ async function main(): Promise<void> {
     checkpointDir?: string;
     debugRootDir?: string;
     noStory?: boolean;
+    story?: boolean;
   }>();
 
   const parsed = optionsSchema.parse({
@@ -265,6 +288,7 @@ async function main(): Promise<void> {
     checkpointDir: raw.checkpointDir,
     debugRootDir: raw.debugRootDir,
     noStory: raw.noStory,
+    story: raw.story,
   });
 
   const sessionId = parsed.sessionId ?? slugifyTopic(parsed.topic);
@@ -293,6 +317,19 @@ async function main(): Promise<void> {
   console.log(
     `[welcome] generating session for topic "${parsed.topic}" (sessionId=${sessionId})`,
   );
+  console.log(
+    `[welcome/${sessionId}] flags includeStory=${parsed.noStory === true || parsed.story === false ? false : true} storyPlanItemId=${parsed.storyPlanItemId}`,
+  );
+
+  const metadataCheckpoint = path.join(checkpointDir, "metadata.json");
+  const quizDefinitionsCheckpoint = path.join(
+    checkpointDir,
+    "quiz_definitions.json",
+  );
+  const codeProblemsCheckpoint = path.join(
+    checkpointDir,
+    "code_problems.json",
+  );
 
   const [session] = await runJobsWithConcurrency<
     "welcome-session",
@@ -312,21 +349,33 @@ async function main(): Promise<void> {
         sessionId,
         storyPlanItemId: parsed.storyPlanItemId,
         progress,
-        includeStory: parsed.noStory === true ? false : undefined,
+        includeStory:
+          parsed.noStory === true || parsed.story === false ? false : undefined,
       });
     },
   });
 
-  const metadata = await generateSessionMetadata({
-    topic: parsed.topic,
-    plan: session.plan,
-    storyTitle: session.story?.title,
-  });
-  const quizDefinitions = await generateQuizDefinitions(
-    session.plan,
-    session.quizzes,
-  );
-  const problems = await generateCodeProblems(session.plan, session.problems);
+  const metadata =
+    (await readCheckpoint<typeof metadataCheckpoint>(metadataCheckpoint)) ??
+    (await generateSessionMetadata({
+      topic: parsed.topic,
+      plan: session.plan,
+      storyTitle: session.story?.title,
+    }));
+  await writeCheckpoint(metadataCheckpoint, metadata);
+
+  const quizDefinitions =
+    (await readCheckpoint<typeof quizDefinitionsCheckpoint>(
+      quizDefinitionsCheckpoint,
+    )) ?? (await generateQuizDefinitions(session.plan, session.quizzes));
+  await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
+
+  const problems =
+    (await readCheckpoint<typeof codeProblemsCheckpoint>(
+      codeProblemsCheckpoint,
+    )) ??
+    (await generateCodeProblems(session.plan, session.problems));
+  await writeCheckpoint(codeProblemsCheckpoint, problems);
 
   const filteredQuizzes = quizDefinitions.filter(
     (quiz) => quiz.id === "intro_quiz" || quiz.id === "wrap_up_quiz",

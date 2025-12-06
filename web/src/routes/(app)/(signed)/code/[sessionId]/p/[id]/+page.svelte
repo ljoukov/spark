@@ -132,7 +132,7 @@
 	export let data: PageData;
 
 	let problem = data.problem;
-	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
+const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState: PlanItemState | null = data.sessionState.items[data.planItem.id] ?? null;
 	let hasMarkedStart = false;
 	let completionRecorded = planItemState?.status === 'completed';

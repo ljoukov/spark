@@ -37,7 +37,7 @@
 	const quiz = data.quiz;
 	const SYNC_ERROR_MESSAGE =
 		"We couldn't save your latest progress. Check your connection and try again.";
-	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
+const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
 	let planItemState = $state<PlanItemState | null>(data.planItemState ?? null);
 	let completionSyncError = $state<string | null>(null);
 	const stopSessionState = sessionStateStore.subscribe((value) => {
