@@ -1472,17 +1472,17 @@ ${storyBrief}
 - Maintain historical fidelity. When uncertain, hedge or omit rather than invent detail. Keep modern references out of the story until the closing paragraph.
 ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
-**Modern Tie-in (ending paragraph only):** choose exactly one of these hedged templates and customise the {application domain} placeholder:
-1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
-2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
-3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
+**Modern Tie-in (ending paragraph only):** use a hedged bridge—either pick one of these endings or write a short analogy that states both the resemblance and the historical difference. Then promise learners they will learn and practice the idea next.
+1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Narrative Flow:**
 1. **Set the Stakes:** Anchor the listener in the historical scene, pressing problem, and protagonist from the brief. Thread in the Origins Capsule here.
 2. **Reveal the Insight:** Show the "aha" moment and introduce the functional analogy in motion—no procedural walkthroughs.
 3. **Analogy Map + Hint:** Provide the succinct analogy map (2–3 concrete correspondences) and, if helpful, one short clarifier contrasting success vs. failure conditions.
 4. **Parallel Voices (hedged):** Maintain momentum without adding new named figures; use phrases like "others later refined the idea" when nuance is required.
-5. **Modern Pivot + Invitation:** In the final paragraph, deploy one approved template and close with an empowering promise that this lesson reveals the details and lets the listener master them in programming challenges.
+5. **Modern Pivot + Invitation:** In the final paragraph, use a hedged modern bridge or contrastive analogy (template or custom) and close with an empowering promise that this lesson reveals the details and lets the listener master them in programming challenges.
 
 **Style Expectations:**
 - Audio-first cadence with clear, varied sentences.
@@ -1599,18 +1599,19 @@ ${feedbackSection}
 - Enforce neutral naming. Replace any "coined", "named", "invented", or sole-credit claims with hedged phrases like "now known as", "credited among", or "... and others".
 - Remove exclusivity claims. The story should never assert "first" or "sole" originators unless the capsule already does so explicitly.
 - Limit the narrative to one named figure or institution; other contributors should appear only as hedged acknowledgements.
-- Keep modern references out of the body. The final paragraph must use one approved template (below) and promise learners they will "learn the details" and "master it in programming challenges" next.
-- Do not invent causal links from the historical anecdote to modern computing (e.g., implying algorithms were formalised from field repairs or cutting telegraph lines). If evidence is thin, drop the claim and use a hedged modern template only.
+- Keep modern references out of the body. The final paragraph must be a hedged modern bridge: either pick one approved ending below or write a short analogy that calls out both the resemblance and the historical differences, then promise learners they will "learn the details" and "master it in programming challenges" next.
+- Do not invent causal links from the historical anecdote to modern computing (e.g., implying algorithms were formalised from field repairs or cutting telegraph lines). When the connection is loose, keep it as an explicit "this reminds us of..." contrast instead of a lineage claim.
 - Expand lesser-known acronyms on first use (e.g., "Jet Propulsion Laboratory (JPL)"); leave well-known ones like NASA unchanged.
 - Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
+- Keep the voice energetic and specific: one or two vivid concrete details are fine; vary hedging language so endings do not all sound alike.
 - Run web searches when historical details are uncertain, but fix the prose rather than adding citations. Hedge when evidence is ambiguous.
 - Tone check: at most one or two vivid adjectives across the entire story; vocabulary stays at or below CEFR B2, with any specialised term defined immediately.
 ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
 **Approved Modern Tie-in Templates (ending paragraph only):**
-1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
-2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
-3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
+1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Fix Checklist expectation:** After revising, you must populate a \\"fixChecklist\\" object confirming which blockers are resolved. Use these keys: \\"namingAttribution\\", \\"exclusivityClaim\\", \\"modernTieInOverclaim\\", \\"datePrecision\\", \\"wrongEntity\\". Set each boolean key to true only when the revised story clearly addresses it; leave false when unresolved. For \\"datePrecision\\", use \\"hedged\\" (string) when you softened or approximated timing, \\"recommend-hedge\\" (string) if you still urge additional hedging, or false (boolean) when no adjustment was required. Do not use true.
 
@@ -1665,6 +1666,7 @@ export function buildStoryValidationPrompt(
 
 **Policy Notes:**
 - Stick with classical, widely taught anchors. Neutral hedges such as "... and others" or "credited among" are acceptable; do **not** fail a story simply for omitting extra contributor names when it avoids exclusivity.
+- Hedged analogies are welcome: it is fine to say a scene "looks like" or "echoes" a modern approach when you immediately spell out the differences. Only treat it as overclaiming when it implies a real lineage or certainty.
 - Block only catastrophic issues: wrong or conflicting names/titles/dates, misattributed naming, exclusive origin claims, un-hedged modern tie-ins, incorrect entities, or dates that need hedging.
 
 **Material to Audit:**
@@ -1677,21 +1679,22 @@ ${storyText}
 2. Historical anchor: the narrative keeps the Origins Capsule semantics—neutral verbs like "described" or "published", no sole-credit claims, and names/timing that match mainstream consensus.
 3. Insight hint: exactly one or two sentences, purely conceptual, no equations, symbols, or step sequences.
 4. Naming & exclusivity guardrails: no "coined", "invented", "first", or "sole" assertions unless universally accepted and stated in the capsule; hedged wording is encouraged.
-5. Modern tie-in: confined to the final paragraph and matches one approved template with hedged language.
+5. Modern tie-in: confined to the final paragraph and uses a hedged bridge—either one approved template or a custom analogy that names both the similarity and the historical difference. No causal lineage claims.
 6. Ending invitation: final sentences promise learners they will learn the details and master the idea in programming challenges.
 7. Vocabulary and tone: CEFR B2 or simpler; define any specialist title immediately; keep charged adjectives to a minimum.
 
 **Approved Modern Tie-in Templates (compare with the final paragraph):**
-1. "Today, related algorithms and heuristics in {application domain} build on this idea; the exact choice depends on costs, constraints, and data. You’ll learn the details here and practice them in short challenges."
-2. "You’ll spot echoes of this idea in modern {application domain} tools. They adapt it with weights and heuristics when real-world factors matter. In this lesson you’ll learn the core and master it in programming challenges."
-3. "This idea sits under the hood of many systems, often in adapted forms. We’ll cover the essentials now, and you’ll apply them in the challenges that follow."
+1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Reporting Instructions:**
 - Return "pass" if there are no Critical or Major issues. Minor issues alone should result in a "pass" verdict (but still list them in 'issues' for feedback).
 - For each issue, start the summary with "Tag: <taxonomy> – ..." where taxonomy ∈ { namingAttribution, exclusivityClaim, modernTieInOverclaim, datePrecision, wrongEntity, other }.
-- Record the same taxonomy in the JSON field "tag". Provide severity, evidence (with citations when referencing sources), and a concrete recommendation.
+- Record the same taxonomy in the JSON field "tag". Provide severity, evidence (with citations when referencing sources), and a concrete recommendation. Recommendations should include a concise, livelier alternative phrasing (e.g., a hedged analogy or a clearer contrast) instead of only saying "remove".
+- When the modern tie-in is hedged with an explicit contrast, treat it as pass or at most minor. Mark modernTieInOverclaim only when the ending asserts a lineage, omits any hedge, or ignores the approved patterns entirely.
 - Populate the "blockers" object: set boolean keys to true when the story violates the guardrail, false when resolved. For "datePrecision", use "hedged" if the prose already uses approximate timing, "recommend-hedge" if it still needs softening, or false when precise dating is acceptable.
-- Treat an un-hedged or non-template modern ending as modernTieInOverclaim.
+- Treat an un-hedged, causally claimed, or off-pattern modern ending as modernTieInOverclaim; a clearly marked analogy with differences is acceptable.
 
 **Output JSON Schema:**
 {
@@ -2417,10 +2420,10 @@ function buildBlockerMessages(
   }
   if (blockers.modernTieInOverclaim === true) {
     messages.push(
-      "Switch the ending to one of the approved hedged modern-connection templates.",
+      "Rework the ending into a hedged modern bridge (approved template or a short analogy that states both the resemblance and the difference) while keeping the promise to learn and practice.",
     );
     messages.push(
-      "Remove any speculative lineage between historical troubleshooting and modern computing; do not claim algorithms were formalised from ad-hoc field tricks.",
+      "Remove any speculative lineage between historical troubleshooting and modern computing; keep parallels as explicit comparisons, not origin claims.",
     );
   }
   const datePrecision = blockers.datePrecision;
@@ -2463,7 +2466,7 @@ function buildFixChecklistMismatches(
     checklist.modernTieInOverclaim
   ) {
     messages.push(
-      "Set fixChecklist.modernTieInOverclaim to false until the ending uses one approved hedged template.",
+      "Set fixChecklist.modernTieInOverclaim to false until the ending uses an approved hedged bridge or an explicit analogy that names both similarity and difference.",
     );
   }
   if (blockers.wrongEntity === true && checklist.wrongEntity) {
@@ -2514,7 +2517,7 @@ function buildValidationFeedback(
   );
   if (hasModernOverclaim) {
     sections.push(
-      "Modern tie-in guardrail: remove any invented lineage between the historical anecdote and modern computing. Use a hedged, template-based ending only; if a modern link is shaky, omit it rather than overclaiming.",
+      "Modern tie-in guardrail: swap any invented lineage for a hedged analogy that names the similarity and the mismatch. Use an approved ending or a short contrastive bridge, and still invite the learner to explore the real algorithm next.",
     );
   }
 
