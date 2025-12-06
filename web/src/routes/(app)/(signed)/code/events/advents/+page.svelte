@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
+	import { adventBundles, type AdventSessionBundle } from '$lib/data/adventSessions';
 
 	type AdventEntry = {
 		day: number;
@@ -240,7 +242,11 @@
 			reward:
 				'Spectacular prize: unlocks the “North Star” profile frame, a bonus XP cache, and a live code review slot with a Spark mentor.'
 		}
-	] satisfies AdventEntry[];
+] satisfies AdventEntry[];
+
+	const bundleByDay = new Map<number, AdventSessionBundle>(
+		adventBundles.map((bundle) => [bundle.day, bundle])
+	);
 
 	let { data }: { data: PageData } = $props();
 	let today = $state(new Date(data.todayIso));
@@ -248,6 +254,7 @@
 	const progressPercent = $derived(Math.round((unlockedDay / adventDays.length) * 100));
 
 	let selected = $state<AdventEntry | null>(null);
+	const selectedBundle = $derived(selected ? bundleByDay.get(selected.day) : undefined);
 	let lockedNudge = $state<number | null>(null);
 	let copyFeedback = $state<'idle' | 'copied' | 'error'>('idle');
 
@@ -259,6 +266,18 @@
 			return 'today';
 		}
 		return 'open';
+	}
+
+	function cardTitle(day: number, fallback: string): string {
+		return bundleByDay.get(day)?.session.title ?? fallback;
+	}
+
+	function cardHook(day: number, fallback: string): string {
+		return bundleByDay.get(day)?.session.tagline ?? fallback;
+	}
+
+	function cardEmoji(day: number, fallback: string): string {
+		return bundleByDay.get(day)?.session.emoji ?? fallback;
 	}
 
 	function handleSelect(entry: AdventEntry): void {
@@ -279,6 +298,31 @@
 		today = new Date();
 	});
 
+	async function handleLaunch(entry: AdventEntry): Promise<void> {
+		if (entry.day > unlockedDay) {
+			return;
+		}
+		const bundle = bundleByDay.get(entry.day);
+		if (!bundle) {
+			return;
+		}
+		try {
+			const response = await fetch('/api/advent/launch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ sessionId: bundle.session.id, day: entry.day })
+			});
+			if (!response.ok) {
+				throw new Error('Failed to launch advent session');
+			}
+			const payload = await response.json();
+			const sessionId = payload.sessionId ?? bundle.session.id;
+			await goto(`/code/${sessionId}`);
+		} catch (error) {
+			console.error('Unable to launch advent session', error);
+		}
+	}
+
 	function closeDetail(): void {
 		selected = null;
 	}
@@ -288,7 +332,12 @@
 			return;
 		}
 		try {
-			await navigator.clipboard.writeText(`${entry.title} — ${entry.prompt}`);
+			const bundle = bundleByDay.get(entry.day);
+			if (bundle) {
+				await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+			} else {
+				await navigator.clipboard.writeText(`${entry.title} — ${entry.prompt}`);
+			}
 			copyFeedback = 'copied';
 			setTimeout(() => {
 				if (copyFeedback === 'copied') {
@@ -343,7 +392,7 @@
 				data-state={stateFor(entry.day)}
 				data-nudge={lockedNudge === entry.day}
 				aria-pressed={selected?.day === entry.day}
-				aria-label={`Day ${entry.day}: ${entry.title}`}
+				aria-label={`Day ${entry.day}: ${cardTitle(entry.day, entry.title)}`}
 				onclick={() => handleSelect(entry)}
 			>
 				<div class="card-header">
@@ -358,16 +407,18 @@
 						{/if}
 					</span>
 				</div>
-				<div class="emoji" aria-hidden="true">{entry.emoji}</div>
+				<div class="emoji" aria-hidden="true">{cardEmoji(entry.day, entry.emoji)}</div>
 				<div class="card-body">
-					<h3>{entry.title}</h3>
-					<p>{entry.hook}</p>
+					<h3>{cardTitle(entry.day, entry.title)}</h3>
+					<p>{cardHook(entry.day, entry.hook)}</p>
 				</div>
 				<div class="card-footer">
 					<span class="difficulty" data-level={entry.difficulty.toLowerCase()}>
 						{entry.difficulty}
 					</span>
-					<span class="cta">Peek</span>
+					<span class="cta">
+						{stateFor(entry.day) === 'locked' ? 'Locked' : 'Launch'}
+					</span>
 				</div>
 				<div class="shine" aria-hidden="true"></div>
 			</button>
@@ -381,48 +432,76 @@
 					×
 				</button>
 				<p class="eyebrow">Day {selected.day}</p>
-				<h2>
-					<span aria-hidden="true">{selected.emoji}</span>
-					{selected.title}
-				</h2>
-				<p class="detail-hook">{selected.hook}</p>
-				<div class="detail-prompt">
-					<p>{selected.prompt}</p>
-				</div>
-				<div class="tags">
-					<span class="tag" data-level={selected.difficulty.toLowerCase()}>
-						{selected.difficulty}
-					</span>
-					<span class="tag">No external links</span>
-					{#if selected.day === unlockedDay}
-						<span class="tag live">Today</span>
-					{/if}
-				</div>
-				{#if selected.reward}
-					<div class="prize">
-						<span class="prize-emoji" aria-hidden="true">🎁</span>
-						<div>
-							<p class="prize-title">Spectacular prize</p>
-							<p class="prize-copy">{selected.reward}</p>
+		<h2>
+			<span class="hero-emoji" aria-hidden="true">{cardEmoji(selected.day, selected.emoji)}</span>
+			{cardTitle(selected.day, selected.title)}
+		</h2>
+				<p class="detail-hook">{cardHook(selected.day, selected.hook)}</p>
+				{#if selectedBundle}
+					<div class="session-meta">
+						<p class="summary">{selectedBundle.session.summary}</p>
+						{#if selectedBundle.session.topics}
+							<div class="tags">
+								{#each selectedBundle.session.topics as topic}
+									<span class="tag">{topic}</span>
+								{/each}
+							</div>
+						{/if}
+					<div class="quiz-grid">
+						{#each selectedBundle.quizzes as quiz}
+							<div class="quiz-card">
+								<p class="eyebrow small">{quiz.id}</p>
+									<h4>{quiz.title}</h4>
+									<p class="muted">{quiz.description}</p>
+									<p class="count">{quiz.questions.length} questions · {quiz.topic ?? 'quiz'}</p>
+								</div>
+							{/each}
+						</div>
+						<div class="problem-grid">
+							{#each selectedBundle.problems as problem}
+								<div class="problem-card">
+									<p class="eyebrow small">{problem.slug}</p>
+									<h4>{problem.title}</h4>
+									<p class="muted">{problem.topics.join(', ')}</p>
+									<p class="pill problem-pill">{problem.difficulty}</p>
+								</div>
+							{/each}
 						</div>
 					</div>
+				{:else}
+					<div class="detail-prompt">
+						<p>{selected.prompt}</p>
+					</div>
+					<div class="tags">
+						<span class="tag" data-level={selected.difficulty.toLowerCase()}>
+							{selected.difficulty}
+						</span>
+						<span class="tag">No external links</span>
+						{#if selected.day === unlockedDay}
+							<span class="tag live">Today</span>
+						{/if}
+					</div>
+					{#if selected.reward}
+						<div class="prize">
+							<span class="prize-emoji" aria-hidden="true">🎁</span>
+							<div>
+								<p class="prize-title">Spectacular prize</p>
+								<p class="prize-copy">{selected.reward}</p>
+							</div>
+						</div>
+					{/if}
 				{/if}
 				<div class="detail-actions">
 					<button
 						type="button"
-						class="ghost"
-						onclick={() => selected && void copyPrompt(selected)}
-						data-state={copyFeedback}
+						class="primary"
+						aria-disabled={selected.day > unlockedDay}
+						disabled={selected.day > unlockedDay}
+						onclick={() => selected && handleLaunch(selected)}
 					>
-						{#if copyFeedback === 'copied'}
-							Copied!
-						{:else if copyFeedback === 'error'}
-							Copy failed
-						{:else}
-							Copy prompt
-						{/if}
+						Launch
 					</button>
-					<button type="button" class="primary" onclick={closeDetail}>Close</button>
+					<button type="button" class="ghost" onclick={closeDetail}>Close</button>
 				</div>
 			</div>
 		</div>
@@ -1026,21 +1105,76 @@
 		background: rgba(255, 255, 255, 0.85);
 	}
 
-	.detail-actions .ghost[data-state='copied'] {
-		border-color: rgba(34, 197, 94, 0.55);
-		color: #15803d;
-	}
-
-	.detail-actions .ghost[data-state='error'] {
-		border-color: rgba(239, 68, 68, 0.55);
-		color: #b91c1c;
-	}
-
 	.detail-actions .primary {
 		background: linear-gradient(135deg, #6366f1, #8b5cf6);
 		color: #fff;
 		border-color: transparent;
 		box-shadow: 0 18px 45px -25px rgba(99, 102, 241, 0.5);
+	}
+
+	.session-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		margin-top: 0.5rem;
+	}
+
+	.summary {
+		margin: 0;
+		color: rgba(71, 85, 105, 0.88);
+	}
+
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.2);
+		border: 1px solid rgba(148, 163, 184, 0.3);
+		font-weight: 700;
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.quiz-grid,
+	.problem-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 0.75rem;
+	}
+
+	.quiz-card,
+	.problem-card {
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		border-radius: 0.9rem;
+		padding: 0.8rem;
+		background: rgba(255, 255, 255, 0.85);
+	}
+
+	.hero-emoji {
+		font-size: clamp(3.2rem, 6vw, 4.6rem);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		line-height: 1;
+		margin-right: 0.35rem;
+		filter: drop-shadow(0 12px 24px rgba(15, 23, 42, 0.25));
+	}
+
+	.problem-card .problem-pill {
+		margin-top: 0.4rem;
+		text-transform: capitalize;
+	}
+
+	.eyebrow.small {
+		font-size: 0.68rem;
+	}
+
+	.count {
+		margin: 0.2rem 0 0;
+		font-weight: 700;
 	}
 
 	@keyframes wobble {

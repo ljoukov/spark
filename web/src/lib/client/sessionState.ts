@@ -86,11 +86,17 @@ export type SessionStateStore = Readable<SessionState> & {
 	stop: () => void;
 };
 
+type SessionStateStoreOptions = {
+	syncEnabled?: boolean;
+};
+
 export function createSessionStateStore(
 	sessionId: string,
-	initialState: SessionState
+	initialState: SessionState,
+	options?: SessionStateStoreOptions
 ): SessionStateStore {
 	const store = writable<SessionState>(initialState);
+	const syncEnabled = options?.syncEnabled ?? true;
 
 	if (!browser) {
 		return {
@@ -127,6 +133,10 @@ export function createSessionStateStore(
 		store.set(optimistic);
 
 		if (options?.sync === false) {
+			return null;
+		}
+
+		if (!syncEnabled) {
 			return null;
 		}
 
