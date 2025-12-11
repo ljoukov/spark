@@ -23,13 +23,13 @@ const makePointerWarmup = (): QuizDefinition => ({
 			id: 'q1-card',
 			prompt: 'How do two indices + sliding window work in Python?',
 			body:
-				'**Two indices**: on a sorted list, track `left` and `right`; compare `nums[left] + nums[right]` to the target and move ONE index to raise or lower the sum.\n\n```python\nleft, right = 0, len(nums) - 1\nwhile left < right:\n    s = nums[left] + nums[right]\n    if s < target:\n        left += 1\n    else:\n        right -= 1\n```\n\n**Sliding window**: when numbers are non-negative and you care about subarray sums, keep a running `window_sum` between `left` and `right`. Expand right to grow the sum; shrink left to reduce it.\n\n```python\nleft = 0\nwindow = 0\nfor right, val in enumerate(nums):\n    window += val\n    while window >= target:\n        answer = min(answer, right - left + 1)\n        window -= nums[left]\n        left += 1\n```\n\nThese are just integer positions, never memory pointers.'
+				'Use **two indices** on a sorted list and move exactly one of them based on the sum.\n\n```python\nleft, right = 0, len(nums) - 1\nwhile left < right:\n    s = nums[left] + nums[right]\n    if s < target:\n        left += 1\n    else:\n        right -= 1\n```\n\nFor subarray sums with non-negative numbers, keep a **sliding window**. Grow to increase the sum; shrink to reduce it.\n\n```python\nleft = 0\nwindow = 0\nfor right, val in enumerate(nums):\n    window += val\n    while window >= target:\n        answer = min(answer, right - left + 1)\n        window -= nums[left]\n        left += 1\n```\n\nThese are integer indices, never memory pointers.'
 		},
 		{
 			kind: 'multiple-choice',
 			id: 'q2',
 			prompt:
-				"Goal: find a pair that sums to the target.\n\nCurrent state:\n```python\nnums = [4, 8, 10, 12, 14]\nleft, right = 0, 4\ncurrent = nums[left] + nums[right]  # 18\ntarget = 22\n```\n\nWhich index should you move to **increase** the sum?",
+				"Goal: find a pair that sums to the target.\n\nCurrent state:\n```python\nnums = [4, 8, 10, 12, 14]\nleft, right = 0, 4\ncurrent = nums[left] + nums[right]  # 18\ntarget = 22\n```\n\nTo get closer to the target, which index should you move in Python?",
 			options: [
 				{ id: 'A', label: 'A', text: 'Advance the left index (left += 1)' },
 				{ id: 'B', label: 'B', text: 'Advance the right index (right += 1)' },
