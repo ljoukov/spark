@@ -22,61 +22,197 @@ const makePointerWarmup = (): QuizDefinition => ({
 			kind: 'info-card',
 			id: 'q1-card',
 			prompt: 'How do two indices + sliding window work in Python?',
-			body:
-				'Use **two indices** on a sorted list and move exactly one of them based on the sum.\n\n```python\nleft, right = 0, len(nums) - 1\nwhile left < right:\n    s = nums[left] + nums[right]\n    if s < target:\n        left += 1\n    else:\n        right -= 1\n```\n\nFor subarray sums with non-negative numbers, keep a **sliding window**. Grow to increase the sum; shrink to reduce it.\n\n```python\nleft = 0\nwindow = 0\nfor right, val in enumerate(nums):\n    window += val\n    while window >= target:\n        answer = min(answer, right - left + 1)\n        window -= nums[left]\n        left += 1\n```\n\nThese are integer indices, never memory pointers.'
+			body: `**Dual indices**: keep lright on a sorted list and move exactly one index to steer the sum.
+
+\`\`\`python
+left, right = 0, len(nums) - 1
+if nums[left] + nums[right] < target:
+    left += 1
+else:
+    right -= 1
+\`\`\`
+
+**Sliding window** (non-negative arrays): grow right to raise the sum; shrink left to lower it. These are plain list indices—never raw pointers.`,
 		},
 		{
 			kind: 'multiple-choice',
 			id: 'q2',
-			prompt:
-				"Goal: find a pair that sums to the target.\n\nCurrent state:\n```python\nnums = [4, 8, 10, 12, 14]\nleft, right = 0, 4\ncurrent = nums[left] + nums[right]  # 18\ntarget = 22\n```\n\nTo get closer to the target, which index should you move in Python?",
+			prompt: 'When is the dual-index pattern the right tool?',
 			options: [
-				{ id: 'A', label: 'A', text: 'Advance the left index (left += 1)' },
-				{ id: 'B', label: 'B', text: 'Advance the right index (right += 1)' },
-				{ id: 'C', label: 'C', text: 'Move the left index left (left -= 1)' },
-				{ id: 'D', label: 'D', text: 'Move the right index left (right -= 1)' }
+				{ id: 'A', label: 'A', text: 'The list is sorted or monotone so moves are predictable' },
+				{ id: 'B', label: 'B', text: 'The list is unsorted with many negatives' },
+				{ id: 'C', label: 'C', text: 'You need to test every pair anyway' },
+				{ id: 'D', label: 'D', text: 'Only when n == 2' }
 			],
 			correctOptionId: 'A',
-			correctFeedback: { message: 'Raise the smaller addend by moving the left index right.' },
-			explanation: 'In Python, increment the lower index to increase the sum.'
+			correctFeedback: { message: 'Order lets you steer left/right deterministically.' }
 		},
-		{ kind: 'multiple-choice', id: 'q3', prompt: 'Sum=31, target=20 in sorted array. Move?', options: [ {id:'A',label:'A',text:'Left++'}, {id:'B',label:'B',text:'Right--'}, {id:'C',label:'C',text:'Swap pointers'}, {id:'D',label:'D',text:'Reset'} ], correctOptionId: 'B', correctFeedback: { message: 'Drop the larger addend.' }, explanation: 'Decrease sum by moving right pointer left.' },
-		{ kind: 'multiple-choice', id: 'q4', prompt: 'When are sliding windows safest?', options: [ {id:'A',label:'A',text:'Non-negative numbers'}, {id:'B',label:'B',text:'Arbitrary signs'}, {id:'C',label:'C',text:'Strings only'}, {id:'D',label:'D',text:'Sorted descending'} ], correctOptionId: 'A', correctFeedback: { message: 'Shrinking always lowers the sum when values are ≥0.' } },
-		{ kind: 'type-answer', id: 'q5', prompt: 'Return value when no pair hits the target?', answer: '-1 -1', acceptableAnswers: ['-1 -1'], correctFeedback: { message: 'Use a sentinel pair.' } },
-		{ kind: 'multiple-choice', id: 'q6', prompt: 'Invariant to keep for min-window sum?', options: [ {id:'A',label:'A',text:'left always moves right'}, {id:'B',label:'B',text:'window sum tracked'}, {id:'C',label:'C',text:'array sorted descending'}, {id:'D',label:'D',text:'window length fixed'} ], correctOptionId: 'B', correctFeedback: { message: 'Track current sum as you grow/shrink.' } },
+		{
+			kind: 'multiple-choice',
+			id: 'q3',
+			prompt: `Two-sum step:
+\`\`\`python
+nums = [4, 8, 10, 12, 14]
+left, right = 0, 4
+s = nums[left] + nums[right]  # 18
+target = 22
+\`\`\`
+Which index do you move to increase s?`,
+			options: [
+				{ id: 'A', label: 'A', text: 'left += 1' },
+				{ id: 'B', label: 'B', text: 'right += 1' },
+				{ id: 'C', label: 'C', text: 'left -= 1' },
+				{ id: 'D', label: 'D', text: 'right -= 1' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Raise the smaller addend.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q4',
+			prompt: 'Now s = 31 and target = 20. How do you shrink s?',
+			options: [
+				{ id: 'A', label: 'A', text: 'left += 1' },
+				{ id: 'B', label: 'B', text: 'right -= 1' },
+				{ id: 'C', label: 'C', text: 'swap indices' },
+				{ id: 'D', label: 'D', text: 'restart loop' }
+			],
+			correctOptionId: 'B',
+			correctFeedback: { message: 'Move the larger end down.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q5',
+			prompt: 'Sliding window works best when...',
+			options: [
+				{ id: 'A', label: 'A', text: 'numbers are non-negative' },
+				{ id: 'B', label: 'B', text: 'values are strings' },
+				{ id: 'C', label: 'C', text: 'array is strictly descending' },
+				{ id: 'D', label: 'D', text: 'data are arbitrary negatives' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Then shrinking always lowers the sum.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q6',
+			prompt: 'Window sum exceeds target; first move?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Shrink from left' },
+				{ id: 'B', label: 'B', text: 'Expand right' },
+				{ id: 'C', label: 'C', text: 'Reset window' },
+				{ id: 'D', label: 'D', text: 'Re-sort the list' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Shrinking lowers the sum with non-negative numbers.' }
+		},
 		{
 			kind: 'multiple-choice',
 			id: 'q7',
-			prompt: 'Best data type for indices in Python?',
+			prompt: 'Why enforce `left < right` in two-sum?',
 			options: [
-				{ id: 'A', label: 'A', text: 'int' },
-				{ id: 'B', label: 'B', text: 'float' },
-				{ id: 'C', label: 'C', text: 'str' },
-				{ id: 'D', label: 'D', text: 'bool' }
+				{ id: 'A', label: 'A', text: 'Avoid using the same index twice' },
+				{ id: 'B', label: 'B', text: 'Speed up sorting' },
+				{ id: 'C', label: 'C', text: 'Handle negatives' },
+				{ id: 'D', label: 'D', text: 'Python requires it' }
 			],
 			correctOptionId: 'A',
-			correctFeedback: { message: 'Plain ints are perfect.' }
+			correctFeedback: { message: 'You need two distinct positions.' }
 		},
-		{ kind: 'multiple-choice', id: 'q8', prompt: 'Why 1-based answers?', options: [ {id:'A',label:'A',text:'Matches problem spec'}, {id:'B',label:'B',text:'Python demands it'}, {id:'C',label:'C',text:'Zero is unsafe'}, {id:'D',label:'D',text:'Because recursion'} ], correctOptionId: 'A', correctFeedback: { message: 'Follow output contract exactly.' } },
-		{ kind: 'multiple-choice', id: 'q9', prompt: 'Condition to shrink window?', options: [ {id:'A',label:'A',text:'sum >= target'}, {id:'B',label:'B',text:'sum < target'}, {id:'C',label:'C',text:'anytime'}, {id:'D',label:'D',text:'never'} ], correctOptionId: 'A', correctFeedback: { message: 'Only shrink while valid to hunt smaller length.' } },
+		{
+			kind: 'multiple-choice',
+			id: 'q8',
+			prompt: 'For unsorted two-sum, what keeps it O(n)?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Hash map of seen values' },
+				{ id: 'B', label: 'B', text: 'Nested loops' },
+				{ id: 'C', label: 'C', text: 'Binary search each element' },
+				{ id: 'D', label: 'D', text: 'Linked lists' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Hash lookups keep it linear.' }
+		},
+		{
+			kind: 'type-answer',
+			id: 'q9',
+			prompt: 'If no pair hits the target, what do you return?',
+			answer: '-1 -1',
+			acceptableAnswers: ['-1 -1'],
+			correctFeedback: { message: 'Use the sentinel pair.' }
+		},
 		{
 			kind: 'multiple-choice',
 			id: 'q10',
-			prompt: 'Two indices fail when...',
+			prompt: 'Time complexity of the dual-index sweep?',
 			options: [
-				{ id: 'A', label: 'A', text: 'array unsorted and no monotone rule' },
-				{ id: 'B', label: 'B', text: 'array length > 2' },
-				{ id: 'C', label: 'C', text: 'targets negative' },
-				{ id: 'D', label: 'D', text: 'indices start at 0' }
+				{ id: 'A', label: 'A', text: 'O(n)' },
+				{ id: 'B', label: 'B', text: 'O(n log n)' },
+				{ id: 'C', label: 'C', text: 'O(n^2)' },
+				{ id: 'D', label: 'D', text: 'O(1)' }
 			],
 			correctOptionId: 'A',
-			correctFeedback: { message: 'Need an ordering to steer moves.' }
+			correctFeedback: { message: 'Single pass.' }
 		},
-		{ kind: 'type-answer', id: 'q11', prompt: 'What loop condition prevents overlap?', answer: 'while i < j', acceptableAnswers: ['while i < j','i<j'], correctFeedback: { message: 'Stop when pointers cross.' } },
-		{ kind: 'multiple-choice', id: 'q12', prompt: 'Best-case time for two-sum two-pointers?', options: [ {id:'A',label:'A',text:'O(n)'}, {id:'B',label:'B',text:'O(log n)'}, {id:'C',label:'C',text:'O(n log n)'}, {id:'D',label:'D',text:'O(n^2)'} ], correctOptionId: 'A', correctFeedback: { message: 'Single pass from both ends.' } },
-		{ kind: 'multiple-choice', id: 'q13', prompt: 'Space complexity of sliding window sum?', options: [ {id:'A',label:'A',text:'O(1)'}, {id:'B',label:'B',text:'O(k)'}, {id:'C',label:'C',text:'O(n)'}, {id:'D',label:'D',text:'O(log n)'} ], correctOptionId: 'A', correctFeedback: { message: 'Track only indices and running sum.' } },
-		{ kind: 'multiple-choice', id: 'q14', prompt: 'If numbers can be negative, what helps?', options: [ {id:'A',label:'A',text:'prefix sums'}, {id:'B',label:'B',text:'two pointers'}, {id:'C',label:'C',text:'bitmask'}, {id:'D',label:'D',text:'DFS'} ], correctOptionId: 'A', correctFeedback: { message: 'Prefix/monotone deque handles negatives, window alone fails.' } },
-		{ kind: 'multiple-choice', id: 'q15', prompt: 'Edge case to guard first?', options: [ {id:'A',label:'A',text:'empty array'}, {id:'B',label:'B',text:'array already sorted'}, {id:'C',label:'C',text:'target zero'}, {id:'D',label:'D',text:'odd length'} ], correctOptionId: 'A', correctFeedback: { message: 'Return "-1 -1" if no data.' } }
+		{
+			kind: 'multiple-choice',
+			id: 'q11',
+			prompt: 'Extra space for sliding window?',
+			options: [
+				{ id: 'A', label: 'A', text: 'O(1)' },
+				{ id: 'B', label: 'B', text: 'O(k)' },
+				{ id: 'C', label: 'C', text: 'O(n)' },
+				{ id: 'D', label: 'D', text: 'O(log n)' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Just indices and a running sum.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q12',
+			prompt: 'While shrinking a window, what must stay true?',
+			options: [
+				{ id: 'A', label: 'A', text: 'left never passes right' },
+				{ id: 'B', label: 'B', text: 'sum must increase' },
+				{ id: 'C', label: 'C', text: 'window length fixed' },
+				{ id: 'D', label: 'D', text: 'array re-sorted' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Keep a valid window range.' }
+		},
+		{
+			kind: 'type-answer',
+			id: 'q13',
+			prompt: 'Empty list? What should a two-sum helper return?',
+			answer: '-1 -1',
+			acceptableAnswers: ['-1 -1'],
+			correctFeedback: { message: 'No elements → sentinel pair.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q14',
+			prompt: 'Why use 1-based indices in outputs?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Matches the stated problem contract' },
+				{ id: 'B', label: 'B', text: 'Zero-based is invalid in Python' },
+				{ id: 'C', label: 'C', text: 'Performance' },
+				{ id: 'D', label: 'D', text: 'Sorted arrays require it' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Honor the spec.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'q15',
+			prompt: 'What breaks the basic sliding-window approach?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Negative numbers when you assume sums only grow' },
+				{ id: 'B', label: 'B', text: 'Large targets' },
+				{ id: 'C', label: 'C', text: 'Duplicate values' },
+				{ id: 'D', label: 'D', text: 'Even-length arrays' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Negatives break the monotone sum assumption.' }
+		}
 	 ]
 });
 
@@ -88,29 +224,84 @@ const makePointerWrap = (): QuizDefinition => ({
 	estimatedMinutes: 4,
 	progressKey: 'advent-01-wrap',
 	questions: [
-		{ kind: 'multiple-choice', id: 'w1', prompt: 'Sum=30 target=18; first move?', options: [ {id:'A',label:'A',text:'Expand right'}, {id:'B',label:'B',text:'Shrink left'}, {id:'C',label:'C',text:'Reset'}, {id:'D',label:'D',text:'Binary search'} ], correctOptionId: 'B', correctFeedback: { message: 'Trim to drop sum.' }, explanation: 'Shrinking reduces sum with positives.' },
-		{ kind: 'multiple-choice', id: 'w2', prompt: 'Why track min length?', options: [ {id:'A',label:'A',text:'Sum equals length'}, {id:'B',label:'B',text:'Need best after each shrink'}, {id:'C',label:'C',text:'For sorting'}, {id:'D',label:'D',text:'For recursion'} ], correctOptionId: 'B', correctFeedback: { message: 'Update answer when valid window exists.' } },
-		{ kind: 'type-answer', id: 'w3', prompt: 'Return if no window meets target?', answer: '0', acceptableAnswers: ['0'], correctFeedback: { message: 'Zero length signals impossible.' } },
-		{ kind: 'multiple-choice', id: 'w4', prompt: 'Two-sum in unsorted array fastest is…', options: [ {id:'A',label:'A',text:'Sort then two-pointer'}, {id:'B',label:'B',text:'Hash map in O(n)'}, {id:'C',label:'C',text:'Brute force'}, {id:'D',label:'D',text:'DFS'} ], correctOptionId: 'B', correctFeedback: { message: 'Hash map keeps O(n).' }, explanation: 'Sorting changes indices.' },
-		{ kind: 'multiple-choice', id: 'w5', prompt: 'When keep left == right allowed?', options: [ {id:'A',label:'A',text:'Looking for pair of same index'}, {id:'B',label:'B',text:'Never'}, {id:'C',label:'C',text:'When array length 1'}, {id:'D',label:'D',text:'Only after loop ends'} ], correctOptionId: 'C', correctFeedback: { message: 'Single element case.' } },
+		{
+			kind: 'multiple-choice',
+			id: 'w1',
+			prompt: 'Window sum = 30, target = 18 (all values positive). First move?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Expand right' },
+				{ id: 'B', label: 'B', text: 'Shrink left' },
+				{ id: 'C', label: 'C', text: 'Restart window' },
+				{ id: 'D', label: 'D', text: 'Binary search' }
+			],
+			correctOptionId: 'B',
+			correctFeedback: { message: 'Shrinking lowers the sum when values are non-negative.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'w2',
+			prompt: 'When do you record a new best length in min-window problems?',
+			options: [
+				{ id: 'A', label: 'A', text: 'After shrinking while window is still valid' },
+				{ id: 'B', label: 'B', text: 'Before expanding right' },
+				{ id: 'C', label: 'C', text: 'Only at the very end' },
+				{ id: 'D', label: 'D', text: 'Never; length is constant' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Update answer while the sum still meets the target.' }
+		},
+		{
+			kind: 'type-answer',
+			id: 'w3',
+			prompt: 'If no window ever meets the target, what length do you return?',
+			answer: '0',
+			acceptableAnswers: ['0'],
+			correctFeedback: { message: 'Zero signals “no solution”.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'w4',
+			prompt: 'Tie-break for two-sum with duplicates?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Pick smallest left index, then smallest right' },
+				{ id: 'B', label: 'B', text: 'Pick largest right index' },
+				{ id: 'C', label: 'C', text: 'Return any' },
+				{ id: 'D', label: 'D', text: 'Always pick middle indices' }
+			],
+			correctOptionId: 'A',
+			correctFeedback: { message: 'Stay consistent and stable.' }
+		},
+		{
+			kind: 'multiple-choice',
+			id: 'w5',
+			prompt: 'When is left == right acceptable?',
+			options: [
+				{ id: 'A', label: 'A', text: 'Never' },
+				{ id: 'B', label: 'B', text: 'Only when the array has one element' },
+				{ id: 'C', label: 'C', text: 'Whenever sum is too small' },
+				{ id: 'D', label: 'D', text: 'When searching for max' }
+			],
+			correctOptionId: 'B',
+			correctFeedback: { message: 'A window of length 1 is valid only if there is one element.' }
+		},
 		{
 			kind: 'multiple-choice',
 			id: 'w6',
-			prompt: 'Duplicate numbers require?',
+			prompt: 'Runtime of the “shrink while valid” window pattern?',
 			options: [
-				{ id: 'A', label: 'A', text: 'Stable tie-break rules' },
-				{ id: 'B', label: 'B', text: 'Skip them' },
-				{ id: 'C', label: 'C', text: 'Reverse array' },
-				{ id: 'D', label: 'D', text: 'Use floats' }
+				{ id: 'A', label: 'A', text: 'O(n)' },
+				{ id: 'B', label: 'B', text: 'O(n log n)' },
+				{ id: 'C', label: 'C', text: 'O(n^2)' },
+				{ id: 'D', label: 'D', text: 'O(1)' }
 			],
 			correctOptionId: 'A',
-			correctFeedback: { message: 'Pick smallest left index per spec.' }
+			correctFeedback: { message: 'Each index moves forward at most once.' }
 		},
 		{
 			kind: 'info-card',
 			id: 'w7',
-			prompt: 'Index hygiene (Python)',
-			body: 'Keep left <= right, move one index per loop, and always bounds-check before accessing a list. “Pointers” here are just indices, never raw addresses.'
+			prompt: 'Dry-run tip',
+			body: 'Keep a tiny table of (left, right, window_sum) as you step through examples; you will spot off-by-one mistakes fast.'
 		}
 	]
 });
