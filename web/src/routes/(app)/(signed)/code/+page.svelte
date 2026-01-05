@@ -305,6 +305,13 @@
 		font-size: 0.9rem;
 		line-height: 1.5;
 		color: rgba(71, 85, 105, 0.85);
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-height: 3em;
+		max-height: 3em;
 	}
 
 	:global([data-theme='dark'] .topic-tagline),
