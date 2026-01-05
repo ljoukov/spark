@@ -1578,9 +1578,7 @@ export class SessionGenerationPipeline {
       const summary = result
         .map((failure) => {
           const label =
-            failure.index >= 0
-              ? `test ${failure.index + 1}`
-              : "setup";
+            failure.index >= 0 ? `test ${failure.index + 1}` : "setup";
           return `${problem.id} ${label}: ${failure.message}`;
         })
         .join("; ");
