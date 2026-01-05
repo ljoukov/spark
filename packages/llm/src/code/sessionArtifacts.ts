@@ -260,9 +260,10 @@ const SESSION_METADATA_RESPONSE_SCHEMA: Schema = {
 function buildQuizDefinitionsPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
+  lessonBrief?: string,
 ): string {
   const quizCount = quizzes.length;
-  return [
+  const parts: string[] = [
     "Convert the session quizzes into Spark quiz definitions for the learner dashboard.",
     `Return exactly ${quizCount} quiz objects (same order as provided) and nothing else.`,
     "Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
@@ -275,6 +276,11 @@ function buildQuizDefinitionsPrompt(
     "JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
     "If you are unsure about any field, copy the draft value instead of leaving it blank, and still provide a helpful hint/explanation.",
     'Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
+  ];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
     "Promised skills:",
@@ -285,7 +291,8 @@ function buildQuizDefinitionsPrompt(
     "",
     "Draft quizzes JSON:",
     JSON.stringify(quizzes, null, 2),
-  ].join("\\n");
+  );
+  return parts.join("\\n");
 }
 
 function repairQuizzesJson(rawText: string): { quizzes: QuizDefinition[] } {
@@ -464,8 +471,9 @@ function rawSubsectionsToQuizzes(
 function buildCodeProblemsPrompt(
   plan: SessionPlan,
   problems: readonly CodingProblem[],
+  lessonBrief?: string,
 ): string {
-  return [
+  const parts: string[] = [
     "Convert these two draft coding problems into Spark CodeProblem JSON (array with problems).",
     "",
     "Output must match the Spark CodeProblemSchema exactly. REQUIRED fields and types:",
@@ -488,6 +496,11 @@ function buildCodeProblemsPrompt(
     "- Keep code in Python 3; no type hints needed beyond the code block itself.",
     "- Each test must include an explanation.",
     "- All strings must be non-empty; never return empty objects.",
+  ];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Return JSON only in this shape (no prose):",
     '{"problems":[{"slug":"p1","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1},{"slug":"p2","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1}]}',
@@ -506,14 +519,16 @@ function buildCodeProblemsPrompt(
     "",
     "Draft coding problems JSON:",
     JSON.stringify(problems, null, 2),
-  ].join("\\n");
+  );
+  return parts.join("\\n");
 }
 
 export async function generateQuizDefinitions(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
+  lessonBrief?: string,
 ): Promise<readonly QuizDefinition[]> {
-  const prompt = buildQuizDefinitionsPrompt(plan, quizzes);
+  const prompt = buildQuizDefinitionsPrompt(plan, quizzes, lessonBrief);
   try {
     const payload = await generateJson<{ quizzes: QuizDefinition[] }>({
       modelId: TEXT_MODEL_ID,
@@ -544,8 +559,9 @@ export async function generateQuizDefinitions(
 export async function generateCodeProblems(
   plan: SessionPlan,
   problems: readonly CodingProblem[],
+  lessonBrief?: string,
 ): Promise<readonly CodeProblem[]> {
-  const prompt = buildCodeProblemsPrompt(plan, problems);
+  const prompt = buildCodeProblemsPrompt(plan, problems, lessonBrief);
   const payload = await generateJson<{ problems: CodeProblem[] }>({
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
