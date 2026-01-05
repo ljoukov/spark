@@ -1,7 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { renderMarkdownOptional } from '$lib/server/markdown';
 import { getUserQuiz } from '$lib/server/quiz/repo';
-import { getBundleBySessionId } from '$lib/data/adventSessions';
 import type { PageServerLoad } from './$types';
 import type { QuizDefinition as SchemaQuizDefinition } from '@spark/schemas';
 import type {
@@ -55,25 +54,9 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { session, userId, sessionState } = await parent();
-	const adventBundle = getBundleBySessionId(session.id);
 	const planItem = session.plan.find((item) => item.id === params.id);
 	if (!planItem || planItem.kind !== 'quiz') {
 		throw error(404, { message: 'Quiz not found in session plan' });
-	}
-
-	if (adventBundle) {
-		const quiz = adventBundle.quizzes.find((q) => q.id === planItem.id);
-		if (!quiz) {
-			throw error(404, { message: 'Quiz definition not found' });
-		}
-		return {
-			planItem,
-			quiz: enrichQuizWithHtml(quiz),
-			sessionId: session.id,
-			userId,
-			sessionState,
-			planItemState: sessionState.items[planItem.id] ?? null
-		};
 	}
 
 	const quiz = await getUserQuiz(userId, session.id, planItem.id);

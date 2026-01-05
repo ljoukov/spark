@@ -291,15 +291,6 @@
 							Lessons
 						</DropdownMenu.Item>
 						<DropdownMenu.Separator />
-						<DropdownMenu.Item
-							class="app-user-menu__link"
-							onSelect={() => {
-								void goto('/code/events/advents');
-							}}
-						>
-							Advent of Code
-						</DropdownMenu.Item>
-						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="app-user-menu__subtrigger">
 								Launch

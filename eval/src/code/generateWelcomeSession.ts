@@ -22,6 +22,10 @@ import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
 
+type SessionMetadata = Awaited<ReturnType<typeof generateSessionMetadata>>;
+type QuizDefinitions = Awaited<ReturnType<typeof generateQuizDefinitions>>;
+type CodeProblems = Awaited<ReturnType<typeof generateCodeProblems>>;
+
 const TEMPLATE_USER_ID = "welcome-templates";
 const TEMPLATE_ROOT_COLLECTION = "spark-admin";
 const TEMPLATE_ROOT_DOC = "templates";
@@ -88,19 +92,20 @@ function getTemplateDocRef(sessionId: string) {
     .doc(sessionId);
 }
 
-function stripUndefined<T>(value: T): T {
+function stripUndefined<T>(value: T): T;
+function stripUndefined(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => stripUndefined(item)) as unknown as T;
+    return (value as unknown[]).map((item) => stripUndefined(item));
   }
   if (value && typeof value === "object") {
     const result: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(value)) {
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
       if (val === undefined) {
         continue;
       }
       result[key] = stripUndefined(val);
     }
-    return result as unknown as T;
+    return result;
   }
   return value;
 }
@@ -118,9 +123,9 @@ async function readCheckpoint<T>(filePath: string): Promise<T | undefined> {
   }
 }
 
-async function writeCheckpoint<T>(
+async function writeCheckpoint(
   filePath: string,
-  value: T,
+  value: unknown,
 ): Promise<void> {
   const json = JSON.stringify(value, null, 2);
   await writeFile(filePath, json, { encoding: "utf8" });
@@ -317,8 +322,10 @@ async function main(): Promise<void> {
   console.log(
     `[welcome] generating session for topic "${parsed.topic}" (sessionId=${sessionId})`,
   );
+  const includeStoryOverride =
+    parsed.noStory === true || parsed.story === false ? false : undefined;
   console.log(
-    `[welcome/${sessionId}] flags includeStory=${parsed.noStory === true || parsed.story === false ? false : true} storyPlanItemId=${parsed.storyPlanItemId}`,
+    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId}`,
   );
 
   const metadataCheckpoint = path.join(checkpointDir, "metadata.json");
@@ -326,10 +333,7 @@ async function main(): Promise<void> {
     checkpointDir,
     "quiz_definitions.json",
   );
-  const codeProblemsCheckpoint = path.join(
-    checkpointDir,
-    "code_problems.json",
-  );
+  const codeProblemsCheckpoint = path.join(checkpointDir, "code_problems.json");
 
   const [session] = await runJobsWithConcurrency<
     "welcome-session",
@@ -349,14 +353,13 @@ async function main(): Promise<void> {
         sessionId,
         storyPlanItemId: parsed.storyPlanItemId,
         progress,
-        includeStory:
-          parsed.noStory === true || parsed.story === false ? false : undefined,
+        includeStory: includeStoryOverride,
       });
     },
   });
 
   const metadata =
-    (await readCheckpoint<typeof metadataCheckpoint>(metadataCheckpoint)) ??
+    (await readCheckpoint<SessionMetadata>(metadataCheckpoint)) ??
     (await generateSessionMetadata({
       topic: parsed.topic,
       plan: session.plan,
@@ -365,15 +368,12 @@ async function main(): Promise<void> {
   await writeCheckpoint(metadataCheckpoint, metadata);
 
   const quizDefinitions =
-    (await readCheckpoint<typeof quizDefinitionsCheckpoint>(
-      quizDefinitionsCheckpoint,
-    )) ?? (await generateQuizDefinitions(session.plan, session.quizzes));
+    (await readCheckpoint<QuizDefinitions>(quizDefinitionsCheckpoint)) ??
+    (await generateQuizDefinitions(session.plan, session.quizzes));
   await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
 
   const problems =
-    (await readCheckpoint<typeof codeProblemsCheckpoint>(
-      codeProblemsCheckpoint,
-    )) ??
+    (await readCheckpoint<CodeProblems>(codeProblemsCheckpoint)) ??
     (await generateCodeProblems(session.plan, session.problems));
   await writeCheckpoint(codeProblemsCheckpoint, problems);
 
