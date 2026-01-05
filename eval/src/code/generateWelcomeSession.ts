@@ -32,32 +32,44 @@ const TEMPLATE_ROOT_DOC = "templates";
 const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 
-const optionsSchema = z.object({
-  topic: z.string().trim().min(1, "topic cannot be empty"),
-  sessionId: z.string().trim().min(1).optional(),
-  seed: z
-    .string()
-    .optional()
-    .transform((value) => {
-      if (value === undefined) {
-        return undefined;
-      }
-      const parsed = Number.parseInt(value, 10);
-      if (Number.isNaN(parsed)) {
-        throw new Error("seed must be an integer");
-      }
-      return parsed;
-    }),
-  storyPlanItemId: z
-    .string()
-    .trim()
-    .min(1, "story plan item id cannot be empty")
-    .default(DEFAULT_STORY_PLAN_ITEM_ID),
-  checkpointDir: z.string().trim().optional(),
-  debugRootDir: z.string().trim().optional(),
-  noStory: z.boolean().optional(),
-  story: z.boolean().optional(),
-});
+const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;
+
+const optionsSchema = z
+  .object({
+    topic: z.string().trim().min(1, "topic cannot be empty").optional(),
+    briefFile: z.string().trim().min(1).optional(),
+    sessionId: z.string().trim().min(1).optional(),
+    seed: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (value === undefined) {
+          return undefined;
+        }
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isNaN(parsed)) {
+          throw new Error("seed must be an integer");
+        }
+        return parsed;
+      }),
+    storyPlanItemId: z
+      .string()
+      .trim()
+      .min(1, "story plan item id cannot be empty")
+      .default(DEFAULT_STORY_PLAN_ITEM_ID),
+    checkpointDir: z.string().trim().optional(),
+    debugRootDir: z.string().trim().optional(),
+    noStory: z.boolean().optional(),
+    story: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.topic && !value.briefFile) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Provide --topic or --brief-file",
+      });
+    }
+  });
 
 function slugifyTopic(topic: string): string {
   const ascii = topic
@@ -81,6 +93,61 @@ function slugifyTopic(topic: string): string {
   const prefix = baseSlug.slice(0, cutoff).replace(/-+$/g, "");
   const safePrefix = prefix.length > 0 ? prefix : baseSlug.slice(0, maxLength);
   return `${safePrefix}-${hash}`;
+}
+
+function formatSupportedExtensions(): string {
+  return SUPPORTED_BRIEF_EXTENSIONS.join(", ");
+}
+
+function deriveTopicFromBrief(text: string): string {
+  const lines = text.split(/\r?\n/u);
+  for (const line of lines) {
+    const match = line.match(
+      /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
+    );
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  const firstNonEmpty = lines.find((line) => line.trim().length > 0);
+  if (!firstNonEmpty) {
+    return "";
+  }
+  return firstNonEmpty.replace(/^\s*#+\s*/u, "").trim();
+}
+
+async function readLessonBriefFile(filePath: string): Promise<string> {
+  const resolved = path.resolve(filePath);
+  const ext = path.extname(resolved).toLowerCase();
+  if (
+    !SUPPORTED_BRIEF_EXTENSIONS.includes(
+      ext as (typeof SUPPORTED_BRIEF_EXTENSIONS)[number],
+    )
+  ) {
+    throw new Error(
+      `Lesson brief must be a text file (${formatSupportedExtensions()}); received "${filePath}"`,
+    );
+  }
+
+  const buffer = await readFile(resolved);
+  const prefix = buffer.subarray(0, 4).toString("utf8");
+  if (prefix === "%PDF") {
+    throw new Error(
+      `Lesson brief must be plain text (${formatSupportedExtensions()}), not a PDF: "${filePath}"`,
+    );
+  }
+  for (const byte of buffer) {
+    if (byte === 0) {
+      throw new Error(
+        `Lesson brief must be plain text (${formatSupportedExtensions()}); file looks binary: "${filePath}"`,
+      );
+    }
+  }
+  const text = buffer.toString("utf8").replace(/\r\n/g, "\n").trim();
+  if (text.length === 0) {
+    throw new Error(`Lesson brief file is empty: "${filePath}"`);
+  }
+  return text;
 }
 
 function getTemplateDocRef(sessionId: string) {
@@ -254,7 +321,11 @@ async function main(): Promise<void> {
 
   const program = new Command();
   program
-    .requiredOption("--topic <topic>", "Topic for the welcome session")
+    .option("--topic <topic>", "Topic for the welcome session")
+    .option(
+      "--brief-file <path>",
+      `Path to a text file containing extra lesson requirements (${formatSupportedExtensions()})`,
+    )
     .option("--session-id <id>", "Override the generated session id")
     .option("--seed <int>", "Seed for deterministic prompting")
     .option("--no-story", "Skip story generation")
@@ -275,7 +346,8 @@ async function main(): Promise<void> {
   program.parse(process.argv);
 
   const raw = program.opts<{
-    topic: string;
+    topic?: string;
+    briefFile?: string;
     sessionId?: string;
     seed?: string;
     storyPlanItemId?: string;
@@ -287,6 +359,7 @@ async function main(): Promise<void> {
 
   const parsed = optionsSchema.parse({
     topic: raw.topic,
+    briefFile: raw.briefFile,
     sessionId: raw.sessionId,
     seed: raw.seed,
     storyPlanItemId: raw.storyPlanItemId,
@@ -296,7 +369,16 @@ async function main(): Promise<void> {
     story: raw.story,
   });
 
-  const sessionId = parsed.sessionId ?? slugifyTopic(parsed.topic);
+  const lessonBrief = parsed.briefFile
+    ? await readLessonBriefFile(parsed.briefFile)
+    : undefined;
+  const topicFromBrief = lessonBrief ? deriveTopicFromBrief(lessonBrief) : "";
+  const topic = (parsed.topic ?? topicFromBrief).trim();
+  if (topic.length === 0) {
+    throw new Error("Unable to determine topic; pass --topic");
+  }
+
+  const sessionId = parsed.sessionId ?? slugifyTopic(topic);
   const checkpointDir =
     parsed.checkpointDir ??
     path.join(
@@ -320,8 +402,13 @@ async function main(): Promise<void> {
   await mkdir(debugRootDir, { recursive: true });
 
   console.log(
-    `[welcome] generating session for topic "${parsed.topic}" (sessionId=${sessionId})`,
+    `[welcome] generating session for topic "${topic}" (sessionId=${sessionId})`,
   );
+  if (lessonBrief) {
+    console.log(
+      `[welcome/${sessionId}] using lesson brief from "${parsed.briefFile ?? ""}"`,
+    );
+  }
   const includeStoryOverride =
     parsed.noStory === true || parsed.story === false ? false : undefined;
   console.log(
@@ -345,7 +432,8 @@ async function main(): Promise<void> {
     label: `[welcome/${sessionId}]`,
     handler: async (_item, { progress }) => {
       return generateSession({
-        topic: parsed.topic,
+        topic,
+        lessonBrief,
         seed: parsed.seed,
         checkpointDir,
         debugRootDir,
@@ -361,7 +449,7 @@ async function main(): Promise<void> {
   const metadata =
     (await readCheckpoint<SessionMetadata>(metadataCheckpoint)) ??
     (await generateSessionMetadata({
-      topic: parsed.topic,
+      topic,
       plan: session.plan,
       storyTitle: session.story?.title,
     }));
@@ -369,12 +457,12 @@ async function main(): Promise<void> {
 
   const quizDefinitions =
     (await readCheckpoint<QuizDefinitions>(quizDefinitionsCheckpoint)) ??
-    (await generateQuizDefinitions(session.plan, session.quizzes));
+    (await generateQuizDefinitions(session.plan, session.quizzes, lessonBrief));
   await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
 
   const problems =
     (await readCheckpoint<CodeProblems>(codeProblemsCheckpoint)) ??
-    (await generateCodeProblems(session.plan, session.problems));
+    (await generateCodeProblems(session.plan, session.problems, lessonBrief));
   await writeCheckpoint(codeProblemsCheckpoint, problems);
 
   const filteredQuizzes = quizDefinitions.filter(
@@ -404,7 +492,7 @@ async function main(): Promise<void> {
     parsed.storyPlanItemId,
   );
 
-  await writeTemplateDoc(sessionId, parsed.topic, {
+  await writeTemplateDoc(sessionId, topic, {
     plan,
     tagline: metadata.tagline,
     emoji: metadata.emoji,
