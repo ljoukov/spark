@@ -185,10 +185,16 @@ const PlanGradeSchemaBase = z.object({
 export const PlanGradeSchema = PlanGradeSchemaBase;
 export type PlanGrade = z.infer<typeof PlanGradeSchema>;
 
-export function buildPlanIdeasUserPrompt(topic: string, seed?: number): string {
-  return [
-    `Topic: "${topic}"`,
-    `Seed: ${seed ?? "none"}`,
+export function buildPlanIdeasUserPrompt(
+  topic: string,
+  seed?: number,
+  lessonBrief?: string,
+): string {
+  const parts = [`Topic: "${topic}"`, `Seed: ${seed ?? "none"}`];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Task: Produce at least 3 distinct lesson ideas in Markdown.",
     "Each idea must include:",
@@ -209,7 +215,8 @@ export function buildPlanIdeasUserPrompt(topic: string, seed?: number): string {
     "- Promised Skills must cover every skill the coding blueprints need; avoid adding skills that are not used.",
     "",
     "Use clear labels for each idea (e.g., Historical Hook, Analogy Seed, Modern Tie-in Domain, Visual Motif, Naming Note) so they can be parsed into the plan.",
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildPlanParseUserPrompt(markdown: string): string {

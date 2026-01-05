@@ -177,9 +177,12 @@ export function buildProblemTechniquesUserPrompt(plan: {
   promised_skills: string[];
   concepts_to_teach: string[];
   coding_blueprints: { id: "p1" | "p2"; required_skills: string[] }[];
-}) {
-  return [
-    `Topic: "${plan.topic}"`,
+}, lessonBrief?: string): string {
+  const parts = [`Topic: "${plan.topic}"`];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Extract the problem-solving techniques needed to solve the two coding problems implied by the coding_blueprints (ids p1 and p2).",
     "Techniques include algorithms, patterns, invariants, decomposition steps, edge-case handling, math shortcuts, and data structure choices. Keep them aligned to the plan difficulty and promised skills; avoid advanced or unseen topics.",
@@ -192,7 +195,8 @@ export function buildProblemTechniquesUserPrompt(plan: {
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildProblemIdeasUserPrompt(
@@ -207,10 +211,13 @@ export function buildProblemIdeasUserPrompt(
   },
   techniques: readonly ProblemTechnique[],
   seed?: number,
+  lessonBrief?: string,
 ): string {
-  return [
-    `Topic: "${plan.topic}"`,
-    `Seed: ${seed ?? "none"}`,
+  const parts = [`Topic: "${plan.topic}"`, `Seed: ${seed ?? "none"}`];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     'Return "Problem Specs Markdown" with two sections titled "### p1" and "### p2".',
     "Each section must contain the FULL problem spec (no JSON) with these labeled fields in order:",
@@ -246,15 +253,17 @@ export function buildProblemIdeasUserPrompt(
     "",
     "REMEMBER: Use code execution tool run reference solution agains EACH of public and EACH of private tests and MAKE SURE THEY PASS.",
     "CRITICAL: problem and solution and tests should be CONSISTENT in that solution should solve the problem and all tests SHOULD PASS",
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildProblemsGenerateUserPrompt(
   plan: object,
   problemIdeasMarkdown: string,
   techniques: readonly ProblemTechnique[],
+  lessonBrief?: string,
 ): string {
-  return [
+  const parts: string[] = [
     'Parse the "Problem Specs Markdown" below (sections "### p1" and "### p2") into a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
     "Do NOT invent or alter content—carry over titles, statements, constraints, examples, hints, reference solutions, and ALL tests exactly as given. Preserve inputs/outputs verbatim (escape newlines with \\n).",
     "Each problem must include fields: id, title, difficulty (easy|medium|hard), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.",
@@ -262,6 +271,11 @@ export function buildProblemsGenerateUserPrompt(
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
     "Keep p1/p2 unique and map each spec to its matching id; do not swap or merge content.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests". Do not wrap the JSON in Markdown fences or add commentary.',
+  ];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -275,19 +289,26 @@ export function buildProblemsGenerateUserPrompt(
       null,
       2,
     ),
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildProblemsGradeUserPrompt(
   plan: object,
   problems: readonly CodingProblem[],
   techniques: readonly ProblemTechnique[],
+  lessonBrief?: string,
 ): string {
-  return [
+  const parts: string[] = [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
     "Fail if p1 and p2 are not meaningfully different (no reused statements, tests, or function goals).",
     "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
     "Output {pass:boolean, issues:string[], too_hard_reasons:string[], misaligned_skills:string[]} JSON only.",
+  ];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -301,7 +322,8 @@ export function buildProblemsGradeUserPrompt(
     "",
     "Problems JSON:",
     JSON.stringify(problems, null, 2),
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildProblemSolutionUserPrompt(problem: CodingProblem): string {

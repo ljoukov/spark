@@ -1,0 +1,68 @@
+Topic: BIO 2024 R1 Q1 — Palindromic Sums
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact integers and the exact spacing between numbers.
+- Output formatting for this problem: output the palindromic addends separated by single spaces on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (palindrome checks, search strategy, tie-break rules), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task, constraints, tie-break rule, and marking-scheme tests.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the tie-break rule exactly:
+  1) minimal number of palindromic addends (1, then 2, else 3)
+  2) among minimal-length sums: choose the one containing the lowest palindromic number
+  3) if still tied: choose the one containing the highest palindromic number
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 1: Palindromic Sums
+Every positive integer can be represented by a palindromic sum of at most three palindromic numbers
+(numbers that remain the same when their digits are reversed).
+To be a valid palindromic sum for an integer, the sum must contain the smallest possible number of
+palindromic numbers. It can contain duplicates.
+For example:
+• 12321 is a palindromic number already, so can be formed from just 12321;
+• 9610 is equal to 161 + 9449, which is the only pair of palindromic numbers that sum to 9610.
+There are triplets that sum to 9610, such as 282 + 1771 + 7557, but those contain too many
+palindromic numbers;
+• 1031 requires three palindromic numbers such as 2 + 494 + 535 and 4 + 88 + 939.
+1(a) [ 25 marks ]
+Write a program that reads in an integer (between 1 and 1,000,000 inclusive) and
+outputs 1, 2 or 3 palindromic numbers which together form a minimal length
+palindromic sum for the input.
+If there are several possible palindromic sums you should output the one containing
+the lowest palindromic number. If there are still several solutions remaining you
+should select the one containing the highest palindromic number.
+Sample run
+1031
+1 101 929
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] 1031 1 101 929
+[1] 1 1
+[1] 55 55
+[1] 12321 12321
+[2] 10 1 9
+[2] 894 6 888
+[2] 10219 1221 8998
+[2] 21802 10901 10901
+[2] 987654 51015 936639
+[2] 21 1 9 11
+[2] 109812 22 989 108801
+[2] 109988 88 10001 99899
+[2] 219803 1 109901 109901
+--- END MARKING ---

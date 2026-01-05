@@ -103,10 +103,13 @@ export function buildQuizIdeasUserPrompt(
   problems: readonly CodingProblem[],
   markdownPlanIdeas: string,
   seed?: number,
+  lessonBrief?: string,
 ): string {
-  return [
-    `Topic: "${plan.topic}"`,
-    `Seed: ${seed ?? "none"}`,
+  const parts = [`Topic: "${plan.topic}"`, `Seed: ${seed ?? "none"}`];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Provide Markdown describing intro and wrap-up quiz coverage that fully teaches the techniques required for the coding problems before students attempt them.",
     "Learners will see quizzes immediately after the story and BEFORE reading the coding problems, so the quizzes must stand alone without assuming the problem text or solution is known.",
@@ -129,7 +132,8 @@ export function buildQuizIdeasUserPrompt(
     "",
     "Original Plan Ideas:",
     markdownPlanIdeas,
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildQuizzesGenerateUserPrompt(
@@ -141,6 +145,7 @@ export function buildQuizzesGenerateUserPrompt(
     introQuiz?: number;
     wrapUpQuiz?: number;
   },
+  lessonBrief?: string,
 ): string {
   const introCount =
     typeof questionCounts?.introQuiz === "number" &&
@@ -172,8 +177,11 @@ export function buildQuizzesGenerateUserPrompt(
     "If any technique uses randomness or probabilistic sampling, add theory/questions on reproducibility (seeding or fixed witness sets) and on the residual probability of error.",
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
-  return [
-    constraints.join("\n"),
+  const parts: string[] = [constraints.join("\n")];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -186,7 +194,8 @@ export function buildQuizzesGenerateUserPrompt(
     "",
     "Quiz coverage Markdown:",
     coverageMarkdown,
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 export function buildQuizzesGradeUserPrompt(
@@ -197,6 +206,7 @@ export function buildQuizzesGradeUserPrompt(
     introQuiz?: number;
     wrapUpQuiz?: number;
   },
+  lessonBrief?: string,
 ): string {
   const introCount =
     typeof questionCounts?.introQuiz === "number" &&
@@ -208,7 +218,7 @@ export function buildQuizzesGradeUserPrompt(
     questionCounts.wrapUpQuiz > 0
       ? questionCounts.wrapUpQuiz
       : 10;
-  return [
+  const parts: string[] = [
     `Fail if intro_quiz does not have exactly ${introCount} questions or wrap_up_quiz does not have exactly ${wrapCount}.`,
     "Ensure all required skills covered.",
     "Ensure theory blocks present when needed for new concepts.",
@@ -220,6 +230,11 @@ export function buildQuizzesGradeUserPrompt(
     "Fail if techniques that use randomness/probabilistic sampling lack any coverage of reproducibility (seeding/fixed witnesses) or residual error probability.",
     "Flag any question that tests memorization of a provided solution rather than understanding of the underlying principle.",
     "Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]} JSON only.",
+  ];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -229,7 +244,8 @@ export function buildQuizzesGradeUserPrompt(
     "",
     "Quizzes JSON:",
     JSON.stringify(quizzes, null, 2),
-  ].join("\n");
+  );
+  return parts.join("\n");
 }
 
 const QUIZ_QUESTION_BASE_PROPERTIES: Record<string, Schema> = {

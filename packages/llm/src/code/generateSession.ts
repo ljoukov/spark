@@ -178,6 +178,7 @@ type StageReadResult<TValue> = {
 
 const MarkdownCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
+  lessonBriefHash: z.string().trim().min(1).optional(),
   markdown: z.string().trim().min(1),
 });
 
@@ -260,6 +261,7 @@ class IndependentSolutionFailureError extends Error {
 
 type SessionGenerationPipelineOptions = {
   topic: string;
+  lessonBrief?: string;
   seed?: number;
   checkpointDir?: string;
   debugRootDir?: string;
@@ -273,54 +275,67 @@ type SessionGenerationPipelineOptions = {
 
 type PlanIdeasCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   markdown: string;
 };
 
 type QuizIdeasCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   markdown: string;
 };
 
-type ProblemTechniquesCheckpoint = ProblemTechniquesPayload;
+type ProblemTechniquesCheckpoint = ProblemTechniquesPayload & {
+  lessonBriefHash?: string;
+};
 
 type PlanCheckpoint = SessionPlan & {
   topic: string;
+  lessonBriefHash?: string;
 };
 
 type PlanGradeCheckpoint = PlanGrade & {
   topic: string;
+  lessonBriefHash?: string;
 };
 
 type QuizzesCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   quizzes: SessionQuiz[];
 };
 
 type QuizzesGradeCheckpoint = QuizzesGrade & {
   topic: string;
+  lessonBriefHash?: string;
 };
 
 type ProblemIdeasCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   markdown: string;
 };
 
 type ProblemSolutionsCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   solutions: ProblemSolutions["solutions"];
 };
 
 type ProblemsCheckpoint = {
   topic: string;
+  lessonBriefHash?: string;
   problems: CodingProblem[];
 };
 
 type ProblemsGradeCheckpoint = ProblemsGrade & {
   topic: string;
+  lessonBriefHash?: string;
 };
 
 export class SessionGenerationPipeline {
   private readonly logger: JobProgressReporter;
+  private readonly lessonBriefHash: string | undefined;
 
   private readonly caches: {
     planIdeas?: StageCacheEntry<PlanIdeasStageValue>;
@@ -338,6 +353,20 @@ export class SessionGenerationPipeline {
 
   constructor(private readonly options: SessionGenerationPipelineOptions) {
     this.logger = useProgress(options.progress);
+    this.lessonBriefHash = options.lessonBrief
+      ? createHash("sha256").update(options.lessonBrief).digest("hex")
+      : undefined;
+  }
+
+  private checkpointLessonBriefMatches(checkpointHash: unknown): boolean {
+    const checkpoint =
+      typeof checkpointHash === "string" && checkpointHash.trim().length > 0
+        ? checkpointHash.trim()
+        : undefined;
+    if (this.lessonBriefHash) {
+      return checkpoint === this.lessonBriefHash;
+    }
+    return checkpoint === undefined;
   }
 
   private get checkpointDir(): string | undefined {
@@ -441,6 +470,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(result.data.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -458,6 +493,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: PlanIdeasCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -486,6 +522,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       const result = SessionPlanSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -508,7 +550,11 @@ export class SessionGenerationPipeline {
       return;
     }
     await mkdir(this.checkpointDir, { recursive: true });
-    const payload: PlanCheckpoint = { ...value, topic: this.options.topic };
+    const payload: PlanCheckpoint = {
+      ...value,
+      topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
+    };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
     });
@@ -532,6 +578,12 @@ export class SessionGenerationPipeline {
       ) {
         this.logger.log(
           `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (topic mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (lesson brief mismatch)`,
         );
         return undefined;
       }
@@ -560,6 +612,7 @@ export class SessionGenerationPipeline {
     const payload: PlanGradeCheckpoint = {
       ...value,
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -590,6 +643,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       return {
         value: { techniques: result.data.techniques },
         filePath,
@@ -612,6 +671,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: ProblemTechniquesCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       techniques: value.techniques,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -645,6 +705,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       return {
         value: { solutions: result.data.solutions },
         filePath,
@@ -667,6 +733,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: ProblemSolutionsCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       solutions: value.solutions,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -700,6 +767,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(result.data.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -717,6 +790,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: QuizIdeasCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -745,6 +819,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       const result = QuizzesSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -769,6 +849,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: QuizzesCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       quizzes: value.quizzes,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -797,6 +878,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       const result = QuizzesGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -822,6 +909,7 @@ export class SessionGenerationPipeline {
     const payload: QuizzesGradeCheckpoint = {
       ...value,
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -854,6 +942,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(result.data.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -871,6 +965,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: ProblemIdeasCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -901,6 +996,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       const result = ProblemsSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -925,6 +1026,7 @@ export class SessionGenerationPipeline {
     await mkdir(this.checkpointDir, { recursive: true });
     const payload: ProblemsCheckpoint = {
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
       problems: value.problems,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -953,6 +1055,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
       const result = ProblemsGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -978,6 +1086,7 @@ export class SessionGenerationPipeline {
     const payload: ProblemsGradeCheckpoint = {
       ...value,
       topic: this.options.topic,
+      lessonBriefHash: this.lessonBriefHash,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1032,6 +1141,7 @@ export class SessionGenerationPipeline {
           const userPrompt = buildPlanIdeasUserPrompt(
             this.options.topic,
             this.options.seed,
+            this.options.lessonBrief,
           );
           this.logger.log(
             `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
@@ -1193,7 +1303,10 @@ export class SessionGenerationPipeline {
     }
     return this.withStage("problem_techniques", async () => {
       const plan = await this.ensurePlan();
-      const userPrompt = buildProblemTechniquesUserPrompt(plan);
+      const userPrompt = buildProblemTechniquesUserPrompt(
+        plan,
+        this.options.lessonBrief,
+      );
       const debugOptions = this.createDebugOptions("problem-techniques");
       this.logger.log("[session/problem-techniques] extracting techniques");
       const payload = await generateJson<ProblemTechniquesPayload>({
@@ -1294,6 +1407,7 @@ export class SessionGenerationPipeline {
             problems,
             planIdeas.markdown,
             this.options.seed,
+            this.options.lessonBrief,
           );
           this.logger.log(
             `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
@@ -1399,6 +1513,7 @@ export class SessionGenerationPipeline {
         problems,
         techniques,
         this.options.questionCounts,
+        this.options.lessonBrief,
       );
       const debugOptions = this.createDebugOptions("quizzes-generate");
       this.logger.log("[session/quizzes] generating quiz JSON");
@@ -1457,6 +1572,7 @@ export class SessionGenerationPipeline {
         quizzes,
         techniques,
         this.options.questionCounts,
+        this.options.lessonBrief,
       );
       const debugOptions = this.createDebugOptions("quizzes-grade");
       this.logger.log("[session/quizzes-grade] grading quizzes");
@@ -1519,6 +1635,7 @@ export class SessionGenerationPipeline {
             plan,
             techniques,
             this.options.seed,
+            this.options.lessonBrief,
           );
           this.logger.log(
             `[session/problem-ideas] generating markdown (${attemptLabel})`,
@@ -1618,6 +1735,7 @@ export class SessionGenerationPipeline {
           plan,
           problemIdeas.markdown,
           techniques,
+          this.options.lessonBrief,
         );
         const debugOptions = this.createDebugOptions("problems-generate");
         this.logger.log("[session/problems] generating coding problems");
@@ -1794,6 +1912,7 @@ export class SessionGenerationPipeline {
         plan,
         problems,
         techniques,
+        this.options.lessonBrief,
       );
       const debugOptions = this.createDebugOptions("problems-grade");
       this.logger.log("[session/problems-grade] grading coding problems");
@@ -1954,6 +2073,7 @@ type SessionGenerationQuestionCounts =
 
 export type GenerateSessionOptions = {
   topic: string;
+  lessonBrief?: string;
   seed?: number;
   checkpointDir?: string;
   debugRootDir?: string;
@@ -2014,6 +2134,7 @@ export async function generateSession(
   const includeStory = options.includeStory ?? true;
   const pipeline = new SessionGenerationPipeline({
     topic: options.topic,
+    lessonBrief: options.lessonBrief,
     seed: options.seed,
     checkpointDir: options.checkpointDir,
     debugRootDir: options.debugRootDir,
