@@ -11,11 +11,6 @@ export const MAX_PROBLEM_ATTEMPTS = 3;
 export const MAX_PROBLEM_GRADE_RETRIES = 2;
 export const MAX_PROBLEM_SOLUTION_ATTEMPTS = 3;
 
-const CodingProblemFunctionParamSchema = z.object({
-  name: z.string().trim().min(1),
-  type: z.string().trim().min(1),
-});
-
 const CodingProblemExampleSchema = z.object({
   input: z.string().trim().min(1),
   output: z.string().trim().min(1),
@@ -73,12 +68,8 @@ export const CodingProblemSchema = z.object({
   difficulty: z.enum(["easy", "medium", "hard"]),
   story_callback: z.string().trim().min(1),
   statement_md: z.string().trim().min(1),
-  function: z.object({
-    name: z.string().trim().min(1),
-    signature: z.string().trim().min(1),
-    params: z.array(CodingProblemFunctionParamSchema),
-    returns: z.string().trim().min(1),
-  }),
+  input_format_md: z.string().trim().min(1),
+  output_format_md: z.string().trim().min(1),
   constraints: z.array(z.string().trim().min(1)).min(1),
   examples: z.array(CodingProblemExampleSchema).min(1),
   edge_cases: z.array(z.string().trim().min(1)).min(1),
@@ -225,19 +216,22 @@ export function buildProblemIdeasUserPrompt(
     "- Difficulty: (easy|medium|hard)",
     "- Story callback:",
     "- Statement:",
-    "- Function name:",
-    "- Function signature:",
-    "- Params: (name and type list)",
-    "- Returns:",
+    "- Input format:",
+    "- Output format:",
     "- Constraints:",
-    "- Examples: (at least two; include input, output, and explanation)",
+    "- Examples: (at least two; include stdin input, stdout output, and optional explanation)",
     "- Edge cases:",
     "- Hints:",
     "- Solution overview:",
-    "- Reference solution (Python code block):",
-    "- Public tests: (3-5 cases; list as input => output)",
-    "- Private tests: (3-8 cases; list as input => output)",
-    "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool; fix the spec until they pass.",
+    "- Reference solution (Python 3 program in a code block; read stdin, print stdout):",
+    "- Public tests: (3-5 cases; list as stdin => stdout)",
+    "- Private tests: (3-8 cases; list as stdin => stdout)",
+    "Input/Output style rules:",
+    "- Inputs must be plain text, consisting of 1+ lines; tokens are separated by whitespace (spaces/newlines).",
+    "- Do NOT use JSON, Python literals (e.g. [1,2], {'a':1}), or any structured encoding that requires complex parsing.",
+    "- Outputs must be plain text exactly as printed to stdout (no extra labels or prompts).",
+    "- The problem must be posed as a stdin/stdout program (competitive programming style). Do NOT ask for a function signature or return values.",
+    "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool (run the program with each test input as stdin and compare stdout); fix the spec until they pass.",
     "Spell out boundary behaviors so tests cannot imply hidden rules (e.g., whether a Rosette on the final index grants another turn, or how off-board moves behave) and ensure the reference solution matches that rule exactly.",
     "If any test fails when executed against the reference solution, revise the test/spec/solution until they are consistent—never return a failing test.",
     "The two problems must be clearly different: p2 must introduce a distinct goal/data shape/recurrence and require at least one additional technique beyond p1 (not a trivial re-skin).",
@@ -266,7 +260,11 @@ export function buildProblemsGenerateUserPrompt(
   const parts: string[] = [
     'Parse the "Problem Specs Markdown" below (sections "### p1" and "### p2") into a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
     "Do NOT invent or alter content—carry over titles, statements, constraints, examples, hints, reference solutions, and ALL tests exactly as given. Preserve inputs/outputs verbatim (escape newlines with \\n).",
-    "Each problem must include fields: id, title, difficulty (easy|medium|hard), story_callback, statement_md, function {name, signature, params[{name,type}], returns}, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.",
+    "Each problem must include fields: id, title, difficulty (easy|medium|hard), story_callback, statement_md, input_format_md, output_format_md, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.",
+    "Map Statement => statement_md, Input format => input_format_md, Output format => output_format_md.",
+    "Input/Output style rules:",
+    "- tests.*.input and examples.*.input are stdin text (1+ lines, whitespace-separated tokens); do not encode JSON or Python literals.",
+    "- tests.*.output and examples.*.output are exact stdout text; no extra prompts or labels.",
     "Do not re-run or change tests; just transcribe them into JSON. If something appears malformed, choose the most literal faithful transcription rather than patching logic.",
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
     "Keep p1/p2 unique and map each spec to its matching id; do not swap or merge content.",
@@ -301,8 +299,10 @@ export function buildProblemsGradeUserPrompt(
 ): string {
   const parts: string[] = [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
-    "Fail if p1 and p2 are not meaningfully different (no reused statements, tests, or function goals).",
+    "Fail if p1 and p2 are not meaningfully different (no reused statements, tests, or I/O goals).",
     "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
+    "Fail if the statement expects a function signature/return value instead of stdin/stdout program behavior.",
+    "Fail if the input/output style requires complex parsing (JSON, Python literals, nested structured encodings) instead of simple whitespace tokenization.",
     "Output {pass:boolean, issues:string[], too_hard_reasons:string[], misaligned_skills:string[]} JSON only.",
   ];
   if (lessonBrief) {
@@ -331,8 +331,8 @@ export function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
     .map((example, index) => {
       const parts = [
         `Example ${index + 1}:`,
-        `Input: ${example.input}`,
-        `Output: ${example.output}`,
+        `Input (stdin): ${example.input}`,
+        `Output (stdout): ${example.output}`,
       ];
       if (example.explanation) {
         parts.push(`Explanation: ${example.explanation}`);
@@ -354,15 +354,19 @@ export function buildProblemSolutionUserPrompt(problem: CodingProblem): string {
     `Problem ID: ${problem.id} — ${problem.title}`,
     "",
     "Write a correct Python 3 solution using ONLY the statement and examples below.",
-    "Use the exact function signature and return values (no input()/print()).",
-    "Use the code execution tool to verify your solution against the examples. If any example fails, fix the code and re-run until it passes.",
+    "Write a complete program: read from stdin, write to stdout (no prompts / extra text).",
+    "Input parsing must be simple BIO-style: 1+ lines of plain text; tokens are separated by whitespace. Use sys.stdin.read().split() or sys.stdin.readline().split() as appropriate.",
+    "Use the code execution tool to verify your program against the examples (feed the example input on stdin and check stdout). If any example fails, fix the code and re-run until it passes.",
     "Respond in plain text, wrapping only the final code in <CODE>...</CODE> tags. Do not return JSON, markdown fences, or any other text.",
-    "",
-    "Function signature:",
-    problem.function.signature,
     "",
     "Problem statement:",
     problem.statement_md,
+    "",
+    "Input format:",
+    problem.input_format_md,
+    "",
+    "Output format:",
+    problem.output_format_md,
     "",
     "Constraints:",
     constraints,
@@ -416,31 +420,6 @@ export const PROBLEMS_GRADE_RESPONSE_SCHEMA: Schema = {
     issues: { type: Type.ARRAY, items: { type: Type.STRING } },
     too_hard_reasons: { type: Type.ARRAY, items: { type: Type.STRING } },
     misaligned_skills: { type: Type.ARRAY, items: { type: Type.STRING } },
-  },
-};
-
-export const CODING_PROBLEM_FUNCTION_PARAM_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["name", "type"],
-  propertyOrdering: ["name", "type"],
-  properties: {
-    name: { type: Type.STRING, minLength: "1" },
-    type: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-export const CODING_PROBLEM_FUNCTION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["name", "signature", "params", "returns"],
-  propertyOrdering: ["name", "signature", "params", "returns"],
-  properties: {
-    name: { type: Type.STRING, minLength: "1" },
-    signature: { type: Type.STRING, minLength: "1" },
-    params: {
-      type: Type.ARRAY,
-      items: CODING_PROBLEM_FUNCTION_PARAM_RESPONSE_SCHEMA,
-    },
-    returns: { type: Type.STRING, minLength: "1" },
   },
 };
 
@@ -500,7 +479,8 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
           "difficulty",
           "story_callback",
           "statement_md",
-          "function",
+          "input_format_md",
+          "output_format_md",
           "constraints",
           "examples",
           "edge_cases",
@@ -515,7 +495,8 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
           "difficulty",
           "story_callback",
           "statement_md",
-          "function",
+          "input_format_md",
+          "output_format_md",
           "constraints",
           "examples",
           "edge_cases",
@@ -533,7 +514,8 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
           },
           story_callback: { type: Type.STRING, minLength: "1" },
           statement_md: { type: Type.STRING, minLength: "1" },
-          function: CODING_PROBLEM_FUNCTION_RESPONSE_SCHEMA,
+          input_format_md: { type: Type.STRING, minLength: "1" },
+          output_format_md: { type: Type.STRING, minLength: "1" },
           constraints: {
             type: Type.ARRAY,
             minItems: "1",
@@ -587,71 +569,51 @@ export type ProblemSolutions = z.infer<typeof ProblemSolutionsSchema>;
 
 export function normaliseProblemsPayload(payload: unknown): unknown {
   if (
-    payload &&
-    typeof payload === "object" &&
-    payload !== null &&
-    "problems" in payload &&
-    Array.isArray((payload as { problems?: unknown[] }).problems)
+    !payload ||
+    typeof payload !== "object" ||
+    payload === null ||
+    !("problems" in payload) ||
+    !Array.isArray((payload as { problems?: unknown[] }).problems)
   ) {
-    const original = payload as { problems: unknown[] };
-    const normalisedProblems = original.problems.map((problem) => {
-      if (
-        problem &&
-        typeof problem === "object" &&
-        problem !== null &&
-        "function" in problem
-      ) {
-        const fn = (problem as { function: unknown }).function;
-        if (fn && typeof fn === "object" && fn !== null && "returns" in fn) {
-          const returnsValue = (fn as { returns: unknown }).returns;
-          let returns = returnsValue;
-          if (
-            returnsValue &&
-            typeof returnsValue === "object" &&
-            returnsValue !== null &&
-            "type" in returnsValue &&
-            typeof (returnsValue as { type: unknown }).type === "string"
-          ) {
-            returns = (returnsValue as { type: string }).type;
-          }
-          return {
-            ...(problem as Record<string, unknown>),
-            function: {
-              ...(fn as Record<string, unknown>),
-              returns,
-            },
-            tests: (() => {
-              const tests = (problem as { tests?: unknown }).tests;
-              if (
-                tests &&
-                typeof tests === "object" &&
-                "private" in tests &&
-                Array.isArray((tests as { private?: unknown[] }).private)
-              ) {
-                const privateTests = (tests as { private: unknown[] }).private;
-                const privateCount = Number.isFinite(
-                  (tests as { private_count?: unknown }).private_count,
-                )
-                  ? (tests as { private_count?: number }).private_count
-                  : privateTests.length;
-                return {
-                  ...(tests as Record<string, unknown>),
-                  private_count: privateCount,
-                };
-              }
-              return (problem as { tests?: unknown }).tests;
-            })(),
-          };
-        }
-      }
-      return problem;
-    });
-    return {
-      ...(payload as Record<string, unknown>),
-      problems: normalisedProblems,
-    };
+    return payload;
   }
-  return payload;
+
+  const original = payload as { problems: unknown[] };
+  const normalisedProblems = original.problems.map((problem) => {
+    if (!problem || typeof problem !== "object" || problem === null) {
+      return problem;
+    }
+    const record = problem as Record<string, unknown>;
+    const tests = record.tests;
+    if (
+      !tests ||
+      typeof tests !== "object" ||
+      tests === null ||
+      !("private" in tests) ||
+      !Array.isArray((tests as { private?: unknown[] }).private)
+    ) {
+      return problem;
+    }
+
+    const privateTests = (tests as { private: unknown[] }).private;
+    const privateCountRaw = (tests as { private_count?: unknown }).private_count;
+    const privateCount = Number.isFinite(privateCountRaw as number)
+      ? (privateCountRaw as number)
+      : privateTests.length;
+
+    return {
+      ...record,
+      tests: {
+        ...(tests as Record<string, unknown>),
+        private_count: privateCount,
+      },
+    };
+  });
+
+  return {
+    ...(payload as Record<string, unknown>),
+    problems: normalisedProblems,
+  };
 }
 
 type MutableGlobal = typeof globalThis & {
@@ -733,157 +695,40 @@ export async function runSolutionAgainstTests(
   indexURL?: string,
 ): Promise<SolutionTestFailure[]> {
   const python = await ensurePythonRuntime(indexURL);
-  const paramNames = problem.function.params.map((param) => param.name);
   const testsJson = JSON.stringify([
     ...problem.tests.public,
     ...(problem.tests.private ?? []),
   ]);
-  const paramNamesJson = JSON.stringify(paramNames);
-  const functionName = problem.function.name;
   const script = [
-    "import ast",
     "import json",
-    "from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict",
-    "import math",
-    "import itertools",
-    "import collections",
-    "import heapq",
-    `param_names = json.loads(${JSON.stringify(paramNamesJson)})`,
+    "import io",
+    "import sys",
     `tests = json.loads(${JSON.stringify(testsJson)})`,
     `solution_source = ${JSON.stringify(solutionSource)}`,
-    "failures: List[Dict[str, object]] = []",
-    "global_env: Dict[str, object] = {}",
-    'exec("from typing import Any, Dict, List, Tuple, Set, Optional, Deque, DefaultDict\\nimport math\\nimport itertools\\nimport collections\\nimport heapq", global_env)',
-    "try:",
-    "    exec(solution_source, global_env)",
-    "except Exception as exc:",
-    "    failures.append({'index': -1, 'message': f'exec error: {exc}'})",
-    `fn = global_env.get(${JSON.stringify(functionName)})`,
-    "if not callable(fn):",
-    "    failures.append({'index': -1, 'message': 'solution did not define the target function'})",
-    "else:",
-    "    def parse_args(raw: str):",
-    "        text = raw.strip()",
-    "        if text == '':",
-    "            return []",
-    "        def _normalize_commas(expr: str) -> str:",
-    "            depth = 0",
-    "            in_str = False",
-    "            str_char = ''",
-    "            escape = False",
-    "            normalized: list[str] = []",
-    "            for ch in expr:",
-    "                if in_str:",
-    "                    normalized.append(ch)",
-    "                    if escape:",
-    "                        escape = False",
-    "                        continue",
-    "                    if ch == '\\\\':",
-    "                        escape = True",
-    "                        continue",
-    "                    if ch == str_char:",
-    "                        in_str = False",
-    "                    continue",
-    "                if ch in ('\"', \"'\"):",
-    "                    in_str = True",
-    "                    str_char = ch",
-    "                    normalized.append(ch)",
-    "                    continue",
-    "                if ch in '([{':",
-    "                    depth += 1",
-    "                    normalized.append(ch)",
-    "                    continue",
-    "                if ch in ')]}':",
-    "                    depth = max(0, depth - 1)",
-    "                    normalized.append(ch)",
-    "                    continue",
-    "                if ch == ',' and depth == 0:",
-    "                    normalized.append(';')",
-    "                    continue",
-    "                normalized.append(ch)",
-    "            return ''.join(normalized)",
-    "        try:",
-    "            env: Dict[str, object] = {}",
-    "            exec(text, {}, env)",
-    "            values = [env[name] for name in param_names if name in env]",
-    "            if len(values) == len(param_names):",
-    "                return values",
-    "            if len(values) > 0 and len(values) < len(param_names) and param_names[-1] == 'memo':",
-    "                return values + [None] * (len(param_names) - len(values))",
-    "        except Exception:",
-    "            pass",
-    "        normalized = _normalize_commas(text)",
-    "        if normalized != text:",
-    "            try:",
-    "                env: Dict[str, object] = {}",
-    "                exec(normalized, {}, env)",
-    "                values = [env[name] for name in param_names if name in env]",
-    "                if len(values) == len(param_names):",
-    "                    return values",
-    "                if len(values) > 0 and len(values) < len(param_names) and param_names[-1] == 'memo':",
-    "                    return values + [None] * (len(param_names) - len(values))",
-    "            except Exception:",
-    "                pass",
-    "        try:",
-    "            parsed = ast.literal_eval(text)",
-    "            if isinstance(parsed, dict) and all(name in parsed for name in param_names):",
-    "                return [parsed[name] for name in param_names]",
-    "            if len(param_names) == 1:",
-    "                return [parsed]",
-    "            if len(param_names) > 1 and param_names[-1] == 'memo':",
-    "                return [parsed] + [None] * (len(param_names) - 1)",
-    "            if isinstance(parsed, (list, tuple)) and len(parsed) == len(param_names):",
-    "                return list(parsed)",
-    "        except Exception:",
-    "            pass",
-    "        lines = [line for line in text.splitlines() if line.strip()]",
-    "        if len(lines) == len(param_names):",
-    "            parsed_lines = []",
-    "            for line in lines:",
-    "                try:",
-    "                    parsed_lines.append(ast.literal_eval(line))",
-    "                except Exception:",
-    "                    parsed_lines.append(line.strip())",
-    "            return parsed_lines",
-    "        parts = [part for part in text.split(',') if part.strip()]",
-    "        if len(parts) == len(param_names):",
-    "            parsed_parts = []",
-    "            for part in parts:",
-    "                try:",
-    "                    parsed_parts.append(ast.literal_eval(part))",
-    "                except Exception:",
-    "                    parsed_parts.append(part.strip())",
-    "            return parsed_parts",
-    "        if len(param_names) == 1:",
-    "            return [text]",
-    "        raise ValueError('unable to parse inputs for parameters')",
-    "",
-    "    def parse_expected(raw: str):",
-    "        text = raw.strip()",
-    "        try:",
-    "            return ast.literal_eval(text)",
-    "        except Exception:",
-    "            return text",
-    "",
-    "    def values_match(result, expected):",
-    "        if result == expected:",
-    "            return True",
-    "        if isinstance(result, float) and isinstance(expected, float):",
-    "            return abs(result - expected) < 1e-6",
-    "        return str(result).strip() == str(expected).strip()",
-    "",
-    "    for index, test in enumerate(tests):",
-    "        try:",
-    "            args = parse_args(test.get('input', ''))",
-    "            if len(args) != len(param_names):",
-    "                raise ValueError(f'parsed {len(args)} args, expected {len(param_names)}')",
-    "            expected = parse_expected(test.get('output', ''))",
-    "            actual = fn(*args)",
-    "        except Exception as exc:",
-    "            failures.append({'index': index, 'message': str(exc)})",
-    "            continue",
-    "        if not values_match(actual, expected):",
-    "            failures.append({'index': index, 'message': f'expected {repr(expected)} but got {repr(actual)}'})",
+    "failures = []",
+    "def normalize(text: str) -> str:",
+    "    return str(text).replace('\\r\\n', '\\n').replace('\\r', '\\n').rstrip()",
+    "for index, test in enumerate(tests):",
+    "    stdin_text = str(test.get('input', ''))",
+    "    expected = str(test.get('output', ''))",
+    "    global_env = {'__name__': '__main__'}",
+    "    buffer_in = io.StringIO(stdin_text)",
+    "    buffer_out = io.StringIO()",
+    "    original_stdin = sys.stdin",
+    "    original_stdout = sys.stdout",
+    "    try:",
+    "        sys.stdin = buffer_in",
+    "        sys.stdout = buffer_out",
+    "        exec(solution_source, global_env)",
+    "    except Exception as exc:",
+    "        failures.append({'index': index, 'message': f'{type(exc).__name__}: {exc}'})",
+    "        continue",
+    "    finally:",
+    "        sys.stdin = original_stdin",
+    "        sys.stdout = original_stdout",
+    "    actual = buffer_out.getvalue()",
+    "    if normalize(actual) != normalize(expected):",
+    "        failures.append({'index': index, 'message': f'expected {repr(normalize(expected))} but got {repr(normalize(actual))}'})",
     "",
     "json.dumps({'failures': failures})",
   ].join("\n");

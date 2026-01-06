@@ -494,6 +494,7 @@ function buildCodeProblemsPrompt(
     "- Do NOT include fields like statement_md, function, edge_cases, or tests.public/private; only the fields listed above.",
     "- Keep inputs/outputs as plain text (no code fences).",
     "- Keep code in Python 3; no type hints needed beyond the code block itself.",
+    "- The solution must be a complete program that reads stdin and prints stdout (no function signatures, no prompts).",
     "- Each test must include an explanation.",
     "- All strings must be non-empty; never return empty objects.",
   ];

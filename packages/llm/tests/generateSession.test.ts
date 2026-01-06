@@ -19,12 +19,8 @@ const baseProblem: Omit<CodingProblem, "id"> = {
   difficulty: "easy",
   story_callback: "callback",
   statement_md: "statement",
-  function: {
-    name: "",
-    signature: "",
-    params: [],
-    returns: "int",
-  },
+  input_format_md: "One integer on stdin.",
+  output_format_md: "One line with the answer.",
   constraints: ["constraint"],
   examples: [{ input: "1", output: "1" }],
   edge_cases: ["edge"],
@@ -32,7 +28,7 @@ const baseProblem: Omit<CodingProblem, "id"> = {
   solution_overview_md: "overview",
   reference_solution_py: "pass",
   tests: {
-    public: [],
+    public: [{ input: "1\n", output: "1" }],
   },
 };
 
@@ -44,10 +40,6 @@ function buildProblem(
     ...baseProblem,
     ...override,
     id,
-    function: {
-      ...baseProblem.function,
-      ...((override.function ?? {}) as CodingProblem["function"]),
-    },
     tests: {
       ...baseProblem.tests,
       ...((override.tests ?? {}) as CodingProblem["tests"]),
@@ -55,90 +47,71 @@ function buildProblem(
   };
 }
 
-describe("runSolutionAgainstTests parse_args", () => {
-  it("pads trailing memo parameters when omitted", async () => {
+describe("runSolutionAgainstTests stdin/stdout", () => {
+  it("executes the program with stdin and captures stdout", async () => {
     const problem = buildProblem({
-      function: {
-        name: "calculate_paperwork",
-        signature: "def calculate_paperwork(n: int, memo: dict = None) -> int:",
-        params: [
-          { name: "n", type: "int" },
-          { name: "memo", type: "dict" },
-        ],
-        returns: "int",
-      },
       tests: {
         public: [{ input: "5", output: "5" }],
       },
     });
     const solution = `
-def calculate_paperwork(n: int, memo: dict = None) -> int:
-    if memo is None:
-        memo = {}
-    memo[n] = memo.get(n, n)
-    return n
+import sys
+
+def main() -> None:
+    data = sys.stdin.read().strip()
+    print(data)
+
+if __name__ == "__main__":
+    main()
 `;
     const failures = await runSolutionAgainstTests(problem, solution);
     expect(failures).toEqual([]);
   });
 
-  it("parses comma-separated named arguments at top level", async () => {
+  it("normalizes newlines and ignores trailing whitespace", async () => {
     const problem = buildProblem({
-      function: {
-        name: "get_value",
-        signature: "def get_value(grid: list[str], row: int, col: int) -> str:",
-        params: [
-          { name: "grid", type: "list[str]" },
-          { name: "row", type: "int" },
-          { name: "col", type: "int" },
-        ],
-        returns: "str",
-      },
       tests: {
         public: [
           {
-            input: 'grid=["ABC", "DEF", "GHI"], row=1, col=2',
-            output: "F",
+            input: "10\n",
+            output: "20",
           },
         ],
       },
     });
     const solution = `
-def get_value(grid: list[str], row: int, col: int) -> str:
-    return grid[row][col]
+import sys
+
+tokens = sys.stdin.read().split()
+n = int(tokens[0])
+sys.stdout.write(str(2 * n) + "\\r\\n\\n")
 `;
     const failures = await runSolutionAgainstTests(problem, solution);
     expect(failures).toEqual([]);
   });
 
-  it("does not split commas inside string or list literals", async () => {
+  it("reports runtime errors as test failures", async () => {
     const problem = buildProblem({
       id: "p2",
-      function: {
-        name: "first_char",
-        signature:
-          "def first_char(grid: list[str], row: int, col: int) -> str:",
-        params: [
-          { name: "grid", type: "list[str]" },
-          { name: "row", type: "int" },
-          { name: "col", type: "int" },
-        ],
-        returns: "str",
-      },
       tests: {
         public: [
           {
-            input: 'grid=["a,b", "cd"], row=0, col=0',
-            output: "a",
+            input: "0\n",
+            output: "ok",
           },
         ],
       },
     });
     const solution = `
-def first_char(grid: list[str], row: int, col: int) -> str:
-    return grid[row][col]
+import sys
+
+value = int(sys.stdin.read().strip())
+if value == 0:
+    raise ValueError("boom")
+print("ok")
 `;
     const failures = await runSolutionAgainstTests(problem, solution);
-    expect(failures).toEqual([]);
+    expect(failures.length).toBe(1);
+    expect(failures[0]?.message).toContain("ValueError");
   });
 });

@@ -40,13 +40,14 @@ Hard code in a variable the following assumption about the student (we will late
 - `difficulty: "easy"`
 - `story_callback: string`
 - `statement_md: string`
-- `function: { name: string; signature: string; params: Array<{ name: string; type: string }>; returns: string }`
+- `input_format_md: string` (stdin format; plain text, whitespace-tokenized)
+- `output_format_md: string` (stdout format; plain text)
 - `constraints: string[]`
 - `examples: Array<{ input: string; output: string; explanation?: string }>`
 - `edge_cases: string[]`
 - `hints: string[]`
 - `solution_overview_md: string`
-- `reference_solution_py: string`
+- `reference_solution_py: string` (Python 3 program; reads stdin, prints stdout)
 - `tests: { public: Array<{ input: string; output: string }>; private: Array<{ input: string; output: string }>; private_count: number }`
 
 ## Pipeline
