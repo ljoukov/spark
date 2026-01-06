@@ -37,6 +37,7 @@ import {
   type ProblemsPayload,
 } from "./generateCodeProblems";
 import {
+  ASSUMPTIONS as HARD_CODED_ASSUMPTIONS,
   MAX_PLAN_ATTEMPTS,
   MAX_PLAN_GRADE_RETRIES,
   PlanGradeSchema,
@@ -213,6 +214,26 @@ function slugifyTopic(topic: string): string {
   const prefix = baseSlug.slice(0, cutoff).replace(/-+$/g, "");
   const safePrefix = prefix.length > 0 ? prefix : baseSlug.slice(0, maxLength);
   return `${safePrefix}-${hash}`;
+}
+
+function applyHardCodedAssumptions(plan: SessionPlan): {
+  plan: SessionPlan;
+  changed: boolean;
+} {
+  const expected = Array.from(HARD_CODED_ASSUMPTIONS);
+  const assumptionsMatch =
+    plan.assumptions.length === expected.length &&
+    plan.assumptions.every((assumption, index) => assumption === expected[index]);
+  if (assumptionsMatch) {
+    return { plan, changed: false };
+  }
+  return {
+    plan: {
+      ...plan,
+      assumptions: expected,
+    },
+    changed: true,
+  };
 }
 
 type SessionGenerationStageName =
@@ -1147,7 +1168,7 @@ export class SessionGenerationPipeline {
             `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
           );
           const contents = buildSingleUserPrompt(
-            "Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume base knowledge listed above. Call out new concepts when needed.",
+            `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`,
             userPrompt,
           );
           const markdown = await generateText({
@@ -1194,8 +1215,15 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/checkpoint] restored 'plan' from ${checkpoint.filePath}`,
       );
+      const hardened = applyHardCodedAssumptions(checkpoint.value);
+      if (hardened.changed) {
+        this.logger.log(
+          `[session/plan] overwriting assumptions in restored plan checkpoint at ${checkpoint.filePath}`,
+        );
+        await this.writePlanCheckpoint(hardened.plan);
+      }
       const entry: StageCacheEntry<SessionPlan> = {
-        value: checkpoint.value,
+        value: hardened.plan,
         source: "checkpoint",
         checkpointPath: checkpoint.filePath,
       };
@@ -1219,9 +1247,10 @@ export class SessionGenerationPipeline {
         progress: this.logger,
         debug: debugOptions,
       });
-      await this.writePlanCheckpoint(planJson);
+      const hardened = applyHardCodedAssumptions(planJson);
+      await this.writePlanCheckpoint(hardened.plan);
       const entry: StageCacheEntry<SessionPlan> = {
-        value: planJson,
+        value: hardened.plan,
         source: "generated",
       };
       this.caches.plan = entry;
@@ -1358,15 +1387,16 @@ export class SessionGenerationPipeline {
       debug: debugOptions,
     });
 
-    await this.writePlanCheckpoint(planJson);
+    const hardened = applyHardCodedAssumptions(planJson);
+    await this.writePlanCheckpoint(hardened.plan);
     const entry: StageCacheEntry<SessionPlan> = {
-      value: planJson,
+      value: hardened.plan,
       source: "generated",
     };
     this.caches.plan = entry;
 
     await this.invalidateStage("plan_grade");
-    return planJson;
+    return hardened.plan;
   }
 
   private async ensureQuizIdeasInternal(): Promise<

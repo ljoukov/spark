@@ -33,6 +33,7 @@ const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 
 const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;
+const QuizDefinitionsCheckpointSchema = z.array(QuizDefinitionSchema);
 
 const optionsSchema = z
   .object({
@@ -455,8 +456,47 @@ async function main(): Promise<void> {
     }));
   await writeCheckpoint(metadataCheckpoint, metadata);
 
+  const quizDefinitionsFromCheckpointRaw =
+    await readCheckpoint<unknown>(quizDefinitionsCheckpoint);
+  const quizDefinitionsFromCheckpoint = (() => {
+    if (quizDefinitionsFromCheckpointRaw === undefined) {
+      return undefined;
+    }
+    const parsedQuizDefinitions = QuizDefinitionsCheckpointSchema.safeParse(
+      quizDefinitionsFromCheckpointRaw,
+    );
+    if (!parsedQuizDefinitions.success) {
+      console.warn(
+        `[welcome/${sessionId}] quiz_definitions checkpoint schema mismatch; regenerating`,
+      );
+      return undefined;
+    }
+    const expectedQuestionCounts = new Map<string, number>();
+    for (const quiz of session.quizzes) {
+      expectedQuestionCounts.set(quiz.quiz_id, quiz.questions.length);
+    }
+    for (const [quizId, expectedCount] of expectedQuestionCounts.entries()) {
+      const checkpointQuiz = parsedQuizDefinitions.data.find(
+        (quiz) => quiz.id === quizId,
+      );
+      if (!checkpointQuiz) {
+        console.warn(
+          `[welcome/${sessionId}] quiz_definitions checkpoint missing quiz '${quizId}'; regenerating`,
+        );
+        return undefined;
+      }
+      const checkpointCount = checkpointQuiz.questions.length;
+      if (checkpointCount !== expectedCount) {
+        console.warn(
+          `[welcome/${sessionId}] quiz_definitions checkpoint has ${String(checkpointCount)} questions for '${quizId}' but session draft has ${String(expectedCount)}; regenerating`,
+        );
+        return undefined;
+      }
+    }
+    return parsedQuizDefinitions.data satisfies QuizDefinitions;
+  })();
   const quizDefinitions =
-    (await readCheckpoint<QuizDefinitions>(quizDefinitionsCheckpoint)) ??
+    quizDefinitionsFromCheckpoint ??
     (await generateQuizDefinitions(session.plan, session.quizzes, lessonBrief));
   await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
 

@@ -3,8 +3,13 @@ import { z } from "zod";
 
 export const ASSUMPTIONS = [
   "basic Python syntax",
+  "for",
+  "if",
   "lists",
   "integer division (//)",
+  "+",
+  "-",
+  "*",
   "modulo (%)",
 ] as const;
 
@@ -222,7 +227,7 @@ export function buildPlanIdeasUserPrompt(
 export function buildPlanParseUserPrompt(markdown: string): string {
   return [
     "Schema: {topic, difficulty, assumptions, story{storyTopic, protagonist?, anchor_event?, anchor_year?, anchor_place?, stakes?, analogy_seed?, modern_tie_in?, visual_motif?, naming_note?}, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
-    `Include relevant assumptions from ${JSON.stringify(ASSUMPTIONS)}`,
+    `Set assumptions exactly to ${JSON.stringify(ASSUMPTIONS)} (no additions).`,
     'Set "difficulty" to "easy", "medium", or "hard".',
     "Keep story.* strings compact: <=120 chars (stakes<=200, analogy_seed<=180, visual_motif<=15 words and <=160 chars).",
     "visual_motif must be one concrete object/scene only—no art styles, palettes, resolution tokens, or repeated adjectives.",
