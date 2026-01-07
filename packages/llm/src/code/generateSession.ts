@@ -2400,6 +2400,13 @@ export async function generateSession(
       );
     }
     await pipeline.invalidateStage("quizzes");
+    if (
+      quizzesGrade.uncovered_skills.length > 0 ||
+      quizzesGrade.missing_theory_for_concepts.length > 0 ||
+      quizzesGrade.missing_techniques.length > 0
+    ) {
+      await pipeline.invalidateStage("quiz_ideas");
+    }
   }
 
   if (!quizzes || !quizzesGrade) {
