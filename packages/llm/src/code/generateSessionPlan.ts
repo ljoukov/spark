@@ -28,7 +28,7 @@ export const PLAN_LIMITS = {
     stakes: 200,
     analogySeed: 180,
     modernTieIn: 120,
-    visualAnchor: 120,
+    visualMotif: 120,
     namingNote: 160,
   },
   partSummary: 160,
@@ -117,11 +117,11 @@ export const SessionPlanSchema = z
         .min(1)
         .max(PLAN_LIMITS.story.modernTieIn)
         .optional(),
-      visual_anchor: z
+      visual_motif: z
         .string()
         .trim()
         .min(1)
-        .max(PLAN_LIMITS.story.visualAnchor)
+        .max(PLAN_LIMITS.story.visualMotif)
         .optional(),
       naming_note: z
         .string()
