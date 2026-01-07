@@ -458,8 +458,7 @@ export const QUIZZES_RESPONSE_SCHEMA: Schema = {
   properties: {
     quizzes: {
       type: Type.ARRAY,
-      minItems: "2",
-      maxItems: "2",
+      minItems: "1",
       items: {
         type: Type.OBJECT,
         required: ["quiz_id", "questions"],
