@@ -66,11 +66,11 @@ Segmentation restructures the prose into narration slices and illustration promp
 
 ```text
 Requirements:
-1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.
+1. Provide `title`, `posterPrompt`, chronological `segments` (default 10; configurable), and `endingPrompt`.
 …
 2. `posterPrompt` … Visible text must include a bold 2-4 word title, the protagonist’s name, and a single 4-digit year. Keep every supporting element under six words and period appropriate.
 …
-4. For each of the ten `segments`:
+4. For each of the configured `segments`:
    • Provide `narration` … Alternate between the `M` and `F` voices whenever the flow allows.
    • Provide `imagePrompt` … Focus on subject, action, setting, and lighting cues.
 5. Keep each `imagePrompt` drawable as a cinematic single-scene illustration with modern storyboard energy; avoid multi-panel layouts, mirrored halves, or overly technical camera jargon.
@@ -78,7 +78,7 @@ Requirements:
 …
 9. Ensure the protagonist appears whenever the narration centres on them; environmental cutaways are fine when explicitly described.
 …
-13. Keep the ten story segments purely historical—save any modern tie-in for the `endingPrompt`, and keep it brief.
+13. Keep the story segments purely historical—save any modern tie-in for the `endingPrompt`, and keep it brief.
 ```
 
 The narration sentences generated here are now preserved verbatim through the image pipeline. Each frame’s narration bundle is attached to later grading and prompt-revision calls so the models can re-ground revisions without drifting from the original story beat.
@@ -143,7 +143,7 @@ The model must return JSON `replacements` where each entry includes a 1-based fr
 
 ### Poster Selection and Ending
 
-After the ten interior frames are locked:
+After the interior frames are locked (default 10):
 
 - **Poster candidates:** Each image set spins four concurrent poster renders against the same style prompt and leading frame references. A text-grade pass evaluates all candidates, flags catastrophic artefacts, and selects the most stunning acceptable poster.
 - **Poster typography:** The selector enforces the bold 2–4 word title, the protagonist’s name, and a single 4-digit year; any supporting text must stay under six words and remain period-appropriate.
@@ -164,11 +164,11 @@ Only the winning set is kept for downstream storage. The judge weighs prompt fid
 
 ## Media Packaging
 
-- **Filtering:** Frames 1-10 (indices 1..10) feed the session’s media timeline; poster and ending are excluded from narration assembly but re-encoded and uploaded as supplementary stills so the client can display them without Ken Burns motion.
+- **Filtering:** Story panels (indices 1..segmentCount, default 10) feed the session’s media timeline; poster and ending are excluded from narration assembly but re-encoded and uploaded as supplementary stills so the client can display them without Ken Burns motion.
 - **JPEG normalisation:** Images are re-encoded (quality 92, 4:4:4) prior to upload.
 - **Narration synthesis (post-judging):** The alternating `M` / `F` segments from the winning set are passed to the narration pipeline, keeping the same order as the frames.
 
-The result bundle contains the story text, accepted segmentation, storage paths for the ten canonical frames, poster/ending still references, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.
+The result bundle contains the story text, accepted segmentation, storage paths for the canonical story frames (default 10), poster/ending still references, and narration metadata. No runtime command knowledge is required to reason about these steps; the process hinges on prompt engineering, iterative grading, and consistent style handoff between model calls.
 
 ## Revise + Validate Flow
 

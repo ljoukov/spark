@@ -2250,6 +2250,7 @@ export type GenerateSessionOptions = {
   storyPlanItemId: string;
   storagePrefix?: string;
   includeStory?: boolean;
+  storySegmentCount?: number;
 };
 
 export type GenerateSessionResult = {
@@ -2430,6 +2431,7 @@ export async function generateSession(
       checkpointDir: options.checkpointDir
         ? path.join(options.checkpointDir, "story")
         : undefined,
+      storySegmentCount: options.storySegmentCount,
       lessonContext: {
         planTopic: plan.topic,
         promisedSkills: plan.promised_skills,
