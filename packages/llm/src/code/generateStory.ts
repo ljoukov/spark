@@ -3457,6 +3457,33 @@ export async function generateImageSets(
     ? { rootDir: options.debugRootDir, stage: "image-sets" }
     : undefined;
   const baseSubStage = options?.debugSubStage;
+  const normaliseDebugPathSegment = (value: string): string => {
+    const cleaned = value
+      .trim()
+      .replace(/[^a-z0-9\-_/]+/gi, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^[-_/]+|[-_/]+$/g, "");
+    return cleaned.length > 0 ? cleaned : "segment";
+  };
+  const resolveImageSetDebugRoot = (
+    imageSetLabel: "set_a" | "set_b",
+  ): string | undefined => {
+    if (!baseDebug?.rootDir) {
+      return undefined;
+    }
+    const segments = [baseSubStage, imageSetLabel]
+      .filter((segment): segment is string => typeof segment === "string")
+      .flatMap((segment) => segment.split("/"))
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+      .map((segment) => normaliseDebugPathSegment(segment));
+    return path.join(
+      baseDebug.rootDir,
+      "stages",
+      "image-sets",
+      ...segments,
+    );
+  };
   const buildDebug = (subStage: string): LlmDebugOptions | undefined => {
     if (!baseDebug) {
       return undefined;
@@ -3497,6 +3524,18 @@ export async function generateImageSets(
       ? adapter.startStage(`images/${imageSetLabel}`)
       : Symbol("stage");
     try {
+      const imageSetDebugRoot = resolveImageSetDebugRoot(imageSetLabel);
+      if (imageSetDebugRoot) {
+        try {
+          await rm(imageSetDebugRoot, { recursive: true, force: true });
+        } catch (error) {
+          adapter.log(
+            `[story/image-sets/${imageSetLabel}] failed to clear debug directory: ${errorAsString(
+              error,
+            )}`,
+          );
+        }
+      }
       const frameNarrationByIndex = new Map<number, readonly string[]>();
       for (const entry of panelEntries) {
         const narrationLines =
