@@ -28,7 +28,7 @@ export const PLAN_LIMITS = {
     stakes: 200,
     analogySeed: 180,
     modernTieIn: 120,
-    visualMotif: 160,
+    visualAnchor: 120,
     namingNote: 160,
   },
   partSummary: 160,
@@ -117,11 +117,11 @@ export const SessionPlanSchema = z
         .min(1)
         .max(PLAN_LIMITS.story.modernTieIn)
         .optional(),
-      visual_motif: z
+      visual_anchor: z
         .string()
         .trim()
         .min(1)
-        .max(PLAN_LIMITS.story.visualMotif)
+        .max(PLAN_LIMITS.story.visualAnchor)
         .optional(),
       naming_note: z
         .string()
@@ -394,6 +394,8 @@ export const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
     difficulty: { type: Type.STRING, enum: ["easy", "medium", "hard"] },
     assumptions: {
       type: Type.ARRAY,
+      minItems: String(ASSUMPTIONS.length),
+      maxItems: String(ASSUMPTIONS.length),
       items: {
         type: Type.STRING,
         minLength: "1",
@@ -476,13 +478,13 @@ export const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
       type: Type.ARRAY,
       items: {
         type: Type.STRING,
+        minLength: "1",
         maxLength: String(PLAN_LIMITS.concept),
       },
     },
     coding_blueprints: {
       type: Type.ARRAY,
-      minItems: "2",
-      maxItems: "2",
+      minItems: "1",
       items: {
         ...CODING_BLUEPRINT_RESPONSE_SCHEMA,
       },
