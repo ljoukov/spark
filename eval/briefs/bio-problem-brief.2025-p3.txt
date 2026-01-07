@@ -1,0 +1,77 @@
+Topic: BIO 2025 R1 Q3 — Short Fuse
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the number of distinct periods as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (state exploration, time fractions, set aggregation), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must compute the number of distinct periods exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: Short Fuse
+
+A fuse is a length of material that can be burned. This is an irregular process but when lit from one end a
+fuse completes burning in a fixed amount of time. If lit from both ends it will take half this time. A fuse
+can only be used once and when it has started to burn it cannot be paused.
+
+Given several fuses we can measure different continuous periods of time by lighting fuses when other
+fuses have finished burning. Fuses are lit at the instant another fuse stops burning and multiple fuses can
+be lit simultaneously. We cannot measure time in any other way.
+
+For example, given two fuses with a burn time of 1, we can measure various times as follows:
+• 0 — do not light any fuse;
+• 1 — light a single fuse at one end;
+• 2 — light a fuse at one end. When it finishes burning (at 1) light the other fuse at one end;
+• 0.5 — light both ends of a fuse simultaneously;
+• 1.5 — light both ends of a fuse simultaneously. When it finishes burning, light the other fuse at one end;
+• 0.75 — light both ends of the first fuse and one end of the second fuse simultaneously. At 0.5 the
+  first fuse has finished and the second has another 0.5 to burn. At this point light the second end of
+  the second fuse, so it completes burning in 0.25;
+• 0.25 — follow the directions for 0.75 but only start timing the period after the first fuse has finished.
+
+3(a) [ 25 marks ]
+Write a program to determine the number of distinct periods that can be measured by
+a set of fuses.
+
+Your program should first input a single integer, f (1 ≤ f ≤ 4), indicating the number of
+fuses. You should then input f integers, each between 1 and 5000 inclusive, giving the
+burn times for each fuse.
+You should output the number of possible periods that we can time with these fuses.
+Sample run
+2
+1 1
+7
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] 2 1 1 7
+[2] 1 1 3
+[2] 2 2 4 9
+[2] 2 1 3 11
+[2] 3 100 100 100 16
+[2] 3 7 14 14 24
+[2] 3 16 32 128 45
+[2] 3 10 11 12 89
+[2] 3 43 401 4757 101
+[2] 4 1 1 1 1 35
+[2] 4 1 2 4 8 133
+[2] 4 5 41 83 137 891
+[2] 4 1483 1801 3407 4999 1781
+--- END MARKING ---

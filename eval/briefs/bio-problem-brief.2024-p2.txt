@@ -1,0 +1,85 @@
+Topic: BIO 2024 R1 Q2 — Parsing Lists
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the ith value as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (list definitions, composition, bracket reduction), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement list manipulation exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 2: Parsing Lists
+
+In this task you will manipulate lists of integers to create new lists. There are three fundamental lists that
+you will start from:
+• E — the list of even integers, in order, starting with 2;
+• O — the list of odd integers, in order, starting with 1;
+• T — the list of integers, in order, where each one occurs the same number of times in the list as its
+  value, starting 1, 2, 2, 3, 3, 3, 4, 4, 4, 4, …
+
+Given a list L, L[i] indicates the value in the ith position of L. If L and R are two lists, L on the left and
+R on the right, when combined they are replaced by list C where the ith position of C is R[L[R[i]]].
+I.e. we find a value in list R, use it to find a value in list L and then use that value to find a final value in
+list R.
+
+For example, if we combine O (on the left) and E:
+• The 1st value in E is 2, the 2nd value in O is 3, and the 3rd value in E is 6;
+• The 2nd value in E is 4, the 4th value in O is 7, and the 7th value in E is 14;
+• The combined sequence is 6, 14, …
+A description, giving details on the required manipulations, contains lists as well as brackets. Lists in the
+description will be combined until there is only a single list remaining. Where part of a description lies
+between brackets, it is treated as an independent description and that part will be manipulated (without
+combination with external lists) until reduced to a single list, at which point those brackets are then
+removed. When a description contains no brackets, the leftmost two lists are repeatedly combined
+forming a new description, until a single list remains.
+
+For example:
+• E is a description of a single list, so there is nothing further to do;
+• OE involves a single combination leading to 6, 14, 22, 30, 38, …
+• E(OE) will be the combination of E with OE, i.e. 94, 222, 350, …
+• EOT is manipulated by first combining EO, then combining the resulting list with T, and is
+  equivalent to (EO)T.
+
+2(a) [ 25 marks ]
+Write a program that calculates the ith value in a fully manipulated description.
+
+Your program should input a string d of up to 12 characters (E, O, T or brackets)
+followed by i (1 ≤ i ≤ 260). You will not be required to access any value over 261.
+You should output the ith value in the fully manipulated description d.
+Sample run
+E(OE) 3
+350
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] E(OE) 3 350
+[2] T 1 1
+[2] O 123456 246911
+[2] EE 1 8
+[2] TOE 1000 354
+[2] (TO)E 555 266
+[2] T(OE) 2000 1430
+[2] (EO)(OE) 5000 2559830
+[2] E(OO)E 4433 2269458
+[2] E(O(OE)) 5566 182375894
+[2] T(OO(EO))T 987654 1108
+[2] EEEOEEEOEEEO 12345 103552892655
+[2] EE(O(EEEE))O 12345678 424194248808595199
+--- END MARKING ---
