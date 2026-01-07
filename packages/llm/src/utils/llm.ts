@@ -1439,7 +1439,9 @@ async function llmStream({
   const googlePromptContents = promptContents.map(
     convertLlmContentToGoogleContent,
   );
-  const config: GeminiCallConfig = {};
+  const config: GeminiCallConfig = {
+    maxOutputTokens: 32_000,
+  };
   const thinkingConfig: GeminiCallConfig["thinkingConfig"] = (() => {
     switch (options.modelId) {
       case "gemini-3-pro-preview":
