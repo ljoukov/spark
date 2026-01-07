@@ -505,26 +505,12 @@ async function main(): Promise<void> {
     (await generateCodeProblems(session.plan, session.problems, lessonBrief));
   await writeCheckpoint(codeProblemsCheckpoint, problems);
 
-  const filteredQuizzes = quizDefinitions.filter(
-    (quiz) => quiz.id === "intro_quiz" || quiz.id === "wrap_up_quiz",
-  );
-  const missingQuizId = ["intro_quiz", "wrap_up_quiz"].find((required) =>
-    filteredQuizzes.every((quiz) => quiz.id !== required),
-  );
-  if (missingQuizId) {
-    throw new Error(`quiz definitions missing required id '${missingQuizId}'`);
+  if (quizDefinitions.length === 0) {
+    throw new Error("quiz definitions are required for welcome sessions.");
   }
 
-  const filteredProblems = problems.filter(
-    (problem) => problem.slug === "p1" || problem.slug === "p2",
-  );
-  const missingProblemId = ["p1", "p2"].find((required) =>
-    filteredProblems.every((problem) => problem.slug !== required),
-  );
-  if (missingProblemId) {
-    throw new Error(
-      `code problems missing required slug '${missingProblemId}'`,
-    );
+  if (problems.length === 0) {
+    throw new Error("code problems are required for welcome sessions.");
   }
 
   const { plan, storyTitle } = convertSessionPlanToItems(
@@ -539,8 +525,8 @@ async function main(): Promise<void> {
     summary: metadata.summary,
     title: storyTitle,
   });
-  await writeQuizzesToTemplate(sessionId, filteredQuizzes);
-  await writeProblemsToTemplate(sessionId, filteredProblems);
+  await writeQuizzesToTemplate(sessionId, quizDefinitions);
+  await writeProblemsToTemplate(sessionId, problems);
 
   if (session.story) {
     await copyStoryToTemplate(sessionId, parsed.storyPlanItemId, session.story);

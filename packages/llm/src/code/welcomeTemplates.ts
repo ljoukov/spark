@@ -204,30 +204,16 @@ export async function generateWelcomeSessionTemplate(
     generation.plan,
     generation.quizzes,
   );
-  const filteredQuizzes = quizDefinitions.filter(
-    (quiz) => quiz.id === "intro_quiz" || quiz.id === "wrap_up_quiz",
-  );
-  const missingQuizId = ["intro_quiz", "wrap_up_quiz"].find((required) =>
-    filteredQuizzes.every((quiz) => quiz.id !== required),
-  );
-  if (missingQuizId) {
-    throw new Error(`quiz definitions missing required id '${missingQuizId}'`);
+  if (quizDefinitions.length === 0) {
+    throw new Error("quiz definitions are required for welcome templates.");
   }
 
   const codeProblems = await generateCodeProblems(
     generation.plan,
     generation.problems,
   );
-  const filteredProblems = codeProblems.filter(
-    (problem) => problem.slug === "p1" || problem.slug === "p2",
-  );
-  const missingProblemId = ["p1", "p2"].find((required) =>
-    filteredProblems.every((problem) => problem.slug !== required),
-  );
-  if (missingProblemId) {
-    throw new Error(
-      `code problems missing required slug '${missingProblemId}'`,
-    );
+  if (codeProblems.length === 0) {
+    throw new Error("code problems are required for welcome templates.");
   }
 
   const metadata = await generateSessionMetadata({
@@ -250,8 +236,8 @@ export async function generateWelcomeSessionTemplate(
     title: storyTitle,
   });
 
-  await writeQuizzesToTemplate(sessionId, filteredQuizzes);
-  await writeProblemsToTemplate(sessionId, filteredProblems);
+  await writeQuizzesToTemplate(sessionId, quizDefinitions);
+  await writeProblemsToTemplate(sessionId, codeProblems);
 
   return { sessionId, topic: parsed.topic, title: storyTitle };
 }

@@ -231,7 +231,7 @@ const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
 };
 
 const CodeProblemsPayloadSchema = z.object({
-  problems: z.array(CodeProblemSchema),
+  problems: z.array(CodeProblemSchema).min(1),
 });
 
 const CODE_PROBLEMS_RESPONSE_SCHEMA: Schema = {
@@ -240,8 +240,7 @@ const CODE_PROBLEMS_RESPONSE_SCHEMA: Schema = {
   properties: {
     problems: {
       type: Type.ARRAY,
-      minItems: "2",
-      maxItems: "2",
+      minItems: "1",
       items: CODE_PROBLEM_RESPONSE_SCHEMA,
     },
   },
@@ -476,10 +475,11 @@ function buildCodeProblemsPrompt(
   lessonBrief?: string,
 ): string {
   const parts: string[] = [
-    "Convert these two draft coding problems into Spark CodeProblem JSON (array with problems).",
+    "Convert these draft coding problems into Spark CodeProblem JSON (array with problems).",
     "",
     "Output must match the Spark CodeProblemSchema exactly. REQUIRED fields and types:",
-    "- slug: string (use 'p1' and 'p2' respectively; do not invent other slugs)",
+    "- slug: string (use the coding_blueprints ids exactly; do not invent other slugs)",
+    "- Include one problem per coding_blueprint, in the same order as listed.",
     "- title: string",
     "- topics: string[] (2-4 concise topics)",
     '- difficulty: "warmup" | "intro" | "easy" | "medium" | "hard" (use "easy" or "medium" here as appropriate)',
@@ -506,7 +506,7 @@ function buildCodeProblemsPrompt(
   parts.push(
     "",
     "Return JSON only in this shape (no prose):",
-    '{"problems":[{"slug":"p1","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1},{"slug":"p2","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1}]}',
+    '{"problems":[{"slug":"problem_id","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1}]}',
     "",
     `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
     "Promised skills:",
@@ -604,14 +604,13 @@ export function convertSessionPlanToItems(
   storyPlanItemId: string,
 ): { plan: PlanItem[]; storyTitle: string } {
   const problems = ProblemPlanItemsSchema.parse(session.problems);
-  const problemTitles: Record<"p1" | "p2", string> = {
-    p1: "",
-    p2: "",
-  };
+  const problemTitles = new Map<string, string>();
   for (const problem of problems) {
-    problemTitles[problem.id] = problem.title;
+    problemTitles.set(problem.id, problem.title);
   }
   const storyTitle = session.story?.title ?? session.plan.story.storyTopic;
+  let quizIndex = 0;
+  let problemIndex = 0;
   const parts = session.plan.parts.map((part) => {
     const base = {
       title: part.summary,
@@ -626,34 +625,26 @@ export function convertSessionPlanToItems(
           kind: "media" as const,
           title: storyTitle,
         };
-      case "intro_quiz":
+      case "quiz": {
+        quizIndex += 1;
+        const quizId = part.id ?? `quiz_${quizIndex}`;
         return {
           ...base,
-          id: "intro_quiz",
+          id: quizId,
           kind: "quiz" as const,
         };
-      case "coding_1": {
+      }
+      case "problem": {
+        problemIndex += 1;
+        const problemId = part.id ?? `p${problemIndex}`;
+        const problemTitle = problemTitles.get(problemId);
         return {
           ...base,
-          id: "p1",
+          id: problemId,
           kind: "problem" as const,
-          title: problemTitles.p1,
+          title: problemTitle ?? part.summary,
         };
       }
-      case "coding_2": {
-        return {
-          ...base,
-          id: "p2",
-          kind: "problem" as const,
-          title: problemTitles.p2,
-        };
-      }
-      case "wrap_up_quiz":
-        return {
-          ...base,
-          id: "wrap_up_quiz",
-          kind: "quiz" as const,
-        };
     }
   });
 

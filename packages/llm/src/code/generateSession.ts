@@ -61,6 +61,7 @@ import {
   buildQuizIdeasUserPrompt,
   buildQuizzesGenerateUserPrompt,
   buildQuizzesGradeUserPrompt,
+  type PlanQuizSpec,
   type QuizzesGrade,
   type QuizzesPayload,
   type SessionQuiz,
@@ -236,6 +237,102 @@ function applyHardCodedAssumptions(plan: SessionPlan): {
   };
 }
 
+function normalizePlanStructure(plan: SessionPlan): {
+  plan: SessionPlan;
+  changed: boolean;
+} {
+  let changed = false;
+  let quizIndex = 0;
+  let problemIndex = 0;
+  const normalizedParts = plan.parts.map((part) => {
+    if (part.kind === "quiz") {
+      quizIndex += 1;
+      const id = `quiz_${quizIndex}`;
+      if (part.id !== id) {
+        changed = true;
+      }
+      return { ...part, id };
+    }
+    if (part.kind === "problem") {
+      problemIndex += 1;
+      const id = `p${problemIndex}`;
+      if (part.id !== id) {
+        changed = true;
+      }
+      return { ...part, id };
+    }
+    if (part.question_count !== undefined) {
+      changed = true;
+      const { question_count: _questionCount, ...rest } = part;
+      return rest;
+    }
+    return part;
+  });
+
+  const normalizedBlueprints = plan.coding_blueprints.map((blueprint, index) => {
+    const id = `p${index + 1}`;
+    if (blueprint.id !== id) {
+      changed = true;
+    }
+    return { ...blueprint, id };
+  });
+
+  return {
+    plan: {
+      ...plan,
+      parts: normalizedParts,
+      coding_blueprints: normalizedBlueprints,
+    },
+    changed,
+  };
+}
+
+function normalizeSessionPlan(plan: SessionPlan): {
+  plan: SessionPlan;
+  changed: boolean;
+} {
+  let changed = false;
+  let normalized = plan;
+  const withAssumptions = applyHardCodedAssumptions(normalized);
+  if (withAssumptions.changed) {
+    changed = true;
+    normalized = withAssumptions.plan;
+  }
+  const withStructure = normalizePlanStructure(normalized);
+  if (withStructure.changed) {
+    changed = true;
+    normalized = withStructure.plan;
+  }
+  return { plan: normalized, changed };
+}
+
+function buildQuizSpecs(
+  plan: SessionPlan,
+  overrides?: SessionGenerationPipelineOptions["questionCounts"],
+): PlanQuizSpec[] {
+  const defaultCount =
+    typeof overrides?.defaultQuiz === "number" && overrides.defaultQuiz > 0
+      ? overrides.defaultQuiz
+      : 15;
+  const perQuiz = overrides?.perQuiz ?? {};
+  const specs: PlanQuizSpec[] = [];
+  for (const part of plan.parts) {
+    if (part.kind !== "quiz") {
+      continue;
+    }
+    const id = part.id ?? `quiz_${specs.length + 1}`;
+    const override = perQuiz[id];
+    const questionCount =
+      typeof override === "number" && override > 0
+        ? override
+        : typeof part.question_count === "number" && part.question_count > 0
+          ? part.question_count
+          : defaultCount;
+    specs.push({ id, summary: part.summary, questionCount });
+  }
+  return specs;
+}
+
 type SessionGenerationStageName =
   | "plan_ideas"
   | "plan"
@@ -270,6 +367,13 @@ class ProblemReferenceSolutionError extends Error {
   }
 }
 
+class ProblemSpecMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProblemSpecMismatchError";
+  }
+}
+
 class IndependentSolutionFailureError extends Error {
   constructor(
     readonly problemId: string,
@@ -288,8 +392,8 @@ type SessionGenerationPipelineOptions = {
   debugRootDir?: string;
   progress?: SessionProgress;
   questionCounts?: {
-    introQuiz?: number;
-    wrapUpQuiz?: number;
+    defaultQuiz?: number;
+    perQuiz?: Record<string, number>;
   };
   pythonIndexUrl?: string;
 };
@@ -1168,7 +1272,7 @@ export class SessionGenerationPipeline {
             `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
           );
           const contents = buildSingleUserPrompt(
-            `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and five-part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`,
+            `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and the requested part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`,
             userPrompt,
           );
           const markdown = await generateText({
@@ -1215,15 +1319,15 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/checkpoint] restored 'plan' from ${checkpoint.filePath}`,
       );
-      const hardened = applyHardCodedAssumptions(checkpoint.value);
-      if (hardened.changed) {
+      const normalized = normalizeSessionPlan(checkpoint.value);
+      if (normalized.changed) {
         this.logger.log(
           `[session/plan] overwriting assumptions in restored plan checkpoint at ${checkpoint.filePath}`,
         );
-        await this.writePlanCheckpoint(hardened.plan);
+        await this.writePlanCheckpoint(normalized.plan);
       }
       const entry: StageCacheEntry<SessionPlan> = {
-        value: hardened.plan,
+        value: normalized.plan,
         source: "checkpoint",
         checkpointPath: checkpoint.filePath,
       };
@@ -1247,10 +1351,10 @@ export class SessionGenerationPipeline {
         progress: this.logger,
         debug: debugOptions,
       });
-      const hardened = applyHardCodedAssumptions(planJson);
-      await this.writePlanCheckpoint(hardened.plan);
+      const normalized = normalizeSessionPlan(planJson);
+      await this.writePlanCheckpoint(normalized.plan);
       const entry: StageCacheEntry<SessionPlan> = {
-        value: hardened.plan,
+        value: normalized.plan,
         source: "generated",
       };
       this.caches.plan = entry;
@@ -1387,16 +1491,16 @@ export class SessionGenerationPipeline {
       debug: debugOptions,
     });
 
-    const hardened = applyHardCodedAssumptions(planJson);
-    await this.writePlanCheckpoint(hardened.plan);
+    const normalized = normalizeSessionPlan(planJson);
+    await this.writePlanCheckpoint(normalized.plan);
     const entry: StageCacheEntry<SessionPlan> = {
-      value: hardened.plan,
+      value: normalized.plan,
       source: "generated",
     };
     this.caches.plan = entry;
 
     await this.invalidateStage("plan_grade");
-    return hardened.plan;
+    return normalized.plan;
   }
 
   private async ensureQuizIdeasInternal(): Promise<
@@ -1420,6 +1524,7 @@ export class SessionGenerationPipeline {
     }
     const planEntry = await this.ensurePlanInternal();
     const plan = planEntry.value;
+    const quizSpecs = buildQuizSpecs(plan, this.options.questionCounts);
     const planIdeas = await this.ensurePlanIdeas();
     const techniques = await this.ensureProblemTechniques();
     const problems = await this.ensureProblems();
@@ -1433,6 +1538,7 @@ export class SessionGenerationPipeline {
           );
           const userPrompt = buildQuizIdeasUserPrompt(
             plan,
+            quizSpecs,
             techniques,
             problems,
             planIdeas.markdown,
@@ -1480,35 +1586,32 @@ export class SessionGenerationPipeline {
     return entry.value;
   }
 
-  private validateQuizCounts(quizzes: QuizzesPayload): void {
-    const introCount =
-      typeof this.options.questionCounts?.introQuiz === "number" &&
-      this.options.questionCounts.introQuiz > 0
-        ? this.options.questionCounts.introQuiz
-        : 15;
-    const wrapCount =
-      typeof this.options.questionCounts?.wrapUpQuiz === "number" &&
-      this.options.questionCounts.wrapUpQuiz > 0
-        ? this.options.questionCounts.wrapUpQuiz
-        : 10;
-    let introQuestions = 0;
-    let wrapQuestions = 0;
+  private validateQuizCounts(
+    quizzes: QuizzesPayload,
+    quizSpecs: readonly PlanQuizSpec[],
+  ): void {
+    const expected = new Map(
+      quizSpecs.map((quiz) => [quiz.id, quiz.questionCount]),
+    );
+    const seen = new Set<string>();
     for (const quiz of quizzes.quizzes) {
-      if (quiz.quiz_id === "intro_quiz") {
-        introQuestions = quiz.questions.length;
-      } else if (quiz.quiz_id === "wrap_up_quiz") {
-        wrapQuestions = quiz.questions.length;
+      const expectedCount = expected.get(quiz.quiz_id);
+      if (expectedCount === undefined) {
+        throw new Error(`unexpected quiz_id '${quiz.quiz_id}'`);
       }
+      if (quiz.questions.length !== expectedCount) {
+        throw new Error(
+          `quiz '${quiz.quiz_id}' expected ${expectedCount} questions but found ${quiz.questions.length}`,
+        );
+      }
+      if (seen.has(quiz.quiz_id)) {
+        throw new Error(`duplicate quiz_id '${quiz.quiz_id}'`);
+      }
+      seen.add(quiz.quiz_id);
     }
-    if (introQuestions !== introCount) {
-      throw new Error(
-        `intro_quiz expected ${introCount} questions but found ${introQuestions}`,
-      );
-    }
-    if (wrapQuestions !== wrapCount) {
-      throw new Error(
-        `wrap_up_quiz expected ${wrapCount} questions but found ${wrapQuestions}`,
-      );
+    if (seen.size !== expected.size) {
+      const missing = [...expected.keys()].filter((id) => !seen.has(id));
+      throw new Error(`missing quizzes for ids: ${missing.join(", ")}`);
     }
   }
 
@@ -1518,12 +1621,14 @@ export class SessionGenerationPipeline {
     if (this.caches.quizzes) {
       return this.caches.quizzes;
     }
+    const plan = await this.ensurePlan();
+    const quizSpecs = buildQuizSpecs(plan, this.options.questionCounts);
     const checkpoint = await this.readQuizzesCheckpoint();
     if (checkpoint) {
       this.logger.log(
         `[session/checkpoint] restored 'quizzes' from ${checkpoint.filePath}`,
       );
-      this.validateQuizCounts(checkpoint.value);
+      this.validateQuizCounts(checkpoint.value, quizSpecs);
       const entry: StageCacheEntry<QuizzesPayload> = {
         value: checkpoint.value,
         source: "checkpoint",
@@ -1532,7 +1637,6 @@ export class SessionGenerationPipeline {
       this.caches.quizzes = entry;
       return entry;
     }
-    const plan = await this.ensurePlan();
     const quizIdeas = await this.ensureQuizIdeas();
     const techniques = await this.ensureProblemTechniques();
     const problems = await this.ensureProblems();
@@ -1542,7 +1646,7 @@ export class SessionGenerationPipeline {
         quizIdeas.markdown,
         problems,
         techniques,
-        this.options.questionCounts,
+        quizSpecs,
         this.options.lessonBrief,
       );
       const debugOptions = this.createDebugOptions("quizzes-generate");
@@ -1558,7 +1662,7 @@ export class SessionGenerationPipeline {
         progress: this.logger,
         debug: debugOptions,
       });
-      this.validateQuizCounts(quizzes);
+      this.validateQuizCounts(quizzes, quizSpecs);
       await this.writeQuizzesCheckpoint(quizzes);
       const entry: StageCacheEntry<QuizzesPayload> = {
         value: quizzes,
@@ -1594,6 +1698,7 @@ export class SessionGenerationPipeline {
       return entry;
     }
     const plan = await this.ensurePlan();
+    const quizSpecs = buildQuizSpecs(plan, this.options.questionCounts);
     const quizzes = await this.ensureQuizzes();
     const techniques = await this.ensureProblemTechniques();
     return this.withStage("quizzes_grade", async () => {
@@ -1601,7 +1706,7 @@ export class SessionGenerationPipeline {
         plan,
         quizzes,
         techniques,
-        this.options.questionCounts,
+        quizSpecs,
         this.options.lessonBrief,
       );
       const debugOptions = this.createDebugOptions("quizzes-grade");
@@ -1673,7 +1778,7 @@ export class SessionGenerationPipeline {
           const markdown = await generateText({
             modelId: TEXT_MODEL_ID,
             contents: buildSingleUserPrompt(
-              "Generate full Problem Specs Markdown (p1 and p2) with verified examples and tests.",
+              "Generate full Problem Specs Markdown for all problems with verified examples and tests.",
               userPrompt,
             ),
             tools: [{ type: "code-execution" }],
@@ -1739,12 +1844,41 @@ export class SessionGenerationPipeline {
     );
   }
 
+  private validateProblemsAgainstPlan(
+    plan: SessionPlan,
+    payload: ProblemsPayload,
+  ): void {
+    const expectedIds = plan.coding_blueprints.map((blueprint) => blueprint.id);
+    const expected = new Set(expectedIds);
+    const seen = new Set<string>();
+    for (const problem of payload.problems) {
+      if (!expected.has(problem.id)) {
+        throw new ProblemSpecMismatchError(
+          `unexpected problem id '${problem.id}' (expected: ${expectedIds.join(", ")})`,
+        );
+      }
+      if (seen.has(problem.id)) {
+        throw new ProblemSpecMismatchError(
+          `duplicate problem id '${problem.id}'`,
+        );
+      }
+      seen.add(problem.id);
+    }
+    if (seen.size !== expected.size) {
+      const missing = expectedIds.filter((id) => !seen.has(id));
+      throw new ProblemSpecMismatchError(
+        `missing problems for ids: ${missing.join(", ")}`,
+      );
+    }
+  }
+
   private async ensureProblemsInternal(): Promise<
     StageCacheEntry<ProblemsPayload>
   > {
     if (this.caches.problems) {
       return this.caches.problems;
     }
+    const plan = await this.ensurePlan();
     const checkpoint = await this.readProblemsCheckpoint();
     let problemsPayload: ProblemsPayload;
     let source: StageCacheEntry<ProblemsPayload>["source"] = "generated";
@@ -1785,6 +1919,7 @@ export class SessionGenerationPipeline {
       });
     }
 
+    this.validateProblemsAgainstPlan(plan, problemsPayload);
     this.logger.log("[session/problems] validating reference solutions");
     await this.validateReferenceSolutions(problemsPayload);
     await this.writeProblemsCheckpoint(problemsPayload);
@@ -2203,9 +2338,12 @@ export async function generateSession(
     try {
       problems = await pipeline.ensureProblems();
     } catch (error) {
-      if (error instanceof ProblemReferenceSolutionError) {
+      if (
+        error instanceof ProblemReferenceSolutionError ||
+        error instanceof ProblemSpecMismatchError
+      ) {
         logger.log(
-          `[session/problems] reference solution check failed (attempt ${attempt} of ${MAX_PROBLEM_GRADE_RETRIES + 1}): ${error.message}`,
+          `[session/problems] validation failed (attempt ${attempt} of ${MAX_PROBLEM_GRADE_RETRIES + 1}): ${error.message}`,
         );
         if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
           throw new Error(
