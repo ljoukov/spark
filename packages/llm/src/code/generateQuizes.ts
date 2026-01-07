@@ -103,6 +103,57 @@ export type PlanQuizSpec = {
   questionCount: number;
 };
 
+type QuizCoverageRequirement = {
+  quizId: string;
+  problemIds: string[];
+  techniqueIds: string[];
+};
+
+function buildQuizCoverageRequirements(
+  plan: SessionPlan,
+  techniques: readonly ProblemTechnique[],
+): QuizCoverageRequirement[] {
+  const quizProblems = new Map<string, string[]>();
+  let quizIndex = 0;
+  let problemIndex = 0;
+  let currentQuizId: string | undefined;
+
+  for (const part of plan.parts) {
+    if (part.kind === "quiz") {
+      quizIndex += 1;
+      const quizId = part.id ?? `quiz_${quizIndex}`;
+      currentQuizId = quizId;
+      if (!quizProblems.has(quizId)) {
+        quizProblems.set(quizId, []);
+      }
+      continue;
+    }
+    if (part.kind === "problem") {
+      problemIndex += 1;
+      const problemId = part.id ?? `p${problemIndex}`;
+      if (currentQuizId) {
+        const problems = quizProblems.get(currentQuizId);
+        if (problems) {
+          problems.push(problemId);
+        }
+      }
+    }
+  }
+
+  const requirements: QuizCoverageRequirement[] = [];
+  for (const [quizId, problemIds] of quizProblems.entries()) {
+    const techniqueIds = techniques
+      .filter((technique) =>
+        technique.applies_to.some((problemId) =>
+          problemIds.includes(problemId),
+        ),
+      )
+      .map((technique) => technique.id);
+    requirements.push({ quizId, problemIds, techniqueIds });
+  }
+  return requirements;
+}
+
 export function buildQuizIdeasUserPrompt(
   plan: SessionPlan,
   quizSpecs: readonly PlanQuizSpec[],
@@ -125,11 +176,30 @@ export function buildQuizIdeasUserPrompt(
           )
           .join("\n")
       : "None";
+  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageLines =
+    coverageRequirements.length > 0
+      ? coverageRequirements
+          .map((coverage) => {
+            const problems =
+              coverage.problemIds.length > 0
+                ? coverage.problemIds.join(", ")
+                : "none";
+            const techniqueIds =
+              coverage.techniqueIds.length > 0
+                ? coverage.techniqueIds.join(", ")
+                : "none";
+            return `- ${coverage.quizId}: introduce techniques [${techniqueIds}] for problems [${problems}]`;
+          })
+          .join("\n")
+      : "None";
   parts.push(
     "",
     "Provide Markdown describing quiz coverage that fully teaches the techniques required for each coding problem before students reach that problem in the lesson flow.",
     "Learners see quizzes according to the plan order below; quizzes must stand alone without assuming the problem text or solution is known.",
     "Each quiz must use its specified question count.",
+    "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
+    "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
     "Avoid quoting or previewing the reference solutions; keep the focus on concepts, patterns, and how to reason through the problems.",
     "Include theory primers when a technique or concept is not already covered by assumptions.",
     "Treat modulo (%) as an operator-only assumption; if modular arithmetic properties (cycles, congruence, divisibility) are needed, include a brief refresher.",
@@ -137,6 +207,9 @@ export function buildQuizIdeasUserPrompt(
     "Call out misconceptions, preconditions, and limitations (e.g., when a heuristic can give false positives, or when a recurrence no longer fits) so quizzes can include checks on them.",
     "If any technique involves randomness or probabilistic error, include coverage on reproducibility (seeding/fixed witness sets) and on the residual error probability/one-way nature of the guarantee.",
     "Call out which techniques are introduced in theory blocks vs. practiced in questions.",
+    "",
+    "Quiz-to-problem technique coverage requirements:",
+    coverageLines,
     "",
     "Quiz requirements:",
     quizSpecLines,
@@ -178,6 +251,23 @@ export function buildQuizzesGenerateUserPrompt(
           )
           .join("\n")
       : "None";
+  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageLines =
+    coverageRequirements.length > 0
+      ? coverageRequirements
+          .map((coverage) => {
+            const problems =
+              coverage.problemIds.length > 0
+                ? coverage.problemIds.join(", ")
+                : "none";
+            const techniqueIds =
+              coverage.techniqueIds.length > 0
+                ? coverage.techniqueIds.join(", ")
+                : "none";
+            return `- ${coverage.quizId}: introduce techniques [${techniqueIds}] for problems [${problems}]`;
+          })
+          .join("\n")
+      : "None";
   const constraints: string[] = [
     quizCountLine,
     'Each quiz definition must include "quiz_id", optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
@@ -186,6 +276,8 @@ export function buildQuizzesGenerateUserPrompt(
     "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
     "Each quiz must match the required question counts listed below.",
     "Ensure techniques needed for each problem are introduced in quizzes that appear before that problem in the plan order.",
+    "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
+    "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
     "Quizzes must stand alone; never assume the problem text is known or refer to 'in problem X'.",
     "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution.",
     "covers_techniques must use ids from the provided Problem Techniques JSON.",
@@ -203,6 +295,9 @@ export function buildQuizzesGenerateUserPrompt(
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
   parts.push(
+    "",
+    "Quiz-to-problem technique coverage requirements:",
+    coverageLines,
     "",
     "Quiz counts:",
     quizSpecLines,

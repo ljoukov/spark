@@ -260,6 +260,7 @@ export function buildPlanParseUserPrompt(markdown: string): string {
     "Keep story.* strings compact: <=120 chars (stakes<=200, analogy_seed<=180, visual_motif<=15 words and <=160 chars).",
     "visual_motif must be one concrete object/scene only—no art styles, palettes, resolution tokens, or repeated adjectives.",
     'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
+    "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/problems and any wrap-up quiz.",
     "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
     "Include one coding_blueprint per problem part, in the same order as the problem parts.",
     "Promised skills must include every item listed under coding_blueprints.required_skills; add missing skills instead of changing the blueprint requirements.",
