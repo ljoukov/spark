@@ -2237,7 +2237,7 @@ export async function generateSession(
         `Problem grading failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${problemsGrade.issues.join("; ")}`,
       );
     }
-    await pipeline.invalidateStage("problems");
+    await pipeline.invalidateStage("problem_ideas");
   }
 
   if (!problems || !problemsGrade) {
