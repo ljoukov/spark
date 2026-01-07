@@ -11,18 +11,19 @@ Exactness rules (what “exactly” means)
 - Do not add, remove, or reorder marking-scheme tests.
 
 Session structure
-- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
-- p1 should teach the core techniques needed for p2 (alphabet value mapping, modular wrap, left-to-right processing), but MUST NOT reuse the same statement or the marking tests.
-- p2 MUST be the official problem below, with the same task and constraints.
+- The session must follow this exact order: story, quiz1 (question_count=10), problem1, quiz2 (question_count=10), problem2, quiz3 (question_count=10), problem3, quiz4 (wrap-up, question_count=7).
+- problem3 is the official BIO problem below, with the same task and constraints.
+- problem1 and problem2 should teach the core techniques needed for problem3 (alphabet value mapping, modular wrap, left-to-right processing), but MUST NOT reuse the same statement or the marking tests.
+- The session must use progressive disclosure: problem1 is simpler than problem2; quiz1 introduces what is needed to solve problem1; quiz2 introduces what is new for problem2; quiz3 introduces what is needed for problem3; the lesson is focused on enabling the student to solve problem3.
 
-Locked requirements for problem p2 (official)
-- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
-- Examples shown to the learner for p2 must use only examples already present in this brief:
+Locked requirements for problem3 (official)
+- The problem3 statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for problem3 must use only examples already present in this brief:
   - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
   - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
-- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
-- The p2 reference solution must implement the decryption logic exactly (reverse of the encryption scheme described).
-- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+- The problem3 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The problem3 reference solution must implement the decryption logic exactly (reverse of the encryption scheme described).
+- The problem3 reference solution must be deterministic and must match the expected output formatting exactly.
 
 --- OFFICIAL PROBLEM (verbatim) ---
 Question 1: Decrypt
