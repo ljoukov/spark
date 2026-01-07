@@ -41,14 +41,8 @@ export const PLAN_LIMITS = {
 } as const;
 
 const PlanPartSchema = z.object({
-  order: z.union([
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-    z.literal(5),
-  ]),
-  kind: z.enum(["story", "intro_quiz", "coding_1", "coding_2", "wrap_up_quiz"]),
+  order: z.number().int().min(1),
+  kind: z.enum(["story", "quiz", "problem"]),
   summary: z
     .string()
     .trim()
@@ -63,10 +57,12 @@ const PlanPartSchema = z.object({
         });
       }
     }),
+  question_count: z.number().int().positive().optional(),
+  id: z.string().trim().min(1).optional(),
 });
 
 const CodingBlueprintSchema = z.object({
-  id: z.enum(["p1", "p2"]),
+  id: z.string().trim().min(1),
   title: z.string().trim().min(1).max(PLAN_LIMITS.blueprintTitle),
   idea: z.string().trim().min(1).max(PLAN_LIMITS.blueprintIdea),
   required_skills: z
@@ -134,33 +130,27 @@ export const SessionPlanSchema = z
         .max(PLAN_LIMITS.story.namingNote)
         .optional(),
     }),
-    parts: z.array(PlanPartSchema).length(5),
+    parts: z.array(PlanPartSchema).min(3),
     promised_skills: z
       .array(z.string().trim().min(1).max(PLAN_LIMITS.promisedSkill))
       .min(1),
     concepts_to_teach: z.array(
       z.string().trim().min(1).max(PLAN_LIMITS.concept),
     ),
-    coding_blueprints: z.array(CodingBlueprintSchema).length(2),
+    coding_blueprints: z.array(CodingBlueprintSchema).min(1),
   })
   .superRefine((data, ctx) => {
-    const requiredIds = new Set(["p1", "p2"]);
-    for (const blueprint of data.coding_blueprints) {
-      requiredIds.delete(blueprint.id);
+    const orders = data.parts.map((part) => part.order).sort((a, b) => a - b);
+    for (let index = 0; index < orders.length; index += 1) {
+      const expectedOrder = index + 1;
+      if (orders[index] !== expectedOrder) {
+        ctx.addIssue({
+          code: "custom",
+          message: `parts must be ordered sequentially starting at 1; found ${orders.join(", ")}`,
+        });
+        break;
+      }
     }
-    if (requiredIds.size > 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: `coding_blueprints missing ids: ${Array.from(requiredIds).join(", ")}`,
-      });
-    }
-    const expectedKinds = [
-      "story",
-      "intro_quiz",
-      "coding_1",
-      "coding_2",
-      "wrap_up_quiz",
-    ];
     data.parts.forEach((part, index) => {
       const expectedOrder = index + 1;
       if (part.order !== expectedOrder) {
@@ -169,13 +159,50 @@ export const SessionPlanSchema = z
           message: `parts[${index}] order expected ${expectedOrder} but received ${part.order}`,
         });
       }
-      if (part.kind !== expectedKinds[index]) {
+    });
+
+    const storyParts = data.parts.filter((part) => part.kind === "story");
+    if (storyParts.length !== 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "parts must include exactly one story segment",
+      });
+    } else if (storyParts[0]?.order !== 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "story must be the first part",
+      });
+    }
+
+    const problemParts = data.parts.filter((part) => part.kind === "problem");
+    if (problemParts.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "parts must include at least one problem segment",
+      });
+    }
+    if (problemParts.length !== data.coding_blueprints.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: `coding_blueprints length ${data.coding_blueprints.length} must match problem parts ${problemParts.length}`,
+      });
+    }
+
+    for (const [index, part] of data.parts.entries()) {
+      if (part.kind === "quiz") {
+        if (part.question_count !== undefined && part.question_count <= 0) {
+          ctx.addIssue({
+            code: "custom",
+            message: `parts[${index}] question_count must be a positive integer`,
+          });
+        }
+      } else if (part.question_count !== undefined) {
         ctx.addIssue({
           code: "custom",
-          message: `parts[${index}] kind expected ${expectedKinds[index]} but received ${part.kind}`,
+          message: `parts[${index}] question_count is only allowed for quiz parts`,
         });
       }
-    });
+    }
   });
 
 export type SessionPlan = z.infer<typeof SessionPlanSchema>;
@@ -210,14 +237,15 @@ export function buildPlanIdeasUserPrompt(
     "- Modern Tie-in Domain: one noun phrase to reserve for the ending pivot (keep it aligned to the lesson).",
     "- Visual Motif: one physical, period-appropriate object/scene to reuse in illustrations (no neon/abstract).",
     "- Naming Note (optional): why the concept/name stuck, if relevant and safe to include.",
-    "- Five-Part Progression with numbered list (1 story, 2 intro/quiz, 3 first coding problem, 4 second coding problem, 5 wrap up quiz)",
+    "- Part Progression with an ordered list of story/quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: story, quiz, problem, problem, quiz.",
     "- Promised Skills bullet list",
     "- Concepts To Teach list (may be empty)",
-    "- Two Coding Blueprints with required skills; blueprint 2 must add at least one new concept/skill or pattern beyond blueprint 1 (not just bigger inputs or a light reskin)",
+    "- One Coding Blueprint per problem segment with required skills; each later blueprint must add at least one new concept/skill/pattern beyond earlier ones (not just bigger inputs or a light reskin)",
     "- Note any common pitfalls/limitations (preconditions, one-way theorems, false positives) that must be surfaced in quizzes",
     "- Call out any randomness or probabilistic steps and how to make them reproducible (fixed seeds, deterministic base sets) so grading and reference solutions are stable",
     "- Only include concepts that appear in the parts summaries or coding blueprint logic; drop anything unused (no stray 'Boolean flags' unless the blueprint explicitly uses a flag).",
     "- Promised Skills must cover every skill the coding blueprints need; avoid adding skills that are not used.",
+    "- If the brief specifies quiz question counts, include them in the progression notes so they can be parsed.",
     "",
     "Use clear labels for each idea (e.g., Historical Hook, Analogy Seed, Modern Tie-in Domain, Visual Motif, Naming Note) so they can be parsed into the plan.",
   );
@@ -226,18 +254,19 @@ export function buildPlanIdeasUserPrompt(
 
 export function buildPlanParseUserPrompt(markdown: string): string {
   return [
-    "Schema: {topic, difficulty, assumptions, story{storyTopic, protagonist?, anchor_event?, anchor_year?, anchor_place?, stakes?, analogy_seed?, modern_tie_in?, visual_motif?, naming_note?}, parts[{order,kind,summary}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
+    "Schema: {topic, difficulty, assumptions, story{storyTopic, protagonist?, anchor_event?, anchor_year?, anchor_place?, stakes?, analogy_seed?, modern_tie_in?, visual_motif?, naming_note?}, parts[{order,kind,summary,question_count?,id?}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
     `Set assumptions exactly to ${JSON.stringify(ASSUMPTIONS)} (no additions).`,
     'Set "difficulty" to "easy", "medium", or "hard".',
     "Keep story.* strings compact: <=120 chars (stakes<=200, analogy_seed<=180, visual_motif<=15 words and <=160 chars).",
     "visual_motif must be one concrete object/scene only—no art styles, palettes, resolution tokens, or repeated adjectives.",
-    "Parts must be exactly 1=story, 2=intro_quiz, 3=coding_1, 4=coding_2, 5=wrap_up_quiz.",
+    'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
     "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
-    "coding_blueprints must have ids p1 and p2.",
+    "Include one coding_blueprint per problem part, in the same order as the problem parts.",
     "Promised skills must include every item listed under coding_blueprints.required_skills; add missing skills instead of changing the blueprint requirements.",
     "Concepts_to_teach must be actually used in the parts summaries or coding_blueprints (logic, constraints, or required_skills). Drop any concept from the Markdown that is not used; never invent new ones.",
     "Populate story.* fields from the historical hook (protagonist, anchor event/year/place, stakes, analogy seed, modern tie-in domain, visual motif, naming note when present).",
     "Keep story fields concise, historical, and free of fictional settings.",
+    "If the brief or plan notes specify quiz question counts, set parts.question_count for those quiz parts.",
     "Output strict JSON only—no analysis, no Markdown, no prose. Start with '{' and end with '}'.",
     "",
     "Markdown ideas:",
@@ -278,6 +307,8 @@ export function buildPlanGradeUserPrompt(plan: SessionPlan): string {
     "R2 promised skills cover blueprint requirements;",
     "R3 concepts_to_teach referenced and manageable;",
     "R4 each parts.summary is concise (<=15 words) and specific;",
+    "R5 story is first and exactly one story is present;",
+    "R6 problem parts count matches coding_blueprints length;",
     "Output {pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]} JSON only.",
     "",
     "Plan JSON:",
@@ -290,16 +321,18 @@ export const PLAN_PART_RESPONSE_SCHEMA: Schema = {
   required: ["order", "kind", "summary"],
   propertyOrdering: ["order", "kind", "summary"],
   properties: {
-    order: { type: Type.NUMBER, minimum: 1, maximum: 5 },
+    order: { type: Type.NUMBER, minimum: 1 },
     kind: {
       type: Type.STRING,
-      enum: ["story", "intro_quiz", "coding_1", "coding_2", "wrap_up_quiz"],
+      enum: ["story", "quiz", "problem"],
     },
     summary: {
       type: Type.STRING,
       minLength: "1",
       maxLength: String(PLAN_LIMITS.partSummary),
     },
+    question_count: { type: Type.NUMBER, minimum: 1 },
+    id: { type: Type.STRING, minLength: "1" },
   },
 };
 
@@ -308,7 +341,7 @@ export const CODING_BLUEPRINT_RESPONSE_SCHEMA: Schema = {
   required: ["id", "title", "idea", "required_skills"],
   propertyOrdering: ["id", "title", "idea", "required_skills", "constraints"],
   properties: {
-    id: { type: Type.STRING, enum: ["p1", "p2"] },
+    id: { type: Type.STRING, minLength: "1" },
     title: {
       type: Type.STRING,
       minLength: "1",
@@ -424,8 +457,7 @@ export const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
     },
     parts: {
       type: Type.ARRAY,
-      minItems: "5",
-      maxItems: "5",
+      minItems: "3",
       items: {
         ...PLAN_PART_RESPONSE_SCHEMA,
       },

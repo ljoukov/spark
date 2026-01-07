@@ -63,7 +63,7 @@ const CodingProblemTestsSchema = z
   });
 
 export const CodingProblemSchema = z.object({
-  id: z.enum(["p1", "p2"]),
+  id: z.string().trim().min(1),
   title: z.string().trim().min(1),
   difficulty: z.enum(["easy", "medium", "hard"]),
   story_callback: z.string().trim().min(1),
@@ -92,7 +92,6 @@ export const ProblemPlanItemsSchema = z
   .array(ProblemPlanItemSchema)
   .superRefine((value, ctx) => {
     const seen = new Set<ProblemPlanItem["id"]>();
-    const missing = new Set<ProblemPlanItem["id"]>(["p1", "p2"]);
     value.forEach((problem, index) => {
       if (seen.has(problem.id)) {
         ctx.addIssue({
@@ -103,13 +102,12 @@ export const ProblemPlanItemsSchema = z
         return;
       }
       seen.add(problem.id);
-      missing.delete(problem.id);
     });
-    if (missing.size > 0) {
+    if (seen.size === 0) {
       ctx.addIssue({
         code: "custom",
         path: ["problems"],
-        message: `problems must include ids ${Array.from(missing).join(", ")}`,
+        message: "problems must include at least one id",
       });
     }
   });
@@ -126,10 +124,10 @@ const ProblemsSchema = z.object({
       }
       ids.add(problem.id);
     }
-    if (!ids.has("p1") || !ids.has("p2")) {
+    if (ids.size === 0) {
       ctx.addIssue({
         code: "custom",
-        message: "problems must include ids p1 and p2",
+        message: "problems must include at least one id",
       });
     }
   }),
@@ -150,7 +148,7 @@ const ProblemTechniqueSchema = z.object({
   id: z.string().trim().min(1),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
-  applies_to: z.array(z.enum(["p1", "p2"])).min(1),
+  applies_to: z.array(z.string().trim().min(1)).min(1),
   tags: z.array(z.string().trim().min(1)).min(1),
 });
 
@@ -167,7 +165,7 @@ export function buildProblemTechniquesUserPrompt(plan: {
   topic: string;
   promised_skills: string[];
   concepts_to_teach: string[];
-  coding_blueprints: { id: "p1" | "p2"; required_skills: string[] }[];
+  coding_blueprints: { id: string; required_skills: string[] }[];
 }, lessonBrief?: string): string {
   const parts = [`Topic: "${plan.topic}"`];
   if (lessonBrief) {
@@ -175,13 +173,14 @@ export function buildProblemTechniquesUserPrompt(plan: {
   }
   parts.push(
     "",
-    "Extract the problem-solving techniques needed to solve the two coding problems implied by the coding_blueprints (ids p1 and p2).",
+    "Extract the problem-solving techniques needed to solve the coding problems implied by the coding_blueprints.",
     "Techniques include algorithms, patterns, invariants, decomposition steps, edge-case handling, math shortcuts, and data structure choices. Keep them aligned to the plan difficulty and promised skills; avoid advanced or unseen topics.",
-    "Include preconditions and failure modes (when the technique does NOT apply), and highlight common misconceptions to guard against. Identify which techniques are unique to p2 vs shared with p1. If any technique uses randomness or probabilistic testing, specify how to make it reproducible (fixed seeds, deterministic base sets) for solutions/tests.",
-    'Return JSON {topic, techniques:[{id,title,summary,applies_to:["p1"|"p2"],tags[]}]} where:',
+    "Treat modulo (%) as an operator-only assumption; if a problem relies on modular arithmetic properties (cycles, congruence, divisibility), include those explicitly as techniques with brief reminders.",
+    "Include preconditions and failure modes (when the technique does NOT apply), and highlight common misconceptions to guard against. Identify which techniques are unique to later problems vs shared with earlier ones. If any technique uses randomness or probabilistic testing, specify how to make it reproducible (fixed seeds, deterministic base sets) for solutions/tests.",
+    'Return JSON {topic, techniques:[{id,title,summary,applies_to:["problem_id"],tags[]}]} where:',
     "- ids are short stable tokens (e.g., t1, t2, t3);",
     "- summary explains why the technique matters and the maneuver to apply;",
-    "- applies_to lists which problem(s) require it (p1, p2, or both);",
+    "- applies_to lists which problem(s) require it (use coding_blueprints ids);",
     "- tags reference promised_skills or concepts_to_teach that match the technique.",
     "",
     "Plan JSON:",
@@ -195,7 +194,7 @@ export function buildProblemIdeasUserPrompt(
     topic: string;
     difficulty: "easy" | "medium" | "hard";
     coding_blueprints: {
-      id: "p1" | "p2";
+      id: string;
       title: string;
       required_skills: string[];
     }[];
@@ -208,9 +207,10 @@ export function buildProblemIdeasUserPrompt(
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
+  const problemIds = plan.coding_blueprints.map((blueprint) => blueprint.id);
   parts.push(
     "",
-    'Return "Problem Specs Markdown" with two sections titled "### p1" and "### p2".',
+    `Return "Problem Specs Markdown" with ${problemIds.length} sections titled: ${problemIds.map((id) => `\"### ${id}\"`).join(", ")}.`,
     "Each section must contain the FULL problem spec (no JSON) with these labeled fields in order:",
     "- Title:",
     "- Difficulty: (easy|medium|hard)",
@@ -235,7 +235,7 @@ export function buildProblemIdeasUserPrompt(
     "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool (run the program with each test input as stdin and compare stdout); fix the spec until they pass.",
     "Spell out boundary behaviors so tests cannot imply hidden rules (e.g., whether a Rosette on the final index grants another turn, or how off-board moves behave) and ensure the reference solution matches that rule exactly.",
     "If any test fails when executed against the reference solution, revise the test/spec/solution until they are consistent—never return a failing test.",
-    "The two problems must be clearly different: p2 must introduce a distinct goal/data shape/recurrence and require at least one additional technique beyond p1 (not a trivial re-skin).",
+    "Each problem must be clearly different from the others; later problems must introduce at least one additional technique beyond earlier ones (not a trivial re-skin).",
     "Explicitly call out any preconditions/limitations/pitfalls inside the Statement, Constraints, or Hints (e.g., one-way heuristics, coprime requirements, recurrence break cases, reproducibility if randomness is involved).",
     "Avoid non-deterministic behavior; if sampling is needed, include a seed or fixed witness list so tests are stable.",
     "Avoid advanced structures unless declared; stay within the provided techniques per problem id.",
@@ -258,8 +258,19 @@ export function buildProblemsGenerateUserPrompt(
   techniques: readonly ProblemTechnique[],
   lessonBrief?: string,
 ): string {
+  const planIds = Array.isArray(
+    (plan as { coding_blueprints?: { id?: string }[] }).coding_blueprints,
+  )
+    ? (plan as { coding_blueprints: { id?: string }[] }).coding_blueprints
+        .map((blueprint) => blueprint.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  const idsLabel =
+    planIds.length > 0
+      ? planIds.join(", ")
+      : "Use the problem ids found in the Markdown sections.";
   const parts: string[] = [
-    'Parse the "Problem Specs Markdown" below (sections "### p1" and "### p2") into a JSON object with key "problems" whose value is an array with exactly two entries (ids "p1" and "p2").',
+    `Parse the "Problem Specs Markdown" below into a JSON object with key "problems" whose value is an array with one entry per section (ids: ${idsLabel}).`,
     "Do NOT invent or alter content—carry over titles, statements, constraints, examples, hints, reference solutions, and ALL tests exactly as given. Preserve inputs/outputs verbatim (escape newlines with \\n).",
     "Each problem must include fields: id, title, difficulty (easy|medium|hard), story_callback, statement_md, input_format_md, output_format_md, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.",
     "Map Statement => statement_md, Input format => input_format_md, Output format => output_format_md.",
@@ -268,7 +279,7 @@ export function buildProblemsGenerateUserPrompt(
     "- tests.*.output and examples.*.output are exact stdout text; no extra prompts or labels.",
     "Do not re-run or change tests; just transcribe them into JSON. If something appears malformed, choose the most literal faithful transcription rather than patching logic.",
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
-    "Keep p1/p2 unique and map each spec to its matching id; do not swap or merge content.",
+    "Keep problem ids unique and map each spec to its matching id; do not swap or merge content.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests". Do not wrap the JSON in Markdown fences or add commentary.',
   ];
   if (lessonBrief) {
@@ -300,7 +311,7 @@ export function buildProblemsGradeUserPrompt(
 ): string {
   const parts: string[] = [
     "Check each problem is easy, specs precise, skills aligned, reference solutions correct.",
-    "Fail if p1 and p2 are not meaningfully different (no reused statements, tests, or I/O goals).",
+    "Fail if any pair of problems is not meaningfully different (no reused statements, tests, or I/O goals).",
     "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
     "Fail if the statement expects a function signature/return value instead of stdin/stdout program behavior.",
     "Fail if the input/output style requires complex parsing (JSON, Python literals, nested structured encodings) instead of simple whitespace tokenization.",
@@ -401,7 +412,7 @@ export const PROBLEM_TECHNIQUES_RESPONSE_SCHEMA: Schema = {
           applies_to: {
             type: Type.ARRAY,
             minItems: "1",
-            items: { type: Type.STRING, enum: ["p1", "p2"] },
+            items: { type: Type.STRING, minLength: "1" },
           },
           tags: {
             type: Type.ARRAY,
@@ -471,8 +482,7 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
   properties: {
     problems: {
       type: Type.ARRAY,
-      minItems: "2",
-      maxItems: "2",
+      minItems: "1",
       items: {
         type: Type.OBJECT,
         required: [
@@ -508,7 +518,7 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
           "tests",
         ],
         properties: {
-          id: { type: Type.STRING, enum: ["p1", "p2"] },
+          id: { type: Type.STRING, minLength: "1" },
           title: { type: Type.STRING, minLength: "1" },
           difficulty: {
             type: Type.STRING,
@@ -548,21 +558,27 @@ export const PROBLEMS_RESPONSE_SCHEMA: Schema = {
 };
 
 const ProblemSolutionEntrySchema = z.object({
-  id: z.enum(["p1", "p2"]),
+  id: z.string().trim().min(1),
   solution_py: z.string().trim().min(1),
 });
 
 export const ProblemSolutionsSchema = z
   .object({
     topic: z.string().trim().min(1),
-    solutions: z.array(ProblemSolutionEntrySchema).length(2),
+    solutions: z.array(ProblemSolutionEntrySchema).min(1),
   })
   .superRefine((data, ctx) => {
     const ids = new Set(data.solutions.map((solution) => solution.id));
-    if (!ids.has("p1") || !ids.has("p2")) {
+    if (ids.size !== data.solutions.length) {
       ctx.addIssue({
         code: "custom",
-        message: "solutions must include ids p1 and p2",
+        message: "solutions contain duplicate ids",
+      });
+    }
+    if (ids.size === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "solutions must include at least one id",
       });
     }
   });
