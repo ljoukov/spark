@@ -1,0 +1,81 @@
+Topic: BIO 2020 R1 Q3 — False Plan
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the plan as a single uppercase string on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (counting constrained strings, lexicographic enumeration, big integers), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the nth-plan selection exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: False Plan
+A spy, currently working their way through an enemy compound, has been given a false plan. The plan is
+an ordered list of letters. In order to make the plan look realistic, the number of adjacent identical letters
+in the plan has been limited.
+
+For example, suppose that the plan contains four letters, each of which is an A or a B, and that there are
+never more than two adjacent identical letters. There are 10 possible plans:
+
+AABA
+AABB
+ABAA
+ABAB
+ABBA
+BAAB
+BABA
+BABB
+BBAA
+BBAB
+These have been listed in alphabetical order.
+
+3(a) [ 27 marks ]
+Write a program to determine the nth possible plan.
+
+Your program should input a line containing three integers p, q, r (1 ≤ p, q, r ≤ 12)
+indicating (in order) that the first p letters of the alphabet can be used, no more than
+q adjacent identical letters are permitted and that the plan should contain exactly r
+letters. You should then input a line containing a single number n (1 ≤ n < 2^63).
+You will only be given input where n is no greater than the number of possible plans.
+
+You should output the nth possible plan.
+Sample run
+2 2 4
+7
+BABA
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] 1 1 1 1 A
+[1] 1 12 12 1 AAAAAAAAAAAA
+[1] 2 1 8 2 BABABABA
+[1] 2 2 7 1 AABAABA
+[1] 2 2 12 400 BBAABBAABABA
+[1] 2 3 10 500 BBABBBAABB
+[1] 6 3 10 1234567 AAEDFEEEFD
+[1] 6 2 8 567890 CCADDCFA
+[1] 8 8 8 16000111 HFACCBFG
+[2] 6 2 12 1666111000 FFBBFFCCBCFA
+[2] 12 2 12 9876543210 AADACFGGLBJI
+[2] 10 10 10 7654334567 HGFEDDEFGG
+[3] 7 2 12 11223344556 GFEGAFFEADAF
+[3] 10 3 12 223344556677 CCFCFJIFIGHE
+[3] 11 4 12 334455667788 BBJKBCJGCGFE
+[3] 12 5 12 3344554433999 EGACGKCJHCFI
+--- END MARKING ---

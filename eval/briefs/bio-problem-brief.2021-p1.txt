@@ -1,0 +1,66 @@
+Topic: BIO 2021 R1 Q1 — Down Pat
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output three lines, each containing a YES or NO (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (recursive pat checks, valid splits, alphabet ordering), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the pat definition exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 1: Down Pat
+A pat is a single letter or a string of letters which can be split into a left and right string (of at least 1 letter)
+where: each is the reverse of a pat; and all the letters in the left string are later in the alphabet than all the
+letters in the right string.
+
+For example:
+• BA is a pat as it splits into B and A, both of which are single letters and therefore pats, and B is
+  alphabetically after A. AB is not a pat as the alphabetical rule would be broken;
+• Similarly ED is a pat but DE is not;
+• DEC is a pat as it splits into DE (whose reverse ED is a pat) and C.
+• CEDAB splits into CED and AB, whose reverses are pats and C, E, and D are after A and B
+  alphabetically.
+
+1(a) [ 24 marks ]
+Write a program that reads in two strings from a line, s1 then s2, each between 1 and
+6 uppercase letters inclusive.
+You should output three lines, each containing a YES or NO indicating, in order, if s1
+is a pat, if s2 is a pat, and if s1s2 (the combination of the two words) is a pat.
+You must get all three lines of output correct to score marks.
+Sample run
+DE C
+NO
+YES
+YES
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] DE C NO YES YES
+[2] A A YES YES NO
+[2] A B YES YES NO
+[2] B A YES YES YES
+[2] AB CD NO NO NO
+[2] BEFCD A NO YES YES
+[2] GEA DBCF NO NO YES
+[2] EFCD GAB YES YES YES
+[2] ECBDFA LKJIHG YES NO NO
+[2] BDIGEF HCA NO NO YES
+[2] JKHGIL ADFEBC NO NO YES
+--- END MARKING ---

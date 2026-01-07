@@ -1,0 +1,78 @@
+Topic: BIO 2023 R1 Q3 — Dreaming Spires
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the minimum number of moves as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (state encoding, BFS shortest paths, move generation), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must compute the minimum number of moves exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: Dreaming Spires
+In the Tower of Oxford game there are four pegs and four balls (numbered 1, 2, 3, 4) which can be
+stacked on the pegs. Each peg has a height of four, i.e. it can support a stack of all four balls.
+
+We will denote a stack, running from the bottom to the top, by a sequence of digits running left (bottom)
+to right (top). E.g. 1234 is the stack with the balls in order and 1 on the bottom. An empty stack will be
+denoted by the digit 0. The current state of the game will be shown by giving each peg’s stack.
+
+A valid move in the game consists of moving the top ball from a peg’s stack and placing it on top of a
+(possibly empty) stack on another peg. Given a start position, the object of the game is to make the
+minimum number of moves to get to a given end position.
+
+For example:
+• Suppose the starting configuration has a single ball on each peg: 1 2 3 4. There are 12 possible
+  moves as each ball is on top of a stack and can be moved to any of the other pegs.
+• The balls on the left-most two pegs could be swapped over by the following sequence of moves:
+  1 2 3 4 → 0 2 31 4 → 2 0 31 4 → 2 1 3 4; i.e. by stacking ball 1 on top of ball 3,
+  then moving ball 2 to its final position ahead of ball 1 being moved.
+• We could move from 1 2 3 4 to 2 3 4 1 using an equivalent swap sequence several times to
+  swap 1 & 2, then 3 & 1, then 4 & 1. This takes 9 moves.
+• 1 2 3 4 → 12 0 3 4 → 12 3 0 4 → 12 3 4 0 → 1 32 4 0 → 0 32 4 1 → 2 3 4 1
+  requires only 6 moves.
+
+3(a) [ 23 marks ]
+Write a program to determine the minimum number of moves required to get
+between two game states.
+
+Your program should first input four numbers showing the initial state of the game. The
+next line of input will contain another four numbers giving the end state of the game.
+You should output the minimum number of moves required to get from the start to
+the end state. It is possible to get between any two game states.
+Sample run
+12 0 3 4
+1 32 4 0
+3
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] 12 0 3 4 1 32 4 0 3
+[2] 12 0 34 0 12 0 34 0 0
+[2] 1 23 0 4 1 2 0 43 1
+[2] 1 2 3 4 0 2 3 41 1
+[2] 1 2 3 4 1 3 2 4 3
+[2] 4 3 2 1 3 2 4 1 4
+[2] 0 0 241 3 0 4 1 32 4
+[2] 0 4 0 123 12 3 4 0 5
+[2] 1234 0 0 0 4 213 0 0 6
+[2] 12 3 4 0 21 0 34 0 7
+[2] 1234 0 0 0 0 0 0 1234 7
+[2] 1234 0 0 0 4321 0 0 0 9
+--- END MARKING ---

@@ -1,0 +1,78 @@
+Topic: BIO 2021 R1 Q3 — Window Dressing
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the minimum number of operations as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (state search, shortest paths, operation modelling), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must compute the minimum number of operations exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: Window Dressing
+A shop is looking to display some boxes (conveniently labelled A, B, …) in their window. There is a
+desired order for the boxes to appear in the window but unfortunately the boxes arrive from the
+warehouse in alphabetical order and access to the window limits how the boxes can be added to the
+display.
+
+There are three possible operations the store manager can employ to change the order of the boxes in
+the window:
+• (Add) The next box from the warehouse can be added to the end of the boxes currently on display;
+• (Swap) The first two boxes in the window display can be swapped;
+• (Rotate) The first box can be removed from the display and replaced at the other end of the display.
+
+Given a desired order for the display, the manager wishes to find the minimum number of operations
+needed.
+For example, suppose the desired order is ACBD:
+• The manager could add A then B then C then D (giving ABCD after 4 operations), then rotate (giving
+  BCDA), swap (CBDA) and rotate another 3 times (ACBD). A total of 9 operations.
+• The manager could add A then B (giving AB), then swap (BA), add C (BAC), rotate (ACB) and add D
+  (ACBD). A total of 6 operations.
+
+3(a) [ 24 marks ]
+Write a program to determine the minimum number of operations to display the
+boxes.
+
+Your program should input a string of b (1 ≤ b ≤ 8) uppercase letters, a permutation of
+the first b letters of the alphabet.
+
+You should output the minimum number of operations required to reach this
+permutation.
+Sample run
+ACBD
+6
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] ACBD 6
+[1] A 1
+[1] AB 2
+[1] BA 3
+[1] ACB 5
+[1] DCBA 8
+[2] ABCDEFGH 8
+[2] BACDE 6
+[2] AEDBC 12
+[2] BACDEFGH 9
+[2] CFBGAHDE 15
+[2] GADEFBC 16
+[2] GCFBEDA 21
+[2] CHDGABFE 23
+[2] AHGEFDCB 27
+--- END MARKING ---

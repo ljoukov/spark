@@ -1,0 +1,121 @@
+Topic: BIO 2021 R1 Q2 — Tri-iso-game
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output p lines of final scores (one per player), then a final line with the outside perimeter length (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (grid traversal simulation, scoring, perimeter tracking), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must simulate the Tri-iso-game rules exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 2: Tri-iso-game
+A game is being played on an infinite triangular grid, made up from equilateral triangles (with side length
+of 1 unit). They are regularly tiled, with each edge (except at the ends) of a triangle touching one edge of
+another triangle. The grid is orientated so that each triangle has one edge horizontal.
+
+At the start of the game a single point-upwards triangle contains a 0; all other triangles are empty. On
+each move of the game an empty triangle, which is adjacent to a triangle already containing a number,
+will be filled with a number. Player 1 will fill triangles with 1s, player 2 will fill triangles with 2s, etc.
+Players take it in turns to move; with n players this would be 1, 2, …, n, 1, 2, …, n, 1, …
+When deciding which triangle to fill, players will traverse around the perimeter of the filled triangles.
+Each player is positioned on one triangle’s edge (which is on this perimeter) and will traverse by moving
+to an adjacent edge. All players move around the perimeter in the same direction for the entire game.
+Note that players are positioned on edges and not in the triangles adjacent to edges.
+Players start against the left-hand edge of the triangle containing a 0. After a single traversal they will
+move to the right-hand edge; i.e. clockwise around the triangle.
+Each player has a maximum number of traversals they can use each move. After they have finished
+traversing the perimeter, they fill the empty triangle, adjacent to where they started the move, with their
+number. If, after a triangle is filled, any player finds that their current position is no longer touching an
+empty triangle, they reposition themselves on the left-hand edge of the left-most filled triangle on the
+highest row of the grid.
+
+Four adjacent triangles (of length 1) can be seen as larger triangle (of length 2). A player
+scores 1 point for all such larger triangles where the three outer triangles are filled with
+their number. It does not matter if the inner triangle is empty or contains a different
+number. For example, the figure to the right is worth 1 point to player 1.
+Players try to set themselves up for future turns. When traversing the perimeter, a player
+will stop before their maximum number of traversals in the following situation: they have reached an
+edge (after at least one traversal) whose empty adjacent triangle would score them a
+point if it were filled in. Note that it is not actually filled when they stop.
+
+For example, suppose the game has 2 players. Player 1 can traverse sixteen edges a
+move; player 2 can traverse two edges. In the diagrams to the right, ● and ○ show the
+positions of the two players.
+• Initially, there is a single filled triangle containing a 0 and both player 1 (●) and ○ 1 0 ●
+  player 2 (○) are positioned against its left edge;
+• Player 1 traverses sixteen edges, looping around the 0 triangle until finishing
+  against its right edge. They then fill in the triangle adjacent to where they started
+  with a 1. As player 2 is no longer adjacent to an empty triangle they are 1 ○
+                                                           2 0●
+  repositioned.
+• Player 2 now traverses two edges, finishing in the same position as player 1.
+  They fill the triangle adjacent to their starting edge with a 2.
+• Player 1 starts to traverse the perimeter. Note that they do not stop after the first
+                                                          ○ 1 1
+  edge has been traversed; if they filled in the triangle at this stage they would not 2 0
+                                                             ●
+  gain a point as the triangle adjacent to their starting position is not placed until
+  the move’s end. After sixteen edges they eventually stop and fill in a triangle.
+  Once again Player 2 is repositioned.
+• Player 2 moves two edges. Note that, even though two successive edges were 2 1 1
+                                                           2 0
+  horizontal, it still takes two traversals. A triangle is filled in. ●
+• Player 1 moves and stops after 7 traversals as filling in the adjacent triangle
+  would score them a point. They do not fill in the triangle on stopping. Their
+  traversals now being completed they fill in their starting triangle, which is co- ○
+  incidentally where they had stopped, score a point and are then repositioned.
+                                                        ●2
+                                                           2
+                                                            1
+                                                             0
+                                                              1
+                                                             1
+
+2(a) [ 24 marks ]
+Write a program that plays the game.
+
+Your program should first input a line containing two integers, p (1 ≤ p ≤ 5) then m
+(1 ≤ m ≤ 5,000), indicating the number of players and a number of moves to play.
+This will be followed by a line containing p integers, each between 1 and 100
+inclusive, the ith indicating the maximum number of traversals player i can make
+each move.
+You should first output p lines. The ith line should contain the final score for player i.
+This should be followed by a line containing the length of the outside perimeter of
+the filled triangles at the end of the game.
+Sample run
+2 5
+16 2
+1
+0
+8
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] 2 5 16 2 1 0 8
+[2] 1 1 1 0 4
+[2] 1 3 1 1 6
+[1] 1 36 3 17 21
+[1] 1 1250 15 989 216
+[1] 2 2 5 7 0 0 5
+[1] 2 16 11 13 0 0 15
+[1] 2 2000 5 13 474 478 275
+[1] 3 2222 13 19 23 207 220 222 292
+[1] 5 4999 2 3 5 7 11 84 73 71 91 135 382
+--- END MARKING ---

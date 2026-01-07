@@ -1,0 +1,79 @@
+Topic: BIO 2022 R1 Q3 — Parking
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the preference list as a single uppercase string on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (simulation, counting consistent preferences, lexicographic ordering), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the ith-preference-list selection exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: Parking
+
+A one-way street, running left to right, has several parking spaces each large enough for a single vehicle.
+Each arriving car has a preferred parking spot and is driven along the street, ignoring empty spaces, until
+it reaches its preferred spot. If that spot is available it is parked there, otherwise it continues along the
+street and is parked in the first unoccupied space. If all those spaces are occupied it leaves the street and
+does not park anywhere.
+
+Spaces are labelled A, B, … in the order they are encountered. Cars are labelled a, b, … in order of their
+arrival. There are the same number of cars as parking spaces and all the spaces are initially empty.
+
+A preference list shows the preferred parking spaces for the cars (in order of their arrival).
+
+For example, suppose after each car has arrived they are parked in the order cabd:
+• Car a’s preferred space was B. When it arrived it drove past space A to space B, found it empty and
+  parked.
+• Car b might have a preferred space of C (driving past spaces A and B on arrival, finding space C
+  empty and parking) but it might also have a preferred space of B (driving past A on arrival, finding B
+  full and parking at the next available space C).
+• Car c’s preferred space must be A.
+• Car d might prefer any of the spaces. If their preferred space is A, B or C when they arrive they find
+  it full and the first available space, in each case, will be D.
+• There are eight difference preference lists for the cars: BBAA, BBAB, BBAC, BBAD, BCAA, BCAB,
+  BCAC and BCAD. These have been listed in alphabetical order.
+
+3(a) [ 25 marks ]
+Write a program to determine the ith preference list for a given final arrangement of
+cars where all the cars have managed to park.
+
+Your program should input a string of n (1 ≤ n ≤ 16) lowercase letters (a permutation
+of the first n letters of the alphabet) giving the final arrangement of the cars, followed
+by an integer i (1 ≤ i ≤ 2^63).
+You should output the ith preference list for the cars that will lead to the final arrangement.
+Sample run
+cabd 5
+BCAA
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] cabd 5 BCAA
+[2] a 1 A
+[2] dacb 2 BDCA
+[2] fedcba 1 FEDCBA
+[2] badcef 90 BADCEF
+[2] dabcefgh 5000 BBDAEFBH
+[2] hefbdciajg 125 HDFDBCJAGH
+[2] bcadefghi 49999 CAADBDBDD
+[2] bcdefghijak 1000000 JAABCAACFAA
+[2] acbdefghijk 12345678 ACBDCAEGDED
+[3] abcdeghfklijnmop 2800700600 ABCDDHEDKKAANFMH
+[3] abcdefghijklmnop 12345678901234 ABACAEFHBFJAMLCB
+--- END MARKING ---

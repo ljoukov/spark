@@ -1,0 +1,73 @@
+Topic: BIO 2024 R1 Q3 — Word Game
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the position as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (DP by score, lexicographic counting, prefix constraints), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must compute the position exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 3: Word Game
+
+In a word game letters are scored according to their position in the alphabet (A=1, …, Z=26) and a
+word’s score is the sum of scores of its letters. Any combination of letters is allowed in a word, so long as
+there are no adjacent copies of the same letter.
+
+Given a word, we are interested in finding its position in the alphabetically ordered list of words with the
+same score.
+
+For example, there are 7 words which score 5. The word BAB is the 3rd word in the list, which is:
+
+ACA
+AD
+BAB
+BC
+CB
+DA
+E
+
+3(a) [ 25 marks ]
+Write a program to determine the position of a word in its list.
+
+Your program should first input a string of 1 to 12 uppercase letters. The score of this
+string will be ≤ 75.
+
+You should output the position of this string in the alphabetically ordered list of words
+with the same score.
+Sample run
+BAB
+3
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] BAB 3
+[2] A 1
+[2] GA 38
+[2] DEAD 980
+[2] R 10843
+[2] BIO 579377
+[2] DOG 824034
+[2] ALGAE 346221
+[2] NICE 15671736
+[2] ALGOL 44097895090
+[3] ZY 1141042340074
+[3] LIKELY 444474391799316244
+--- END MARKING ---

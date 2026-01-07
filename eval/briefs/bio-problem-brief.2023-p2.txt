@@ -1,0 +1,107 @@
+Topic: BIO 2023 R1 Q2 — Pentominoes
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the number of distinguishable shapes as a single integer on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (shape enumeration, adjacency constraints, symmetry handling), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the pentomino combination rules exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 2: Pentominoes
+Pentominoes are the shapes that can be made when five equal sized squares are connected, with each
+square always edge-to-edge with another square. The number of different pentominoes depends on
+whether they are considered different when rotated and/or flipped over. We will consider the set of 18
+pentominoes shown below (which are distinguishable if rotations only were allowed) although
+throughout this question we will not permit flipping or rotations.
+
+
+ F       G     I   L       J   N      M   P       Q     T
+
+
+
+                                                Y   A
+
+ U     V             W       X      Z       S
+
+
+
+Pentominoes can be combined to make more complicated shapes. When connecting pentominoes at
+least one square in each pentomino must be edge-to-edge with a square in a different pentomino.
+
+For example, two F pentominoes can be combined to make the following seven distinguishable shapes.
+These are the only combinations that can be formed because we are not permitting flipping or rotations.
+
+
+
+
+
+
+Note that the last combination contains an internal hole. I.e. there is a gap inside the combined shape
+which is separated from the space outside the shape.
+
+Two shapes are not distinguishable if, without flipping or rotation, the layout of their squares is the same,
+even if they were formed from different pentominoes.
+
+For example, the following two shapes, generated from FX and GX, are not distinguishable:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2(a) [ 23 marks ]
+Write a program that calculates in how many ways a pair of pentominoes can be
+combined.
+
+Your program should input a line containing a string of two capital letters, indicating
+the pentominoes to be joined. You should output the number of distinguishable
+shapes that can be formed by combining those pentominoes.
+Sample run
+FF
+7
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] FF 7
+[2] XX 6
+[2] TT 8
+[2] II 10
+[2] GX 13
+[2] QP 14
+[2] MW 15
+[2] ZY 16
+[2] NU 16
+[2] AS 16
+[2] JL 18
+[2] VI 19
+--- END MARKING ---

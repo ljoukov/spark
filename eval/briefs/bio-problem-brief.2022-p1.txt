@@ -1,0 +1,57 @@
+Topic: BIO 2022 R1 Q1 — Decrypt
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the decrypted string on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (alphabet value mapping, modular wrap, left-to-right processing), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the decryption logic exactly (reverse of the encryption scheme described).
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 1: Decrypt
+Each letter in the alphabet can be given a value based on its position in the alphabet, A being 1 through
+to Z being 26. Two letters can produce a third letter by adding together their values, deducting 26 from
+the sum if it is greater than 26, and finding the letter whose value equals this result.
+A simple encryption scheme for a string is as follows. Working from left to right, after leaving the left-most character alone, each character is replaced with the character produced by adding it to the
+character to its immediate left.
+For example:
+• The string ENCRYPT goes through the steps ENCRYPT → ESCRYPT → ESVRYPT → ESVNYPT →
+  ESVNMPT -> ESVNMCT -> ESVNMCW
+1(a) [ 24 marks ]
+Write a program that reads in an encrypted string, between 1 and 10 uppercase
+letters inclusive, and outputs the original version of that string.
+Sample run
+ESVNMCW
+ENCRYPT
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] ESVNMCW ENCRYPT
+[2] H H
+[2] ZT ZT
+[2] IO IF
+[2] AA AZ
+[2] BIO BGF
+[2] TCCCB TIZZY
+[2] CRFZEXR CONTEST
+[2] CONTEST CLYFKNA
+[2] ABCDEFGHIJ AAAAAAAAAA (10 As)
+[2] STRAWBERRY SAXIVECMZG
+--- END MARKING ---

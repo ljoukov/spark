@@ -1,4 +1,4 @@
-Topic: BIO 2024 R1 Q1 — Palindromic Sums
+Topic: BIO 2025 R1 Q1 — Palindromic Sums
 
 Spark Code Lesson Brief (BIO locked problem)
 
@@ -6,7 +6,7 @@ You are generating a Spark Code lesson. This brief is authoritative.
 
 Exactness rules (what “exactly” means)
 - When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
-- For inputs/outputs and tests: preserve the exact integers and the exact spacing between numbers.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
 - Output formatting for this problem: output the palindromic addends separated by single spaces on ONE line (no extra text).
 - Do not add, remove, or reorder marking-scheme tests.
 
@@ -36,8 +36,8 @@ palindromic numbers. It can contain duplicates.
 For example:
 • 12321 is a palindromic number already, so can be formed from just 12321;
 • 9610 is equal to 161 + 9449, which is the only pair of palindromic numbers that sum to 9610.
-There are triplets that sum to 9610, such as 282 + 1771 + 7557, but those contain too many
-palindromic numbers;
+  There are triplets that sum to 9610, such as 282 + 1771 + 7557, but those contain too many
+  palindromic numbers;
 • 1031 requires three palindromic numbers such as 2 + 494 + 535 and 4 + 88 + 939.
 1(a) [ 25 marks ]
 Write a program that reads in an integer (between 1 and 1,000,000 inclusive) and
