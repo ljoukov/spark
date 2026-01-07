@@ -230,6 +230,7 @@ export function buildProblemIdeasUserPrompt(
     "- Inputs must be plain text, consisting of 1+ lines; tokens are separated by whitespace (spaces/newlines).",
     "- Do NOT use JSON, Python literals (e.g. [1,2], {'a':1}), or any structured encoding that requires complex parsing.",
     "- Outputs must be plain text exactly as printed to stdout (no extra labels or prompts).",
+    "- Unless the lesson brief explicitly requires a structured format, outputs must be 1+ lines of whitespace-separated tokens only; never use list/tuple/dict literals, brackets, commas, or JSON (e.g., \"[1, 2, 3]\").",
     "- The problem must be posed as a stdin/stdout program (competitive programming style). Do NOT ask for a function signature or return values.",
     "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool (run the program with each test input as stdin and compare stdout); fix the spec until they pass.",
     "Spell out boundary behaviors so tests cannot imply hidden rules (e.g., whether a Rosette on the final index grants another turn, or how off-board moves behave) and ensure the reference solution matches that rule exactly.",
@@ -303,6 +304,7 @@ export function buildProblemsGradeUserPrompt(
     "Fail if problems rely on techniques not listed for their applies_to ids or introduce advanced concepts absent from assumptions/techniques.",
     "Fail if the statement expects a function signature/return value instead of stdin/stdout program behavior.",
     "Fail if the input/output style requires complex parsing (JSON, Python literals, nested structured encodings) instead of simple whitespace tokenization.",
+    "Fail if any example/test output uses serialized lists/tuples/dicts or JSON (brackets/commas) unless the lesson brief explicitly requires that exact format.",
     "Output {pass:boolean, issues:string[], too_hard_reasons:string[], misaligned_skills:string[]} JSON only.",
   ];
   if (lessonBrief) {
