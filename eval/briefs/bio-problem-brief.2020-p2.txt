@@ -1,0 +1,108 @@
+Topic: BIO 2020 R1 Q2 — Alpha Complex
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output n+2 lines of connected rooms (letters in alphabetical order), then a final line containing the spy’s locations after p and q moves with no spaces (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (tree construction from plan, simulation of moves, tracking parity), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the Alpha Complex construction and movement rules exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 2: Alpha Complex
+Alpha Complex consists of many connected rooms. Each room is identified by a single (unique) letter
+and each exit from a room is marked with the letter identifying the room to which it is connected.
+
+A spy is moving systematically through Alpha Complex. For each room they keep track of whether they
+have visited it an even or an odd number of times. They also record, for each room and for each exit,
+whether they have left the room through that exit an odd or even number of times.
+The spy moves between rooms according to the following rules:
+
+• If they have visited the room an odd number of times, they will leave through the exit which is
+  marked with the first letter alphabetically;
+• If they have visited the room an even number of times, they will find the first exit alphabetically that
+  they have left through an odd number of times. If that is the last exit alphabetically in this room
+  they will leave through it, otherwise they will leave through the next exit alphabetically.
+When the spy starts exploring Alpha Complex, they have visited their starting room an odd number of
+times (i.e. once), each other room an even number of times (i.e. zero) and have left through each exit an
+even number of times (i.e. zero).
+
+For example, suppose that they start in room X, which has exits to B, I and O:
+
+• They have visited X an odd number of times, so they leave the room through the first exit
+  alphabetically, which is B;
+• When they are next in X they will have visited it an even number of times. The first exit
+  alphabetically that they have left through an odd number of times is B. As this is not the last exit
+  alphabetically, they leave through exit I;
+• Subsequent visits to the room will see them leave through B, O, B, I, B, O, …
+
+Alpha Complex consists of r (r ≥ 3) rooms, identified by the first r letters of the alphabet. The spy is in
+possession of a secret plan, giving the connections between the rooms. This plan is an ordered list of r-2
+letters and the spy can construct a map of the complex as follows:
+• The spy will choose the first room alphabetically which has not yet been chosen and which is not in
+  the plan. The chosen room is connected to the first room in the plan. The first room is then
+  removed from the plan;
+• The above step is repeated until the plan is empty;
+• There will be two rooms which have not yet been chosen. These two rooms are connected together.
+
+If two rooms are connected, each room has an exit to the other room.
+
+For example, suppose Alpha Complex has 6 rooms and the plan is E, A, E, D:
+• The first room which is not in the plan is B, which gets connected to E (the first room in the plan).
+  The updated plan becomes A, E, D. Note that only B has been chosen and that the other instance of
+  E in the plan is not removed;
+• The next chosen room will be C, which gets connected to A;
+• The next chosen room will be A (it has not been previously chosen and is no longer in the plan) and
+  it is connected to E;
+• E is now chosen and connected to D;
+• The plan is now empty. As D and F were never chosen, they are now connected.
+
+2(a) [ 24 marks ]
+Write a program that tracks the spy through Alpha Complex.
+
+Your program should first input a string consisting of n (1 ≤ n ≤ 8) uppercase letters
+(each from the first n+2 letters of the alphabet) indicating the spy’s plan of Alpha
+Complex, followed by p and q (1 ≤ p < q ≤ 1,000,000) indicating moves the spy will
+make.
+The spy starts in room A.
+You should first output n+2 lines. The first containing (in alphabetical order) the
+rooms connected to A, the second those connected to B, etc. These should be
+followed by a line containing the spy’s location after p and q moves.
+Sample run
+EAED 1 2
+CE
+E
+A
+EF
+ABD
+D
+CA
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] A 1 2 BC A A BA
+[1] C 4 8 C C AB BB
+[1] BC 4 9 B AC BD C CD
+[2] BBACC 10 1010 BC ADE AFG B B C C FG
+[2] ABCD 50 51 BE AC BD CF A D CD
+[2] FEDC 2020 876543 F E DF CE BD AC CB
+[2] AABGB 5000 9999 BCD AFG A A G B BE AB
+[2] CDCDCD 2020 876543 C D ADEG BCFH C D C D DH
+[2] FFFFFFFF 512 1022 F F F F F ABCDEGHIJ F F F F JA
+--- END MARKING ---

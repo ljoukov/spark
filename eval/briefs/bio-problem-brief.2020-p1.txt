@@ -1,0 +1,79 @@
+Topic: BIO 2020 R1 Q1 — Roman Look-and-Say
+
+Spark Code Lesson Brief (BIO locked problem)
+
+You are generating a Spark Code lesson. This brief is authoritative.
+
+Exactness rules (what “exactly” means)
+- When this brief says “exactly/verbatim”, preserve the original wording and numbers from this brief.
+- For inputs/outputs and tests: preserve the exact tokens and the exact spacing between them.
+- Output formatting for this problem: output the count of Is followed by the count of Vs separated by a single space on ONE line (no extra text).
+- Do not add, remove, or reorder marking-scheme tests.
+
+Session structure
+- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
+- p1 should teach the core techniques needed for p2 (Roman numeral counts, run-length encoding, iterative transformations), but MUST NOT reuse the same statement or the marking tests.
+- p2 MUST be the official problem below, with the same task and constraints.
+
+Locked requirements for problem p2 (official)
+- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p2 must use only examples already present in this brief:
+  - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
+  - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
+- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p2 reference solution must implement the Roman look-and-say description exactly.
+- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+
+--- OFFICIAL PROBLEM (verbatim) ---
+Question 1: Roman Look-and-Say
+The Roman look-and-say description of a string (of Is, Vs, Xs, Ls, Cs, Ds and Ms) is made by taking each
+block of adjacent identical letters and replacing it with the number of occurrences of that letter, given in
+Roman numerals (*), followed by the letter itself. A block of adjacent identical letters is never broken
+into smaller pieces before describing it.
+
+For example:
+• MMXX is described as “two Ms followed by two Xs”. Since two is II in Roman numerals, this is
+  written as IIMIIX;
+• IIMIIX is described as IIIIMIIIIX, which is “two Is, one M, two Is, one X”;
+• IIIIMIIIIX is described as IVIIMIVIIX;
+• It is not valid to describe III as, “two Is, one I” IIIII.
+
+Note that Roman look-and-say descriptions are not necessarily Roman numerals.
+
+1(a) [ 25 marks ]
+Write a program that reads in a Roman numeral representing a number between 1
+and 3999 inclusive, followed by n (1 ≤ n ≤ 50).
+You should apply the Roman look-and-say description n times and then output the
+number of Is in the final description, followed by the number of Vs.
+Sample run 1
+MMXX 1
+4 0
+Sample run 2
+MMXX 3
+6 2
+
+(*) Roman numerals are conventionally defined to represent numbers using seven letters:
+I=1, V=5, X=10, L=50, C=100, D=500 and M=1000. Numbers other than these are formed
+by placing letters together, from left to right, in descending order of size, and adding their
+values. The basic rule is to always use the biggest numeral possible (e.g. 15 is represented
+as XV but never as VVV, VX or XIIIII).
+Letters may not appear more than three times in a row, so there are six exceptions to these
+rules – the combinations IV, IX, XL, XC, CD and CM. In these cases a letter is placed before
+one of greater value and the smaller value is subtracted from the larger. E.g. CD = 400.
+These are the only exceptions so, for example, MIM is not valid.
+--- END OFFICIAL PROBLEM ---
+
+--- MARKING (verbatim) ---
+[1] MMXX 3 6 2
+[1] C 1 1 0
+[2] V 1 1 1
+[2] III 2 2 1
+[2] I 7 6 2
+[2] MMXX 8 30 12
+[2] II 20 101 37
+[2] IV 20 121 46
+[2] MDCLX 30 1795 695
+[2] M 50 2858 1103
+[2] V 50 2858 1104
+[2] MMDCCCLXXXVIII 50 19013 7333
+--- END MARKING ---
