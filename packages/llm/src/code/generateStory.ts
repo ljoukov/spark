@@ -56,6 +56,18 @@ export const ART_STYLE: readonly string[] = [
 ];
 
 const IMAGE_SET_GENERATE_MAX_ATTEMPTS = 3;
+const DEFAULT_STORY_SEGMENT_COUNT = 10;
+const STORY_SEGMENT_COUNT_RANGE = { min: 1, max: 10 };
+const StorySegmentCountSchema = z
+  .number()
+  .int()
+  .min(STORY_SEGMENT_COUNT_RANGE.min)
+  .max(STORY_SEGMENT_COUNT_RANGE.max)
+  .default(DEFAULT_STORY_SEGMENT_COUNT);
+
+function resolveStorySegmentCount(value: number | undefined): number {
+  return StorySegmentCountSchema.parse(value);
+}
 
 export type StoryProgress = JobProgressReporter | undefined;
 
@@ -122,13 +134,18 @@ const StorySegmentSchema = z.object({
   narration: z.array(StorySegmentNarrationSchema).min(1),
 });
 
-export const StorySegmentationSchema = z.object({
-  title: z.string().trim().min(1),
-  posterPrompt: z.string().trim().min(1),
-  // Increase to exactly 10 segments (content-only; style is applied at generation time)
-  segments: z.array(StorySegmentSchema).min(10).max(10),
-  endingPrompt: z.string().trim().min(1),
-});
+function buildStorySegmentationSchema(segmentCount: number) {
+  return z.object({
+    title: z.string().trim().min(1),
+    posterPrompt: z.string().trim().min(1),
+    segments: z.array(StorySegmentSchema).length(segmentCount),
+    endingPrompt: z.string().trim().min(1),
+  });
+}
+
+export const StorySegmentationSchema = buildStorySegmentationSchema(
+  DEFAULT_STORY_SEGMENT_COUNT,
+);
 
 export type StorySegmentation = z.infer<typeof StorySegmentationSchema>;
 
@@ -138,53 +155,64 @@ export type SegmentationPromptCorrection = {
   critique: string;
 };
 
-const SegmentationCorrectorResponseSchema = z
-  .object({
-    issuesSummary: z.string().trim().optional(),
-    corrections: z
-      .array(
-        z.object({
-          prompt_index: z.number().int().min(0).max(11),
-          critique: z.string().trim().min(1),
-          updatedPrompt: z.string().trim().min(1),
-        }),
-      )
-      .default([]),
-  })
-  .transform((data) => ({
-    issuesSummary: data.issuesSummary ?? "",
-    corrections: data.corrections.map((entry) => ({
-      promptIndex: entry.prompt_index,
-      critique: entry.critique,
-      updatedPrompt: entry.updatedPrompt,
-    })),
-  }));
+function buildSegmentationCorrectorResponseSchema(maxPromptIndex: number) {
+  return z
+    .object({
+      issuesSummary: z.string().trim().optional(),
+      corrections: z
+        .array(
+          z.object({
+            prompt_index: z.number().int().min(0).max(maxPromptIndex),
+            critique: z.string().trim().min(1),
+            updatedPrompt: z.string().trim().min(1),
+          }),
+        )
+        .default([]),
+    })
+    .transform((data) => ({
+      issuesSummary: data.issuesSummary ?? "",
+      corrections: data.corrections.map((entry) => ({
+        promptIndex: entry.prompt_index,
+        critique: entry.critique,
+        updatedPrompt: entry.updatedPrompt,
+      })),
+    }));
+}
 
-type SegmentationCorrectorResponse = z.infer<
-  typeof SegmentationCorrectorResponseSchema
->;
+type SegmentationCorrectorResponse = {
+  issuesSummary: string;
+  corrections: SegmentationPromptCorrection[];
+};
 
-const SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["corrections"],
-  propertyOrdering: ["issuesSummary", "corrections"],
-  properties: {
-    issuesSummary: { type: Type.STRING },
-    corrections: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["prompt_index", "critique", "updatedPrompt"],
-        propertyOrdering: ["prompt_index", "critique", "updatedPrompt"],
-        properties: {
-          prompt_index: { type: Type.NUMBER, minimum: 0, maximum: 11 },
-          critique: { type: Type.STRING, minLength: "1" },
-          updatedPrompt: { type: Type.STRING, minLength: "1" },
+function buildSegmentationCorrectorResponseSchemaJson(
+  maxPromptIndex: number,
+): Schema {
+  return {
+    type: Type.OBJECT,
+    required: ["corrections"],
+    propertyOrdering: ["issuesSummary", "corrections"],
+    properties: {
+      issuesSummary: { type: Type.STRING },
+      corrections: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          required: ["prompt_index", "critique", "updatedPrompt"],
+          propertyOrdering: ["prompt_index", "critique", "updatedPrompt"],
+          properties: {
+            prompt_index: {
+              type: Type.NUMBER,
+              minimum: 0,
+              maximum: maxPromptIndex,
+            },
+            critique: { type: Type.STRING, minLength: "1" },
+            updatedPrompt: { type: Type.STRING, minLength: "1" },
+          },
         },
       },
     },
-  },
-};
+  };
+}
 
 export type StoryProseRevisionCriterion = {
   score: number;
@@ -989,42 +1017,44 @@ export class SegmentationCorrectionError extends Error {
   }
 }
 
-const STORY_SEGMENTATION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["title", "posterPrompt", "segments", "endingPrompt"],
-  propertyOrdering: ["title", "posterPrompt", "segments", "endingPrompt"],
-  properties: {
-    title: { type: Type.STRING, minLength: "1" },
-    posterPrompt: { type: Type.STRING, minLength: "1" },
-    segments: {
-      type: Type.ARRAY,
-      minItems: "10",
-      maxItems: "10",
-      items: {
-        type: Type.OBJECT,
-        required: ["imagePrompt", "narration"],
-        propertyOrdering: ["imagePrompt", "narration"],
-        properties: {
-          imagePrompt: { type: Type.STRING, minLength: "1" },
-          narration: {
-            type: Type.ARRAY,
-            minItems: "1",
-            items: {
-              type: Type.OBJECT,
-              required: ["voice", "text"],
-              propertyOrdering: ["voice", "text"],
-              properties: {
-                voice: { type: Type.STRING, enum: ["M", "F"] },
-                text: { type: Type.STRING, minLength: "1" },
+function buildStorySegmentationResponseSchema(segmentCount: number): Schema {
+  return {
+    type: Type.OBJECT,
+    required: ["title", "posterPrompt", "segments", "endingPrompt"],
+    propertyOrdering: ["title", "posterPrompt", "segments", "endingPrompt"],
+    properties: {
+      title: { type: Type.STRING, minLength: "1" },
+      posterPrompt: { type: Type.STRING, minLength: "1" },
+      segments: {
+        type: Type.ARRAY,
+        minItems: String(segmentCount),
+        maxItems: String(segmentCount),
+        items: {
+          type: Type.OBJECT,
+          required: ["imagePrompt", "narration"],
+          propertyOrdering: ["imagePrompt", "narration"],
+          properties: {
+            imagePrompt: { type: Type.STRING, minLength: "1" },
+            narration: {
+              type: Type.ARRAY,
+              minItems: "1",
+              items: {
+                type: Type.OBJECT,
+                required: ["voice", "text"],
+                propertyOrdering: ["voice", "text"],
+                properties: {
+                  voice: { type: Type.STRING, enum: ["M", "F"] },
+                  text: { type: Type.STRING, minLength: "1" },
+                },
               },
             },
           },
         },
       },
+      endingPrompt: { type: Type.STRING, minLength: "1" },
     },
-    endingPrompt: { type: Type.STRING, minLength: "1" },
-  },
-};
+  };
+}
 
 const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -1787,6 +1817,7 @@ export function buildStoryFactualValidationParsePrompt(
 export function buildSegmentationPrompt(
   storyText: string,
   topic?: string,
+  segmentCount?: number,
 ): string {
   // Style requirements are intentionally excluded here. Style gets applied later during image generation.
   const topicLines =
@@ -1796,16 +1827,21 @@ export function buildSegmentationPrompt(
           "",
         ]
       : [];
+  const resolvedSegmentCount = resolveStorySegmentCount(segmentCount);
+  const segmentLabel = resolvedSegmentCount === 1 ? "segment" : "segments";
+  const storyBeatLabel =
+    resolvedSegmentCount === 1 ? "story beat" : "story beats";
+  const totalPrompts = resolvedSegmentCount + 2;
   return [
     "Convert the provided historical story into a structured narration and illustration plan.",
     "",
     ...topicLines,
     "Requirements:",
-    "1. Provide `title`, `posterPrompt`, ten chronological `segments`, and `endingPrompt`.",
-    "   This yields 12 total illustration prompts: poster + 10 story beats + ending card.",
+    `1. Provide \`title\`, \`posterPrompt\`, ${resolvedSegmentCount} chronological \`${segmentLabel}\`, and \`endingPrompt\`.`,
+    `   This yields ${totalPrompts} total illustration prompts: poster + ${resolvedSegmentCount} ${storyBeatLabel} + ending card.`,
     "2. `posterPrompt` introduces the entire story in a single dynamic scene suitable for a cover/poster. It must be stunning, captivating, and intriguing; and it should mention the name of the protagonist (an important historical figure). If the name is long, prefer a concise form (e.g., first+last name or well-known moniker). As visible text on the poster, include: (a) a bold 2–4 word title, (b) the protagonist’s name, and (c) a single 4-digit year relevant to the story. Keep each supporting element under six words.",
     '3. `endingPrompt` is a graceful "The End" card with a minimal motif from the story.',
-    "4. For each of the ten `segments`:",
+    `4. For each of the ${resolvedSegmentCount} \`${segmentLabel}\`:`,
     "   • Provide `narration`, an ordered array of narration slices. Each slice contains `voice` and `text`.",
     "   • Alternate between the `M` and `F` voices whenever the flow allows. Let `M` handle formal or structural beats; let `F` handle emotional or explanatory beats. Avoid repeating the same voice twice in a row unless it preserves clarity. Remove citation markers or reference-style callouts.",
     "   • Copy narration text verbatim from the story. Do not paraphrase, summarize, or invent new sentences. Do not drop any sentence; keep the original wording in order. If splitting a sentence across slices, duplicate the exact text with no additions, removals, or ellipses.",
@@ -1818,7 +1854,7 @@ export function buildSegmentationPrompt(
     "10. Ensure the named protagonist appears whenever the narration centres on them; otherwise spotlight the setting, consequences, or supporting cast to keep the beat clear.",
     "11. Keep each `imagePrompt` concise: roughly 12–30 words.",
     "12. Narration tone: plain and natural. Avoid hyperbole or overly dramatic adjectives; keep language straightforward and conversational.",
-    "13. Historical focus only in the ten segments: do not include modern devices or references in the segments. If a modern connection is relevant, reserve it for the `endingPrompt` only and keep it brief.",
+    `13. Historical focus only in the ${resolvedSegmentCount} ${segmentLabel}: do not include modern devices or references in the ${segmentLabel}. If a modern connection is relevant, reserve it for the \`endingPrompt\` only and keep it brief.`,
     "14. Never depict the listener or any second‑person stand‑in. Do not use 'you', 'student', 'apprentice', 'listener', or 'audience' as subjects in any illustration prompt. If the ending includes a modern connection, express it through objects, settings, or artifacts—not by showing the listener.",
     "15. Physically meaningful visuals only: depict real spaces, people, and objects. Do not request glowing glyphs, neon writing, holographic UI, floating captions, or abstract concepts drawn in mid‑air.",
     "16. Match the narration’s meaning, not isolated keywords. Interpret metaphors, idioms, or symbolic phrases sensibly and depict the actual historical situation being described. Never turn figurative language (e.g., “cornerstone”) into literal objects unless the story explicitly establishes them.",
@@ -2960,6 +2996,15 @@ function buildSegmentationCorrectorPrompt(
   segmentation: StorySegmentation,
   generationPrompt: string,
 ): string {
+  const segmentCount = segmentation.segments.length;
+  const panelRangeLabel =
+    segmentCount === 1
+      ? "story panel 1"
+      : `story panels 1-${segmentCount}`;
+  const promptRangeLabel =
+    segmentCount === 1
+      ? '0 = story panel 1'
+      : `0-${segmentCount - 1} = story panels 1-${segmentCount}`;
   const lines: string[] = [
     "You are the image prompt corrector for illustrated historical stories.",
     "Assess whether the illustration prompts comply with the brief and rewrite only the prompts that violate the rules.",
@@ -2975,7 +3020,7 @@ function buildSegmentationCorrectorPrompt(
     "- Do not attempt to visualize abstract entities as hovering graphics; depict physical artifacts instead (e.g., a ledger, a letter, a map, a machine).",
     "- Follow the historical beat described; do not invent new artifacts beyond everyday period items.",
     "- Poster prompts must include a bold 2–4 word title, the historical figure’s name, and a single 4-digit year as visible text (each supporting element under six words).",
-    "- No modern-world references in story panels 1–10; if a modern connection exists, it must appear only in the ending card text and remain brief.",
+    `- No modern-world references in ${panelRangeLabel}; if a modern connection exists, it must appear only in the ending card text and remain brief.`,
     "- Never depict the listener or a second-person stand‑in. Remove 'you', 'student', 'apprentice', 'listener', or 'audience' as subjects; rewrite to focus on historical figures, settings, or artifacts instead.",
     "- Prompts must match the narration’s intended meaning. Do not literalize idioms or latch onto keywords that change the beat’s context.",
     "- Consecutive frames must feel like distinct scenes. Reject prompts that only introduce small pose tweaks or superficial changes instead of new settings or moments.",
@@ -2988,7 +3033,7 @@ function buildSegmentationCorrectorPrompt(
     generationPrompt,
     "===== End brief =====",
     "",
-    'Indexed prompts (0-9 story panels, 10 = ending card labelled "the end", 11 = poster):',
+    `Indexed prompts (${promptRangeLabel}, ${segmentCount} = ending card labelled "the end", ${segmentCount + 1} = poster):`,
   ];
 
   segmentation.segments.forEach((segment, idx) => {
@@ -3053,7 +3098,7 @@ function applySegmentationCorrections(
     );
   });
 
-  return StorySegmentationSchema.parse(draft);
+  return buildStorySegmentationSchema(totalSegments).parse(draft);
 }
 
 export async function generateStorySegmentation(
@@ -3061,16 +3106,25 @@ export async function generateStorySegmentation(
   topic: string,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
+  segmentCount?: number,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating narration segments with ${TEXT_MODEL_ID}`);
-  const prompt = buildSegmentationPrompt(storyText, topic);
+  const resolvedSegmentCount = resolveStorySegmentCount(segmentCount);
+  const prompt = buildSegmentationPrompt(
+    storyText,
+    topic,
+    resolvedSegmentCount,
+  );
+  const responseSchema =
+    buildStorySegmentationResponseSchema(resolvedSegmentCount);
+  const segmentationSchema = buildStorySegmentationSchema(resolvedSegmentCount);
   const segmentation = await generateJson<StorySegmentation>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseSchema: STORY_SEGMENTATION_RESPONSE_SCHEMA,
-    schema: StorySegmentationSchema,
+    responseSchema,
+    schema: segmentationSchema,
     debug: options?.debugRootDir
       ? {
           rootDir: options.debugRootDir,
@@ -3089,9 +3143,15 @@ export async function correctStorySegmentation(
   initialSegmentation: StorySegmentation,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
+  segmentCount?: number,
 ): Promise<StorySegmentation> {
   const adapter = useProgress(progress);
-  const generationPrompt = buildSegmentationPrompt(storyText, topic);
+  const resolvedSegmentCount = resolveStorySegmentCount(segmentCount);
+  const generationPrompt = buildSegmentationPrompt(
+    storyText,
+    topic,
+    resolvedSegmentCount,
+  );
   let workingSegmentation = initialSegmentation;
   adapter.log(`[story] reviewing segmentation prompts with ${TEXT_MODEL_ID}`);
 
@@ -3104,6 +3164,11 @@ export async function correctStorySegmentation(
       workingSegmentation,
       generationPrompt,
     );
+    const maxPromptIndex = resolvedSegmentCount + 1;
+    const responseSchema =
+      buildSegmentationCorrectorResponseSchemaJson(maxPromptIndex);
+    const parseSchema =
+      buildSegmentationCorrectorResponseSchema(maxPromptIndex);
     const attemptLabel = `corrections/attempt-${String(attempt).padStart(3, "0")}-of-${String(SEGMENTATION_CORRECTION_ATTEMPTS).padStart(3, "0")}`;
     const stageLabel =
       [options?.debugSubStage, attemptLabel]
@@ -3122,8 +3187,8 @@ export async function correctStorySegmentation(
             parts: [{ type: "text", text: reviewPrompt }],
           },
         ],
-        responseSchema: SEGMENTATION_CORRECTOR_RESPONSE_SCHEMA,
-        schema: SegmentationCorrectorResponseSchema,
+        responseSchema,
+        schema: parseSchema,
         debug: options?.debugRootDir
           ? {
               rootDir: options.debugRootDir,
@@ -3737,6 +3802,10 @@ export async function judgeImageSets(
 }> {
   const adapter = useProgress(progress);
   const { promptsByIndex } = collectSegmentationImageContext(segmentation);
+  const segmentCount = segmentation.segments.length;
+  const totalImages = segmentCount + 2;
+  const panelRangeLabel =
+    segmentCount === 1 ? "story panel 1" : `story panels 1-${segmentCount}`;
   const setA = imageSets.find((set) => set.imageSetLabel === "set_a");
   const setB = imageSets.find((set) => set.imageSetLabel === "set_b");
   if (!setA || !setB) {
@@ -3745,7 +3814,7 @@ export async function judgeImageSets(
 
   const headerLines: string[] = [
     "You are the image quality judge for illustrated historical stories.",
-    'Two complete illustration sets are provided: Set A and Set B. Each contains 12 images covering story panels 1-10, a "the end" card, and a poster.',
+    `Two complete illustration sets are provided: Set A and Set B. Each contains ${totalImages} images covering ${panelRangeLabel}, a "the end" card, and a poster.`,
     "Evaluate which set better satisfies the prompts and style requirements.",
     "Criteria: prompt fidelity, cinematic single-scene composition, grounded historical setting, expressive yet cohesive style, and strong character continuity.",
     "Typography check: the poster must clearly display (as visible text) a bold 2–4 word title, the historical figure’s name, and a single 4-digit year; other text stays concise, spelled correctly, and period-appropriate.",
@@ -3810,7 +3879,10 @@ export async function generateStoryImages(
   options?: StoryDebugOptions,
 ): Promise<StoryImagesResult> {
   const adapter = useProgress(progress);
-  adapter.log("[story] generating 12 images via dual-set comparison workflow");
+  const totalImages = segmentation.segments.length + 2;
+  adapter.log(
+    `[story] generating ${totalImages} images via dual-set comparison workflow`,
+  );
 
   const { entries, promptsByIndex } =
     collectSegmentationImageContext(segmentation);
@@ -3852,6 +3924,7 @@ type GenerateStoryOptions = {
   debugRootDir?: string;
   checkpointDir?: string;
   lessonContext?: StoryLessonContext;
+  storySegmentCount?: number;
 };
 
 export type GenerateStoryResult = {
@@ -3948,6 +4021,7 @@ type StoryGenerationPipelineOptions = {
   debugRootDir?: string;
   checkpointDir?: string;
   lessonContext?: StoryLessonContext;
+  storySegmentCount?: number;
 };
 
 type StageCacheEntry<TValue> = {
@@ -4026,9 +4100,11 @@ export class StoryGenerationPipeline {
   } = {};
 
   private readonly logger: JobProgressReporter;
+  private readonly segmentCount: number;
 
   constructor(private readonly options: StoryGenerationPipelineOptions) {
     this.logger = useProgress(options.progress);
+    this.segmentCount = resolveStorySegmentCount(options.storySegmentCount);
   }
 
   private get checkpointDir(): string | undefined {
@@ -4052,6 +4128,28 @@ export class StoryGenerationPipeline {
       return undefined;
     }
     return path.join(this.checkpointDir, `${stage}.json`);
+  }
+
+  private imageCheckpointMatchesSegmentCount(
+    images: StoryImagesResult,
+  ): boolean {
+    const expectedTotal = this.segmentCount + 2;
+    if (images.images.length !== expectedTotal) {
+      return false;
+    }
+    const indices = new Set<number>();
+    for (const image of images.images) {
+      indices.add(image.index);
+    }
+    if (indices.size !== expectedTotal) {
+      return false;
+    }
+    for (let index = 1; index <= expectedTotal; index += 1) {
+      if (!indices.has(index)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async readIdeaCheckpoint(): Promise<
@@ -4371,8 +4469,16 @@ export class StoryGenerationPipeline {
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed: unknown = JSON.parse(raw);
-      const segmentation = StorySegmentationSchema.parse(parsed);
-      return { value: segmentation, filePath };
+      const parseResult = buildStorySegmentationSchema(
+        this.segmentCount,
+      ).safeParse(parsed);
+      if (!parseResult.success) {
+        this.logger.log(
+          `[story/checkpoint] ignored 'segmentation' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      return { value: parseResult.data, filePath };
     } catch (error) {
       if (isEnoent(error)) {
         return undefined;
@@ -4405,8 +4511,16 @@ export class StoryGenerationPipeline {
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
       const parsed: unknown = JSON.parse(raw);
-      const segmentation = StorySegmentationSchema.parse(parsed);
-      return { value: segmentation, filePath };
+      const parseResult = buildStorySegmentationSchema(
+        this.segmentCount,
+      ).safeParse(parsed);
+      if (!parseResult.success) {
+        this.logger.log(
+          `[story/checkpoint] ignored 'segmentation_correction' checkpoint at ${filePath} (schema mismatch)`,
+        );
+        return undefined;
+      }
+      return { value: parseResult.data, filePath };
     } catch (error) {
       if (isEnoent(error)) {
         return undefined;
@@ -4890,6 +5004,7 @@ export class StoryGenerationPipeline {
         {
           debugRootDir: this.options.debugRootDir,
         },
+        this.segmentCount,
       );
       const checkpointPath =
         await this.writeSegmentationCheckpoint(segmentation);
@@ -4940,6 +5055,7 @@ export class StoryGenerationPipeline {
         {
           debugRootDir: this.options.debugRootDir,
         },
+        this.segmentCount,
       );
       const checkpointPath =
         await this.writeCorrectedSegmentationCheckpoint(corrected);
@@ -4965,16 +5081,22 @@ export class StoryGenerationPipeline {
     }
     const checkpoint = await this.readImagesCheckpoint();
     if (checkpoint) {
-      const entry: StageCacheEntry<StoryImagesResult> = {
-        value: checkpoint.value,
-        source: "checkpoint",
-        checkpointPath: checkpoint.filePath,
-      };
-      this.caches.images = entry;
-      this.logger.log(
-        `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`,
-      );
-      return entry;
+      if (!this.imageCheckpointMatchesSegmentCount(checkpoint.value)) {
+        this.logger.log(
+          `[story/checkpoint] ignored 'images' checkpoint at ${checkpoint.filePath} (segment count mismatch)`,
+        );
+      } else {
+        const entry: StageCacheEntry<StoryImagesResult> = {
+          value: checkpoint.value,
+          source: "checkpoint",
+          checkpointPath: checkpoint.filePath,
+        };
+        this.caches.images = entry;
+        this.logger.log(
+          `[story/checkpoint] restored 'images' from ${checkpoint.filePath}`,
+        );
+        return entry;
+      }
     }
     await this.invalidateAfter("images");
     const { value: segmentation } = await this.ensureSegmentationCorrection();
@@ -5245,6 +5367,7 @@ export async function generateStory(
     debugRootDir: options.debugRootDir,
     checkpointDir: options.checkpointDir,
     lessonContext: options.lessonContext,
+    storySegmentCount: options.storySegmentCount,
   });
 
   const { value: story } = await pipeline.ensureProse();

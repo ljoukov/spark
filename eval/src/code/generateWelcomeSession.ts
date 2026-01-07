@@ -53,6 +53,23 @@ const optionsSchema = z
         }
         return parsed;
       }),
+    storySegmentCount: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (value === undefined) {
+          return undefined;
+        }
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isNaN(parsed)) {
+          throw new Error("story segment count must be an integer");
+        }
+        return parsed;
+      })
+      .refine(
+        (value) => value === undefined || (value >= 1 && value <= 10),
+        { message: "story segment count must be between 1 and 10" },
+      ),
     storyPlanItemId: z
       .string()
       .trim()
@@ -331,6 +348,10 @@ async function main(): Promise<void> {
     .option("--seed <int>", "Seed for deterministic prompting")
     .option("--no-story", "Skip story generation")
     .option(
+      "--story-segment-count <int>",
+      "Number of story panels (1-10)",
+    )
+    .option(
       "--story-plan-item-id <id>",
       "Plan item id used for the story media",
       DEFAULT_STORY_PLAN_ITEM_ID,
@@ -351,6 +372,7 @@ async function main(): Promise<void> {
     briefFile?: string;
     sessionId?: string;
     seed?: string;
+    storySegmentCount?: string;
     storyPlanItemId?: string;
     checkpointDir?: string;
     debugRootDir?: string;
@@ -363,6 +385,7 @@ async function main(): Promise<void> {
     briefFile: raw.briefFile,
     sessionId: raw.sessionId,
     seed: raw.seed,
+    storySegmentCount: raw.storySegmentCount,
     storyPlanItemId: raw.storyPlanItemId,
     checkpointDir: raw.checkpointDir,
     debugRootDir: raw.debugRootDir,
@@ -413,7 +436,7 @@ async function main(): Promise<void> {
   const includeStoryOverride =
     parsed.noStory === true || parsed.story === false ? false : undefined;
   console.log(
-    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId}`,
+    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId} storySegmentCount=${parsed.storySegmentCount ?? "default"}`,
   );
 
   const metadataCheckpoint = path.join(checkpointDir, "metadata.json");
@@ -441,6 +464,7 @@ async function main(): Promise<void> {
         userId: TEMPLATE_USER_ID,
         sessionId,
         storyPlanItemId: parsed.storyPlanItemId,
+        storySegmentCount: parsed.storySegmentCount,
         progress,
         includeStory: includeStoryOverride,
       });
