@@ -1294,7 +1294,12 @@ export function buildStoryIdeaPrompt(
       if (hook.analogy_seed) {
         contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
       }
-      if (hook.visual_motif) {
+      if (hook.visual_scene) {
+        const props = hook.visual_scene.props.join(", ");
+        contextLines.push(
+          `- Visual scene: setting="${hook.visual_scene.setting}", focal_object="${hook.visual_scene.focal_object}", props=[${props}]`,
+        );
+      } else if (hook.visual_motif) {
         contextLines.push(`- Visual motif: ${hook.visual_motif}`);
       }
       if (hook.modern_tie_in) {
@@ -1462,7 +1467,12 @@ export function buildStoryDraftPrompt(
       if (hook.analogy_seed) {
         contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
       }
-      if (hook.visual_motif) {
+      if (hook.visual_scene) {
+        const props = hook.visual_scene.props.join(", ");
+        contextLines.push(
+          `- Visual scene: setting="${hook.visual_scene.setting}", focal_object="${hook.visual_scene.focal_object}", props=[${props}]`,
+        );
+      } else if (hook.visual_motif) {
         contextLines.push(`- Visual motif: ${hook.visual_motif}`);
       }
       if (hook.modern_tie_in) {
@@ -1598,7 +1608,12 @@ export function buildStoryRevisionPrompt(
       if (hook.analogy_seed) {
         contextLines.push(`- Analogy seed: ${hook.analogy_seed}`);
       }
-      if (hook.visual_motif) {
+      if (hook.visual_scene) {
+        const props = hook.visual_scene.props.join(", ");
+        contextLines.push(
+          `- Visual scene: setting="${hook.visual_scene.setting}", focal_object="${hook.visual_scene.focal_object}", props=[${props}]`,
+        );
+      } else if (hook.visual_motif) {
         contextLines.push(`- Visual motif: ${hook.visual_motif}`);
       }
       if (hook.modern_tie_in) {
@@ -4055,6 +4070,11 @@ type StoryLessonContext = {
     stakes?: string;
     analogy_seed?: string;
     modern_tie_in?: string;
+    visual_scene?: {
+      setting: string;
+      focal_object: string;
+      props: string[];
+    };
     visual_motif?: string;
     naming_note?: string;
   };
