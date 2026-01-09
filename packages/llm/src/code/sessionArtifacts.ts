@@ -19,6 +19,7 @@ import {
 } from "./generateSession";
 
 const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
+const QUIZ_DEFINITIONS_MODEL_ID = "gemini-flash-latest" as const;
 
 const SessionMetadataSchema = z.object({
   tagline: z.string().trim().min(1),
@@ -534,7 +535,7 @@ export async function generateQuizDefinitions(
   const prompt = buildQuizDefinitionsPrompt(plan, quizzes, lessonBrief);
   try {
     const payload = await generateJson<{ quizzes: QuizDefinition[] }>({
-      modelId: TEXT_MODEL_ID,
+      modelId: QUIZ_DEFINITIONS_MODEL_ID,
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       schema: QuizDefinitionsPayloadSchema,
       responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
