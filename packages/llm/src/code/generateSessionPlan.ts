@@ -29,6 +29,9 @@ export const PLAN_LIMITS = {
     analogySeed: 180,
     modernTieIn: 120,
     visualMotif: 120,
+    visualSceneSetting: 80,
+    visualSceneFocalObject: 60,
+    visualSceneProp: 40,
     namingNote: 160,
   },
   partSummary: 160,
@@ -116,6 +119,30 @@ export const SessionPlanSchema = z
         .trim()
         .min(1)
         .max(PLAN_LIMITS.story.modernTieIn)
+        .optional(),
+      visual_scene: z
+        .object({
+          setting: z
+            .string()
+            .trim()
+            .min(1)
+            .max(PLAN_LIMITS.story.visualSceneSetting),
+          focal_object: z
+            .string()
+            .trim()
+            .min(1)
+            .max(PLAN_LIMITS.story.visualSceneFocalObject),
+          props: z
+            .array(
+              z
+                .string()
+                .trim()
+                .min(1)
+                .max(PLAN_LIMITS.story.visualSceneProp),
+            )
+            .min(1)
+            .max(3),
+        })
         .optional(),
       visual_motif: z
         .string()
@@ -235,7 +262,11 @@ export function buildPlanIdeasUserPrompt(
     "- Historical Hook bullets: protagonist (name + role), specific event with year/place, and the stakes.",
     "- Analogy Seed: a one-sentence functional analogy that maps to the concept’s core behaviour.",
     "- Modern Tie-in Domain: one noun phrase to reserve for the ending pivot (keep it aligned to the lesson).",
-    "- Visual Motif: one physical, period-appropriate object/scene to reuse in illustrations (no neon/abstract).",
+    "- Visual Scene: three bullets — Setting (place + era), Focal Object (single concrete object), Supporting Props (2-3 concrete items).",
+    "  Example Visual Scene:",
+    '  - Setting: "1860s Prussian map room"',
+    '  - Focal Object: "cipher wheel"',
+    '  - Supporting Props: ["ledger", "ink blotter", "wax seal"]',
     "- Naming Note (optional): why the concept/name stuck, if relevant and safe to include.",
     "- Part Progression with an ordered list of story/quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: story, quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
     "- Promised Skills bullet list",
@@ -247,25 +278,30 @@ export function buildPlanIdeasUserPrompt(
     "- Promised Skills must cover every skill the coding blueprints need; avoid adding skills that are not used.",
     "- If the brief specifies quiz question counts, include them on quiz parts only (never story/problem) in the progression notes so they can be parsed.",
     "",
-    "Use clear labels for each idea (e.g., Historical Hook, Analogy Seed, Modern Tie-in Domain, Visual Motif, Naming Note) so they can be parsed into the plan.",
+    "Use clear labels for each idea (e.g., Historical Hook, Analogy Seed, Modern Tie-in Domain, Visual Scene, Naming Note) so they can be parsed into the plan.",
   );
   return parts.join("\n");
 }
 
 export function buildPlanParseUserPrompt(markdown: string): string {
   return [
-    "Schema: {topic, difficulty, assumptions, story{storyTopic, protagonist?, anchor_event?, anchor_year?, anchor_place?, stakes?, analogy_seed?, modern_tie_in?, visual_motif?, naming_note?}, parts[{order,kind,summary,question_count?,id?}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
+    "Schema: {topic, difficulty, assumptions, story{storyTopic, protagonist?, anchor_event?, anchor_year?, anchor_place?, stakes?, analogy_seed?, modern_tie_in?, visual_scene?, naming_note?}, parts[{order,kind,summary,question_count?,id?}], promised_skills[], concepts_to_teach[], coding_blueprints[{id,title,idea,required_skills[],constraints?[]}]}",
     `Set assumptions exactly to ${JSON.stringify(ASSUMPTIONS)} (no additions).`,
     'Set "difficulty" to "easy", "medium", or "hard".',
-    "Keep story.* strings compact: <=120 chars (stakes<=200, analogy_seed<=180, visual_motif<=15 words and <=160 chars).",
-    "visual_motif must be one concrete object/scene only—no art styles, palettes, resolution tokens, or repeated adjectives.",
+    "Keep story.* strings compact: <=120 chars (stakes<=200, analogy_seed<=180).",
+    "If present, visual_scene must be an object with {setting, focal_object, props}.",
+    "visual_scene.setting must be a place + era (<=80 chars).",
+    "visual_scene.focal_object must be one concrete object (<=60 chars).",
+    "visual_scene.props must be 1-3 short concrete items (<=40 chars each).",
+    'Example visual_scene: {"setting":"1860s Prussian map room","focal_object":"cipher wheel","props":["ledger","ink blotter","wax seal"]}.',
+    "Never quote or repeat any instruction text in visual_scene fields.",
     'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
     "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/problems and any wrap-up quiz.",
     "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
     "Include one coding_blueprint per problem part, in the same order as the problem parts.",
     "Promised skills must include every item listed under coding_blueprints.required_skills; add missing skills instead of changing the blueprint requirements.",
     "Concepts_to_teach must be actually used in the parts summaries or coding_blueprints (logic, constraints, or required_skills). Drop any concept from the Markdown that is not used; never invent new ones.",
-    "Populate story.* fields from the historical hook (protagonist, anchor event/year/place, stakes, analogy seed, modern tie-in domain, visual motif, naming note when present).",
+    "Populate story.* fields from the historical hook (protagonist, anchor event/year/place, stakes, analogy seed, modern tie-in domain, visual scene, naming note when present).",
     "Keep story fields concise, historical, and free of fictional settings.",
     "If the brief or plan notes specify quiz question counts, set parts.question_count for those quiz parts only; omit question_count for story/problem parts.",
     "Output strict JSON only—no analysis, no Markdown, no prose. Start with '{' and end with '}'.",
@@ -286,7 +322,8 @@ export function buildPlanEditUserPrompt(
     "Promised skills must cover every coding_blueprints.required_skills entry; add the missing skills rather than removing blueprint requirements.",
     "question_count is only allowed on quiz parts; remove it from story/problem parts.",
     "Remove any concepts_to_teach entries that are not used in parts or coding_blueprints; do not invent new concepts.",
-    "Enforce length and concreteness caps: every string must respect the schema limits. visual_motif must be a single concrete object/scene under 120 characters—no style tokens or adjective chains; shorten aggressively when in doubt.",
+    "Enforce length and concreteness caps: every string must respect the schema limits.",
+    "If visual_scene is present, keep setting as place+era, focal_object as a single concrete object, and props as 1-3 short items.",
     "Output JSON only (no Markdown or commentary). If unsure, simplify wording instead of expanding.",
     "",
     "Grading Report:",
@@ -447,10 +484,31 @@ export const PLAN_PARSE_RESPONSE_SCHEMA: Schema = {
           minLength: "1",
           maxLength: String(PLAN_LIMITS.story.modernTieIn),
         },
-        visual_motif: {
-          type: Type.STRING,
-          minLength: "1",
-          maxLength: String(PLAN_LIMITS.story.visualMotif),
+        visual_scene: {
+          type: Type.OBJECT,
+          required: ["setting", "focal_object", "props"],
+          properties: {
+            setting: {
+              type: Type.STRING,
+              minLength: "1",
+              maxLength: String(PLAN_LIMITS.story.visualSceneSetting),
+            },
+            focal_object: {
+              type: Type.STRING,
+              minLength: "1",
+              maxLength: String(PLAN_LIMITS.story.visualSceneFocalObject),
+            },
+            props: {
+              type: Type.ARRAY,
+              minItems: "1",
+              maxItems: "3",
+              items: {
+                type: Type.STRING,
+                minLength: "1",
+                maxLength: String(PLAN_LIMITS.story.visualSceneProp),
+              },
+            },
+          },
         },
         naming_note: {
           type: Type.STRING,
