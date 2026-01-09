@@ -2463,6 +2463,7 @@ export async function generateSession(
           stakes: plan.story.stakes,
           analogy_seed: plan.story.analogy_seed,
           modern_tie_in: plan.story.modern_tie_in,
+          visual_scene: plan.story.visual_scene,
           visual_motif: plan.story.visual_motif,
           naming_note: plan.story.naming_note,
         },
