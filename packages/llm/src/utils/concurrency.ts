@@ -625,7 +625,7 @@ class ProgressDisplay {
       startedAt: Date.now(),
     });
     this.dirty = true;
-    this.render(this.mode === "interactive");
+    this.render(true);
     return handle;
   }
 
@@ -636,7 +636,7 @@ class ProgressDisplay {
     }
     this.activeStages.delete(handle);
     this.dirty = true;
-    this.render(this.mode === "interactive");
+    this.render(true);
   }
 
   private clearStagesForReporter(reporterId: symbol): void {
@@ -649,7 +649,7 @@ class ProgressDisplay {
     }
     if (changed) {
       this.dirty = true;
-      this.render(this.mode === "interactive");
+      this.render(true);
     }
   }
 
