@@ -9,7 +9,7 @@ import {
 } from "@spark/schemas";
 import { z } from "zod";
 
-import { generateJson } from "../utils/llm";
+import { generateJson, type LlmDebugOptions } from "../utils/llm";
 import {
   ProblemPlanItemsSchema,
   type CodingProblem,
@@ -532,6 +532,7 @@ export async function generateQuizDefinitions(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
   lessonBrief?: string,
+  options?: { debug?: LlmDebugOptions },
 ): Promise<readonly QuizDefinition[]> {
   const prompt = buildQuizDefinitionsPrompt(plan, quizzes, lessonBrief);
   try {
@@ -540,6 +541,7 @@ export async function generateQuizDefinitions(
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       schema: QuizDefinitionsPayloadSchema,
       responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
+      debug: options?.debug,
       maxAttempts: 4,
     });
     return payload.quizzes;
