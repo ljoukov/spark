@@ -19,7 +19,7 @@ import {
 } from "./generateSession";
 
 const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
-const QUIZ_DEFINITIONS_MODEL_ID = "gemini-flash-latest" as const;
+const QUIZ_DEFINITIONS_MODEL_ID = "gemini-3-pro-preview" as const;
 
 const SessionMetadataSchema = z.object({
   tagline: z.string().trim().min(1),
