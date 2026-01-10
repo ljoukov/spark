@@ -12,6 +12,7 @@
     "tools:pdf-to-json": "tsx src/tools/pdf-to-json.ts",
     "tools:say": "tsx src/tools/say.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
+    "test:llm-openai": "tsx src/tests/testOpenAiApi.ts",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",

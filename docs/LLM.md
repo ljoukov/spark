@@ -1,6 +1,6 @@
 # LLM Utilities (packages/llm/src/utils/llm.ts)
 
-This module provides thin wrappers around Gemini streaming to make it easy to:
+This module provides thin wrappers around Gemini + OpenAI Responses streaming to make it easy to:
 - Send prompts as structured parts (text, inline data)
 - Stream responses (text, image) while reporting progress
 - Validate JSON responses with Zod
@@ -22,7 +22,7 @@ It is used across eval tools and session generators.
 ### Shared options
 
 All calls accept:
-- `modelId`: text model (Gemini) or image model (`gemini-3-pro-image-preview`).
+- `modelId`: text model (Gemini or OpenAI) or image model (`gemini-3-pro-image-preview`).
 - `contents`: ordered array of `{ role: 'user' | 'model' | 'system' | 'tool'; parts: LlmContentPart[] }` representing the conversation you want to send to Gemini. Each part can be:
   - `{ type: 'text', text: string, thought?: boolean }`
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
@@ -32,7 +32,7 @@ All calls accept:
   - `responseMimeType?`, `responseSchema?` (text/JSON)
   - `responseModalities?` (e.g. `["IMAGE","TEXT"]`); images default to `["IMAGE","TEXT"]`
   - `imageAspectRatio?`
-  - `tools?`: an array of `{ type: 'web-search' }` (mapped to Google Search)
+  - `tools?`: `{ type: 'web-search' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
 
 ### JSON convenience
 
@@ -41,6 +41,10 @@ All calls accept:
 - `responseSchema`: Google `Schema` definition applied at request time (required)
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
 - Responses are automatically requested as `application/json` and parsed before validation.
+
+When `modelId` is an OpenAI model, `generateJson` enables Structured Outputs by sending
+`text.format` with a JSON Schema derived from the Zod schema (via `@alcyone-labs/zod-to-json-schema`).
+The response text is still parsed and validated with the supplied Zod schema.
 
 Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
 
@@ -66,6 +70,7 @@ The default reporter aggregates across all calls and renders a single line that 
 
 Notes:
 - Thinking tokens are reported separately (text and tokens) and are included in the final cost calculation. Visible response text still determines the returned value from `generateText`.
+- OpenAI reasoning tokens are reported as `thinking` in logs/metrics.
 - Zero-value stats are omitted from the status line to keep it readable.
 
 ## Debug Snapshots (Prompts and Responses)

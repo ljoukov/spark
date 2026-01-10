@@ -54,17 +54,23 @@ import {
 import {
   MAX_QUIZ_ATTEMPTS,
   MAX_QUIZ_GRADE_RETRIES,
+  QUIZZES_OUTLINE_RESPONSE_SCHEMA,
   QUIZZES_GRADE_RESPONSE_SCHEMA,
-  QUIZZES_RESPONSE_SCHEMA,
+  QUIZ_RESPONSE_SCHEMA,
   QuizzesGradeSchema,
+  QuizzesOutlineSchema,
   QuizzesSchema,
   buildQuizIdeasUserPrompt,
-  buildQuizzesGenerateUserPrompt,
+  buildQuizFillUserPrompt,
+  buildQuizzesOutlineUserPrompt,
   buildQuizzesGradeUserPrompt,
   type PlanQuizSpec,
   type QuizzesGrade,
+  type QuizzesOutlinePayload,
   type QuizzesPayload,
   type SessionQuiz,
+  type SessionQuizOutline,
+  SessionQuizSchema,
 } from "./generateQuizes";
 import { generateStory } from "./generateStory";
 import type { GenerateStoryResult } from "./generateStory";
@@ -331,6 +337,18 @@ function buildQuizSpecs(
     specs.push({ id, summary: part.summary, questionCount });
   }
   return specs;
+}
+
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 type SessionGenerationStageName =
@@ -1587,7 +1605,7 @@ export class SessionGenerationPipeline {
   }
 
   private validateQuizCounts(
-    quizzes: QuizzesPayload,
+    quizzes: { quizzes: Array<{ quiz_id: string; questions: unknown[] }> },
     quizSpecs: readonly PlanQuizSpec[],
   ): void {
     const expected = new Map(
@@ -1613,6 +1631,68 @@ export class SessionGenerationPipeline {
       const missing = [...expected.keys()].filter((id) => !seen.has(id));
       throw new Error(`missing quizzes for ids: ${missing.join(", ")}`);
     }
+  }
+
+  private mergeQuizOutline(
+    outline: SessionQuizOutline,
+    quiz: SessionQuiz,
+  ): SessionQuiz {
+    if (quiz.quiz_id !== outline.quiz_id) {
+      throw new Error(
+        `quiz id mismatch: expected '${outline.quiz_id}' but received '${quiz.quiz_id}'`,
+      );
+    }
+    if (quiz.questions.length !== outline.questions.length) {
+      throw new Error(
+        `quiz '${outline.quiz_id}' expected ${outline.questions.length} questions but received ${quiz.questions.length}`,
+      );
+    }
+    const mergedQuestions: SessionQuiz["questions"] = [];
+    for (let index = 0; index < outline.questions.length; index += 1) {
+      const outlineQuestion = outline.questions[index];
+      const quizQuestion = quiz.questions[index];
+      if (!quizQuestion) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' missing question at index ${index}`,
+        );
+      }
+      if (quizQuestion.id !== outlineQuestion.id) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' question ${index + 1} id mismatch: expected '${outlineQuestion.id}' but received '${quizQuestion.id}'`,
+        );
+      }
+      if (quizQuestion.type !== outlineQuestion.type) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' question ${outlineQuestion.id} type mismatch: expected '${outlineQuestion.type}' but received '${quizQuestion.type}'`,
+        );
+      }
+      if (quizQuestion.prompt !== outlineQuestion.prompt) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' question ${outlineQuestion.id} prompt mismatch`,
+        );
+      }
+      if (!arraysEqual(quizQuestion.tags, outlineQuestion.tags)) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' question ${outlineQuestion.id} tags mismatch`,
+        );
+      }
+      if (
+        !arraysEqual(
+          quizQuestion.covers_techniques,
+          outlineQuestion.covers_techniques,
+        )
+      ) {
+        throw new Error(
+          `quiz '${outline.quiz_id}' question ${outlineQuestion.id} covers_techniques mismatch`,
+        );
+      }
+      mergedQuestions.push(quizQuestion);
+    }
+    return {
+      ...quiz,
+      quiz_id: outline.quiz_id,
+      questions: mergedQuestions,
+    };
   }
 
   private async ensureQuizzesInternal(): Promise<
@@ -1641,35 +1721,88 @@ export class SessionGenerationPipeline {
     const techniques = await this.ensureProblemTechniques();
     const problems = await this.ensureProblems();
     return this.withStage("quizzes", async () => {
-      const userPrompt = buildQuizzesGenerateUserPrompt(
-        plan,
-        quizIdeas.markdown,
-        problems,
-        techniques,
-        quizSpecs,
-        this.options.lessonBrief,
-      );
-      const debugOptions = this.createDebugOptions("quizzes-generate");
-      this.logger.log("[session/quizzes] generating quiz JSON");
-      const quizzes = await generateJson<QuizzesPayload>({
-        modelId: TEXT_MODEL_ID,
-        contents: buildSingleUserPrompt(
-          "Produce final quizzes with concise explanations, optional theory blocks, and explicit technique coverage.",
-          userPrompt,
-        ),
-        responseSchema: QUIZZES_RESPONSE_SCHEMA,
-        schema: QuizzesSchema,
-        progress: this.logger,
-        debug: debugOptions,
-      });
-      this.validateQuizCounts(quizzes, quizSpecs);
-      await this.writeQuizzesCheckpoint(quizzes);
-      const entry: StageCacheEntry<QuizzesPayload> = {
-        value: quizzes,
-        source: "generated",
-      };
-      this.caches.quizzes = entry;
-      return entry;
+      for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
+        const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
+        try {
+          const outlinePrompt = buildQuizzesOutlineUserPrompt(
+            plan,
+            quizIdeas.markdown,
+            problems,
+            techniques,
+            quizSpecs,
+            this.options.lessonBrief,
+          );
+          const outlineDebug = this.createDebugOptions(
+            "quizzes-outline",
+            attemptLabel,
+          );
+          this.logger.log(
+            `[session/quizzes] generating question outlines (${attemptLabel})`,
+          );
+          const outlines = await generateJson<QuizzesOutlinePayload>({
+            modelId: TEXT_MODEL_ID,
+            contents: buildSingleUserPrompt(
+              "Produce quiz question outlines only (no answers or explanations).",
+              outlinePrompt,
+            ),
+            responseSchema: QUIZZES_OUTLINE_RESPONSE_SCHEMA,
+            schema: QuizzesOutlineSchema,
+            progress: this.logger,
+            debug: outlineDebug,
+            maxAttempts: 4,
+          });
+          this.validateQuizCounts(outlines, quizSpecs);
+          const expandedQuizzes: SessionQuiz[] = [];
+          for (const outline of outlines.quizzes) {
+            const expandPrompt = buildQuizFillUserPrompt(
+              plan,
+              outline,
+              techniques,
+              this.options.lessonBrief,
+            );
+            const expandDebug = this.createDebugOptions(
+              "quiz-expand",
+              `${attemptLabel}/${outline.quiz_id}`,
+            );
+            this.logger.log(
+              `[session/quizzes] expanding ${outline.quiz_id} (${attemptLabel})`,
+            );
+            const expanded = await generateJson<SessionQuiz>({
+              modelId: TEXT_MODEL_ID,
+              contents: buildSingleUserPrompt(
+                "Expand a single quiz with answers, options, and explanations.",
+                expandPrompt,
+              ),
+              responseSchema: QUIZ_RESPONSE_SCHEMA,
+              schema: SessionQuizSchema,
+              progress: this.logger,
+              debug: expandDebug,
+              maxAttempts: 4,
+            });
+            expandedQuizzes.push(this.mergeQuizOutline(outline, expanded));
+          }
+          const quizzesPayload: QuizzesPayload = { quizzes: expandedQuizzes };
+          this.validateQuizCounts(quizzesPayload, quizSpecs);
+          await this.writeQuizzesCheckpoint(quizzesPayload);
+          const entry: StageCacheEntry<QuizzesPayload> = {
+            value: quizzesPayload,
+            source: "generated",
+          };
+          this.caches.quizzes = entry;
+          return entry;
+        } catch (error) {
+          const message = errorAsString(error);
+          this.logger.log(
+            `[session/quizzes] attempt ${attempt} failed (${message})`,
+          );
+          if (attempt === MAX_QUIZ_ATTEMPTS) {
+            throw new Error(
+              `Quiz generation failed after ${MAX_QUIZ_ATTEMPTS} attempts: ${message}`,
+            );
+          }
+        }
+      }
+      throw new Error("Quiz generation failed");
     });
   }
 

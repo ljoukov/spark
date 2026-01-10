@@ -7,6 +7,14 @@ import type { SessionPlan } from "./generateSessionPlan";
 export const MAX_QUIZ_ATTEMPTS = 3;
 export const MAX_QUIZ_GRADE_RETRIES = 2;
 
+const QUIZ_QUESTION_TYPES = [
+  "mcq",
+  "multi",
+  "short",
+  "numeric",
+  "code_reading",
+] as const;
+
 const QuizTheoryBlockSchema = z.object({
   id: z.string().trim().min(1),
   title: z.string().trim().min(1),
@@ -17,6 +25,14 @@ const QuizQuestionBaseSchema = z.object({
   id: z.string().trim().min(1),
   prompt: z.string().trim().min(1),
   explanation: z.string().trim().min(1),
+  tags: z.array(z.string().trim().min(1)).min(1),
+  covers_techniques: z.array(z.string().trim().min(1)).min(1),
+});
+
+const QuizQuestionOutlineSchema = z.object({
+  id: z.string().trim().min(1),
+  type: z.enum(QUIZ_QUESTION_TYPES),
+  prompt: z.string().trim().min(1),
   tags: z.array(z.string().trim().min(1)).min(1),
   covers_techniques: z.array(z.string().trim().min(1)).min(1),
 });
@@ -56,13 +72,43 @@ const QuizQuestionSchema = z.discriminatedUnion("type", [
   QuizQuestionCodeReadingSchema,
 ]);
 
-const SessionQuizSchema = z.object({
+export const SessionQuizSchema = z.object({
   quiz_id: z.string().trim().min(1),
   theory_blocks: z.array(QuizTheoryBlockSchema).optional(),
   questions: z.array(QuizQuestionSchema).min(1),
 });
 
+const SessionQuizOutlineSchema = z.object({
+  quiz_id: z.string().trim().min(1),
+  questions: z.array(QuizQuestionOutlineSchema).min(1),
+});
+
+export type SessionQuizOutline = z.infer<typeof SessionQuizOutlineSchema>;
+
 export type SessionQuiz = z.infer<typeof SessionQuizSchema>;
+
+export const QuizzesOutlineSchema = z.object({
+  quizzes: z.array(SessionQuizOutlineSchema).superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    for (const quiz of value) {
+      if (seen.has(quiz.quiz_id)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `duplicate quiz_id '${quiz.quiz_id}'`,
+        });
+      }
+      seen.add(quiz.quiz_id);
+    }
+    if (seen.size === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "quizzes must include at least one quiz",
+      });
+    }
+  }),
+});
+
+export type QuizzesOutlinePayload = z.infer<typeof QuizzesOutlineSchema>;
 
 export const QuizzesSchema = z.object({
   quizzes: z.array(SessionQuizSchema).superRefine((value, ctx) => {
@@ -322,6 +368,134 @@ export function buildQuizzesGenerateUserPrompt(
   return parts.join("\n");
 }
 
+export function buildQuizzesOutlineUserPrompt(
+  plan: SessionPlan,
+  coverageMarkdown: string,
+  problems: readonly CodingProblem[],
+  techniques: readonly ProblemTechnique[],
+  quizSpecs: readonly PlanQuizSpec[],
+  lessonBrief?: string,
+): string {
+  const quizIds = quizSpecs.map((quiz) => quiz.id);
+  const quizCountLine =
+    quizSpecs.length === 0
+      ? "No quizzes are required."
+      : `Return a JSON object with a single key "quizzes" whose value is an array of exactly ${quizSpecs.length} quiz definitions in this order: ${quizIds.join(", ")}.`;
+  const quizSpecLines =
+    quizSpecs.length > 0
+      ? quizSpecs
+          .map(
+            (quiz, index) =>
+              `- ${index + 1}. quiz_id="${quiz.id}" must have exactly ${quiz.questionCount} questions`,
+          )
+          .join("\n")
+      : "None";
+  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageLines =
+    coverageRequirements.length > 0
+      ? coverageRequirements
+          .map((coverage) => {
+            const problemsList =
+              coverage.problemIds.length > 0
+                ? coverage.problemIds.join(", ")
+                : "none";
+            const techniqueIds =
+              coverage.techniqueIds.length > 0
+                ? coverage.techniqueIds.join(", ")
+                : "none";
+            return `- ${coverage.quizId}: introduce techniques [${techniqueIds}] for problems [${problemsList}]`;
+          })
+          .join("\n")
+      : "None";
+  const constraints: string[] = [
+    quizCountLine,
+    'Each quiz definition must include "quiz_id" and "questions".',
+    'Each question object must include ONLY {"id","type","prompt","tags","covers_techniques"}.',
+    `Allowed question types: ${QUIZ_QUESTION_TYPES.join(", ")}.`,
+    "Do NOT include options, correct answers, explanations, hints, or feedback.",
+    "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
+    "Each quiz must match the required question counts listed below.",
+    "Ensure techniques needed for each problem are introduced in quizzes that appear before that problem in the plan order.",
+    "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
+    "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
+    "Quizzes must stand alone; never assume any problem text is known or refer to 'Problem 1/2/3', 'p1/p2/p3', or 'as in the problem'.",
+    "Do not mention or cite any coding problem title/number; restate any needed setup inside the quiz question itself.",
+    "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
+    "Never reference or assume any problem that appears after the quiz.",
+    "Do not quote or paraphrase the reference solutions.",
+    "covers_techniques must use ids from the provided Problem Techniques JSON.",
+    "Tags must include promised skills, concept tags, and technique-aligned tags.",
+    "Avoid filler: vary question styles and cognitive load (recall -> apply -> debug), and do not repeat near-identical prompts.",
+    "For any technique with preconditions, one-way guarantees, or known pitfalls (e.g., heuristic tests with false positives, base must be coprime, recurrence that breaks on certain inputs), include at least one question that surfaces those limits.",
+    "If any technique uses randomness/probabilistic sampling, add questions about reproducibility (seeding or fixed witness sets) and residual error probability.",
+    "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
+  ];
+  const parts: string[] = [constraints.join("\n")];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
+    "",
+    "Quiz-to-problem technique coverage requirements:",
+    coverageLines,
+    "",
+    "Quiz counts:",
+    quizSpecLines,
+    "",
+    "Plan JSON:",
+    JSON.stringify(plan, null, 2),
+    "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
+    "",
+    "Problems JSON:",
+    JSON.stringify(problems, null, 2),
+    "",
+    "Quiz coverage Markdown:",
+    coverageMarkdown,
+  );
+  return parts.join("\n");
+}
+
+export function buildQuizFillUserPrompt(
+  plan: SessionPlan,
+  quizOutline: SessionQuizOutline,
+  techniques: readonly ProblemTechnique[],
+  lessonBrief?: string,
+): string {
+  const constraints: string[] = [
+    "Expand the quiz outline into a full quiz JSON object.",
+    "Do NOT change quiz_id, question order, question ids, types, prompts, tags, or covers_techniques.",
+    "Add the missing fields for each question:",
+    "- mcq: add options (4-5 strings) and correct (single string that exactly matches one option).",
+    "- multi: add options (4-6 strings) and correct (array of >=2 strings matching options).",
+    "- short/numeric/code_reading: add correct (string).",
+    "Add a concise explanation for every question.",
+    "Ensure options include plausible incorrect answers (distractors) and avoid trick questions.",
+    "Quizzes must stand alone; do not reference coding problems or future lesson parts.",
+    "If a concept is not covered by assumptions, add a short theory_blocks array with a primer before the questions that need it.",
+    "Do not include hints, correctFeedback, or other extra fields.",
+    "Output strict JSON for a single quiz object (not wrapped in an array).",
+  ];
+  const parts: string[] = [constraints.join("\n")];
+  if (lessonBrief) {
+    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+  }
+  parts.push(
+    "",
+    `Topic: "${plan.topic}"`,
+    "Assumptions:",
+    plan.assumptions.map((assumption) => `- ${assumption}`).join("\n"),
+    "",
+    "Problem Techniques JSON:",
+    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
+    "",
+    "Quiz Outline JSON:",
+    JSON.stringify(quizOutline, null, 2),
+  );
+  return parts.join("\n");
+}
+
 export function buildQuizzesGradeUserPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
@@ -388,6 +562,29 @@ const QUIZ_QUESTION_BASE_PROPERTIES: Record<string, Schema> = {
     minItems: "1",
     items: { type: Type.STRING, minLength: "1" },
   },
+};
+
+const QUIZ_QUESTION_OUTLINE_PROPERTIES: Record<string, Schema> = {
+  id: { type: Type.STRING, minLength: "1" },
+  type: { type: Type.STRING, enum: [...QUIZ_QUESTION_TYPES] },
+  prompt: { type: Type.STRING, minLength: "1" },
+  tags: {
+    type: Type.ARRAY,
+    minItems: "1",
+    items: { type: Type.STRING, minLength: "1" },
+  },
+  covers_techniques: {
+    type: Type.ARRAY,
+    minItems: "1",
+    items: { type: Type.STRING, minLength: "1" },
+  },
+};
+
+const QUIZ_QUESTION_OUTLINE_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["id", "type", "prompt", "tags", "covers_techniques"],
+  propertyOrdering: ["id", "type", "prompt", "tags", "covers_techniques"],
+  properties: QUIZ_QUESTION_OUTLINE_PROPERTIES,
 };
 
 const QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA: Schema = {
@@ -554,7 +751,7 @@ const QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA: Schema = {
   },
 };
 
-export const QUIZZES_RESPONSE_SCHEMA: Schema = {
+export const QUIZZES_OUTLINE_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   required: ["quizzes"],
   propertyOrdering: ["quizzes"],
@@ -565,28 +762,55 @@ export const QUIZZES_RESPONSE_SCHEMA: Schema = {
       items: {
         type: Type.OBJECT,
         required: ["quiz_id", "questions"],
-        propertyOrdering: ["quiz_id", "theory_blocks", "questions"],
+        propertyOrdering: ["quiz_id", "questions"],
         properties: {
           quiz_id: { type: Type.STRING, minLength: "1" },
-          theory_blocks: {
-            type: Type.ARRAY,
-            items: QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA,
-          },
           questions: {
             type: Type.ARRAY,
             minItems: "1",
-            items: {
-              anyOf: [
-                QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA,
-              ],
-            },
+            items: QUIZ_QUESTION_OUTLINE_RESPONSE_SCHEMA,
           },
         },
       },
+    },
+  },
+};
+
+export const QUIZ_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["quiz_id", "questions"],
+  propertyOrdering: ["quiz_id", "theory_blocks", "questions"],
+  properties: {
+    quiz_id: { type: Type.STRING, minLength: "1" },
+    theory_blocks: {
+      type: Type.ARRAY,
+      items: QUIZ_THEORY_BLOCK_RESPONSE_SCHEMA,
+    },
+    questions: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: {
+        anyOf: [
+          QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA,
+          QUIZ_QUESTION_MULTI_RESPONSE_SCHEMA,
+          QUIZ_QUESTION_SHORT_RESPONSE_SCHEMA,
+          QUIZ_QUESTION_NUMERIC_RESPONSE_SCHEMA,
+          QUIZ_QUESTION_CODE_READING_RESPONSE_SCHEMA,
+        ],
+      },
+    },
+  },
+};
+
+export const QUIZZES_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: ["quizzes"],
+  propertyOrdering: ["quizzes"],
+  properties: {
+    quizzes: {
+      type: Type.ARRAY,
+      minItems: "1",
+      items: QUIZ_RESPONSE_SCHEMA,
     },
   },
 };

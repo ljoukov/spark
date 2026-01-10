@@ -21,6 +21,7 @@
     "dist"
   ],
   "dependencies": {
+    "@alcyone-labs/zod-to-json-schema": "^4.0.10",
     "@google/genai": "^1.30.0",
     "@spark/schemas": "file:../schemas",
     "execa": "^9.6.0",

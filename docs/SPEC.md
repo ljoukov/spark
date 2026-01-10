@@ -188,6 +188,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ## 9) LLM Guardrails & Prompting
 
+- LLM providers: Gemini (Vertex AI) and OpenAI (Responses API). The shared wrapper defaults OpenAI calls to `gpt-5.2` with `reasoning: { effort: "xhigh" }` when an OpenAI model is selected.
 - Extraction prompt: preserve original wording; label low-confidence items; ensure per-question metadata includes source page reference.
 - Generation prompt: board + subject aware; include numeric tolerance, significant figures instructions; produce rationale snippet.
 - Grading prompt: strict rubric enforcement; respond with canonical enum {correct, partial, incorrect}, required units, and 1-line rationale.
