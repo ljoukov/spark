@@ -123,6 +123,10 @@ const PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000; // $18 per 1M output/thinki
 const PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000; // $0.20 per 1M cached tokens
 const PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000; // $0.40 per 1M cached tokens (large prompts)
 
+const OPENAI_GPT_52_INPUT_RATE = 1.75 / 1_000_000; // $1.75 per 1M input tokens
+const OPENAI_GPT_52_CACHED_RATE = 0.175 / 1_000_000; // $0.175 per 1M cached tokens
+const OPENAI_GPT_52_OUTPUT_RATE = 14 / 1_000_000; // $14 per 1M output/thinking tokens
+
 const IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000; // $2 per 1M input tokens (text/image)
 const IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000; // $12 per 1M text/thinking tokens
 const IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000; // $120 per 1M image tokens
@@ -154,12 +158,15 @@ function resolveNumber(next: number | undefined, prev: number): number {
 
 function resolvePricingModel(
   modelId: string,
-): "pro-preview" | "image-preview" | undefined {
+): "pro-preview" | "image-preview" | "openai-gpt-5.2" | undefined {
   if (modelId.includes("image-preview")) {
     return "image-preview";
   }
   if (modelId.includes("gemini-3-pro")) {
     return "pro-preview";
+  }
+  if (modelId.includes("gpt-5.2")) {
+    return "openai-gpt-5.2";
   }
   return undefined;
 }
@@ -205,6 +212,13 @@ function calculateCallCost({
     const cachedCost = cachedTokens * cachedRate;
     const outputTokens = tokens.responseTokens + thinkingTokens;
     const outputCost = outputTokens * outputRate;
+    return inputCost + cachedCost + outputCost;
+  }
+  if (pricingModel === "openai-gpt-5.2") {
+    const inputCost = nonCachedPrompt * OPENAI_GPT_52_INPUT_RATE;
+    const cachedCost = cachedTokens * OPENAI_GPT_52_CACHED_RATE;
+    const outputTokens = tokens.responseTokens + thinkingTokens;
+    const outputCost = outputTokens * OPENAI_GPT_52_OUTPUT_RATE;
     return inputCost + cachedCost + outputCost;
   }
 

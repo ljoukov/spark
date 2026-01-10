@@ -18,6 +18,7 @@ export * from "./utils/audio";
 export * from "./utils/googleAuth";
 export * from "./utils/googleTTS";
 export * from "./utils/openai";
+export * from "./utils/openai-llm";
 export * from "./utils/openaiTTS";
 export * from "./utils/tts";
 export * from "./utils/tasks";
