@@ -393,10 +393,22 @@ async function main(): Promise<void> {
     story: raw.story,
   });
 
-  const lessonBrief = parsed.briefFile
+  const lessonBriefRaw = parsed.briefFile
     ? await readLessonBriefFile(parsed.briefFile)
     : undefined;
-  const topicFromBrief = lessonBrief ? deriveTopicFromBrief(lessonBrief) : "";
+  const topicFromBrief = lessonBriefRaw
+    ? deriveTopicFromBrief(lessonBriefRaw)
+    : "";
+  const generationRequirements = [
+    "Automation requirements (must follow):",
+    "- Validate every example and test output by running the reference solution with the code execution tool.",
+    "- If any mismatch occurs, fix the solution/spec/tests before responding; never leave inconsistent tests.",
+    "- If the brief provides marking tests or fixed outputs, treat them as ground truth: do not change cases or outputs; adjust the solution to match.",
+    "- Do not approximate counts; compute exact integers for outputs.",
+  ].join("\n");
+  const lessonBrief = lessonBriefRaw
+    ? `${lessonBriefRaw}\n\n${generationRequirements}`
+    : undefined;
   const topic = (parsed.topic ?? topicFromBrief).trim();
   if (topic.length === 0) {
     throw new Error("Unable to determine topic; pass --topic");
