@@ -26,7 +26,19 @@ import {
   type Tool,
 } from "@google/genai";
 import { runGeminiCall, type GeminiModelId } from "./gemini";
+import {
+  DEFAULT_OPENAI_REASONING_EFFORT,
+  isOpenAiModelId,
+  runOpenAiCall,
+  type OpenAiModelId,
+  type OpenAiReasoningEffort,
+} from "./openai-llm";
 import { z } from "zod";
+import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
+import type {
+  ResponseTextConfig,
+  ResponseUsage,
+} from "openai/resources/responses/responses";
 import { getSharp } from "./sharp";
 
 import type { JobProgressReporter, LlmUsageTokenUpdate } from "./concurrency";
@@ -115,7 +127,7 @@ type LlmCallStage = {
   readonly debugDir?: string;
 };
 
-export type LlmTextModelId = GeminiModelId;
+export type LlmTextModelId = GeminiModelId | OpenAiModelId;
 export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 export type LlmImageSize = "1K" | "2K" | "4K";
@@ -192,6 +204,120 @@ function convertLlmContentToGoogleContent(content: LlmContent): Content {
     role: content.role,
     parts: content.parts.map(toGooglePart),
   };
+}
+
+type OpenAiInputRole = "user" | "assistant" | "system" | "tool";
+
+type OpenAiInputPart =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string };
+
+type OpenAiInputItem = {
+  role: OpenAiInputRole;
+  content: string | OpenAiInputPart[];
+};
+
+function toOpenAiRole(role: LlmRole): OpenAiInputRole {
+  switch (role) {
+    case "user":
+      return "user";
+    case "model":
+      return "assistant";
+    case "system":
+      return "system";
+    case "tool":
+      return "tool";
+    default:
+      return "user";
+  }
+}
+
+function toOpenAiInput(contents: readonly LlmContent[]): OpenAiInputItem[] {
+  return contents.map((content) => {
+    const parts: OpenAiInputPart[] = [];
+    for (const part of content.parts) {
+      if (part.type === "text") {
+        parts.push({ type: "input_text", text: part.text });
+        continue;
+      }
+      const mimeType = part.mimeType ?? "application/octet-stream";
+      const dataUrl = `data:${mimeType};base64,${part.data}`;
+      parts.push({ type: "input_image", image_url: dataUrl });
+    }
+    if (
+      parts.length === 1 &&
+      parts[0]?.type === "input_text" &&
+      typeof parts[0].text === "string"
+    ) {
+      return {
+        role: toOpenAiRole(content.role),
+        content: parts[0].text,
+      };
+    }
+    return {
+      role: toOpenAiRole(content.role),
+      content: parts,
+    };
+  });
+}
+
+function extractOpenAiResponseParts(response: {
+  output?: unknown;
+  output_text?: unknown;
+}): { parts: LlmContentPart[]; blocked: boolean } {
+  const parts: LlmContentPart[] = [];
+  let blocked = false;
+  const output = response.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const itemType = (item as { type?: unknown }).type;
+      if (itemType === "message") {
+        const content = (item as { content?: unknown }).content;
+        if (Array.isArray(content)) {
+          for (const entry of content) {
+            if (!entry || typeof entry !== "object") {
+              continue;
+            }
+            const entryType = (entry as { type?: unknown }).type;
+            if (entryType === "output_text") {
+              const text = (entry as { text?: unknown }).text;
+              if (typeof text === "string" && text.length > 0) {
+                parts.push({ type: "text", text });
+              }
+            } else if (entryType === "refusal") {
+              blocked = true;
+            }
+          }
+        }
+      } else if (itemType === "reasoning") {
+        const content = (item as { content?: unknown }).content;
+        if (Array.isArray(content)) {
+          for (const entry of content) {
+            if (!entry || typeof entry !== "object") {
+              continue;
+            }
+            const entryType = (entry as { type?: unknown }).type;
+            if (entryType === "reasoning_text") {
+              const text = (entry as { text?: unknown }).text;
+              if (typeof text === "string" && text.length > 0) {
+                parts.push({ type: "text", text, thought: true });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  if (parts.length === 0) {
+    const outputText = response.output_text;
+    if (typeof outputText === "string" && outputText.length > 0) {
+      parts.push({ type: "text", text: outputText });
+    }
+  }
+  return { parts, blocked };
 }
 
 function toGooglePart(part: LlmContentPart): Part {
@@ -363,12 +489,16 @@ export type LlmCallBaseOptions = {
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
   readonly imageSize?: LlmImageSize;
+  readonly openAiReasoningEffort?: OpenAiReasoningEffort;
 };
+
+type OpenAiTextFormat = ResponseTextConfig["format"];
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
   readonly responseMimeType?: string;
   readonly responseSchema?: Schema;
   readonly tools?: readonly LlmToolConfig[];
+  readonly openAiTextFormat?: OpenAiTextFormat;
 };
 
 // Gemini does not support tool calls when responseSchema/JSON mode is used, so tools are excluded here.
@@ -378,6 +508,7 @@ export type LlmJsonCallOptions<T> = Omit<
 > & {
   readonly schema: z.ZodType<T>;
   readonly responseSchema: Schema;
+  readonly openAiSchemaName?: string;
   readonly maxAttempts?: number;
   readonly maxRetries?: number;
 };
@@ -661,6 +792,28 @@ function toGeminiTools(
   });
 }
 
+type OpenAiToolConfig =
+  | { type: "web_search_preview" }
+  | { type: "code_interpreter"; container?: { type: "auto" } };
+
+function toOpenAiTools(
+  tools: readonly LlmToolConfig[] | undefined,
+): OpenAiToolConfig[] | undefined {
+  if (!tools || tools.length === 0) {
+    return undefined;
+  }
+  return tools.map((tool) => {
+    switch (tool.type) {
+      case "web-search":
+        return { type: "web_search_preview" };
+      case "code-execution":
+        return { type: "code_interpreter", container: { type: "auto" } };
+      default:
+        throw new Error("Unsupported tool configuration");
+    }
+  });
+}
+
 async function ensureDebugDir(debugDir?: string): Promise<void> {
   if (!debugDir) {
     return;
@@ -770,13 +923,15 @@ function buildRequestSnapshot({
   maxAttempts,
   uploadBytes,
   config,
+  configLabel = "LLM Request",
 }: {
   modelId: LlmModelId;
   stageLabel: string;
   attempt: number;
   maxAttempts: number;
   uploadBytes: number;
-  config: GeminiCallConfig;
+  config: unknown;
+  configLabel?: string;
 }): string {
   const timestamp = new Date().toISOString();
   const lines: string[] = [
@@ -787,7 +942,7 @@ function buildRequestSnapshot({
     `Estimated Upload Bytes: ${uploadBytes}`,
   ];
   const configSummary = JSON.stringify(config, null, 2);
-  lines.push("", "Gemini Call Config:", configSummary ?? "{}");
+  lines.push("", `${configLabel}:`, configSummary ?? "{}");
   return lines.join("\n");
 }
 
@@ -1020,6 +1175,10 @@ const COST_PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000;
 const COST_PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000;
 const COST_PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000;
 
+const COST_OPENAI_GPT_52_INPUT_RATE = 1.75 / 1_000_000;
+const COST_OPENAI_GPT_52_CACHED_RATE = 0.175 / 1_000_000;
+const COST_OPENAI_GPT_52_OUTPUT_RATE = 14 / 1_000_000;
+
 const COST_IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000;
 const COST_IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000;
 const COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000;
@@ -1066,6 +1225,9 @@ function estimateCallCostUsd({
     if (modelId.includes("gemini-3-pro")) {
       return "pro-preview" as const;
     }
+    if (modelId.includes("gpt-5.2")) {
+      return "openai-gpt-5.2" as const;
+    }
     return undefined;
   })();
   if (pricingModel === "pro-preview") {
@@ -1083,6 +1245,13 @@ function estimateCallCostUsd({
     const cachedCost = cachedTokens * cachedRate;
     const outputTokens = responseTokens + thinkingTokens;
     const outputCost = outputTokens * outputRate;
+    return inputCost + cachedCost + outputCost;
+  }
+  if (pricingModel === "openai-gpt-5.2") {
+    const inputCost = nonCachedPrompt * COST_OPENAI_GPT_52_INPUT_RATE;
+    const cachedCost = cachedTokens * COST_OPENAI_GPT_52_CACHED_RATE;
+    const outputTokens = responseTokens + thinkingTokens;
+    const outputCost = outputTokens * COST_OPENAI_GPT_52_OUTPUT_RATE;
     return inputCost + cachedCost + outputCost;
   }
   if (pricingModel !== "image-preview") {
@@ -1353,6 +1522,42 @@ function extractUsageTokens(usage: unknown): LlmUsageTokenUpdate | undefined {
   };
 }
 
+function extractOpenAiUsageTokens(
+  usage: ResponseUsage | undefined,
+): LlmUsageTokenUpdate | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  const promptTokens = toMaybeNumber(usage.input_tokens);
+  const cachedTokens = toMaybeNumber(usage.input_tokens_details?.cached_tokens);
+  const outputTokensRaw = toMaybeNumber(usage.output_tokens);
+  const reasoningTokens = toMaybeNumber(
+    usage.output_tokens_details?.reasoning_tokens,
+  );
+  const totalTokens = toMaybeNumber(usage.total_tokens);
+  let responseTokens: number | undefined;
+  if (outputTokensRaw !== undefined) {
+    const adjusted = outputTokensRaw - (reasoningTokens ?? 0);
+    responseTokens = adjusted >= 0 ? adjusted : 0;
+  }
+  if (
+    promptTokens === undefined &&
+    cachedTokens === undefined &&
+    responseTokens === undefined &&
+    reasoningTokens === undefined &&
+    totalTokens === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    promptTokens,
+    cachedTokens,
+    responseTokens,
+    thinkingTokens: reasoningTokens,
+    totalTokens,
+  };
+}
+
 function buildCallStage({
   modelId,
   debug,
@@ -1379,6 +1584,7 @@ type LlmStreamCallOptions = LlmCallBaseOptions & {
   readonly imageAspectRatio?: string;
   readonly imageSize?: LlmImageSize;
   readonly tools?: readonly LlmToolConfig[];
+  readonly openAiTextFormat?: OpenAiTextFormat;
 };
 
 export type LlmStreamContent = LlmContent;
@@ -1436,64 +1642,13 @@ async function llmStream({
     debugRootDir !== undefined ? path.join(debugRootDir, "media") : undefined;
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
-  const googlePromptContents = promptContents.map(
-    convertLlmContentToGoogleContent,
-  );
-  const config: GeminiCallConfig = {
-    maxOutputTokens: 32_000,
-  };
-  const thinkingConfig: GeminiCallConfig["thinkingConfig"] = (() => {
-    switch (options.modelId) {
-      case "gemini-3-pro-preview":
-        return {
-          includeThoughts: true,
-          thinkingLevel: ThinkingLevel.HIGH,
-        } as const;
-      case "gemini-2.5-pro":
-        return {
-          includeThoughts: true,
-          thinkingBudget: 32_768,
-          thinkingLevel: ThinkingLevel.HIGH,
-        } as const;
-      case "gemini-flash-latest":
-      case "gemini-flash-lite-latest":
-        return {
-          includeThoughts: true,
-          thinkingBudget: 24_576,
-        } as const;
-      case "gemini-3-pro-image-preview":
-        return undefined;
-    }
-  })();
-  if (thinkingConfig) {
-    config.thinkingConfig = thinkingConfig;
-  }
-  if (options.responseMimeType) {
-    config.responseMimeType = options.responseMimeType;
-  }
-  if (options.responseSchema) {
-    config.responseSchema = options.responseSchema;
-  }
-  if (options.responseModalities) {
-    config.responseModalities = Array.from(options.responseModalities);
-  }
+  const isOpenAi = isOpenAiModelId(options.modelId);
   const effectiveImageSize =
-    options.modelId === "gemini-3-pro-image-preview"
+    !isOpenAi && options.modelId === "gemini-3-pro-image-preview"
       ? (options.imageSize ?? "2K")
-      : options.imageSize;
-  if (options.imageAspectRatio || effectiveImageSize) {
-    config.imageConfig = {
-      ...(options.imageAspectRatio
-        ? { aspectRatio: options.imageAspectRatio }
-        : {}),
-      ...(effectiveImageSize ? { imageSize: effectiveImageSize } : {}),
-    };
-  }
-  // temperature is intentionally not configurable in this wrapper.
-  const geminiTools = toGeminiTools(options.tools);
-  if (geminiTools) {
-    config.tools = geminiTools;
-  }
+      : !isOpenAi
+        ? options.imageSize
+        : undefined;
 
   const responseSnapshotWriter = new IncrementalResponseSnapshotWriter(
     Array.from(
@@ -1560,6 +1715,82 @@ async function llmStream({
     }
 
     const uploadBytes = estimateContentsUploadBytes(promptContents);
+    const openAiInput = isOpenAi ? toOpenAiInput(promptContents) : undefined;
+    const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
+    const openAiReasoningEffort =
+      options.openAiReasoningEffort ?? DEFAULT_OPENAI_REASONING_EFFORT;
+    const openAiTextConfig =
+      isOpenAi && options.openAiTextFormat
+        ? { format: options.openAiTextFormat }
+        : undefined;
+    const openAiRequestConfig = isOpenAi
+      ? {
+          reasoning: { effort: openAiReasoningEffort },
+          ...(openAiTextConfig ? { text: openAiTextConfig } : {}),
+          ...(openAiTools ? { tools: openAiTools } : {}),
+          stream: true,
+        }
+      : undefined;
+
+    const geminiPromptContents = !isOpenAi
+      ? promptContents.map(convertLlmContentToGoogleContent)
+      : undefined;
+    const geminiConfig: GeminiCallConfig | undefined = !isOpenAi
+      ? {
+          maxOutputTokens: 32_000,
+        }
+      : undefined;
+    if (geminiConfig) {
+      const thinkingConfig: GeminiCallConfig["thinkingConfig"] = (() => {
+        switch (options.modelId) {
+          case "gemini-3-pro-preview":
+            return {
+              includeThoughts: true,
+              thinkingLevel: ThinkingLevel.HIGH,
+            } as const;
+          case "gemini-2.5-pro":
+            return {
+              includeThoughts: true,
+              thinkingBudget: 32_768,
+              thinkingLevel: ThinkingLevel.HIGH,
+            } as const;
+          case "gemini-flash-latest":
+          case "gemini-flash-lite-latest":
+            return {
+              includeThoughts: true,
+              thinkingBudget: 24_576,
+            } as const;
+          case "gemini-3-pro-image-preview":
+            return undefined;
+        }
+      })();
+      if (thinkingConfig) {
+        geminiConfig.thinkingConfig = thinkingConfig;
+      }
+      if (options.responseMimeType) {
+        geminiConfig.responseMimeType = options.responseMimeType;
+      }
+      if (options.responseSchema) {
+        geminiConfig.responseSchema = options.responseSchema;
+      }
+      if (options.responseModalities) {
+        geminiConfig.responseModalities = Array.from(options.responseModalities);
+      }
+      if (options.imageAspectRatio || effectiveImageSize) {
+        geminiConfig.imageConfig = {
+          ...(options.imageAspectRatio
+            ? { aspectRatio: options.imageAspectRatio }
+            : {}),
+          ...(effectiveImageSize ? { imageSize: effectiveImageSize } : {}),
+        };
+      }
+      // temperature is intentionally not configurable in this wrapper.
+      const geminiTools = toGeminiTools(options.tools);
+      if (geminiTools) {
+        geminiConfig.tools = geminiTools;
+      }
+    }
+
     if (debugOutputDirs.length > 0) {
       const requestSnapshot = buildRequestSnapshot({
         modelId: options.modelId,
@@ -1567,7 +1798,8 @@ async function llmStream({
         attempt,
         maxAttempts,
         uploadBytes,
-        config,
+        config: isOpenAi ? openAiRequestConfig : geminiConfig,
+        configLabel: isOpenAi ? "OpenAI Request" : "Gemini Call Config",
       });
       await writeDebugTextFile({
         dirs: debugOutputDirs,
@@ -1699,101 +1931,194 @@ async function llmStream({
     };
 
     try {
-      await runGeminiCall(async (client) => {
-        const stream = await client.models.generateContentStream({
-          model: options.modelId,
-          contents: googlePromptContents,
-          config,
-        });
-        let latestGroundingMetadata: GroundingMetadata | undefined;
-        for await (const chunk of stream) {
-          if (chunk.modelVersion) {
-            resolvedModelVersion = chunk.modelVersion;
-          }
-          if (chunk.promptFeedback?.blockReason) {
-            blocked = true;
-          }
-          latestUsageTokens = mergeTokenUpdates(
-            latestUsageTokens,
-            extractUsageTokens(chunk.usageMetadata),
-          );
-          const candidates = chunk.candidates;
-          let chunkResponseText = 0;
-          let chunkResponseImages = 0;
-          let chunkResponseImageBytes = 0;
-          let chunkThinkingText = 0;
-          if (candidates !== undefined && candidates.length > 0) {
-            const primary = candidates[0];
-            if (isModerationFinish(primary.finishReason)) {
-              blocked = true;
+      if (isOpenAi) {
+        if (!openAiInput) {
+          throw new Error("OpenAI call received an empty prompt");
+        }
+        await runOpenAiCall(async (client) => {
+          const stream = client.responses.stream({
+            model: options.modelId,
+            input: openAiInput,
+            reasoning: { effort: openAiReasoningEffort },
+            ...(openAiTextConfig ? { text: openAiTextConfig } : {}),
+            ...(openAiTools ? { tools: openAiTools } : {}),
+          });
+          for await (const event of stream) {
+            switch (event.type) {
+              case "response.output_text.delta": {
+                const delta = event.delta ?? "";
+                if (delta.length > 0) {
+                  appendTextPart(delta, false);
+                  responseTextChars += delta.length;
+                  reporter.recordModelUsage(callHandle, {
+                    response: { textCharsDelta: delta.length },
+                  });
+                  responseSnapshotWriter.flush();
+                }
+                break;
+              }
+              case "response.reasoning_text.delta": {
+                const delta = event.delta ?? "";
+                if (delta.length > 0) {
+                  appendTextPart(delta, true);
+                  thinkingTextChars += delta.length;
+                  reporter.recordModelUsage(callHandle, {
+                    thinking: { textCharsDelta: delta.length },
+                  });
+                  responseSnapshotWriter.flush();
+                }
+                break;
+              }
+              case "response.refusal.delta": {
+                blocked = true;
+                break;
+              }
+              default:
+                break;
             }
-            for (const candidate of candidates) {
-              const candidateContent = candidate.content;
-              if (!candidateContent) {
-                continue;
-              }
-              if (candidate.groundingMetadata) {
-                latestGroundingMetadata = candidate.groundingMetadata;
-              }
-              try {
-                const content =
-                  convertGoogleContentToLlmContent(candidateContent);
-                const deltas = accumulateContent(content);
-                chunkResponseText += deltas.responseText;
-                chunkResponseImages += deltas.responseImages;
-                chunkResponseImageBytes += deltas.responseImageBytes;
-                chunkThinkingText += deltas.thinkingText;
-                responseTextChars += deltas.responseText;
-                responseImages += deltas.responseImages;
-                responseImageBytes += deltas.responseImageBytes;
-                thinkingTextChars += deltas.thinkingText;
-              } catch (error) {
-                log(
-                  `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
-                );
-              }
-            }
+          }
+          const finalResponse = await stream.finalResponse();
+          if (finalResponse.model) {
+            resolvedModelVersion = finalResponse.model;
+          }
+          if (finalResponse.error) {
+            const message =
+              typeof finalResponse.error.message === "string"
+                ? finalResponse.error.message
+                : "OpenAI response failed";
+            throw new Error(message);
           }
           if (
-            chunkResponseText > 0 ||
-            chunkResponseImages > 0 ||
-            chunkResponseImageBytes > 0 ||
-            chunkThinkingText > 0 ||
-            chunk.modelVersion
+            finalResponse.status &&
+            finalResponse.status !== "completed" &&
+            finalResponse.status !== "in_progress"
           ) {
-            reporter.recordModelUsage(callHandle, {
-              modelVersion: chunk.modelVersion,
-              response:
-                chunkResponseText > 0 ||
-                chunkResponseImages > 0 ||
-                chunkResponseImageBytes > 0
-                  ? {
-                      textCharsDelta:
-                        chunkResponseText > 0 ? chunkResponseText : undefined,
-                      imageCountDelta:
-                        chunkResponseImages > 0
-                          ? chunkResponseImages
-                          : undefined,
-                      imageBytesDelta:
-                        chunkResponseImageBytes > 0
-                          ? chunkResponseImageBytes
-                          : undefined,
-                    }
-                  : undefined,
-              thinking:
-                chunkThinkingText > 0
-                  ? { textCharsDelta: chunkThinkingText }
-                  : undefined,
-            });
-            if (chunkResponseText > 0 || chunkThinkingText > 0) {
+            const detail = finalResponse.incomplete_details?.reason;
+            throw new Error(
+              `OpenAI response status ${finalResponse.status}${
+                detail ? ` (${detail})` : ""
+              }`,
+            );
+          }
+          latestUsageTokens = extractOpenAiUsageTokens(finalResponse.usage);
+          if (responseParts.length === 0) {
+            const fallback = extractOpenAiResponseParts(finalResponse);
+            if (fallback.blocked) {
+              blocked = true;
+            }
+            if (fallback.parts.length > 0) {
+              const deltas = accumulateContent({
+                role: "model",
+                parts: fallback.parts,
+              });
+              responseTextChars += deltas.responseText;
+              responseImages += deltas.responseImages;
+              responseImageBytes += deltas.responseImageBytes;
+              thinkingTextChars += deltas.thinkingText;
               responseSnapshotWriter.flush();
             }
           }
+        });
+      } else {
+        if (!geminiPromptContents || !geminiConfig) {
+          throw new Error("Gemini call received an empty prompt");
         }
-        if (latestGroundingMetadata) {
-          responseGroundingMetadata = latestGroundingMetadata;
-        }
-      });
+        await runGeminiCall(async (client) => {
+          const stream = await client.models.generateContentStream({
+            model: options.modelId,
+            contents: geminiPromptContents,
+            config: geminiConfig,
+          });
+          let latestGroundingMetadata: GroundingMetadata | undefined;
+          for await (const chunk of stream) {
+            if (chunk.modelVersion) {
+              resolvedModelVersion = chunk.modelVersion;
+            }
+            if (chunk.promptFeedback?.blockReason) {
+              blocked = true;
+            }
+            latestUsageTokens = mergeTokenUpdates(
+              latestUsageTokens,
+              extractUsageTokens(chunk.usageMetadata),
+            );
+            const candidates = chunk.candidates;
+            let chunkResponseText = 0;
+            let chunkResponseImages = 0;
+            let chunkResponseImageBytes = 0;
+            let chunkThinkingText = 0;
+            if (candidates !== undefined && candidates.length > 0) {
+              const primary = candidates[0];
+              if (isModerationFinish(primary.finishReason)) {
+                blocked = true;
+              }
+              for (const candidate of candidates) {
+                const candidateContent = candidate.content;
+                if (!candidateContent) {
+                  continue;
+                }
+                if (candidate.groundingMetadata) {
+                  latestGroundingMetadata = candidate.groundingMetadata;
+                }
+                try {
+                  const content =
+                    convertGoogleContentToLlmContent(candidateContent);
+                  const deltas = accumulateContent(content);
+                  chunkResponseText += deltas.responseText;
+                  chunkResponseImages += deltas.responseImages;
+                  chunkResponseImageBytes += deltas.responseImageBytes;
+                  chunkThinkingText += deltas.thinkingText;
+                  responseTextChars += deltas.responseText;
+                  responseImages += deltas.responseImages;
+                  responseImageBytes += deltas.responseImageBytes;
+                  thinkingTextChars += deltas.thinkingText;
+                } catch (error) {
+                  log(
+                    `failed to convert candidate content: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                }
+              }
+            }
+            if (
+              chunkResponseText > 0 ||
+              chunkResponseImages > 0 ||
+              chunkResponseImageBytes > 0 ||
+              chunkThinkingText > 0 ||
+              chunk.modelVersion
+            ) {
+              reporter.recordModelUsage(callHandle, {
+                modelVersion: chunk.modelVersion,
+                response:
+                  chunkResponseText > 0 ||
+                  chunkResponseImages > 0 ||
+                  chunkResponseImageBytes > 0
+                    ? {
+                        textCharsDelta:
+                          chunkResponseText > 0 ? chunkResponseText : undefined,
+                        imageCountDelta:
+                          chunkResponseImages > 0
+                            ? chunkResponseImages
+                            : undefined,
+                        imageBytesDelta:
+                          chunkResponseImageBytes > 0
+                            ? chunkResponseImageBytes
+                            : undefined,
+                      }
+                    : undefined,
+                thinking:
+                  chunkThinkingText > 0
+                    ? { textCharsDelta: chunkThinkingText }
+                    : undefined,
+              });
+              if (chunkResponseText > 0 || chunkThinkingText > 0) {
+                responseSnapshotWriter.flush();
+              }
+            }
+          }
+          if (latestGroundingMetadata) {
+            responseGroundingMetadata = latestGroundingMetadata;
+          }
+        });
+      }
       if (latestUsageTokens || resolvedModelVersion !== options.modelId) {
         reporter.recordModelUsage(callHandle, {
           modelVersion: resolvedModelVersion,
@@ -2018,6 +2343,7 @@ export async function generateJson<T>(
     responseSchema,
     maxAttempts: maxAttemptsOption,
     maxRetries,
+    openAiSchemaName,
     ...rest
   } = options;
   const normaliseAttempts = (value: number | undefined): number | undefined => {
@@ -2035,10 +2361,24 @@ export async function generateJson<T>(
   };
   const maxAttempts =
     normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
+  const isOpenAi = isOpenAiModelId(rest.modelId);
+  const resolvedOpenAiSchemaName = normalisePathSegment(
+    openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
+  );
+  const openAiTextFormat = isOpenAi
+    ? {
+        type: "json_schema",
+        name: resolvedOpenAiSchemaName,
+        strict: true,
+        schema: zodToJsonSchema(schema, { target: "openAi" }),
+      }
+    : undefined;
+
   const textOptions: LlmTextCallOptions = {
     ...rest,
     responseSchema,
     responseMimeType: rest.responseMimeType ?? "application/json",
+    ...(openAiTextFormat ? { openAiTextFormat } : {}),
   };
 
   const failures: Array<{
