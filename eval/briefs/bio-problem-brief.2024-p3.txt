@@ -11,18 +11,20 @@ Exactness rules (what “exactly” means)
 - Do not add, remove, or reorder marking-scheme tests.
 
 Session structure
-- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
-- p1 should teach the core techniques needed for p2 (DP by score, lexicographic counting, prefix constraints), but MUST NOT reuse the same statement or the marking tests.
-- p2 MUST be the official problem below, with the same task and constraints.
+- The session must follow this exact order: story, quiz1 (question_count=12), p1, quiz2 (question_count=12), p2, quiz3 (question_count=12), p3, quiz4 (question_count=12), p4, quiz5 (question_count=12), p5, final-quiz (wrap-up, question_count=7).
+- The session must contain exactly five coding problems: p1 (warm-up), p2 (foundation), p3 (intermediate), p4 (advanced), and p5 (official BIO problem).
+- p1–p4 should teach the core techniques needed for p5 (DP by score, lexicographic counting, prefix constraints), but MUST NOT reuse the same statement or the marking tests.
+- p5 MUST be the official problem below, with the same task and constraints.
+- Quizzes must be self-contained and follow the lesson order above. Each quiz may only rely on earlier parts of the lesson; never assume the learner has read any later problem. Do not reference or preview future problems.
 
-Locked requirements for problem p2 (official)
-- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
-- Examples shown to the learner for p2 must use only examples already present in this brief:
+Locked requirements for problem p5 (official)
+- The p5 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p5 must use only examples already present in this brief:
   - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
   - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
-- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
-- The p2 reference solution must compute the position exactly.
-- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+- The p5 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p5 reference solution must compute the position exactly.
+- The p5 reference solution must be deterministic and must match the expected output formatting exactly.
 
 --- OFFICIAL PROBLEM (verbatim) ---
 Question 3: Word Game

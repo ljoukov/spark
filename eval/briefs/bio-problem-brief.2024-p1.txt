@@ -11,18 +11,20 @@ Exactness rules (what “exactly” means)
 - Do not add, remove, or reorder marking-scheme tests.
 
 Session structure
-- The session must contain exactly two coding problems: p1 (warm-up) and p2 (official BIO problem).
-- p1 should teach the core techniques needed for p2 (digit indexing in concatenated sequences, length counting), but MUST NOT reuse the same statement or the marking tests.
-- p2 MUST be the official problem below, with the same task and constraints.
+- The session must follow this exact order: story, quiz1 (question_count=10), p1, quiz2 (question_count=10), p2, quiz3 (question_count=10), p3, final-quiz (wrap-up, question_count=7).
+- The session must contain exactly three coding problems: p1 (warm-up), p2 (intermediate), and p3 (official BIO problem).
+- p1 and p2 should teach the core techniques needed for p3 (digit indexing in concatenated sequences, length counting), but MUST NOT reuse the same statement or the marking tests.
+- p3 MUST be the official problem below, with the same task and constraints.
+- Quizzes must be self-contained and follow the lesson order above. Each quiz may only rely on earlier parts of the lesson; never assume the learner has read any later problem. Do not reference or preview future problems.
 
-Locked requirements for problem p2 (official)
-- The p2 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
-- Examples shown to the learner for p2 must use only examples already present in this brief:
+Locked requirements for problem p3 (official)
+- The p3 problem statement and constraints must be taken from the OFFICIAL PROBLEM section below (verbatim).
+- Examples shown to the learner for p3 must use only examples already present in this brief:
   - Prefer examples and sample runs from the OFFICIAL PROBLEM section.
   - If the schema requires exactly three examples and the OFFICIAL PROBLEM has fewer than three, fill the remaining example(s) using cases from the MARKING section (still from this brief). Do not invent new examples.
-- The p2 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
-- The p2 reference solution must compute the ith digit correctly.
-- The p2 reference solution must be deterministic and must match the expected output formatting exactly.
+- The p3 test list must be EXACTLY the MARKING tests below (same cases, same expected outputs, same order). Do not add any other tests.
+- The p3 reference solution must compute the ith digit correctly.
+- The p3 reference solution must be deterministic and must match the expected output formatting exactly.
 
 --- OFFICIAL PROBLEM (verbatim) ---
 Question 1: Integer Strings
