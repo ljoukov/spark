@@ -533,7 +533,12 @@ async function main(): Promise<void> {
   })();
   const quizDefinitions =
     quizDefinitionsFromCheckpoint ??
-    (await generateQuizDefinitions(session.plan, session.quizzes, lessonBrief));
+    (await generateQuizDefinitions(session.plan, session.quizzes, lessonBrief, {
+      debug: {
+        rootDir: debugRootDir,
+        stage: "quiz-definitions",
+      },
+    }));
   await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
 
   const problems =
