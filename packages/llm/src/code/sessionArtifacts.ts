@@ -216,8 +216,8 @@ const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
     },
     tests: {
       type: Type.ARRAY,
-      minItems: "10",
-      maxItems: "25",
+      minItems: "3",
+      maxItems: "100",
       items: CODE_PROBLEM_TEST_RESPONSE_SCHEMA,
     },
     hints: {
@@ -488,7 +488,7 @@ function buildCodeProblemsPrompt(
     "- inputFormat: markdown string",
     "- constraints: string[] (plain bullet strings)",
     "- examples: exactly 3 items, each with { title, input, output, explanation }",
-    "- tests: 10-14 items, each with { input, output, explanation }; tests[0-2] must MATCH examples[0-2] exactly",
+    "- tests: follow the count required by the lesson brief when specified; otherwise use 10-14 items. Each test includes { input, output, explanation }, and tests[0-2] must MATCH examples[0-2] exactly.",
     "- hints: exactly 3 markdown strings, ordered",
     '- solution: { language: "python", code: string } (full reference solution)',
     "- metadataVersion: 1",
@@ -500,6 +500,7 @@ function buildCodeProblemsPrompt(
     "- The solution must be a complete program that reads stdin and prints stdout (no function signatures, no prompts).",
     "- Each test must include an explanation.",
     "- All strings must be non-empty; never return empty objects.",
+    "- If the lesson brief supplies a fixed test list or marking scheme, use those cases exactly (no additions, no removals).",
   ];
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
