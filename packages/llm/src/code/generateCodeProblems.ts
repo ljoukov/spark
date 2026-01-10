@@ -35,7 +35,6 @@ const CodingProblemTestsSchema = z
         }),
       )
       .min(1)
-      .max(10)
       .optional(),
     private_count: z.number().int().min(1).optional(),
   })
@@ -224,8 +223,8 @@ export function buildProblemIdeasUserPrompt(
     "- Hints:",
     "- Solution overview:",
     "- Reference solution (Python 3 program in a code block; read stdin, print stdout):",
-    "- Public tests: (3-5 cases; list as stdin => stdout)",
-    "- Private tests: (3-8 cases; list as stdin => stdout)",
+    "- Public tests: list as stdin => stdout (use 3-5 cases unless the lesson brief specifies a different count or a fixed marking list).",
+    "- Private tests: list as stdin => stdout (use 3-8 cases unless the lesson brief specifies otherwise; if the brief provides a marking list, include the remaining marking cases here in the same order).",
     "Input/Output style rules:",
     "- Inputs must be plain text, consisting of 1+ lines; tokens are separated by whitespace (spaces/newlines).",
     "- Do NOT use JSON, Python literals (e.g. [1,2], {'a':1}), or any structured encoding that requires complex parsing.",
@@ -233,6 +232,7 @@ export function buildProblemIdeasUserPrompt(
     "- Unless the lesson brief explicitly requires a structured format, outputs must be 1+ lines of whitespace-separated tokens only; never use list/tuple/dict literals, brackets, commas, or JSON (e.g., \"[1, 2, 3]\").",
     "- The problem must be posed as a stdin/stdout program (competitive programming style). Do NOT ask for a function signature or return values.",
     "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool (run the program with each test input as stdin and compare stdout); fix the spec until they pass.",
+    "If the lesson brief supplies a marking or official test list, use those cases exactly (no additions, no removals) and preserve their order.",
     "Spell out boundary behaviors so tests cannot imply hidden rules (e.g., whether a Rosette on the final index grants another turn, or how off-board moves behave) and ensure the reference solution matches that rule exactly.",
     "If any test fails when executed against the reference solution, revise the test/spec/solution until they are consistent—never return a failing test.",
     "Each problem must be clearly different from the others; later problems must introduce at least one additional technique beyond earlier ones (not a trivial re-skin).",

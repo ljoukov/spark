@@ -70,8 +70,8 @@ export const CodeProblemSchema = z
       .length(3, "Provide exactly three examples"),
     tests: z
       .array(testCaseSchema)
-      .min(10, "Provide at least ten tests")
-      .max(25, "Provide at most twenty-five tests"),
+      .min(3, "Provide at least three tests")
+      .max(100, "Provide at most one hundred tests"),
     hints: z
       .array(markdownString)
       .length(3, "Provide exactly three ordered hints"),
