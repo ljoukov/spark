@@ -328,6 +328,9 @@ async function seedSessionState(userId: string, session: Session): Promise<void>
 export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[]> {
 	const snapshot = await resolveTemplateCollection().get();
 	const options: WelcomeSessionOption[] = [];
+	console.info('[welcome/templates] fetched template snapshot', {
+		count: snapshot.size
+	});
 
 	for (const doc of snapshot.docs) {
 		const raw = doc.data();
@@ -335,7 +338,7 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 			continue;
 		}
 		try {
-			const parsed = TemplateDocSchema.parse({
+			const parsed = TemplateDocSchema.safeParse({
 				id: (raw.id ?? doc.id) as TemplateDoc['id'],
 				title: raw.title,
 				createdAt: raw.createdAt,
@@ -346,23 +349,39 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				summary: raw.summary,
 				key: raw.key
 			});
+			if (!parsed.success) {
+				const missing = ['plan', 'tagline', 'emoji', 'topic'].filter(
+					(field) => raw[field] === undefined || raw[field] === null
+				);
+				console.warn('[welcome/templates] template parse failed', {
+					id: doc.id,
+					missing,
+					issues: parsed.error.issues.map((issue) => issue.message)
+				});
+				continue;
+			}
 
 			const session = SessionSchema.parse({
-				id: parsed.id,
-				title: parsed.title,
-				createdAt: parsed.createdAt ?? Timestamp.now(),
-				plan: parsed.plan
+				id: parsed.data.id,
+				title: parsed.data.title,
+				createdAt: parsed.data.createdAt ?? Timestamp.now(),
+				plan: parsed.data.plan
 			});
 
 			const posterImageUrl = await resolveTemplatePosterUrl(doc.ref, session.plan);
 
 			options.push({
-				key: parsed.key ?? parsed.id,
+				key: parsed.data.key ?? parsed.data.id,
 				sessionId: session.id,
 				title: session.title,
-				tagline: parsed.tagline,
-				emoji: parsed.emoji,
+				tagline: parsed.data.tagline,
+				emoji: parsed.data.emoji,
 				posterImageUrl
+			});
+			console.info('[welcome/templates] template loaded', {
+				id: session.id,
+				key: parsed.data.key ?? parsed.data.id,
+				title: session.title
 			});
 		} catch (error) {
 			console.error('Unable to parse welcome session option', doc.id, error);
