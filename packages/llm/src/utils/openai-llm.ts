@@ -70,7 +70,7 @@ function schedule<T>(fn: () => Promise<T>): Promise<T> {
         const result = await fn();
         resolve(result);
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       } finally {
         activeCount -= 1;
         queueMicrotask(drainQueue);

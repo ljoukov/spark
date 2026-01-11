@@ -29,7 +29,7 @@ All calls accept:
 - `progress?`: `JobProgressReporter` (see below). If omitted, a concise fallback logger is used.
 - `debug?`: `{ rootDir: string; stage?: string; subStage?: string; attempt?: number|string; enabled?: boolean }`
 - Optional generation controls:
-  - `responseMimeType?`, `responseSchema?` (text/JSON)
+  - `responseMimeType?`, `responseJsonSchema?` (text/JSON)
   - `responseModalities?` (e.g. `["IMAGE","TEXT"]`); images default to `["IMAGE","TEXT"]`
   - `imageAspectRatio?`
   - `tools?`: `{ type: 'web-search' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
@@ -38,15 +38,15 @@ All calls accept:
 
 `generateJson` adds:
 - `schema`: `z.ZodSchema<T>`
-- `responseSchema`: Google `Schema` definition applied at request time (required)
+- `responseJsonSchema`: JSON Schema definition applied at request time (required). Use `toGeminiJsonSchema()` to convert existing Google `Schema` definitions.
 - `maxAttempts?`: default `2` (will re-prompt using the same options)
 - Responses are automatically requested as `application/json` and parsed before validation.
 
 When `modelId` is an OpenAI model, `generateJson` enables Structured Outputs by sending
-`text.format` with a JSON Schema derived from the Zod schema (via `@alcyone-labs/zod-to-json-schema`).
+`text.format` with a JSON Schema derived from `responseJsonSchema` (normalized to require all fields and `additionalProperties: false` for OpenAI compliance).
 The response text is still parsed and validated with the supplied Zod schema.
 
-Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
+Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseJsonSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
 
 When you need to explain the expected shape inside a prompt, describe it in clear prose (sections, fields, and intent) rather than pasting raw JSON schemas or example skeletons. The schema definitions live in code; prompts should only outline the requirements at a conceptual level.
 
@@ -147,6 +147,7 @@ JSON call with Zod validation:
 
 ```ts
 import { Type } from "@google/genai";
+import { toGeminiJsonSchema } from "./llm";
 
 const schema = z.object({ title: z.string(), items: z.array(z.string()) });
 const responseSchema = {
@@ -168,7 +169,7 @@ const data = await generateJson({
       parts: [{ type: "text", text: "Return JSON: {title, items[]}" }],
     },
   ],
-  responseSchema,
+  responseJsonSchema: toGeminiJsonSchema(responseSchema),
   schema,
   debug: { rootDir: "/tmp/llm-debug", stage: "json-task" },
 });
