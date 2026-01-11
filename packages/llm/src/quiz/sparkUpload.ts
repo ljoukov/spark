@@ -13,6 +13,7 @@ import {
 } from "./common";
 export type { SparkQuizSourceFile } from "./common";
 import { streamGeminiTextResponse, type GeminiModelId } from "../utils/gemini";
+import { toGeminiJsonSchema } from "../utils/llm";
 
 type QuizQuestionDefinition = QuizDefinition["questions"][number];
 
@@ -343,7 +344,7 @@ export async function generateSparkUploadQuizDefinition(
     parts,
     config: {
       responseMimeType: "application/json",
-      responseSchema: SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA,
+      responseJsonSchema: toGeminiJsonSchema(SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA),
     },
     trimOutput: false,
   });

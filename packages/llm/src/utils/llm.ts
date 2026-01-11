@@ -34,10 +34,13 @@ import {
   type OpenAiReasoningEffort,
 } from "./openai-llm";
 import { z } from "zod";
-import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
 import type {
+  EasyInputMessage,
+  ResponseInput,
+  ResponseInputContent,
   ResponseTextConfig,
   ResponseUsage,
+  ResponseIncludable,
 } from "openai/resources/responses/responses";
 import { getSharp } from "./sharp";
 
@@ -131,6 +134,304 @@ export type LlmTextModelId = GeminiModelId | OpenAiModelId;
 export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 export type LlmImageSize = "1K" | "2K" | "4K";
+export type JsonSchema = Record<string, unknown>;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseNumericConstraint(
+  value: string | number | undefined,
+): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function mapGoogleSchemaType(type: Type | undefined): string | undefined {
+  switch (type) {
+    case Type.STRING:
+      return "string";
+    case Type.NUMBER:
+      return "number";
+    case Type.INTEGER:
+      return "integer";
+    case Type.BOOLEAN:
+      return "boolean";
+    case Type.ARRAY:
+      return "array";
+    case Type.OBJECT:
+      return "object";
+    case Type.NULL:
+      return "null";
+    default:
+      return undefined;
+  }
+}
+
+function orderedSchemaKeys(
+  properties: Record<string, Schema>,
+  ordering: readonly string[] | undefined,
+): string[] {
+  const keys = Object.keys(properties);
+  if (!ordering || ordering.length === 0) {
+    return keys;
+  }
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const key of ordering) {
+    if (Object.prototype.hasOwnProperty.call(properties, key)) {
+      ordered.push(key);
+      seen.add(key);
+    }
+  }
+  for (const key of keys) {
+    if (!seen.has(key)) {
+      ordered.push(key);
+    }
+  }
+  return ordered;
+}
+
+function applyNullableJsonSchema(schema: Record<string, unknown>): void {
+  const anyOf = schema.anyOf;
+  if (Array.isArray(anyOf)) {
+    if (!anyOf.some((entry) => isPlainRecord(entry) && entry.type === "null")) {
+      anyOf.push({ type: "null" });
+    }
+    return;
+  }
+  const type = schema.type;
+  if (typeof type === "string") {
+    schema.type = type === "null" ? "null" : [type, "null"];
+    return;
+  }
+  if (Array.isArray(type)) {
+    const normalized = type.filter(
+      (entry): entry is string => typeof entry === "string",
+    );
+    if (!normalized.includes("null")) {
+      schema.type = [...normalized, "null"];
+    } else {
+      schema.type = normalized;
+    }
+    return;
+  }
+  schema.type = ["null"];
+}
+
+function convertGeminiSchemaToJsonSchema(
+  schema: Schema,
+  options: { includePropertyOrdering: boolean },
+): JsonSchema {
+  const output: Record<string, unknown> = {};
+  const mappedType = mapGoogleSchemaType(schema.type);
+  if (mappedType) {
+    output.type = mappedType;
+  }
+  if (schema.title) {
+    output.title = schema.title;
+  }
+  if (schema.description) {
+    output.description = schema.description;
+  }
+  if (schema.format) {
+    output.format = schema.format;
+  }
+  if (schema.enum) {
+    output.enum = [...schema.enum];
+  }
+  if (schema.pattern) {
+    output.pattern = schema.pattern;
+  }
+  const minLength = parseNumericConstraint(schema.minLength);
+  if (minLength !== undefined) {
+    output.minLength = minLength;
+  }
+  const maxLength = parseNumericConstraint(schema.maxLength);
+  if (maxLength !== undefined) {
+    output.maxLength = maxLength;
+  }
+  const minItems = parseNumericConstraint(schema.minItems);
+  if (minItems !== undefined) {
+    output.minItems = minItems;
+  }
+  const maxItems = parseNumericConstraint(schema.maxItems);
+  if (maxItems !== undefined) {
+    output.maxItems = maxItems;
+  }
+  if (schema.minimum !== undefined) {
+    output.minimum = schema.minimum;
+  }
+  if (schema.maximum !== undefined) {
+    output.maximum = schema.maximum;
+  }
+  if (schema.items) {
+    output.items = convertGeminiSchemaToJsonSchema(schema.items, options);
+  }
+  if (schema.anyOf && schema.anyOf.length > 0) {
+    output.anyOf = schema.anyOf.map((entry) =>
+      convertGeminiSchemaToJsonSchema(entry, options),
+    );
+  }
+  if (schema.properties) {
+    const keys = orderedSchemaKeys(schema.properties, schema.propertyOrdering);
+    const properties: Record<string, unknown> = {};
+    for (const key of keys) {
+      const propSchema = schema.properties[key];
+      if (!propSchema) {
+        continue;
+      }
+      properties[key] = convertGeminiSchemaToJsonSchema(propSchema, options);
+    }
+    output.properties = properties;
+    if (schema.required) {
+      output.required = [...schema.required];
+    }
+    if (options.includePropertyOrdering && schema.propertyOrdering) {
+      output.propertyOrdering = [...schema.propertyOrdering];
+    }
+  }
+  if (schema.nullable) {
+    applyNullableJsonSchema(output);
+  }
+  return output;
+}
+
+function orderedJsonSchemaKeys(
+  properties: Record<string, unknown>,
+  ordering: readonly string[] | undefined,
+): string[] {
+  const keys = Object.keys(properties);
+  if (!ordering || ordering.length === 0) {
+    return keys;
+  }
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const key of ordering) {
+    if (Object.prototype.hasOwnProperty.call(properties, key)) {
+      ordered.push(key);
+      seen.add(key);
+    }
+  }
+  for (const key of keys) {
+    if (!seen.has(key)) {
+      ordered.push(key);
+    }
+  }
+  return ordered;
+}
+
+function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
+  if (!isPlainRecord(schema)) {
+    return schema;
+  }
+  if (typeof schema.$ref === "string") {
+    return { $ref: schema.$ref };
+  }
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "properties") {
+      continue;
+    }
+    if (key === "required") {
+      continue;
+    }
+    if (key === "additionalProperties") {
+      continue;
+    }
+    if (key === "propertyOrdering") {
+      continue;
+    }
+    if (key === "items") {
+      if (isPlainRecord(value)) {
+        output.items = normalizeOpenAiSchema(value);
+      }
+      continue;
+    }
+    if (key === "anyOf" || key === "oneOf") {
+      if (Array.isArray(value)) {
+        output.anyOf = value.map((entry) =>
+          normalizeOpenAiSchema(entry as JsonSchema),
+        );
+      }
+      continue;
+    }
+    if (key === "$defs" && isPlainRecord(value)) {
+      const defs: Record<string, unknown> = {};
+      for (const [defKey, defValue] of Object.entries(value)) {
+        if (isPlainRecord(defValue)) {
+          defs[defKey] = normalizeOpenAiSchema(defValue);
+        }
+      }
+      output.$defs = defs;
+      continue;
+    }
+    output[key] = value;
+  }
+
+  const propertiesRaw = schema.properties;
+  if (isPlainRecord(propertiesRaw)) {
+    const ordering = Array.isArray(schema.propertyOrdering)
+      ? schema.propertyOrdering
+      : undefined;
+    const orderedKeys = orderedJsonSchemaKeys(propertiesRaw, ordering);
+    const properties: Record<string, unknown> = {};
+    for (const key of orderedKeys) {
+      const value = propertiesRaw[key];
+      if (!isPlainRecord(value)) {
+        properties[key] = value;
+        continue;
+      }
+      properties[key] = normalizeOpenAiSchema(value as JsonSchema);
+    }
+    output.properties = properties;
+    output.required = orderedKeys;
+    output.additionalProperties = false;
+  }
+
+  const schemaType = schema.type;
+  if (
+    output.additionalProperties === undefined &&
+    (schemaType === "object" ||
+      (Array.isArray(schemaType) && schemaType.includes("object")))
+  ) {
+    output.additionalProperties = false;
+    if (!Array.isArray(output.required)) {
+      output.required = [];
+    }
+  }
+
+  return output;
+}
+
+function isJsonSchemaObject(schema: JsonSchema): boolean {
+  if (!isPlainRecord(schema)) {
+    return false;
+  }
+  const type = schema.type;
+  if (type === "object") {
+    return true;
+  }
+  if (Array.isArray(type) && type.includes("object")) {
+    return true;
+  }
+  if (isPlainRecord(schema.properties)) {
+    return true;
+  }
+  return false;
+}
+
+export function toGeminiJsonSchema(schema: Schema): JsonSchema {
+  return convertGeminiSchemaToJsonSchema(schema, {
+    includePropertyOrdering: true,
+  });
+}
 
 type LlmInlineDataPart = {
   type: "inlineData";
@@ -206,16 +507,8 @@ function convertLlmContentToGoogleContent(content: LlmContent): Content {
   };
 }
 
-type OpenAiInputRole = "user" | "assistant" | "system" | "tool";
-
-type OpenAiInputPart =
-  | { type: "input_text"; text: string }
-  | { type: "input_image"; image_url: string };
-
-type OpenAiInputItem = {
-  role: OpenAiInputRole;
-  content: string | OpenAiInputPart[];
-};
+type OpenAiInputRole = EasyInputMessage["role"];
+type OpenAiInputPart = ResponseInputContent;
 
 function toOpenAiRole(role: LlmRole): OpenAiInputRole {
   switch (role) {
@@ -226,13 +519,13 @@ function toOpenAiRole(role: LlmRole): OpenAiInputRole {
     case "system":
       return "system";
     case "tool":
-      return "tool";
+      return "assistant";
     default:
       return "user";
   }
 }
 
-function toOpenAiInput(contents: readonly LlmContent[]): OpenAiInputItem[] {
+function toOpenAiInput(contents: readonly LlmContent[]): ResponseInput {
   return contents.map((content) => {
     const parts: OpenAiInputPart[] = [];
     for (const part of content.parts) {
@@ -242,7 +535,7 @@ function toOpenAiInput(contents: readonly LlmContent[]): OpenAiInputItem[] {
       }
       const mimeType = part.mimeType ?? "application/octet-stream";
       const dataUrl = `data:${mimeType};base64,${part.data}`;
-      parts.push({ type: "input_image", image_url: dataUrl });
+      parts.push({ type: "input_image", image_url: dataUrl, detail: "auto" });
     }
     if (
       parts.length === 1 &&
@@ -496,21 +789,22 @@ type OpenAiTextFormat = ResponseTextConfig["format"];
 
 export type LlmTextCallOptions = LlmCallBaseOptions & {
   readonly responseMimeType?: string;
-  readonly responseSchema?: Schema;
+  readonly responseJsonSchema?: JsonSchema;
   readonly tools?: readonly LlmToolConfig[];
   readonly openAiTextFormat?: OpenAiTextFormat;
 };
 
-// Gemini does not support tool calls when responseSchema/JSON mode is used, so tools are excluded here.
+// Gemini does not support tool calls when responseJsonSchema/JSON mode is used, so tools are excluded here.
 export type LlmJsonCallOptions<T> = Omit<
   LlmTextCallOptions,
-  "responseSchema" | "tools"
+  "responseJsonSchema" | "tools"
 > & {
   readonly schema: z.ZodType<T>;
-  readonly responseSchema: Schema;
+  readonly responseJsonSchema: JsonSchema;
   readonly openAiSchemaName?: string;
   readonly maxAttempts?: number;
   readonly maxRetries?: number;
+  readonly normalizeJson?: (value: unknown) => unknown;
 };
 
 export class LlmJsonCallError extends Error {
@@ -794,7 +1088,7 @@ function toGeminiTools(
 
 type OpenAiToolConfig =
   | { type: "web_search_preview" }
-  | { type: "code_interpreter"; container?: { type: "auto" } };
+  | { type: "code_interpreter"; container: { type: "auto" } };
 
 function toOpenAiTools(
   tools: readonly LlmToolConfig[] | undefined,
@@ -1579,7 +1873,7 @@ function buildCallStage({
 
 type LlmStreamCallOptions = LlmCallBaseOptions & {
   readonly responseMimeType?: string;
-  readonly responseSchema?: Schema;
+  readonly responseJsonSchema?: JsonSchema;
   readonly responseModalities?: readonly string[];
   readonly imageAspectRatio?: string;
   readonly imageSize?: LlmImageSize;
@@ -1719,15 +2013,36 @@ async function llmStream({
     const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
     const openAiReasoningEffort =
       options.openAiReasoningEffort ?? DEFAULT_OPENAI_REASONING_EFFORT;
-    const openAiTextConfig =
-      isOpenAi && options.openAiTextFormat
-        ? { format: options.openAiTextFormat }
-        : undefined;
+    const openAiTextConfig: ResponseTextConfig | undefined = isOpenAi
+      ? {
+          format: options.openAiTextFormat ?? { type: "text" },
+          verbosity: "high",
+        }
+      : undefined;
+    const openAiReasoningPayload = isOpenAi
+      ? {
+          effort: openAiReasoningEffort as unknown as
+            | "minimal"
+            | "low"
+            | "medium"
+            | "high"
+            | null,
+          summary: "detailed" as const,
+        }
+      : undefined;
+    const openAiInclude: ResponseIncludable[] | undefined = isOpenAi
+      ? [
+          "code_interpreter_call.outputs",
+          "reasoning.encrypted_content",
+          "web_search_call.action.sources",
+        ]
+      : undefined;
     const openAiRequestConfig = isOpenAi
       ? {
-          reasoning: { effort: openAiReasoningEffort },
+          reasoning: openAiReasoningPayload,
           ...(openAiTextConfig ? { text: openAiTextConfig } : {}),
           ...(openAiTools ? { tools: openAiTools } : {}),
+          ...(openAiInclude ? { include: openAiInclude } : {}),
           stream: true,
         }
       : undefined;
@@ -1770,11 +2085,13 @@ async function llmStream({
       if (options.responseMimeType) {
         geminiConfig.responseMimeType = options.responseMimeType;
       }
-      if (options.responseSchema) {
-        geminiConfig.responseSchema = options.responseSchema;
+      if (options.responseJsonSchema) {
+        geminiConfig.responseJsonSchema = options.responseJsonSchema;
       }
       if (options.responseModalities) {
-        geminiConfig.responseModalities = Array.from(options.responseModalities);
+        geminiConfig.responseModalities = Array.from(
+          options.responseModalities,
+        );
       }
       if (options.imageAspectRatio || effectiveImageSize) {
         geminiConfig.imageConfig = {
@@ -1939,9 +2256,10 @@ async function llmStream({
           const stream = client.responses.stream({
             model: options.modelId,
             input: openAiInput,
-            reasoning: { effort: openAiReasoningEffort },
+            reasoning: openAiReasoningPayload,
             ...(openAiTextConfig ? { text: openAiTextConfig } : {}),
             ...(openAiTools ? { tools: openAiTools } : {}),
+            ...(openAiInclude ? { include: openAiInclude } : {}),
           });
           for await (const event of stream) {
             switch (event.type) {
@@ -1958,6 +2276,18 @@ async function llmStream({
                 break;
               }
               case "response.reasoning_text.delta": {
+                const delta = event.delta ?? "";
+                if (delta.length > 0) {
+                  appendTextPart(delta, true);
+                  thinkingTextChars += delta.length;
+                  reporter.recordModelUsage(callHandle, {
+                    thinking: { textCharsDelta: delta.length },
+                  });
+                  responseSnapshotWriter.flush();
+                }
+                break;
+              }
+              case "response.reasoning_summary_text.delta": {
                 const delta = event.delta ?? "";
                 if (delta.length > 0) {
                   appendTextPart(delta, true);
@@ -2340,10 +2670,11 @@ export async function generateJson<T>(
 ): Promise<T> {
   const {
     schema,
-    responseSchema,
+    responseJsonSchema,
     maxAttempts: maxAttemptsOption,
     maxRetries,
     openAiSchemaName,
+    normalizeJson,
     ...rest
   } = options;
   const normaliseAttempts = (value: number | undefined): number | undefined => {
@@ -2362,21 +2693,26 @@ export async function generateJson<T>(
   const maxAttempts =
     normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
   const isOpenAi = isOpenAiModelId(rest.modelId);
+  if (isOpenAi && !isJsonSchemaObject(responseJsonSchema)) {
+    throw new Error(
+      "OpenAI structured outputs require a JSON object schema at the root.",
+    );
+  }
   const resolvedOpenAiSchemaName = normalisePathSegment(
     openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
   );
-  const openAiTextFormat = isOpenAi
+  const openAiTextFormat: OpenAiTextFormat | undefined = isOpenAi
     ? {
         type: "json_schema",
         name: resolvedOpenAiSchemaName,
         strict: true,
-        schema: zodToJsonSchema(schema, { target: "openAi" }),
+        schema: normalizeOpenAiSchema(responseJsonSchema),
       }
     : undefined;
 
   const textOptions: LlmTextCallOptions = {
     ...rest,
-    responseSchema,
+    responseJsonSchema,
     responseMimeType: rest.responseMimeType ?? "application/json",
     ...(openAiTextFormat ? { openAiTextFormat } : {}),
   };
@@ -2397,7 +2733,9 @@ export async function generateJson<T>(
       const cleanedText = normalizeJsonText(rawText);
       const repairedText = escapeNewlinesInStrings(cleanedText);
       const payload: unknown = JSON.parse(repairedText);
-      const parsed = schema.parse(payload);
+      const normalized =
+        typeof normalizeJson === "function" ? normalizeJson(payload) : payload;
+      const parsed = schema.parse(normalized);
       return parsed;
     } catch (error) {
       const handledError =
@@ -2490,7 +2828,7 @@ async function gradeGeneratedImage(params: {
     modelId: IMAGE_GRADING_MODEL_ID,
     contents,
     schema: IMAGE_GRADE_SCHEMA,
-    responseSchema: IMAGE_GRADE_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(IMAGE_GRADE_RESPONSE_SCHEMA),
     debug: params.debug,
   });
   return result;

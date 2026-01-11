@@ -4,7 +4,11 @@ import path from "node:path";
 import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
-import { generateJson, type LlmContent } from "@spark/llm/utils/llm";
+import {
+  generateJson,
+  toGeminiJsonSchema,
+  type LlmContent,
+} from "@spark/llm/utils/llm";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
 import { createCliCommand } from "../utils/cli";
@@ -185,7 +189,7 @@ async function main(argv: readonly string[]): Promise<void> {
         modelId: "gemini-2.5-pro",
         contents: item.contents,
         schema: PdfAnalysisSchema,
-        responseSchema: PDF_ANALYSIS_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(PDF_ANALYSIS_RESPONSE_SCHEMA),
         progress,
       });
       progress.log(`completed Gemini analysis for ${item.fileName}`);

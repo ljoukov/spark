@@ -3,6 +3,7 @@ import {
   generateJson,
   generateText,
   LlmJsonCallError,
+  toGeminiJsonSchema,
   type LlmTextModelId,
 } from "@spark/llm/utils/llm";
 import {
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
       schema: z.object({
         greeting: z.string(),
       }),
-      responseSchema: GREETING_RESPONSE_SCHEMA,
+      responseJsonSchema: toGeminiJsonSchema(GREETING_RESPONSE_SCHEMA),
       debug,
       contents: [
         {
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
   } catch (error) {
     if (error instanceof LlmJsonCallError) {
       for (const attempt of error.attempts) {
-        const label = `Attempt ${attempt.attempt}`;
+        const label = `Attempt ${String(attempt.attempt)}`;
         const rawText = attempt.rawText || "(empty response)";
         process.stderr.write(`${label} raw text:\n${rawText}\n`);
       }
@@ -136,7 +137,14 @@ void main().catch((error: unknown) => {
 });
 
 function parseCliOptions(args: readonly string[]):
-  | { success: true; data: { modelId: OpenAiModelId; jsonModelId: LlmTextModelId } }
+  | {
+      success: true;
+      data: {
+        modelId: OpenAiModelId;
+        jsonModelId: LlmTextModelId;
+        debugDir?: string;
+      };
+    }
   | { success: false; error: z.ZodError } {
   const schema = z
     .object({
@@ -145,7 +153,7 @@ function parseCliOptions(args: readonly string[]):
       debugDir: z.string().optional(),
     })
     .transform(({ model, jsonModel, debugDir }) => {
-      const modelId = (model ?? DEFAULT_OPENAI_MODEL_ID) as OpenAiModelId;
+      const modelId: OpenAiModelId = model ?? DEFAULT_OPENAI_MODEL_ID;
       const jsonModelId: LlmTextModelId = jsonModel ?? modelId;
       return { modelId, jsonModelId, debugDir };
     });

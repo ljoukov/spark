@@ -5,6 +5,7 @@ import { getSharp } from "../utils/sharp";
 import {
   generateImages,
   generateJson,
+  toGeminiJsonSchema,
   type LlmContentPart,
   type LlmDebugOptions,
   type LlmImageData,
@@ -451,7 +452,7 @@ async function gradeBatch(params: {
     modelId: options.gradingModelId,
     progress: options.progress,
     schema: BatchGradeResponseSchema,
-    responseSchema: BATCH_GRADE_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(BATCH_GRADE_RESPONSE_SCHEMA),
     debug: extendDebug(options.debug, debugSuffix),
     contents: buildBatchGradeContents({
       catDescription: options.gradeCatastrophicDescription,
@@ -550,7 +551,7 @@ async function selectBestRedoFrameCandidate(params: {
     modelId: gradingModelId,
     contents: [{ role: "user", parts }],
     schema: FrameComparisonSchema,
-    responseSchema: FRAME_COMPARISON_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(FRAME_COMPARISON_RESPONSE_SCHEMA),
     debug,
   });
 
@@ -636,7 +637,9 @@ async function assessFrameSemantic(params: {
     modelId: gradingModelId,
     contents,
     schema: FrameSemanticAssessmentSchema,
-    responseSchema: FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(
+      FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA,
+    ),
     debug,
   });
   return response;
@@ -929,7 +932,9 @@ async function requestFramePromptRevisions(params: {
     progress: params.progress,
     contents,
     schema: FramePromptRevisionResponseSchema,
-    responseSchema: FRAME_PROMPT_REVISION_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(
+      FRAME_PROMPT_REVISION_RESPONSE_SCHEMA,
+    ),
     debug: params.debug,
   });
 }

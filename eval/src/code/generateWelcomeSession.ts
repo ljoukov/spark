@@ -6,18 +6,16 @@ import { Command } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
-import {
-  convertSessionPlanToItems,
+import type {
   generateCodeProblems,
   generateSessionMetadata,
   generateQuizDefinitions,
 } from "@spark/llm/code/sessionArtifacts";
-import { generateSession } from "@spark/llm/code/generateSession";
 import type { GenerateStoryResult } from "@spark/llm/code/generateStory";
 import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
-} from "@spark/llm";
+} from "@spark/llm/utils/firebaseAdmin";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
@@ -25,6 +23,8 @@ import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
 type SessionMetadata = Awaited<ReturnType<typeof generateSessionMetadata>>;
 type QuizDefinitions = Awaited<ReturnType<typeof generateQuizDefinitions>>;
 type CodeProblems = Awaited<ReturnType<typeof generateCodeProblems>>;
+type GenerateSession =
+  typeof import("@spark/llm/code/generateSession").generateSession;
 
 const TEMPLATE_USER_ID = "welcome-templates";
 const TEMPLATE_ROOT_COLLECTION = "spark-admin";
@@ -33,6 +33,7 @@ const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 
 const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;
+const OPENAI_TEXT_MODEL_ID = "gpt-5.2";
 const QuizDefinitionsCheckpointSchema = z.array(QuizDefinitionSchema);
 
 const optionsSchema = z
@@ -66,10 +67,9 @@ const optionsSchema = z
         }
         return parsed;
       })
-      .refine(
-        (value) => value === undefined || (value >= 1 && value <= 10),
-        { message: "story segment count must be between 1 and 10" },
-      ),
+      .refine((value) => value === undefined || (value >= 1 && value <= 10), {
+        message: "story segment count must be between 1 and 10",
+      }),
     storyPlanItemId: z
       .string()
       .trim()
@@ -336,6 +336,18 @@ async function writeTemplateDoc(
 
 async function main(): Promise<void> {
   ensureEvalEnvLoaded();
+  process.env.SPARK_LLM_TEXT_MODEL_ID = OPENAI_TEXT_MODEL_ID;
+
+  const [{ generateSession }, sessionArtifacts] = await Promise.all([
+    import("@spark/llm/code/generateSession"),
+    import("@spark/llm/code/sessionArtifacts"),
+  ]);
+  const {
+    convertSessionPlanToItems,
+    generateCodeProblems,
+    generateSessionMetadata,
+    generateQuizDefinitions,
+  } = sessionArtifacts;
 
   const program = new Command();
   program
@@ -347,10 +359,7 @@ async function main(): Promise<void> {
     .option("--session-id <id>", "Override the generated session id")
     .option("--seed <int>", "Seed for deterministic prompting")
     .option("--no-story", "Skip story generation")
-    .option(
-      "--story-segment-count <int>",
-      "Number of story panels (1-10)",
-    )
+    .option("--story-segment-count <int>", "Number of story panels (1-10)")
     .option(
       "--story-plan-item-id <id>",
       "Plan item id used for the story media",
@@ -448,7 +457,7 @@ async function main(): Promise<void> {
   const includeStoryOverride =
     parsed.noStory === true || parsed.story === false ? false : undefined;
   console.log(
-    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId} storySegmentCount=${parsed.storySegmentCount ?? "default"}`,
+    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId} storySegmentCount=${String(parsed.storySegmentCount ?? "default")}`,
   );
 
   const metadataCheckpoint = path.join(checkpointDir, "metadata.json");
@@ -460,7 +469,7 @@ async function main(): Promise<void> {
 
   const [session] = await runJobsWithConcurrency<
     "welcome-session",
-    Awaited<ReturnType<typeof generateSession>>
+    Awaited<ReturnType<GenerateSession>>
   >({
     items: ["welcome-session"],
     concurrency: 1,
@@ -492,8 +501,9 @@ async function main(): Promise<void> {
     }));
   await writeCheckpoint(metadataCheckpoint, metadata);
 
-  const quizDefinitionsFromCheckpointRaw =
-    await readCheckpoint<unknown>(quizDefinitionsCheckpoint);
+  const quizDefinitionsFromCheckpointRaw = await readCheckpoint<unknown>(
+    quizDefinitionsCheckpoint,
+  );
   const quizDefinitionsFromCheckpoint = (() => {
     if (quizDefinitionsFromCheckpointRaw === undefined) {
       return undefined;
