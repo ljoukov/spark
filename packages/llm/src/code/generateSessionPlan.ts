@@ -134,11 +134,7 @@ export const SessionPlanSchema = z
             .max(PLAN_LIMITS.story.visualSceneFocalObject),
           props: z
             .array(
-              z
-                .string()
-                .trim()
-                .min(1)
-                .max(PLAN_LIMITS.story.visualSceneProp),
+              z.string().trim().min(1).max(PLAN_LIMITS.story.visualSceneProp),
             )
             .min(1)
             .max(3),
@@ -233,6 +229,43 @@ export const SessionPlanSchema = z
   });
 
 export type SessionPlan = z.infer<typeof SessionPlanSchema>;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function normalizeSessionPlanJson(value: unknown): unknown {
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+  const parts = Array.isArray(value.parts)
+    ? (value.parts as unknown[])
+    : undefined;
+  if (!parts) {
+    return value;
+  }
+  let changed = false;
+  const nextParts = parts.map((part): unknown => {
+    if (!isPlainRecord(part)) {
+      return part;
+    }
+    const kind = part.kind;
+    if (kind !== "quiz" && "question_count" in part) {
+      const rest = { ...part };
+      delete rest.question_count;
+      changed = true;
+      return rest;
+    }
+    return part;
+  });
+  if (!changed) {
+    return value;
+  }
+  return {
+    ...value,
+    parts: nextParts,
+  };
+}
 
 const PlanGradeSchemaBase = z.object({
   pass: z.boolean(),

@@ -160,12 +160,15 @@ export const ProblemTechniquesSchema = z.object({
 
 export type ProblemTechniquesPayload = z.infer<typeof ProblemTechniquesSchema>;
 
-export function buildProblemTechniquesUserPrompt(plan: {
-  topic: string;
-  promised_skills: string[];
-  concepts_to_teach: string[];
-  coding_blueprints: { id: string; required_skills: string[] }[];
-}, lessonBrief?: string): string {
+export function buildProblemTechniquesUserPrompt(
+  plan: {
+    topic: string;
+    promised_skills: string[];
+    concepts_to_teach: string[];
+    coding_blueprints: { id: string; required_skills: string[] }[];
+  },
+  lessonBrief?: string,
+): string {
   const parts = [`Topic: "${plan.topic}"`];
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
@@ -209,7 +212,7 @@ export function buildProblemIdeasUserPrompt(
   const problemIds = plan.coding_blueprints.map((blueprint) => blueprint.id);
   parts.push(
     "",
-    `Return "Problem Specs Markdown" with ${problemIds.length} sections titled: ${problemIds.map((id) => `\"### ${id}\"`).join(", ")}.`,
+    `Return "Problem Specs Markdown" with ${problemIds.length} sections titled: ${problemIds.map((id) => `"### ${id}"`).join(", ")}.`,
     "Each section must contain the FULL problem spec (no JSON) with these labeled fields in order:",
     "- Title:",
     "- Difficulty: (easy|medium|hard)",
@@ -229,7 +232,7 @@ export function buildProblemIdeasUserPrompt(
     "- Inputs must be plain text, consisting of 1+ lines; tokens are separated by whitespace (spaces/newlines).",
     "- Do NOT use JSON, Python literals (e.g. [1,2], {'a':1}), or any structured encoding that requires complex parsing.",
     "- Outputs must be plain text exactly as printed to stdout (no extra labels or prompts).",
-    "- Unless the lesson brief explicitly requires a structured format, outputs must be 1+ lines of whitespace-separated tokens only; never use list/tuple/dict literals, brackets, commas, or JSON (e.g., \"[1, 2, 3]\").",
+    '- Unless the lesson brief explicitly requires a structured format, outputs must be 1+ lines of whitespace-separated tokens only; never use list/tuple/dict literals, brackets, commas, or JSON (e.g., "[1, 2, 3]").',
     "- The problem must be posed as a stdin/stdout program (competitive programming style). Do NOT ask for a function signature or return values.",
     "Generate and VERIFY all examples and public/private tests against the reference solution using the code execution tool (run the program with each test input as stdin and compare stdout); fix the spec until they pass.",
     "If the lesson brief supplies a marking or official test list, use those cases exactly (no additions, no removals) and preserve their order.",
@@ -614,7 +617,8 @@ export function normaliseProblemsPayload(payload: unknown): unknown {
     }
 
     const privateTests = (tests as { private: unknown[] }).private;
-    const privateCountRaw = (tests as { private_count?: unknown }).private_count;
+    const privateCountRaw = (tests as { private_count?: unknown })
+      .private_count;
     const privateCount = Number.isFinite(privateCountRaw as number)
       ? (privateCountRaw as number)
       : privateTests.length;

@@ -9,13 +9,16 @@ import {
   generateImages,
   generateText,
   generateJson,
+  toGeminiJsonSchema,
   type LlmContentPart,
   type LlmImageData,
   type LlmDebugOptions,
   type LlmImageSize,
+  type LlmTextModelId,
 } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
+import { isGeminiModelId } from "../utils/gemini";
 import {
   getFirebaseAdminStorage,
   getFirebaseAdminFirestore,
@@ -23,6 +26,7 @@ import {
 } from "../utils/firebaseAdmin";
 import type { MediaSegment } from "./schemas";
 import { getSharp } from "../utils/sharp";
+import { isOpenAiModelId } from "../utils/openai-llm";
 
 import {
   createConsoleProgress,
@@ -31,7 +35,15 @@ import {
 import { generateStoryFrames } from "./generateFrames";
 import { STORY_IMAGE_GRADING_PROMPT } from "./imageGradingPrompt";
 
-export const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
+const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gemini-3-pro-preview";
+
+const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
+
+export const TEXT_MODEL_ID: LlmTextModelId =
+  ENV_TEXT_MODEL_ID &&
+  (isGeminiModelId(ENV_TEXT_MODEL_ID) || isOpenAiModelId(ENV_TEXT_MODEL_ID))
+    ? ENV_TEXT_MODEL_ID
+    : DEFAULT_TEXT_MODEL_ID;
 export const IMAGE_MODEL_ID = "gemini-3-pro-image-preview" as const;
 
 const STORY_FRAME_CATASTROPHIC_DESCRIPTION = [
@@ -1930,7 +1942,7 @@ export async function generateStoryIdea(
         contents: [
           { role: "user", parts: [{ type: "text", text: parsePrompt }] },
         ],
-        responseSchema: STORY_IDEA_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(STORY_IDEA_RESPONSE_SCHEMA),
         schema: StoryIdeaDataSchema,
         debug: parseDebugOptions,
       });
@@ -2311,7 +2323,9 @@ export async function generateStoryProseRevision(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseSchema: STORY_PROSE_REVISION_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(
+      STORY_PROSE_REVISION_RESPONSE_SCHEMA,
+    ),
     schema: StoryProseRevisionResponseSchema,
     debug: options?.debugRootDir
       ? {
@@ -2388,7 +2402,9 @@ export async function validateStoryProse(
     contents: [
       { role: "user", parts: [{ type: "text", text: factualParsePrompt }] },
     ],
-    responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(
+      STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    ),
     schema: StoryProseValidationResultSchema,
     maxAttempts: 3,
     debug: options?.debugRootDir
@@ -2416,7 +2432,9 @@ export async function validateStoryProse(
     contents: [
       { role: "user", parts: [{ type: "text", text: structuralPrompt }] },
     ],
-    responseSchema: STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(
+      STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
+    ),
     schema: StoryProseValidationResultSchema,
     maxAttempts: 2,
     debug: options?.debugRootDir
@@ -2914,7 +2932,7 @@ async function judgeProseVariants(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseSchema: PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA),
     schema: ProseVariantJudgeResponseSchema,
     debug: baseDebug?.debugRootDir
       ? {
@@ -3013,12 +3031,10 @@ function buildSegmentationCorrectorPrompt(
 ): string {
   const segmentCount = segmentation.segments.length;
   const panelRangeLabel =
-    segmentCount === 1
-      ? "story panel 1"
-      : `story panels 1-${segmentCount}`;
+    segmentCount === 1 ? "story panel 1" : `story panels 1-${segmentCount}`;
   const promptRangeLabel =
     segmentCount === 1
-      ? '0 = story panel 1'
+      ? "0 = story panel 1"
       : `0-${segmentCount - 1} = story panels 1-${segmentCount}`;
   const lines: string[] = [
     "You are the image prompt corrector for illustrated historical stories.",
@@ -3138,7 +3154,7 @@ export async function generateStorySegmentation(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseSchema,
+    responseJsonSchema: toGeminiJsonSchema(responseSchema),
     schema: segmentationSchema,
     debug: options?.debugRootDir
       ? {
@@ -3202,7 +3218,7 @@ export async function correctStorySegmentation(
             parts: [{ type: "text", text: reviewPrompt }],
           },
         ],
-        responseSchema,
+        responseJsonSchema: toGeminiJsonSchema(responseSchema),
         schema: parseSchema,
         debug: options?.debugRootDir
           ? {
@@ -3516,7 +3532,7 @@ async function selectPosterCandidate(options: {
     modelId: options.gradingModelId,
     contents: [{ role: "user", parts }],
     schema: PosterSelectionSchema,
-    responseSchema: POSTER_SELECTION_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(POSTER_SELECTION_RESPONSE_SCHEMA),
     debug: options.debug,
   });
 
@@ -3557,12 +3573,7 @@ export async function generateImageSets(
       .map((segment) => segment.trim())
       .filter((segment) => segment.length > 0)
       .map((segment) => normaliseDebugPathSegment(segment));
-    return path.join(
-      baseDebug.rootDir,
-      "stages",
-      "image-sets",
-      ...segments,
-    );
+    return path.join(baseDebug.rootDir, "stages", "image-sets", ...segments);
   };
   const buildDebug = (subStage: string): LlmDebugOptions | undefined => {
     if (!baseDebug) {
@@ -3871,7 +3882,7 @@ export async function judgeImageSets(
     modelId: TEXT_MODEL_ID,
     maxAttempts: 5,
     contents: [{ role: "user", parts }],
-    responseSchema: IMAGE_SET_JUDGE_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(IMAGE_SET_JUDGE_RESPONSE_SCHEMA),
     schema: ImageSetJudgeResponseSchema,
     debug: options?.debugRootDir
       ? {

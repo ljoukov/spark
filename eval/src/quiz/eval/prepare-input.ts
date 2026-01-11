@@ -27,6 +27,7 @@ import { detectMimeType } from "../../utils/mime";
 import {
   convertGooglePartsToLlmParts,
   generateJson,
+  toGeminiJsonSchema,
 } from "@spark/llm/utils/llm";
 import { createCliCommand, createIntegerParser } from "../../utils/cli";
 
@@ -425,7 +426,7 @@ async function callGeminiJson({
         parts: llmParts,
       },
     ],
-    responseSchema: RAW_CLASSIFICATION_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(RAW_CLASSIFICATION_SCHEMA),
     schema: RawClassificationSchema,
     maxAttempts: 1,
   });

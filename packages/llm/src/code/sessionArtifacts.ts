@@ -9,7 +9,12 @@ import {
 } from "@spark/schemas";
 import { z } from "zod";
 
-import { generateJson, type LlmDebugOptions } from "../utils/llm";
+import {
+  generateJson,
+  toGeminiJsonSchema,
+  type LlmDebugOptions,
+} from "../utils/llm";
+import { TEXT_MODEL_ID } from "./sessionLlm";
 import {
   ProblemPlanItemsSchema,
   type CodingProblem,
@@ -18,8 +23,7 @@ import {
   type SessionQuiz,
 } from "./generateSession";
 
-const TEXT_MODEL_ID = "gemini-3-pro-preview" as const;
-const QUIZ_DEFINITIONS_MODEL_ID = "gemini-3-pro-preview" as const;
+const QUIZ_DEFINITIONS_MODEL_ID = TEXT_MODEL_ID;
 
 const SessionMetadataSchema = z.object({
   tagline: z.string().trim().min(1),
@@ -540,7 +544,7 @@ export async function generateQuizDefinitions(
       modelId: QUIZ_DEFINITIONS_MODEL_ID,
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       schema: QuizDefinitionsPayloadSchema,
-      responseSchema: QUIZ_DEFINITIONS_RESPONSE_SCHEMA,
+      responseJsonSchema: toGeminiJsonSchema(QUIZ_DEFINITIONS_RESPONSE_SCHEMA),
       debug: options?.debug,
       maxAttempts: 4,
     });
@@ -573,7 +577,7 @@ export async function generateCodeProblems(
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: CodeProblemsPayloadSchema,
-    responseSchema: CODE_PROBLEMS_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(CODE_PROBLEMS_RESPONSE_SCHEMA),
     maxAttempts: 4,
   });
   return payload.problems;
@@ -599,7 +603,7 @@ export async function generateSessionMetadata(options: {
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: SessionMetadataSchema,
-    responseSchema: SESSION_METADATA_RESPONSE_SCHEMA,
+    responseJsonSchema: toGeminiJsonSchema(SESSION_METADATA_RESPONSE_SCHEMA),
   });
 }
 

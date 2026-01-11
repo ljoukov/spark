@@ -1,9 +1,53 @@
 import OpenAI from "openai";
+import { Agent, fetch as undiciFetch } from "undici";
 
 import { loadLocalEnv } from "./env";
 
 let cachedApiKey: string | null = null;
 let cachedClient: OpenAI | null = null;
+let cachedFetch: typeof fetch | null = null;
+let cachedTimeoutMs: number | null = null;
+
+const DEFAULT_OPENAI_TIMEOUT_MS = 15 * 60_000;
+
+function resolveOpenAiTimeoutMs(): number {
+  if (cachedTimeoutMs !== null) {
+    return cachedTimeoutMs;
+  }
+
+  const raw =
+    process.env.OPENAI_STREAM_TIMEOUT_MS ?? process.env.OPENAI_TIMEOUT_MS;
+  const parsed = raw ? Number(raw) : Number.NaN;
+  cachedTimeoutMs =
+    Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_OPENAI_TIMEOUT_MS;
+  return cachedTimeoutMs;
+}
+
+function getOpenAiFetch(): typeof fetch {
+  if (cachedFetch) {
+    return cachedFetch;
+  }
+
+  const timeoutMs = resolveOpenAiTimeoutMs();
+  const dispatcher = new Agent({
+    bodyTimeout: timeoutMs,
+    headersTimeout: timeoutMs,
+  });
+
+  cachedFetch = ((
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> =>
+    undiciFetch(
+      input as unknown as import("undici").RequestInfo,
+      {
+        ...(init as Record<string, unknown> | undefined),
+        dispatcher,
+      } as Record<string, unknown>,
+    ) as unknown as Promise<Response>) as typeof fetch;
+
+  return cachedFetch;
+}
 
 function getOpenAiApiKey(): string {
   if (cachedApiKey !== null) {
@@ -28,6 +72,11 @@ export function getOpenAiClient(): OpenAI {
   }
 
   const apiKey = getOpenAiApiKey();
-  cachedClient = new OpenAI({ apiKey });
+  const timeoutMs = resolveOpenAiTimeoutMs();
+  cachedClient = new OpenAI({
+    apiKey,
+    fetch: getOpenAiFetch(),
+    timeout: timeoutMs,
+  });
   return cachedClient;
 }

@@ -5,7 +5,12 @@ import path from "node:path";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
-import { generateJson, generateText, type LlmDebugOptions } from "../utils/llm";
+import {
+  generateJson,
+  generateText,
+  toGeminiJsonSchema,
+  type LlmDebugOptions,
+} from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { getFirebaseAdminFirestore } from "../utils/firebaseAdmin";
@@ -48,6 +53,7 @@ import {
   buildPlanGradeUserPrompt,
   buildPlanIdeasUserPrompt,
   buildPlanParseUserPrompt,
+  normalizeSessionPlanJson,
   type PlanGrade,
   type SessionPlan,
 } from "./generateSessionPlan";
@@ -230,7 +236,9 @@ function applyHardCodedAssumptions(plan: SessionPlan): {
   const expected = Array.from(HARD_CODED_ASSUMPTIONS);
   const assumptionsMatch =
     plan.assumptions.length === expected.length &&
-    plan.assumptions.every((assumption, index) => assumption === expected[index]);
+    plan.assumptions.every(
+      (assumption, index) => assumption === expected[index],
+    );
   if (assumptionsMatch) {
     return { plan, changed: false };
   }
@@ -269,19 +277,22 @@ function normalizePlanStructure(plan: SessionPlan): {
     }
     if (part.question_count !== undefined) {
       changed = true;
-      const { question_count: _questionCount, ...rest } = part;
+      const { question_count, ...rest } = part;
+      void question_count;
       return rest;
     }
     return part;
   });
 
-  const normalizedBlueprints = plan.coding_blueprints.map((blueprint, index) => {
-    const id = `p${index + 1}`;
-    if (blueprint.id !== id) {
-      changed = true;
-    }
-    return { ...blueprint, id };
-  });
+  const normalizedBlueprints = plan.coding_blueprints.map(
+    (blueprint, index) => {
+      const id = `p${index + 1}`;
+      if (blueprint.id !== id) {
+        changed = true;
+      }
+      return { ...blueprint, id };
+    },
+  );
 
   return {
     plan: {
@@ -1364,8 +1375,9 @@ export class SessionGenerationPipeline {
           "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
           userPrompt,
         ),
-        responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(PLAN_PARSE_RESPONSE_SCHEMA),
         schema: SessionPlanSchema,
+        normalizeJson: normalizeSessionPlanJson,
         progress: this.logger,
         debug: debugOptions,
       });
@@ -1413,7 +1425,7 @@ export class SessionGenerationPipeline {
           "Rubric QA, diagnose only.",
           userPrompt,
         ),
-        responseSchema: PLAN_GRADE_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(PLAN_GRADE_RESPONSE_SCHEMA),
         schema: PlanGradeSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -1466,7 +1478,9 @@ export class SessionGenerationPipeline {
           "List concrete techniques learners must know before solving the problems.",
           userPrompt,
         ),
-        responseSchema: PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(
+          PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
+        ),
         schema: ProblemTechniquesSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -1503,8 +1517,9 @@ export class SessionGenerationPipeline {
         "Fix the session plan based on the grading feedback. Maintain JSON structure.",
         userPrompt,
       ),
-      responseSchema: PLAN_PARSE_RESPONSE_SCHEMA,
+      responseJsonSchema: toGeminiJsonSchema(PLAN_PARSE_RESPONSE_SCHEMA),
       schema: SessionPlanSchema,
+      normalizeJson: normalizeSessionPlanJson,
       progress: this.logger,
       debug: debugOptions,
     });
@@ -1745,7 +1760,9 @@ export class SessionGenerationPipeline {
               "Produce quiz question outlines only (no answers or explanations).",
               outlinePrompt,
             ),
-            responseSchema: QUIZZES_OUTLINE_RESPONSE_SCHEMA,
+            responseJsonSchema: toGeminiJsonSchema(
+              QUIZZES_OUTLINE_RESPONSE_SCHEMA,
+            ),
             schema: QuizzesOutlineSchema,
             progress: this.logger,
             debug: outlineDebug,
@@ -1773,7 +1790,7 @@ export class SessionGenerationPipeline {
                 "Expand a single quiz with answers, options, and explanations.",
                 expandPrompt,
               ),
-              responseSchema: QUIZ_RESPONSE_SCHEMA,
+              responseJsonSchema: toGeminiJsonSchema(QUIZ_RESPONSE_SCHEMA),
               schema: SessionQuizSchema,
               progress: this.logger,
               debug: expandDebug,
@@ -1850,7 +1867,7 @@ export class SessionGenerationPipeline {
           "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
           userPrompt,
         ),
-        responseSchema: QUIZZES_GRADE_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(QUIZZES_GRADE_RESPONSE_SCHEMA),
         schema: QuizzesGradeSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -2042,7 +2059,7 @@ export class SessionGenerationPipeline {
             "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
             userPrompt,
           ),
-          responseSchema: PROBLEMS_RESPONSE_SCHEMA,
+          responseJsonSchema: toGeminiJsonSchema(PROBLEMS_RESPONSE_SCHEMA),
           schema: ProblemsSchema,
           progress: this.logger,
           debug: debugOptions,
@@ -2220,7 +2237,7 @@ export class SessionGenerationPipeline {
           "QA problems for alignment, clarity, difficulty, and technique alignment.",
           userPrompt,
         ),
-        responseSchema: PROBLEMS_GRADE_RESPONSE_SCHEMA,
+        responseJsonSchema: toGeminiJsonSchema(PROBLEMS_GRADE_RESPONSE_SCHEMA),
         schema: ProblemsGradeSchema,
         progress: this.logger,
         debug: debugOptions,
