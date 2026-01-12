@@ -5,12 +5,7 @@ import path from "node:path";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
-import {
-  generateJson,
-  generateText,
-  toGeminiJsonSchema,
-  type LlmDebugOptions,
-} from "../utils/llm";
+import { generateJson, generateText, type LlmDebugOptions } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { getFirebaseAdminFirestore } from "../utils/firebaseAdmin";
@@ -22,9 +17,6 @@ import {
   ProblemSolutionsSchema,
   ProblemsGradeSchema,
   ProblemsSchema,
-  PROBLEMS_GRADE_RESPONSE_SCHEMA,
-  PROBLEMS_RESPONSE_SCHEMA,
-  PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
   ProblemTechniquesSchema,
   buildProblemIdeasUserPrompt,
   buildProblemSolutionUserPrompt,
@@ -46,8 +38,6 @@ import {
   MAX_PLAN_ATTEMPTS,
   MAX_PLAN_GRADE_RETRIES,
   PlanGradeSchema,
-  PLAN_GRADE_RESPONSE_SCHEMA,
-  getPlanParseResponseSchema,
   getSessionPlanSchema,
   buildPlanEditUserPrompt,
   buildPlanGradeUserPrompt,
@@ -60,9 +50,6 @@ import {
 import {
   MAX_QUIZ_ATTEMPTS,
   MAX_QUIZ_GRADE_RETRIES,
-  QUIZZES_OUTLINE_RESPONSE_SCHEMA,
-  QUIZZES_GRADE_RESPONSE_SCHEMA,
-  QUIZ_RESPONSE_SCHEMA,
   QuizzesGradeSchema,
   QuizzesOutlineSchema,
   QuizzesSchema,
@@ -1610,13 +1597,6 @@ export class SessionGenerationPipeline {
           "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(
-          getPlanParseResponseSchema(
-            includeStory,
-            includeCoding,
-            includeAssumptions,
-          ),
-        ),
         schema: getSessionPlanSchema(includeStory, includeCoding),
         normalizeJson: normalizeSessionPlanJson,
         progress: this.logger,
@@ -1670,7 +1650,6 @@ export class SessionGenerationPipeline {
           "Rubric QA, diagnose only.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(PLAN_GRADE_RESPONSE_SCHEMA),
         schema: PlanGradeSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -1730,9 +1709,6 @@ export class SessionGenerationPipeline {
           "List concrete techniques learners must know before solving the problems.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(
-          PROBLEM_TECHNIQUES_RESPONSE_SCHEMA,
-        ),
         schema: ProblemTechniquesSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -1775,13 +1751,6 @@ export class SessionGenerationPipeline {
       contents: buildSingleUserPrompt(
         "Fix the session plan based on the grading feedback. Maintain JSON structure.",
         userPrompt,
-      ),
-      responseJsonSchema: toGeminiJsonSchema(
-        getPlanParseResponseSchema(
-          includeStory,
-          includeCoding,
-          !this.options.lessonBrief && includeCoding,
-        ),
       ),
       schema: getSessionPlanSchema(includeStory, includeCoding),
       normalizeJson: normalizeSessionPlanJson,
@@ -2076,9 +2045,6 @@ export class SessionGenerationPipeline {
               "Produce quiz question outlines only (no answers or explanations).",
               outlinePrompt,
             ),
-            responseJsonSchema: toGeminiJsonSchema(
-              QUIZZES_OUTLINE_RESPONSE_SCHEMA,
-            ),
             schema: QuizzesOutlineSchema,
             progress: this.logger,
             debug: outlineDebug,
@@ -2109,7 +2075,6 @@ export class SessionGenerationPipeline {
                 "Expand a single quiz with answers, options, and explanations.",
                 expandPrompt,
               ),
-              responseJsonSchema: toGeminiJsonSchema(QUIZ_RESPONSE_SCHEMA),
               schema: SessionQuizSchema,
               progress: this.logger,
               debug: expandDebug,
@@ -2192,7 +2157,6 @@ export class SessionGenerationPipeline {
             : "QA quizzes for coverage, theory, clarity, and technique readiness for the lesson.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(QUIZZES_GRADE_RESPONSE_SCHEMA),
         schema: QuizzesGradeSchema,
         progress: this.logger,
         debug: debugOptions,
@@ -2382,7 +2346,6 @@ export class SessionGenerationPipeline {
             "Produce full beginner-friendly specs with reference solutions and tests that use only the listed techniques.",
             userPrompt,
           ),
-          responseJsonSchema: toGeminiJsonSchema(PROBLEMS_RESPONSE_SCHEMA),
           schema: ProblemsSchema,
           progress: this.logger,
           debug: debugOptions,
@@ -2560,7 +2523,6 @@ export class SessionGenerationPipeline {
           "QA problems for alignment, clarity, difficulty, and technique alignment.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(PROBLEMS_GRADE_RESPONSE_SCHEMA),
         schema: ProblemsGradeSchema,
         progress: this.logger,
         debug: debugOptions,

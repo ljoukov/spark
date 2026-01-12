@@ -1,14 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
-import {
-  generateJson,
-  toGeminiJsonSchema,
-  type LlmContent,
-} from "@spark/llm/utils/llm";
+import { generateJson, type LlmContent } from "@spark/llm/utils/llm";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 
 import { createCliCommand } from "../utils/cli";
@@ -55,45 +50,6 @@ const PdfAnalysisSchema = z
     })),
     documentSummary: raw.document_summary,
   }));
-
-const PAGE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["page_number", "description"],
-  propertyOrdering: ["page_number", "description"],
-  properties: {
-    page_number: {
-      type: Type.NUMBER,
-      minimum: 1,
-      description: "1-based index of the PDF page being described",
-    },
-    description: {
-      type: Type.STRING,
-      minLength: "1",
-      description:
-        "Concise but complete description of the page content, notable visuals, and its role in the document",
-    },
-  },
-};
-
-const PDF_ANALYSIS_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["pages", "document_summary"],
-  propertyOrdering: ["pages", "document_summary"],
-  properties: {
-    pages: {
-      type: Type.ARRAY,
-      items: PAGE_RESPONSE_SCHEMA,
-      description:
-        "List of page descriptions ordered from the first page to the last page",
-    },
-    document_summary: {
-      type: Type.STRING,
-      minLength: "1",
-      description:
-        "Short overall description that captures the document's purpose and the key ideas linking the pages together",
-    },
-  },
-};
 
 function parseCliOptions(argv: readonly string[]): CliOptions {
   const program = createCliCommand(
@@ -189,7 +145,6 @@ async function main(argv: readonly string[]): Promise<void> {
         modelId: "gemini-2.5-pro",
         contents: item.contents,
         schema: PdfAnalysisSchema,
-        responseJsonSchema: toGeminiJsonSchema(PDF_ANALYSIS_RESPONSE_SCHEMA),
         progress,
       });
       progress.log(`completed Gemini analysis for ${item.fileName}`);

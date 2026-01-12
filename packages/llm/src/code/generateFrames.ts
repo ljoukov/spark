@@ -1,11 +1,9 @@
-import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 import { getSharp } from "../utils/sharp";
 
 import {
   generateImages,
   generateJson,
-  toGeminiJsonSchema,
   type LlmContentPart,
   type LlmDebugOptions,
   type LlmImageData,
@@ -79,28 +77,6 @@ const FrameComparisonSchema = z
 
 type FrameComparisonResponse = z.infer<typeof FrameComparisonSchema>;
 
-const FRAME_COMPARISON_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["reasoning", "winner_index"],
-  propertyOrdering: ["reasoning", "catastrophic_candidates", "winner_index"],
-  properties: {
-    reasoning: { type: Type.STRING, minLength: "1" },
-    catastrophic_candidates: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["index", "reason"],
-        propertyOrdering: ["index", "reason"],
-        properties: {
-          index: { type: Type.NUMBER, minimum: 1 },
-          reason: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-    winner_index: { type: Type.NUMBER, minimum: 1 },
-  },
-};
-
 const BatchGradeResponseSchema = z
   .object({
     outcome: z.enum(["accept", "redo_batch", "redo_frames"]),
@@ -127,37 +103,6 @@ const BatchGradeResponseSchema = z
 
 type BatchGradeResponse = z.infer<typeof BatchGradeResponseSchema>;
 
-const BATCH_GRADE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["outcome", "frames_to_redo"],
-  propertyOrdering: [
-    "outcome",
-    "summary",
-    "catastrophic_batch_reason",
-    "frames_to_redo",
-  ],
-  properties: {
-    outcome: {
-      type: Type.STRING,
-      enum: ["accept", "redo_batch", "redo_frames"],
-    },
-    catastrophic_batch_reason: { type: Type.STRING },
-    summary: { type: Type.STRING },
-    frames_to_redo: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["frame_index", "reason"],
-        propertyOrdering: ["frame_index", "reason"],
-        properties: {
-          frame_index: { type: Type.NUMBER, minimum: 1 },
-          reason: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-  },
-};
-
 const FramePromptRevisionResponseSchema = z
   .object({
     summary: z.string().trim().optional(),
@@ -183,28 +128,6 @@ const FramePromptRevisionResponseSchema = z
 type FramePromptRevisionResponse = z.infer<
   typeof FramePromptRevisionResponseSchema
 >;
-
-const FRAME_PROMPT_REVISION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["replacements"],
-  propertyOrdering: ["summary", "replacements"],
-  properties: {
-    summary: { type: Type.STRING },
-    replacements: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["frame_index", "updated_prompt", "rationale"],
-        propertyOrdering: ["frame_index", "updated_prompt", "rationale"],
-        properties: {
-          frame_index: { type: Type.NUMBER, minimum: 1 },
-          updated_prompt: { type: Type.STRING, minLength: "1" },
-          rationale: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-  },
-};
 
 type FrameSemanticScores = {
   promptAlignment: number;
@@ -247,43 +170,6 @@ const FrameSemanticAssessmentSchema = z
 type FrameSemanticAssessmentResponse = z.infer<
   typeof FrameSemanticAssessmentSchema
 >;
-
-const FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["caption", "scores"],
-  propertyOrdering: ["caption", "issues", "scores"],
-  properties: {
-    caption: { type: Type.STRING, minLength: "1" },
-    issues: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING, minLength: "1" },
-    },
-    scores: {
-      type: Type.OBJECT,
-      required: [
-        "prompt_alignment",
-        "narration_alignment",
-        "subject_presence",
-        "composition_risk",
-        "text_artifact_risk",
-      ],
-      propertyOrdering: [
-        "prompt_alignment",
-        "narration_alignment",
-        "subject_presence",
-        "composition_risk",
-        "text_artifact_risk",
-      ],
-      properties: {
-        prompt_alignment: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-        narration_alignment: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-        subject_presence: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-        composition_risk: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-        text_artifact_risk: { type: Type.NUMBER, minimum: 0, maximum: 1 },
-      },
-    },
-  },
-};
 
 type FramePromptRevisionEvidence = {
   frameIndex: number;
@@ -452,7 +338,6 @@ async function gradeBatch(params: {
     modelId: options.gradingModelId,
     progress: options.progress,
     schema: BatchGradeResponseSchema,
-    responseJsonSchema: toGeminiJsonSchema(BATCH_GRADE_RESPONSE_SCHEMA),
     debug: extendDebug(options.debug, debugSuffix),
     contents: buildBatchGradeContents({
       catDescription: options.gradeCatastrophicDescription,
@@ -551,7 +436,6 @@ async function selectBestRedoFrameCandidate(params: {
     modelId: gradingModelId,
     contents: [{ role: "user", parts }],
     schema: FrameComparisonSchema,
-    responseJsonSchema: toGeminiJsonSchema(FRAME_COMPARISON_RESPONSE_SCHEMA),
     debug,
   });
 
@@ -637,9 +521,6 @@ async function assessFrameSemantic(params: {
     modelId: gradingModelId,
     contents,
     schema: FrameSemanticAssessmentSchema,
-    responseJsonSchema: toGeminiJsonSchema(
-      FRAME_SEMANTIC_ASSESSMENT_RESPONSE_SCHEMA,
-    ),
     debug,
   });
   return response;
@@ -932,9 +813,6 @@ async function requestFramePromptRevisions(params: {
     progress: params.progress,
     contents,
     schema: FramePromptRevisionResponseSchema,
-    responseJsonSchema: toGeminiJsonSchema(
-      FRAME_PROMPT_REVISION_RESPONSE_SCHEMA,
-    ),
     debug: params.debug,
   });
 }

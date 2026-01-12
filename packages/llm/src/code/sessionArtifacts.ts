@@ -1,4 +1,3 @@
-import { Type, type Schema } from "@google/genai";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
@@ -9,11 +8,7 @@ import {
 } from "@spark/schemas";
 import { z } from "zod";
 
-import {
-  generateJson,
-  toGeminiJsonSchema,
-  type LlmDebugOptions,
-} from "../utils/llm";
+import { generateJson, type LlmDebugOptions } from "../utils/llm";
 import { TEXT_MODEL_ID } from "./sessionLlm";
 import {
   ProblemPlanItemsSchema,
@@ -35,231 +30,9 @@ const QuizDefinitionsPayloadSchema = z.object({
   quizzes: z.array(QuizDefinitionSchema),
 });
 
-const QUIZ_FEEDBACK_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["message"],
-  properties: {
-    message: { type: Type.STRING, minLength: "1" },
-    tone: { type: Type.STRING, enum: ["info", "success", "warning"] },
-    heading: { type: Type.STRING },
-  },
-};
-
-const QUIZ_OPTION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["id", "label", "text"],
-  properties: {
-    id: { type: Type.STRING, minLength: "1" },
-    label: { type: Type.STRING, minLength: "1" },
-    text: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const QUIZ_QUESTION_BASE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["id", "prompt"],
-  properties: {
-    id: { type: Type.STRING, minLength: "1" },
-    prompt: { type: Type.STRING, minLength: "1" },
-    explanation: { type: Type.STRING },
-    hint: { type: Type.STRING },
-  },
-};
-
-const QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: [
-    "kind",
-    "id",
-    "prompt",
-    "options",
-    "correctOptionId",
-    "correctFeedback",
-  ],
-  properties: {
-    kind: { type: Type.STRING, enum: ["multiple-choice"] },
-    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties,
-    options: {
-      type: Type.ARRAY,
-      minItems: "2",
-      items: QUIZ_OPTION_RESPONSE_SCHEMA,
-    },
-    correctOptionId: { type: Type.STRING, minLength: "1" },
-    correctFeedback: QUIZ_FEEDBACK_RESPONSE_SCHEMA,
-  },
-};
-
-const QUIZ_QUESTION_TYPE_ANSWER_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["kind", "id", "prompt", "answer"],
-  properties: {
-    kind: { type: Type.STRING, enum: ["type-answer"] },
-    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties,
-    answer: { type: Type.STRING, minLength: "1" },
-    acceptableAnswers: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING, minLength: "1" },
-    },
-  },
-};
-
-const QUIZ_QUESTION_INFO_CARD_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["kind", "id", "prompt", "body"],
-  properties: {
-    kind: { type: Type.STRING, enum: ["info-card"] },
-    ...QUIZ_QUESTION_BASE_RESPONSE_SCHEMA.properties,
-    body: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const QUIZ_DEFINITIONS_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["quizzes"],
-  properties: {
-    quizzes: {
-      type: Type.ARRAY,
-      minItems: "1",
-      items: {
-        type: Type.OBJECT,
-        required: ["id", "title", "description", "progressKey", "questions"],
-        properties: {
-          id: { type: Type.STRING, minLength: "1" },
-          title: { type: Type.STRING, minLength: "1" },
-          description: { type: Type.STRING, minLength: "1" },
-          topic: { type: Type.STRING },
-          estimatedMinutes: { type: Type.NUMBER },
-          progressKey: { type: Type.STRING, minLength: "1" },
-          questions: {
-            type: Type.ARRAY,
-            minItems: "1",
-            items: {
-              anyOf: [
-                QUIZ_QUESTION_MCQ_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_TYPE_ANSWER_RESPONSE_SCHEMA,
-                QUIZ_QUESTION_INFO_CARD_RESPONSE_SCHEMA,
-              ],
-            },
-          },
-        },
-      },
-    },
-  },
-};
-
-const CODE_PROBLEM_EXAMPLE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["title", "input", "output", "explanation"],
-  properties: {
-    title: { type: Type.STRING, minLength: "1" },
-    input: { type: Type.STRING, minLength: "1" },
-    output: { type: Type.STRING, minLength: "1" },
-    explanation: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const CODE_PROBLEM_TEST_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["input", "output", "explanation"],
-  properties: {
-    input: { type: Type.STRING, minLength: "1" },
-    output: { type: Type.STRING, minLength: "1" },
-    explanation: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const CODE_PROBLEM_SOLUTION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["language", "code"],
-  properties: {
-    language: { type: Type.STRING, enum: ["python"] },
-    code: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const CODE_PROBLEM_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: [
-    "slug",
-    "title",
-    "topics",
-    "difficulty",
-    "description",
-    "inputFormat",
-    "constraints",
-    "examples",
-    "tests",
-    "hints",
-    "solution",
-    "metadataVersion",
-  ],
-  properties: {
-    slug: { type: Type.STRING, minLength: "1" },
-    title: { type: Type.STRING, minLength: "1" },
-    topics: {
-      type: Type.ARRAY,
-      minItems: "1",
-      items: { type: Type.STRING, minLength: "1" },
-    },
-    difficulty: {
-      type: Type.STRING,
-      enum: ["warmup", "intro", "easy", "medium", "hard"],
-    },
-    description: { type: Type.STRING, minLength: "1" },
-    inputFormat: { type: Type.STRING, minLength: "1" },
-    constraints: {
-      type: Type.ARRAY,
-      minItems: "1",
-      items: { type: Type.STRING, minLength: "1" },
-    },
-    examples: {
-      type: Type.ARRAY,
-      minItems: "3",
-      maxItems: "3",
-      items: CODE_PROBLEM_EXAMPLE_RESPONSE_SCHEMA,
-    },
-    tests: {
-      type: Type.ARRAY,
-      minItems: "3",
-      maxItems: "100",
-      items: CODE_PROBLEM_TEST_RESPONSE_SCHEMA,
-    },
-    hints: {
-      type: Type.ARRAY,
-      minItems: "3",
-      maxItems: "3",
-      items: { type: Type.STRING, minLength: "1" },
-    },
-    solution: CODE_PROBLEM_SOLUTION_RESPONSE_SCHEMA,
-    metadataVersion: { type: Type.NUMBER },
-  },
-};
-
 const CodeProblemsPayloadSchema = z.object({
   problems: z.array(CodeProblemSchema).min(1),
 });
-
-const CODE_PROBLEMS_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["problems"],
-  properties: {
-    problems: {
-      type: Type.ARRAY,
-      minItems: "1",
-      items: CODE_PROBLEM_RESPONSE_SCHEMA,
-    },
-  },
-};
-
-const SESSION_METADATA_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["tagline", "emoji", "summary"],
-  properties: {
-    tagline: { type: Type.STRING },
-    emoji: { type: Type.STRING },
-    summary: { type: Type.STRING },
-  },
-};
 
 function formatQuizDraftsMarkdown(quizzes: readonly SessionQuiz[]): string {
   if (quizzes.length === 0) {
@@ -591,7 +364,6 @@ export async function generateQuizDefinitions(
       modelId: QUIZ_DEFINITIONS_MODEL_ID,
       contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
       schema: QuizDefinitionsPayloadSchema,
-      responseJsonSchema: toGeminiJsonSchema(QUIZ_DEFINITIONS_RESPONSE_SCHEMA),
       debug: options?.debug,
       maxAttempts: 4,
     });
@@ -624,7 +396,6 @@ export async function generateCodeProblems(
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: CodeProblemsPayloadSchema,
-    responseJsonSchema: toGeminiJsonSchema(CODE_PROBLEMS_RESPONSE_SCHEMA),
     maxAttempts: 4,
   });
   return payload.problems;
@@ -661,7 +432,6 @@ export async function generateSessionMetadata(options: {
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
     schema: SessionMetadataSchema,
-    responseJsonSchema: toGeminiJsonSchema(SESSION_METADATA_RESPONSE_SCHEMA),
   });
 }
 

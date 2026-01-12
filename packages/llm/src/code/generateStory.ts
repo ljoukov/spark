@@ -2,14 +2,12 @@ import { Buffer } from "node:buffer";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 
-import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
 import {
   generateImages,
   generateText,
   generateJson,
-  toGeminiJsonSchema,
   type LlmContentPart,
   type LlmImageData,
   type LlmDebugOptions,
@@ -43,7 +41,7 @@ function getChallengeLabel(includeCoding: boolean): string {
   return includeCoding ? "Coding challenges" : "Lesson problems";
 }
 
-const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gemini-3-pro-preview";
+const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gpt-5.2";
 
 const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
 
@@ -208,36 +206,6 @@ type SegmentationCorrectorResponse = {
   corrections: SegmentationPromptCorrection[];
 };
 
-function buildSegmentationCorrectorResponseSchemaJson(
-  maxPromptIndex: number,
-): Schema {
-  return {
-    type: Type.OBJECT,
-    required: ["corrections"],
-    propertyOrdering: ["issuesSummary", "corrections"],
-    properties: {
-      issuesSummary: { type: Type.STRING },
-      corrections: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          required: ["prompt_index", "critique", "updatedPrompt"],
-          propertyOrdering: ["prompt_index", "critique", "updatedPrompt"],
-          properties: {
-            prompt_index: {
-              type: Type.NUMBER,
-              minimum: 0,
-              maximum: maxPromptIndex,
-            },
-            critique: { type: Type.STRING, minLength: "1" },
-            updatedPrompt: { type: Type.STRING, minLength: "1" },
-          },
-        },
-      },
-    },
-  };
-}
-
 export type StoryProseRevisionCriterion = {
   score: number;
   justification: string;
@@ -360,297 +328,6 @@ const StoryIdeaDataSchema = StoryIdeaDataSchemaBase.superRefine(
 );
 
 export type StoryIdeaData = z.infer<typeof StoryIdeaDataSchema>;
-
-const STORY_IDEA_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["researchSnapshot", "candidates", "recommendation", "sources"],
-  propertyOrdering: [
-    "researchSnapshot",
-    "candidates",
-    "recommendation",
-    "sources",
-  ],
-  properties: {
-    researchSnapshot: {
-      type: Type.OBJECT,
-      description:
-        "Factual research summary that grounds the chosen story direction.",
-      required: [
-        "conceptualEssence",
-        "historicalAnchor",
-        "narrativeElements",
-        "keyTermToNameInStory",
-        "analogyClarifierSeed",
-        "closingInvitationSeed",
-      ],
-      propertyOrdering: [
-        "conceptualEssence",
-        "historicalAnchor",
-        "narrativeElements",
-        "keyTerminologyGloss",
-        "keyTermToNameInStory",
-        "namingNote",
-        "historicalNuance",
-        "analogyClarifierSeed",
-        "closingInvitationSeed",
-      ],
-      properties: {
-        conceptualEssence: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "One-sentence explanation of the core behaviour or insight behind the concept.",
-        },
-        historicalAnchor: {
-          type: Type.OBJECT,
-          description:
-            "Primary historical figure and decisive moment that anchor the narrative.",
-          required: ["figure", "canonicalEvent", "highStakesProblem"],
-          propertyOrdering: ["figure", "canonicalEvent", "highStakesProblem"],
-          properties: {
-            figure: {
-              type: Type.STRING,
-              minLength: "1",
-              description:
-                "Full name and role of the person whose story we will tell.",
-            },
-            canonicalEvent: {
-              type: Type.STRING,
-              minLength: "1",
-              description:
-                "Specific paper, project, or milestone (with year/location) where the concept proved decisive.",
-            },
-            highStakesProblem: {
-              type: Type.STRING,
-              minLength: "1",
-              description:
-                "Why the problem mattered at that moment and what was at risk.",
-            },
-          },
-        },
-        narrativeElements: {
-          type: Type.OBJECT,
-          description:
-            "Analogy and foil information that shape how the story will be told.",
-          required: [
-            "functionalAnalogies",
-            "contrastingFoil",
-            "invisibleArchitecturePivot",
-          ],
-          propertyOrdering: [
-            "functionalAnalogies",
-            "contrastingFoil",
-            "invisibleArchitecturePivot",
-          ],
-          properties: {
-            functionalAnalogies: {
-              type: Type.ARRAY,
-              minItems: "1",
-              description:
-                "Candidate analogies (2–3) that can map the concept to familiar systems.",
-              items: {
-                type: Type.OBJECT,
-                required: ["name", "description"],
-                propertyOrdering: ["name", "description"],
-                properties: {
-                  name: {
-                    type: Type.STRING,
-                    minLength: "1",
-                    description: "Short title for the analogy (2–4 words).",
-                  },
-                  description: {
-                    type: Type.STRING,
-                    minLength: "1",
-                    description:
-                      "One-sentence description mapping the analogy behaviour to the concept.",
-                  },
-                },
-              },
-            },
-            contrastingFoil: {
-              type: Type.STRING,
-              minLength: "1",
-              description:
-                "Alternate approach that fails for this historical problem (one sentence).",
-            },
-            invisibleArchitecturePivot: {
-              type: Type.STRING,
-              minLength: "1",
-              description:
-                "Modern-day system or experience powered by the concept; used only in the ending.",
-            },
-          },
-        },
-        keyTerminologyGloss: {
-          type: Type.ARRAY,
-          description:
-            "Optional glossary entries; omit when no glossary terms are required.",
-          items: {
-            type: Type.OBJECT,
-            required: ["term", "definition"],
-            propertyOrdering: ["term", "definition"],
-            properties: {
-              term: {
-                type: Type.STRING,
-                minLength: "1",
-                description: "Term that must appear in the final story.",
-              },
-              definition: {
-                type: Type.STRING,
-                minLength: "1",
-                description:
-                  "Learner-friendly definition (no formulas) to guide writers.",
-              },
-            },
-          },
-        },
-        keyTermToNameInStory: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Exact concept name that must appear early in the story.",
-        },
-        namingNote: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Optional sentence clarifying how or why the concept received its name.",
-        },
-        historicalNuance: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Optional note about proof status, independent rediscoveries, or caveats.",
-        },
-        analogyClarifierSeed: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Sentence the writer can reuse to explain why the analogy guarantees the desired behaviour.",
-        },
-        closingInvitationSeed: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Cliffhanger sentence promising learners they will practice the trick in this lesson.",
-        },
-      },
-    },
-    candidates: {
-      type: Type.ARRAY,
-      minItems: "1",
-      description:
-        "Exactly three narrative directions (candidate_a/b/c) for the writer to choose from.",
-      items: {
-        type: Type.OBJECT,
-        required: ["id", "angle", "anchorEvent", "analogy", "lessonTeaser"],
-        propertyOrdering: [
-          "id",
-          "angle",
-          "anchorEvent",
-          "analogy",
-          "endingPivot",
-          "lessonTeaser",
-          "namingNote",
-        ],
-        properties: {
-          id: {
-            type: Type.STRING,
-            enum: [...STORY_IDEA_CANDIDATE_IDS],
-            description:
-              "Stable identifier (candidate_a, candidate_b, candidate_c).",
-          },
-          angle: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "One-sentence framing of the narrative focus for this candidate.",
-          },
-          anchorEvent: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "Specific event used to open the story for this candidate (include year/place if applicable).",
-          },
-          analogy: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "Analogy sentence tailored to this candidate (no numbered steps).",
-          },
-          endingPivot: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "Optional sentence describing how the story ends with a modern tie-in; omit if none.",
-          },
-          lessonTeaser: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "Sentence promising learners the trick will be revealed and practised in the lesson.",
-          },
-          namingNote: {
-            type: Type.STRING,
-            minLength: "1",
-            description: "Optional naming trivia unique to this candidate.",
-          },
-        },
-      },
-    },
-    recommendation: {
-      type: Type.OBJECT,
-      description:
-        "Recommendation of which candidate to ship, with supporting rationale.",
-      required: ["selectedCandidateId", "rationale"],
-      propertyOrdering: ["rationale", "selectedCandidateId"],
-      properties: {
-        selectedCandidateId: {
-          type: Type.STRING,
-          enum: [...STORY_IDEA_CANDIDATE_IDS],
-          description:
-            "Identifier of the winning candidate (must match one entry in candidates).",
-        },
-        rationale: {
-          type: Type.STRING,
-          minLength: "1",
-          description:
-            "Concise argument (2–3 sentences) explaining why this candidate delivers the best story.",
-        },
-      },
-    },
-    sources: {
-      type: Type.ARRAY,
-      minItems: "1",
-      description:
-        "Merged bibliography covering every citation used in the snapshot and candidates.",
-      items: {
-        type: Type.OBJECT,
-        required: ["title", "url", "summary"],
-        propertyOrdering: ["title", "url", "summary"],
-        properties: {
-          title: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "Human-readable source title (site + article/book name).",
-          },
-          url: {
-            type: Type.STRING,
-            minLength: "1",
-            description: "Direct URL to the supporting evidence.",
-          },
-          summary: {
-            type: Type.STRING,
-            minLength: "1",
-            description:
-              "One-sentence recap of what this source confirms (dates, quotes, context, etc.).",
-          },
-        },
-      },
-    },
-  },
-};
 
 export type StoryIdeaResult = {
   brief: string;
@@ -990,16 +667,6 @@ type ProseVariantJudgeResponse = z.infer<
   typeof ProseVariantJudgeResponseSchema
 >;
 
-const PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["reasoning", "verdict"],
-  propertyOrdering: ["reasoning", "verdict"],
-  properties: {
-    reasoning: { type: Type.STRING, minLength: "1" },
-    verdict: { type: Type.STRING, enum: ["variant_a", "variant_b"] },
-  },
-};
-
 const StoryImagesCheckpointSchema = z.object({
   prompt: z.string(),
   modelVersion: z.string().trim().min(1),
@@ -1040,216 +707,6 @@ export class SegmentationCorrectionError extends Error {
     this.name = "SegmentationCorrectionError";
   }
 }
-
-function buildStorySegmentationResponseSchema(segmentCount: number): Schema {
-  return {
-    type: Type.OBJECT,
-    required: ["title", "posterPrompt", "segments", "endingPrompt"],
-    propertyOrdering: ["title", "posterPrompt", "segments", "endingPrompt"],
-    properties: {
-      title: { type: Type.STRING, minLength: "1" },
-      posterPrompt: { type: Type.STRING, minLength: "1" },
-      segments: {
-        type: Type.ARRAY,
-        minItems: String(segmentCount),
-        maxItems: String(segmentCount),
-        items: {
-          type: Type.OBJECT,
-          required: ["imagePrompt", "narration"],
-          propertyOrdering: ["imagePrompt", "narration"],
-          properties: {
-            imagePrompt: { type: Type.STRING, minLength: "1" },
-            narration: {
-              type: Type.ARRAY,
-              minItems: "1",
-              items: {
-                type: Type.OBJECT,
-                required: ["voice", "text"],
-                propertyOrdering: ["voice", "text"],
-                properties: {
-                  voice: { type: Type.STRING, enum: ["M", "F"] },
-                  text: { type: Type.STRING, minLength: "1" },
-                },
-              },
-            },
-          },
-        },
-      },
-      endingPrompt: { type: Type.STRING, minLength: "1" },
-    },
-  };
-}
-
-const STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["justification", "score"],
-  propertyOrdering: ["justification", "score"],
-  properties: {
-    justification: { type: Type.STRING, minLength: "1" },
-    score: { type: Type.NUMBER, minimum: 1, maximum: 5 },
-  },
-};
-
-const STORY_PROSE_REVISION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["analysis", "revisedStory", "improvementSummary", "fixChecklist"],
-  propertyOrdering: [
-    "analysis",
-    "revisedStory",
-    "improvementSummary",
-    "fixChecklist",
-  ],
-  properties: {
-    analysis: {
-      type: Type.OBJECT,
-      required: [
-        "metaphoricalIntegrity",
-        "narrativeMomentum",
-        "conceptualClarity",
-        "audienceResonance",
-        "motivationalPower",
-      ],
-      propertyOrdering: [
-        "metaphoricalIntegrity",
-        "narrativeMomentum",
-        "conceptualClarity",
-        "audienceResonance",
-        "motivationalPower",
-      ],
-      properties: {
-        metaphoricalIntegrity: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
-        narrativeMomentum: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
-        conceptualClarity: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
-        audienceResonance: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
-        motivationalPower: STORY_PROSE_REVISION_CRITERION_RESPONSE_SCHEMA,
-      },
-    },
-    revisedStory: {
-      type: Type.OBJECT,
-      required: ["title", "paragraphs"],
-      propertyOrdering: ["title", "paragraphs"],
-      properties: {
-        title: { type: Type.STRING, minLength: "1" },
-        paragraphs: {
-          type: Type.ARRAY,
-          minItems: "1",
-          items: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-    improvementSummary: { type: Type.STRING, minLength: "1" },
-    fixChecklist: {
-      type: Type.OBJECT,
-      required: [
-        "namingAttribution",
-        "exclusivityClaim",
-        "modernTieInOverclaim",
-        "datePrecision",
-        "wrongEntity",
-      ],
-      propertyOrdering: [
-        "namingAttribution",
-        "exclusivityClaim",
-        "modernTieInOverclaim",
-        "datePrecision",
-        "wrongEntity",
-      ],
-      properties: {
-        namingAttribution: { type: Type.BOOLEAN },
-        exclusivityClaim: { type: Type.BOOLEAN },
-        modernTieInOverclaim: { type: Type.BOOLEAN },
-        datePrecision: {
-          anyOf: [
-            { type: Type.STRING, enum: ["hedged", "recommend-hedge"] },
-            { type: Type.BOOLEAN },
-          ],
-        },
-        wrongEntity: { type: Type.BOOLEAN },
-      },
-    },
-  },
-};
-
-const STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["summary", "category", "severity", "evidence", "recommendation"],
-  propertyOrdering: [
-    "tag",
-    "summary",
-    "category",
-    "severity",
-    "evidence",
-    "recommendation",
-  ],
-  properties: {
-    tag: {
-      type: Type.STRING,
-      enum: [...STORY_VALIDATION_TAGS],
-      description: "Taxonomy tag for this issue.",
-    },
-    summary: { type: Type.STRING, minLength: "1" },
-    category: {
-      type: Type.STRING,
-      enum: [
-        "factual",
-        "naming",
-        "terminology",
-        "structure",
-        "tone",
-        "requirement",
-        "other",
-      ],
-    },
-    severity: {
-      type: Type.STRING,
-      enum: ["critical", "major", "minor"],
-    },
-    evidence: { type: Type.STRING, minLength: "1" },
-    recommendation: { type: Type.STRING, minLength: "1" },
-  },
-};
-
-const STORY_PROSE_VALIDATION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["verdict", "issues"],
-  propertyOrdering: ["verdict", "issues", "blockers"],
-  properties: {
-    verdict: { type: Type.STRING, enum: ["pass", "fail"] },
-    issues: {
-      type: Type.ARRAY,
-      items: STORY_PROSE_VALIDATION_ISSUE_RESPONSE_SCHEMA,
-    },
-    blockers: {
-      type: Type.OBJECT,
-      required: [
-        "namingAttribution",
-        "exclusivityClaim",
-        "modernTieInOverclaim",
-        "datePrecision",
-        "wrongEntity",
-      ],
-      propertyOrdering: [
-        "namingAttribution",
-        "exclusivityClaim",
-        "modernTieInOverclaim",
-        "datePrecision",
-        "wrongEntity",
-      ],
-      properties: {
-        namingAttribution: { type: Type.BOOLEAN },
-        exclusivityClaim: { type: Type.BOOLEAN },
-        modernTieInOverclaim: { type: Type.BOOLEAN },
-        datePrecision: {
-          anyOf: [
-            { type: Type.STRING, enum: ["hedged", "recommend-hedge"] },
-            { type: Type.BOOLEAN },
-          ],
-        },
-        wrongEntity: { type: Type.BOOLEAN },
-      },
-    },
-  },
-};
 
 export function buildStoryIdeaPrompt(
   topic: string,
@@ -1967,7 +1424,6 @@ export async function generateStoryIdea(
         contents: [
           { role: "user", parts: [{ type: "text", text: parsePrompt }] },
         ],
-        responseJsonSchema: toGeminiJsonSchema(STORY_IDEA_RESPONSE_SCHEMA),
         schema: StoryIdeaDataSchema,
         debug: parseDebugOptions,
       });
@@ -2352,9 +1808,6 @@ export async function generateStoryProseRevision(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseJsonSchema: toGeminiJsonSchema(
-      STORY_PROSE_REVISION_RESPONSE_SCHEMA,
-    ),
     schema: StoryProseRevisionResponseSchema,
     debug: options?.debugRootDir
       ? {
@@ -2432,9 +1885,6 @@ export async function validateStoryProse(
     contents: [
       { role: "user", parts: [{ type: "text", text: factualParsePrompt }] },
     ],
-    responseJsonSchema: toGeminiJsonSchema(
-      STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
-    ),
     schema: StoryProseValidationResultSchema,
     maxAttempts: 3,
     debug: options?.debugRootDir
@@ -2466,9 +1916,6 @@ export async function validateStoryProse(
     contents: [
       { role: "user", parts: [{ type: "text", text: structuralPrompt }] },
     ],
-    responseJsonSchema: toGeminiJsonSchema(
-      STORY_PROSE_VALIDATION_RESPONSE_SCHEMA,
-    ),
     schema: StoryProseValidationResultSchema,
     maxAttempts: 2,
     debug: options?.debugRootDir
@@ -2971,7 +2418,6 @@ async function judgeProseVariants(
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseJsonSchema: toGeminiJsonSchema(PROSE_VARIANT_JUDGE_RESPONSE_SCHEMA),
     schema: ProseVariantJudgeResponseSchema,
     debug: baseDebug?.debugRootDir
       ? {
@@ -3201,14 +2647,11 @@ export async function generateStorySegmentation(
     topic,
     resolvedSegmentCount,
   );
-  const responseSchema =
-    buildStorySegmentationResponseSchema(resolvedSegmentCount);
   const segmentationSchema = buildStorySegmentationSchema(resolvedSegmentCount);
   const segmentation = await generateJson<StorySegmentation>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
     contents: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
-    responseJsonSchema: toGeminiJsonSchema(responseSchema),
     schema: segmentationSchema,
     debug: options?.debugRootDir
       ? {
@@ -3250,8 +2693,6 @@ export async function correctStorySegmentation(
       generationPrompt,
     );
     const maxPromptIndex = resolvedSegmentCount + 1;
-    const responseSchema =
-      buildSegmentationCorrectorResponseSchemaJson(maxPromptIndex);
     const parseSchema =
       buildSegmentationCorrectorResponseSchema(maxPromptIndex);
     const attemptLabel = `corrections/attempt-${String(attempt).padStart(3, "0")}-of-${String(SEGMENTATION_CORRECTION_ATTEMPTS).padStart(3, "0")}`;
@@ -3272,7 +2713,6 @@ export async function correctStorySegmentation(
             parts: [{ type: "text", text: reviewPrompt }],
           },
         ],
-        responseJsonSchema: toGeminiJsonSchema(responseSchema),
         schema: parseSchema,
         debug: options?.debugRootDir
           ? {
@@ -3330,16 +2770,6 @@ const ImageSetJudgeResponseSchema = z.object({
   verdict: z.enum(["set_a", "set_b"]),
 });
 type ImageSetJudgeResponse = z.infer<typeof ImageSetJudgeResponseSchema>;
-
-const IMAGE_SET_JUDGE_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["reasoning", "verdict"],
-  propertyOrdering: ["reasoning", "verdict"],
-  properties: {
-    reasoning: { type: Type.STRING, minLength: "1" },
-    verdict: { type: Type.STRING, enum: ["set_a", "set_b"] },
-  },
-};
 
 type SegmentationImageEntry = {
   index: number;
@@ -3489,28 +2919,6 @@ const PosterSelectionSchema = z
 
 type PosterSelectionResponse = z.infer<typeof PosterSelectionSchema>;
 
-const POSTER_SELECTION_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["reasoning", "winner_index"],
-  propertyOrdering: ["reasoning", "catastrophic_candidates", "winner_index"],
-  properties: {
-    reasoning: { type: Type.STRING, minLength: "1" },
-    catastrophic_candidates: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["index", "reason"],
-        propertyOrdering: ["index", "reason"],
-        properties: {
-          index: { type: Type.NUMBER, minimum: 1 },
-          reason: { type: Type.STRING, minLength: "1" },
-        },
-      },
-    },
-    winner_index: { type: Type.NUMBER, minimum: 1 },
-  },
-};
-
 async function selectPosterCandidate(options: {
   prompt: string;
   stylePrompt: string;
@@ -3586,7 +2994,6 @@ async function selectPosterCandidate(options: {
     modelId: options.gradingModelId,
     contents: [{ role: "user", parts }],
     schema: PosterSelectionSchema,
-    responseJsonSchema: toGeminiJsonSchema(POSTER_SELECTION_RESPONSE_SCHEMA),
     debug: options.debug,
   });
 
@@ -3936,7 +3343,6 @@ export async function judgeImageSets(
     modelId: TEXT_MODEL_ID,
     maxAttempts: 5,
     contents: [{ role: "user", parts }],
-    responseJsonSchema: toGeminiJsonSchema(IMAGE_SET_JUDGE_RESPONSE_SCHEMA),
     schema: ImageSetJudgeResponseSchema,
     debug: options?.debugRootDir
       ? {

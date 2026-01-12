@@ -3,7 +3,6 @@ import {
   generateJson,
   generateText,
   LlmJsonCallError,
-  toGeminiJsonSchema,
   type LlmTextModelId,
 } from "@spark/llm/utils/llm";
 import {
@@ -12,17 +11,8 @@ import {
   type OpenAiModelId,
 } from "@spark/llm/utils/openai-llm";
 import { z } from "zod";
-import { Type, type Schema } from "@google/genai";
 
 ensureEvalEnvLoaded();
-
-const GREETING_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["greeting"],
-  properties: {
-    greeting: { type: Type.STRING },
-  },
-};
 
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
@@ -98,7 +88,6 @@ async function main(): Promise<void> {
       schema: z.object({
         greeting: z.string(),
       }),
-      responseJsonSchema: toGeminiJsonSchema(GREETING_RESPONSE_SCHEMA),
       debug,
       contents: [
         {

@@ -15,14 +15,12 @@ import { inspect } from "node:util";
 // NOTE: Keep docs/LLM.md in sync with any API changes to this file.
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
-  Type,
   FinishReason,
   ThinkingLevel,
   type Content,
   type GenerateContentConfig,
   type GroundingMetadata,
   type Part,
-  type Schema,
   type Tool,
 } from "@google/genai";
 import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
@@ -141,64 +139,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseNumericConstraint(
-  value: string | number | undefined,
-): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
-function mapGoogleSchemaType(type: Type | undefined): string | undefined {
-  switch (type) {
-    case Type.STRING:
-      return "string";
-    case Type.NUMBER:
-      return "number";
-    case Type.INTEGER:
-      return "integer";
-    case Type.BOOLEAN:
-      return "boolean";
-    case Type.ARRAY:
-      return "array";
-    case Type.OBJECT:
-      return "object";
-    case Type.NULL:
-      return "null";
-    default:
-      return undefined;
-  }
-}
-
-function orderedSchemaKeys(
-  properties: Record<string, Schema>,
-  ordering: readonly string[] | undefined,
-): string[] {
-  const keys = Object.keys(properties);
-  if (!ordering || ordering.length === 0) {
-    return keys;
-  }
-  const ordered: string[] = [];
-  const seen = new Set<string>();
-  for (const key of ordering) {
-    if (Object.prototype.hasOwnProperty.call(properties, key)) {
-      ordered.push(key);
-      seen.add(key);
-    }
-  }
-  for (const key of keys) {
-    if (!seen.has(key)) {
-      ordered.push(key);
-    }
-  }
-  return ordered;
-}
-
 function applyNullableJsonSchema(schema: Record<string, unknown>): void {
   const anyOf = schema.anyOf;
   if (Array.isArray(anyOf)) {
@@ -226,84 +166,6 @@ function applyNullableJsonSchema(schema: Record<string, unknown>): void {
   schema.type = ["null"];
 }
 
-function convertGeminiSchemaToJsonSchema(
-  schema: Schema,
-  options: { includePropertyOrdering: boolean },
-): JsonSchema {
-  const output: Record<string, unknown> = {};
-  const mappedType = mapGoogleSchemaType(schema.type);
-  if (mappedType) {
-    output.type = mappedType;
-  }
-  if (schema.title) {
-    output.title = schema.title;
-  }
-  if (schema.description) {
-    output.description = schema.description;
-  }
-  if (schema.format) {
-    output.format = schema.format;
-  }
-  if (schema.enum) {
-    output.enum = [...schema.enum];
-  }
-  if (schema.pattern) {
-    output.pattern = schema.pattern;
-  }
-  const minLength = parseNumericConstraint(schema.minLength);
-  if (minLength !== undefined) {
-    output.minLength = minLength;
-  }
-  const maxLength = parseNumericConstraint(schema.maxLength);
-  if (maxLength !== undefined) {
-    output.maxLength = maxLength;
-  }
-  const minItems = parseNumericConstraint(schema.minItems);
-  if (minItems !== undefined) {
-    output.minItems = minItems;
-  }
-  const maxItems = parseNumericConstraint(schema.maxItems);
-  if (maxItems !== undefined) {
-    output.maxItems = maxItems;
-  }
-  if (schema.minimum !== undefined) {
-    output.minimum = schema.minimum;
-  }
-  if (schema.maximum !== undefined) {
-    output.maximum = schema.maximum;
-  }
-  if (schema.items) {
-    output.items = convertGeminiSchemaToJsonSchema(schema.items, options);
-  }
-  if (schema.anyOf && schema.anyOf.length > 0) {
-    output.anyOf = schema.anyOf.map((entry) =>
-      convertGeminiSchemaToJsonSchema(entry, options),
-    );
-  }
-  if (schema.properties) {
-    const keys = orderedSchemaKeys(schema.properties, schema.propertyOrdering);
-    const properties: Record<string, unknown> = {};
-    for (const key of keys) {
-      const propSchema = schema.properties[key];
-      if (!propSchema) {
-        continue;
-      }
-      properties[key] = convertGeminiSchemaToJsonSchema(propSchema, options);
-    }
-    output.properties = properties;
-    if (schema.required) {
-      output.required = [...schema.required];
-    }
-    if (options.includePropertyOrdering && schema.propertyOrdering) {
-      output.propertyOrdering = [...schema.propertyOrdering];
-    }
-  }
-  if (schema.nullable) {
-    applyNullableJsonSchema(output);
-  }
-  return output;
-}
-
 function orderedJsonSchemaKeys(
   properties: Record<string, unknown>,
   ordering: readonly string[] | undefined,
@@ -326,6 +188,59 @@ function orderedJsonSchemaKeys(
     }
   }
   return ordered;
+}
+
+function addGeminiPropertyOrdering(schema: JsonSchema): JsonSchema {
+  if (!isPlainRecord(schema)) {
+    return schema;
+  }
+  if (typeof schema.$ref === "string") {
+    return { $ref: schema.$ref };
+  }
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "properties") {
+      continue;
+    }
+    if (key === "items") {
+      output.items = isPlainRecord(value)
+        ? addGeminiPropertyOrdering(value as JsonSchema)
+        : value;
+      continue;
+    }
+    if (key === "anyOf" || key === "oneOf") {
+      output[key] = Array.isArray(value)
+        ? value.map((entry) => addGeminiPropertyOrdering(entry as JsonSchema))
+        : value;
+      continue;
+    }
+    if (key === "$defs" && isPlainRecord(value)) {
+      const defs: Record<string, unknown> = {};
+      for (const [defKey, defValue] of Object.entries(value)) {
+        if (isPlainRecord(defValue)) {
+          defs[defKey] = addGeminiPropertyOrdering(defValue as JsonSchema);
+        }
+      }
+      output.$defs = defs;
+      continue;
+    }
+    output[key] = value;
+  }
+  const propertiesRaw = schema.properties;
+  if (isPlainRecord(propertiesRaw)) {
+    const properties: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(propertiesRaw)) {
+      properties[key] = isPlainRecord(value)
+        ? addGeminiPropertyOrdering(value as JsonSchema)
+        : value;
+    }
+    output.properties = properties;
+    output.propertyOrdering = Object.keys(properties);
+  }
+  if (schema.nullable) {
+    applyNullableJsonSchema(output);
+  }
+  return output;
 }
 
 function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
@@ -428,10 +343,15 @@ function isJsonSchemaObject(schema: JsonSchema | undefined): boolean {
   return false;
 }
 
-export function toGeminiJsonSchema(schema: Schema): JsonSchema {
-  return convertGeminiSchemaToJsonSchema(schema, {
-    includePropertyOrdering: true,
-  });
+export function toGeminiJsonSchema(
+  schema: z.ZodType,
+  options?: { name?: string },
+): JsonSchema {
+  const jsonSchema = zodToJsonSchema(schema, {
+    name: options?.name,
+    target: "jsonSchema7",
+  }) as JsonSchema;
+  return addGeminiPropertyOrdering(jsonSchema);
 }
 
 type LlmInlineDataPart = {
@@ -801,7 +721,7 @@ export type LlmJsonCallOptions<T> = Omit<
   "responseJsonSchema" | "tools"
 > & {
   readonly schema: z.ZodType<T>;
-  readonly responseJsonSchema: JsonSchema;
+  readonly responseJsonSchema?: JsonSchema;
   readonly openAiSchemaName?: string;
   readonly maxAttempts?: number;
   readonly maxRetries?: number;
@@ -2694,18 +2614,20 @@ export async function generateJson<T>(
   const maxAttempts =
     normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
   const isOpenAi = isOpenAiModelId(rest.modelId);
-  const resolvedOpenAiSchemaName = normalisePathSegment(
+  const resolvedSchemaName = normalisePathSegment(
     openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
   );
-  const openAiJsonSchema = isOpenAi
-    ? (zodToJsonSchema(schema, {
-        name: resolvedOpenAiSchemaName,
-        target: "openAi",
-      }) as JsonSchema)
+  const baseJsonSchema = zodToJsonSchema(schema, {
+    name: resolvedSchemaName,
+    target: isOpenAi ? "openAi" : "jsonSchema7",
+  }) as JsonSchema;
+  const openAiJsonSchema = isOpenAi ? baseJsonSchema : undefined;
+  const geminiJsonSchema = !isOpenAi
+    ? addGeminiPropertyOrdering(baseJsonSchema)
     : undefined;
   const resolvedResponseJsonSchema = isOpenAi
     ? openAiJsonSchema
-    : responseJsonSchema;
+    : (responseJsonSchema ?? geminiJsonSchema);
   if (isOpenAi && !isJsonSchemaObject(resolvedResponseJsonSchema)) {
     throw new Error(
       "OpenAI structured outputs require a JSON object schema at the root.",
@@ -2721,7 +2643,7 @@ export async function generateJson<T>(
     const openAiSchema = resolvedResponseJsonSchema;
     openAiTextFormat = {
       type: "json_schema",
-      name: resolvedOpenAiSchemaName,
+      name: resolvedSchemaName,
       strict: true,
       schema: normalizeOpenAiSchema(openAiSchema),
     };
@@ -2777,12 +2699,7 @@ export async function generateJson<T>(
 
 const IMAGE_GRADE_SCHEMA = z.enum(["pass", "fail"]);
 
-const IMAGE_GRADE_RESPONSE_SCHEMA: Schema = {
-  type: Type.STRING,
-  enum: ["pass", "fail"],
-};
-
-const IMAGE_GRADING_MODEL_ID: LlmTextModelId = "gemini-flash-latest";
+const IMAGE_GRADING_MODEL_ID: LlmTextModelId = "gpt-5.2";
 
 function appendDebugSubStage(
   debug: LlmDebugOptions | undefined,
@@ -2845,7 +2762,6 @@ async function gradeGeneratedImage(params: {
     modelId: IMAGE_GRADING_MODEL_ID,
     contents,
     schema: IMAGE_GRADE_SCHEMA,
-    responseJsonSchema: toGeminiJsonSchema(IMAGE_GRADE_RESPONSE_SCHEMA),
     debug: params.debug,
   });
   return result;

@@ -1,4 +1,4 @@
-import { Type, type Part, type Schema } from "@google/genai";
+import { type Part } from "@google/genai";
 import type { QuizDefinition } from "@spark/schemas";
 import { QuizDefinitionSchema } from "@spark/schemas";
 import { z } from "zod";
@@ -85,81 +85,6 @@ export const SparkUploadQuizPayloadSchema = z.object({
 export type SparkUploadQuizPayload = z.infer<
   typeof SparkUploadQuizPayloadSchema
 >;
-
-export const SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  required: ["quizId", "title", "questionCount", "questions"],
-  properties: {
-    quizId: { type: Type.STRING },
-    title: { type: Type.STRING },
-    description: { type: Type.STRING },
-    topic: { type: Type.STRING },
-    subject: { type: Type.STRING },
-    board: { type: Type.STRING },
-    questionCount: { type: Type.INTEGER, minimum: 1, maximum: 40 },
-    questions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        required: ["id", "kind", "prompt", "explanation"],
-        properties: {
-          id: { type: Type.STRING },
-          kind: {
-            type: Type.STRING,
-            enum: ["multiple-choice", "type-answer"],
-          },
-          prompt: { type: Type.STRING },
-          hint: { type: Type.STRING },
-          explanation: { type: Type.STRING },
-          options: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description:
-              "Only for multiple-choice questions. Provide 3-5 concise answer choices without letter prefixes.",
-          },
-          correctOptionIndex: {
-            type: Type.INTEGER,
-            minimum: 1,
-            description:
-              "1-based index pointing to the correct option in the options array. Required for multiple-choice.",
-          },
-          answer: {
-            type: Type.STRING,
-            description:
-              "Canonical short answer for type-answer questions. Omit for multiple-choice.",
-          },
-          acceptableAnswers: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description:
-              "Optional additional acceptable responses for type-answer questions.",
-          },
-        },
-        propertyOrdering: [
-          "id",
-          "kind",
-          "prompt",
-          "hint",
-          "explanation",
-          "options",
-          "correctOptionIndex",
-          "answer",
-          "acceptableAnswers",
-        ],
-      },
-    },
-  },
-  propertyOrdering: [
-    "quizId",
-    "title",
-    "description",
-    "topic",
-    "subject",
-    "board",
-    "questionCount",
-    "questions",
-  ],
-};
 
 export interface GenerateSparkUploadQuizOptions {
   readonly uploadId: string;
@@ -344,7 +269,7 @@ export async function generateSparkUploadQuizDefinition(
     parts,
     config: {
       responseMimeType: "application/json",
-      responseJsonSchema: toGeminiJsonSchema(SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA),
+      responseJsonSchema: toGeminiJsonSchema(SparkUploadQuizPayloadSchema),
     },
     trimOutput: false,
   });

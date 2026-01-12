@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 
-import { Type, type Schema, type Part } from "@google/genai";
+import { type Part } from "@google/genai";
 import { z } from "zod";
 
 import { GeminiModelId } from "@spark/llm/utils/gemini";
@@ -27,7 +27,6 @@ import { detectMimeType } from "../../utils/mime";
 import {
   convertGooglePartsToLlmParts,
   generateJson,
-  toGeminiJsonSchema,
 } from "@spark/llm/utils/llm";
 import { createCliCommand, createIntegerParser } from "../../utils/cli";
 
@@ -155,57 +154,6 @@ const ConfidenceSchema = z.preprocess(
   normaliseConfidenceInput,
   z.enum(CONFIDENCE_LEVELS),
 );
-
-const RAW_CLASSIFICATION_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    numberOfPages: {
-      type: Type.INTEGER,
-      minimum: 1,
-      description: "Count the number of pages in the uploaded document",
-    },
-    examBoard: {
-      type: Type.STRING,
-      enum: [...EXAM_BOARDS],
-      description: `Exam board, if explicitly labeled in the document. Otherwise or if several boards are mentioned '${"general" satisfies (typeof EXAM_BOARDS)[number]}'`,
-    },
-    gradeBucket: { type: Type.STRING, enum: [...GRADE_BUCKETS] },
-    materialType: { type: Type.STRING, enum: [...MATERIAL_TYPES] },
-    summary: { type: Type.STRING },
-    rationale: { type: Type.STRING },
-    confidence: { type: Type.STRING, enum: [...CONFIDENCE_LEVELS] },
-    tags: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Optional short keywords that describe the material.",
-    },
-    shortName: {
-      type: Type.STRING,
-      description:
-        "Lowercase slug beginning with subject, then topic keywords separated by hyphens.",
-    },
-  },
-  required: [
-    "examBoard",
-    "summary",
-    "rationale",
-    "gradeBucket",
-    "materialType",
-    "confidence",
-    "shortName",
-  ],
-  propertyOrdering: [
-    "numberOfPages",
-    "examBoard",
-    "summary",
-    "rationale",
-    "gradeBucket",
-    "materialType",
-    "confidence",
-    "tags",
-    "shortName",
-  ],
-};
 
 const RawClassificationSchema = z.object({
   numberOfPages: z.number().int().positive().optional(),
@@ -426,7 +374,6 @@ async function callGeminiJson({
         parts: llmParts,
       },
     ],
-    responseJsonSchema: toGeminiJsonSchema(RAW_CLASSIFICATION_SCHEMA),
     schema: RawClassificationSchema,
     maxAttempts: 1,
   });

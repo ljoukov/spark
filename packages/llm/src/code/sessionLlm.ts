@@ -2,7 +2,7 @@ import type { LlmContent, LlmTextModelId } from "../utils/llm";
 import { isGeminiModelId } from "../utils/gemini";
 import { isOpenAiModelId } from "../utils/openai-llm";
 
-const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gemini-3-pro-preview";
+const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gpt-5.2";
 
 const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
 
