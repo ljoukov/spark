@@ -25,6 +25,7 @@ import {
   type Schema,
   type Tool,
 } from "@google/genai";
+import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
 import { runGeminiCall, type GeminiModelId } from "./gemini";
 import {
   DEFAULT_OPENAI_REASONING_EFFORT,
@@ -410,8 +411,8 @@ function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
   return output;
 }
 
-function isJsonSchemaObject(schema: JsonSchema): boolean {
-  if (!isPlainRecord(schema)) {
+function isJsonSchemaObject(schema: JsonSchema | undefined): boolean {
+  if (!schema || !isPlainRecord(schema)) {
     return false;
   }
   const type = schema.type;
@@ -2693,26 +2694,42 @@ export async function generateJson<T>(
   const maxAttempts =
     normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
   const isOpenAi = isOpenAiModelId(rest.modelId);
-  if (isOpenAi && !isJsonSchemaObject(responseJsonSchema)) {
+  const resolvedOpenAiSchemaName = normalisePathSegment(
+    openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
+  );
+  const openAiJsonSchema = isOpenAi
+    ? (zodToJsonSchema(schema, {
+        name: resolvedOpenAiSchemaName,
+        target: "openAi",
+      }) as JsonSchema)
+    : undefined;
+  const resolvedResponseJsonSchema = isOpenAi
+    ? openAiJsonSchema
+    : responseJsonSchema;
+  if (isOpenAi && !isJsonSchemaObject(resolvedResponseJsonSchema)) {
     throw new Error(
       "OpenAI structured outputs require a JSON object schema at the root.",
     );
   }
-  const resolvedOpenAiSchemaName = normalisePathSegment(
-    openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
-  );
-  const openAiTextFormat: OpenAiTextFormat | undefined = isOpenAi
-    ? {
-        type: "json_schema",
-        name: resolvedOpenAiSchemaName,
-        strict: true,
-        schema: normalizeOpenAiSchema(responseJsonSchema),
-      }
-    : undefined;
+  let openAiTextFormat: OpenAiTextFormat | undefined;
+  if (isOpenAi) {
+    if (!resolvedResponseJsonSchema) {
+      throw new Error(
+        "OpenAI structured outputs require a JSON schema response config.",
+      );
+    }
+    const openAiSchema = resolvedResponseJsonSchema;
+    openAiTextFormat = {
+      type: "json_schema",
+      name: resolvedOpenAiSchemaName,
+      strict: true,
+      schema: normalizeOpenAiSchema(openAiSchema),
+    };
+  }
 
   const textOptions: LlmTextCallOptions = {
     ...rest,
-    responseJsonSchema,
+    responseJsonSchema: resolvedResponseJsonSchema,
     responseMimeType: rest.responseMimeType ?? "application/json",
     ...(openAiTextFormat ? { openAiTextFormat } : {}),
   };

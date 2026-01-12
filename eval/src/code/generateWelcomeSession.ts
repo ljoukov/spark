@@ -79,6 +79,7 @@ const optionsSchema = z
     debugRootDir: z.string().trim().optional(),
     noStory: z.boolean().optional(),
     story: z.boolean().optional(),
+    noCoding: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.topic && !value.briefFile) {
@@ -359,6 +360,7 @@ async function main(): Promise<void> {
     .option("--session-id <id>", "Override the generated session id")
     .option("--seed <int>", "Seed for deterministic prompting")
     .option("--no-story", "Skip story generation")
+    .option("--no-coding", "Skip coding problem generation")
     .option("--story-segment-count <int>", "Number of story panels (1-10)")
     .option(
       "--story-plan-item-id <id>",
@@ -387,6 +389,7 @@ async function main(): Promise<void> {
     debugRootDir?: string;
     noStory?: boolean;
     story?: boolean;
+    noCoding?: boolean;
   }>();
 
   const parsed = optionsSchema.parse({
@@ -400,8 +403,11 @@ async function main(): Promise<void> {
     debugRootDir: raw.debugRootDir,
     noStory: raw.noStory,
     story: raw.story,
+    noCoding: raw.noCoding,
   });
 
+  const includeCodingOverride = parsed.noCoding === true ? false : undefined;
+  const includeCoding = includeCodingOverride !== false;
   const lessonBriefRaw = parsed.briefFile
     ? await readLessonBriefFile(parsed.briefFile)
     : undefined;
@@ -416,7 +422,9 @@ async function main(): Promise<void> {
     "- Do not approximate counts; compute exact integers for outputs.",
   ].join("\n");
   const lessonBrief = lessonBriefRaw
-    ? `${lessonBriefRaw}\n\n${generationRequirements}`
+    ? includeCoding
+      ? `${lessonBriefRaw}\n\n${generationRequirements}`
+      : lessonBriefRaw
     : undefined;
   const topic = (parsed.topic ?? topicFromBrief).trim();
   if (topic.length === 0) {
@@ -457,7 +465,7 @@ async function main(): Promise<void> {
   const includeStoryOverride =
     parsed.noStory === true || parsed.story === false ? false : undefined;
   console.log(
-    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} storyPlanItemId=${parsed.storyPlanItemId} storySegmentCount=${String(parsed.storySegmentCount ?? "default")}`,
+    `[welcome/${sessionId}] flags includeStory=${includeStoryOverride === false ? "false" : "true"} includeCoding=${includeCoding ? "true" : "false"} storyPlanItemId=${parsed.storyPlanItemId} storySegmentCount=${String(parsed.storySegmentCount ?? "default")}`,
   );
 
   const metadataCheckpoint = path.join(checkpointDir, "metadata.json");
@@ -488,6 +496,7 @@ async function main(): Promise<void> {
         storySegmentCount: parsed.storySegmentCount,
         progress,
         includeStory: includeStoryOverride,
+        includeCoding: includeCodingOverride,
       });
     },
   });
@@ -498,6 +507,7 @@ async function main(): Promise<void> {
       topic,
       plan: session.plan,
       storyTitle: session.story?.title,
+      includeCoding,
     }));
   await writeCheckpoint(metadataCheckpoint, metadata);
 
@@ -551,16 +561,19 @@ async function main(): Promise<void> {
     }));
   await writeCheckpoint(quizDefinitionsCheckpoint, quizDefinitions);
 
-  const problems =
-    (await readCheckpoint<CodeProblems>(codeProblemsCheckpoint)) ??
-    (await generateCodeProblems(session.plan, session.problems, lessonBrief));
-  await writeCheckpoint(codeProblemsCheckpoint, problems);
+  const problems = includeCoding
+    ? ((await readCheckpoint<CodeProblems>(codeProblemsCheckpoint)) ??
+      (await generateCodeProblems(session.plan, session.problems, lessonBrief)))
+    : [];
+  if (includeCoding) {
+    await writeCheckpoint(codeProblemsCheckpoint, problems);
+  }
 
   if (quizDefinitions.length === 0) {
     throw new Error("quiz definitions are required for welcome sessions.");
   }
 
-  if (problems.length === 0) {
+  if (includeCoding && problems.length === 0) {
     throw new Error("code problems are required for welcome sessions.");
   }
 
@@ -577,7 +590,9 @@ async function main(): Promise<void> {
     title: storyTitle,
   });
   await writeQuizzesToTemplate(sessionId, quizDefinitions);
-  await writeProblemsToTemplate(sessionId, problems);
+  if (includeCoding) {
+    await writeProblemsToTemplate(sessionId, problems);
+  }
 
   if (session.story) {
     await copyStoryToTemplate(sessionId, parsed.storyPlanItemId, session.story);

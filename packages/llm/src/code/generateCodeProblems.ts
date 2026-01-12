@@ -168,21 +168,33 @@ export function buildProblemTechniquesUserPrompt(
     coding_blueprints: { id: string; required_skills: string[] }[];
   },
   lessonBrief?: string,
+  options?: { includeCoding?: boolean; quizIds?: string[] },
 ): string {
+  const includeCoding = options?.includeCoding ?? true;
+  const quizIds = options?.quizIds ?? [];
+  const problemIds = plan.coding_blueprints.map((blueprint) => blueprint.id);
+  const useQuizTargets = problemIds.length === 0 && quizIds.length > 0;
   const parts = [`Topic: "${plan.topic}"`];
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
+  const appliesToTargets = useQuizTargets
+    ? `Use quiz ids (${quizIds.join(", ")}) in applies_to.`
+    : "Use problem blueprint ids (coding_blueprints ids) in applies_to.";
   parts.push(
     "",
-    "Extract the problem-solving techniques needed to solve the coding problems implied by the coding_blueprints.",
+    includeCoding
+      ? "Extract the problem-solving techniques needed to solve the coding problems implied by the coding_blueprints."
+      : useQuizTargets
+        ? "Extract the problem-solving techniques needed across the lesson quizzes (non-coding)."
+        : "Extract the problem-solving techniques needed to answer the lesson problems and quizzes (non-coding).",
     "Techniques include algorithms, patterns, invariants, decomposition steps, edge-case handling, math shortcuts, and data structure choices. Keep them aligned to the plan difficulty and promised skills; avoid advanced or unseen topics.",
     "Treat modulo (%) as an operator-only assumption; if a problem relies on modular arithmetic properties (cycles, congruence, divisibility), include those explicitly as techniques with brief reminders.",
     "Include preconditions and failure modes (when the technique does NOT apply), and highlight common misconceptions to guard against. Identify which techniques are unique to later problems vs shared with earlier ones. If any technique uses randomness or probabilistic testing, specify how to make it reproducible (fixed seeds, deterministic base sets) for solutions/tests.",
     'Return JSON {topic, techniques:[{id,title,summary,applies_to:["problem_id"],tags[]}]} where:',
     "- ids are short stable tokens (e.g., t1, t2, t3);",
     "- summary explains why the technique matters and the maneuver to apply;",
-    "- applies_to lists which problem(s) require it (use coding_blueprints ids);",
+    `- applies_to lists which problem(s) or quiz(es) require it (${appliesToTargets});`,
     "- tags reference promised_skills or concepts_to_teach that match the technique.",
     "",
     "Plan JSON:",
@@ -320,10 +332,7 @@ export function buildProblemsGenerateUserPrompt(
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
-  parts.push(
-    "Problem Specs Markdown:",
-    problemIdeasMarkdown,
-  );
+  parts.push("Problem Specs Markdown:", problemIdeasMarkdown);
   return parts.join("\n");
 }
 

@@ -35,6 +35,14 @@ import {
 import { generateStoryFrames } from "./generateFrames";
 import { STORY_IMAGE_GRADING_PROMPT } from "./imageGradingPrompt";
 
+function getPracticeLabel(includeCoding: boolean): string {
+  return includeCoding ? "programming challenges" : "practice problems";
+}
+
+function getChallengeLabel(includeCoding: boolean): string {
+  return includeCoding ? "Coding challenges" : "Lesson problems";
+}
+
 const DEFAULT_TEXT_MODEL_ID: LlmTextModelId = "gemini-3-pro-preview";
 
 const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
@@ -86,6 +94,10 @@ export type StoryProgress = JobProgressReporter | undefined;
 type StoryDebugOptions = {
   debugRootDir?: string;
   debugSubStage?: string;
+};
+
+type StoryProseOptions = StoryDebugOptions & {
+  includeCoding?: boolean;
 };
 
 function useProgress(progress: StoryProgress): JobProgressReporter {
@@ -1242,6 +1254,7 @@ const STORY_PROSE_VALIDATION_RESPONSE_SCHEMA: Schema = {
 export function buildStoryIdeaPrompt(
   topic: string,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): string {
   const contextLines: string[] = [];
   if (lessonContext) {
@@ -1265,7 +1278,9 @@ export function buildStoryIdeaPrompt(
       }
     }
     if (lessonContext.problems && lessonContext.problems.length > 0) {
-      contextLines.push("- Coding challenges learners will tackle:");
+      contextLines.push(
+        `- ${getChallengeLabel(includeCoding)} learners will tackle:`,
+      );
       for (const problem of lessonContext.problems) {
         const details = [problem.title];
         if (problem.story_callback) {
@@ -1322,6 +1337,7 @@ export function buildStoryIdeaPrompt(
       }
     }
   }
+  const practiceLabel = getPracticeLabel(includeCoding);
   return `### **Prompt 1: The Story Architect's Brief**
 
 **(Objective: To perform deep research and strategic planning. The output of this prompt is a structured brief, not a full story.)**
@@ -1334,7 +1350,7 @@ Important constraints:
 - Every factual statement (dates, locations, publications, people, proof status, terminology origins) must include an inline citation in parentheses with the source title and URL (e.g., "(Source: Bell Labs Archive — https://example.org/...)"). Collect all citations at the end under a "Sources" heading with one bullet per source and a short 1-line summary.
 - The final story must explicitly name the concept "${topic}". Include brief naming history when genuinely interesting (e.g., why an approach has a surprising name), otherwise skip it—but capture the note in the brief if relevant so the writer can decide.
 - Make clear that the core trick will be revealed within this very lesson; hint that brief in-lesson exercises will let the audience try it immediately (no explicit call-to-action wording).
-- Ensure any narrative seeds align with the lesson context so the story hints at the techniques learners will practice in the warm-up quiz and coding problems.
+- Ensure any narrative seeds align with the lesson context so the story hints at the techniques learners will practice in the warm-up quiz and ${practiceLabel}.
 ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 - Historical fidelity for anecdotes: only include famous quotes/stories when tied to the same concept/result and time period. Do not misattribute well-known anecdotes; if relevant contextually, frame as foreshadowing of a later milestone rather than attributing it to the current concept.
 - Fact-checking: when any date, name, or claim is uncertain, run a quick web search to verify before including it. Prefer authoritative sources. Do not guess.
@@ -1413,6 +1429,7 @@ export function buildStoryDraftPrompt(
   storyBrief: string,
   originsCapsule: string,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): string {
   const contextLines: string[] = [];
   if (lessonContext) {
@@ -1438,7 +1455,9 @@ export function buildStoryDraftPrompt(
       }
     }
     if (lessonContext.problems && lessonContext.problems.length > 0) {
-      contextLines.push("- Coding challenges this story tees up:");
+      contextLines.push(
+        `- ${getChallengeLabel(includeCoding)} this story tees up:`,
+      );
       for (const problem of lessonContext.problems) {
         const parts = [problem.title];
         if (problem.story_callback) {
@@ -1495,6 +1514,7 @@ export function buildStoryDraftPrompt(
       }
     }
   }
+  const practiceLabel = getPracticeLabel(includeCoding);
   return `### **Prompt 2: The Narrative Weaver**
 
 **Objective:** Transform the strategic brief and Origins Capsule into a 250–450 word audio-first story for curious 12–16 year olds. You may extend modestly (≈1.2–1.5×) when the added detail sharpens clarity; never pad with tangents.
@@ -1526,7 +1546,7 @@ ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
 **Modern Tie-in (ending paragraph only):** use a hedged bridge—either pick one of these endings or write a short analogy that states both the resemblance and the historical difference. Then promise learners they will learn and practice the idea next.
 1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
-2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in ${practiceLabel}."
 3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Narrative Flow:**
@@ -1534,7 +1554,7 @@ ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 2. **Reveal the Insight:** Show the "aha" moment and introduce the functional analogy in motion—no procedural walkthroughs.
 3. **Analogy Map + Hint:** Provide the succinct analogy map (2–3 concrete correspondences) and, if helpful, one short clarifier contrasting success vs. failure conditions.
 4. **Parallel Voices (hedged):** Maintain momentum without adding new named figures; use phrases like "others later refined the idea" when nuance is required.
-5. **Modern Pivot + Invitation:** In the final paragraph, use a hedged modern bridge or contrastive analogy (template or custom) and close with an empowering promise that this lesson reveals the details and lets the listener master them in programming challenges.
+5. **Modern Pivot + Invitation:** In the final paragraph, use a hedged modern bridge or contrastive analogy (template or custom) and close with an empowering promise that this lesson reveals the details and lets the listener master them in ${practiceLabel}.
 
 **Style Expectations:**
 - Audio-first cadence with clear, varied sentences.
@@ -1553,6 +1573,7 @@ export function buildStoryRevisionPrompt(
   originsCapsule: string,
   feedback?: string,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): string {
   const feedbackSection =
     feedback && feedback.trim().length > 0
@@ -1579,7 +1600,7 @@ export function buildStoryRevisionPrompt(
     }
     if (lessonContext.problems && lessonContext.problems.length > 0) {
       contextLines.push(
-        "- Coding challenges this story should gently foreshadow (no spoilers):",
+        `- ${getChallengeLabel(includeCoding)} this story should gently foreshadow (no spoilers):`,
       );
       for (const problem of lessonContext.problems) {
         const parts = [problem.title];
@@ -1636,6 +1657,7 @@ export function buildStoryRevisionPrompt(
       }
     }
   }
+  const practiceLabel = getPracticeLabel(includeCoding);
   return `### **Prompt 3: The Narrative Editor's Cut**
 
 **Objective:** Audit the Narrative Weaver draft against all guardrails, protect the Origins Capsule facts, and deliver the final polished story.
@@ -1656,7 +1678,7 @@ ${feedbackSection}
 - Enforce neutral naming. Replace any "coined", "named", "invented", or sole-credit claims with hedged phrases like "now known as", "credited among", or "... and others".
 - Remove exclusivity claims. The story should never assert "first" or "sole" originators unless the capsule already does so explicitly.
 - Limit the narrative to one named figure or institution; other contributors should appear only as hedged acknowledgements.
-- Keep modern references out of the body. The final paragraph must be a hedged modern bridge: either pick one approved ending below or write a short analogy that calls out both the resemblance and the historical differences, then promise learners they will "learn the details" and "master it in programming challenges" next.
+- Keep modern references out of the body. The final paragraph must be a hedged modern bridge: either pick one approved ending below or write a short analogy that calls out both the resemblance and the historical differences, then promise learners they will "learn the details" and "master it in ${practiceLabel}" next.
 - Do not invent causal links from the historical anecdote to modern computing (e.g., implying algorithms were formalised from field repairs or cutting telegraph lines). When the connection is loose, keep it as an explicit "this reminds us of..." contrast instead of a lineage claim.
 - Expand lesser-known acronyms on first use (e.g., "Jet Propulsion Laboratory (JPL)"); leave well-known ones like NASA unchanged.
 - Maintain the insight hint in one or two sentences, using plain nouns—no equations, symbols, or step-by-step language.
@@ -1667,7 +1689,7 @@ ${contextLines.length > 0 ? `\n${contextLines.join("\n")}\n` : ""}
 
 **Approved Modern Tie-in Templates (ending paragraph only):**
 1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
-2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in ${practiceLabel}."
 3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Fix Checklist expectation:** After revising, you must populate a \\"fixChecklist\\" object confirming which blockers are resolved. Use these keys: \\"namingAttribution\\", \\"exclusivityClaim\\", \\"modernTieInOverclaim\\", \\"datePrecision\\", \\"wrongEntity\\". Set each boolean key to true only when the revised story clearly addresses it; leave false when unresolved. For \\"datePrecision\\", use \\"hedged\\" (string) when you softened or approximated timing, \\"recommend-hedge\\" (string) if you still urge additional hedging, or false (boolean) when no adjustment was required. Do not use true.
@@ -1684,7 +1706,7 @@ Score the draft against our five-point rubric (1–5, integers only) with concis
 * **5. Motivational Power**
 
 **Part B: Final Revision**
-Rewrite the story so it satisfies every guardrail above, protects the Origins Capsule semantics, integrates exactly one modern template in the ending, and keeps the insight hint brief. Ensure the final sentences hand the learner the metaphorical tool and promise lesson mastery plus programming challenges.
+Rewrite the story so it satisfies every guardrail above, protects the Origins Capsule semantics, integrates exactly one modern template in the ending, and keeps the insight hint brief. Ensure the final sentences hand the learner the metaphorical tool and promise lesson mastery plus ${practiceLabel}.
 
 Respond strictly in JSON with this structure:
 {
@@ -1716,7 +1738,9 @@ Do not include commentary outside the JSON object. Every score must be an intege
 export function buildStoryValidationPrompt(
   topic: string,
   storyText: string,
+  includeCoding: boolean = true,
 ): string {
+  const practiceLabel = getPracticeLabel(includeCoding);
   return `### **Prompt 4: The Fact-Check Gate**
 
 **Objective:** Safeguard young learners by catching catastrophic factual or naming errors while respecting neutral hedges and the locked Origins Capsule facts.
@@ -1737,12 +1761,12 @@ ${storyText}
 3. Insight hint: exactly one or two sentences, purely conceptual, no equations, symbols, or step sequences.
 4. Naming & exclusivity guardrails: no "coined", "invented", "first", or "sole" assertions unless universally accepted and stated in the capsule; hedged wording is encouraged.
 5. Modern tie-in: confined to the final paragraph and uses a hedged bridge—either one approved template or a custom analogy that names both the similarity and the historical difference. No causal lineage claims.
-6. Ending invitation: final sentences promise learners they will learn the details and master the idea in programming challenges.
+6. Ending invitation: final sentences promise learners they will learn the details and master the idea in ${practiceLabel}.
 7. Vocabulary and tone: CEFR B2 or simpler; define any specialist title immediately; keep charged adjectives to a minimum.
 
 **Approved Modern Tie-in Templates (compare with the final paragraph):**
 1. "You’ll see echoes of this idea in modern {application domain}; today’s tools adapt it with costs or heuristics rather than copying the original scene. We’ll unpack the core move and you’ll try it in short challenges."
-2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in programming challenges."
+2. "The story invites comparisons to {application domain}, even though the historical problem differed. We’ll map the resemblance and the gap, then you’ll practice the algorithm in ${practiceLabel}."
 3. "Modern systems borrow its shape—grids, layers, or scoring loops—while adding data and code constraints. You’ll learn the clean version here and apply it in the challenges that follow."
 
 **Reporting Instructions:**
@@ -1903,9 +1927,10 @@ export async function generateStoryIdea(
   lessonContext?: StoryLessonContext,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
+  includeCoding: boolean = true,
 ): Promise<StoryIdeaResult> {
   const adapter = useProgress(progress);
-  const prompt = buildStoryIdeaPrompt(topic, lessonContext);
+  const prompt = buildStoryIdeaPrompt(topic, lessonContext, includeCoding);
   for (let attempt = 1; attempt <= IDEA_GENERATION_MAX_ATTEMPTS; attempt += 1) {
     const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(IDEA_GENERATION_MAX_ATTEMPTS).padStart(2, "0")}`;
     const subStage = combineDebugSegments(options?.debugSubStage, attemptLabel);
@@ -2269,6 +2294,7 @@ export async function generateStoryProseDraft(
   progress?: StoryProgress,
   options?: StoryDebugOptions,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): Promise<StoryProseDraftResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] generating prose draft with ${TEXT_MODEL_ID}`);
@@ -2277,6 +2303,7 @@ export async function generateStoryProseDraft(
     idea.brief,
     originsCapsule.text,
     lessonContext,
+    includeCoding,
   );
   const text = await generateText({
     progress: adapter,
@@ -2309,6 +2336,7 @@ export async function generateStoryProseRevision(
   options?: StoryDebugOptions,
   feedback?: string,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): Promise<StoryProseRevisionResult> {
   const adapter = useProgress(progress);
   adapter.log(`[story] revising prose with ${TEXT_MODEL_ID}`);
@@ -2318,6 +2346,7 @@ export async function generateStoryProseRevision(
     originsCapsule.text,
     feedback,
     lessonContext,
+    includeCoding,
   );
   const response = await generateJson<StoryProseRevisionResponse>({
     progress: adapter,
@@ -2361,6 +2390,7 @@ export async function validateStoryProse(
   revision: StoryProseRevisionResult,
   progress?: StoryProgress,
   options?: StoryDebugOptions,
+  includeCoding: boolean = true,
 ): Promise<StoryProseValidationResult> {
   const adapter = useProgress(progress);
   const buildStagePath = (leaf: string): string | undefined => {
@@ -2425,7 +2455,11 @@ export async function validateStoryProse(
   adapter.log(
     `[story] validating prose – structural pass with ${TEXT_MODEL_ID}`,
   );
-  const structuralPrompt = buildStoryValidationPrompt(topic, revision.text);
+  const structuralPrompt = buildStoryValidationPrompt(
+    topic,
+    revision.text,
+    includeCoding,
+  );
   const structuralResponse = await generateJson<StoryProseValidationResult>({
     progress: adapter,
     modelId: TEXT_MODEL_ID,
@@ -2720,6 +2754,7 @@ async function prepareProseVariantDraft(
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): Promise<StoryProseDraftVariant> {
   const adapter = useProgress(progress);
   for (let attempt = 1; attempt <= PROSE_DRAFT_MAX_ATTEMPTS; attempt += 1) {
@@ -2740,6 +2775,7 @@ async function prepareProseVariantDraft(
         progress,
         draftOptions,
         lessonContext,
+        includeCoding,
       );
       return { label, idea, originsCapsule, draft };
     } catch (error) {
@@ -2768,6 +2804,7 @@ async function reviseProseVariant(
   progress?: StoryProgress,
   baseDebug?: StoryDebugOptions,
   lessonContext?: StoryLessonContext,
+  includeCoding: boolean = true,
 ): Promise<StoryProseVariantCandidate> {
   const adapter = useProgress(progress);
   let draftForRevision: StoryProseDraftResult = variant.draft;
@@ -2798,12 +2835,14 @@ async function reviseProseVariant(
       revisionOptions,
       feedback,
       lessonContext,
+      includeCoding,
     );
     const validation = await validateStoryProse(
       topic,
       candidate,
       progress,
       validationOptions,
+      includeCoding,
     );
     if (validation.verdict === "pass") {
       const lingeringBlockers = buildBlockerMessages(validation.blockers);
@@ -2955,9 +2994,16 @@ export async function generateProseStory(
   topic: string,
   lessonContext?: StoryLessonContext,
   progress?: StoryProgress,
-  options?: StoryDebugOptions,
+  options?: StoryProseOptions,
 ): Promise<StoryProseResult> {
-  const idea = await generateStoryIdea(topic, lessonContext, progress, options);
+  const includeCoding = options?.includeCoding ?? true;
+  const idea = await generateStoryIdea(
+    topic,
+    lessonContext,
+    progress,
+    options,
+    includeCoding,
+  );
   const originsCapsule = await generateOriginsCapsule(
     topic,
     idea,
@@ -2974,12 +3020,20 @@ export async function generateProseStory(
         progress,
         options,
         lessonContext,
+        includeCoding,
       ),
     ),
   );
   const variantResults = await Promise.all(
     variantDrafts.map((variant) =>
-      reviseProseVariant(topic, variant, progress, options, lessonContext),
+      reviseProseVariant(
+        topic,
+        variant,
+        progress,
+        options,
+        lessonContext,
+        includeCoding,
+      ),
     ),
   );
   const judge = await judgeProseVariants(
@@ -3951,6 +4005,7 @@ type GenerateStoryOptions = {
   checkpointDir?: string;
   lessonContext?: StoryLessonContext;
   storySegmentCount?: number;
+  includeCoding?: boolean;
 };
 
 export type GenerateStoryResult = {
@@ -4048,6 +4103,7 @@ type StoryGenerationPipelineOptions = {
   checkpointDir?: string;
   lessonContext?: StoryLessonContext;
   storySegmentCount?: number;
+  includeCoding?: boolean;
 };
 
 type StageCacheEntry<TValue> = {
@@ -4788,6 +4844,7 @@ export class StoryGenerationPipeline {
         {
           debugRootDir: this.options.debugRootDir,
         },
+        this.options.includeCoding ?? true,
       );
       const checkpointPath = await this.writeIdeaCheckpoint(idea);
       const stageEntry: StageCacheEntry<StoryIdeaResult> = {
@@ -4888,6 +4945,7 @@ export class StoryGenerationPipeline {
             this.options.progress,
             baseDebug,
             this.options.lessonContext,
+            this.options.includeCoding ?? true,
           ),
         ),
       );
@@ -4940,6 +4998,7 @@ export class StoryGenerationPipeline {
             this.options.progress,
             baseDebug,
             this.options.lessonContext,
+            this.options.includeCoding ?? true,
           ),
         ),
       );
@@ -5399,6 +5458,7 @@ export async function generateStory(
     checkpointDir: options.checkpointDir,
     lessonContext: options.lessonContext,
     storySegmentCount: options.storySegmentCount,
+    includeCoding: options.includeCoding,
   });
 
   const { value: story } = await pipeline.ensureProse();

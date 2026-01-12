@@ -1,7 +1,7 @@
 import { Type, type Schema } from "@google/genai";
 import { z } from "zod";
 
-import type { CodingProblem, ProblemTechnique } from "./generateCodeProblems";
+import type { ProblemTechnique } from "./generateCodeProblems";
 import type { SessionPlan } from "./generateSessionPlan";
 
 export const MAX_QUIZ_ATTEMPTS = 3;
@@ -14,6 +14,21 @@ const QUIZ_QUESTION_TYPES = [
   "numeric",
   "code_reading",
 ] as const;
+
+type QuizQuestionType = (typeof QUIZ_QUESTION_TYPES)[number];
+
+const QUIZ_QUESTION_TYPES_NO_CODE: QuizQuestionType[] = [
+  "mcq",
+  "multi",
+  "short",
+  "numeric",
+];
+
+function getQuizQuestionTypes(
+  includeCoding: boolean,
+): readonly QuizQuestionType[] {
+  return includeCoding ? QUIZ_QUESTION_TYPES : QUIZ_QUESTION_TYPES_NO_CODE;
+}
 
 const QuizTheoryBlockSchema = z.object({
   id: z.string().trim().min(1),
@@ -151,6 +166,13 @@ export type PlanQuizSpec = {
   questionCount: number;
 };
 
+export type ProblemSnapshot = {
+  id: string;
+  title: string;
+  difficulty?: string;
+  story_callback?: string;
+};
+
 type QuizCoverageRequirement = {
   quizId: string;
   problemIds: string[];
@@ -160,7 +182,26 @@ type QuizCoverageRequirement = {
 function buildQuizCoverageRequirements(
   plan: SessionPlan,
   techniques: readonly ProblemTechnique[],
+  useQuizTargets: boolean,
 ): QuizCoverageRequirement[] {
+  if (useQuizTargets) {
+    const requirements = new Map<string, QuizCoverageRequirement>();
+    for (const technique of techniques) {
+      for (const quizId of technique.applies_to) {
+        const existing = requirements.get(quizId);
+        if (existing) {
+          existing.techniqueIds.push(technique.id);
+        } else {
+          requirements.set(quizId, {
+            quizId,
+            problemIds: [],
+            techniqueIds: [technique.id],
+          });
+        }
+      }
+    }
+    return Array.from(requirements.values());
+  }
   const quizProblems = new Map<string, string[]>();
   let quizIndex = 0;
   let problemIndex = 0;
@@ -244,9 +285,7 @@ function formatQuizFeedback(
   if (includeGlobals && feedback.missing_theory_for_concepts.length > 0) {
     lines.push("Missing theory concepts:");
     lines.push(
-      ...feedback.missing_theory_for_concepts.map(
-        (concept) => `- ${concept}`,
-      ),
+      ...feedback.missing_theory_for_concepts.map((concept) => `- ${concept}`),
     );
   }
   if (includeGlobals && feedback.missing_techniques.length > 0) {
@@ -284,17 +323,18 @@ function formatPlanParts(plan: SessionPlan): string {
     .join("\n");
 }
 
-function formatProblemSnapshots(problems: readonly CodingProblem[]): string {
-  if (problems.length === 0) {
+function formatProblemSnapshots(snapshots: readonly ProblemSnapshot[]): string {
+  if (snapshots.length === 0) {
     return "None";
   }
-  return problems
+  return snapshots
     .map((problem) => {
       const callback =
-        problem.story_callback.trim().length > 0
+        problem.story_callback && problem.story_callback.trim().length > 0
           ? ` — ${problem.story_callback.trim()}`
           : "";
-      return `- ${problem.id} (${problem.difficulty}): ${problem.title}${callback}`;
+      const difficulty = problem.difficulty ? ` (${problem.difficulty})` : "";
+      return `- ${problem.id}${difficulty}: ${problem.title}${callback}`;
     })
     .join("\n");
 }
@@ -375,12 +415,14 @@ export function buildQuizIdeasUserPrompt(
   plan: SessionPlan,
   quizSpecs: readonly PlanQuizSpec[],
   techniques: readonly ProblemTechnique[],
-  problems: readonly CodingProblem[],
+  problemSnapshots: readonly ProblemSnapshot[],
   markdownPlanIdeas: string,
   seed?: number,
   lessonBrief?: string,
   quizFeedback?: QuizzesGrade,
+  includeCoding: boolean = true,
 ): string {
+  const hasStory = plan.parts.some((part) => part.kind === "story");
   const parts = [
     "# Quiz coverage plan",
     `Topic: "${plan.topic}"`,
@@ -397,7 +439,11 @@ export function buildQuizIdeasUserPrompt(
           )
           .join("\n")
       : "None";
-  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageRequirements = buildQuizCoverageRequirements(
+    plan,
+    techniques,
+    !includeCoding && plan.coding_blueprints.length === 0,
+  );
   const coverageLines =
     coverageRequirements.length > 0
       ? coverageRequirements
@@ -415,9 +461,13 @@ export function buildQuizIdeasUserPrompt(
           .join("\n")
       : "None";
   parts.push(
-    "- Provide Markdown describing quiz coverage that fully teaches the techniques required for each coding problem before students reach that problem in the lesson flow.",
+    includeCoding
+      ? "- Provide Markdown describing quiz coverage that fully teaches the techniques required for each coding problem before students reach that problem in the lesson flow."
+      : "- Provide Markdown describing quiz coverage that teaches the techniques needed for the lesson problems before students reach them in the lesson flow.",
     "- Learners see quizzes according to the plan order below; quizzes must stand alone without assuming the problem text or solution is known.",
-    "- Each quiz must be self-contained and only rely on the story plus earlier quizzes/problems in the plan order.",
+    hasStory
+      ? "- Each quiz must be self-contained and only rely on the story plus earlier quizzes/problems in the plan order."
+      : "- Each quiz must be self-contained and only rely on earlier quizzes/problems in the plan order.",
     "- Never assume the learner has seen any problem that appears after the quiz; do not reference or preview future problems.",
     "- Each quiz must use its specified question count.",
     "- Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
@@ -439,19 +489,16 @@ export function buildQuizIdeasUserPrompt(
   if (feedbackSection) {
     parts.push("", "## Fixes from previous grading", feedbackSection);
   }
+  parts.push("", "## Lesson flow", formatPlanParts(plan), "");
+  if (!lessonBrief) {
+    parts.push("## Assumptions", formatBulletList(plan.assumptions), "");
+  }
   parts.push(
-    "",
-    "## Lesson flow",
-    formatPlanParts(plan),
-    "",
-    "## Assumptions",
-    formatBulletList(plan.assumptions),
-    "",
     "## Promised skills",
     formatBulletList(plan.promised_skills),
     "",
     "## Problem snapshots (context only)",
-    formatProblemSnapshots(problems),
+    formatProblemSnapshots(problemSnapshots),
     "",
     "## Technique catalog (use ids in covers_techniques)",
     formatTechniqueCatalog(techniques),
@@ -471,12 +518,14 @@ export function buildQuizIdeasUserPrompt(
 export function buildQuizzesGenerateUserPrompt(
   plan: SessionPlan,
   coverageMarkdown: string,
-  problems: readonly CodingProblem[],
+  problemSnapshots: readonly ProblemSnapshot[],
   techniques: readonly ProblemTechnique[],
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
   quizFeedback?: QuizzesGrade,
+  includeCoding: boolean = true,
 ): string {
+  const hasStory = plan.parts.some((part) => part.kind === "story");
   const quizIds = quizSpecs.map((quiz) => quiz.id);
   const quizCountLine =
     quizSpecs.length === 0
@@ -491,7 +540,11 @@ export function buildQuizzesGenerateUserPrompt(
           )
           .join("\n")
       : "None";
-  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageRequirements = buildQuizCoverageRequirements(
+    plan,
+    techniques,
+    !includeCoding && plan.coding_blueprints.length === 0,
+  );
   const coverageLines =
     coverageRequirements.length > 0
       ? coverageRequirements
@@ -511,18 +564,26 @@ export function buildQuizzesGenerateUserPrompt(
   const constraints: string[] = [
     quizCountLine,
     'Each quiz definition must include "quiz_id", optional "theory_blocks" (array of {id,title,content_md}), and "questions".',
-    'Every question object must follow the schema: {"id","type","prompt","explanation","tags","covers_techniques", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
+    includeCoding
+      ? 'Every question object must follow the schema: {"id","type","prompt","explanation","tags","covers_techniques", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric/code_reading, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".'
+      : 'Every question object must follow the schema: {"id","type","prompt","explanation","tags","covers_techniques", ...}. Use "options" (array of strings) and "correct" (string for mcq/short/numeric, array of strings for multi). Do not use aliases like "stem", "answer", or "solution".',
     'If a question has only one correct answer, use "mcq" (not "multi"). For "multi", return at least two correct answers in the "correct" array.',
-    "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
+    `Each quiz uses varied question types (${getQuizQuestionTypes(includeCoding).join(", ")}).`,
     "Each quiz must match the required question counts listed below.",
     "Ensure techniques needed for each problem are introduced in quizzes that appear before that problem in the plan order.",
     "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
     "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
     "Quizzes must stand alone; never assume any problem text is known or refer to 'Problem 1/2/3', 'p1/p2/p3', or 'as in the problem'.",
-    "Do not mention or cite any coding problem title/number; restate any needed setup inside the quiz question itself.",
-    "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
+    includeCoding
+      ? "Do not mention or cite any coding problem title/number; restate any needed setup inside the quiz question itself."
+      : "Do not mention or cite any problem title/number; restate any needed setup inside the quiz question itself.",
+    hasStory
+      ? "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier."
+      : "Each quiz may only rely on earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
     "Never reference or assume any problem that appears after the quiz.",
-    "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution.",
+    includeCoding
+      ? "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution."
+      : "Do not quote or paraphrase any solution write-ups; quizzes should stand alone.",
     "covers_techniques must use ids from the technique catalog.",
     "If a technique or concept is not in assumptions, add a concise theory block before its first use.",
     "Treat modulo (%) as an operator-only assumption; if modular arithmetic properties (cycles, congruence, divisibility) are needed, add a brief refresher.",
@@ -546,19 +607,16 @@ export function buildQuizzesGenerateUserPrompt(
   if (feedbackSection) {
     parts.push("", "## Fixes from previous grading", feedbackSection);
   }
+  parts.push("", "## Lesson flow", formatPlanParts(plan), "");
+  if (!lessonBrief) {
+    parts.push("## Assumptions", formatBulletList(plan.assumptions), "");
+  }
   parts.push(
-    "",
-    "## Lesson flow",
-    formatPlanParts(plan),
-    "",
-    "## Assumptions",
-    formatBulletList(plan.assumptions),
-    "",
     "## Promised skills",
     formatBulletList(plan.promised_skills),
     "",
     "## Problem snapshots (context only)",
-    formatProblemSnapshots(problems),
+    formatProblemSnapshots(problemSnapshots),
     "",
     "## Technique catalog (use ids in covers_techniques)",
     formatTechniqueCatalog(techniques),
@@ -578,12 +636,14 @@ export function buildQuizzesGenerateUserPrompt(
 export function buildQuizzesOutlineUserPrompt(
   plan: SessionPlan,
   coverageMarkdown: string,
-  problems: readonly CodingProblem[],
+  problemSnapshots: readonly ProblemSnapshot[],
   techniques: readonly ProblemTechnique[],
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
   quizFeedback?: QuizzesGrade,
+  includeCoding: boolean = true,
 ): string {
+  const hasStory = plan.parts.some((part) => part.kind === "story");
   const quizIds = quizSpecs.map((quiz) => quiz.id);
   const quizCountLine =
     quizSpecs.length === 0
@@ -598,7 +658,11 @@ export function buildQuizzesOutlineUserPrompt(
           )
           .join("\n")
       : "None";
-  const coverageRequirements = buildQuizCoverageRequirements(plan, techniques);
+  const coverageRequirements = buildQuizCoverageRequirements(
+    plan,
+    techniques,
+    !includeCoding && plan.coding_blueprints.length === 0,
+  );
   const coverageLines =
     coverageRequirements.length > 0
       ? coverageRequirements
@@ -619,16 +683,20 @@ export function buildQuizzesOutlineUserPrompt(
     quizCountLine,
     'Each quiz definition must include "quiz_id" and "questions".',
     'Each question object must include ONLY {"id","type","prompt","tags","covers_techniques"}.',
-    `Allowed question types: ${QUIZ_QUESTION_TYPES.join(", ")}.`,
+    `Allowed question types: ${getQuizQuestionTypes(includeCoding).join(", ")}.`,
     "Do NOT include options, correct answers, explanations, hints, or feedback.",
-    "Each quiz uses varied question types (mcq, multi, short, numeric, code_reading).",
+    `Each quiz uses varied question types (${getQuizQuestionTypes(includeCoding).join(", ")}).`,
     "Each quiz must match the required question counts listed below.",
     "Ensure techniques needed for each problem are introduced in quizzes that appear before that problem in the plan order.",
     "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
     "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
     "Quizzes must stand alone; never assume any problem text is known or refer to 'Problem 1/2/3', 'p1/p2/p3', or 'as in the problem'.",
-    "Do not mention or cite any coding problem title/number; restate any needed setup inside the quiz question itself.",
-    "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
+    includeCoding
+      ? "Do not mention or cite any coding problem title/number; restate any needed setup inside the quiz question itself."
+      : "Do not mention or cite any problem title/number; restate any needed setup inside the quiz question itself.",
+    hasStory
+      ? "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier."
+      : "Each quiz may only rely on earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
     "Never reference or assume any problem that appears after the quiz.",
     "Do not quote or paraphrase the reference solutions.",
     "covers_techniques must use ids from the technique catalog.",
@@ -651,19 +719,16 @@ export function buildQuizzesOutlineUserPrompt(
   if (feedbackSection) {
     parts.push("", "## Fixes from previous grading", feedbackSection);
   }
+  parts.push("", "## Lesson flow", formatPlanParts(plan), "");
+  if (!lessonBrief) {
+    parts.push("## Assumptions", formatBulletList(plan.assumptions), "");
+  }
   parts.push(
-    "",
-    "## Lesson flow",
-    formatPlanParts(plan),
-    "",
-    "## Assumptions",
-    formatBulletList(plan.assumptions),
-    "",
     "## Promised skills",
     formatBulletList(plan.promised_skills),
     "",
     "## Problem snapshots (context only)",
-    formatProblemSnapshots(problems),
+    formatProblemSnapshots(problemSnapshots),
     "",
     "## Technique catalog (use ids in covers_techniques)",
     formatTechniqueCatalog(techniques),
@@ -686,6 +751,7 @@ export function buildQuizFillUserPrompt(
   techniques: readonly ProblemTechnique[],
   lessonBrief?: string,
   quizFeedback?: QuizzesGrade,
+  includeCoding: boolean = true,
 ): string {
   const constraints: string[] = [
     "Expand the quiz outline into a full quiz JSON object.",
@@ -693,10 +759,14 @@ export function buildQuizFillUserPrompt(
     "Add the missing fields for each question:",
     "mcq: add options (4-5 strings) and correct (single string that exactly matches one option).",
     "multi: add options (4-6 strings) and correct (array of >=2 strings matching options).",
-    "short/numeric/code_reading: add correct (string).",
+    includeCoding
+      ? "short/numeric/code_reading: add correct (string)."
+      : "short/numeric: add correct (string).",
     "Add a concise explanation for every question.",
     "Ensure options include plausible incorrect answers (distractors) and avoid trick questions.",
-    "Quizzes must stand alone; do not reference coding problems or future lesson parts.",
+    includeCoding
+      ? "Quizzes must stand alone; do not reference coding problems or future lesson parts."
+      : "Quizzes must stand alone; do not reference problems or future lesson parts.",
     "If a concept is not covered by assumptions, add a short theory_blocks array with a primer before the questions that need it.",
     "Do not include hints, correctFeedback, or other extra fields.",
     "Output strict JSON for a single quiz object (not wrapped in an array).",
@@ -715,14 +785,11 @@ export function buildQuizFillUserPrompt(
   if (feedbackSection) {
     parts.push("", "## Fixes from previous grading", feedbackSection);
   }
+  parts.push("", "## Topic", plan.topic, "");
+  if (!lessonBrief) {
+    parts.push("## Assumptions", formatBulletList(plan.assumptions), "");
+  }
   parts.push(
-    "",
-    "## Topic",
-    plan.topic,
-    "",
-    "## Assumptions",
-    formatBulletList(plan.assumptions),
-    "",
     "## Technique catalog (use ids in covers_techniques)",
     formatTechniqueCatalog(techniques),
     "",
@@ -739,6 +806,7 @@ export function buildQuizzesGradeUserPrompt(
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
   profile: QuizGradeProfile = "strict",
+  includeCoding: boolean = true,
 ): string {
   const quizSpecLines =
     quizSpecs.length > 0
@@ -763,9 +831,15 @@ export function buildQuizzesGradeUserPrompt(
     "- Ensure answers unambiguous and explanations correct.",
     "- Ensure techniques are introduced in quizzes that appear before the problems that require them.",
     "- Fail if any quiz references or assumes any problem that appears after it in the plan order.",
-    "- Fail if a quiz depends on any coding problem statement instead of being self-contained (including earlier problems).",
-    "- Fail if a quiz references coding problems by number/title (e.g., 'Problem 1', 'p2', 'the problem says').",
-    "- Ensure quizzes stand alone even if the learner has not read any coding problems; avoid referencing problem text or quoting reference solutions (code_reading snippets must be fresh teaching examples, not lifted from solutions).",
+    includeCoding
+      ? "- Fail if a quiz depends on any coding problem statement instead of being self-contained (including earlier problems)."
+      : "- Fail if a quiz depends on any problem statement instead of being self-contained (including earlier problems).",
+    includeCoding
+      ? "- Fail if a quiz references coding problems by number/title (e.g., 'Problem 1', 'p2', 'the problem says')."
+      : "- Fail if a quiz references problems by number/title (e.g., 'Problem 1', 'p2', 'the problem says').",
+    includeCoding
+      ? "- Ensure quizzes stand alone even if the learner has not read any coding problems; avoid referencing problem text or quoting reference solutions (code_reading snippets must be fresh teaching examples, not lifted from solutions)."
+      : "- Ensure quizzes stand alone even if the learner has not read any problem statements; avoid referencing external problem text.",
     "- Fail if the question set is repetitive definition-drills without conceptual application, debugging, or limitation checks.",
     "- Fail if techniques with preconditions/one-way guarantees lack any question that tests their limits or misuse cases (e.g., false positives, missing coprimality, recurrence invalid cases).",
     "- Fail if techniques that use randomness/probabilistic sampling lack any coverage of reproducibility (seeding/fixed witnesses) or residual error probability.",
@@ -775,14 +849,11 @@ export function buildQuizzesGradeUserPrompt(
   if (lessonBrief) {
     parts.push("", "## Lesson brief (authoritative)", lessonBrief);
   }
+  parts.push("", "## Lesson flow", formatPlanParts(plan), "");
+  if (!lessonBrief) {
+    parts.push("## Assumptions", formatBulletList(plan.assumptions), "");
+  }
   parts.push(
-    "",
-    "## Lesson flow",
-    formatPlanParts(plan),
-    "",
-    "## Assumptions",
-    formatBulletList(plan.assumptions),
-    "",
     "## Promised skills",
     formatBulletList(plan.promised_skills),
     "",

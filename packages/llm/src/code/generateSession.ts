@@ -47,8 +47,8 @@ import {
   MAX_PLAN_GRADE_RETRIES,
   PlanGradeSchema,
   PLAN_GRADE_RESPONSE_SCHEMA,
-  PLAN_PARSE_RESPONSE_SCHEMA,
-  SessionPlanSchema,
+  getPlanParseResponseSchema,
+  getSessionPlanSchema,
   buildPlanEditUserPrompt,
   buildPlanGradeUserPrompt,
   buildPlanIdeasUserPrompt,
@@ -71,6 +71,7 @@ import {
   buildQuizzesOutlineUserPrompt,
   buildQuizzesGradeUserPrompt,
   type PlanQuizSpec,
+  type ProblemSnapshot,
   type QuizGradeProfile,
   type QuizzesGrade,
   type QuizzesOutlinePayload,
@@ -194,6 +195,8 @@ type StageReadResult<TValue> = {
 const MarkdownCheckpointSchema = z.object({
   topic: z.string().trim().min(1),
   lessonBriefHash: z.string().trim().min(1).optional(),
+  includeStory: z.boolean().optional(),
+  includeCoding: z.boolean().optional(),
   markdown: z.string().trim().min(1),
 });
 
@@ -230,10 +233,16 @@ function slugifyTopic(topic: string): string {
   return `${safePrefix}-${hash}`;
 }
 
-function applyHardCodedAssumptions(plan: SessionPlan): {
+function applyHardCodedAssumptions(
+  plan: SessionPlan,
+  enforceAssumptions: boolean,
+): {
   plan: SessionPlan;
   changed: boolean;
 } {
+  if (!enforceAssumptions) {
+    return { plan, changed: false };
+  }
   const expected = Array.from(HARD_CODED_ASSUMPTIONS);
   const assumptionsMatch =
     plan.assumptions.length === expected.length &&
@@ -305,13 +314,19 @@ function normalizePlanStructure(plan: SessionPlan): {
   };
 }
 
-function normalizeSessionPlan(plan: SessionPlan): {
+function normalizeSessionPlan(
+  plan: SessionPlan,
+  enforceAssumptions: boolean,
+): {
   plan: SessionPlan;
   changed: boolean;
 } {
   let changed = false;
   let normalized = plan;
-  const withAssumptions = applyHardCodedAssumptions(normalized);
+  const withAssumptions = applyHardCodedAssumptions(
+    normalized,
+    enforceAssumptions,
+  );
   if (withAssumptions.changed) {
     changed = true;
     normalized = withAssumptions.plan;
@@ -349,6 +364,24 @@ function buildQuizSpecs(
     specs.push({ id, summary: part.summary, questionCount });
   }
   return specs;
+}
+
+function buildProblemSnapshotsFromProblems(
+  problems: readonly CodingProblem[],
+): ProblemSnapshot[] {
+  return problems.map((problem) => ({
+    id: problem.id,
+    title: problem.title,
+    difficulty: problem.difficulty,
+    story_callback: problem.story_callback,
+  }));
+}
+
+function buildProblemSnapshotsFromPlan(plan: SessionPlan): ProblemSnapshot[] {
+  return plan.coding_blueprints.map((blueprint) => ({
+    id: blueprint.id,
+    title: blueprint.title,
+  }));
 }
 
 function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
@@ -421,6 +454,8 @@ type SessionGenerationPipelineOptions = {
   checkpointDir?: string;
   debugRootDir?: string;
   progress?: SessionProgress;
+  includeStory?: boolean;
+  includeCoding?: boolean;
   questionCounts?: {
     defaultQuiz?: number;
     perQuiz?: Record<string, number>;
@@ -431,32 +466,42 @@ type SessionGenerationPipelineOptions = {
 type PlanIdeasCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeStory?: boolean;
+  includeCoding?: boolean;
   markdown: string;
 };
 
 type QuizIdeasCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeStory?: boolean;
+  includeCoding?: boolean;
   markdown: string;
 };
 
 type ProblemTechniquesCheckpoint = ProblemTechniquesPayload & {
   lessonBriefHash?: string;
+  includeCoding?: boolean;
 };
 
 type PlanCheckpoint = SessionPlan & {
   topic: string;
   lessonBriefHash?: string;
+  includeStory?: boolean;
+  includeCoding?: boolean;
 };
 
 type PlanGradeCheckpoint = PlanGrade & {
   topic: string;
   lessonBriefHash?: string;
+  includeStory?: boolean;
+  includeCoding?: boolean;
 };
 
 type QuizzesCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeCoding?: boolean;
   quizzes: SessionQuiz[];
 };
 
@@ -464,29 +509,34 @@ type QuizzesGradeCheckpoint = QuizzesGrade & {
   topic: string;
   lessonBriefHash?: string;
   gradeProfile?: QuizGradeProfile;
+  includeCoding?: boolean;
 };
 
 type ProblemIdeasCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeCoding?: boolean;
   markdown: string;
 };
 
 type ProblemSolutionsCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeCoding?: boolean;
   solutions: ProblemSolutions["solutions"];
 };
 
 type ProblemsCheckpoint = {
   topic: string;
   lessonBriefHash?: string;
+  includeCoding?: boolean;
   problems: CodingProblem[];
 };
 
 type ProblemsGradeCheckpoint = ProblemsGrade & {
   topic: string;
   lessonBriefHash?: string;
+  includeCoding?: boolean;
 };
 
 export class SessionGenerationPipeline {
@@ -533,6 +583,34 @@ export class SessionGenerationPipeline {
       return checkpoint === this.lessonBriefHash;
     }
     return checkpoint === undefined;
+  }
+
+  private resolveIncludeStory(): boolean {
+    return this.options.includeStory ?? true;
+  }
+
+  private checkpointIncludeStoryMatches(
+    checkpointIncludeStory: unknown,
+  ): boolean {
+    const checkpoint =
+      typeof checkpointIncludeStory === "boolean"
+        ? checkpointIncludeStory
+        : true;
+    return checkpoint === this.resolveIncludeStory();
+  }
+
+  private resolveIncludeCoding(): boolean {
+    return this.options.includeCoding ?? true;
+  }
+
+  private checkpointIncludeCodingMatches(
+    checkpointIncludeCoding: unknown,
+  ): boolean {
+    const checkpoint =
+      typeof checkpointIncludeCoding === "boolean"
+        ? checkpointIncludeCoding
+        : true;
+    return checkpoint === this.resolveIncludeCoding();
   }
 
   private get checkpointDir(): string | undefined {
@@ -642,6 +720,18 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeStoryMatches(result.data.includeStory)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (includeStory mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointIncludeCodingMatches(result.data.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_ideas' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -660,6 +750,8 @@ export class SessionGenerationPipeline {
     const payload: PlanIdeasCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeStory: this.resolveIncludeStory(),
+      includeCoding: this.resolveIncludeCoding(),
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -694,7 +786,22 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
-      const result = SessionPlanSchema.safeParse(parsed);
+      if (!this.checkpointIncludeStoryMatches(parsed?.includeStory)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (includeStory mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
+      const result = getSessionPlanSchema(
+        this.resolveIncludeStory(),
+        this.resolveIncludeCoding(),
+      ).safeParse(parsed);
       if (!result.success) {
         this.logger.log(
           `[session/checkpoint] ignoring 'plan' checkpoint at ${filePath} (schema mismatch)`,
@@ -720,6 +827,8 @@ export class SessionGenerationPipeline {
       ...value,
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeStory: this.resolveIncludeStory(),
+      includeCoding: this.resolveIncludeCoding(),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -753,6 +862,18 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeStoryMatches(parsed?.includeStory)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (includeStory mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'plan_grade' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       const result = PlanGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -779,6 +900,8 @@ export class SessionGenerationPipeline {
       ...value,
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeStory: this.resolveIncludeStory(),
+      includeCoding: this.resolveIncludeCoding(),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -815,6 +938,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_techniques' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       return {
         value: { techniques: result.data.techniques },
         filePath,
@@ -838,6 +967,7 @@ export class SessionGenerationPipeline {
     const payload: ProblemTechniquesCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
       techniques: value.techniques,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -877,6 +1007,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_solutions' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       return {
         value: { solutions: result.data.solutions },
         filePath,
@@ -900,6 +1036,7 @@ export class SessionGenerationPipeline {
     const payload: ProblemSolutionsCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
       solutions: value.solutions,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -939,6 +1076,18 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeStoryMatches(result.data.includeStory)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (includeStory mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointIncludeCodingMatches(result.data.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quiz_ideas' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -957,6 +1106,8 @@ export class SessionGenerationPipeline {
     const payload: QuizIdeasCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeStory: this.resolveIncludeStory(),
+      includeCoding: this.resolveIncludeCoding(),
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -991,6 +1142,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       const result = QuizzesSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1016,6 +1173,7 @@ export class SessionGenerationPipeline {
     const payload: QuizzesCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
       quizzes: value.quizzes,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -1047,6 +1205,12 @@ export class SessionGenerationPipeline {
       if (!this.checkpointLessonBriefMatches(parsed?.lessonBriefHash)) {
         this.logger.log(
           `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (lesson brief mismatch)`,
+        );
+        return undefined;
+      }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (includeCoding mismatch)`,
         );
         return undefined;
       }
@@ -1087,6 +1251,7 @@ export class SessionGenerationPipeline {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
       gradeProfile: this.quizGradeProfile,
+      includeCoding: this.resolveIncludeCoding(),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1125,6 +1290,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(result.data.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problem_ideas' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       return { value: { markdown: result.data.markdown }, filePath };
     } catch (error) {
       if (isEnoent(error)) {
@@ -1143,6 +1314,7 @@ export class SessionGenerationPipeline {
     const payload: ProblemIdeasCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
       markdown: value.markdown,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -1179,6 +1351,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problems' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       const result = ProblemsSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1204,6 +1382,7 @@ export class SessionGenerationPipeline {
     const payload: ProblemsCheckpoint = {
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
       problems: value.problems,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
@@ -1238,6 +1417,12 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      if (!this.checkpointIncludeCodingMatches(parsed?.includeCoding)) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'problems_grade' checkpoint at ${filePath} (includeCoding mismatch)`,
+        );
+        return undefined;
+      }
       const result = ProblemsGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1264,6 +1449,7 @@ export class SessionGenerationPipeline {
       ...value,
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      includeCoding: this.resolveIncludeCoding(),
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1308,6 +1494,9 @@ export class SessionGenerationPipeline {
     }
 
     return this.withStage("plan_ideas", async () => {
+      const includeStory = this.resolveIncludeStory();
+      const includeCoding = this.resolveIncludeCoding();
+      const hasLessonBrief = Boolean(this.options.lessonBrief);
       for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt += 1) {
         const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_PLAN_ATTEMPTS).padStart(2, "0")}`;
         try {
@@ -1319,14 +1508,24 @@ export class SessionGenerationPipeline {
             this.options.topic,
             this.options.seed,
             this.options.lessonBrief,
+            includeStory,
+            includeCoding,
           );
           this.logger.log(
             `[session/plan-ideas] generating plan ideas (${attemptLabel})`,
           );
-          const contents = buildSingleUserPrompt(
-            `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and the requested part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`,
-            userPrompt,
-          );
+          const systemPrompt = hasLessonBrief
+            ? includeStory
+              ? "Expert educator generating engaging lesson ideas. Produce diverse concepts that align story, promised skills, and the requested part progression. Call out any new concepts you introduce."
+              : "Expert educator generating engaging lesson ideas. Produce diverse concepts that align promised skills and the requested part progression. Call out any new concepts you introduce."
+            : includeCoding
+              ? includeStory
+                ? `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align story, promised skills, and the requested part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`
+                : `Expert CS educator generating engaging beginner-friendly Python lesson ideas. Produce diverse concepts that align promised skills and the requested part progression. Difficulty is “easy”; assume learners only know: ${HARD_CODED_ASSUMPTIONS.map((assumption) => `"${assumption}"`).join(", ")}. Call out any new concepts you introduce.`
+              : includeStory
+                ? "Expert educator generating engaging math lesson ideas. Produce diverse concepts that align story, promised skills, and the requested part progression. Call out any new concepts you introduce."
+                : "Expert educator generating engaging math lesson ideas. Produce diverse concepts that align promised skills and the requested part progression. Call out any new concepts you introduce.";
+          const contents = buildSingleUserPrompt(systemPrompt, userPrompt);
           const markdown = await generateText({
             modelId: TEXT_MODEL_ID,
             contents,
@@ -1371,7 +1570,12 @@ export class SessionGenerationPipeline {
       this.logger.log(
         `[session/checkpoint] restored 'plan' from ${checkpoint.filePath}`,
       );
-      const normalized = normalizeSessionPlan(checkpoint.value);
+      const enforceAssumptions =
+        this.resolveIncludeCoding() && !this.options.lessonBrief;
+      const normalized = normalizeSessionPlan(
+        checkpoint.value,
+        enforceAssumptions,
+      );
       if (normalized.changed) {
         this.logger.log(
           `[session/plan] overwriting assumptions in restored plan checkpoint at ${checkpoint.filePath}`,
@@ -1389,7 +1593,15 @@ export class SessionGenerationPipeline {
 
     const { value: planIdeas } = await this.ensurePlanIdeasInternal();
     return this.withStage("plan", async () => {
-      const userPrompt = buildPlanParseUserPrompt(planIdeas.markdown);
+      const includeStory = this.resolveIncludeStory();
+      const includeCoding = this.resolveIncludeCoding();
+      const includeAssumptions = !this.options.lessonBrief && includeCoding;
+      const userPrompt = buildPlanParseUserPrompt(
+        planIdeas.markdown,
+        includeStory,
+        includeAssumptions,
+        includeCoding,
+      );
       const debugOptions = this.createDebugOptions("plan-parse");
       this.logger.log("[session/plan] parsing ideas into plan JSON");
       const planJson = await generateJson<SessionPlan>({
@@ -1398,13 +1610,19 @@ export class SessionGenerationPipeline {
           "Convert Markdown ideas into plan JSON. Enforce ordering, coverage of required skills, and difficulty.",
           userPrompt,
         ),
-        responseJsonSchema: toGeminiJsonSchema(PLAN_PARSE_RESPONSE_SCHEMA),
-        schema: SessionPlanSchema,
+        responseJsonSchema: toGeminiJsonSchema(
+          getPlanParseResponseSchema(
+            includeStory,
+            includeCoding,
+            includeAssumptions,
+          ),
+        ),
+        schema: getSessionPlanSchema(includeStory, includeCoding),
         normalizeJson: normalizeSessionPlanJson,
         progress: this.logger,
         debug: debugOptions,
       });
-      const normalized = normalizeSessionPlan(planJson);
+      const normalized = normalizeSessionPlan(planJson, includeAssumptions);
       await this.writePlanCheckpoint(normalized.plan);
       const entry: StageCacheEntry<SessionPlan> = {
         value: normalized.plan,
@@ -1439,7 +1657,11 @@ export class SessionGenerationPipeline {
     }
     const plan = await this.ensurePlan();
     return this.withStage("plan_grade", async () => {
-      const userPrompt = buildPlanGradeUserPrompt(plan);
+      const userPrompt = buildPlanGradeUserPrompt(
+        plan,
+        this.resolveIncludeStory(),
+        this.resolveIncludeCoding(),
+      );
       const debugOptions = this.createDebugOptions("plan-grade");
       this.logger.log("[session/plan-grade] grading plan");
       const grade = await generateJson<PlanGrade>({
@@ -1489,9 +1711,16 @@ export class SessionGenerationPipeline {
     }
     return this.withStage("problem_techniques", async () => {
       const plan = await this.ensurePlan();
+      const quizIds = plan.parts
+        .filter((part) => part.kind === "quiz")
+        .map((part, index) => part.id ?? `quiz_${index + 1}`);
       const userPrompt = buildProblemTechniquesUserPrompt(
         plan,
         this.options.lessonBrief,
+        {
+          includeCoding: this.resolveIncludeCoding(),
+          quizIds,
+        },
       );
       const debugOptions = this.createDebugOptions("problem-techniques");
       this.logger.log("[session/problem-techniques] extracting techniques");
@@ -1530,7 +1759,14 @@ export class SessionGenerationPipeline {
     currentPlan: SessionPlan,
     grade: PlanGrade,
   ): Promise<SessionPlan> {
-    const userPrompt = buildPlanEditUserPrompt(currentPlan, grade);
+    const includeStory = this.resolveIncludeStory();
+    const includeCoding = this.resolveIncludeCoding();
+    const userPrompt = buildPlanEditUserPrompt(
+      currentPlan,
+      grade,
+      includeStory,
+      includeCoding,
+    );
     const debugOptions = this.createDebugOptions("plan-edit");
     this.logger.log("[session/plan-edit] editing plan based on feedback");
 
@@ -1540,14 +1776,23 @@ export class SessionGenerationPipeline {
         "Fix the session plan based on the grading feedback. Maintain JSON structure.",
         userPrompt,
       ),
-      responseJsonSchema: toGeminiJsonSchema(PLAN_PARSE_RESPONSE_SCHEMA),
-      schema: SessionPlanSchema,
+      responseJsonSchema: toGeminiJsonSchema(
+        getPlanParseResponseSchema(
+          includeStory,
+          includeCoding,
+          !this.options.lessonBrief && includeCoding,
+        ),
+      ),
+      schema: getSessionPlanSchema(includeStory, includeCoding),
       normalizeJson: normalizeSessionPlanJson,
       progress: this.logger,
       debug: debugOptions,
     });
 
-    const normalized = normalizeSessionPlan(planJson);
+    const normalized = normalizeSessionPlan(
+      planJson,
+      !this.options.lessonBrief && this.resolveIncludeCoding(),
+    );
     await this.writePlanCheckpoint(normalized.plan);
     const entry: StageCacheEntry<SessionPlan> = {
       value: normalized.plan,
@@ -1583,7 +1828,11 @@ export class SessionGenerationPipeline {
     const quizSpecs = buildQuizSpecs(plan, this.options.questionCounts);
     const planIdeas = await this.ensurePlanIdeas();
     const techniques = await this.ensureProblemTechniques();
-    const problems = await this.ensureProblems();
+    const includeCoding = this.resolveIncludeCoding();
+    const problems = includeCoding ? await this.ensureProblems() : [];
+    const problemSnapshots = includeCoding
+      ? buildProblemSnapshotsFromProblems(problems)
+      : buildProblemSnapshotsFromPlan(plan);
     return this.withStage("quiz_ideas", async () => {
       for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
         const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
@@ -1596,11 +1845,12 @@ export class SessionGenerationPipeline {
             plan,
             quizSpecs,
             techniques,
-            problems,
+            problemSnapshots,
             planIdeas.markdown,
             this.options.seed,
             this.options.lessonBrief,
             this.quizFeedback,
+            includeCoding,
           );
           this.logger.log(
             `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
@@ -1608,7 +1858,9 @@ export class SessionGenerationPipeline {
           const coverageMarkdown = await generateText({
             modelId: TEXT_MODEL_ID,
             contents: buildSingleUserPrompt(
-              "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding.",
+              includeCoding
+                ? "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before coding."
+                : "Expand plan into quiz coverage ensuring primers precede practice and every technique is taught before learners face the target problems.",
               userPrompt,
             ),
             progress: this.logger,
@@ -1669,6 +1921,30 @@ export class SessionGenerationPipeline {
     if (seen.size !== expected.size) {
       const missing = [...expected.keys()].filter((id) => !seen.has(id));
       throw new Error(`missing quizzes for ids: ${missing.join(", ")}`);
+    }
+  }
+
+  private ensureNoCodeReadingQuestions(
+    quizzes: {
+      quizzes: Array<{
+        quiz_id: string;
+        questions: Array<{ type?: string; id?: string }>;
+      }>;
+    },
+    label: string,
+  ): void {
+    if (this.resolveIncludeCoding()) {
+      return;
+    }
+    for (const quiz of quizzes.quizzes) {
+      for (const question of quiz.questions) {
+        if (question.type === "code_reading") {
+          const questionId = question.id ?? "unknown";
+          throw new Error(
+            `${label} contains code_reading question ${quiz.quiz_id}:${questionId} (no-coding mode)`,
+          );
+        }
+      }
     }
   }
 
@@ -1748,17 +2024,31 @@ export class SessionGenerationPipeline {
         `[session/checkpoint] restored 'quizzes' from ${checkpoint.filePath}`,
       );
       this.validateQuizCounts(checkpoint.value, quizSpecs);
-      const entry: StageCacheEntry<QuizzesPayload> = {
-        value: checkpoint.value,
-        source: "checkpoint",
-        checkpointPath: checkpoint.filePath,
-      };
-      this.caches.quizzes = entry;
-      return entry;
+      try {
+        this.ensureNoCodeReadingQuestions(
+          checkpoint.value,
+          "quizzes checkpoint",
+        );
+        const entry: StageCacheEntry<QuizzesPayload> = {
+          value: checkpoint.value,
+          source: "checkpoint",
+          checkpointPath: checkpoint.filePath,
+        };
+        this.caches.quizzes = entry;
+        return entry;
+      } catch (error) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes' checkpoint at ${checkpoint.filePath} (${errorAsString(error)})`,
+        );
+      }
     }
     const quizIdeas = await this.ensureQuizIdeas();
     const techniques = await this.ensureProblemTechniques();
-    const problems = await this.ensureProblems();
+    const includeCoding = this.resolveIncludeCoding();
+    const problems = includeCoding ? await this.ensureProblems() : [];
+    const problemSnapshots = includeCoding
+      ? buildProblemSnapshotsFromProblems(problems)
+      : buildProblemSnapshotsFromPlan(plan);
     return this.withStage("quizzes", async () => {
       for (let attempt = 1; attempt <= MAX_QUIZ_ATTEMPTS; attempt += 1) {
         const attemptLabel = `attempt-${String(attempt).padStart(2, "0")}-of-${String(MAX_QUIZ_ATTEMPTS).padStart(2, "0")}`;
@@ -1766,11 +2056,12 @@ export class SessionGenerationPipeline {
           const outlinePrompt = buildQuizzesOutlineUserPrompt(
             plan,
             quizIdeas.markdown,
-            problems,
+            problemSnapshots,
             techniques,
             quizSpecs,
             this.options.lessonBrief,
             this.quizFeedback,
+            includeCoding,
           );
           const outlineDebug = this.createDebugOptions(
             "quizzes-outline",
@@ -1794,6 +2085,7 @@ export class SessionGenerationPipeline {
             maxAttempts: 4,
           });
           this.validateQuizCounts(outlines, quizSpecs);
+          this.ensureNoCodeReadingQuestions(outlines, "quiz outlines");
           const expandedQuizzes: SessionQuiz[] = [];
           for (const outline of outlines.quizzes) {
             const expandPrompt = buildQuizFillUserPrompt(
@@ -1802,6 +2094,7 @@ export class SessionGenerationPipeline {
               techniques,
               this.options.lessonBrief,
               this.quizFeedback,
+              includeCoding,
             );
             const expandDebug = this.createDebugOptions(
               "quiz-expand",
@@ -1826,6 +2119,7 @@ export class SessionGenerationPipeline {
           }
           const quizzesPayload: QuizzesPayload = { quizzes: expandedQuizzes };
           this.validateQuizCounts(quizzesPayload, quizSpecs);
+          this.ensureNoCodeReadingQuestions(quizzesPayload, "expanded quizzes");
           await this.writeQuizzesCheckpoint(quizzesPayload);
           const entry: StageCacheEntry<QuizzesPayload> = {
             value: quizzesPayload,
@@ -1877,6 +2171,7 @@ export class SessionGenerationPipeline {
     const quizSpecs = buildQuizSpecs(plan, this.options.questionCounts);
     const quizzes = await this.ensureQuizzes();
     const techniques = await this.ensureProblemTechniques();
+    const includeCoding = this.resolveIncludeCoding();
     return this.withStage("quizzes_grade", async () => {
       const userPrompt = buildQuizzesGradeUserPrompt(
         plan,
@@ -1885,13 +2180,16 @@ export class SessionGenerationPipeline {
         quizSpecs,
         this.options.lessonBrief,
         this.quizGradeProfile,
+        includeCoding,
       );
       const debugOptions = this.createDebugOptions("quizzes-grade");
       this.logger.log("[session/quizzes-grade] grading quizzes");
       const grade = await generateJson<QuizzesGrade>({
         modelId: TEXT_MODEL_ID,
         contents: buildSingleUserPrompt(
-          "QA quizzes for coverage, theory, clarity, and technique readiness for problems.",
+          includeCoding
+            ? "QA quizzes for coverage, theory, clarity, and technique readiness for problems."
+            : "QA quizzes for coverage, theory, clarity, and technique readiness for the lesson.",
           userPrompt,
         ),
         responseJsonSchema: toGeminiJsonSchema(QUIZZES_GRADE_RESPONSE_SCHEMA),
@@ -2425,6 +2723,7 @@ export type GenerateSessionOptions = {
   storyPlanItemId: string;
   storagePrefix?: string;
   includeStory?: boolean;
+  includeCoding?: boolean;
   storySegmentCount?: number;
 };
 
@@ -2473,12 +2772,15 @@ export async function generateSession(
 ): Promise<GenerateSessionResult> {
   const logger = useProgress(options.progress);
   const includeStory = options.includeStory ?? true;
+  const includeCoding = options.includeCoding ?? true;
   const pipeline = new SessionGenerationPipeline({
     topic: options.topic,
     lessonBrief: options.lessonBrief,
     seed: options.seed,
     checkpointDir: options.checkpointDir,
     debugRootDir: options.debugRootDir,
+    includeStory,
+    includeCoding,
     questionCounts: options.questionCounts,
     pythonIndexUrl: options.pythonIndexUrl,
     progress: options.progress,
@@ -2504,62 +2806,71 @@ export async function generateSession(
     throw new Error("Plan generation failed");
   }
 
-  let problems: readonly CodingProblem[] | undefined;
-  let problemsGrade: ProblemsGrade | undefined;
-  for (
-    let attempt = 1;
-    attempt <= 1 + MAX_PROBLEM_GRADE_RETRIES;
-    attempt += 1
-  ) {
-    try {
-      problems = await pipeline.ensureProblems();
-    } catch (error) {
-      if (
-        error instanceof ProblemReferenceSolutionError ||
-        error instanceof ProblemSpecMismatchError
-      ) {
-        logger.log(
-          `[session/problems] validation failed (attempt ${attempt} of ${MAX_PROBLEM_GRADE_RETRIES + 1}): ${error.message}`,
-        );
+  let problems: readonly CodingProblem[] = [];
+  let problemsGrade: ProblemsGrade = {
+    pass: true,
+    issues: [],
+    too_hard_reasons: [],
+    misaligned_skills: [],
+  };
+  if (includeCoding) {
+    for (
+      let attempt = 1;
+      attempt <= 1 + MAX_PROBLEM_GRADE_RETRIES;
+      attempt += 1
+    ) {
+      try {
+        problems = await pipeline.ensureProblems();
+      } catch (error) {
+        if (
+          error instanceof ProblemReferenceSolutionError ||
+          error instanceof ProblemSpecMismatchError
+        ) {
+          logger.log(
+            `[session/problems] validation failed (attempt ${attempt} of ${MAX_PROBLEM_GRADE_RETRIES + 1}): ${error.message}`,
+          );
+          if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
+            throw new Error(
+              `Problem generation failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${error.message}`,
+            );
+          }
+          await pipeline.invalidateStage("problem_ideas");
+          await pipeline.invalidateStage("problems");
+          continue;
+        }
+        throw error;
+      }
+      problemsGrade = await pipeline.ensureProblemsGrade();
+      if (problemsGrade.pass) {
+        const solved = await solveProblemsWithRetries({ pipeline, logger });
+        if (solved) {
+          break;
+        }
         if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
           throw new Error(
-            `Problem generation failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${error.message}`,
+            `Problem solving failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts`,
           );
         }
-        await pipeline.invalidateStage("problem_ideas");
         await pipeline.invalidateStage("problems");
         continue;
       }
-      throw error;
-    }
-    problemsGrade = await pipeline.ensureProblemsGrade();
-    if (problemsGrade.pass) {
-      const solved = await solveProblemsWithRetries({ pipeline, logger });
-      if (solved) {
-        break;
-      }
       if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
         throw new Error(
-          `Problem solving failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts`,
+          `Problem grading failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${problemsGrade.issues.join("; ")}`,
         );
       }
-      await pipeline.invalidateStage("problems");
-      continue;
+      await pipeline.invalidateStage("problem_ideas");
     }
-    if (attempt === 1 + MAX_PROBLEM_GRADE_RETRIES) {
-      throw new Error(
-        `Problem grading failed after ${MAX_PROBLEM_GRADE_RETRIES + 1} attempts: ${problemsGrade.issues.join("; ")}`,
-      );
+
+    if (problems.length === 0) {
+      throw new Error("Problem generation failed");
     }
-    await pipeline.invalidateStage("problem_ideas");
-  }
 
-  if (!problems || !problemsGrade) {
-    throw new Error("Problem generation failed");
+    problems = await pipeline.ensureProblems();
+    ProblemPlanItemsSchema.parse(problems);
+  } else {
+    logger.log("[session/problems] skipping problem generation (no-coding)");
   }
-
-  problems = await pipeline.ensureProblems();
-  ProblemPlanItemsSchema.parse(problems);
 
   let quizzes: readonly SessionQuiz[] | undefined;
   let quizzesGrade: QuizzesGrade | undefined;
@@ -2596,22 +2907,28 @@ export async function generateSession(
   const slug = slugifyTopic(options.topic);
   const sessionId = options.sessionId ?? slug;
 
-  await persistProblemSolutionsToFirestore({
-    userId: options.userId,
-    sessionId,
-    problems,
-    logger,
-  });
+  if (includeCoding) {
+    await persistProblemSolutionsToFirestore({
+      userId: options.userId,
+      sessionId,
+      problems,
+      logger,
+    });
+  }
 
   const techniques = await pipeline.ensureProblemTechniques();
 
   let story: GenerateStoryResult | undefined;
   if (includeStory) {
+    if (!plan.story) {
+      throw new Error("Story requested but plan.story is missing");
+    }
     story = await generateStory({
       topic: plan.story.storyTopic,
       userId: options.userId,
       sessionId,
       planItemId: options.storyPlanItemId,
+      includeCoding,
       storagePrefix: options.storagePrefix,
       progress: options.progress,
       debugRootDir: options.debugRootDir,
