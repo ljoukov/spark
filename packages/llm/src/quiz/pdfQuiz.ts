@@ -3,17 +3,12 @@ import type { QuizDefinition } from "@spark/schemas";
 import {
   SPARK_UPLOAD_QUIZ_MODEL_ID,
   SPARK_UPLOAD_QUIZ_QUESTION_COUNT,
-  SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA,
   SparkUploadQuizPayloadSchema,
   convertSparkUploadPayloadToQuizDefinition,
   type SparkUploadQuizPayload,
 } from "./sparkUpload";
 import { toInlineSourceFiles } from "./common";
-import {
-  generateJson,
-  toGeminiJsonSchema,
-  type LlmContent,
-} from "../utils/llm";
+import { generateJson, type LlmContent } from "../utils/llm";
 import type { JobProgressReporter } from "../utils/concurrency";
 import type { SparkQuizSourceFile } from "./common";
 
@@ -70,7 +65,6 @@ export async function generateSparkPdfQuizDefinition(
     modelId: SPARK_UPLOAD_QUIZ_MODEL_ID,
     contents,
     schema: SparkUploadQuizPayloadSchema,
-    responseJsonSchema: toGeminiJsonSchema(SPARK_UPLOAD_QUIZ_RESPONSE_SCHEMA),
     progress: options.progress,
   });
 
