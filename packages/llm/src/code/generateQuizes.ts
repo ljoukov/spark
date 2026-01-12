@@ -143,6 +143,8 @@ export const QuizzesGradeSchema = z.object({
 
 export type QuizzesGrade = z.infer<typeof QuizzesGradeSchema>;
 
+export type QuizGradeProfile = "strict" | "lenient";
+
 export type PlanQuizSpec = {
   id: string;
   summary: string;
@@ -200,6 +202,175 @@ function buildQuizCoverageRequirements(
   return requirements;
 }
 
+function formatQuizFeedback(
+  feedback: QuizzesGrade | undefined,
+  options?: { quizId?: string; includeGlobals?: boolean },
+): string | undefined {
+  if (!feedback) {
+    return undefined;
+  }
+  const quizId = options?.quizId?.toLowerCase();
+  const altId = quizId?.startsWith("quiz_")
+    ? quizId.replace("quiz_", "q")
+    : undefined;
+  const filterIssue = (issue: string): boolean => {
+    if (!quizId) {
+      return true;
+    }
+    const normalized = issue.toLowerCase();
+    if (normalized.includes(quizId)) {
+      return true;
+    }
+    if (altId && normalized.includes(`${altId}_`)) {
+      return true;
+    }
+    if (altId && normalized.includes(`${altId} `)) {
+      return true;
+    }
+    return false;
+  };
+
+  const issues = feedback.issues.filter(filterIssue);
+  const includeGlobals = options?.includeGlobals ?? false;
+  const lines: string[] = [];
+  if (issues.length > 0) {
+    lines.push("Issues to fix:");
+    lines.push(...issues.map((issue) => `- ${issue}`));
+  }
+  if (includeGlobals && feedback.uncovered_skills.length > 0) {
+    lines.push("Uncovered skills:");
+    lines.push(...feedback.uncovered_skills.map((skill) => `- ${skill}`));
+  }
+  if (includeGlobals && feedback.missing_theory_for_concepts.length > 0) {
+    lines.push("Missing theory concepts:");
+    lines.push(
+      ...feedback.missing_theory_for_concepts.map(
+        (concept) => `- ${concept}`,
+      ),
+    );
+  }
+  if (includeGlobals && feedback.missing_techniques.length > 0) {
+    lines.push("Missing technique coverage:");
+    lines.push(
+      ...feedback.missing_techniques.map((technique) => `- ${technique}`),
+    );
+  }
+  if (lines.length === 0) {
+    return undefined;
+  }
+  return lines.join("\n");
+}
+
+function formatBulletList(items: readonly string[]): string {
+  if (items.length === 0) {
+    return "None";
+  }
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+function formatPlanParts(plan: SessionPlan): string {
+  if (plan.parts.length === 0) {
+    return "None";
+  }
+  return plan.parts
+    .map((part) => {
+      const id = part.id ?? part.kind;
+      const count =
+        part.kind === "quiz" && part.question_count !== undefined
+          ? ` (${part.question_count} questions)`
+          : "";
+      return `- ${part.order}. ${id}${count}: ${part.summary}`;
+    })
+    .join("\n");
+}
+
+function formatProblemSnapshots(problems: readonly CodingProblem[]): string {
+  if (problems.length === 0) {
+    return "None";
+  }
+  return problems
+    .map((problem) => {
+      const callback =
+        problem.story_callback.trim().length > 0
+          ? ` — ${problem.story_callback.trim()}`
+          : "";
+      return `- ${problem.id} (${problem.difficulty}): ${problem.title}${callback}`;
+    })
+    .join("\n");
+}
+
+function formatTechniqueCatalog(
+  techniques: readonly ProblemTechnique[],
+): string {
+  if (techniques.length === 0) {
+    return "None";
+  }
+  return techniques
+    .map((technique) => {
+      const appliesTo = technique.applies_to.join(", ");
+      const tags = technique.tags.join(", ");
+      return `- ${technique.id}: ${technique.title} — ${technique.summary} (applies to: ${appliesTo}; tags: ${tags})`;
+    })
+    .join("\n");
+}
+
+function formatQuizOutlineMarkdown(quizOutline: SessionQuizOutline): string {
+  const lines: string[] = [`Quiz id: ${quizOutline.quiz_id}`, "Questions:"];
+  let index = 0;
+  for (const question of quizOutline.questions) {
+    index += 1;
+    lines.push(
+      `- Q${index} ${question.id} [${question.type}] ${question.prompt}`,
+    );
+    lines.push(`  - tags: ${question.tags.join(", ")}`);
+    lines.push(
+      `  - covers_techniques: ${question.covers_techniques.join(", ")}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+function formatQuizzesMarkdown(quizzes: readonly SessionQuiz[]): string {
+  if (quizzes.length === 0) {
+    return "None";
+  }
+  const sections: string[] = [];
+  for (const quiz of quizzes) {
+    sections.push(`### ${quiz.quiz_id}`);
+    if (quiz.theory_blocks && quiz.theory_blocks.length > 0) {
+      sections.push("Theory blocks:");
+      let theoryIndex = 0;
+      for (const block of quiz.theory_blocks) {
+        theoryIndex += 1;
+        sections.push(`- ${theoryIndex}. ${block.id}: ${block.title}`);
+        sections.push(`  - ${block.content_md}`);
+      }
+    }
+    sections.push("Questions:");
+    let questionIndex = 0;
+    for (const question of quiz.questions) {
+      questionIndex += 1;
+      sections.push(
+        `- Q${questionIndex} ${question.id} [${question.type}] ${question.prompt}`,
+      );
+      if ("options" in question) {
+        sections.push(`  - options: ${question.options.join(" | ")}`);
+      }
+      const correct = Array.isArray(question.correct)
+        ? question.correct.join(", ")
+        : question.correct;
+      sections.push(`  - correct: ${correct}`);
+      sections.push(`  - explanation: ${question.explanation}`);
+      sections.push(`  - tags: ${question.tags.join(", ")}`);
+      sections.push(
+        `  - covers_techniques: ${question.covers_techniques.join(", ")}`,
+      );
+    }
+    sections.push("");
+  }
+  return sections.join("\n").trim();
+}
+
 export function buildQuizIdeasUserPrompt(
   plan: SessionPlan,
   quizSpecs: readonly PlanQuizSpec[],
@@ -208,11 +379,15 @@ export function buildQuizIdeasUserPrompt(
   markdownPlanIdeas: string,
   seed?: number,
   lessonBrief?: string,
+  quizFeedback?: QuizzesGrade,
 ): string {
-  const parts = [`Topic: "${plan.topic}"`, `Seed: ${seed ?? "none"}`];
-  if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
-  }
+  const parts = [
+    "# Quiz coverage plan",
+    `Topic: "${plan.topic}"`,
+    `Seed: ${seed ?? "none"}`,
+    "",
+    "## Instructions",
+  ];
   const quizSpecLines =
     quizSpecs.length > 0
       ? quizSpecs
@@ -240,38 +415,54 @@ export function buildQuizIdeasUserPrompt(
           .join("\n")
       : "None";
   parts.push(
+    "- Provide Markdown describing quiz coverage that fully teaches the techniques required for each coding problem before students reach that problem in the lesson flow.",
+    "- Learners see quizzes according to the plan order below; quizzes must stand alone without assuming the problem text or solution is known.",
+    "- Each quiz must be self-contained and only rely on the story plus earlier quizzes/problems in the plan order.",
+    "- Never assume the learner has seen any problem that appears after the quiz; do not reference or preview future problems.",
+    "- Each quiz must use its specified question count.",
+    "- Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
+    "- If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
+    "- Avoid quoting or previewing the reference solutions; keep the focus on concepts, patterns, and how to reason through the problems.",
+    "- Include theory primers when a technique or concept is not already covered by assumptions.",
+    "- Treat modulo (%) as an operator-only assumption; if modular arithmetic properties (cycles, congruence, divisibility) are needed, include a brief refresher.",
+    "- List question stems with types and map them to promised skills AND technique ids.",
+    "- Call out misconceptions, preconditions, and limitations (e.g., when a heuristic can give false positives, or when a recurrence no longer fits) so quizzes can include checks on them.",
+    "- If any technique involves randomness or probabilistic error, include coverage on reproducibility (seeding/fixed witness sets) and on the residual error probability/one-way nature of the guarantee.",
+    "- Call out which techniques are introduced in theory blocks vs. practiced in questions.",
+  );
+  if (lessonBrief) {
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
+  }
+  const feedbackSection = formatQuizFeedback(quizFeedback, {
+    includeGlobals: true,
+  });
+  if (feedbackSection) {
+    parts.push("", "## Fixes from previous grading", feedbackSection);
+  }
+  parts.push(
     "",
-    "Provide Markdown describing quiz coverage that fully teaches the techniques required for each coding problem before students reach that problem in the lesson flow.",
-    "Learners see quizzes according to the plan order below; quizzes must stand alone without assuming the problem text or solution is known.",
-    "Each quiz must be self-contained and only rely on the story plus earlier quizzes/problems in the plan order.",
-    "Never assume the learner has seen any problem that appears after the quiz; do not reference or preview future problems.",
-    "Each quiz must use its specified question count.",
-    "Introduce each technique in the quiz that immediately precedes the first problem that needs it; later quizzes may review but must not be the first introduction.",
-    "If a quiz has no problems after it (wrap-up), treat it as review only and do not introduce new techniques.",
-    "Avoid quoting or previewing the reference solutions; keep the focus on concepts, patterns, and how to reason through the problems.",
-    "Include theory primers when a technique or concept is not already covered by assumptions.",
-    "Treat modulo (%) as an operator-only assumption; if modular arithmetic properties (cycles, congruence, divisibility) are needed, include a brief refresher.",
-    "List question stems with types and map them to promised skills AND technique ids.",
-    "Call out misconceptions, preconditions, and limitations (e.g., when a heuristic can give false positives, or when a recurrence no longer fits) so quizzes can include checks on them.",
-    "If any technique involves randomness or probabilistic error, include coverage on reproducibility (seeding/fixed witness sets) and on the residual error probability/one-way nature of the guarantee.",
-    "Call out which techniques are introduced in theory blocks vs. practiced in questions.",
+    "## Lesson flow",
+    formatPlanParts(plan),
     "",
-    "Quiz-to-problem technique coverage requirements:",
+    "## Assumptions",
+    formatBulletList(plan.assumptions),
+    "",
+    "## Promised skills",
+    formatBulletList(plan.promised_skills),
+    "",
+    "## Problem snapshots (context only)",
+    formatProblemSnapshots(problems),
+    "",
+    "## Technique catalog (use ids in covers_techniques)",
+    formatTechniqueCatalog(techniques),
+    "",
+    "## Quiz-to-problem technique coverage requirements",
     coverageLines,
     "",
-    "Quiz requirements:",
+    "## Quiz requirements",
     quizSpecLines,
     "",
-    "Plan JSON:",
-    JSON.stringify(plan, null, 2),
-    "",
-    "Problem Techniques JSON:",
-    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
-    "",
-    "Problems JSON:",
-    JSON.stringify(problems, null, 2),
-    "",
-    "Original Plan Ideas:",
+    "## Original plan ideas",
     markdownPlanIdeas,
   );
   return parts.join("\n");
@@ -284,6 +475,7 @@ export function buildQuizzesGenerateUserPrompt(
   techniques: readonly ProblemTechnique[],
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
+  quizFeedback?: QuizzesGrade,
 ): string {
   const quizIds = quizSpecs.map((quiz) => quiz.id);
   const quizCountLine =
@@ -331,7 +523,7 @@ export function buildQuizzesGenerateUserPrompt(
     "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
     "Never reference or assume any problem that appears after the quiz.",
     "Do not quote or paraphrase the reference solutions. If you include code_reading, write a fresh, minimal snippet that illustrates the principle instead of copying the problem solution.",
-    "covers_techniques must use ids from the provided Problem Techniques JSON.",
+    "covers_techniques must use ids from the technique catalog.",
     "If a technique or concept is not in assumptions, add a concise theory block before its first use.",
     "Treat modulo (%) as an operator-only assumption; if modular arithmetic properties (cycles, congruence, divisibility) are needed, add a brief refresher.",
     "Tags must include promised skills, concept tags, and technique-aligned tags.",
@@ -341,28 +533,43 @@ export function buildQuizzesGenerateUserPrompt(
     "If any technique uses randomness or probabilistic sampling, add theory/questions on reproducibility (seeding or fixed witness sets) and on the residual probability of error.",
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
-  const parts: string[] = [constraints.join("\n")];
+  const parts: string[] = [
+    "## Instructions",
+    ...constraints.map((line) => `- ${line}`),
+  ];
   if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
+  }
+  const feedbackSection = formatQuizFeedback(quizFeedback, {
+    includeGlobals: true,
+  });
+  if (feedbackSection) {
+    parts.push("", "## Fixes from previous grading", feedbackSection);
   }
   parts.push(
     "",
-    "Quiz-to-problem technique coverage requirements:",
+    "## Lesson flow",
+    formatPlanParts(plan),
+    "",
+    "## Assumptions",
+    formatBulletList(plan.assumptions),
+    "",
+    "## Promised skills",
+    formatBulletList(plan.promised_skills),
+    "",
+    "## Problem snapshots (context only)",
+    formatProblemSnapshots(problems),
+    "",
+    "## Technique catalog (use ids in covers_techniques)",
+    formatTechniqueCatalog(techniques),
+    "",
+    "## Quiz-to-problem technique coverage requirements",
     coverageLines,
     "",
-    "Quiz counts:",
+    "## Quiz counts",
     quizSpecLines,
     "",
-    "Plan JSON:",
-    JSON.stringify(plan, null, 2),
-    "",
-    "Problem Techniques JSON:",
-    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
-    "",
-    "Problems JSON:",
-    JSON.stringify(problems, null, 2),
-    "",
-    "Quiz coverage Markdown:",
+    "## Quiz coverage notes",
     coverageMarkdown,
   );
   return parts.join("\n");
@@ -375,6 +582,7 @@ export function buildQuizzesOutlineUserPrompt(
   techniques: readonly ProblemTechnique[],
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
+  quizFeedback?: QuizzesGrade,
 ): string {
   const quizIds = quizSpecs.map((quiz) => quiz.id);
   const quizCountLine =
@@ -423,35 +631,50 @@ export function buildQuizzesOutlineUserPrompt(
     "Each quiz may only rely on story + earlier quizzes in the lesson flow; avoid dependence on problem statements even if they appear earlier.",
     "Never reference or assume any problem that appears after the quiz.",
     "Do not quote or paraphrase the reference solutions.",
-    "covers_techniques must use ids from the provided Problem Techniques JSON.",
+    "covers_techniques must use ids from the technique catalog.",
     "Tags must include promised skills, concept tags, and technique-aligned tags.",
     "Avoid filler: vary question styles and cognitive load (recall -> apply -> debug), and do not repeat near-identical prompts.",
     "For any technique with preconditions, one-way guarantees, or known pitfalls (e.g., heuristic tests with false positives, base must be coprime, recurrence that breaks on certain inputs), include at least one question that surfaces those limits.",
     "If any technique uses randomness/probabilistic sampling, add questions about reproducibility (seeding or fixed witness sets) and residual error probability.",
     "Do not wrap the JSON in Markdown fences or add commentary; output strict JSON only.",
   ];
-  const parts: string[] = [constraints.join("\n")];
+  const parts: string[] = [
+    "## Instructions",
+    ...constraints.map((line) => `- ${line}`),
+  ];
   if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
+  }
+  const feedbackSection = formatQuizFeedback(quizFeedback, {
+    includeGlobals: true,
+  });
+  if (feedbackSection) {
+    parts.push("", "## Fixes from previous grading", feedbackSection);
   }
   parts.push(
     "",
-    "Quiz-to-problem technique coverage requirements:",
+    "## Lesson flow",
+    formatPlanParts(plan),
+    "",
+    "## Assumptions",
+    formatBulletList(plan.assumptions),
+    "",
+    "## Promised skills",
+    formatBulletList(plan.promised_skills),
+    "",
+    "## Problem snapshots (context only)",
+    formatProblemSnapshots(problems),
+    "",
+    "## Technique catalog (use ids in covers_techniques)",
+    formatTechniqueCatalog(techniques),
+    "",
+    "## Quiz-to-problem technique coverage requirements",
     coverageLines,
     "",
-    "Quiz counts:",
+    "## Quiz counts",
     quizSpecLines,
     "",
-    "Plan JSON:",
-    JSON.stringify(plan, null, 2),
-    "",
-    "Problem Techniques JSON:",
-    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
-    "",
-    "Problems JSON:",
-    JSON.stringify(problems, null, 2),
-    "",
-    "Quiz coverage Markdown:",
+    "## Quiz coverage notes",
     coverageMarkdown,
   );
   return parts.join("\n");
@@ -462,14 +685,15 @@ export function buildQuizFillUserPrompt(
   quizOutline: SessionQuizOutline,
   techniques: readonly ProblemTechnique[],
   lessonBrief?: string,
+  quizFeedback?: QuizzesGrade,
 ): string {
   const constraints: string[] = [
     "Expand the quiz outline into a full quiz JSON object.",
     "Do NOT change quiz_id, question order, question ids, types, prompts, tags, or covers_techniques.",
     "Add the missing fields for each question:",
-    "- mcq: add options (4-5 strings) and correct (single string that exactly matches one option).",
-    "- multi: add options (4-6 strings) and correct (array of >=2 strings matching options).",
-    "- short/numeric/code_reading: add correct (string).",
+    "mcq: add options (4-5 strings) and correct (single string that exactly matches one option).",
+    "multi: add options (4-6 strings) and correct (array of >=2 strings matching options).",
+    "short/numeric/code_reading: add correct (string).",
     "Add a concise explanation for every question.",
     "Ensure options include plausible incorrect answers (distractors) and avoid trick questions.",
     "Quizzes must stand alone; do not reference coding problems or future lesson parts.",
@@ -477,21 +701,33 @@ export function buildQuizFillUserPrompt(
     "Do not include hints, correctFeedback, or other extra fields.",
     "Output strict JSON for a single quiz object (not wrapped in an array).",
   ];
-  const parts: string[] = [constraints.join("\n")];
+  const parts: string[] = [
+    "## Instructions",
+    ...constraints.map((line) => `- ${line}`),
+  ];
   if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
+  }
+  const feedbackSection = formatQuizFeedback(quizFeedback, {
+    quizId: quizOutline.quiz_id,
+    includeGlobals: false,
+  });
+  if (feedbackSection) {
+    parts.push("", "## Fixes from previous grading", feedbackSection);
   }
   parts.push(
     "",
-    `Topic: "${plan.topic}"`,
-    "Assumptions:",
-    plan.assumptions.map((assumption) => `- ${assumption}`).join("\n"),
+    "## Topic",
+    plan.topic,
     "",
-    "Problem Techniques JSON:",
-    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
+    "## Assumptions",
+    formatBulletList(plan.assumptions),
     "",
-    "Quiz Outline JSON:",
-    JSON.stringify(quizOutline, null, 2),
+    "## Technique catalog (use ids in covers_techniques)",
+    formatTechniqueCatalog(techniques),
+    "",
+    "## Quiz outline",
+    formatQuizOutlineMarkdown(quizOutline),
   );
   return parts.join("\n");
 }
@@ -502,6 +738,7 @@ export function buildQuizzesGradeUserPrompt(
   techniques: readonly ProblemTechnique[],
   quizSpecs: readonly PlanQuizSpec[],
   lessonBrief?: string,
+  profile: QuizGradeProfile = "strict",
 ): string {
   const quizSpecLines =
     quizSpecs.length > 0
@@ -512,38 +749,51 @@ export function buildQuizzesGradeUserPrompt(
           )
           .join("\n")
       : "None";
-  const parts: string[] = [
-    "Fail if any quiz is missing, duplicated, or has the wrong question count per the requirements below.",
-    "Ensure all required skills covered.",
-    "Ensure theory blocks present when needed for new concepts.",
-    "Ensure answers unambiguous and explanations correct.",
-    "Ensure techniques are introduced in quizzes that appear before the problems that require them.",
-    "Fail if any quiz references or assumes any problem that appears after it in the plan order.",
-    "Fail if a quiz depends on any coding problem statement instead of being self-contained (including earlier problems).",
-    "Fail if a quiz references coding problems by number/title (e.g., 'Problem 1', 'p2', 'the problem says').",
-    "Ensure quizzes stand alone even if the learner has not read any coding problems; avoid referencing problem text or quoting reference solutions (code_reading snippets must be fresh teaching examples, not lifted from solutions).",
-    "Fail if the question set is repetitive definition-drills without conceptual application, debugging, or limitation checks.",
-    "Fail if techniques with preconditions/one-way guarantees lack any question that tests their limits or misuse cases (e.g., false positives, missing coprimality, recurrence invalid cases).",
-    "Fail if techniques that use randomness/probabilistic sampling lack any coverage of reproducibility (seeding/fixed witnesses) or residual error probability.",
-    "Flag any question that tests memorization of a provided solution rather than understanding of the underlying principle.",
-    "Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]} JSON only.",
-  ];
+  const parts: string[] = ["## Grading requirements"];
+  if (profile === "lenient") {
+    parts.push(
+      "- Be lenient on wording or minor style issues; only fail for correctness or requirement violations.",
+      "- If an issue is minor or purely phrasing, list it in issues but keep pass=true.",
+    );
+  }
+  parts.push(
+    "- Fail if any quiz is missing, duplicated, or has the wrong question count per the requirements below.",
+    "- Ensure all required skills covered.",
+    "- Ensure theory blocks present when needed for new concepts.",
+    "- Ensure answers unambiguous and explanations correct.",
+    "- Ensure techniques are introduced in quizzes that appear before the problems that require them.",
+    "- Fail if any quiz references or assumes any problem that appears after it in the plan order.",
+    "- Fail if a quiz depends on any coding problem statement instead of being self-contained (including earlier problems).",
+    "- Fail if a quiz references coding problems by number/title (e.g., 'Problem 1', 'p2', 'the problem says').",
+    "- Ensure quizzes stand alone even if the learner has not read any coding problems; avoid referencing problem text or quoting reference solutions (code_reading snippets must be fresh teaching examples, not lifted from solutions).",
+    "- Fail if the question set is repetitive definition-drills without conceptual application, debugging, or limitation checks.",
+    "- Fail if techniques with preconditions/one-way guarantees lack any question that tests their limits or misuse cases (e.g., false positives, missing coprimality, recurrence invalid cases).",
+    "- Fail if techniques that use randomness/probabilistic sampling lack any coverage of reproducibility (seeding/fixed witnesses) or residual error probability.",
+    "- Flag any question that tests memorization of a provided solution rather than understanding of the underlying principle.",
+    "- Output {pass:boolean, issues:string[], uncovered_skills:string[], missing_theory_for_concepts:string[], missing_techniques:string[]} JSON only.",
+  );
   if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
   }
   parts.push(
     "",
-    "Quiz requirements:",
+    "## Lesson flow",
+    formatPlanParts(plan),
+    "",
+    "## Assumptions",
+    formatBulletList(plan.assumptions),
+    "",
+    "## Promised skills",
+    formatBulletList(plan.promised_skills),
+    "",
+    "## Technique catalog (use ids in covers_techniques)",
+    formatTechniqueCatalog(techniques),
+    "",
+    "## Quiz requirements",
     quizSpecLines,
     "",
-    "Plan JSON:",
-    JSON.stringify(plan, null, 2),
-    "",
-    "Problem Techniques JSON:",
-    JSON.stringify({ topic: plan.topic, techniques }, null, 2),
-    "",
-    "Quizzes JSON:",
-    JSON.stringify(quizzes, null, 2),
+    "## Quizzes",
+    formatQuizzesMarkdown(quizzes),
   );
   return parts.join("\n");
 }

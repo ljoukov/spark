@@ -261,6 +261,47 @@ const SESSION_METADATA_RESPONSE_SCHEMA: Schema = {
   },
 };
 
+function formatQuizDraftsMarkdown(quizzes: readonly SessionQuiz[]): string {
+  if (quizzes.length === 0) {
+    return "None";
+  }
+  const sections: string[] = [];
+  for (const quiz of quizzes) {
+    sections.push(`### ${quiz.quiz_id}`);
+    if (quiz.theory_blocks && quiz.theory_blocks.length > 0) {
+      sections.push("Theory blocks:");
+      let theoryIndex = 0;
+      for (const block of quiz.theory_blocks) {
+        theoryIndex += 1;
+        sections.push(`- ${theoryIndex}. ${block.id}: ${block.title}`);
+        sections.push(`  - ${block.content_md}`);
+      }
+    }
+    sections.push("Questions:");
+    let questionIndex = 0;
+    for (const question of quiz.questions) {
+      questionIndex += 1;
+      sections.push(
+        `- Q${questionIndex} ${question.id} [${question.type}] ${question.prompt}`,
+      );
+      if ("options" in question) {
+        sections.push(`  - options: ${question.options.join(" | ")}`);
+      }
+      const correct = Array.isArray(question.correct)
+        ? question.correct.join(", ")
+        : question.correct;
+      sections.push(`  - correct: ${correct}`);
+      sections.push(`  - explanation: ${question.explanation}`);
+      sections.push(`  - tags: ${question.tags.join(", ")}`);
+      sections.push(
+        `  - covers_techniques: ${question.covers_techniques.join(", ")}`,
+      );
+    }
+    sections.push("");
+  }
+  return sections.join("\n").trim();
+}
+
 function buildQuizDefinitionsPrompt(
   plan: SessionPlan,
   quizzes: readonly SessionQuiz[],
@@ -268,35 +309,41 @@ function buildQuizDefinitionsPrompt(
 ): string {
   const quizCount = quizzes.length;
   const parts: string[] = [
-    "Convert the session quizzes into Spark quiz definitions for the learner dashboard.",
-    `Return exactly ${quizCount} quiz objects (same order as provided) and nothing else.`,
-    "Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
-    "Do NOT drop questions: each output quiz must include every draft question in the same order (one output question per draft question).",
-    "Convert each draft question into a supported quiz kind (multiple-choice or type-answer); include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
-    "Draft question type mapping guidance: mcq -> multiple-choice; short/numeric -> type-answer; code_reading -> multiple-choice or type-answer with the snippet in the prompt; multi -> rewrite into a single-answer multiple-choice (options can be combinations like “A and C”).",
-    "Every graded question MUST include a short hint and a short explanation (1-2 sentences each). Do not omit these fields or leave them blank.",
-    "Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
-    "Keep prompts short, avoid jargon, and stick to the promised skills.",
-    "Populate every required field; never emit empty objects or empty strings. Every quiz must include a non-empty description and progressKey.",
-    "IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
-    "JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
-    "If you are unsure about any field, copy the draft value instead of leaving it blank, and still provide a helpful hint/explanation.",
-    'Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
+    "## Instructions",
+    "- Convert the session quizzes into Spark quiz definitions for the learner dashboard.",
+    `- Return exactly ${quizCount} quiz objects (same order as provided) and nothing else.`,
+    "- Use only supported kinds: multiple-choice, type-answer, or an optional info-card primer when introducing a new concept.",
+    "- Do NOT drop questions: each output quiz must include every draft question in the same order (one output question per draft question).",
+    "- Convert each draft question into a supported quiz kind (multiple-choice or type-answer); include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
+    "- Draft question type mapping guidance: mcq -> multiple-choice; short/numeric -> type-answer; code_reading -> multiple-choice or type-answer with the snippet in the prompt; multi -> rewrite into a single-answer multiple-choice (options can be combinations like “A and C”).",
+    "- Every graded question MUST include a short hint and a short explanation (1-2 sentences each). Do not omit these fields or leave them blank.",
+    "- Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
+    "- Keep prompts short, avoid jargon, and stick to the promised skills.",
+    "- Populate every required field; never emit empty objects or empty strings. Every quiz must include a non-empty description and progressKey.",
+    "- IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
+    "- JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
+    "- If you are unsure about any field, copy the draft value instead of leaving it blank, and still provide a helpful hint/explanation.",
+    '- Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
   ];
   if (lessonBrief) {
-    parts.push("", "Lesson brief (authoritative):", lessonBrief);
+    parts.push("", "## Lesson brief (authoritative)", lessonBrief);
   }
   parts.push(
     "",
-    `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
-    "Promised skills:",
+    "## Topic",
+    plan.topic,
+    "",
+    "## Story topic",
+    plan.story.storyTopic,
+    "",
+    "## Promised skills",
     plan.promised_skills.map((skill) => `- ${skill}`).join("\\n"),
     "",
-    "Plan parts:",
+    "## Plan parts",
     plan.parts.map((part) => `- ${part.kind}: ${part.summary}`).join("\\n"),
     "",
-    "Draft quizzes JSON:",
-    JSON.stringify(quizzes, null, 2),
+    "## Draft quizzes (markdown)",
+    formatQuizDraftsMarkdown(quizzes),
   );
   return parts.join("\\n");
 }

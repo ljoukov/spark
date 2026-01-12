@@ -210,6 +210,26 @@ export function buildProblemIdeasUserPrompt(
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
   const problemIds = plan.coding_blueprints.map((blueprint) => blueprint.id);
+  const techniquesByProblem = new Map<
+    string,
+    Array<{ id: string; title: string }>
+  >();
+  for (const technique of techniques) {
+    for (const problemId of technique.applies_to) {
+      const list = techniquesByProblem.get(problemId) ?? [];
+      list.push({ id: technique.id, title: technique.title });
+      techniquesByProblem.set(problemId, list);
+    }
+  }
+  const allowedTechniqueLines = problemIds.map((problemId) => {
+    const allowed = techniquesByProblem.get(problemId) ?? [];
+    if (allowed.length === 0) {
+      return `- ${problemId}: (none listed)`;
+    }
+    return `- ${problemId}: ${allowed
+      .map((technique) => `${technique.id} (${technique.title})`)
+      .join(", ")}`;
+  });
   parts.push(
     "",
     `Return "Problem Specs Markdown" with ${problemIds.length} sections titled: ${problemIds.map((id) => `"### ${id}"`).join(", ")}.`,
@@ -242,6 +262,13 @@ export function buildProblemIdeasUserPrompt(
     "Explicitly call out any preconditions/limitations/pitfalls inside the Statement, Constraints, or Hints (e.g., one-way heuristics, coprime requirements, recurrence break cases, reproducibility if randomness is involved).",
     "Avoid non-deterministic behavior; if sampling is needed, include a seed or fixed witness list so tests are stable.",
     "Avoid advanced structures unless declared; stay within the provided techniques per problem id.",
+    "STRICT technique compliance:",
+    "- Use ONLY the techniques listed for that problem id. Do not introduce unlisted optimizations, data structures, or counting shortcuts even if they seem helpful.",
+    "- If you find yourself relying on a technique not listed for the problem, revise the problem constraints or approach so only the listed techniques are required.",
+    "- Make sure every hint and the solution overview reference only the allowed techniques for that problem.",
+    "- If a problem needs “up to length” counts, summing over lengths directly is acceptable; do NOT introduce a separate cumulative-sum table unless that specific technique appears in the allowed list.",
+    "Allowed techniques by problem id:",
+    ...allowedTechniqueLines,
     "",
     "Plan JSON:",
     JSON.stringify(plan, null, 2),
@@ -258,7 +285,6 @@ export function buildProblemIdeasUserPrompt(
 export function buildProblemsGenerateUserPrompt(
   plan: object,
   problemIdeasMarkdown: string,
-  techniques: readonly ProblemTechnique[],
   lessonBrief?: string,
 ): string {
   const planIds = Array.isArray(
@@ -273,15 +299,21 @@ export function buildProblemsGenerateUserPrompt(
       ? planIds.join(", ")
       : "Use the problem ids found in the Markdown sections.";
   const parts: string[] = [
-    `Parse the "Problem Specs Markdown" below into a JSON object with key "problems" whose value is an array with one entry per section (ids: ${idsLabel}).`,
-    "Do NOT invent or alter content—carry over titles, statements, constraints, examples, hints, reference solutions, and ALL tests exactly as given. Preserve inputs/outputs verbatim (escape newlines with \\n).",
+    `Transcribe the "Problem Specs Markdown" below into a JSON object with key "problems" whose value is an array with one entry per section (ids: ${idsLabel}).`,
+    "This is a STRICT transcription task: copy content verbatim from the markdown. Do NOT invent, summarize, or paraphrase.",
+    "Output MUST include exactly these ids in this order: " +
+      (planIds.length > 0 ? planIds.join(", ") : idsLabel) +
+      ". No extra or missing ids.",
     "Each problem must include fields: id, title, difficulty (easy|medium|hard), story_callback, statement_md, input_format_md, output_format_md, constraints (string[]), examples (array of {input:string, output:string, explanation?}), edge_cases (string[]), hints (string[]), solution_overview_md, reference_solution_py, tests {public:[{input:string, output:string}], private:[{input:string, output:string}], private_count:int}.",
     "Map Statement => statement_md, Input format => input_format_md, Output format => output_format_md.",
+    "Use the exact text from the markdown sections. If the markdown has code fences, remove the ``` markers and keep only the code content.",
+    "Preserve inputs/outputs verbatim (escape newlines with \\n).",
     "Input/Output style rules:",
     "- tests.*.input and examples.*.input are stdin text (1+ lines, whitespace-separated tokens); do not encode JSON or Python literals.",
     "- tests.*.output and examples.*.output are exact stdout text; no extra prompts or labels.",
     "Do not re-run or change tests; just transcribe them into JSON. If something appears malformed, choose the most literal faithful transcription rather than patching logic.",
     "Do not include backslash-based notation (no LaTeX like \\ge or ad-hoc escapes inside prose); write comparisons and symbols in plain words. Only use backslashes for JSON newlines (\\\\n) where needed.",
+    "Forbidden placeholders: do NOT output '-', '—', 'TBD', 'N/A', '...', or empty strings. Every field must contain real content copied from the markdown.",
     "Keep problem ids unique and map each spec to its matching id; do not swap or merge content.",
     'Do not include extra fields such as "prompt", "solution", or "private_tests". Do not wrap the JSON in Markdown fences or add commentary.',
   ];
@@ -289,19 +321,8 @@ export function buildProblemsGenerateUserPrompt(
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
   parts.push(
-    "",
-    "Plan JSON:",
-    JSON.stringify(plan, null, 2),
-    "",
     "Problem Specs Markdown:",
     problemIdeasMarkdown,
-    "",
-    "Problem Techniques JSON:",
-    JSON.stringify(
-      { topic: (plan as { topic?: string }).topic, techniques },
-      null,
-      2,
-    ),
   );
   return parts.join("\n");
 }
