@@ -71,6 +71,7 @@ import {
   buildQuizzesOutlineUserPrompt,
   buildQuizzesGradeUserPrompt,
   type PlanQuizSpec,
+  type QuizGradeProfile,
   type QuizzesGrade,
   type QuizzesOutlinePayload,
   type QuizzesPayload,
@@ -462,6 +463,7 @@ type QuizzesCheckpoint = {
 type QuizzesGradeCheckpoint = QuizzesGrade & {
   topic: string;
   lessonBriefHash?: string;
+  gradeProfile?: QuizGradeProfile;
 };
 
 type ProblemIdeasCheckpoint = {
@@ -490,6 +492,8 @@ type ProblemsGradeCheckpoint = ProblemsGrade & {
 export class SessionGenerationPipeline {
   private readonly logger: JobProgressReporter;
   private readonly lessonBriefHash: string | undefined;
+  private quizFeedback: QuizzesGrade | undefined;
+  private quizGradeProfile: QuizGradeProfile = "strict";
 
   private readonly caches: {
     planIdeas?: StageCacheEntry<PlanIdeasStageValue>;
@@ -510,6 +514,14 @@ export class SessionGenerationPipeline {
     this.lessonBriefHash = options.lessonBrief
       ? createHash("sha256").update(options.lessonBrief).digest("hex")
       : undefined;
+  }
+
+  setQuizFeedback(feedback: QuizzesGrade | undefined): void {
+    this.quizFeedback = feedback;
+  }
+
+  setQuizGradeProfile(profile: QuizGradeProfile): void {
+    this.quizGradeProfile = profile;
   }
 
   private checkpointLessonBriefMatches(checkpointHash: unknown): boolean {
@@ -1038,6 +1050,16 @@ export class SessionGenerationPipeline {
         );
         return undefined;
       }
+      const checkpointProfile =
+        typeof parsed?.gradeProfile === "string"
+          ? (parsed.gradeProfile as QuizGradeProfile)
+          : "strict";
+      if (checkpointProfile !== this.quizGradeProfile) {
+        this.logger.log(
+          `[session/checkpoint] ignoring 'quizzes_grade' checkpoint at ${filePath} (grade profile mismatch)`,
+        );
+        return undefined;
+      }
       const result = QuizzesGradeSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1064,6 +1086,7 @@ export class SessionGenerationPipeline {
       ...value,
       topic: this.options.topic,
       lessonBriefHash: this.lessonBriefHash,
+      gradeProfile: this.quizGradeProfile,
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), {
       encoding: "utf8",
@@ -1577,6 +1600,7 @@ export class SessionGenerationPipeline {
             planIdeas.markdown,
             this.options.seed,
             this.options.lessonBrief,
+            this.quizFeedback,
           );
           this.logger.log(
             `[session/quiz-ideas] generating coverage markdown (${attemptLabel})`,
@@ -1746,6 +1770,7 @@ export class SessionGenerationPipeline {
             techniques,
             quizSpecs,
             this.options.lessonBrief,
+            this.quizFeedback,
           );
           const outlineDebug = this.createDebugOptions(
             "quizzes-outline",
@@ -1776,6 +1801,7 @@ export class SessionGenerationPipeline {
               outline,
               techniques,
               this.options.lessonBrief,
+              this.quizFeedback,
             );
             const expandDebug = this.createDebugOptions(
               "quiz-expand",
@@ -1858,6 +1884,7 @@ export class SessionGenerationPipeline {
         techniques,
         quizSpecs,
         this.options.lessonBrief,
+        this.quizGradeProfile,
       );
       const debugOptions = this.createDebugOptions("quizzes-grade");
       this.logger.log("[session/quizzes-grade] grading quizzes");
@@ -2044,11 +2071,9 @@ export class SessionGenerationPipeline {
       problemsPayload = await this.withStage("problems", async () => {
         const plan = await this.ensurePlan();
         const problemIdeas = await this.ensureProblemIdeas();
-        const techniques = await this.ensureProblemTechniques();
         const userPrompt = buildProblemsGenerateUserPrompt(
           plan,
           problemIdeas.markdown,
-          techniques,
           this.options.lessonBrief,
         );
         const debugOptions = this.createDebugOptions("problems-generate");
@@ -2539,6 +2564,10 @@ export async function generateSession(
   let quizzes: readonly SessionQuiz[] | undefined;
   let quizzesGrade: QuizzesGrade | undefined;
   for (let attempt = 1; attempt <= 1 + MAX_QUIZ_GRADE_RETRIES; attempt += 1) {
+    pipeline.setQuizGradeProfile(attempt === 1 ? "strict" : "lenient");
+    if (attempt === 1) {
+      pipeline.setQuizFeedback(undefined);
+    }
     quizzes = await pipeline.ensureQuizzes();
     quizzesGrade = await pipeline.ensureQuizzesGrade();
     if (quizzesGrade.pass) {
@@ -2549,6 +2578,7 @@ export async function generateSession(
         `Quiz grading failed after ${MAX_QUIZ_GRADE_RETRIES + 1} attempts: ${quizzesGrade.issues.join("; ")}`,
       );
     }
+    pipeline.setQuizFeedback(quizzesGrade);
     await pipeline.invalidateStage("quizzes");
     if (
       quizzesGrade.uncovered_skills.length > 0 ||
