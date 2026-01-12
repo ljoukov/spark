@@ -328,14 +328,11 @@ function buildQuizDefinitionsPrompt(
   if (lessonBrief) {
     parts.push("", "## Lesson brief (authoritative)", lessonBrief);
   }
+  parts.push("", "## Topic", plan.topic, "");
+  if (plan.story?.storyTopic) {
+    parts.push("## Story topic", plan.story.storyTopic, "");
+  }
   parts.push(
-    "",
-    "## Topic",
-    plan.topic,
-    "",
-    "## Story topic",
-    plan.story.storyTopic,
-    "",
     "## Promised skills",
     plan.promised_skills.map((skill) => `- ${skill}`).join("\\n"),
     "",
@@ -556,12 +553,15 @@ function buildCodeProblemsPrompt(
   if (lessonBrief) {
     parts.push("", "Lesson brief (authoritative):", lessonBrief);
   }
+  const storyLabel = plan.story?.storyTopic
+    ? ` (story topic: "${plan.story.storyTopic}")`
+    : "";
   parts.push(
     "",
     "Return JSON only in this shape (no prose):",
     '{"problems":[{"slug":"problem_id","title":"...","topics":["topic1","topic2"],"difficulty":"easy","description":"...","inputFormat":"...","constraints":["..."],"examples":[{"title":"...","input":"...","output":"...","explanation":"..."}],"tests":[{"input":"...","output":"...","explanation":"..."}],"hints":["...","...","..."],"solution":{"language":"python","code":"..."},"metadataVersion":1}]}',
     "",
-    `Topic: "${plan.topic}" (story topic: "${plan.story.storyTopic}")`,
+    `Topic: "${plan.topic}"${storyLabel}`,
     "Promised skills:",
     plan.promised_skills.map((skill) => `- ${skill}`).join("\\n"),
     "",
@@ -634,14 +634,25 @@ export async function generateSessionMetadata(options: {
   topic: string;
   plan: SessionPlan;
   storyTitle?: string;
+  includeCoding?: boolean;
 }): Promise<{ tagline: string; emoji: string; summary: string }> {
+  const includeCoding = options.includeCoding ?? true;
+  const sessionLabel = includeCoding ? "coding session" : "lesson session";
+  const storyTopic = options.plan.story?.storyTopic;
+  const storyTitle = options.storyTitle ?? storyTopic ?? options.topic;
+  const storyLine = storyTopic
+    ? `The session story is about: "${storyTopic}".`
+    : "This session has no story segment.";
+  const storyTitleLine = storyTopic
+    ? `Use the story title "${storyTitle}" if helpful.`
+    : `Use the session topic "${options.topic}" if helpful.`;
   const prompt = `
-    Generate metadata for a coding session about "${options.topic}".
+    Generate metadata for a ${sessionLabel} about "${options.topic}".
     - Tagline: punchy, max 10 words.
     - Emoji: single character.
     - Summary: exactly one academic-style sentence (max 25 words) that states the session focus and approach; avoid marketing fluff and do not reuse a single plan step.
-    The session story is about: "${options.plan.story.storyTopic}".
-    Use the story title "${options.storyTitle ?? options.plan.story.storyTopic}" if helpful.
+    ${storyLine}
+    ${storyTitleLine}
 
     Return JSON with "tagline", "emoji", and "summary".
   `;
@@ -658,12 +669,21 @@ export function convertSessionPlanToItems(
   session: GenerateSessionResult,
   storyPlanItemId: string,
 ): { plan: PlanItem[]; storyTitle: string } {
-  const problems = ProblemPlanItemsSchema.parse(session.problems);
   const problemTitles = new Map<string, string>();
-  for (const problem of problems) {
-    problemTitles.set(problem.id, problem.title);
+  if (session.problems.length > 0) {
+    const problems = ProblemPlanItemsSchema.parse(session.problems);
+    for (const problem of problems) {
+      problemTitles.set(problem.id, problem.title);
+    }
+  } else if (session.plan.coding_blueprints.length > 0) {
+    for (const blueprint of session.plan.coding_blueprints) {
+      problemTitles.set(blueprint.id, blueprint.title);
+    }
   }
-  const storyTitle = session.story?.title ?? session.plan.story.storyTopic;
+  const storyTitle =
+    session.story?.title ??
+    session.plan.story?.storyTopic ??
+    session.plan.topic;
   let quizIndex = 0;
   let problemIndex = 0;
   const parts = session.plan.parts.map((part) => {
