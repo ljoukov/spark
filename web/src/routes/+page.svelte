@@ -63,99 +63,85 @@
 </script>
 
 <svelte:head>
-	<title>GCSE Spark - Study that sparks</title>
+	<title>Spark - Study that sparks</title>
 	<meta
 		name="description"
-		content="GCSE Spark turns your science notes into Grade 9 mastery — download now on the App Store."
+		content="Spark turns your notes into fast mastery — log in to get started."
 	/>
-	<meta property="og:title" content="GCSE Spark" />
+	<meta property="og:title" content="Spark" />
 	<meta
 		property="og:description"
-		content="Ignite GCSE science brilliance with the iOS app designed for fast mastery."
+		content="Think. Hack. Spark. A faster way to learn from your own materials."
 	/>
 	<meta property="og:image" content="/intro.jpg" />
 	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
-<div class="page">
-	<header class="top-bar">
-		<div class="brand">
-			<img class="brand__icon" src="/favicon.png" alt="GCSE Spark icon" loading="lazy" />
-			<span class="brand__name">GCSE Spark</span>
-		</div>
-	</header>
-
-	<main class="hero">
-		<section class="hero__copy" aria-label="GCSE Spark introduction">
-			<span class="pill">Now on the App Store</span>
-			<h1 class="slogan">
-				<span class="slogan__primary">GCSE Spark</span>
-				<span class="slogan__secondary">Scan. Learn. Spark.</span>
-			</h1>
-			<div class="cta">
-				<a
-					class="cta__link"
-					href="https://apps.apple.com"
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					<picture>
-						<source media="(prefers-color-scheme: dark)" srcset="/appstore-dark.svg" />
-						<source media="(prefers-color-scheme: light)" srcset="/appstore-light.svg" />
-						<img
-							src="/appstore-light.svg"
-							alt="Download GCSE Spark on the App Store"
-							width="200"
-							height="64"
-						/>
-					</picture>
-				</a>
+<div class="page-shell">
+	<div class="page">
+		<header class="top-bar">
+			<div class="brand">
+				<img class="brand__icon" src="/favicon.png" alt="Spark icon" loading="lazy" />
+				<span class="brand__name">Spark</span>
 			</div>
-		</section>
+		</header>
 
-		<section class="hero__media" aria-label="App preview">
-			<div class="video-shell" class:video-shell--ready={videoReady}>
-				<div class="video-shell__halo" aria-hidden="true"></div>
-				<div class="video-shell__inner" aria-hidden="true"></div>
-				<div class="video-shell__media">
-					{#if !videoReady}
-						<img
-							class="video-shell__poster"
-							src={INTRO_POSTER}
-							alt="Preview of the GCSE Spark app experience"
-							loading="eager"
-							decoding="async"
-						/>
-					{/if}
-					<video
-						class="video-shell__video"
-						bind:this={videoEl}
-						autoplay={shouldAutoPlay}
-						loop
-						playsinline
-						muted={isMuted}
-						preload="auto"
-						poster={INTRO_POSTER}
-						on:canplay={handleCanPlay}
-						on:error={handleVideoError}
-					>
-						<source src="/intro.webm" type="video/webm" />
-						<source src="/intro.mp4" type="video/mp4" />
-					</video>
+		<main class="hero">
+			<section class="hero__copy" aria-label="Spark introduction">
+				<span class="pill">Beta</span>
+				<h1 class="slogan">
+					<span class="slogan__primary">Spark</span>
+					<span class="slogan__secondary">Think. Hack. Spark.</span>
+				</h1>
+				<div class="cta">
+					<a class="cta__button" href="/welcome">Login</a>
 				</div>
+			</section>
 
-				<button
-					type="button"
-					class="sound-toggle"
-					on:click={toggleAudio}
-					aria-pressed={!isMuted}
-					aria-label={isMuted ? 'Enable soundtrack' : 'Mute soundtrack'}
-				>
-					<span>{isMuted ? 'Sound off' : 'Sound on'}</span>
-				</button>
-			</div>
-		</section>
-	</main>
+			<section class="hero__media" aria-label="App preview">
+				<div class="video-shell" class:video-shell--ready={videoReady}>
+					<div class="video-shell__halo" aria-hidden="true"></div>
+					<div class="video-shell__inner" aria-hidden="true"></div>
+					<div class="video-shell__media">
+						{#if !videoReady}
+							<img
+								class="video-shell__poster"
+								src={INTRO_POSTER}
+								alt="Preview of the Spark app experience"
+								loading="eager"
+								decoding="async"
+							/>
+						{/if}
+						<video
+							class="video-shell__video"
+							bind:this={videoEl}
+							autoplay={shouldAutoPlay}
+							loop
+							playsinline
+							muted={isMuted}
+							preload="auto"
+							poster={INTRO_POSTER}
+							on:canplay={handleCanPlay}
+							on:error={handleVideoError}
+						>
+							<source src="/intro.webm" type="video/webm" />
+							<source src="/intro.mp4" type="video/mp4" />
+						</video>
+					</div>
+
+					<button
+						type="button"
+						class="sound-toggle"
+						on:click={toggleAudio}
+						aria-pressed={!isMuted}
+						aria-label={isMuted ? 'Enable soundtrack' : 'Mute soundtrack'}
+					>
+						<span>{isMuted ? 'Sound off' : 'Sound on'}</span>
+					</button>
+				</div>
+			</section>
+		</main>
+	</div>
 </div>
 
 <style>
@@ -171,11 +157,62 @@
 		}
 	}
 
+	.page-shell {
+		position: relative;
+		min-height: 100dvh;
+		width: 100%;
+		overflow: hidden;
+		background:
+			radial-gradient(120% 120% at 50% -10%, var(--app-halo) 0%, transparent 70%),
+			var(--app-surface);
+		color: var(--text-primary, var(--foreground));
+	}
+
+	@supports not (height: 100dvh) {
+		.page-shell {
+			min-height: 100vh;
+		}
+	}
+
+	.page-shell::before {
+		content: '';
+		position: absolute;
+		inset: -30%;
+		pointer-events: none;
+		background-repeat: no-repeat;
+		background-image:
+			radial-gradient(
+				closest-side at 12% 20%,
+				color-mix(in srgb, var(--blob-gold) 75%, transparent) 0%,
+				transparent 72%
+			),
+			radial-gradient(
+				closest-side at 78% 18%,
+				color-mix(in srgb, var(--blob-pink) 70%, transparent) 0%,
+				transparent 74%
+			),
+			radial-gradient(
+				closest-side at 30% 74%,
+				color-mix(in srgb, var(--blob-blue) 70%, transparent) 0%,
+				transparent 76%
+			),
+			radial-gradient(
+				closest-side at 82% 70%,
+				color-mix(in srgb, var(--blob-yellow-soft) 65%, transparent) 0%,
+				transparent 80%
+			),
+			radial-gradient(
+				closest-side at 46% 48%,
+				color-mix(in srgb, var(--blob-yellow) 60%, transparent) 0%,
+				transparent 78%
+			);
+		opacity: min(0.85, var(--blob-opacity, 0.65));
+		z-index: 0;
+		filter: blur(80px);
+	}
+
 	.page {
 		--page-width: min(1160px, var(--viewport-inline));
-		--page-inline-gutter: max(0px, calc((var(--viewport-inline) - var(--page-width)) / 2));
-		--halo-before-width: min(clamp(18rem, 42vw, 26rem), 100%);
-		--halo-after-width: min(clamp(20rem, 52vw, 32rem), 100%);
 		width: min(1160px, 100%);
 		margin: 0 auto;
 		padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 6vw, 3.75rem) clamp(2.5rem, 8vw, 4rem);
@@ -185,53 +222,7 @@
 		position: relative;
 		isolation: isolate;
 		box-sizing: border-box;
-	}
-
-	.page::before,
-	.page::after {
-		content: '';
-		position: absolute;
-		z-index: -1;
-		border-radius: 50%;
-		filter: blur(64px);
-		opacity: 0.6;
-		pointer-events: none;
-	}
-
-	.page::before {
-		inset: clamp(-8rem, -14vw, -4rem) 0 auto auto;
-		height: clamp(14rem, 38vw, 20rem);
-		width: var(--halo-before-width);
-		background: radial-gradient(circle at 30% 40%, rgba(162, 132, 255, 0.55), transparent 70%);
-		transform: translateX(min(var(--page-inline-gutter), calc(var(--halo-before-width) * 0.22)));
-	}
-
-	.page::after {
-		inset: auto auto clamp(-10rem, -18vw, -4rem) 0;
-		height: clamp(16rem, 46vw, 28rem);
-		width: var(--halo-after-width);
-		background: radial-gradient(circle at 60% 60%, rgba(16, 185, 129, 0.22), transparent 75%);
-		transform: translateX(-min(var(--page-inline-gutter), calc(var(--halo-after-width) * 0.26)));
-	}
-
-	:global([data-theme='dark'] .page::before) {
-		background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
-	}
-
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light']) .page::before) {
-			background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
-		}
-	}
-
-	:global([data-theme='dark'] .page::after) {
-		background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
-	}
-
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light']) .page::after) {
-			background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
-		}
+		z-index: 1;
 	}
 
 	.top-bar {
@@ -341,27 +332,41 @@
 		width: 100%;
 	}
 
-	.cta__link {
+	.cta__button {
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
-		filter: drop-shadow(0 22px 44px var(--shadow-color));
+		text-decoration: none;
+		color: #ffffff;
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.9));
+		border: 1px solid rgba(59, 130, 246, 0.35);
+		border-radius: 999px;
+		font-size: 0.85rem;
+		font-weight: 600;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		padding: 0.85rem 2.2rem;
+		box-shadow: 0 22px 44px var(--shadow-color);
 		transition:
 			transform 180ms ease,
-			filter 180ms ease;
-		padding: 0;
-		width: min(100%, clamp(190px, 28vw, 250px));
+			box-shadow 180ms ease;
 	}
 
-	.cta__link:hover {
+	:global([data-theme='dark'] .cta__button) {
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(37, 99, 235, 0.98));
+		border-color: rgba(96, 165, 250, 0.4);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light']) .cta__button) {
+			background: linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(37, 99, 235, 0.98));
+			border-color: rgba(96, 165, 250, 0.4);
+		}
+	}
+
+	.cta__button:hover {
 		transform: translateY(-2px) scale(1.01);
-		filter: drop-shadow(0 28px 56px var(--shadow-color));
-	}
-
-	.cta__link img {
-		display: block;
-		width: 100%;
-		height: auto;
+		box-shadow: 0 28px 56px var(--shadow-color);
 	}
 
 	.hero__media {
@@ -576,7 +581,7 @@
 			justify-content: center;
 		}
 
-		.cta__link {
+		.cta__button {
 			margin-inline: auto;
 		}
 
