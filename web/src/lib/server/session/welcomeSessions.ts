@@ -328,9 +328,6 @@ async function seedSessionState(userId: string, session: Session): Promise<void>
 export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[]> {
 	const snapshot = await resolveTemplateCollection().get();
 	const options: WelcomeSessionOption[] = [];
-	console.info('[welcome/templates] fetched template snapshot', {
-		count: snapshot.size
-	});
 
 	for (const doc of snapshot.docs) {
 		const raw = doc.data();
@@ -377,11 +374,6 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				tagline: parsed.data.tagline,
 				emoji: parsed.data.emoji,
 				posterImageUrl
-			});
-			console.info('[welcome/templates] template loaded', {
-				id: session.id,
-				key: parsed.data.key ?? parsed.data.id,
-				title: session.title
 			});
 		} catch (error) {
 			console.error('Unable to parse welcome session option', doc.id, error);
