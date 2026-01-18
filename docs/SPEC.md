@@ -132,7 +132,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - IMPORTANT: read the docs in web/docs/sveltekit-docs.md for SvelteKit, it significantly changed recently, eg runes
 - IMPORTANT: read the docs in web/docs/shadcn-svelte.md to understand shadcn (UI Com ponents library)
 
-- Landing page is minimal and not shadcn
+- Landing page is minimal and not shadcn; it uses the shared app gradient background (app-surface/app-halo + blobs), shows a "Beta" pill with the "Think. Hack. Spark." hero, and routes the primary CTA to `/welcome` for login.
 - /app and /admin pages are build with shadcn and SvelteKit
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
