@@ -17,7 +17,7 @@ const selectionSchema = z.object({
 export const load: PageServerLoad = async ({ locals }) => {
 	const user = locals.appUser;
 	if (!user) {
-		throw redirect(302, '/welcome');
+		throw redirect(302, '/');
 	}
 
 	const sessions = await listSessions(user.uid, LESSON_LIST_LIMIT);
@@ -61,7 +61,7 @@ export const actions: Actions = {
 	start: async ({ locals, request }) => {
 		const user = locals.appUser;
 		if (!user) {
-			throw redirect(302, '/welcome');
+			throw redirect(302, '/');
 		}
 
 		const formData = await request.formData();

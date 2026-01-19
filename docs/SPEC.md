@@ -133,22 +133,29 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - IMPORTANT: read the docs in web/docs/shadcn-svelte.md to understand shadcn (UI Com ponents library)
 - Svelte 5 gotcha: do not capture reactive `data` (from `$props`) in top-level initializers. Use `$derived`, `$effect`, or lazy functions (e.g. for context) so values update and avoid `state_referenced_locally`.
 
-- Landing page is minimal and not shadcn; it uses the shared app gradient background (app-surface/app-halo + blobs), shows a "Beta" pill with the "Think. Hack. Spark." hero, and routes the primary CTA to `/welcome` for login.
+- Landing page (`/`) is a focused sign-in screen (gradient background + blobs). It accepts an optional `destination` query (`code` | `spark`) and otherwise routes authenticated users to `/c` (Spark Chat).
 - /app and /admin pages are build with shadcn and SvelteKit
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
-- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/code`.
-- `/spark` greets the authenticated user by name as the hub landing page after sign-in, while `/code` continues to host the coding sessions UI. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf` and immediately register Firestore metadata at `spark/{uid}/uploads/{sha}` with a pending 20-question quiz run.
+- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/c`, `/spark`, and `/code`.
+- `/c` is the default signed-in home (Spark Chat). It shows a Slack-style channel list, a default “New chat” channel, and a message composer. When the channel is empty it shows quick links to `/code` and `/spark` until the full card-based home is implemented.
+- `/spark` hosts the Spark Quiz flow. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf` and immediately register Firestore metadata at `spark/{uid}/uploads/{sha}` with a pending 20-question quiz run.
   - Learners can trigger additional quiz runs for a stored upload via `POST /api/spark/uploads/{uploadId}/quiz`; each request creates a new `spark/{uid}/uploads/{uploadId}/quiz/{quizId}` document and enqueues processing without duplicating the underlying PDF.
-- `/welcome` accepts an optional `destination` query (`code` | `spark`). Without a destination it shows the dual-card picker (Spark Quiz → `/spark`, Spark Code → `/code`) after authentication; when present it deep-links to the requested experience post-login.
-- `/logout` honours a `from` query (`code` | `spark`) and routes the “Back to welcome” action to `/welcome?destination=<from>` so learners land in the correct experience.
+- `/welcome` is deprecated and now redirects to `/`.
+- `/logout` honours a `from` query (`code` | `spark`) and routes the “Back to Spark” action to `/?destination=<from>` so learners land in the correct experience, otherwise `/?` for the standard login screen.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
 - CSR avoided for marketing pages; islands used sparingly for forms.
 
 ## 7) Firestore Data Model
 
 - `users/{uid}`: profile info, preferences, current programme, board (optional), subscriber flags.
+- `spark/{uid}/channels/{channelId}`: Spark Chat channels scoped to a single user (current default scope).
+  - Fields: `{ title: string, scope: 'private', createdAt: Timestamp, updatedAt: Timestamp, lastMessageAt?: Timestamp }`.
+  - Default channel id: `home` (title “New chat”).
+  - Future family/shared channels will live under `spark-families/{familyId}/channels/{channelId}` with `scope: 'family'`.
+- `spark/{uid}/channels/{channelId}/messages/{messageId}`: chat messages for a channel.
+  - Fields: `{ text: string, authorId: string, authorName?: string, role: 'user' | 'assistant', createdAt: Timestamp }`.
 - `spark/{uid}/uploads/{uploadId}`: metadata about raw assets (filename, storagePath, hash, contentType, sizeBytes, status, quizStatus, quizQuestionCount, uploadedAt, lastUpdatedAt, activeQuizId). Subcollection `quiz/{quizId}` records each generation attempt with `{ uploadId, status, requestedQuestionCount, definition?, failureReason?, createdAt, updatedAt }`, where `definition` reuses `QuizDefinitionSchema`. The active quiz run is referenced by `activeQuizId`.
 - `requests/{jobId}`: canonical job record with type (`generate`, `check_answer`, `summarize`), status enum, timestamps, error field, payload hashes.
 - `client/{uid}` document containing `events` map keyed by `jobId` (compact snapshots mirroring job status + minimal payload refs). TTL clean-up routine prunes old entries.

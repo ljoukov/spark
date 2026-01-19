@@ -7,7 +7,7 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async ({ locals, params }) => {
 	const user = locals.appUser;
 	if (!user) {
-		throw redirect(302, '/welcome');
+		throw redirect(302, '/');
 	}
 
 	const sessionId = params.sessionId?.trim();
