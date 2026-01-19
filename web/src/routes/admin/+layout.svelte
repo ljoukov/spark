@@ -26,11 +26,23 @@
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
 	let adminUser = $state<AdminUser>({
-		uid: data.user?.uid ?? 'guest',
-		email: data.user?.email ?? null,
-		name: data.user?.name ?? null,
-		photoUrl: data.user?.photoUrl ?? null,
+		uid: 'guest',
+		email: null,
+		name: null,
+		photoUrl: null,
 		loginUrl: null
+	});
+
+	$effect(() => {
+		const nextUid = data.user?.uid ?? 'guest';
+		const userChanged = adminUser.uid !== nextUid;
+		adminUser.uid = nextUid;
+		adminUser.email = data.user?.email ?? null;
+		adminUser.name = data.user?.name ?? null;
+		adminUser.photoUrl = data.user?.photoUrl ?? null;
+		if (userChanged) {
+			adminUser.loginUrl = null;
+		}
 	});
 
 	const sidebarUser = $derived({
