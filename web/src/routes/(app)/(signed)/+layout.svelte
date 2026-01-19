@@ -4,7 +4,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { fromStore, writable } from 'svelte/store';
+	import { fromStore, writable, type Readable } from 'svelte/store';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import {
@@ -17,6 +17,11 @@
 	import { getAuth, onIdTokenChanged, type User } from 'firebase/auth';
 
 	type ClientUser = NonNullable<LayoutData['user']>;
+	type ChatSidebarContext = {
+		open: Readable<boolean>;
+		setOpen: (value: boolean) => void;
+		toggle: () => void;
+	};
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
@@ -66,6 +71,17 @@
 
 	const userStore = writable<ClientUser | null>(null);
 	setContext('spark:user', userStore);
+	const chatSidebarOpen = writable(false);
+	const chatSidebarContext: ChatSidebarContext = {
+		open: chatSidebarOpen,
+		setOpen: (value) => {
+			chatSidebarOpen.set(value);
+		},
+		toggle: () => {
+			chatSidebarOpen.update((current) => !current);
+		}
+	};
+	setContext('spark:chat-sidebar', chatSidebarContext);
 	const userSnapshot = fromStore(userStore);
 	const user = $derived(userSnapshot.current);
 
@@ -268,7 +284,21 @@
 
 <div class="app-page">
 	<div class="app-shell">
-		<header class="app-header">
+		<header class="app-header" data-experience={experience ?? ''}>
+			{#if experience === 'chat'}
+				<button
+					type="button"
+					class="app-hamburger"
+					aria-label="Toggle chat list"
+					onclick={() => {
+						chatSidebarContext.toggle();
+					}}
+				>
+					<span class="app-hamburger__line"></span>
+					<span class="app-hamburger__line"></span>
+					<span class="app-hamburger__line"></span>
+				</button>
+			{/if}
 			<a class="app-brand" href={sessionHomeHref}>
 				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
 				<div class="app-brand__text">
@@ -458,6 +488,27 @@
 		flex-shrink: 0;
 	}
 
+	.app-hamburger {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		height: 2.25rem;
+		width: 2.25rem;
+		border-radius: 0.75rem;
+		border: 1px solid color-mix(in srgb, var(--app-content-border) 80%, transparent);
+		background: color-mix(in srgb, var(--app-content-bg) 80%, transparent);
+		cursor: pointer;
+		gap: 0.25rem;
+	}
+
+	.app-hamburger__line {
+		display: block;
+		width: 1.15rem;
+		height: 2px;
+		border-radius: 999px;
+		background: currentColor;
+	}
+
 	:global([data-theme='dark'] .app-header),
 	:global(:root:not([data-theme='light']) .app-header) {
 		background: color-mix(in srgb, rgba(6, 11, 25, 1) 50%, transparent);
@@ -512,6 +563,16 @@
 		align-items: center;
 		gap: 0.75rem;
 		margin-left: auto;
+	}
+
+	@media (max-width: 900px) {
+		.app-header[data-experience='chat'] .app-brand {
+			display: none;
+		}
+
+		.app-header[data-experience='chat'] .app-hamburger {
+			display: inline-flex;
+		}
 	}
 
 	:global(.app-avatar) {
