@@ -16,6 +16,7 @@ import { inspect } from "node:util";
 // The markdown doc explains the public wrapper API and debug snapshot layout.
 import {
   FinishReason,
+  FunctionCallingConfigMode,
   ThinkingLevel,
   type Content,
   type GenerateContentConfig,
@@ -35,8 +36,13 @@ import {
 import { z } from "zod";
 import type {
   EasyInputMessage,
+  FunctionTool as OpenAiFunctionTool,
+  Response as OpenAiResponse,
   ResponseInput,
   ResponseInputContent,
+  ResponseInputItem,
+  ResponseOutputItem,
+  ResponseFunctionToolCall,
   ResponseTextConfig,
   ResponseUsage,
   ResponseIncludable,
@@ -134,6 +140,7 @@ export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 export type LlmImageSize = "1K" | "2K" | "4K";
 export type JsonSchema = Record<string, unknown>;
+type OpenAiReasoningEffortParam = "minimal" | "low" | "medium" | "high";
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -164,6 +171,21 @@ function applyNullableJsonSchema(schema: Record<string, unknown>): void {
     return;
   }
   schema.type = ["null"];
+}
+
+function toOpenAiReasoningEffort(
+  effort: OpenAiReasoningEffort,
+): OpenAiReasoningEffortParam {
+  switch (effort) {
+    case "low":
+      return "low";
+    case "medium":
+      return "medium";
+    case "high":
+      return "high";
+    case "xhigh":
+      return "high";
+  }
 }
 
 function orderedJsonSchemaKeys(
@@ -326,6 +348,30 @@ function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
   return output;
 }
 
+function resolveOpenAiSchemaRoot(schema: JsonSchema): JsonSchema {
+  if (!isPlainRecord(schema)) {
+    return schema;
+  }
+  if (typeof schema.$ref !== "string") {
+    return schema;
+  }
+  const refMatch = /^#\/(definitions|[$]defs)\/(.+)$/u.exec(schema.$ref);
+  if (!refMatch) {
+    return schema;
+  }
+  const [, section, key] = refMatch;
+  const defsSource =
+    section === "definitions" ? schema.definitions : schema.$defs;
+  if (!isPlainRecord(defsSource)) {
+    return schema;
+  }
+  const resolved = defsSource[key];
+  if (!isPlainRecord(resolved)) {
+    return schema;
+  }
+  return { ...resolved };
+}
+
 function isJsonSchemaObject(schema: JsonSchema | undefined): boolean {
   if (!schema || !isPlainRecord(schema)) {
     return false;
@@ -351,7 +397,7 @@ export function toGeminiJsonSchema(
     name: options?.name,
     target: "jsonSchema7",
   }) as JsonSchema;
-  return addGeminiPropertyOrdering(jsonSchema);
+  return addGeminiPropertyOrdering(resolveOpenAiSchemaRoot(jsonSchema));
 }
 
 type LlmInlineDataPart = {
@@ -768,6 +814,60 @@ export type LlmDebugOptions = {
 export type LlmToolConfig = {
   readonly type: "web-search" | "code-execution";
 };
+
+export type LlmExecutableTool<Schema extends z.ZodType, Output> = {
+  readonly description?: string;
+  readonly inputSchema: Schema;
+  readonly execute: (input: z.output<Schema>) => Promise<Output> | Output;
+};
+
+export type LlmToolSet = Record<string, LlmExecutableTool<z.ZodType, unknown>>;
+
+export function tool<Schema extends z.ZodType, Output>(options: {
+  readonly description?: string;
+  readonly inputSchema: Schema;
+  readonly execute: (input: z.output<Schema>) => Promise<Output> | Output;
+}): LlmExecutableTool<Schema, Output> {
+  return options;
+}
+
+export type LlmToolCallResult = {
+  readonly toolName: string;
+  readonly input: unknown;
+  readonly output: unknown;
+  readonly error?: string;
+  readonly callId?: string;
+};
+
+export type LlmToolLoopStep = {
+  readonly step: number;
+  readonly modelId: LlmTextModelId;
+  readonly text?: string;
+  readonly toolCalls: readonly LlmToolCallResult[];
+};
+
+export type LlmToolLoopResult = {
+  readonly text: string;
+  readonly steps: readonly LlmToolLoopStep[];
+};
+
+type LlmToolLoopPromptOptions = {
+  readonly prompt: string;
+  readonly systemPrompt?: string;
+};
+
+type LlmToolLoopContentsOptions = {
+  readonly contents: readonly LlmContent[];
+};
+
+export type LlmToolLoopOptions = {
+  readonly modelId: LlmTextModelId;
+  readonly tools: LlmToolSet;
+  readonly maxSteps?: number;
+  readonly progress?: JobProgressReporter;
+  readonly debug?: LlmDebugOptions;
+  readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+} & (LlmToolLoopPromptOptions | LlmToolLoopContentsOptions);
 
 function createFallbackProgress(label: string): JobProgressReporter {
   return {
@@ -1942,21 +2042,12 @@ async function llmStream({
       : undefined;
     const openAiReasoningPayload = isOpenAi
       ? {
-          effort: openAiReasoningEffort as unknown as
-            | "minimal"
-            | "low"
-            | "medium"
-            | "high"
-            | null,
+          effort: toOpenAiReasoningEffort(openAiReasoningEffort),
           summary: "detailed" as const,
         }
       : undefined;
     const openAiInclude: ResponseIncludable[] | undefined = isOpenAi
-      ? [
-          "code_interpreter_call.outputs",
-          "reasoning.encrypted_content",
-          "web_search_call.action.sources",
-        ]
+      ? ["code_interpreter_call.outputs", "reasoning.encrypted_content"]
       : undefined;
     const openAiRequestConfig = isOpenAi
       ? {
@@ -2621,7 +2712,9 @@ export async function generateJson<T>(
     name: resolvedSchemaName,
     target: isOpenAi ? "openAi" : "jsonSchema7",
   }) as JsonSchema;
-  const openAiJsonSchema = isOpenAi ? baseJsonSchema : undefined;
+  const openAiJsonSchema = isOpenAi
+    ? resolveOpenAiSchemaRoot(baseJsonSchema)
+    : undefined;
   const geminiJsonSchema = !isOpenAi
     ? addGeminiPropertyOrdering(baseJsonSchema)
     : undefined;
@@ -2695,6 +2788,444 @@ export async function generateJson<T>(
   }
 
   throw new LlmJsonCallError("LLM JSON call failed", failures);
+}
+
+const DEFAULT_TOOL_LOOP_STEPS = 8;
+
+function resolveToolLoopContents(options: LlmToolLoopOptions): LlmContent[] {
+  if ("contents" in options) {
+    return [...options.contents];
+  }
+  const contents: LlmContent[] = [];
+  if (options.systemPrompt) {
+    contents.push({
+      role: "system",
+      parts: [{ type: "text", text: options.systemPrompt }],
+    });
+  }
+  contents.push({
+    role: "user",
+    parts: [{ type: "text", text: options.prompt }],
+  });
+  return contents;
+}
+
+function resolveToolLoopMaxSteps(value: number | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_TOOL_LOOP_STEPS;
+  }
+  if (!Number.isFinite(value)) {
+    return DEFAULT_TOOL_LOOP_STEPS;
+  }
+  const floored = Math.floor(value);
+  return floored > 0 ? floored : DEFAULT_TOOL_LOOP_STEPS;
+}
+
+function buildOpenAiToolSchema(schema: z.ZodType, name: string): JsonSchema {
+  const rawSchema = zodToJsonSchema(schema, {
+    name,
+    target: "openAi",
+  }) as JsonSchema;
+  const normalized = normalizeOpenAiSchema(resolveOpenAiSchemaRoot(rawSchema));
+  if (!isJsonSchemaObject(normalized)) {
+    throw new Error(
+      `OpenAI tool schema for ${name} must be a JSON object at the root.`,
+    );
+  }
+  return normalized;
+}
+
+function buildGeminiToolSchema(schema: z.ZodType, name: string): JsonSchema {
+  const jsonSchema = toGeminiJsonSchema(schema, { name });
+  if (!isJsonSchemaObject(jsonSchema)) {
+    throw new Error(
+      `Gemini tool schema for ${name} must be a JSON object at the root.`,
+    );
+  }
+  return jsonSchema;
+}
+
+function formatZodIssues(issues: readonly z.core.$ZodIssue[]): string {
+  const messages: string[] = [];
+  for (const issue of issues) {
+    const path =
+      issue.path.length > 0 ? issue.path.map(String).join(".") : "input";
+    messages.push(`${path}: ${issue.message}`);
+  }
+  return messages.join("; ");
+}
+
+function buildToolErrorOutput(
+  message: string,
+  issues?: readonly z.core.$ZodIssue[],
+): Record<string, unknown> {
+  const output: Record<string, unknown> = { error: message };
+  if (issues && issues.length > 0) {
+    output.issues = issues.map((issue) => ({
+      path: issue.path.map(String),
+      message: issue.message,
+      code: issue.code,
+    }));
+  }
+  return output;
+}
+
+function serializeToolOutput(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    const encoded = JSON.stringify(value);
+    return typeof encoded === "string" ? encoded : "null";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      error: "Failed to serialize tool output",
+      detail: message,
+    });
+  }
+}
+
+function wrapGeminiToolOutput(value: unknown): Record<string, unknown> {
+  if (isPlainRecord(value)) {
+    return value;
+  }
+  return { output: value };
+}
+
+function parseOpenAiToolArguments(raw: string): {
+  value: unknown;
+  error?: string;
+} {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return { value: {} };
+  }
+  try {
+    return { value: JSON.parse(trimmed) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { value: raw, error: message };
+  }
+}
+
+async function executeToolCall(params: {
+  toolName: string;
+  tool: LlmExecutableTool<z.ZodType, unknown> | undefined;
+  rawInput: unknown;
+  parseError?: string;
+}): Promise<{
+  result: LlmToolCallResult;
+  outputPayload: unknown;
+}> {
+  const { toolName, tool, rawInput, parseError } = params;
+  if (!tool) {
+    const message = `Unknown tool: ${toolName}`;
+    return {
+      result: {
+        toolName,
+        input: rawInput,
+        output: { error: message },
+        error: message,
+      },
+      outputPayload: buildToolErrorOutput(message),
+    };
+  }
+  if (parseError) {
+    const message = `Invalid JSON for tool ${toolName}: ${parseError}`;
+    return {
+      result: {
+        toolName,
+        input: rawInput,
+        output: { error: message },
+        error: message,
+      },
+      outputPayload: buildToolErrorOutput(message),
+    };
+  }
+  const parsed = tool.inputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const message = `Invalid tool arguments for ${toolName}: ${formatZodIssues(
+      parsed.error.issues,
+    )}`;
+    const outputPayload = buildToolErrorOutput(message, parsed.error.issues);
+    return {
+      result: {
+        toolName,
+        input: rawInput,
+        output: outputPayload,
+        error: message,
+      },
+      outputPayload,
+    };
+  }
+  try {
+    const output = await tool.execute(parsed.data);
+    return {
+      result: {
+        toolName,
+        input: parsed.data,
+        output,
+      },
+      outputPayload: output,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const outputPayload = buildToolErrorOutput(
+      `Tool ${toolName} failed: ${message}`,
+    );
+    return {
+      result: {
+        toolName,
+        input: parsed.data,
+        output: outputPayload,
+        error: message,
+      },
+      outputPayload,
+    };
+  }
+}
+
+function extractOpenAiFunctionCalls(
+  output: readonly ResponseOutputItem[] | undefined,
+): ResponseFunctionToolCall[] {
+  const calls: ResponseFunctionToolCall[] = [];
+  if (!output) {
+    return calls;
+  }
+  for (const item of output) {
+    if (item.type === "function_call") {
+      calls.push(item);
+    }
+  }
+  return calls;
+}
+
+function extractOpenAiText(response: OpenAiResponse): string {
+  const { parts } = extractOpenAiResponseParts(response);
+  if (parts.length > 0) {
+    const content: LlmContent = { role: "model", parts };
+    return extractVisibleText(content);
+  }
+  if (typeof response.output_text === "string") {
+    return response.output_text;
+  }
+  return "";
+}
+
+function buildOpenAiFunctionTools(tools: LlmToolSet): OpenAiFunctionTool[] {
+  const toolEntries = Object.entries(tools);
+  const openAiTools: OpenAiFunctionTool[] = [];
+  for (const [name, toolDef] of toolEntries) {
+    openAiTools.push({
+      type: "function",
+      name,
+      description: toolDef.description ?? undefined,
+      parameters: buildOpenAiToolSchema(toolDef.inputSchema, name),
+      strict: true,
+    });
+  }
+  return openAiTools;
+}
+
+function buildGeminiFunctionDeclarations(tools: LlmToolSet): Tool[] {
+  const toolEntries = Object.entries(tools);
+  const functionDeclarations = toolEntries.map(([name, toolDef]) => ({
+    name,
+    description: toolDef.description ?? "",
+    parametersJsonSchema: buildGeminiToolSchema(toolDef.inputSchema, name),
+  }));
+  return [{ functionDeclarations }];
+}
+
+export async function runToolLoop(
+  options: LlmToolLoopOptions,
+): Promise<LlmToolLoopResult> {
+  const toolEntries = Object.entries(options.tools);
+  if (toolEntries.length === 0) {
+    throw new Error("Tool loop requires at least one tool definition.");
+  }
+  const contents = resolveToolLoopContents(options);
+  if (contents.length === 0) {
+    throw new Error("Tool loop prompt must not be empty.");
+  }
+  const maxSteps = resolveToolLoopMaxSteps(options.maxSteps);
+  const reporter = options.progress ?? createFallbackProgress("tool-loop");
+  const steps: LlmToolLoopStep[] = [];
+  if (isOpenAiModelId(options.modelId)) {
+    const openAiTools = buildOpenAiFunctionTools(options.tools);
+    const openAiReasoningEffort =
+      options.openAiReasoningEffort ?? DEFAULT_OPENAI_REASONING_EFFORT;
+    const openAiTextConfig: ResponseTextConfig = {
+      format: { type: "text" },
+      verbosity: "high",
+    };
+    const openAiReasoningPayload = {
+      effort: toOpenAiReasoningEffort(openAiReasoningEffort),
+      summary: "detailed" as const,
+    };
+    let previousResponseId: string | undefined;
+    let input: ResponseInput = toOpenAiInput(contents);
+    for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
+      reporter.log(`[tool-loop] OpenAI step ${stepIndex + 1}`);
+      const response = await runOpenAiCall(async (client) =>
+        client.responses.create({
+          model: options.modelId,
+          input,
+          ...(previousResponseId
+            ? { previous_response_id: previousResponseId }
+            : {}),
+          ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
+          reasoning: openAiReasoningPayload,
+          text: openAiTextConfig,
+        }),
+      );
+      if (response.error) {
+        const message =
+          typeof response.error.message === "string"
+            ? response.error.message
+            : "OpenAI response failed";
+        throw new Error(message);
+      }
+      if (
+        response.status &&
+        response.status !== "completed" &&
+        response.status !== "in_progress"
+      ) {
+        const detail = response.incomplete_details?.reason;
+        throw new Error(
+          `OpenAI response status ${response.status}${
+            detail ? ` (${detail})` : ""
+          }`,
+        );
+      }
+      previousResponseId = response.id;
+      const responseText = extractOpenAiText(response);
+      const functionCalls = extractOpenAiFunctionCalls(response.output);
+      if (functionCalls.length === 0) {
+        if (!responseText) {
+          throw new Error("Tool loop response did not include text output.");
+        }
+        steps.push({
+          step: steps.length + 1,
+          modelId: options.modelId,
+          text: responseText,
+          toolCalls: [],
+        });
+        return { text: responseText, steps };
+      }
+      const toolCalls: LlmToolCallResult[] = [];
+      const toolOutputs: ResponseInput = [];
+      for (const call of functionCalls) {
+        const toolName = call.name;
+        const { value, error: parseError } = parseOpenAiToolArguments(
+          call.arguments,
+        );
+        const { result, outputPayload } = await executeToolCall({
+          toolName,
+          tool: options.tools[toolName],
+          rawInput: value,
+          parseError,
+        });
+        toolCalls.push({
+          ...result,
+          callId: call.call_id,
+        });
+        toolOutputs.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: serializeToolOutput(outputPayload),
+        } as ResponseInputItem.FunctionCallOutput);
+      }
+      steps.push({
+        step: steps.length + 1,
+        modelId: options.modelId,
+        text: responseText.length > 0 ? responseText : undefined,
+        toolCalls,
+      });
+      input = toolOutputs;
+    }
+  } else {
+    const geminiTools = buildGeminiFunctionDeclarations(options.tools);
+    const geminiContents = contents.map(convertLlmContentToGoogleContent);
+    for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
+      reporter.log(`[tool-loop] Gemini step ${stepIndex + 1}`);
+      const response = await runGeminiCall(async (client) =>
+        client.models.generateContent({
+          model: options.modelId,
+          contents: geminiContents,
+          config: {
+            maxOutputTokens: 32_000,
+            tools: geminiTools,
+            toolConfig: {
+              functionCallingConfig: {
+                mode: FunctionCallingConfigMode.VALIDATED,
+              },
+            },
+          },
+        }),
+      );
+      const responseText = response.text ?? "";
+      const functionCalls = response.functionCalls;
+      if (!functionCalls || functionCalls.length === 0) {
+        if (!responseText) {
+          throw new Error("Tool loop response did not include text output.");
+        }
+        steps.push({
+          step: steps.length + 1,
+          modelId: options.modelId,
+          text: responseText,
+          toolCalls: [],
+        });
+        return { text: responseText, steps };
+      }
+      const toolCalls: LlmToolCallResult[] = [];
+      const modelContent = response.candidates?.[0]?.content;
+      if (modelContent) {
+        geminiContents.push(modelContent);
+      } else {
+        const parts: Part[] = [];
+        if (responseText) {
+          parts.push({ text: responseText });
+        }
+        for (const call of functionCalls) {
+          parts.push({ functionCall: call });
+        }
+        geminiContents.push({ role: "model", parts });
+      }
+      const responseParts: Part[] = [];
+      for (const call of functionCalls) {
+        const toolName = call.name ?? "unknown";
+        const { result, outputPayload } = await executeToolCall({
+          toolName,
+          tool: options.tools[toolName],
+          rawInput: call.args ?? {},
+        });
+        toolCalls.push({
+          ...result,
+          callId: call.id,
+        });
+        const responsePayload = wrapGeminiToolOutput(outputPayload);
+        responseParts.push({
+          functionResponse: {
+            name: toolName,
+            response: responsePayload,
+            ...(call.id ? { id: call.id } : {}),
+          },
+        });
+      }
+      steps.push({
+        step: steps.length + 1,
+        modelId: options.modelId,
+        text: responseText.length > 0 ? responseText : undefined,
+        toolCalls,
+      });
+      geminiContents.push({ role: "user", parts: responseParts });
+    }
+  }
+  throw new Error(
+    `Tool loop exceeded max steps (${maxSteps}) without final response.`,
+  );
 }
 
 const IMAGE_GRADE_SCHEMA = z.enum(["pass", "fail"]);

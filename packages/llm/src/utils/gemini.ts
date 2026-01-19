@@ -110,9 +110,8 @@ async function getGeminiClient(): Promise<GoogleGenAI> {
         vertexai: true,
         project: projectId,
         location,
-        googleAuthOptions: googleAuthOptions as unknown as NonNullable<
-          GoogleGenAIOptions["googleAuthOptions"]
-        >,
+        googleAuthOptions:
+          googleAuthOptions as GoogleGenAIOptions["googleAuthOptions"],
       });
     });
   }

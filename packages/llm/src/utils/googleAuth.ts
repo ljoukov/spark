@@ -82,7 +82,7 @@ export function getGoogleAuthOptions(
 ): GoogleAuthOptions<AnyAuthClient> {
   const serviceAccount = getGoogleServiceAccount();
   const normalisedScopes = normaliseScopes(scopes);
-  return {
+  const options: GoogleAuthOptions<AnyAuthClient> = {
     credentials: {
       client_email: serviceAccount.clientEmail,
       private_key: serviceAccount.privateKey,
@@ -90,6 +90,7 @@ export function getGoogleAuthOptions(
     projectId: serviceAccount.projectId,
     scopes: normalisedScopes,
   };
+  return options;
 }
 
 export function getGoogleAuth(

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, setGlobalDispatcher } from "undici";
 
 import { loadLocalEnv } from "./env";
 
@@ -33,18 +33,8 @@ function getOpenAiFetch(): typeof fetch {
     bodyTimeout: timeoutMs,
     headersTimeout: timeoutMs,
   });
-
-  cachedFetch = ((
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> =>
-    undiciFetch(
-      input as unknown as import("undici").RequestInfo,
-      {
-        ...(init as Record<string, unknown> | undefined),
-        dispatcher,
-      } as Record<string, unknown>,
-    ) as unknown as Promise<Response>) as typeof fetch;
+  setGlobalDispatcher(dispatcher);
+  cachedFetch = globalThis.fetch.bind(globalThis);
 
   return cachedFetch;
 }

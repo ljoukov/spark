@@ -18,6 +18,10 @@ It is used across eval tools and session generators.
   - Attempts to produce one image per entry in `imagePrompts`, retrying remaining prompts up to four attempts and grading each candidate with `gemini-flash-latest` (JSON pass/fail) using the supplied `imageGradingPrompt`.
 - `generateJson<T>(options): Promise<T>`
   - Like `generateText` but parses and validates the final text as JSON via a Zod schema. Retries up to `maxAttempts`.
+- `tool(options): LlmExecutableTool`
+  - Defines a callable tool with a Zod input schema and async execution handler.
+- `runToolLoop(options): Promise<LlmToolLoopResult>`
+  - Runs an agentic loop that lets the model call tools, validates inputs with Zod, executes tools in TS, and feeds results back until a final text answer is produced.
 
 ### Shared options
 
@@ -49,6 +53,56 @@ The response text is still parsed and validated with the supplied Zod schema.
 Avoid adding manual instructions such as “Return strict JSON …” in prompts. Passing the `schema` and `responseJsonSchema` is sufficient for Gemini to emit structured output. If a field needs extra guidance, add a `description` on the schema property instead, and use `propertyOrdering` so any thinking/reasoning fields come before the final answer fields.
 
 When you need to explain the expected shape inside a prompt, describe it in clear prose (sections, fields, and intent) rather than pasting raw JSON schemas or example skeletons. The schema definitions live in code; prompts should only outline the requirements at a conceptual level.
+
+## Tool Loop (Custom Function Calling)
+
+`runToolLoop` accepts either a `prompt` string (plus optional `systemPrompt`) or explicit `contents`. Tools are defined via `tool({ inputSchema, execute })`. Tool calls are validated with Zod, and any errors are returned to the model as `{ error, issues? }` so it can repair the call.
+
+Defaults:
+- `maxSteps`: 8 (override if a longer chain is expected)
+
+OpenAI function tools are sent with `strict: true` and a normalized JSON schema. Gemini uses `FunctionCallingConfigMode.VALIDATED` with JSON schema + `propertyOrdering`.
+
+Example:
+
+```ts
+import { runToolLoop, tool } from "./llm";
+import { z } from "zod";
+
+const tools = {
+  weather: tool({
+    description: "Get the weather in Fahrenheit",
+    inputSchema: z.object({
+      location: z.string().describe("Location to fetch weather for"),
+    }),
+    execute: async ({ location }) => ({
+      location,
+      temperatureF: 68,
+    }),
+  }),
+  convertFahrenheitToCelsius: tool({
+    description: "Convert Fahrenheit to Celsius",
+    inputSchema: z.object({
+      temperatureF: z.number(),
+    }),
+    execute: ({ temperatureF }) => ({
+      celsius: Math.round((temperatureF - 32) * (5 / 9)),
+    }),
+  }),
+};
+
+const result = await runToolLoop({
+  modelId: "gpt-5.2",
+  prompt:
+    "Use the tools to get the San Francisco weather in celsius. " +
+    "Call weather first, then convertFahrenheitToCelsius.",
+  tools,
+  maxSteps: 6,
+});
+
+console.log(result.text);
+console.log(result.steps);
+```
 
 ## Progress and Metrics
 
