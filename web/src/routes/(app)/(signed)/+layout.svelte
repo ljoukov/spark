@@ -20,11 +20,14 @@
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-	type ExperienceKey = 'code' | 'spark' | null;
+	type ExperienceKey = 'code' | 'spark' | 'chat' | null;
 
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
 		if (!routeId) {
 			return null;
+		}
+		if (routeId.startsWith('/(app)/(signed)/c')) {
+			return 'chat';
 		}
 		if (routeId.startsWith('/(app)/(signed)/code')) {
 			return 'code';
@@ -36,18 +39,27 @@
 	}
 
 	function resolveSessionHomeHref(experience: ExperienceKey, sessionId: string | null): string {
+		if (experience === 'chat') {
+			return '/c';
+		}
 		if (experience === 'code') {
 			return sessionId ? `/code/${sessionId}` : '/code';
 		}
-		return '/spark';
+		if (experience === 'spark') {
+			return '/spark';
+		}
+		return '/c';
 	}
 
-	function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string } {
+	function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string | null } {
 		if (experience === 'code') {
 			return { title: 'Spark Code', tagline: 'Think. Hack. Spark.' };
 		}
 		if (experience === 'spark') {
 			return { title: 'Spark Quiz', tagline: 'Revise. Learn. Spark.' };
+		}
+		if (experience === 'chat') {
+			return { title: 'Spark', tagline: null };
 		}
 		return { title: 'Spark', tagline: 'Think. Learn. Spark.' };
 	}
@@ -65,9 +77,10 @@
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
 	const experiences = [
+		{ id: 'chat', label: 'Spark Chat', href: '/c' },
 		{ id: 'spark', label: 'Spark Quiz', href: '/spark' },
 		{ id: 'code', label: 'Spark Code', href: '/code' }
-	] satisfies ReadonlyArray<{ id: 'spark' | 'code'; label: string; href: string }>;
+	] satisfies ReadonlyArray<{ id: 'chat' | 'spark' | 'code'; label: string; href: string }>;
 	let theme = $state<ThemePreference>('auto');
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
@@ -260,8 +273,10 @@
 				<img src="/favicon.png" alt="Spark logo" class="app-brand__logo" />
 				<div class="app-brand__text">
 					<span class="app-brand__title">{brandCopy.title}</span>
-					<span class="app-brand__separator" aria-hidden="true">•</span>
-					<span class="app-brand__tagline">{brandCopy.tagline}</span>
+					{#if brandCopy.tagline}
+						<span class="app-brand__separator" aria-hidden="true">•</span>
+						<span class="app-brand__tagline">{brandCopy.tagline}</span>
+					{/if}
 				</div>
 			</a>
 			<div class="app-header__actions">
