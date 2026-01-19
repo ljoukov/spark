@@ -13,7 +13,6 @@
 	import { goto } from '$app/navigation';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
-	import { onDestroy } from 'svelte';
 
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect' | 'skipped';
 
@@ -34,17 +33,29 @@
 	type FinishState = 'confirm' | 'saving';
 
 	let { data }: { data: PageData } = $props();
-	const quiz = data.quiz;
+	const quiz = $derived(data.quiz);
 	const SYNC_ERROR_MESSAGE =
 		"We couldn't save your latest progress. Check your connection and try again.";
-	const sessionStateStore = createSessionStateStore(data.sessionId, data.sessionState);
-	let planItemState = $state<PlanItemState | null>(data.planItemState ?? null);
+	let sessionStateStore: ReturnType<typeof createSessionStateStore> | null = null;
+	let planItemState = $state<PlanItemState | null>(null);
 	let completionSyncError = $state<string | null>(null);
-	const stopSessionState = sessionStateStore.subscribe((value) => {
-		planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
-		if (planItemState?.status === 'completed') {
-			completionSyncError = null;
-		}
+
+	$effect(() => {
+		const store = createSessionStateStore(data.sessionId, data.sessionState);
+		sessionStateStore = store;
+		planItemState = data.planItemState ?? null;
+		completionSyncError = null;
+		const stop = store.subscribe((value) => {
+			planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+			if (planItemState?.status === 'completed') {
+				completionSyncError = null;
+			}
+		});
+		return () => {
+			stop();
+			store.stop();
+			sessionStateStore = null;
+		};
 	});
 
 	function createInitialAttempt(seen = false): AttemptState {
@@ -133,6 +144,9 @@
 		mutator: (state: PlanItemState, quizState: PlanItemQuizState) => PlanItemState,
 		options?: SessionUpdateOptions
 	): Promise<void> {
+		if (!sessionStateStore) {
+			throw new Error('Quiz session state is not ready yet.');
+		}
 		try {
 			await sessionStateStore.updateItem(
 				data.planItem.id,
@@ -287,7 +301,7 @@
 		return 'neutral';
 	}
 
-	let attempts = $state(quiz.questions.map((_, idx) => createInitialAttempt(idx === 0)));
+	let attempts = $state<AttemptState[]>([]);
 	let currentIndex = $state(0);
 	let finishDialogOpen = $state(false);
 	let finishState = $state<FinishState>('confirm');
@@ -315,6 +329,15 @@
 	function updateAttempt(index: number, updater: (value: AttemptState) => AttemptState) {
 		attempts = attempts.map((attempt, idx) => (idx === index ? updater(attempt) : attempt));
 	}
+
+	$effect(() => {
+		attempts = quiz.questions.map((_, idx) => createInitialAttempt(idx === 0));
+		currentIndex = 0;
+		finishDialogOpen = false;
+		finishState = 'confirm';
+		finishMode = null;
+		quitPending = false;
+	});
 
 	const activeQuestion = $derived(quiz.questions[currentIndex] as QuizQuestion);
 	const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
@@ -617,6 +640,10 @@
 
 	async function finalizeCompletion(mode: 'auto' | 'manual'): Promise<boolean> {
 		const completedAt = new Date();
+		if (!sessionStateStore) {
+			completionSyncError = SYNC_ERROR_MESSAGE;
+			return false;
+		}
 		try {
 			await sessionStateStore.markStatus(
 				data.planItem.id,
@@ -745,11 +772,6 @@
 
 	$effect(() => {
 		hydrateFromPlanState(planItemState);
-	});
-
-	onDestroy(() => {
-		stopSessionState();
-		sessionStateStore.stop();
 	});
 </script>
 

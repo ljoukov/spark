@@ -1,17 +1,15 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { getContext, onDestroy } from 'svelte';
+	import { getContext } from 'svelte';
+	import { fromStore, type Readable } from 'svelte/store';
 	import type { PageData } from './$types';
 
 	type UserSnapshot = { name?: string | null; email?: string | null } | null;
 
-	type UserStore = {
-		subscribe: (run: (value: UserSnapshot) => void) => () => void;
-	};
-
 	let { data }: { data: PageData } = $props();
 
-	const userStore = getContext<UserStore | undefined>('spark:user');
+	const userStore = getContext<Readable<UserSnapshot> | undefined>('spark:user');
+	const userSnapshot = userStore ? fromStore(userStore) : null;
 
 	function deriveGreeting(source: UserSnapshot, fallback = 'Spark friend'): string {
 		const name = source?.name?.trim();
@@ -25,7 +23,8 @@
 		return fallback;
 	}
 
-	let firstName = $state(deriveGreeting(data.user ?? null));
+	const fallbackSnapshot = $derived<UserSnapshot>(data.user ?? null);
+	const firstName = $derived(deriveGreeting(userSnapshot?.current ?? fallbackSnapshot));
 	let isUploading = $state(false);
 	let isDragging = $state(false);
 	let uploadError = $state<string | null>(null);
@@ -221,17 +220,6 @@
 			void uploadFile(files[0]);
 		}
 	}
-
-	let unsubscribe: (() => void) | null = null;
-	if (userStore) {
-		unsubscribe = userStore.subscribe((value) => {
-			firstName = deriveGreeting(value, firstName);
-		});
-	}
-
-	onDestroy(() => {
-		unsubscribe?.();
-	});
 </script>
 
 <svelte:head>
