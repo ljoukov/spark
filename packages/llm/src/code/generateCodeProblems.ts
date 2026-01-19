@@ -502,7 +502,7 @@ export function normaliseProblemsPayload(payload: unknown): unknown {
   };
 }
 
-type MutableGlobal = typeof globalThis & {
+type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
   location?: { href: string };
   self?: typeof globalThis;
 };
@@ -550,12 +550,12 @@ function resolvePythonIndexUrl(explicit?: string): string {
 function ensurePythonEnvironment(indexURL: string): void {
   const globalObject = globalThis as MutableGlobal;
   if (!globalObject.location) {
-    globalObject.location = { href: indexURL } as unknown as Location;
+    globalObject.location = { href: indexURL };
   } else if (!globalObject.location.href) {
     globalObject.location.href = indexURL;
   }
   if (!globalObject.self) {
-    globalObject.self = globalThis as unknown as Window & typeof globalThis;
+    globalObject.self = globalThis;
   }
 }
 

@@ -181,7 +181,11 @@ function getTemplateDocRef(sessionId: string) {
 function stripUndefined<T>(value: T): T;
 function stripUndefined(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return (value as unknown[]).map((item) => stripUndefined(item));
+    const next: unknown[] = [];
+    for (const item of value) {
+      next.push(stripUndefined(item));
+    }
+    return next;
   }
   if (value && typeof value === "object") {
     const result: Record<string, unknown> = {};

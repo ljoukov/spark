@@ -687,7 +687,7 @@ export class SessionGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw) as unknown;
+      const parsed: unknown = JSON.parse(raw);
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1043,7 +1043,7 @@ export class SessionGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw) as unknown;
+      const parsed: unknown = JSON.parse(raw);
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
@@ -1257,7 +1257,7 @@ export class SessionGenerationPipeline {
     }
     try {
       const raw = await readFile(filePath, { encoding: "utf8" });
-      const parsed = JSON.parse(raw) as unknown;
+      const parsed: unknown = JSON.parse(raw);
       const result = MarkdownCheckpointSchema.safeParse(parsed);
       if (!result.success) {
         this.logger.log(
