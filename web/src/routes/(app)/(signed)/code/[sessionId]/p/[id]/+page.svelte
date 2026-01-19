@@ -1458,10 +1458,13 @@
 				attributeFilter: ['data-theme']
 			});
 
-			subscription = monacoEditor.onDidChangeModelContent(() => {
-				const value = monacoEditor?.getValue() ?? '';
-				handleLocalCodeChange(value);
-			});
+			if (monacoEditor) {
+				const editor = monacoEditor;
+				subscription = editor.onDidChangeModelContent(() => {
+					const value = editor.getValue();
+					handleLocalCodeChange(value);
+				});
+			}
 		})();
 
 		disposeEditor = () => {

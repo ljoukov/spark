@@ -26,22 +26,22 @@
   "dependencies": {
     "@spark/llm": "file:../packages/llm",
     "@spark/schemas": "file:../packages/schemas",
-    "pyodide": "^0.28.3",
-    "commander": "^14.0.1",
-    "firebase-admin": "^13.5.0",
-    "sharp": "^0.33.5"
+    "pyodide": "^0.29.1",
+    "commander": "^14.0.2",
+    "firebase-admin": "^13.6.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "@eslint/js": "^9.22.0",
-    "@google/genai": "^1.21.0",
-    "@types/node": "^24.5.2",
-    "eslint": "^9.22.0",
-    "prettier": "^3.4.2",
-    "tsx": "^4.20.6",
+    "@eslint/js": "^9.39.2",
+    "@google/genai": "^1.37.0",
+    "@types/node": "^25.0.9",
+    "eslint": "^9.39.2",
+    "prettier": "^3.8.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.22.0",
-    "undici": "^7.16.0",
-    "vitest": "^3.2.4",
-    "zod": "^4.1.11"
+    "typescript-eslint": "^8.53.0",
+    "undici": "^7.18.2",
+    "vitest": "^4.0.17",
+    "zod": "^4.3.5"
   }
 }
