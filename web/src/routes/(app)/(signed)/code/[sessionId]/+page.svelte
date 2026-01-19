@@ -13,7 +13,7 @@
 
 	const userStore = getContext<Readable<UserSnapshot> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
-	const firstName = $derived(() => {
+	const firstName = $derived.by(() => {
 		const resolved =
 			userSnapshot?.current?.name?.trim() ||
 			userSnapshot?.current?.email?.split('@')[0] ||
