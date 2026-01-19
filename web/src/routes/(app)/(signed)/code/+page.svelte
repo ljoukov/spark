@@ -1,16 +1,13 @@
 <script lang="ts">
-	import { getContext, onDestroy } from 'svelte';
+	import { getContext } from 'svelte';
+	import { fromStore, type Readable } from 'svelte/store';
 	import type { PageData, ActionData } from './$types';
 
 	type UserSnapshot = { name?: string | null; email?: string | null } | null;
 
-	type UserStore = {
-		subscribe: (run: (value: UserSnapshot) => void) => () => void;
-	};
-
 	let { data, form }: { data: PageData; form: ActionData | null } = $props();
 
-	const options = data.welcomeOptions ?? [];
+	const options = $derived(data.welcomeOptions ?? []);
 
 	function resolveFirst(source: UserSnapshot, fallback = 'friend'): string {
 		const name = source?.name?.trim();
@@ -24,20 +21,10 @@
 		return base.split(/\s+/)[0] || fallback;
 	}
 
-	const userStore = getContext<UserStore | undefined>('spark:user');
-
-	let firstName = $state(resolveFirst({ name: data.userName ?? null }, 'friend'));
-
-	let unsubscribe: (() => void) | null = null;
-	if (userStore) {
-		unsubscribe = userStore.subscribe((value) => {
-			firstName = resolveFirst(value, firstName);
-		});
-	}
-
-	onDestroy(() => {
-		unsubscribe?.();
-	});
+	const userStore = getContext<Readable<UserSnapshot> | undefined>('spark:user');
+	const userSnapshot = userStore ? fromStore(userStore) : null;
+	const fallbackSnapshot = $derived<UserSnapshot>({ name: data.userName ?? null });
+	const firstName = $derived(resolveFirst(userSnapshot?.current ?? fallbackSnapshot, 'friend'));
 </script>
 
 <svelte:head>

@@ -10,21 +10,28 @@
 
 	let { data }: { data: PageData } = $props();
 
-	const destination = data.destination;
-	const hasDestination = destination !== null;
+	const destination = $derived(data.destination);
+	const hasDestination = $derived(destination !== null);
 
-	let authResolved = $state(data.authDisabled || data.alreadyAuthenticated);
+	let authResolved = $state(false);
 	let redirecting = $state(false);
 	let lastSyncedUid = $state<string | null>(null);
 
 	const ui = $state({
-		showAuth: !(data.alreadyAuthenticated || data.authDisabled),
+		showAuth: true,
 		showAnonConfirm: false,
 		signingInWithGoogle: false,
 		signingInAnonymously: false,
 		syncingProfile: false,
 		errorMessage: '',
-		showExperiencePicker: (data.alreadyAuthenticated || data.authDisabled) && !hasDestination
+		showExperiencePicker: false
+	});
+
+	$effect(() => {
+		const alreadyAuthenticated = data.alreadyAuthenticated || data.authDisabled;
+		authResolved = alreadyAuthenticated;
+		ui.showAuth = !alreadyAuthenticated;
+		ui.showExperiencePicker = alreadyAuthenticated && !hasDestination;
 	});
 
 	const googleButtonLabel = $derived(

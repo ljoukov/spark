@@ -4,7 +4,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { writable } from 'svelte/store';
+	import { fromStore, writable } from 'svelte/store';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import {
@@ -52,11 +52,14 @@
 		return { title: 'Spark', tagline: 'Think. Learn. Spark.' };
 	}
 
-	const initialUser = data.user;
-	const userStore = writable<ClientUser | null>(initialUser);
-	setContext('spark:user', { subscribe: userStore.subscribe });
+	const userStore = writable<ClientUser | null>(null);
+	setContext('spark:user', userStore);
+	const userSnapshot = fromStore(userStore);
+	const user = $derived(userSnapshot.current);
 
-	let user = $state<ClientUser | null>(initialUser);
+	$effect(() => {
+		userStore.set(data.user ?? null);
+	});
 	const sessionId = $derived($page.params.sessionId ?? null);
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
@@ -109,9 +112,6 @@
 	}
 
 	onMount(() => {
-		const unsubscribeUser = userStore.subscribe((value) => {
-			user = value;
-		});
 		const unsubscribeTheme = themePreference.subscribe((value) => {
 			theme = value;
 		});
@@ -187,7 +187,6 @@
 		}
 
 		return () => {
-			unsubscribeUser();
 			unsubscribeTheme();
 			stopAuthListener();
 		};

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { writable } from 'svelte/store';
 	import { initializeUserStats } from '$lib/client/userStats';
 	import type { LayoutData } from './$types';
 
@@ -9,22 +8,16 @@
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-	initializeUserStats(data.stats ?? null);
-
-	const contextStore = writable({
+	const getSessionContext = () => ({
 		session: data.session,
 		stats: data.stats ?? null,
 		userId: data.userId
 	});
 
-	setContext(CONTEXT_KEY, { subscribe: contextStore.subscribe });
+	setContext(CONTEXT_KEY, getSessionContext);
 
 	$effect(() => {
-		contextStore.set({
-			session: data.session,
-			stats: data.stats ?? null,
-			userId: data.userId
-		});
+		initializeUserStats(data.stats ?? null);
 	});
 </script>
 

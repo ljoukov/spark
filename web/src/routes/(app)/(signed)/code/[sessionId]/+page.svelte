@@ -1,30 +1,25 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { getContext, onDestroy } from 'svelte';
+	import { fromStore, type Readable } from 'svelte/store';
 	import { z } from 'zod';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import type { PageData } from './$types';
 	import type { LessonProposal, PlanItemState, UserStats } from '@spark/schemas';
 	import { createSessionStateStore } from '$lib/client/sessionState';
-	import { initializeUserStats } from '$lib/client/userStats';
+	import { initializeUserStats, setUserStats } from '$lib/client/userStats';
 
-	type UserStore = {
-		subscribe: (
-			run: (value: { name?: string | null; email?: string | null } | null) => void
-		) => () => void;
-	};
+	type UserSnapshot = { name?: string | null; email?: string | null } | null;
 
-	const userStore = getContext<UserStore | undefined>('spark:user');
-
-	let firstName = $state('Sparkie');
-	let unsubscribe: (() => void) | null = null;
-
-	if (userStore) {
-		unsubscribe = userStore.subscribe((value) => {
-			const resolved = value?.name?.trim() || value?.email?.split('@')[0] || 'Spark guest';
-			firstName = resolved.split(/\s+/)[0] ?? resolved;
-		});
-	}
+	const userStore = getContext<Readable<UserSnapshot> | undefined>('spark:user');
+	const userSnapshot = userStore ? fromStore(userStore) : null;
+	const firstName = $derived(() => {
+		const resolved =
+			userSnapshot?.current?.name?.trim() ||
+			userSnapshot?.current?.email?.split('@')[0] ||
+			'Spark guest';
+		return resolved.split(/\s+/)[0] ?? resolved;
+	});
 
 	let { data }: { data: PageData } = $props();
 
@@ -57,13 +52,18 @@
 		];
 	}
 
-	const userStatsStore = initializeUserStats(data.stats ?? null);
-	let liveStats = $state<UserStats | null>(data.stats ?? null);
+	const initialStats = $derived(data.stats ?? null);
+	const userStatsStore = initializeUserStats(null);
+	let liveStats = $state<UserStats | null>(null);
 	const stopUserStats = userStatsStore.subscribe((value) => {
 		liveStats = value;
 	});
 
-	const stats = $derived(buildStats(liveStats ?? data.stats));
+	$effect(() => {
+		setUserStats(initialStats);
+	});
+
+	const stats = $derived(buildStats(liveStats ?? initialStats));
 
 	const sessionId = $derived(data.session.id);
 	const sessionStatus = $derived(data.session.status ?? 'ready');
@@ -76,16 +76,19 @@
 	const planTopic = $derived(data.session.title ?? sessionPlan[0]?.title ?? 'Your session plan');
 	const planSummary = $derived(data.session.summary ?? '');
 
-	const sessionStateStore = createSessionStateStore(data.session.id, data.sessionState);
 	let sessionStateItems = $state<Record<string, PlanItemState>>({});
-	const stopSessionStateSubscription = sessionStateStore.subscribe((value) => {
-		sessionStateItems = value.items;
+	$effect(() => {
+		const store = createSessionStateStore(data.session.id, data.sessionState);
+		const stop = store.subscribe((value) => {
+			sessionStateItems = value.items;
+		});
+		return () => {
+			stop();
+			store.stop();
+		};
 	});
 
 	onDestroy(() => {
-		unsubscribe?.();
-		stopSessionStateSubscription();
-		sessionStateStore.stop();
 		stopUserStats();
 	});
 
@@ -176,11 +179,17 @@
 
 	let proposalDialogOpen = $state(false);
 	let proposalsLoading = $state(false);
-	let proposalsLoaded = $state((data.session.nextLessonProposals?.length ?? 0) > 0);
+	const initialProposals = $derived(data.session.nextLessonProposals ?? []);
+	let proposalsLoaded = $state(false);
 	let proposalsError = $state<string | null>(null);
 	let selectionError = $state<string | null>(null);
-	let proposals = $state<LessonProposal[]>(data.session.nextLessonProposals ?? []);
+	let proposals = $state<LessonProposal[]>([]);
 	let selectPendingId = $state<string | null>(null);
+
+	$effect(() => {
+		proposals = initialProposals;
+		proposalsLoaded = initialProposals.length > 0;
+	});
 
 	async function fetchProposals(): Promise<void> {
 		proposalsError = null;
