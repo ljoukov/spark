@@ -31,11 +31,11 @@
 		if (!routeId) {
 			return null;
 		}
-		if (routeId.startsWith('/(app)/(signed)/c')) {
-			return 'chat';
-		}
 		if (routeId.startsWith('/(app)/(signed)/code')) {
 			return 'code';
+		}
+		if (routeId === '/(app)/(signed)/c' || routeId.startsWith('/(app)/(signed)/c/')) {
+			return 'chat';
 		}
 		if (routeId.startsWith('/(app)/(signed)/spark')) {
 			return 'spark';
