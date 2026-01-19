@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 
-export type Monaco = typeof import('monaco-editor/esm/vs/editor/editor.api');
+export type Monaco = typeof import('monaco-editor/esm/vs/editor/editor.api.js');
 
 let monacoPromise: Promise<Monaco> | null = null;
 let stylePromise: Promise<void> | null = null;
@@ -33,8 +33,8 @@ export async function loadMonaco(): Promise<Monaco | null> {
 	if (!monacoPromise) {
 		monacoPromise = (async () => {
 			const [{ default: EditorWorker }, monaco] = await Promise.all([
-				import('monaco-editor/esm/vs/editor/editor.worker?worker'),
-				import('monaco-editor/esm/vs/editor/editor.api')
+				import('monaco-editor/esm/vs/editor/editor.worker.js?worker'),
+				import('monaco-editor/esm/vs/editor/editor.api.js')
 			]);
 
 			const globalScope = globalThis as typeof globalThis & {
@@ -51,7 +51,7 @@ export async function loadMonaco(): Promise<Monaco | null> {
 
 			await Promise.all([
 				ensureMonacoStyles(),
-				import('monaco-editor/esm/vs/basic-languages/python/python.contribution')
+				import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js')
 			]);
 
 			return monaco;

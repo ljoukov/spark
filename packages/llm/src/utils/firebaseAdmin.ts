@@ -13,18 +13,14 @@ type FirebaseAdminFirestoreModule = typeof import("firebase-admin/firestore");
 type FirebaseAdminStorageModule = typeof import("firebase-admin/storage");
 
 // Load firebase-admin lazily for Node while keeping bundlers aware of these CJS modules.
-const firebaseAdminAppModule: FirebaseAdminAppModule = await import(
-  "firebase-admin/app"
-);
-const firebaseAdminAuthModule: FirebaseAdminAuthModule = await import(
-  "firebase-admin/auth"
-);
-const firebaseAdminFirestoreModule: FirebaseAdminFirestoreModule = await import(
-  "firebase-admin/firestore"
-);
-const firebaseAdminStorageModule: FirebaseAdminStorageModule = await import(
-  "firebase-admin/storage"
-);
+const firebaseAdminAppModule: FirebaseAdminAppModule =
+  await import("firebase-admin/app");
+const firebaseAdminAuthModule: FirebaseAdminAuthModule =
+  await import("firebase-admin/auth");
+const firebaseAdminFirestoreModule: FirebaseAdminFirestoreModule =
+  await import("firebase-admin/firestore");
+const firebaseAdminStorageModule: FirebaseAdminStorageModule =
+  await import("firebase-admin/storage");
 
 let cachedApp: App | null = null;
 let cachedBucket: string | null = null;

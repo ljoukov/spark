@@ -3568,9 +3568,9 @@ type StageReadResult<TValue> = {
 function isEnoent(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: string }).code === "ENOENT",
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: string }).code === "ENOENT",
   );
 }
 

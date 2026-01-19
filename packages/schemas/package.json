@@ -15,10 +15,10 @@
     "lint": "npm run typecheck"
   },
   "dependencies": {
-    "zod": "^4.1.11"
+    "zod": "^4.3.5"
   },
   "devDependencies": {
-    "prettier": "^3.4.2",
+    "prettier": "^3.8.0",
     "typescript": "^5.9.3"
   }
 }
