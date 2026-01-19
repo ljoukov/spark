@@ -287,9 +287,7 @@ export function normalizeSessionPlanJson(value: unknown): unknown {
   if (!isPlainRecord(value)) {
     return value;
   }
-  const parts = Array.isArray(value.parts)
-    ? (value.parts as unknown[])
-    : undefined;
+  const parts = Array.isArray(value.parts) ? value.parts : undefined;
   if (!parts) {
     return value;
   }
