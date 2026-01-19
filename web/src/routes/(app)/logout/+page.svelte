@@ -59,9 +59,7 @@
 
 	const logoutFrom = $derived($page.url.searchParams.get('from'));
 	const returnHref = $derived(
-		logoutFrom === 'code' || logoutFrom === 'spark'
-			? `/welcome?destination=${logoutFrom}`
-			: '/welcome'
+		logoutFrom === 'code' || logoutFrom === 'spark' ? `/?destination=${logoutFrom}` : '/'
 	);
 
 	let authInstance: Auth | null = null;
@@ -149,7 +147,7 @@
 		{#if !isBusy && (showLoginLink || showRetry)}
 			<footer class="logout-footer">
 				{#if showLoginLink}
-					<Button href={returnHref} size="lg" class="logout-action">Back to welcome</Button>
+					<Button href={returnHref} size="lg" class="logout-action">Back to Spark</Button>
 				{/if}
 				{#if showRetry}
 					<Button

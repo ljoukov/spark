@@ -1,6 +1,7 @@
 This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs are here: https://svelte.dev/llms.txt
 
 - Product spec and flows: see `../docs/SPEC.md`.
+- Signed-in home is `/c` (Spark Chat). `/` is the login screen and accepts optional `destination=code|spark`. `/welcome` now redirects to `/`.
 
 # Technology Stack
 
