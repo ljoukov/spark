@@ -15,6 +15,44 @@
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
 
+### 0.1) Web UI Automation (Screenshot Template)
+
+For quick UI verification, use the repo template script `scripts/web_screenshot_flow.py`. This script is only a **template**; the AI coding assistant should normally generate a **temporary** JSON spec for each investigation that explicitly lists:
+
+- Which buttons/links to click (exact labels or selectors).
+- The exact **sequence** of those clicks.
+- When to take screenshots (including “immediately after click” with short waits to catch spinners).
+
+The temporary spec should live outside the repo (e.g. `/tmp/spark-webflow.json`) unless we decide to keep it.
+
+Example spec:
+
+```json
+{
+  "url": "https://spark.eviworld.com/",
+  "viewport": { "width": 1440, "height": 900 },
+  "fullPage": true,
+  "timeoutMs": 30000,
+  "headless": true,
+  "steps": [
+    { "action": "waitFor", "selector": "text=LOGIN" },
+    { "action": "screenshot", "path": "01-landing.png" },
+    { "action": "click", "selector": "text=LOGIN" },
+    { "action": "screenshot", "path": "02-after-login-click.png", "afterMs": 100 },
+    { "action": "clickText", "text": "Continue with Google" },
+    { "action": "screenshot", "path": "03-after-google-click.png", "afterMs": 100 }
+  ]
+}
+```
+
+Run (outputs relative screenshots into the specified output dir):
+
+```bash
+python3 -m pip install playwright
+python3 -m playwright install chromium
+python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir /tmp/spark-shots
+```
+
 ## 1) Product Goals
 
 - Spark is an effort comprising two apps:
@@ -139,7 +177,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/c`, `/spark`, and `/code`.
-- `/c` is the default signed-in home (Spark Chat). It shows a Slack-style channel list, a default “New chat” channel, and a message composer. When the channel is empty it shows quick links to `/code` and `/spark` until the full card-based home is implemented.
+- `/c` is the default signed-in home (Spark Chat). It shows a Slack-style channel list, a default “New chat” channel, and a message composer. The left panel keeps the Spark logo, Search, and “New chat” pinned above the scrollable channel list; on small screens it collapses behind a hamburger in the top bar. The composer stays pinned above the scrollable transcript and caps its height at ~14 lines before it scrolls internally. When the channel is empty it shows quick links to `/code` and `/spark` until the full card-based home is implemented.
 - `/spark` hosts the Spark Quiz flow. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf` and immediately register Firestore metadata at `spark/{uid}/uploads/{sha}` with a pending 20-question quiz run.
   - Learners can trigger additional quiz runs for a stored upload via `POST /api/spark/uploads/{uploadId}/quiz`; each request creates a new `spark/{uid}/uploads/{uploadId}/quiz/{quizId}` document and enqueues processing without duplicating the underlying PDF.
 - `/welcome` is deprecated and now redirects to `/`.

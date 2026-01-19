@@ -27,12 +27,22 @@
 		photoUrl?: string | null;
 	} | null;
 
+	type ChatSidebarContext = {
+		open: Readable<boolean>;
+		setOpen: (value: boolean) => void;
+		toggle: () => void;
+	};
+
 	let { data }: { data: PageData } = $props();
 
 	const userStore = getContext<Readable<UserSnapshot> | undefined>('spark:user');
+	const sidebarContext = getContext<ChatSidebarContext | undefined>('spark:chat-sidebar');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
+	const sidebarSnapshot = sidebarContext ? fromStore(sidebarContext.open) : null;
 	const fallbackUser = $derived<UserSnapshot>(data.user ?? null);
 	const user = $derived(userSnapshot?.current ?? fallbackUser);
+	let localSidebarOpen = $state(false);
+	const isSidebarOpen = $derived(sidebarSnapshot?.current ?? localSidebarOpen);
 
 	const routeChannelId = $derived(data.channelId ?? null);
 	const DEFAULT_CHANNEL_ID = 'home';
@@ -180,6 +190,14 @@
 		return channelId === DEFAULT_CHANNEL_ID ? '/c' : `/c/${channelId}`;
 	}
 
+	function setSidebarOpen(value: boolean): void {
+		if (sidebarContext) {
+			sidebarContext.setOpen(value);
+			return;
+		}
+		localSidebarOpen = value;
+	}
+
 	async function ensureChannelDocument(
 		db: Firestore,
 		uid: string,
@@ -204,6 +222,7 @@
 			return;
 		}
 		await goto(channelHref(channelId));
+		setSidebarOpen(false);
 	}
 
 	async function handleNewChannel(): Promise<void> {
@@ -228,6 +247,7 @@
 				lastMessageAt: null
 			});
 			await goto(`/c/${docRef.id}`);
+			setSidebarOpen(false);
 		} catch (error) {
 			console.error('Failed to create chat channel', error);
 			lastError = 'Unable to start a new chat. Please try again.';
@@ -356,17 +376,41 @@
 	<title>Spark Chat</title>
 </svelte:head>
 
-<div class="chat-shell">
-	<aside class="chat-sidebar">
-		<header class="chat-sidebar__header">
-			<div>
-				<p class="chat-sidebar__eyebrow">Spark</p>
-				<h2 class="chat-sidebar__title">Chats</h2>
+<div class="chat-shell" data-sidebar-open={isSidebarOpen ? 'true' : 'false'}>
+	<button
+		type="button"
+		class="chat-overlay"
+		aria-label="Close chat list"
+		onclick={() => {
+			setSidebarOpen(false);
+		}}
+	></button>
+	<aside class="chat-sidebar" data-open={isSidebarOpen ? 'true' : 'false'}>
+		<header class="chat-sidebar__top">
+			<div class="chat-sidebar__brand">
+				<img src="/favicon.png" alt="Spark logo" class="chat-sidebar__logo" />
+				<span>Spark</span>
 			</div>
+			<button
+				type="button"
+				class="chat-sidebar__close"
+				aria-label="Close chat list"
+				onclick={() => {
+					setSidebarOpen(false);
+				}}
+			>
+				✕
+			</button>
+		</header>
+		<div class="chat-sidebar__controls">
+			<label class="chat-sidebar__search">
+				<span class="chat-sidebar__search-label">Search</span>
+				<input type="search" placeholder="Search" />
+			</label>
 			<button class="chat-sidebar__new" onclick={handleNewChannel} disabled={isCreatingChannel}>
 				New chat
 			</button>
-		</header>
+		</div>
 		<nav class="chat-sidebar__list" aria-label="Channels">
 			{#each channelItems as channel}
 				<button
@@ -473,18 +517,24 @@
 		gap: 1.5rem;
 		padding: clamp(1.5rem, 2.5vw, 2.5rem);
 		min-height: 100%;
+		position: relative;
 	}
 
-	@media (max-width: 900px) {
-		.chat-shell {
-			grid-template-columns: 1fr;
-		}
+	.chat-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 23, 42, 0.35);
+		backdrop-filter: blur(6px);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.2s ease;
+		z-index: 20;
 	}
 
 	.chat-sidebar {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 1rem;
 		padding: 1.25rem;
 		border-radius: 1.5rem;
 		background: color-mix(in srgb, var(--app-content-bg) 92%, transparent);
@@ -493,26 +543,70 @@
 		min-height: 20rem;
 	}
 
-	.chat-sidebar__header {
+	.chat-sidebar__top {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 
-	.chat-sidebar__eyebrow {
-		margin: 0;
+	.chat-sidebar__brand {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-weight: 600;
+	}
+
+	.chat-sidebar__logo {
+		height: 2rem;
+		width: 2rem;
+		border-radius: 0.75rem;
+		box-shadow: 0 18px 45px -25px rgba(15, 23, 42, 0.35);
+	}
+
+	.chat-sidebar__close {
+		display: none;
+		height: 2rem;
+		width: 2rem;
+		border-radius: 0.6rem;
+		border: 1px solid color-mix(in srgb, var(--app-content-border) 70%, transparent);
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.chat-sidebar__controls {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.chat-sidebar__search {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
 		font-size: 0.7rem;
-		letter-spacing: 0.32em;
+		letter-spacing: 0.28em;
 		text-transform: uppercase;
 		color: var(--app-subtitle-color);
 		font-weight: 600;
 	}
 
-	.chat-sidebar__title {
-		margin: 0.35rem 0 0;
-		font-size: 1.25rem;
-		font-weight: 600;
+	.chat-sidebar__search-label {
+		font-size: 0.65rem;
+	}
+
+	.chat-sidebar__search input {
+		width: 100%;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--app-content-border) 80%, transparent);
+		background: color-mix(in srgb, var(--app-content-bg) 90%, transparent);
+		padding: 0.5rem 0.8rem;
+		font-size: 0.85rem;
+		color: inherit;
+		text-transform: none;
+		letter-spacing: normal;
+		font-weight: 500;
 	}
 
 	.chat-sidebar__new {
@@ -542,6 +636,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		flex: 1 1 auto;
+		overflow-y: auto;
+		padding-right: 0.15rem;
 	}
 
 	.chat-channel {
@@ -597,6 +694,7 @@
 		border: 1px solid var(--app-content-border, rgba(255, 255, 255, 0.55));
 		box-shadow: var(--app-content-shadow-primary);
 		min-height: 24rem;
+		min-height: 0;
 	}
 
 	.chat-panel__header {
@@ -635,6 +733,7 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
+		position: relative;
 	}
 
 	.chat-empty {
@@ -701,6 +800,7 @@
 		gap: 1rem;
 		overflow-y: auto;
 		padding-right: 0.5rem;
+		padding-bottom: 6rem;
 		flex: 1 1 auto;
 	}
 
@@ -744,8 +844,13 @@
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 0.75rem;
 		align-items: end;
-		padding-top: 0.5rem;
+		padding-top: 0.75rem;
+		padding-bottom: 0.25rem;
 		border-top: 1px solid color-mix(in srgb, var(--app-content-border) 80%, transparent);
+		position: sticky;
+		bottom: 0;
+		background: color-mix(in srgb, var(--app-content-bg) 96%, transparent);
+		box-shadow: 0 -18px 50px -40px rgba(15, 23, 42, 0.45);
 	}
 
 	.chat-composer textarea {
@@ -758,6 +863,8 @@
 		color: inherit;
 		min-height: 2.75rem;
 		line-height: 1.4;
+		max-height: 20rem;
+		overflow-y: auto;
 	}
 
 	.chat-composer textarea:focus {
@@ -785,6 +892,37 @@
 
 	.chat-composer button:not(:disabled):hover {
 		transform: translateY(-1px);
+	}
+
+	@media (max-width: 900px) {
+		.chat-shell {
+			grid-template-columns: 1fr;
+		}
+
+		.chat-sidebar {
+			position: fixed;
+			inset: 0 auto 0 0;
+			width: min(80vw, 20rem);
+			border-radius: 0;
+			transform: translateX(-105%);
+			transition: transform 0.25s ease;
+			z-index: 30;
+		}
+
+		.chat-sidebar__close {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.chat-shell[data-sidebar-open='true'] .chat-sidebar {
+			transform: translateX(0);
+		}
+
+		.chat-shell[data-sidebar-open='true'] .chat-overlay {
+			opacity: 1;
+			pointer-events: auto;
+		}
 	}
 
 	@media (max-width: 700px) {
