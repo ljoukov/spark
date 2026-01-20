@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import { cn } from '$lib/utils.js';
 	import type { QuizProgressStep } from '$lib/types/quiz';
 
@@ -8,14 +7,18 @@
 		currentIndex?: number;
 		metaLabel?: string | null;
 		total?: number;
+		onNavigate?: (detail: { index: number }) => void;
+		onFinish?: () => void;
 	};
 
-	const dispatch = createEventDispatcher<{
-		navigate: { index: number };
-		finish: void;
-	}>();
-
-	let { steps = [], currentIndex = 0, metaLabel = undefined, total }: Props = $props();
+	let {
+		steps = [],
+		currentIndex = 0,
+		metaLabel = undefined,
+		total,
+		onNavigate = undefined,
+		onFinish = undefined
+	}: Props = $props();
 
 	const fallbackTotal = $derived(total ?? steps.length);
 	const derivedSteps = $derived(
@@ -62,12 +65,12 @@
 	function handleNavigate(index: number) {
 		const step = derivedSteps[index];
 		if (step && step.status !== 'pending' && index !== safeCurrent) {
-			dispatch('navigate', { index });
+			onNavigate?.({ index });
 		}
 	}
 
 	function handleFinish() {
-		dispatch('finish');
+		onFinish?.();
 	}
 </script>
 
