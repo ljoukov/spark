@@ -4,11 +4,14 @@
 	import type { QuizInfoCardQuestion } from '$lib/types/quiz';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
+	type BusyAction = 'submit' | 'dontKnow' | 'continue';
 
 	type Props = {
 		question: QuizInfoCardQuestion;
 		continueLabel?: string;
 		status?: Status;
+		busy?: boolean;
+		busyAction?: BusyAction | null;
 		onContinue?: () => void;
 	};
 
@@ -16,10 +19,13 @@
 		question,
 		continueLabel = question.continueLabel ?? 'Next',
 		status: statusProp = 'neutral' as Status,
+		busy = false,
+		busyAction = null,
 		onContinue = undefined
 	}: Props = $props();
 
 	const eyebrow = $derived(question.eyebrow ?? 'Concept spotlight');
+	const isContinueBusy = $derived(busy && busyAction === 'continue');
 
 	function handleContinue() {
 		onContinue?.();
@@ -47,7 +53,14 @@
 
 	{#snippet footer()}
 		<div class="ml-auto flex items-center gap-2">
-			<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
+			<Button size="lg" onclick={handleContinue} disabled={busy}>
+				{#if isContinueBusy}
+					<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+					<span>Loading…</span>
+				{:else}
+					{continueLabel}
+				{/if}
+			</Button>
 		</div>
 	{/snippet}
 </QuizQuestionCard>
