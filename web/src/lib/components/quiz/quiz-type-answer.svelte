@@ -1,19 +1,10 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import QuizQuestionCard from './quiz-question-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import type { QuizFeedback, QuizTypeAnswerQuestion } from '$lib/types/quiz';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
-
-	const dispatch = createEventDispatcher<{
-		input: { value: string };
-		submit: { value: string };
-		requestHint: void;
-		dontKnow: void;
-		continue: void;
-	}>();
 
 	type Props = {
 		question: QuizTypeAnswerQuestion;
@@ -30,6 +21,11 @@
 		dontKnowLabel?: string;
 		placeholder?: string;
 		eyebrow?: string | null;
+		onInput?: (detail: { value: string }) => void;
+		onSubmit?: (detail: { value: string }) => void;
+		onRequestHint?: () => void;
+		onDontKnow?: () => void;
+		onContinue?: () => void;
 	};
 
 	let {
@@ -46,32 +42,37 @@
 		hintLabel = 'Show hint',
 		dontKnowLabel = "Don't know?",
 		placeholder = question.placeholder ?? 'Type your answer',
-		eyebrow = undefined
+		eyebrow = undefined,
+		onInput = undefined,
+		onSubmit = undefined,
+		onRequestHint = undefined,
+		onDontKnow = undefined,
+		onContinue = undefined
 	}: Props = $props();
 
 	function handleInput(event: Event) {
 		const target = event.target as HTMLInputElement;
 		value = target.value;
-		dispatch('input', { value });
+		onInput?.({ value });
 	}
 
 	function handleSubmit() {
 		if (!value.trim()) {
 			return;
 		}
-		dispatch('submit', { value: value.trim() });
+		onSubmit?.({ value: value.trim() });
 	}
 
 	function handleHint() {
-		dispatch('requestHint');
+		onRequestHint?.();
 	}
 
 	function handleDontKnow() {
-		dispatch('dontKnow');
+		onDontKnow?.();
 	}
 
 	function handleContinue() {
-		dispatch('continue');
+		onContinue?.();
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {

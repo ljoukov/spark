@@ -1,19 +1,10 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import QuizQuestionCard from './quiz-question-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { QuizFeedback, QuizMultipleChoiceQuestion } from '$lib/types/quiz';
 	import { cn } from '$lib/utils.js';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
-
-	const dispatch = createEventDispatcher<{
-		select: { optionId: string };
-		submit: { optionId: string };
-		requestHint: void;
-		dontKnow: void;
-		continue: void;
-	}>();
 
 	type Props = {
 		question: QuizMultipleChoiceQuestion;
@@ -29,6 +20,11 @@
 		hintLabel?: string;
 		dontKnowLabel?: string;
 		eyebrow?: string | null;
+		onSelect?: (detail: { optionId: string }) => void;
+		onSubmit?: (detail: { optionId: string }) => void;
+		onRequestHint?: () => void;
+		onDontKnow?: () => void;
+		onContinue?: () => void;
 	};
 
 	let {
@@ -44,7 +40,12 @@
 		continueLabel = 'Continue',
 		hintLabel = 'Show hint',
 		dontKnowLabel = "Don't know?",
-		eyebrow = undefined
+		eyebrow = undefined,
+		onSelect = undefined,
+		onSubmit = undefined,
+		onRequestHint = undefined,
+		onDontKnow = undefined,
+		onContinue = undefined
 	}: Props = $props();
 
 	function optionState(optionId: string) {
@@ -105,26 +106,26 @@
 			return;
 		}
 		selectedOptionId = optionId;
-		dispatch('select', { optionId });
+		onSelect?.({ optionId });
 	}
 
 	function handleSubmit() {
 		if (!selectedOptionId) {
 			return;
 		}
-		dispatch('submit', { optionId: selectedOptionId });
+		onSubmit?.({ optionId: selectedOptionId });
 	}
 
 	function handleHint() {
-		dispatch('requestHint');
+		onRequestHint?.();
 	}
 
 	function handleDontKnow() {
-		dispatch('dontKnow');
+		onDontKnow?.();
 	}
 
 	function handleContinue() {
-		dispatch('continue');
+		onContinue?.();
 	}
 
 	const revealExplanation = $derived(showExplanationProp ?? statusProp !== 'neutral');

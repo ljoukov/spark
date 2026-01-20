@@ -1,29 +1,28 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import QuizQuestionCard from './quiz-question-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { QuizInfoCardQuestion } from '$lib/types/quiz';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
 
-	const dispatch = createEventDispatcher<{ continue: void }>();
-
 	type Props = {
 		question: QuizInfoCardQuestion;
 		continueLabel?: string;
 		status?: Status;
+		onContinue?: () => void;
 	};
 
 	let {
 		question,
 		continueLabel = question.continueLabel ?? 'Next',
-		status: statusProp = 'neutral' as Status
+		status: statusProp = 'neutral' as Status,
+		onContinue = undefined
 	}: Props = $props();
 
 	const eyebrow = $derived(question.eyebrow ?? 'Concept spotlight');
 
 	function handleContinue() {
-		dispatch('continue');
+		onContinue?.();
 	}
 </script>
 
