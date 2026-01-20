@@ -11,6 +11,7 @@
 	import type { QuizFeedback, QuizProgressStep, QuizQuestion } from '$lib/types/quiz';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 
@@ -39,6 +40,7 @@
 	let sessionStateStore: ReturnType<typeof createSessionStateStore> | null = null;
 	let planItemState = $state<PlanItemState | null>(null);
 	let completionSyncError = $state<string | null>(null);
+	let pendingAction = $state<'submit' | 'dontKnow' | 'continue' | null>(null);
 
 	$effect(() => {
 		const store = createSessionStateStore(data.sessionId, data.sessionState);
@@ -46,8 +48,10 @@
 		planItemState = data.planItemState ?? null;
 		completionSyncError = null;
 		const stop = store.subscribe((value) => {
-			planItemState = (value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
-			if (planItemState?.status === 'completed') {
+			const nextPlanItemState =
+				(value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+			planItemState = nextPlanItemState;
+			if (nextPlanItemState?.status === 'completed') {
 				completionSyncError = null;
 			}
 		});
@@ -288,7 +292,10 @@
 		if (!pointerDefined && firstPendingIndex >= 0 && firstPendingIndex > nextIndex) {
 			nextIndex = firstPendingIndex;
 		}
-		currentIndex = nextIndex;
+		const previousIndex = untrack(() => currentIndex);
+		if (previousIndex !== nextIndex) {
+			currentIndex = nextIndex;
+		}
 	}
 
 	function toCardStatus(status: AttemptStatus): 'neutral' | 'correct' | 'incorrect' {
@@ -381,6 +388,9 @@
 	);
 
 	function openFinishDialog() {
+		if (pendingAction) {
+			return;
+		}
 		if (remainingCount === 0) {
 			void handleQuit();
 			return;
@@ -392,6 +402,9 @@
 	}
 
 	function goToQuestion(index: number) {
+		if (pendingAction) {
+			return;
+		}
 		if (index < 0 || index >= quiz.questions.length || index === currentIndex) {
 			return;
 		}
@@ -403,6 +416,9 @@
 	}
 
 	function handleOptionSelect(optionId: string) {
+		if (pendingAction) {
+			return;
+		}
 		const attempt = attempts[currentIndex];
 		if (!attempt || attempt.locked) {
 			return;
@@ -415,10 +431,14 @@
 	}
 
 	async function handleMultipleSubmit(optionId: string) {
+		if (pendingAction) {
+			return;
+		}
 		const question = quiz.questions[currentIndex];
 		if (question.kind !== 'multiple-choice') {
 			return;
 		}
+		pendingAction = 'submit';
 
 		const attempt = attempts[currentIndex] ?? createInitialAttempt();
 		const isCorrect = optionId === question.correctOptionId;
@@ -456,10 +476,15 @@
 		} catch (error) {
 			console.error('Failed to sync multiple-choice submission', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
+		} finally {
+			pendingAction = null;
 		}
 	}
 
 	function handleHint() {
+		if (pendingAction) {
+			return;
+		}
 		const question = getQuestionByIndex(currentIndex);
 		if (!question) {
 			return;
@@ -484,10 +509,14 @@
 	}
 
 	async function handleDontKnow() {
+		if (pendingAction) {
+			return;
+		}
 		const question = getQuestionByIndex(currentIndex);
 		if (!question) {
 			return;
 		}
+		pendingAction = 'dontKnow';
 		const now = new Date();
 		const attempt = attempts[currentIndex] ?? createInitialAttempt();
 		const firstViewedAt = attempt.firstViewedAt ?? now;
@@ -522,10 +551,15 @@
 		} catch (error) {
 			console.error("Failed to sync 'don't know' submission", error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
+		} finally {
+			pendingAction = null;
 		}
 	}
 
 	function handleTypeInput(value: string) {
+		if (pendingAction) {
+			return;
+		}
 		const attempt = attempts[currentIndex];
 		if (!attempt || attempt.locked) {
 			return;
@@ -534,6 +568,9 @@
 	}
 
 	async function handleTypeSubmit(value: string) {
+		if (pendingAction) {
+			return;
+		}
 		const trimmed = value.trim();
 		if (!trimmed) {
 			return;
@@ -542,6 +579,7 @@
 		if (question.kind !== 'type-answer') {
 			return;
 		}
+		pendingAction = 'submit';
 
 		const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
 			entry.trim().toLowerCase()
@@ -583,15 +621,21 @@
 		} catch (error) {
 			console.error('Failed to sync typed answer submission', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
+		} finally {
+			pendingAction = null;
 		}
 	}
 
 	async function handleInfoContinue() {
+		if (pendingAction) {
+			return;
+		}
 		const index = currentIndex;
 		const question = quiz.questions[index];
 		if (question.kind !== 'info-card') {
 			return;
 		}
+		pendingAction = 'continue';
 		const attempt = attempts[index] ?? createInitialAttempt();
 		const now = new Date();
 		const firstViewedAt = attempt.firstViewedAt ?? now;
@@ -622,6 +666,7 @@
 			console.error('Failed to sync info card progression', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
 			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+			pendingAction = null;
 			return;
 		}
 
@@ -635,6 +680,8 @@
 			console.error('Failed to advance after info card', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
 			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+		} finally {
+			pendingAction = null;
 		}
 	}
 
@@ -704,7 +751,11 @@
 	}
 
 	async function handleAdvanceFromAttempt() {
+		if (pendingAction) {
+			return;
+		}
 		const index = currentIndex;
+		pendingAction = 'continue';
 		updateAttempt(index, (prev) => ({ ...prev, showContinue: false }));
 
 		completionSyncError = null;
@@ -718,6 +769,8 @@
 			console.error('Failed to sync progression while advancing', error);
 			completionSyncError = SYNC_ERROR_MESSAGE;
 			updateAttempt(index, (prev) => ({ ...prev, showContinue: true }));
+		} finally {
+			pendingAction = null;
 		}
 	}
 
@@ -745,27 +798,32 @@
 
 	// Mark the current question as seen whenever it becomes active
 	$effect(() => {
-		const questionId = getQuestionId(currentIndex);
+		const index = currentIndex;
+		const questionId = getQuestionId(index);
 		if (!questionId) {
 			return;
 		}
-		const attempt = attempts[currentIndex];
+		const attempt = untrack(() => attempts[index]);
 		if (!attempt) {
 			return;
 		}
 		if (!attempt.seen) {
 			const now = attempt.firstViewedAt ?? new Date();
-			updateAttempt(currentIndex, (prev) => ({
-				...prev,
-				seen: true,
-				firstViewedAt: prev.firstViewedAt ?? now
-			}));
+			untrack(() => {
+				updateAttempt(index, (prev) => ({
+					...prev,
+					seen: true,
+					firstViewedAt: prev.firstViewedAt ?? now
+				}));
+			});
 			if (!attempt.firstViewedAt) {
 				void persistQuestionState(questionId, { firstViewedAt: now }, { sync: false });
 			}
 		} else if (!attempt.firstViewedAt) {
 			const now = new Date();
-			updateAttempt(currentIndex, (prev) => ({ ...prev, firstViewedAt: now }));
+			untrack(() => {
+				updateAttempt(index, (prev) => ({ ...prev, firstViewedAt: now }));
+			});
 			void persistQuestionState(questionId, { firstViewedAt: now }, { sync: false });
 		}
 	});
@@ -794,6 +852,7 @@
 		steps={progressSteps}
 		{currentIndex}
 		total={quiz.questions.length}
+		disabled={pendingAction !== null}
 		onNavigate={(detail) => goToQuestion(detail.index)}
 		onFinish={openFinishDialog}
 	/>
@@ -807,6 +866,8 @@
 				status={toCardStatus(activeAttempt.status)}
 				showHint={activeAttempt.showHint}
 				locked={activeAttempt.locked}
+				busy={pendingAction !== null}
+				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
@@ -824,6 +885,8 @@
 				status={toCardStatus(activeAttempt.status)}
 				showHint={activeAttempt.showHint}
 				locked={activeAttempt.locked}
+				busy={pendingAction !== null}
+				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
@@ -837,6 +900,8 @@
 			<QuizInfoCard
 				question={activeQuestion}
 				status={toCardStatus(activeAttempt.status)}
+				busy={pendingAction !== null}
+				busyAction={pendingAction}
 				{continueLabel}
 				onContinue={() => void handleInfoContinue()}
 			/>
