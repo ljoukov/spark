@@ -5,6 +5,7 @@
 	import type { QuizFeedback, QuizTypeAnswerQuestion } from '$lib/types/quiz';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
+	type BusyAction = 'submit' | 'dontKnow' | 'continue';
 
 	type Props = {
 		question: QuizTypeAnswerQuestion;
@@ -21,6 +22,8 @@
 		dontKnowLabel?: string;
 		placeholder?: string;
 		eyebrow?: string | null;
+		busy?: boolean;
+		busyAction?: BusyAction | null;
 		onInput?: (detail: { value: string }) => void;
 		onSubmit?: (detail: { value: string }) => void;
 		onRequestHint?: () => void;
@@ -43,6 +46,8 @@
 		dontKnowLabel = "Don't know?",
 		placeholder = question.placeholder ?? 'Type your answer',
 		eyebrow = undefined,
+		busy = false,
+		busyAction = null,
 		onInput = undefined,
 		onSubmit = undefined,
 		onRequestHint = undefined,
@@ -85,6 +90,10 @@
 	const revealExplanation = $derived(showExplanationProp ?? statusProp !== 'neutral');
 	const showAnswerPanel = $derived(statusProp !== 'neutral');
 	const trimmedValue = $derived(value.trim());
+	const isSubmitBusy = $derived(busy && busyAction === 'submit');
+	const isDontKnowBusy = $derived(busy && busyAction === 'dontKnow');
+	const isContinueBusy = $derived(busy && busyAction === 'continue');
+	const inputDisabled = $derived(locked || busy);
 </script>
 
 <QuizQuestionCard
@@ -110,7 +119,7 @@
 			bind:value
 			oninput={handleInput}
 			onkeydown={handleKeyDown}
-			disabled={locked}
+			disabled={inputDisabled}
 			autocomplete="off"
 			spellcheck="false"
 			{placeholder}
@@ -139,21 +148,38 @@
 		<div class="flex w-full flex-wrap items-center gap-3">
 			<div class="flex items-center gap-2">
 				{#if question.hint}
-					<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint}>
+					<Button variant="ghost" size="sm" onclick={handleHint} disabled={showHint || busy}>
 						{hintLabel}
 					</Button>
 				{/if}
-				<Button variant="ghost" size="sm" onclick={handleDontKnow} disabled={locked}>
-					{dontKnowLabel}
+				<Button variant="ghost" size="sm" onclick={handleDontKnow} disabled={inputDisabled}>
+					{#if isDontKnowBusy}
+						<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+						<span>Submitting…</span>
+					{:else}
+						{dontKnowLabel}
+					{/if}
 				</Button>
 			</div>
 
 			<div class="ml-auto flex items-center gap-2">
 				{#if showContinue}
-					<Button size="lg" onclick={handleContinue}>{continueLabel}</Button>
+					<Button size="lg" onclick={handleContinue} disabled={busy}>
+						{#if isContinueBusy}
+							<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+							<span>Loading…</span>
+						{:else}
+							{continueLabel}
+						{/if}
+					</Button>
 				{:else}
-					<Button size="lg" onclick={handleSubmit} disabled={!trimmedValue || locked}>
-						{answerLabel}
+					<Button size="lg" onclick={handleSubmit} disabled={!trimmedValue || inputDisabled}>
+						{#if isSubmitBusy}
+							<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+							<span>Submitting…</span>
+						{:else}
+							{answerLabel}
+						{/if}
 					</Button>
 				{/if}
 			</div>
