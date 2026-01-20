@@ -794,8 +794,8 @@
 		steps={progressSteps}
 		{currentIndex}
 		total={quiz.questions.length}
-		on:navigate={(event) => goToQuestion(event.detail.index)}
-		on:finish={openFinishDialog}
+		onNavigate={(detail) => goToQuestion(detail.index)}
+		onFinish={openFinishDialog}
 	/>
 
 	<section class="flex flex-col gap-6">
@@ -810,11 +810,11 @@
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
-				on:select={(event) => handleOptionSelect(event.detail.optionId)}
-				on:submit={(event) => void handleMultipleSubmit(event.detail.optionId)}
-				on:requestHint={handleHint}
-				on:dontKnow={() => void handleDontKnow()}
-				on:continue={() => void handleAdvanceFromAttempt()}
+				onSelect={(detail) => handleOptionSelect(detail.optionId)}
+				onSubmit={(detail) => void handleMultipleSubmit(detail.optionId)}
+				onRequestHint={handleHint}
+				onDontKnow={() => void handleDontKnow()}
+				onContinue={() => void handleAdvanceFromAttempt()}
 			/>
 		{:else if activeQuestion.kind === 'type-answer'}
 			<QuizTypeAnswer
@@ -827,18 +827,18 @@
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
-				on:input={(event) => handleTypeInput(event.detail.value)}
-				on:submit={(event) => void handleTypeSubmit(event.detail.value)}
-				on:requestHint={handleHint}
-				on:dontKnow={() => void handleDontKnow()}
-				on:continue={() => void handleAdvanceFromAttempt()}
+				onInput={(detail) => handleTypeInput(detail.value)}
+				onSubmit={(detail) => void handleTypeSubmit(detail.value)}
+				onRequestHint={handleHint}
+				onDontKnow={() => void handleDontKnow()}
+				onContinue={() => void handleAdvanceFromAttempt()}
 			/>
 		{:else if activeQuestion.kind === 'info-card'}
 			<QuizInfoCard
 				question={activeQuestion}
 				status={toCardStatus(activeAttempt.status)}
 				{continueLabel}
-				on:continue={() => void handleInfoContinue()}
+				onContinue={() => void handleInfoContinue()}
 			/>
 		{/if}
 	</section>
