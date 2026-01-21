@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { Command } from "commander";
 import { Timestamp } from "firebase-admin/firestore";
@@ -7,7 +8,15 @@ import {
   runSessionAgentSmokeTest,
   runSessionGenerationAgent,
 } from "@spark/llm/code/sessionGenerationAgent";
-import type { LlmTextModelId } from "@spark/llm/utils/llm";
+import {
+  estimateCallCostUsd,
+  type LlmTextModelId,
+} from "@spark/llm/utils/llm";
+import type {
+  JobProgressReporter,
+  LlmUsageChunk,
+  ModelCallHandle,
+} from "@spark/llm/utils/concurrency";
 import {
   getFirebaseAdminFirestore,
   getFirebaseAdminFirestoreModule,
@@ -32,6 +41,242 @@ type CliOptions = {
   smokeTest: boolean;
   publish: boolean;
 };
+
+type TokenState = {
+  promptTokens: number;
+  cachedTokens: number;
+  responseTokens: number;
+  responseImageTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+  toolUsePromptTokens: number;
+};
+
+type CallState = {
+  modelId: string;
+  modelVersion?: string;
+  imageSize?: string;
+  tokens: TokenState;
+  responseImages: number;
+};
+
+type UsageTotals = {
+  calls: number;
+  costUsd: number;
+  tokens: {
+    input: number;
+    prompt: number;
+    cached: number;
+    toolUsePrompt: number;
+    output: number;
+    response: number;
+    responseImageTokens: number;
+    thinking: number;
+    total: number;
+  };
+};
+
+type UsageSummary = {
+  generatedAt: string;
+  totals: UsageTotals;
+  models: Record<string, UsageTotals>;
+};
+
+function createEmptyTokenState(): TokenState {
+  return {
+    promptTokens: 0,
+    cachedTokens: 0,
+    responseTokens: 0,
+    responseImageTokens: 0,
+    thinkingTokens: 0,
+    totalTokens: 0,
+    toolUsePromptTokens: 0,
+  };
+}
+
+function resolveNumber(next: number | undefined, prev: number): number {
+  if (typeof next === "number" && Number.isFinite(next)) {
+    return Math.max(0, next);
+  }
+  return prev;
+}
+
+function ensureUsageTotals(target: UsageTotals | undefined): UsageTotals {
+  if (target) {
+    return target;
+  }
+  return {
+    calls: 0,
+    costUsd: 0,
+    tokens: {
+      input: 0,
+      prompt: 0,
+      cached: 0,
+      toolUsePrompt: 0,
+      output: 0,
+      response: 0,
+      responseImageTokens: 0,
+      thinking: 0,
+      total: 0,
+    },
+  };
+}
+
+class UsageAggregator {
+  private readonly calls = new Map<ModelCallHandle, CallState>();
+  private readonly modelTotals = new Map<string, UsageTotals>();
+  private readonly overallTotals: UsageTotals = ensureUsageTotals(undefined);
+
+  start(details: { modelId: string; imageSize?: string }): ModelCallHandle {
+    const handle: ModelCallHandle = Symbol("usage-call");
+    this.calls.set(handle, {
+      modelId: details.modelId,
+      imageSize: details.imageSize,
+      tokens: createEmptyTokenState(),
+      responseImages: 0,
+    });
+    return handle;
+  }
+
+  record(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
+    const state = this.calls.get(handle);
+    if (!state) {
+      return;
+    }
+    if (chunk.modelVersion) {
+      state.modelVersion = chunk.modelVersion;
+    }
+    if (chunk.response?.imageCountDelta) {
+      state.responseImages += Math.max(0, chunk.response.imageCountDelta);
+    }
+    if (chunk.tokens) {
+      const prev = state.tokens;
+      state.tokens = {
+        promptTokens: resolveNumber(chunk.tokens.promptTokens, prev.promptTokens),
+        cachedTokens: resolveNumber(chunk.tokens.cachedTokens, prev.cachedTokens),
+        responseTokens: resolveNumber(
+          chunk.tokens.responseTokens,
+          prev.responseTokens,
+        ),
+        responseImageTokens: resolveNumber(
+          chunk.tokens.responseImageTokens,
+          prev.responseImageTokens,
+        ),
+        thinkingTokens: resolveNumber(
+          chunk.tokens.thinkingTokens,
+          prev.thinkingTokens,
+        ),
+        totalTokens: resolveNumber(chunk.tokens.totalTokens, prev.totalTokens),
+        toolUsePromptTokens: resolveNumber(
+          chunk.tokens.toolUsePromptTokens,
+          prev.toolUsePromptTokens,
+        ),
+      };
+    }
+  }
+
+  finish(handle: ModelCallHandle): void {
+    const state = this.calls.get(handle);
+    if (!state) {
+      return;
+    }
+    this.calls.delete(handle);
+    const modelId = state.modelVersion ?? state.modelId;
+    const costUsd = estimateCallCostUsd({
+      modelId,
+      tokens: state.tokens,
+      responseImages: state.responseImages,
+      imageSize: state.imageSize,
+    });
+    this.applyTotals(this.overallTotals, state, costUsd);
+    const modelTotals = ensureUsageTotals(this.modelTotals.get(modelId));
+    this.applyTotals(modelTotals, state, costUsd);
+    this.modelTotals.set(modelId, modelTotals);
+  }
+
+  private applyTotals(
+    totals: UsageTotals,
+    state: CallState,
+    costUsd: number,
+  ): void {
+    totals.calls += 1;
+    totals.costUsd += costUsd;
+    const inputTokens =
+      state.tokens.promptTokens + state.tokens.toolUsePromptTokens;
+    const outputTokens = state.tokens.responseTokens;
+    const totalTokens =
+      state.tokens.totalTokens > 0
+        ? state.tokens.totalTokens
+        : inputTokens + state.tokens.responseTokens + state.tokens.thinkingTokens;
+    totals.tokens.input += inputTokens;
+    totals.tokens.prompt += state.tokens.promptTokens;
+    totals.tokens.cached += state.tokens.cachedTokens;
+    totals.tokens.toolUsePrompt += state.tokens.toolUsePromptTokens;
+    totals.tokens.output += outputTokens;
+    totals.tokens.response += state.tokens.responseTokens;
+    totals.tokens.responseImageTokens += state.tokens.responseImageTokens;
+    totals.tokens.thinking += state.tokens.thinkingTokens;
+    totals.tokens.total += totalTokens;
+  }
+
+  summary(): UsageSummary {
+    const models: Record<string, UsageTotals> = {};
+    for (const [modelId, totals] of this.modelTotals.entries()) {
+      models[modelId] = totals;
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      totals: this.overallTotals,
+      models,
+    };
+  }
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US").format(Math.round(value));
+}
+
+function formatUsd(value: number): string {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: safe < 1 ? 4 : 2,
+    maximumFractionDigits: safe < 1 ? 4 : 2,
+  }).format(safe);
+}
+
+function printUsageSummary(summary: UsageSummary): void {
+  const entries = Object.entries(summary.models).sort(
+    (a, b) => b[1].costUsd - a[1].costUsd,
+  );
+  console.log("\nUsage summary:");
+  for (const [modelId, totals] of entries) {
+    console.log(
+      `- ${modelId}: calls=${formatNumber(totals.calls)} in=${formatNumber(
+        totals.tokens.input,
+      )} cached=${formatNumber(totals.tokens.cached)} out=${formatNumber(
+        totals.tokens.output,
+      )} thinking=${formatNumber(
+        totals.tokens.thinking,
+      )} total=${formatNumber(totals.tokens.total)} cost=${formatUsd(
+        totals.costUsd,
+      )}`,
+    );
+  }
+  const overall = summary.totals;
+  console.log(
+    `Total: calls=${formatNumber(overall.calls)} in=${formatNumber(
+      overall.tokens.input,
+    )} cached=${formatNumber(overall.tokens.cached)} out=${formatNumber(
+      overall.tokens.output,
+    )} thinking=${formatNumber(
+      overall.tokens.thinking,
+    )} total=${formatNumber(overall.tokens.total)} cost=${formatUsd(
+      overall.costUsd,
+    )}`,
+  );
+}
 
 function parseCliOptions(): CliOptions {
   const program = new Command();
@@ -223,12 +468,41 @@ async function publishToWelcomeTemplate(options: {
 
 async function main(): Promise<void> {
   const options = parseCliOptions();
+  const usage = new UsageAggregator();
+  const progress: JobProgressReporter = {
+    log(message: string) {
+      console.log(message);
+    },
+    startModelCall(details: {
+      modelId: string;
+      uploadBytes: number;
+      imageSize?: string;
+    }) {
+      return usage.start({ modelId: details.modelId, imageSize: details.imageSize });
+    },
+    recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk) {
+      usage.record(handle, chunk);
+    },
+    finishModelCall(handle: ModelCallHandle) {
+      usage.finish(handle);
+    },
+    startStage(_stageName: string) {
+      return Symbol("stage");
+    },
+    finishStage(_handle: symbol) {},
+    setActiveStages(_stages?: Iterable<string>) {},
+  };
   if (options.smokeTest) {
     await runSessionAgentSmokeTest({
       workingDirectory: options.workingDirectory,
       modelId: options.modelId as unknown as LlmTextModelId,
+      progress,
     });
     process.stdout.write("Smoke test succeeded.\n");
+    const usageSummary = usage.summary();
+    const usagePath = path.join(options.workingDirectory, "usage.json");
+    await writeFile(usagePath, JSON.stringify(usageSummary, null, 2), "utf8");
+    printUsageSummary(usageSummary);
     return;
   }
 
@@ -244,6 +518,7 @@ async function main(): Promise<void> {
     storySegmentCount: options.storySegmentCount,
     modelId: options.modelId as unknown as LlmTextModelId,
     maxSteps: options.maxSteps,
+    progress,
   });
 
   process.stdout.write(
@@ -266,6 +541,12 @@ async function main(): Promise<void> {
       problems: result.problems,
     });
   }
+
+  const usageSummary = usage.summary();
+  const usagePath = path.join(options.workingDirectory, "usage.json");
+  await writeFile(usagePath, JSON.stringify(usageSummary, null, 2), "utf8");
+  const loaded = JSON.parse(await readFile(usagePath, "utf8")) as UsageSummary;
+  printUsageSummary(loaded);
 }
 
 void main().catch((error: unknown) => {
