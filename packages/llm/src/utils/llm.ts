@@ -3338,7 +3338,9 @@ function extractOpenAiText(response: OpenAiResponse): string {
   return "";
 }
 
-function extractOpenAiReasoningSummary(response: OpenAiResponse): string | undefined {
+function extractOpenAiReasoningSummary(
+  response: OpenAiResponse,
+): string | undefined {
   const output = response.output;
   if (!Array.isArray(output)) {
     return undefined;
@@ -3402,11 +3404,15 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
     case "list_files": {
       const pathLabel = record.path ? `path=${String(record.path)}` : "";
       const depth =
-        record.maxDepth !== undefined ? `maxDepth=${String(record.maxDepth)}` : "";
+        record.maxDepth !== undefined
+          ? `maxDepth=${String(record.maxDepth)}`
+          : "";
       return [pathLabel, depth].filter(Boolean).join(" ");
     }
     case "rg_search": {
-      const pattern = record.pattern ? `pattern=${truncateForLog(String(record.pattern), 120)}` : "";
+      const pattern = record.pattern
+        ? `pattern=${truncateForLog(String(record.pattern), 120)}`
+        : "";
       const pathLabel = record.path ? `path=${String(record.path)}` : "";
       return [pattern, pathLabel].filter(Boolean).join(" ");
     }
@@ -3442,9 +3448,15 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
         : "";
     }
     case "generate_text": {
-      const promptPath = record.promptPath ? `promptPath=${String(record.promptPath)}` : "";
-      const outputPath = record.outputPath ? `outputPath=${String(record.outputPath)}` : "";
-      const tools = Array.isArray(record.tools) ? `tools=${record.tools.join(",")}` : "";
+      const promptPath = record.promptPath
+        ? `promptPath=${String(record.promptPath)}`
+        : "";
+      const outputPath = record.outputPath
+        ? `outputPath=${String(record.outputPath)}`
+        : "";
+      const tools = Array.isArray(record.tools)
+        ? `tools=${record.tools.join(",")}`
+        : "";
       return [promptPath, outputPath, tools].filter(Boolean).join(" ");
     }
     default:
@@ -3567,9 +3579,7 @@ export async function runToolLoop(
       }
       const reasoningSummary = extractOpenAiReasoningSummary(response);
       if (reasoningSummary) {
-        reporter.log(
-          `summary: ${truncateForLog(reasoningSummary, 800)}`,
-        );
+        reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
       }
       const usageTokens = extractOpenAiUsageTokens(response.usage);
       const resolvedModelId = response.model ?? options.modelId;

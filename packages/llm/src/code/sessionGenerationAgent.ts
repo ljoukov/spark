@@ -112,7 +112,6 @@ type SessionAgentOutput = {
   problems: CodeProblem[];
 };
 
-
 function useProgress(
   progress: JobProgressReporter | undefined,
 ): JobProgressReporter {
@@ -279,7 +278,10 @@ async function ensureFile(filePath: string, content: string): Promise<void> {
 async function expandPromptTemplate(options: {
   template: string;
   workspaceDir: string;
-}): Promise<{ text: string; replacements: Array<{ path: string; chars: number }> }> {
+}): Promise<{
+  text: string;
+  replacements: Array<{ path: string; chars: number }>;
+}> {
   const { template, workspaceDir } = options;
   const regex = /{{\s*([^}]+?)\s*}}/g;
   let result = "";
@@ -512,7 +514,10 @@ function buildFirestoreSchemaJsonContent(): string {
   const sessionSchema = safeToJsonSchema(SessionSchema, "Session");
   const quizSchema = safeToJsonSchema(QuizDefinitionSchema, "QuizDefinition");
   const codeSchema = safeToJsonSchema(CodeProblemSchema, "CodeProblem");
-  const mediaSchema = safeToJsonSchema(SessionMediaDocSchema, "SessionMediaDoc");
+  const mediaSchema = safeToJsonSchema(
+    SessionMediaDocSchema,
+    "SessionMediaDoc",
+  );
   const payload = {
     session: sessionSchema,
     quiz: quizSchema,
@@ -583,7 +588,10 @@ function buildPlanTrackerContent(options: {
   includeStory: boolean;
   includeCoding: boolean;
 }): string {
-  const lines: string[] = ["# Plan", "- [running] Review brief and list hard requirements."];
+  const lines: string[] = [
+    "# Plan",
+    "- [running] Review brief and list hard requirements.",
+  ];
   if (options.includeCoding) {
     lines.push(
       "- [pending] Draft problems/problem-XX.md (one per problem), verify with code execution, and revise.",
@@ -597,9 +605,7 @@ function buildPlanTrackerContent(options: {
     "- [pending] Draft quizzes/quiz-XX.md (one per quiz set), grade, and revise.",
   );
   if (options.includeStory) {
-    lines.push(
-      "- [pending] Draft story.md (markdown), grade, and revise.",
-    );
+    lines.push("- [pending] Draft story.md (markdown), grade, and revise.");
   }
   lines.push(
     "- [pending] Compile Firestore JSON outputs from drafts.",
@@ -1045,9 +1051,7 @@ async function loadFirestoreOutputs(options: {
   }
   for (const id of planQuizIds) {
     if (!quizIds.has(id)) {
-      throw new Error(
-        `Plan quiz id '${id}' missing firestore/quiz/${id}.json`,
-      );
+      throw new Error(`Plan quiz id '${id}' missing firestore/quiz/${id}.json`);
     }
   }
 
@@ -1323,9 +1327,7 @@ function buildSessionAgentTools(options: {
           const content = await readFile(resolved, { encoding: "utf8" });
           const bytes = Buffer.byteLength(content, "utf8");
           const output = { path: inputPath, content, bytes };
-          log(
-            `[agent-tool] read_file path=${inputPath} bytes=${bytes}`,
-          );
+          log(`[agent-tool] read_file path=${inputPath} bytes=${bytes}`);
           await logTool({
             tool: "read_file",
             input: { path: inputPath },
@@ -1542,13 +1544,15 @@ function buildSessionAgentTools(options: {
     generate_text: tool({
       description:
         "Call a sub-LLM (gpt-5.2) to produce text/markdown; optionally enable web-search or code-execution tools. promptPath is required and must point to a file in the workspace. If outputPath is provided, the tool writes the text to that file (overwrite by default).",
-      inputSchema: z.object({
-        promptPath: z.string().trim().min(1),
-        tools: z.array(z.enum(["web-search", "code-execution"])).optional(),
-        debugLabel: z.string().trim().optional(),
-        outputPath: z.string().trim().optional(),
-        outputMode: z.enum(["overwrite", "append"]).optional(),
-      }).strict(),
+      inputSchema: z
+        .object({
+          promptPath: z.string().trim().min(1),
+          tools: z.array(z.enum(["web-search", "code-execution"])).optional(),
+          debugLabel: z.string().trim().optional(),
+          outputPath: z.string().trim().optional(),
+          outputMode: z.enum(["overwrite", "append"]).optional(),
+        })
+        .strict(),
       execute: async (input) => {
         type UsageState = {
           tokens?: LlmUsageChunk["tokens"];
@@ -1644,7 +1648,11 @@ function buildSessionAgentTools(options: {
             }
           }
           const output = outputPath
-            ? { outputPath: input.outputPath, outputMode, textChars: text.length }
+            ? {
+                outputPath: input.outputPath,
+                outputMode,
+                textChars: text.length,
+              }
             : { text };
           const elapsedMs = Date.now() - startedAt;
           const tokens = usageState.tokens;
