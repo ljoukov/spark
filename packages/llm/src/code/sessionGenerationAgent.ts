@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -535,6 +534,7 @@ function buildTaskContent(options: {
     "",
     "Goal: produce Firestore-ready JSON outputs (see firestore-schema.json).",
     "Use markdown drafts for session-plan.md, quizzes/quiz-XX.md, problems/problem-XX.md, and story.md.",
+    "You control the workspace for this run; reuse or overwrite existing files from prior runs as needed.",
     "Create one quiz file per quiz set and one problem file per coding problem.",
     "For each draft: generate -> grade with feedback -> revise using feedback.",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
@@ -596,6 +596,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
   return [
     "You are a session generation agent.",
     `You may only edit files under: ${workspaceDir}`,
+    "Assume you control the workspace during this run; some files may already exist from earlier runs.",
     "Use workspace-relative paths only (no absolute paths, no .. segments).",
     "Use apply_patch for edits to existing files. For large rewrites, prefer delete_file then create_file with full contents.",
     "Use create_file for new files, move_file for renames, and delete_file for deletions.",
@@ -661,6 +662,7 @@ function buildAgentUserPrompt(options: {
     "",
     `Include story: ${options.includeStory ? "yes" : "no"}`,
     `Include coding: ${options.includeCoding ? "yes" : "no"}`,
+    "Workspace may already contain files from prior runs; overwrite or reuse as needed.",
   ];
   if (options.validationError) {
     sections.push("", "Validation errors to fix:", options.validationError);
@@ -1172,121 +1174,6 @@ async function buildSessionAgentTools(options: {
     }
   };
   const logPath = path.join(paths.debugDir, "tool-calls.jsonl");
-  const cachePath = path.join(paths.workspaceDir, "cache", "file-cache.json");
-  type CachedFileEntry = {
-    mtimeMs: number;
-    size: number;
-    sha256?: string;
-    content?: string;
-  };
-  type CachedSummaryEntry = {
-    mtimeMs: number;
-    size: number;
-    sha256: string;
-    promptHash: string;
-    summary: string;
-  };
-  type FileCache = {
-    version: number;
-    files: Record<string, CachedFileEntry>;
-    summaries: Record<string, CachedSummaryEntry>;
-  };
-  const fileCache: FileCache = {
-    version: 1,
-    files: {},
-    summaries: {},
-  };
-  try {
-    const cacheText = await readFile(cachePath, "utf8");
-    const parsed = JSON.parse(cacheText) as FileCache;
-    if (parsed && typeof parsed === "object") {
-      if (parsed.files && typeof parsed.files === "object") {
-        fileCache.files = parsed.files;
-      }
-      if (parsed.summaries && typeof parsed.summaries === "object") {
-        fileCache.summaries = parsed.summaries;
-      }
-    }
-  } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code !== "ENOENT") {
-      log(`[session-agent] failed to load cache: ${errorAsString(error)}`);
-    }
-  }
-  let cacheWritePromise: Promise<void> | undefined;
-  const queueCacheWrite = async () => {
-    const payload = JSON.stringify(fileCache, null, 2);
-    const writeOp = async () => {
-      await ensureDir(path.dirname(cachePath));
-      await writeFile(cachePath, payload, "utf8");
-    };
-    if (!cacheWritePromise) {
-      cacheWritePromise = writeOp().catch(() => undefined);
-    } else {
-      cacheWritePromise = cacheWritePromise.then(writeOp).catch(() => undefined);
-    }
-    await cacheWritePromise;
-  };
-  const inflightReads = new Map<string, Promise<CachedFileEntry>>();
-  const hashText = (text: string): string =>
-    createHash("sha256").update(text).digest("hex");
-  const getFileContentWithCache = async (inputPath: string) => {
-    const resolved = resolveWorkspacePath(paths.workspaceDir, inputPath);
-    const stats = await stat(resolved);
-    if (!stats.isFile()) {
-      throw new Error(`Path is not a file: ${inputPath}`);
-    }
-    const entryKey = inputPath;
-    const cacheEntry = fileCache.files[entryKey];
-    if (
-      cacheEntry &&
-      cacheEntry.content !== undefined &&
-      cacheEntry.mtimeMs === stats.mtimeMs &&
-      cacheEntry.size === stats.size
-    ) {
-      const bytes = Buffer.byteLength(cacheEntry.content, "utf8");
-      return {
-        content: cacheEntry.content,
-        bytes,
-        cached: true,
-        entry: cacheEntry,
-      };
-    }
-    let inflight = inflightReads.get(entryKey);
-    if (!inflight) {
-      inflight = (async () => {
-        const content = await readFile(resolved, { encoding: "utf8" });
-        const updated: CachedFileEntry = {
-          mtimeMs: stats.mtimeMs,
-          size: stats.size,
-          sha256: hashText(content),
-          content,
-        };
-        fileCache.files[entryKey] = updated;
-        await queueCacheWrite();
-        return updated;
-      })();
-      inflightReads.set(entryKey, inflight);
-      try {
-        const updated = await inflight;
-        return {
-          content: updated.content ?? "",
-          bytes: Buffer.byteLength(updated.content ?? "", "utf8"),
-          cached: false,
-          entry: updated,
-        };
-      } finally {
-        inflightReads.delete(entryKey);
-      }
-    }
-    const updated = await inflight;
-    return {
-      content: updated.content ?? "",
-      bytes: Buffer.byteLength(updated.content ?? "", "utf8"),
-      cached: false,
-      entry: updated,
-    };
-  };
   let totalGenerateCostUsd = 0;
   let totalGenerateMs = 0;
   let totalSummaryCostUsd = 0;
@@ -1457,18 +1344,11 @@ async function buildSessionAgentTools(options: {
       }),
       execute: async ({ path: inputPath }) => {
         try {
-          const { content, bytes, cached, entry } =
-            await getFileContentWithCache(inputPath);
-          if (entry && !entry.sha256) {
-            entry.sha256 = hashText(content);
-            await queueCacheWrite();
-          }
-          const output = { path: inputPath, content, bytes, cached };
-          log(
-            `[agent-tool] read_file path=${inputPath} bytes=${bytes}${
-              cached ? " cached" : ""
-            }`,
-          );
+          const resolved = resolveWorkspacePath(paths.workspaceDir, inputPath);
+          const content = await readFile(resolved, { encoding: "utf8" });
+          const bytes = Buffer.byteLength(content, "utf8");
+          const output = { path: inputPath, content, bytes };
+          log(`[agent-tool] read_file path=${inputPath} bytes=${bytes}`);
           await logTool({
             tool: "read_file",
             input: { path: inputPath },
@@ -1476,7 +1356,6 @@ async function buildSessionAgentTools(options: {
               path: inputPath,
               chars: content.length,
               bytes,
-              cached,
             },
           });
           return output;
@@ -1500,25 +1379,21 @@ async function buildSessionAgentTools(options: {
         try {
           const entries = await Promise.all(
             inputPaths.map(async (inputPath) => {
-              const { content, bytes, cached, entry } =
-                await getFileContentWithCache(inputPath);
-              if (entry && !entry.sha256) {
-                entry.sha256 = hashText(content);
-                await queueCacheWrite();
-              }
+              const resolved = resolveWorkspacePath(
+                paths.workspaceDir,
+                inputPath,
+              );
+              const content = await readFile(resolved, { encoding: "utf8" });
+              const bytes = Buffer.byteLength(content, "utf8");
               return {
                 path: inputPath,
                 content,
                 bytes,
-                cached,
               };
             }),
           );
           const output = { files: entries };
-          const cachedCount = entries.filter((entry) => entry.cached).length;
-          log(
-            `[agent-tool] read_files paths=${inputPaths.length} cached=${cachedCount}`,
-          );
+          log(`[agent-tool] read_files paths=${inputPaths.length}`);
           await logTool({
             tool: "read_files",
             input: { paths: inputPaths },
@@ -1527,7 +1402,6 @@ async function buildSessionAgentTools(options: {
                 path: entry.path,
                 chars: entry.content.length,
                 bytes: entry.bytes,
-                cached: entry.cached,
               })),
             },
           });
@@ -1554,38 +1428,9 @@ async function buildSessionAgentTools(options: {
         .strict(),
       execute: async ({ path: inputPath, question }) => {
         try {
-          const { content, bytes, cached, entry } =
-            await getFileContentWithCache(inputPath);
-          const sha256 = entry?.sha256 ?? hashText(content);
-          if (entry && entry.sha256 !== sha256) {
-            entry.sha256 = sha256;
-            await queueCacheWrite();
-          }
-          const promptHash = hashText(question);
-          const summaryKey = `${inputPath}::${promptHash}`;
-          const cachedSummary = fileCache.summaries[summaryKey];
-          if (
-            cachedSummary &&
-            cachedSummary.sha256 === sha256 &&
-            cachedSummary.mtimeMs === entry?.mtimeMs &&
-            cachedSummary.size === entry?.size
-          ) {
-            const output = {
-              path: inputPath,
-              summary: cachedSummary.summary,
-              cached: true,
-              bytes,
-            };
-            log(
-              `[agent-tool] read_file_summary path=${inputPath} bytes=${bytes} cached`,
-            );
-            await logTool({
-              tool: "read_file_summary",
-              input: { path: inputPath, question },
-              output,
-            });
-            return output;
-          }
+          const resolved = resolveWorkspacePath(paths.workspaceDir, inputPath);
+          const content = await readFile(resolved, { encoding: "utf8" });
+          const bytes = Buffer.byteLength(content, "utf8");
           const summaryPrompt = [
             "You are a fast file analyst. Answer the question concisely.",
             "If the file does not require action based on the question, reply only with NO_CHANGES.",
@@ -1661,14 +1506,6 @@ async function buildSessionAgentTools(options: {
           });
           totalSummaryCostUsd += costUsd;
           totalSummaryMs += elapsedMs;
-          fileCache.summaries[summaryKey] = {
-            mtimeMs: entry?.mtimeMs ?? 0,
-            size: entry?.size ?? bytes,
-            sha256,
-            promptHash,
-            summary,
-          };
-          await queueCacheWrite();
           log(
             `[agent-tool] read_file_summary path=${inputPath} bytes=${bytes} ` +
               `tokens prompt=${formatOptionalNumber(tokens?.promptTokens)} cached=${formatOptionalNumber(tokens?.cachedTokens)} ` +
@@ -1679,7 +1516,6 @@ async function buildSessionAgentTools(options: {
           const output = {
             path: inputPath,
             summary,
-            cached: false,
             bytes,
           };
           await logTool({
