@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { navigating } from '$app/stores';
+	import { fromStore } from 'svelte/store';
 	import type { PageData } from './$types';
 
 	type WelcomeTemplate = {
@@ -23,6 +25,28 @@
 
 	let { data, form }: { data: PageData; form: ActionData | null } = $props();
 	const templates = $derived(data.welcomeTemplates as WelcomeTemplate[]);
+	const navigationStore = fromStore(navigating);
+	const navigatingTo = $derived(navigationStore?.current?.to?.url?.pathname ?? null);
+	let pendingLessonHref = $state<string | null>(null);
+	let pendingLessonSubmit = $state(false);
+	const lessonRoutePattern = /^\/code\/(?!lessons$)[^/]+$/;
+	const isLessonNavigation = $derived.by(() => {
+		if (pendingLessonSubmit) {
+			return true;
+		}
+		const target = pendingLessonHref ?? navigatingTo;
+		if (!target) {
+			return false;
+		}
+		return lessonRoutePattern.test(target);
+	});
+
+	$effect(() => {
+		if (!navigatingTo) {
+			pendingLessonHref = null;
+			pendingLessonSubmit = false;
+		}
+	});
 
 	function formatDate(value: string): string {
 		const date = new Date(value);
@@ -48,6 +72,20 @@
 		}
 		return 'Start';
 	}
+
+	function handleLessonOpen(href: string): void {
+		if (isLessonNavigation) {
+			return;
+		}
+		pendingLessonHref = href;
+	}
+
+	function handleTemplateSubmit(): void {
+		if (isLessonNavigation) {
+			return;
+		}
+		pendingLessonSubmit = true;
+	}
 </script>
 
 <svelte:head>
@@ -55,6 +93,17 @@
 </svelte:head>
 
 <section class="lessons-page">
+	{#if isLessonNavigation}
+		<div class="lesson-loading" role="status" aria-live="polite">
+			<div class="lesson-loading-card">
+				<div class="lesson-spinner" aria-hidden="true"></div>
+				<div class="lesson-loading-copy">
+					<h2>Opening your lesson…</h2>
+					<p>Syncing your latest progress before we jump in.</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 	<header class="lessons-header">
 		<div>
 			<p class="eyebrow">Lessons</p>
@@ -76,7 +125,14 @@
 		{:else}
 			<div class="lessons-grid">
 				{#each data.lessons as lesson}
-					<a class="lesson-card" href={`/code/${lesson.id}`} data-status={lesson.status}>
+					{@const lessonHref = `/code/${lesson.id}`}
+					<a
+						class="lesson-card"
+						href={lessonHref}
+						data-status={lesson.status}
+						aria-busy={isLessonNavigation && pendingLessonHref === lessonHref ? 'true' : undefined}
+						onclick={() => handleLessonOpen(lessonHref)}
+					>
 						<div class="lesson-meta">
 							<span class="lesson-emoji" aria-hidden="true">{lesson.emoji}</span>
 							<span class="lesson-status" data-state={lesson.status}>
@@ -134,7 +190,12 @@
 		{:else}
 			<div class="templates-grid">
 				{#each templates as template}
-					<form method="POST" action="?/start" class="template-card">
+					<form
+						method="POST"
+						action="?/start"
+						class="template-card"
+						onsubmit={handleTemplateSubmit}
+					>
 						<input type="hidden" name="topic" value={template.key} />
 						<div class="template-visual">
 							{#if template.posterImageUrl}
@@ -481,6 +542,75 @@
 		border: 1px solid rgba(239, 68, 68, 0.38);
 		background: rgba(248, 113, 113, 0.14);
 		color: #b91c1c;
+	}
+
+	.lesson-loading {
+		position: fixed;
+		inset: 0;
+		z-index: 30;
+		display: grid;
+		place-items: center;
+		background: rgba(15, 23, 42, 0.18);
+		backdrop-filter: blur(6px) saturate(120%);
+	}
+
+	:global([data-theme='dark'] .lesson-loading),
+	:global(:root:not([data-theme='light']) .lesson-loading) {
+		background: rgba(2, 6, 23, 0.4);
+	}
+
+	.lesson-loading-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		padding: 2.2rem 2.6rem;
+		border-radius: 1.6rem;
+		background: color-mix(in srgb, var(--app-content-bg) 90%, transparent);
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		box-shadow: 0 28px 80px -50px rgba(15, 23, 42, 0.4);
+		text-align: center;
+		max-width: min(90vw, 28rem);
+	}
+
+	:global([data-theme='dark'] .lesson-loading-card),
+	:global(:root:not([data-theme='light']) .lesson-loading-card) {
+		background: rgba(10, 16, 35, 0.92);
+		border-color: rgba(148, 163, 184, 0.28);
+		box-shadow: 0 28px 80px -50px rgba(2, 6, 23, 0.6);
+	}
+
+	.lesson-spinner {
+		width: 2.8rem;
+		height: 2.8rem;
+		border-radius: 9999px;
+		border: 3px solid rgba(148, 163, 184, 0.32);
+		border-top-color: rgba(59, 130, 246, 0.9);
+		animation: lesson-spin 0.75s linear infinite;
+	}
+
+	.lesson-loading-copy h2 {
+		margin: 0;
+		font-size: 1.3rem;
+	}
+
+	.lesson-loading-copy p {
+		margin: 0;
+		color: var(--app-subtitle-color, rgba(30, 41, 59, 0.78));
+	}
+
+	:global([data-theme='dark'] .lesson-loading-copy p),
+	:global(:root:not([data-theme='light']) .lesson-loading-copy p) {
+		color: rgba(203, 213, 225, 0.78);
+	}
+
+	@keyframes lesson-spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	@media (max-width: 720px) {
