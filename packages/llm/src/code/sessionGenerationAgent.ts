@@ -1296,7 +1296,7 @@ function buildSessionAgentTools(options: {
           const output = { path: inputPath, entries };
           const sampleNames = entries
             .slice(0, 10)
-            .map((entry) => entry.path)
+            .map((entry) => (entry.type === "dir" ? `${entry.path}/` : entry.path))
             .join(", ");
           log(
             `[agent-tool] list_files path=${inputPath} entries=${entries.length}${
