@@ -241,6 +241,16 @@ function withHtml(question: QuizQuestion): QuizQuestion {
 	const promptHtml = renderMarkdownOptional(question.prompt);
 	const hintHtml = renderMarkdownOptional(question.hint);
 	const explanationHtml = renderMarkdownOptional(question.explanation);
+	const renderAnswer = (answer?: string) => {
+		if (!answer) {
+			return undefined;
+		}
+		const hasLatex = /\\[a-zA-Z]+/.test(answer);
+		const hasDollar = answer.includes('$');
+		const candidate = !hasDollar && hasLatex ? `$${answer}$` : answer;
+		return renderMarkdownOptional(candidate);
+	};
+	const renderFeedback = (message: string) => renderMarkdownOptional(message);
 
 	switch (question.kind) {
 		case 'multiple-choice': {
@@ -253,6 +263,10 @@ function withHtml(question: QuizQuestion): QuizQuestion {
 				promptHtml,
 				hintHtml,
 				explanationHtml,
+				correctFeedback: {
+					...question.correctFeedback,
+					messageHtml: renderFeedback(question.correctFeedback.message)
+				},
 				options
 			};
 		}
@@ -261,7 +275,12 @@ function withHtml(question: QuizQuestion): QuizQuestion {
 				...question,
 				promptHtml,
 				hintHtml,
-				explanationHtml
+				explanationHtml,
+				answerHtml: renderAnswer(question.answer),
+				correctFeedback: {
+					...question.correctFeedback,
+					messageHtml: renderFeedback(question.correctFeedback.message)
+				}
 			};
 		}
 		case 'info-card': {

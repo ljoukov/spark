@@ -156,7 +156,13 @@
 				{#if feedback.heading}
 					<p class="text-sm font-semibold tracking-tight">{feedback.heading}</p>
 				{/if}
-				<p class="mt-1 text-base leading-relaxed">{feedback.message}</p>
+				{#if feedback.messageHtml}
+					<div class="markdown mt-1 text-base leading-relaxed">
+						{@html feedback.messageHtml}
+					</div>
+				{:else}
+					<p class="mt-1 text-base leading-relaxed">{feedback.message}</p>
+				{/if}
 			</div>
 		{/if}
 	</CardContent>
