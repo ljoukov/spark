@@ -154,7 +154,9 @@
 				{/if}
 				<Button variant="ghost" size="sm" onclick={handleDontKnow} disabled={inputDisabled}>
 					{#if isDontKnowBusy}
-						<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+						<span
+							class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+						></span>
 						<span>Submitting…</span>
 					{:else}
 						{dontKnowLabel}
@@ -166,7 +168,9 @@
 				{#if showContinue}
 					<Button size="lg" onclick={handleContinue} disabled={busy}>
 						{#if isContinueBusy}
-							<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+							<span
+								class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+							></span>
 							<span>Loading…</span>
 						{:else}
 							{continueLabel}
@@ -175,7 +179,9 @@
 				{:else}
 					<Button size="lg" onclick={handleSubmit} disabled={!trimmedValue || inputDisabled}>
 						{#if isSubmitBusy}
-							<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+							<span
+								class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+							></span>
 							<span>Submitting…</span>
 						{:else}
 							{answerLabel}

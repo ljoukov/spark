@@ -6,10 +6,7 @@ const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
-export const OPENAI_MODEL_IDS = [
-  "gpt-5.2",
-  "gpt-5.2-codex",
-] as const;
+export const OPENAI_MODEL_IDS = ["gpt-5.2", "gpt-5.2-codex"] as const;
 
 export type OpenAiModelId = (typeof OPENAI_MODEL_IDS)[number];
 

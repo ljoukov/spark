@@ -55,7 +55,9 @@
 		<div class="ml-auto flex items-center gap-2">
 			<Button size="lg" onclick={handleContinue} disabled={busy}>
 				{#if isContinueBusy}
-					<span class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+					<span
+						class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+					></span>
 					<span>Loading…</span>
 				{:else}
 					{continueLabel}
