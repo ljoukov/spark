@@ -2,6 +2,7 @@ export type QuizFeedbackTone = 'info' | 'success' | 'warning';
 
 export type QuizFeedback = {
 	message: string;
+	messageHtml?: string;
 	tone?: QuizFeedbackTone;
 	heading?: string;
 };
@@ -37,6 +38,7 @@ export type QuizMultipleChoiceQuestion = QuizQuestionWithFeedback & {
 export type QuizTypeAnswerQuestion = QuizQuestionWithFeedback & {
 	kind: 'type-answer';
 	answer: string;
+	answerHtml?: string;
 	acceptableAnswers?: string[];
 	placeholder?: string;
 };

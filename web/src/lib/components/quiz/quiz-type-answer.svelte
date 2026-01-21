@@ -134,7 +134,11 @@
 				Correct answer
 			</p>
 			<p class="mt-1 text-base leading-relaxed text-foreground/90">
-				{question.answer}
+				{#if question.answerHtml}
+					<span class="markdown">{@html question.answerHtml}</span>
+				{:else}
+					{question.answer}
+				{/if}
 			</p>
 			{#if question.acceptableAnswers?.length}
 				<p class="mt-3 text-sm text-muted-foreground/90">
