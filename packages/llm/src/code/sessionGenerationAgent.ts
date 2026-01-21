@@ -537,6 +537,7 @@ function buildTaskContent(options: {
     "You control the workspace for this run; reuse or overwrite existing files from prior runs as needed.",
     "Create one quiz file per quiz set and one problem file per coding problem.",
     "For each draft: generate -> grade with feedback -> revise using feedback.",
+    "When writing firestore/session.json, set session.id to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
     "Use generate_text tool for drafting and grading; avoid JSON except Firestore output files.",
     'For problem draft/revision/verification prompts, explicitly require code execution to run the solution against all tests and fix failures. Always call generate_text with tools=["code-execution"] for those.',
@@ -620,6 +621,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Read verification-prompt.md before writing verification.md.",
     "Read firestore-schema.json before writing firestore/*.json outputs.",
     "Write Firestore JSON outputs under firestore/session.json, firestore/quiz/*.json, firestore/code/*.json.",
+    "Use a descriptive kebab-case session.id in firestore/session.json; avoid generic ids like session-01.",
     "Use Markdown for drafts; only firestore/*.json files should contain JSON.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
     "Create quiz drafts under quizzes/quiz-01.md, quizzes/quiz-02.md, etc.",
@@ -671,6 +673,7 @@ function buildAgentUserPrompt(options: {
     "",
     "Use the brief as authoritative. Respect exactness rules from the brief.",
     "Use firestore-schema.json for the Firestore JSON output fields and rules.",
+    "Set session.id in firestore/session.json to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
     "Ensure quiz/problem counts match the plan parts.",
     "Proceed in order:",
     options.includeCoding
