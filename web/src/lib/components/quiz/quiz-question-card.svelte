@@ -216,6 +216,37 @@
 		background-color: color-mix(in srgb, currentColor 12%, transparent);
 	}
 
+	.markdown :global(pre),
+	.markdown-title :global(pre) {
+		margin: 0.85rem 0 1rem;
+		padding: 0.95rem 1rem;
+		border-radius: 0.75rem;
+		border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+		background: color-mix(in srgb, currentColor 10%, transparent);
+		overflow-x: auto;
+		font-weight: 500;
+	}
+
+	.markdown :global(pre code),
+	.markdown-title :global(pre code) {
+		display: block;
+		padding: 0;
+		background: transparent;
+		font-family: var(
+			--font-mono,
+			ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Monaco,
+			Consolas,
+			'Liberation Mono',
+			'Courier New',
+			monospace
+		);
+		font-size: 0.9rem;
+		line-height: 1.6;
+	}
+
 	.markdown :global(strong),
 	.markdown-title :global(strong) {
 		font-weight: 600;

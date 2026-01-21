@@ -143,6 +143,10 @@ def run() -> int:
 
     full_page = bool(spec.get("fullPage", False))
     headless = bool(spec.get("headless", True))
+    wait_until = spec.get("waitUntil", "networkidle")
+    if wait_until not in ("load", "domcontentloaded", "networkidle", "commit"):
+        print("error: spec.waitUntil must be load|domcontentloaded|networkidle|commit", file=sys.stderr)
+        return 2
     slow_mo = spec.get("slowMoMs")
     if args.slowmo is not None:
         slow_mo = args.slowmo
@@ -157,7 +161,7 @@ def run() -> int:
             browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
             context = browser.new_context(viewport={"width": width, "height": height})
             page = context.new_page()
-            page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+            page.goto(url, wait_until=wait_until, timeout=timeout_ms)
 
             for raw_step in steps:
                 if not isinstance(raw_step, dict):
@@ -221,7 +225,7 @@ def run() -> int:
                     next_url = raw_step.get("url")
                     if not isinstance(next_url, str):
                         raise SpecError("goto requires url")
-                    page.goto(next_url, wait_until="networkidle", timeout=timeout_ms)
+                    page.goto(next_url, wait_until=wait_until, timeout=timeout_ms)
                     maybe_wait(page, raw_step.get("afterMs"))
                 else:
                     raise SpecError(f"unknown action: {action}")
