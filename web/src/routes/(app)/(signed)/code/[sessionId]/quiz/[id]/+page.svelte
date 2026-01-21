@@ -934,6 +934,7 @@
 				keepLabel="Keep practicing"
 				quitLabel="Quit now"
 				quitDisabled={quitPending}
+				quitBusy={quitPending}
 				on:keep={() => closeFinishDialog()}
 				on:quit={() => void handleQuit()}
 			/>

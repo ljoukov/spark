@@ -14,6 +14,7 @@
 	export let keepLabel = 'Keep practicing';
 	export let quitLabel = 'Quit now';
 	export let quitDisabled = false;
+	export let quitBusy = false;
 
 	function handleKeep() {
 		dispatch('keep');
@@ -42,9 +43,13 @@
 	<Button
 		class="finish-continue w-full sm:w-auto sm:min-w-[9rem]"
 		disabled={quitDisabled}
+		aria-busy={quitBusy ? 'true' : undefined}
 		onclick={handleQuit}
 	>
-		{quitLabel}
+		{#if quitBusy}
+			<span class="finish-spinner-inline" aria-hidden="true"></span>
+		{/if}
+		<span>{quitLabel}</span>
 	</Button>
 </div>
 
@@ -89,6 +94,7 @@
 		background: #f97316 !important;
 		color: #ffffff !important;
 		justify-content: center;
+		gap: 0.45rem;
 		box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
 	}
 
@@ -99,6 +105,24 @@
 	:global(.finish-continue:disabled),
 	:global(.finish-continue[disabled]) {
 		background: #f97316 !important;
+	}
+
+	.finish-spinner-inline {
+		width: 0.95rem;
+		height: 0.95rem;
+		border-radius: 9999px;
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-top-color: rgba(255, 255, 255, 0.95);
+		animation: finish-inline-spin 0.75s linear infinite;
+	}
+
+	@keyframes finish-inline-spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	@media (min-width: 40rem) {

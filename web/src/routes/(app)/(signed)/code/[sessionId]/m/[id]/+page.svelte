@@ -666,6 +666,7 @@
 			keepLabel="Keep watching"
 			quitLabel="Quit now"
 			quitDisabled={exitPending}
+			quitBusy={exitPending}
 			on:keep={closeQuitDialog}
 			on:quit={() => void handleQuitNow()}
 		/>
