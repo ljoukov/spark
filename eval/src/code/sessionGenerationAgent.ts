@@ -78,6 +78,11 @@ type UsageTotals = {
 
 type UsageSummary = {
   generatedAt: string;
+  elapsedMs?: {
+    total: number;
+    model: number;
+    tool: number;
+  };
   totals: UsageTotals;
   models: Record<string, UsageTotals>;
 };
@@ -127,6 +132,39 @@ class UsageAggregator {
   private readonly calls = new Map<ModelCallHandle, CallState>();
   private readonly modelTotals = new Map<string, UsageTotals>();
   private readonly overallTotals: UsageTotals = createUsageTotals(false);
+  private modelElapsedMs = 0;
+
+  constructor(initial?: UsageSummary) {
+    if (!initial) {
+      return;
+    }
+    this.overallTotals.calls = initial.totals?.calls ?? 0;
+    this.overallTotals.costUsd = initial.totals?.costUsd ?? 0;
+    if (initial.elapsedMs?.model) {
+      this.modelElapsedMs = initial.elapsedMs.model;
+    }
+    if (initial.models) {
+      for (const [modelId, totals] of Object.entries(initial.models)) {
+        const hydrated = createUsageTotals(Boolean(totals.tokens));
+        hydrated.calls = totals.calls ?? 0;
+        hydrated.costUsd = totals.costUsd ?? 0;
+        if (totals.tokens) {
+          hydrated.tokens = {
+            input: totals.tokens.input ?? 0,
+            prompt: totals.tokens.prompt ?? 0,
+            cached: totals.tokens.cached ?? 0,
+            toolUsePrompt: totals.tokens.toolUsePrompt ?? 0,
+            output: totals.tokens.output ?? 0,
+            response: totals.tokens.response ?? 0,
+            responseImageTokens: totals.tokens.responseImageTokens ?? 0,
+            thinking: totals.tokens.thinking ?? 0,
+            total: totals.tokens.total ?? 0,
+          };
+        }
+        this.modelTotals.set(modelId, hydrated);
+      }
+    }
+  }
 
   start(details: { modelId: string; imageSize?: string }): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("usage-call");
@@ -197,6 +235,12 @@ class UsageAggregator {
     this.modelTotals.set(modelId, modelTotals);
   }
 
+  addModelElapsedMs(delta: number): void {
+    if (Number.isFinite(delta) && delta > 0) {
+      this.modelElapsedMs += delta;
+    }
+  }
+
   private applyModelTotals(
     totals: UsageTotals,
     state: CallState,
@@ -235,13 +279,31 @@ class UsageAggregator {
     totals.tokens.total += totalTokens;
   }
 
-  summary(): UsageSummary {
+  summary(totalElapsedMs?: number): UsageSummary {
+    const elapsedTotal =
+      Number.isFinite(totalElapsedMs) && totalElapsedMs !== undefined
+        ? Math.max(0, totalElapsedMs)
+        : undefined;
+    const elapsedModel = this.modelElapsedMs;
+    const elapsedTool =
+      elapsedTotal !== undefined
+        ? Math.max(0, elapsedTotal - elapsedModel)
+        : undefined;
     const models: Record<string, UsageTotals> = {};
     for (const [modelId, totals] of this.modelTotals.entries()) {
       models[modelId] = totals;
     }
     return {
       generatedAt: new Date().toISOString(),
+      ...(elapsedTotal !== undefined && elapsedTool !== undefined
+        ? {
+            elapsedMs: {
+              total: elapsedTotal,
+              model: elapsedModel,
+              tool: elapsedTool,
+            },
+          }
+        : {}),
       totals: this.overallTotals,
       models,
     };
@@ -282,6 +344,15 @@ function printUsageSummary(summary: UsageSummary): void {
     );
   }
   const overall = summary.totals;
+  if (summary.elapsedMs) {
+    console.log(
+      `Elapsed: total=${formatNumber(
+        summary.elapsedMs.total,
+      )}ms model=${formatNumber(summary.elapsedMs.model)}ms tool=${formatNumber(
+        summary.elapsedMs.tool,
+      )}ms`,
+    );
+  }
   console.log(
     `Total: calls=${formatNumber(overall.calls)} cost=${formatUsd(
       overall.costUsd,
@@ -479,11 +550,38 @@ async function publishToWelcomeTemplate(options: {
 
 async function main(): Promise<void> {
   const options = parseCliOptions();
-  const usage = new UsageAggregator();
   const usagePath = path.join(options.workingDirectory, "debug", "usage.json");
+  let baselineElapsedMs = 0;
+  let existingSummary: UsageSummary | undefined;
+  try {
+    const existing = JSON.parse(
+      await readFile(usagePath, "utf8"),
+    ) as UsageSummary;
+    existingSummary = existing;
+    if (existing.elapsedMs?.total) {
+      baselineElapsedMs = existing.elapsedMs.total;
+    }
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code && code !== "ENOENT") {
+      console.error(
+        `Failed to read existing usage.json: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  const usage = new UsageAggregator(existingSummary);
+  const runStartedAt = Date.now();
   let usageWritePromise: Promise<void> | undefined;
+  const callStartTimes = new Map<ModelCallHandle, number>();
   const scheduleUsageWrite = () => {
-    const payload = JSON.stringify(usage.summary(), null, 2);
+    const totalElapsedMs = baselineElapsedMs + (Date.now() - runStartedAt);
+    const payload = JSON.stringify(
+      usage.summary(totalElapsedMs),
+      null,
+      2,
+    );
     const writeOp = async () => {
       await mkdir(path.dirname(usagePath), { recursive: true });
       await writeFile(usagePath, payload, "utf8");
@@ -501,12 +599,23 @@ async function main(): Promise<void> {
       uploadBytes: number;
       imageSize?: string;
     }) {
-      return usage.start({ modelId: details.modelId, imageSize: details.imageSize });
+      const handle = usage.start({
+        modelId: details.modelId,
+        imageSize: details.imageSize,
+      });
+      callStartTimes.set(handle, Date.now());
+      return handle;
     },
     recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk) {
       usage.record(handle, chunk);
     },
     finishModelCall(handle: ModelCallHandle) {
+      const startedAt = callStartTimes.get(handle);
+      if (startedAt) {
+        const elapsedMs = Date.now() - startedAt;
+        usage.addModelElapsedMs(elapsedMs);
+        callStartTimes.delete(handle);
+      }
       usage.finish(handle);
       scheduleUsageWrite();
     },
