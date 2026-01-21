@@ -3507,6 +3507,7 @@ export async function runToolLoop(
     };
     let previousResponseId: string | undefined;
     let totalCostUsd = 0;
+    const loopStartedAt = Date.now();
     let input: ResponseInput = toOpenAiInput(contents);
     let debugPromptContents: LlmContent[] = [...contents];
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
@@ -3580,15 +3581,16 @@ export async function runToolLoop(
       totalCostUsd += stepCostUsd;
       reporter.log(
         [
-          `step ${stepIndex + 1} usage`,
+          `[tool-step:${stepIndex + 1}]`,
           `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
           `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
-          `response=${formatOptionalNumber(usageTokens?.responseTokens)}`,
           `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
-          `total=${formatOptionalNumber(usageTokens?.totalTokens)}`,
-          `cost=${formatCurrencyUsd(stepCostUsd)}`,
-          `totalCost=${formatCurrencyUsd(totalCostUsd)}`,
-          `elapsed=${formatMillis(elapsedMs)}`,
+          `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
+          `${formatCurrencyUsd(stepCostUsd)}`,
+          `${formatMillis(elapsedMs)},`,
+          `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
+          `${formatCurrencyUsd(totalCostUsd)}`,
+          `${formatMillis(Date.now() - loopStartedAt)}`,
         ].join(" "),
       );
       previousResponseId = response.id;
