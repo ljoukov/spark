@@ -1,6 +1,7 @@
 <script lang="ts">
 	import HomeIcon from '@lucide/svelte/icons/home';
 	import BotIcon from '@lucide/svelte/icons/bot';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -46,6 +47,12 @@
 			href: '/admin/tasks',
 			icon: PlayIcon,
 			highlight: (path) => path.startsWith('/admin/tasks')
+		},
+		{
+			title: 'UI',
+			href: '/admin/ui/quiz',
+			icon: MonitorIcon,
+			highlight: (path) => path.startsWith('/admin/ui')
 		}
 	] satisfies readonly NavItem[];
 
