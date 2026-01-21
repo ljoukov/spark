@@ -619,6 +619,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
   return [
     "You are a session generation agent.",
     `You may only edit files under: ${workspaceDir}`,
+    "Use workspace-relative paths only (no absolute paths, no .. segments).",
     "Use apply_patch for edits to existing files. For large rewrites, prefer delete_file then create_file with full contents.",
     "Use create_file for new files, move_file for renames, and delete_file for deletions.",
     "Use list_files and rg_search to explore files; avoid shell usage.",
@@ -715,6 +716,13 @@ function resolveWorkspacePath(
   workspaceDir: string,
   targetPath: string,
 ): string {
+  if (path.isAbsolute(targetPath)) {
+    throw new Error(`Absolute paths are not allowed: "${targetPath}".`);
+  }
+  const rawParts = targetPath.split(/[/\\]+/);
+  if (rawParts.some((part) => part === "..")) {
+    throw new Error(`Path traversal ("..") is not allowed: "${targetPath}".`);
+  }
   const resolved = path.resolve(workspaceDir, targetPath);
   const relative = path.relative(workspaceDir, resolved);
   const parts = relative.split(path.sep).filter((part) => part.length > 0);
