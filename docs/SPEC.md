@@ -54,6 +54,71 @@ python3 -m playwright install chromium
 python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir /tmp/spark-shots
 ```
 
+#### 0.1.1) Local No-Auth Mode (Test User)
+
+The web app supports a no-auth mode for local UI checks. When enabled, the server bypasses Firebase Auth and always treats requests as the test user.
+
+Steps:
+
+1) Create or update `.env.local` at the repo root (not inside `web/`) with a valid test user id:
+
+```
+TEST_USER=test-free-0123456789ABCDEF
+```
+
+Admin access requires the `test-admin-` prefix:
+
+```
+TEST_USER=test-admin-0123456789ABCDEF
+```
+
+The value must match `test-(admin|free|paid)-[A-Za-z0-9]{16}`.
+
+2) Start the web dev server in test-user mode:
+
+```
+npm --prefix web run dev:test-user
+```
+
+This sets `FORCE_TEST_USER=true` and reads `TEST_USER` from `.env.local`.
+
+3) Open the app in a browser:
+
+```
+http://127.0.0.1:8080/
+```
+
+Useful entry points:
+- `/` or `/?destination=code` or `/?destination=spark`
+- `/c` (Spark Chat), `/code`, `/spark`
+- `/admin` (requires `test-admin-` prefix)
+
+To return to normal auth, stop the server and run `npm --prefix web run dev` without `FORCE_TEST_USER` or `TEST_USER`.
+
+#### 0.1.2) Browser UI Checks and Screenshots
+
+Manual checks:
+- Keep the dev server running (see 0.1.1).
+- Open the target route(s) in a browser and verify the UI state.
+- Use the browser screenshot tool (full-page if needed) for quick evidence.
+
+Automated screenshots (Playwright template):
+- Create a temporary JSON spec outside the repo (e.g. `/tmp/spark-webflow.json`) listing each click/wait and every screenshot.
+- Use a consistent viewport and include an explicit wait after navigation or actions that trigger spinners.
+
+Example run:
+
+```
+python3 -m pip install playwright
+python3 -m playwright install chromium
+python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir /tmp/spark-shots
+```
+
+Recommended defaults:
+- Desktop: 1440x900, fullPage true
+- Mobile: 390x844, fullPage true
+- Screenshots should be taken right after the UI reaches the expected state (with a small `afterMs` wait if there is loading).
+
 ## 1) Product Goals
 
 - Spark is an effort comprising two apps:
