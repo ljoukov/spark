@@ -176,13 +176,32 @@ def run() -> int:
                     selector = raw_step.get("selector")
                     if not isinstance(selector, str):
                         raise SpecError("click requires selector")
-                    page.click(selector, timeout=timeout_ms)
+                    no_wait = bool(raw_step.get("noWaitAfter", False))
+                    page.click(selector, timeout=timeout_ms, no_wait_after=no_wait)
                     maybe_wait(page, raw_step.get("afterMs"))
                 elif action == "clickText":
                     text = raw_step.get("text")
                     if not isinstance(text, str):
                         raise SpecError("clickText requires text")
-                    click_by_text(page, text, timeout_ms)
+                    no_wait = bool(raw_step.get("noWaitAfter", False))
+                    if no_wait:
+                        locator = page.get_by_role("button", name=text)
+                        if locator.count() > 0:
+                            locator.first.click(timeout=timeout_ms, no_wait_after=True)
+                        else:
+                            locator = page.get_by_role("link", name=text)
+                            if locator.count() > 0:
+                                locator.first.click(timeout=timeout_ms, no_wait_after=True)
+                            else:
+                                locator = page.get_by_text(text)
+                                if locator.count() > 0:
+                                    locator.first.click(timeout=timeout_ms, no_wait_after=True)
+                                else:
+                                    raise PlaywrightTimeoutError(
+                                        f"No element found matching text: {text}"
+                                    )
+                    else:
+                        click_by_text(page, text, timeout_ms)
                     maybe_wait(page, raw_step.get("afterMs"))
                 elif action == "sleep":
                     sleep_ms = raw_step.get("ms")
