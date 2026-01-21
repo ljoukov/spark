@@ -1,4 +1,10 @@
 import { clearInterval, setInterval } from "node:timers";
+
+import {
+  getGeminiImagePreviewPricing,
+  getGeminiProPreviewPricing,
+} from "./gemini";
+import { getOpenAiPricing } from "./openai-llm";
 const ANSI_RESET = "\u001b[0m";
 const ANSI_GRAY = "\u001b[90m";
 const ANSI_RED = "\u001b[31m";
@@ -115,28 +121,6 @@ type CallUsageState = {
   appliedCostUsd: number;
 };
 
-const PRO_PREVIEW_THRESHOLD = 200_000; // prompt token count threshold for higher tier pricing
-const PRO_PREVIEW_INPUT_RATE_LOW = 2 / 1_000_000; // $2 per 1M input tokens
-const PRO_PREVIEW_INPUT_RATE_HIGH = 4 / 1_000_000; // $4 per 1M input tokens (large prompts)
-const PRO_PREVIEW_OUTPUT_RATE_LOW = 12 / 1_000_000; // $12 per 1M output/thinking tokens
-const PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000; // $18 per 1M output/thinking tokens (large prompts)
-const PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000; // $0.20 per 1M cached tokens
-const PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000; // $0.40 per 1M cached tokens (large prompts)
-
-const OPENAI_GPT_52_INPUT_RATE = 1.75 / 1_000_000; // $1.75 per 1M input tokens
-const OPENAI_GPT_52_CACHED_RATE = 0.175 / 1_000_000; // $0.175 per 1M cached tokens
-const OPENAI_GPT_52_OUTPUT_RATE = 14 / 1_000_000; // $14 per 1M output/thinking tokens
-
-const IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000; // $2 per 1M input tokens (text/image)
-const IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000; // $12 per 1M text/thinking tokens
-const IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000; // $120 per 1M image tokens
-const IMAGE_PREVIEW_IMAGE_PRICES: Record<string, number> = {
-  "1K": 0.134,
-  "2K": 0.134,
-  "4K": 0.24,
-};
-const IMAGE_PREVIEW_CACHED_RATE = 0.2 / 1_000_000; // $0.20 per 1M cached tokens
-
 function createEmptyTokenState(): CallTokenState {
   return {
     promptTokens: 0,
@@ -156,21 +140,6 @@ function resolveNumber(next: number | undefined, prev: number): number {
   return prev;
 }
 
-function resolvePricingModel(
-  modelId: string,
-): "pro-preview" | "image-preview" | "openai-gpt-5.2" | undefined {
-  if (modelId.includes("image-preview")) {
-    return "image-preview";
-  }
-  if (modelId.includes("gemini-3-pro")) {
-    return "pro-preview";
-  }
-  if (modelId.includes("gpt-5.2")) {
-    return "openai-gpt-5.2";
-  }
-  return undefined;
-}
-
 function calculateCallCost({
   modelId,
   tokens,
@@ -182,10 +151,6 @@ function calculateCallCost({
   responseImages: number;
   imageSize?: string;
 }): number {
-  const pricingModel = resolvePricingModel(modelId);
-  if (!pricingModel) {
-    return 0;
-  }
   const promptTokens = tokens.promptTokens + (tokens.toolUsePromptTokens ?? 0);
   const cachedTokens = tokens.cachedTokens;
   const nonCachedPrompt = Math.max(0, promptTokens - cachedTokens);
@@ -197,55 +162,65 @@ function calculateCallCost({
   );
   const thinkingTokens = tokens.thinkingTokens;
 
-  if (pricingModel === "pro-preview") {
-    const useHighTier = promptTokens > PRO_PREVIEW_THRESHOLD;
+  const imagePreviewPricing = getGeminiImagePreviewPricing(modelId);
+  if (imagePreviewPricing) {
+    const resolvedImageSize =
+      imageSize && imagePreviewPricing.imagePrices[imageSize]
+        ? imageSize
+        : "2K";
+    const imageRate = imagePreviewPricing.imagePrices[resolvedImageSize];
+    const tokensPerImage =
+      imagePreviewPricing.outputImageRate > 0
+        ? imageRate / imagePreviewPricing.outputImageRate
+        : 0;
+    let responseTextForPricing = responseTextTokens;
+    let imageTokensForPricing = responseImageTokens;
+    if (
+      imageTokensForPricing <= 0 &&
+      responseImages > 0 &&
+      tokensPerImage > 0
+    ) {
+      const estimatedImageTokens = responseImages * tokensPerImage;
+      imageTokensForPricing = estimatedImageTokens;
+      if (responseTextForPricing >= estimatedImageTokens) {
+        responseTextForPricing -= estimatedImageTokens;
+      }
+    }
+    const inputCost = nonCachedPrompt * imagePreviewPricing.inputRate;
+    const cachedCost = cachedTokens * imagePreviewPricing.cachedRate;
+    const outputTextCost =
+      (responseTextForPricing + thinkingTokens) *
+      imagePreviewPricing.outputTextRate;
+    const outputImageCost =
+      imageTokensForPricing * imagePreviewPricing.outputImageRate;
+    return inputCost + cachedCost + outputTextCost + outputImageCost;
+  }
+  const geminiPricing = getGeminiProPreviewPricing(modelId);
+  if (geminiPricing) {
+    const useHighTier = promptTokens > geminiPricing.threshold;
     const inputRate = useHighTier
-      ? PRO_PREVIEW_INPUT_RATE_HIGH
-      : PRO_PREVIEW_INPUT_RATE_LOW;
+      ? geminiPricing.inputRateHigh
+      : geminiPricing.inputRateLow;
     const cachedRate = useHighTier
-      ? PRO_PREVIEW_CACHED_RATE_HIGH
-      : PRO_PREVIEW_CACHED_RATE_LOW;
+      ? geminiPricing.cachedRateHigh
+      : geminiPricing.cachedRateLow;
     const outputRate = useHighTier
-      ? PRO_PREVIEW_OUTPUT_RATE_HIGH
-      : PRO_PREVIEW_OUTPUT_RATE_LOW;
+      ? geminiPricing.outputRateHigh
+      : geminiPricing.outputRateLow;
     const inputCost = nonCachedPrompt * inputRate;
     const cachedCost = cachedTokens * cachedRate;
-    const outputTokens = tokens.responseTokens + thinkingTokens;
-    const outputCost = outputTokens * outputRate;
+    const outputCost = (responseTextTokens + thinkingTokens) * outputRate;
     return inputCost + cachedCost + outputCost;
   }
-  if (pricingModel === "openai-gpt-5.2") {
-    const inputCost = nonCachedPrompt * OPENAI_GPT_52_INPUT_RATE;
-    const cachedCost = cachedTokens * OPENAI_GPT_52_CACHED_RATE;
-    const outputTokens = tokens.responseTokens + thinkingTokens;
-    const outputCost = outputTokens * OPENAI_GPT_52_OUTPUT_RATE;
+  const openAiPricing = getOpenAiPricing(modelId);
+  if (openAiPricing) {
+    const inputCost = nonCachedPrompt * openAiPricing.inputRate;
+    const cachedCost = cachedTokens * openAiPricing.cachedRate;
+    const outputCost =
+      (responseTextTokens + thinkingTokens) * openAiPricing.outputRate;
     return inputCost + cachedCost + outputCost;
   }
-
-  const imageRate =
-    imageSize && IMAGE_PREVIEW_IMAGE_PRICES[imageSize]
-      ? IMAGE_PREVIEW_IMAGE_PRICES[imageSize]
-      : IMAGE_PREVIEW_IMAGE_PRICES["2K"];
-  const tokensPerImage =
-    IMAGE_PREVIEW_OUTPUT_IMAGE_RATE > 0
-      ? imageRate / IMAGE_PREVIEW_OUTPUT_IMAGE_RATE
-      : 0;
-  let responseTextForPricing = responseTextTokens;
-  let imageTokensForPricing = responseImageTokens;
-  if (imageTokensForPricing <= 0 && responseImages > 0 && tokensPerImage > 0) {
-    const estimatedImageTokens = responseImages * tokensPerImage;
-    imageTokensForPricing = estimatedImageTokens;
-    if (responseTextForPricing >= estimatedImageTokens) {
-      responseTextForPricing -= estimatedImageTokens;
-    }
-  }
-  const inputCost = nonCachedPrompt * IMAGE_PREVIEW_INPUT_RATE;
-  const cachedCost = cachedTokens * IMAGE_PREVIEW_CACHED_RATE;
-  const textOutputCost =
-    (responseTextForPricing + thinkingTokens) * IMAGE_PREVIEW_OUTPUT_TEXT_RATE;
-  const imageOutputCost =
-    imageTokensForPricing * IMAGE_PREVIEW_OUTPUT_IMAGE_RATE;
-  return inputCost + cachedCost + textOutputCost + imageOutputCost;
+  return 0;
 }
 
 class MetricsTracker {
