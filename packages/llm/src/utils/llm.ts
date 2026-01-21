@@ -55,7 +55,11 @@ import type {
 } from "openai/resources/responses/responses";
 import { getSharp } from "./sharp";
 
-import type { JobProgressReporter, LlmUsageTokenUpdate } from "./concurrency";
+import type {
+  JobProgressReporter,
+  LlmUsageTokenUpdate,
+  ModelCallHandle,
+} from "./concurrency";
 import { formatMillis } from "./format";
 
 function estimateUploadBytes(parts: readonly LlmContentPart[]): number {
@@ -3538,6 +3542,26 @@ export async function runToolLoop(
   }
   const maxSteps = resolveToolLoopMaxSteps(options.maxSteps);
   const reporter = options.progress ?? createFallbackProgress("tool-loop");
+  const recordPromptUsage = (
+    handle: ModelCallHandle,
+    promptContents: readonly LlmContent[],
+  ): void => {
+    const stats = summarisePromptStats(promptContents);
+    if (
+      stats.textChars === 0 &&
+      stats.imageCount === 0 &&
+      stats.imageBytes === 0
+    ) {
+      return;
+    }
+    reporter.recordModelUsage(handle, {
+      prompt: {
+        textChars: stats.textChars > 0 ? stats.textChars : undefined,
+        imageCount: stats.imageCount > 0 ? stats.imageCount : undefined,
+        imageBytes: stats.imageBytes > 0 ? stats.imageBytes : undefined,
+      },
+    });
+  };
   const steps: LlmToolLoopStep[] = [];
   if (isOpenAiModelId(options.modelId)) {
     const openAiTools = buildOpenAiFunctionTools(options.tools);
@@ -3560,235 +3584,278 @@ export async function runToolLoop(
     let debugPromptContents: LlmContent[] = [...contents];
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       reporter.log(`OpenAI step ${stepIndex + 1}`);
-      const requestConfig = {
-        ...(previousResponseId
-          ? { previous_response_id: previousResponseId }
-          : {}),
-        ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
-        ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
-        reasoning: openAiReasoningPayload,
-        text: openAiTextConfig,
-      };
-      const startedAt = Date.now();
-      const response = await runOpenAiCall(async (client) =>
-        client.responses.create({
-          model: options.modelId,
-          input,
-          ...requestConfig,
-        }),
-      );
-      const elapsedMs = Date.now() - startedAt;
-      if (response.error) {
-        const message =
-          typeof response.error.message === "string"
-            ? response.error.message
-            : "OpenAI response failed";
-        throw new Error(message);
-      }
-      if (
-        response.status &&
-        response.status !== "completed" &&
-        response.status !== "in_progress"
-      ) {
-        const detail = response.incomplete_details?.reason;
-        throw new Error(
-          `OpenAI response status ${response.status}${
-            detail ? ` (${detail})` : ""
-          }`,
-        );
-      }
-      try {
-        await writeToolLoopDebugSnapshot({
-          debug: options.debug,
-          modelId: options.modelId,
-          step: stepIndex + 1,
-          maxSteps,
-          input,
-          debugPromptContents,
-          response,
-          elapsedMs,
-          requestConfig,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        reporter.log(`failed to write debug snapshot: ${message}`);
-      }
-      const reasoningSummary = extractOpenAiReasoningSummary(response);
-      if (reasoningSummary) {
-        reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
-      }
-      const usageTokens = extractOpenAiUsageTokens(response.usage);
-      const resolvedModelId = response.model ?? options.modelId;
-      const stepCostUsd = estimateCallCostUsd({
-        modelId: resolvedModelId,
-        tokens: usageTokens,
-        responseImages: 0,
+      const promptContents = openAiInputToDebugContents(input);
+      const callHandle = reporter.startModelCall({
+        modelId: options.modelId,
+        uploadBytes: estimateContentsUploadBytes(promptContents),
       });
-      totalCostUsd += stepCostUsd;
-      reporter.log(
-        [
-          `[tool-step:${stepIndex + 1}]`,
-          `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
-          `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
-          `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
-          `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
-          `${formatCurrencyUsd(stepCostUsd)}`,
-          `${formatMillis(elapsedMs)},`,
-          `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
-          `${formatCurrencyUsd(totalCostUsd)}`,
-          `${formatMillis(Date.now() - loopStartedAt)}`,
-        ].join(" "),
-      );
-      previousResponseId = response.id;
-      const responseText = extractOpenAiText(response);
-      const functionCalls = extractOpenAiFunctionCalls(response.output);
-      if (functionCalls.length === 0) {
-        if (!responseText) {
-          throw new Error("Tool loop response did not include text output.");
+      recordPromptUsage(callHandle, promptContents);
+      try {
+        const requestConfig = {
+          ...(previousResponseId
+            ? { previous_response_id: previousResponseId }
+            : {}),
+          ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
+          ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
+          reasoning: openAiReasoningPayload,
+          text: openAiTextConfig,
+        };
+        const startedAt = Date.now();
+        const response = await runOpenAiCall(async (client) =>
+          client.responses.create({
+            model: options.modelId,
+            input,
+            ...requestConfig,
+          }),
+        );
+        const elapsedMs = Date.now() - startedAt;
+        if (response.error) {
+          const message =
+            typeof response.error.message === "string"
+              ? response.error.message
+              : "OpenAI response failed";
+          throw new Error(message);
+        }
+        if (
+          response.status &&
+          response.status !== "completed" &&
+          response.status !== "in_progress"
+        ) {
+          const detail = response.incomplete_details?.reason;
+          throw new Error(
+            `OpenAI response status ${response.status}${
+              detail ? ` (${detail})` : ""
+            }`,
+          );
+        }
+        try {
+          await writeToolLoopDebugSnapshot({
+            debug: options.debug,
+            modelId: options.modelId,
+            step: stepIndex + 1,
+            maxSteps,
+            input,
+            debugPromptContents,
+            response,
+            elapsedMs,
+            requestConfig,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          reporter.log(`failed to write debug snapshot: ${message}`);
+        }
+        const reasoningSummary = extractOpenAiReasoningSummary(response);
+        if (reasoningSummary) {
+          reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
+        }
+        const usageTokens = extractOpenAiUsageTokens(response.usage);
+        const resolvedModelId = response.model ?? options.modelId;
+        reporter.recordModelUsage(callHandle, {
+          modelVersion: resolvedModelId,
+          tokens: usageTokens,
+        });
+        const stepCostUsd = estimateCallCostUsd({
+          modelId: resolvedModelId,
+          tokens: usageTokens,
+          responseImages: 0,
+        });
+        totalCostUsd += stepCostUsd;
+        reporter.log(
+          [
+            `[tool-step:${stepIndex + 1}]`,
+            `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
+            `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
+            `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
+            `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
+            `${formatCurrencyUsd(stepCostUsd)}`,
+            `${formatMillis(elapsedMs)},`,
+            `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
+            `${formatCurrencyUsd(totalCostUsd)}`,
+            `${formatMillis(Date.now() - loopStartedAt)}`,
+          ].join(" "),
+        );
+        previousResponseId = response.id;
+        const responseText = extractOpenAiText(response);
+        const functionCalls = extractOpenAiFunctionCalls(response.output);
+        if (functionCalls.length === 0) {
+          if (!responseText) {
+            throw new Error("Tool loop response did not include text output.");
+          }
+          steps.push({
+            step: steps.length + 1,
+            modelId: options.modelId,
+            text: responseText,
+            toolCalls: [],
+          });
+          return { text: responseText, steps };
+        }
+        const toolCalls: LlmToolCallResult[] = [];
+        const toolOutputs: ResponseInput = [];
+        const callInputs = functionCalls.map((call) => {
+          const toolName = call.name;
+          const { value, error: parseError } = parseOpenAiToolArguments(
+            call.arguments,
+          );
+          const toolSummary = summarizeToolCallInput(toolName, value);
+          reporter.log(
+            toolSummary
+              ? `tool: ${toolName} ${toolSummary}`
+              : `tool: ${toolName}`,
+          );
+          return { call, toolName, value, parseError };
+        });
+        const callResults = await Promise.all(
+          callInputs.map(async (entry) => {
+            const { result, outputPayload } = await executeToolCall({
+              toolName: entry.toolName,
+              tool: options.tools[entry.toolName],
+              rawInput: entry.value,
+              parseError: entry.parseError,
+            });
+            return { entry, result, outputPayload };
+          }),
+        );
+        for (const { entry, result, outputPayload } of callResults) {
+          toolCalls.push({
+            ...result,
+            callId: entry.call.call_id,
+          });
+          toolOutputs.push({
+            type: "function_call_output",
+            call_id: entry.call.call_id,
+            output: serializeToolOutput(outputPayload),
+          } as ResponseInputItem.FunctionCallOutput);
         }
         steps.push({
           step: steps.length + 1,
           modelId: options.modelId,
-          text: responseText,
-          toolCalls: [],
+          text: responseText.length > 0 ? responseText : undefined,
+          toolCalls,
         });
-        return { text: responseText, steps };
+        if (toolOutputs.length > 0) {
+          debugPromptContents = debugPromptContents.concat(
+            openAiInputToDebugContents(toolOutputs),
+          );
+        }
+        input = toolOutputs;
+      } finally {
+        reporter.finishModelCall(callHandle);
       }
-      const toolCalls: LlmToolCallResult[] = [];
-      const toolOutputs: ResponseInput = [];
-      const callInputs = functionCalls.map((call) => {
-        const toolName = call.name;
-        const { value, error: parseError } = parseOpenAiToolArguments(
-          call.arguments,
-        );
-        const toolSummary = summarizeToolCallInput(toolName, value);
-        reporter.log(
-          toolSummary
-            ? `tool: ${toolName} ${toolSummary}`
-            : `tool: ${toolName}`,
-        );
-        return { call, toolName, value, parseError };
-      });
-      const callResults = await Promise.all(
-        callInputs.map(async (entry) => {
-          const { result, outputPayload } = await executeToolCall({
-            toolName: entry.toolName,
-            tool: options.tools[entry.toolName],
-            rawInput: entry.value,
-            parseError: entry.parseError,
-          });
-          return { entry, result, outputPayload };
-        }),
-      );
-      for (const { entry, result, outputPayload } of callResults) {
-        toolCalls.push({
-          ...result,
-          callId: entry.call.call_id,
-        });
-        toolOutputs.push({
-          type: "function_call_output",
-          call_id: entry.call.call_id,
-          output: serializeToolOutput(outputPayload),
-        } as ResponseInputItem.FunctionCallOutput);
-      }
-      steps.push({
-        step: steps.length + 1,
-        modelId: options.modelId,
-        text: responseText.length > 0 ? responseText : undefined,
-        toolCalls,
-      });
-      if (toolOutputs.length > 0) {
-        debugPromptContents = debugPromptContents.concat(
-          openAiInputToDebugContents(toolOutputs),
-        );
-      }
-      input = toolOutputs;
     }
   } else {
     const geminiTools = buildGeminiFunctionDeclarations(options.tools);
     const geminiContents = contents.map(convertLlmContentToGoogleContent);
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       reporter.log(`Gemini step ${stepIndex + 1}`);
-      const response = await runGeminiCall(async (client) =>
-        client.models.generateContent({
-          model: options.modelId,
-          contents: geminiContents,
-          config: {
-            maxOutputTokens: 32_000,
-            tools: geminiTools,
-            toolConfig: {
-              functionCallingConfig: {
-                mode: FunctionCallingConfigMode.VALIDATED,
+      let promptContents: LlmContent[] = contents;
+      try {
+        promptContents = geminiContents.map(convertGoogleContentToLlmContent);
+      } catch {
+        promptContents = contents;
+      }
+      const callHandle = reporter.startModelCall({
+        modelId: options.modelId,
+        uploadBytes: estimateContentsUploadBytes(promptContents),
+      });
+      recordPromptUsage(callHandle, promptContents);
+      try {
+        const response = await runGeminiCall(async (client) =>
+          client.models.generateContent({
+            model: options.modelId,
+            contents: geminiContents,
+            config: {
+              maxOutputTokens: 32_000,
+              tools: geminiTools,
+              toolConfig: {
+                functionCallingConfig: {
+                  mode: FunctionCallingConfigMode.VALIDATED,
+                },
               },
             },
-          },
-        }),
-      );
-      const responseText = response.text ?? "";
-      const functionCalls = response.functionCalls;
-      if (!functionCalls || functionCalls.length === 0) {
-        if (!responseText) {
-          throw new Error("Tool loop response did not include text output.");
+          }),
+        );
+        const usageTokens = extractUsageTokens(
+          (response as { usageMetadata?: unknown }).usageMetadata,
+        );
+        const modelVersion =
+          (response as { modelVersion?: string }).modelVersion ??
+          (response as { model?: string }).model ??
+          undefined;
+        if (usageTokens || modelVersion) {
+          reporter.recordModelUsage(callHandle, {
+            modelVersion,
+            tokens: usageTokens,
+          });
+        }
+        const responseText = response.text ?? "";
+        const functionCalls = response.functionCalls;
+        if (!functionCalls || functionCalls.length === 0) {
+          if (!responseText) {
+            throw new Error("Tool loop response did not include text output.");
+          }
+          steps.push({
+            step: steps.length + 1,
+            modelId: options.modelId,
+            text: responseText,
+            toolCalls: [],
+          });
+          return { text: responseText, steps };
+        }
+        const toolCalls: LlmToolCallResult[] = [];
+        const modelContent = response.candidates?.[0]?.content;
+        if (modelContent) {
+          geminiContents.push(modelContent);
+        } else {
+          const parts: Part[] = [];
+          if (responseText) {
+            parts.push({ text: responseText });
+          }
+          for (const call of functionCalls) {
+            parts.push({ functionCall: call });
+          }
+          geminiContents.push({ role: "model", parts });
+        }
+        const responseParts: Part[] = [];
+        const callInputs = functionCalls.map((call) => ({
+          call,
+          toolName: call.name ?? "unknown",
+          rawInput: call.args ?? {},
+        }));
+        const callResults = await Promise.all(
+          callInputs.map(async (entry) => {
+            const { result, outputPayload } = await executeToolCall({
+              toolName: entry.toolName,
+              tool: options.tools[entry.toolName],
+              rawInput: entry.rawInput,
+            });
+            return { entry, result, outputPayload };
+          }),
+        );
+        for (const { entry, result, outputPayload } of callResults) {
+          toolCalls.push({
+            ...result,
+            callId: entry.call.id,
+          });
+          const responsePayload = wrapGeminiToolOutput(outputPayload);
+          responseParts.push({
+            functionResponse: {
+              name: entry.toolName,
+              response: responsePayload,
+              ...(entry.call.id ? { id: entry.call.id } : {}),
+            },
+          });
         }
         steps.push({
           step: steps.length + 1,
           modelId: options.modelId,
-          text: responseText,
-          toolCalls: [],
+          text: responseText.length > 0 ? responseText : undefined,
+          toolCalls,
         });
-        return { text: responseText, steps };
+        geminiContents.push({ role: "user", parts: responseParts });
+      } finally {
+        reporter.finishModelCall(callHandle);
       }
-      const toolCalls: LlmToolCallResult[] = [];
-      const modelContent = response.candidates?.[0]?.content;
-      if (modelContent) {
-        geminiContents.push(modelContent);
-      } else {
-        const parts: Part[] = [];
-        if (responseText) {
-          parts.push({ text: responseText });
-        }
-        for (const call of functionCalls) {
-          parts.push({ functionCall: call });
-        }
-        geminiContents.push({ role: "model", parts });
-      }
-      const responseParts: Part[] = [];
-      const callInputs = functionCalls.map((call) => ({
-        call,
-        toolName: call.name ?? "unknown",
-        rawInput: call.args ?? {},
-      }));
-      const callResults = await Promise.all(
-        callInputs.map(async (entry) => {
-          const { result, outputPayload } = await executeToolCall({
-            toolName: entry.toolName,
-            tool: options.tools[entry.toolName],
-            rawInput: entry.rawInput,
-          });
-          return { entry, result, outputPayload };
-        }),
-      );
-      for (const { entry, result, outputPayload } of callResults) {
-        toolCalls.push({
-          ...result,
-          callId: entry.call.id,
-        });
-        const responsePayload = wrapGeminiToolOutput(outputPayload);
-        responseParts.push({
-          functionResponse: {
-            name: entry.toolName,
-            response: responsePayload,
-            ...(entry.call.id ? { id: entry.call.id } : {}),
-          },
-        });
-      }
-      steps.push({
-        step: steps.length + 1,
-        modelId: options.modelId,
-        text: responseText.length > 0 ? responseText : undefined,
-        toolCalls,
-      });
-      geminiContents.push({ role: "user", parts: responseParts });
     }
   }
   throw new Error(
