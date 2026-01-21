@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -599,7 +600,9 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Use apply_patch for edits to existing files. For large rewrites, prefer delete_file then create_file with full contents.",
     "Use create_file for new files, move_file for renames, and delete_file for deletions.",
     "Use list_files and rg_search to explore files; avoid shell usage.",
-    "Use read_file to inspect file contents.",
+    "Use read_files to fetch multiple files at once.",
+    "Use read_file for full file contents when needed.",
+    "Use read_file_summary (fast model) for quick checks; provide a short question.",
     "Work in the shortest path possible: avoid repeated listing/reading unless needed.",
     "Maintain plan.md with [running] and [done] updates as you progress.",
     "Use generate_text tool for drafting and grading (gpt-5.2). Do not write large drafts directly.",
@@ -673,6 +676,7 @@ function buildAgentUserPrompt(options: {
       : "session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Use generate_text for drafting and grading; set promptPath and outputPath so it reads/writes files directly; enable web-search or code-execution only when needed.",
+    "Use read_files to pull multiple files in one call; use read_file_summary for quick checks instead of reading full files.",
     "Problem drafting, revision, and verification must use generate_text with code-execution.",
     "Problem prompts must explicitly instruct the model to run the solution against all tests and fix any failures.",
     "Use story-prompt.md for story fields and historical anchor meaning.",
@@ -1153,7 +1157,7 @@ function loadAgentEnv(): void {
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
 }
 
-function buildSessionAgentTools(options: {
+async function buildSessionAgentTools(options: {
   paths: WorkspacePaths;
   progress?: JobProgressReporter;
   includeStory: boolean;
@@ -1168,8 +1172,125 @@ function buildSessionAgentTools(options: {
     }
   };
   const logPath = path.join(paths.debugDir, "tool-calls.jsonl");
+  const cachePath = path.join(paths.workspaceDir, "cache", "file-cache.json");
+  type CachedFileEntry = {
+    mtimeMs: number;
+    size: number;
+    sha256?: string;
+    content?: string;
+  };
+  type CachedSummaryEntry = {
+    mtimeMs: number;
+    size: number;
+    sha256: string;
+    promptHash: string;
+    summary: string;
+  };
+  type FileCache = {
+    version: number;
+    files: Record<string, CachedFileEntry>;
+    summaries: Record<string, CachedSummaryEntry>;
+  };
+  const fileCache: FileCache = {
+    version: 1,
+    files: {},
+    summaries: {},
+  };
+  try {
+    const cacheText = await readFile(cachePath, "utf8");
+    const parsed = JSON.parse(cacheText) as FileCache;
+    if (parsed && typeof parsed === "object") {
+      if (parsed.files && typeof parsed.files === "object") {
+        fileCache.files = parsed.files;
+      }
+      if (parsed.summaries && typeof parsed.summaries === "object") {
+        fileCache.summaries = parsed.summaries;
+      }
+    }
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code !== "ENOENT") {
+      log(`[session-agent] failed to load cache: ${errorAsString(error)}`);
+    }
+  }
+  let cacheWritePromise: Promise<void> | undefined;
+  const queueCacheWrite = async () => {
+    const payload = JSON.stringify(fileCache, null, 2);
+    const writeOp = async () => {
+      await ensureDir(path.dirname(cachePath));
+      await writeFile(cachePath, payload, "utf8");
+    };
+    if (!cacheWritePromise) {
+      cacheWritePromise = writeOp().catch(() => undefined);
+    } else {
+      cacheWritePromise = cacheWritePromise.then(writeOp).catch(() => undefined);
+    }
+    await cacheWritePromise;
+  };
+  const inflightReads = new Map<string, Promise<CachedFileEntry>>();
+  const hashText = (text: string): string =>
+    createHash("sha256").update(text).digest("hex");
+  const getFileContentWithCache = async (inputPath: string) => {
+    const resolved = resolveWorkspacePath(paths.workspaceDir, inputPath);
+    const stats = await stat(resolved);
+    if (!stats.isFile()) {
+      throw new Error(`Path is not a file: ${inputPath}`);
+    }
+    const entryKey = inputPath;
+    const cacheEntry = fileCache.files[entryKey];
+    if (
+      cacheEntry &&
+      cacheEntry.content !== undefined &&
+      cacheEntry.mtimeMs === stats.mtimeMs &&
+      cacheEntry.size === stats.size
+    ) {
+      const bytes = Buffer.byteLength(cacheEntry.content, "utf8");
+      return {
+        content: cacheEntry.content,
+        bytes,
+        cached: true,
+        entry: cacheEntry,
+      };
+    }
+    let inflight = inflightReads.get(entryKey);
+    if (!inflight) {
+      inflight = (async () => {
+        const content = await readFile(resolved, { encoding: "utf8" });
+        const updated: CachedFileEntry = {
+          mtimeMs: stats.mtimeMs,
+          size: stats.size,
+          sha256: hashText(content),
+          content,
+        };
+        fileCache.files[entryKey] = updated;
+        await queueCacheWrite();
+        return updated;
+      })();
+      inflightReads.set(entryKey, inflight);
+      try {
+        const updated = await inflight;
+        return {
+          content: updated.content ?? "",
+          bytes: Buffer.byteLength(updated.content ?? "", "utf8"),
+          cached: false,
+          entry: updated,
+        };
+      } finally {
+        inflightReads.delete(entryKey);
+      }
+    }
+    const updated = await inflight;
+    return {
+      content: updated.content ?? "",
+      bytes: Buffer.byteLength(updated.content ?? "", "utf8"),
+      cached: false,
+      entry: updated,
+    };
+  };
   let totalGenerateCostUsd = 0;
   let totalGenerateMs = 0;
+  let totalSummaryCostUsd = 0;
+  let totalSummaryMs = 0;
   const logTool = async (entry: {
     tool: string;
     input: unknown;
@@ -1336,15 +1457,27 @@ function buildSessionAgentTools(options: {
       }),
       execute: async ({ path: inputPath }) => {
         try {
-          const resolved = resolveWorkspacePath(paths.workspaceDir, inputPath);
-          const content = await readFile(resolved, { encoding: "utf8" });
-          const bytes = Buffer.byteLength(content, "utf8");
-          const output = { path: inputPath, content, bytes };
-          log(`[agent-tool] read_file path=${inputPath} bytes=${bytes}`);
+          const { content, bytes, cached, entry } =
+            await getFileContentWithCache(inputPath);
+          if (entry && !entry.sha256) {
+            entry.sha256 = hashText(content);
+            await queueCacheWrite();
+          }
+          const output = { path: inputPath, content, bytes, cached };
+          log(
+            `[agent-tool] read_file path=${inputPath} bytes=${bytes}${
+              cached ? " cached" : ""
+            }`,
+          );
           await logTool({
             tool: "read_file",
             input: { path: inputPath },
-            output: { path: inputPath, chars: content.length, bytes },
+            output: {
+              path: inputPath,
+              chars: content.length,
+              bytes,
+              cached,
+            },
           });
           return output;
         } catch (error) {
@@ -1352,6 +1485,214 @@ function buildSessionAgentTools(options: {
           await logTool({
             tool: "read_file",
             input: { path: inputPath },
+            error: message,
+          });
+          throw error;
+        }
+      },
+    }),
+    read_files: tool({
+      description: "Read multiple text files from the workspace.",
+      inputSchema: z.object({
+        paths: z.array(z.string().trim().min(1)).min(1),
+      }),
+      execute: async ({ paths: inputPaths }) => {
+        try {
+          const entries = await Promise.all(
+            inputPaths.map(async (inputPath) => {
+              const { content, bytes, cached, entry } =
+                await getFileContentWithCache(inputPath);
+              if (entry && !entry.sha256) {
+                entry.sha256 = hashText(content);
+                await queueCacheWrite();
+              }
+              return {
+                path: inputPath,
+                content,
+                bytes,
+                cached,
+              };
+            }),
+          );
+          const output = { files: entries };
+          const cachedCount = entries.filter((entry) => entry.cached).length;
+          log(
+            `[agent-tool] read_files paths=${inputPaths.length} cached=${cachedCount}`,
+          );
+          await logTool({
+            tool: "read_files",
+            input: { paths: inputPaths },
+            output: {
+              files: entries.map((entry) => ({
+                path: entry.path,
+                chars: entry.content.length,
+                bytes: entry.bytes,
+                cached: entry.cached,
+              })),
+            },
+          });
+          return output;
+        } catch (error) {
+          const message = errorAsString(error);
+          await logTool({
+            tool: "read_files",
+            input: { paths: inputPaths },
+            error: message,
+          });
+          throw error;
+        }
+      },
+    }),
+    read_file_summary: tool({
+      description:
+        "Summarize or answer a focused question about a file using a fast model.",
+      inputSchema: z
+        .object({
+          path: z.string().trim().min(1),
+          question: z.string().trim().min(1),
+        })
+        .strict(),
+      execute: async ({ path: inputPath, question }) => {
+        try {
+          const { content, bytes, cached, entry } =
+            await getFileContentWithCache(inputPath);
+          const sha256 = entry?.sha256 ?? hashText(content);
+          if (entry && entry.sha256 !== sha256) {
+            entry.sha256 = sha256;
+            await queueCacheWrite();
+          }
+          const promptHash = hashText(question);
+          const summaryKey = `${inputPath}::${promptHash}`;
+          const cachedSummary = fileCache.summaries[summaryKey];
+          if (
+            cachedSummary &&
+            cachedSummary.sha256 === sha256 &&
+            cachedSummary.mtimeMs === entry?.mtimeMs &&
+            cachedSummary.size === entry?.size
+          ) {
+            const output = {
+              path: inputPath,
+              summary: cachedSummary.summary,
+              cached: true,
+              bytes,
+            };
+            log(
+              `[agent-tool] read_file_summary path=${inputPath} bytes=${bytes} cached`,
+            );
+            await logTool({
+              tool: "read_file_summary",
+              input: { path: inputPath, question },
+              output,
+            });
+            return output;
+          }
+          const summaryPrompt = [
+            "You are a fast file analyst. Answer the question concisely.",
+            "If the file does not require action based on the question, reply only with NO_CHANGES.",
+            "",
+            `Question: ${question}`,
+            "",
+            "File contents:",
+            content,
+          ].join("\n");
+          type UsageState = {
+            tokens?: LlmUsageChunk["tokens"];
+            modelVersion?: string;
+          };
+          const usageState: UsageState = {};
+          const mergeTokens = (
+            current: LlmUsageChunk["tokens"] | undefined,
+            next: LlmUsageChunk["tokens"] | undefined,
+          ): LlmUsageChunk["tokens"] | undefined => {
+            if (!next) {
+              return current;
+            }
+            if (!current) {
+              return next;
+            }
+            return {
+              promptTokens: next.promptTokens ?? current.promptTokens,
+              cachedTokens: next.cachedTokens ?? current.cachedTokens,
+              responseTokens: next.responseTokens ?? current.responseTokens,
+              responseImageTokens:
+                next.responseImageTokens ?? current.responseImageTokens,
+              thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
+              totalTokens: next.totalTokens ?? current.totalTokens,
+              toolUsePromptTokens:
+                next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+            };
+          };
+          const trackingProgress: JobProgressReporter = {
+            log: () => {},
+            startModelCall: () => Symbol("summary-call"),
+            recordModelUsage: (_handle, chunk) => {
+              if (chunk.tokens) {
+                usageState.tokens = mergeTokens(usageState.tokens, chunk.tokens);
+              }
+              if (chunk.modelVersion) {
+                usageState.modelVersion = chunk.modelVersion;
+              }
+            },
+            finishModelCall: () => {},
+            startStage: () => Symbol("summary-stage"),
+            finishStage: () => {},
+            setActiveStages: () => {},
+          };
+          const debug: LlmDebugOptions | undefined = {
+            rootDir: paths.debugDir,
+            stage: "agent-tool",
+            subStage: "summary",
+          };
+          const startedAt = Date.now();
+          const summary = await generateText({
+            modelId: "gemini-flash-latest",
+            contents: [
+              { role: "user", parts: [{ type: "text", text: summaryPrompt }] },
+            ],
+            debug,
+            progress: trackingProgress,
+          });
+          const elapsedMs = Date.now() - startedAt;
+          const tokens = usageState.tokens;
+          const costUsd = estimateCallCostUsd({
+            modelId: usageState.modelVersion ?? "gemini-flash-latest",
+            tokens,
+            responseImages: 0,
+          });
+          totalSummaryCostUsd += costUsd;
+          totalSummaryMs += elapsedMs;
+          fileCache.summaries[summaryKey] = {
+            mtimeMs: entry?.mtimeMs ?? 0,
+            size: entry?.size ?? bytes,
+            sha256,
+            promptHash,
+            summary,
+          };
+          await queueCacheWrite();
+          log(
+            `[agent-tool] read_file_summary path=${inputPath} bytes=${bytes} ` +
+              `tokens prompt=${formatOptionalNumber(tokens?.promptTokens)} cached=${formatOptionalNumber(tokens?.cachedTokens)} ` +
+              `response=${formatOptionalNumber(tokens?.responseTokens)} thinking=${formatOptionalNumber(tokens?.thinkingTokens)} total=${formatOptionalNumber(tokens?.totalTokens)} ` +
+              `elapsed=${formatSeconds(elapsedMs)} cost=${formatCurrencyUsd(costUsd)} ` +
+              `totalCost=${formatCurrencyUsd(totalSummaryCostUsd)} totalTime=${formatSeconds(totalSummaryMs)}`,
+          );
+          const output = {
+            path: inputPath,
+            summary,
+            cached: false,
+            bytes,
+          };
+          await logTool({
+            tool: "read_file_summary",
+            input: { path: inputPath, question },
+            output,
+          });
+          return output;
+        } catch (error) {
+          const message = errorAsString(error);
+          await logTool({
+            tool: "read_file_summary",
+            input: { path: inputPath, question },
             error: message,
           });
           throw error;
@@ -1742,7 +2083,7 @@ export async function runSessionAgentSmokeTest(options: {
   const includeStory = true;
   const includeCoding = true;
   const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
-  const tools = buildSessionAgentTools({
+  const tools = await buildSessionAgentTools({
     paths,
     progress: options.progress,
     includeStory,
@@ -1846,7 +2187,7 @@ export async function runSessionGenerationAgent(
     includeCoding,
   });
 
-  const tools = buildSessionAgentTools({
+  const tools = await buildSessionAgentTools({
     paths,
     progress: options.progress,
     includeStory,
