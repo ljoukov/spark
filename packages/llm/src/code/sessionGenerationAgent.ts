@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -224,30 +223,6 @@ function deriveTopicFromBrief(text: string): string {
     return "";
   }
   return firstNonEmpty.replace(/^\s*#+\s*/u, "").trim();
-}
-
-function slugifyTopic(topic: string): string {
-  const ascii = topic
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9\s-]/g, " ")
-    .trim()
-    .toLowerCase();
-  const collapsed = ascii.replace(/\s+/g, "-").replace(/-+/g, "-");
-  const trimmed = collapsed.replace(/^-+|-+$/g, "");
-  const baseSlug = trimmed || "session";
-  const maxLength = 25;
-  if (baseSlug.length <= maxLength) {
-    return baseSlug;
-  }
-  let cutoff = maxLength;
-  while (cutoff < baseSlug.length && baseSlug[cutoff] !== "-") {
-    cutoff += 1;
-  }
-  const hash = createHash("sha256").update(topic).digest("hex").slice(0, 6);
-  const prefix = baseSlug.slice(0, cutoff).replace(/-+$/g, "");
-  const safePrefix = prefix.length > 0 ? prefix : baseSlug.slice(0, maxLength);
-  return `${safePrefix}-${hash}`;
 }
 
 async function ensureDir(dirPath: string): Promise<void> {
@@ -493,7 +468,7 @@ function buildVerificationPromptContent(): string {
 }
 
 function safeToJsonSchema(
-  schema: z.ZodTypeAny,
+  schema: z.ZodType,
   name: string,
 ): Record<string, unknown> {
   try {
@@ -501,7 +476,7 @@ function safeToJsonSchema(
       string,
       unknown
     >;
-  } catch (error) {
+  } catch {
     const fallback = zodToJsonSchema(schema, {
       name,
       target: "jsonSchema7",
@@ -563,6 +538,7 @@ function buildTaskContent(options: {
     "For each draft: generate -> grade with feedback -> revise using feedback.",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
     "Use generate_text tool for drafting and grading; avoid JSON except Firestore output files.",
+    "For problem draft/revision/verification prompts, explicitly require code execution to run the solution against all tests and fix failures. Always call generate_text with tools=[\"code-execution\"] for those.",
     "generate_text should write directly to files via outputPath; do not paste large drafts into the tool response.",
     "generate_text should read its prompt from a file via promptPath; do not inline large prompts in tool arguments.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
@@ -635,6 +611,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Do not write any firestore/*.json outputs until all drafts are verified and finalized.",
     "If coding is enabled, draft and verify problems first, then derive techniques and update session-plan.md before drafting quizzes.",
+    "For all problem draft/revision/verification generate_text calls, set tools=[\"code-execution\"] and include an explicit prompt instruction to run the solution against all tests and fix any failures.",
     "Read story-prompt.md before drafting story.md.",
     "Read verification-prompt.md before writing verification.md.",
     "Read firestore-schema.json before writing firestore/*.json outputs.",
@@ -696,7 +673,8 @@ function buildAgentUserPrompt(options: {
       : "session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Use generate_text for drafting and grading; set promptPath and outputPath so it reads/writes files directly; enable web-search or code-execution only when needed.",
-    "Problem solution verification should use generate_text with code-execution.",
+    "Problem drafting, revision, and verification must use generate_text with code-execution.",
+    "Problem prompts must explicitly instruct the model to run the solution against all tests and fix any failures.",
     "Use story-prompt.md for story fields and historical anchor meaning.",
     "Use verification-prompt.md during the final cross-check.",
     "Prompt templates may include {{path/to/file.md}} placeholders that will be expanded before calling generate_text.",
@@ -957,6 +935,31 @@ function applyDiff(original: string, diff: string): string {
   throw new Error("Unsupported diff format (missing hunk headers).");
 }
 
+function formatIssueValue(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  switch (typeof value) {
+    case "string":
+      return value;
+    case "number":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+      return value.toString();
+    case "undefined":
+      return "undefined";
+    default: {
+      try {
+        const json = JSON.stringify(value);
+        return typeof json === "string" ? json : "[unserializable]";
+      } catch {
+        return "[unserializable]";
+      }
+    }
+  }
+}
+
 function buildValidationError(error: unknown): string {
   if (error instanceof z.ZodError) {
     return error.issues
@@ -966,11 +969,11 @@ function buildValidationError(error: unknown): string {
         const codeLabel = issue.code ? ` [${issue.code}]` : "";
         const expected =
           "expected" in issue && issue.expected !== undefined
-            ? ` expected=${String(issue.expected)}`
+            ? ` expected=${formatIssueValue(issue.expected)}`
             : "";
         const received =
           "received" in issue && issue.received !== undefined
-            ? ` received=${String(issue.received)}`
+            ? ` received=${formatIssueValue(issue.received)}`
             : "";
         return `${pathLabel}: ${issue.message}${codeLabel}${expected}${received}`;
       })
@@ -1230,7 +1233,9 @@ function buildSessionAgentTools(options: {
             schemaPath,
           );
           const schemaText = await readFile(resolvedSchemaPath, "utf8");
-          const schemaJson = JSON.parse(schemaText);
+          const schemaJson = JSON.parse(
+            schemaText,
+          ) as Record<string, unknown>;
           if (!schemaJson || typeof schemaJson !== "object") {
             throw new Error("Schema JSON must be an object.");
           }
@@ -1296,7 +1301,9 @@ function buildSessionAgentTools(options: {
           const output = { path: inputPath, entries };
           const sampleNames = entries
             .slice(0, 10)
-            .map((entry) => (entry.type === "dir" ? `${entry.path}/` : entry.path))
+            .map((entry) =>
+              entry.type === "dir" ? `${entry.path}/` : entry.path,
+            )
             .join(", ");
           log(
             `[agent-tool] list_files path=${inputPath} entries=${entries.length}${
@@ -1734,6 +1741,8 @@ export async function runSessionAgentSmokeTest(options: {
   await ensureDir(paths.workspaceDir);
   await ensureDir(paths.debugDir);
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+  const includeStory = true;
+  const includeCoding = true;
   const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
   const tools = buildSessionAgentTools({
     paths,
@@ -2095,8 +2104,10 @@ async function main(): Promise<void> {
     modelId: cli.modelId,
     maxSteps: cli.maxSteps,
   });
+  const sessionTitle =
+    result.session.title ?? result.session.plan?.[0]?.title ?? "session";
   process.stdout.write(
-    `Session generated: ${result.sessionId} (${result.plan.topic})\n`,
+    `Session generated: ${result.sessionId} (${sessionTitle})\n`,
   );
 }
 
