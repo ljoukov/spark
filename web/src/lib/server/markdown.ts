@@ -10,6 +10,34 @@ marked.use(
 	})
 );
 
+function normalizeLatexLists(markdown: string): string {
+	const lines = markdown.split(/\r?\n/u);
+	const normalized: string[] = [];
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (/^\\begin\{(enumerate|itemize)\}/.test(trimmed)) {
+			normalized.push('');
+			continue;
+		}
+		if (/^\\end\{(enumerate|itemize)\}/.test(trimmed)) {
+			normalized.push('');
+			continue;
+		}
+		const itemMatch = trimmed.match(/^\\item(?:\[(.+?)\])?\s*(.*)$/);
+		if (itemMatch) {
+			const label = itemMatch[1]?.trim();
+			const rest = itemMatch[2]?.trim() ?? '';
+			const prefix = label ? `- ${label}` : '-';
+			normalized.push(rest.length > 0 ? `${prefix} ${rest}` : prefix);
+			continue;
+		}
+		normalized.push(line);
+	}
+
+	return normalized.join('\n');
+}
+
 function normalizeDisplayMathBlocks(markdown: string): string {
 	const lines = markdown.split(/\r?\n/u);
 	let inFence = false;
@@ -48,14 +76,14 @@ function normalizeDisplayMathBlocks(markdown: string): string {
 			continue;
 		}
 
-		if (trimmed === '[') {
+		if (trimmed === '[' || trimmed === '\\[') {
 			ensureBlankLineBefore();
 			inMathBlock = true;
 			normalized.push('$$');
 			continue;
 		}
 
-		if (trimmed === ']') {
+		if (trimmed === ']' || trimmed === '\\]') {
 			if (inMathBlock) {
 				inMathBlock = false;
 				normalized.push('$$');
@@ -87,7 +115,7 @@ function normalizeDisplayMathBlocks(markdown: string): string {
 }
 
 export function renderMarkdown(markdown: string): string {
-	const normalized = normalizeDisplayMathBlocks(markdown);
+	const normalized = normalizeDisplayMathBlocks(normalizeLatexLists(markdown));
 	const parsed = marked.parse(normalized);
 	return typeof parsed === 'string' ? parsed : '';
 }
