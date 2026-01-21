@@ -538,7 +538,7 @@ function buildTaskContent(options: {
     "For each draft: generate -> grade with feedback -> revise using feedback.",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
     "Use generate_text tool for drafting and grading; avoid JSON except Firestore output files.",
-    "For problem draft/revision/verification prompts, explicitly require code execution to run the solution against all tests and fix failures. Always call generate_text with tools=[\"code-execution\"] for those.",
+    'For problem draft/revision/verification prompts, explicitly require code execution to run the solution against all tests and fix failures. Always call generate_text with tools=["code-execution"] for those.',
     "generate_text should write directly to files via outputPath; do not paste large drafts into the tool response.",
     "generate_text should read its prompt from a file via promptPath; do not inline large prompts in tool arguments.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
@@ -611,7 +611,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Do not write any firestore/*.json outputs until all drafts are verified and finalized.",
     "If coding is enabled, draft and verify problems first, then derive techniques and update session-plan.md before drafting quizzes.",
-    "For all problem draft/revision/verification generate_text calls, set tools=[\"code-execution\"] and include an explicit prompt instruction to run the solution against all tests and fix any failures.",
+    'For all problem draft/revision/verification generate_text calls, set tools=["code-execution"] and include an explicit prompt instruction to run the solution against all tests and fix any failures.',
     "Read story-prompt.md before drafting story.md.",
     "Read verification-prompt.md before writing verification.md.",
     "Read firestore-schema.json before writing firestore/*.json outputs.",
@@ -1233,9 +1233,7 @@ function buildSessionAgentTools(options: {
             schemaPath,
           );
           const schemaText = await readFile(resolvedSchemaPath, "utf8");
-          const schemaJson = JSON.parse(
-            schemaText,
-          ) as Record<string, unknown>;
+          const schemaJson = JSON.parse(schemaText) as Record<string, unknown>;
           if (!schemaJson || typeof schemaJson !== "object") {
             throw new Error("Schema JSON must be an object.");
           }

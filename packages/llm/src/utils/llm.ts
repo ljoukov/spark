@@ -505,19 +505,31 @@ function convertLlmContentToGoogleContent(content: LlmContent): Content {
 type OpenAiInputRole = EasyInputMessage["role"];
 type OpenAiInputPart = ResponseInputContent;
 
+const OPENAI_ROLE_FROM_LLM: Record<LlmRole, OpenAiInputRole> = {
+  user: "user",
+  model: "assistant",
+  system: "system",
+  tool: "assistant",
+};
+
+const OPENAI_ROLE_TO_LLM: Record<OpenAiInputRole, LlmRole> = {
+  user: "user",
+  assistant: "model",
+  system: "system",
+  developer: "system",
+};
+
+function isOpenAiInputRole(value: unknown): value is OpenAiInputRole {
+  return (
+    value === "user" ||
+    value === "assistant" ||
+    value === "system" ||
+    value === "developer"
+  );
+}
+
 function toOpenAiRole(role: LlmRole): OpenAiInputRole {
-  switch (role) {
-    case "user":
-      return "user";
-    case "model":
-      return "assistant";
-    case "system":
-      return "system";
-    case "tool":
-      return "assistant";
-    default:
-      return "user";
-  }
+  return OPENAI_ROLE_FROM_LLM[role];
 }
 
 function toOpenAiInput(contents: readonly LlmContent[]): ResponseInput {
@@ -550,55 +562,45 @@ function toOpenAiInput(contents: readonly LlmContent[]): ResponseInput {
 }
 
 function fromOpenAiRole(role: OpenAiInputRole): LlmRole {
-  switch (role) {
-    case "assistant":
-      return "model";
-    case "system":
-      return "system";
-    case "user":
-      return "user";
-    case "tool":
-      return "tool";
-    default:
-      return "user";
-  }
+  return OPENAI_ROLE_TO_LLM[role];
 }
 
 function openAiInputToDebugContents(input: ResponseInput): LlmContent[] {
   const contents: LlmContent[] = [];
   for (const item of input) {
-    if (!item || typeof item !== "object") {
+    if (!isPlainRecord(item)) {
       continue;
     }
-    if ("role" in item) {
-      const role = fromOpenAiRole(item.role as OpenAiInputRole);
+    if ("role" in item && isOpenAiInputRole(item.role)) {
+      const role = fromOpenAiRole(item.role);
       const parts: LlmContentPart[] = [];
-      const content = (item as { content?: unknown }).content;
+      const content = item.content;
       if (typeof content === "string") {
         parts.push({ type: "text", text: content });
       } else if (Array.isArray(content)) {
         for (const entry of content) {
-          if (!entry || typeof entry !== "object") {
+          if (!isPlainRecord(entry)) {
             continue;
           }
-          const entryType = (entry as { type?: unknown }).type;
+          const entryType = entry.type;
           if (entryType === "input_text") {
-            const text = (entry as { text?: unknown }).text;
+            const text = entry.text;
             if (typeof text === "string" && text.length > 0) {
               parts.push({ type: "text", text });
             }
             continue;
           }
           if (entryType === "input_image") {
-            const imageUrl = (entry as { image_url?: unknown }).image_url;
-            const urlValue =
-              typeof imageUrl === "string"
-                ? imageUrl
-                : imageUrl &&
-                    typeof imageUrl === "object" &&
-                    typeof (imageUrl as { url?: unknown }).url === "string"
-                  ? (imageUrl as { url?: unknown }).url
-                  : undefined;
+            const imageUrl = entry.image_url;
+            let urlValue: string | undefined;
+            if (typeof imageUrl === "string") {
+              urlValue = imageUrl;
+            } else if (
+              isPlainRecord(imageUrl) &&
+              typeof imageUrl.url === "string"
+            ) {
+              urlValue = imageUrl.url;
+            }
             if (typeof urlValue === "string") {
               const match = /^data:([^;]+);base64,(.*)$/.exec(urlValue);
               if (match && match[1] && match[2]) {
@@ -623,13 +625,11 @@ function openAiInputToDebugContents(input: ResponseInput): LlmContent[] {
       contents.push({ role, parts });
       continue;
     }
-    const itemType = (item as { type?: unknown }).type;
+    const itemType = item.type;
     if (itemType === "function_call_output") {
       const callId =
-        typeof (item as { call_id?: unknown }).call_id === "string"
-          ? (item as { call_id?: unknown }).call_id
-          : "unknown";
-      const output = (item as { output?: unknown }).output;
+        typeof item.call_id === "string" ? item.call_id : "unknown";
+      const output = item.output;
       const outputText =
         typeof output === "string"
           ? output
@@ -1994,7 +1994,7 @@ async function writeToolLoopDebugSnapshot(params: {
 
   const responseParts = extractOpenAiResponseParts(response).parts;
   const mergedParts = mergeConsecutiveTextParts(responseParts);
-  const responseContent =
+  const responseContent: LlmContent | undefined =
     mergedParts.length > 0
       ? {
           role: "model",
@@ -2280,7 +2280,10 @@ async function llmStream({
     debugRootDir !== undefined ? path.join(debugRootDir, "media") : undefined;
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
-  const isOpenAi = isOpenAiModelId(options.modelId);
+  const openAiModelId = isOpenAiModelId(options.modelId)
+    ? options.modelId
+    : undefined;
+  const isOpenAi = openAiModelId !== undefined;
   const effectiveImageSize =
     !isOpenAi && options.modelId === "gemini-3-pro-image-preview"
       ? (options.imageSize ?? "2K")
@@ -2355,17 +2358,19 @@ async function llmStream({
     const uploadBytes = estimateContentsUploadBytes(promptContents);
     const openAiInput = isOpenAi ? toOpenAiInput(promptContents) : undefined;
     const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
-    const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-      options.modelId,
-      options.openAiReasoningEffort,
-    );
-    const openAiTextConfig: ResponseTextConfig | undefined = isOpenAi
+    const openAiReasoningEffort = openAiModelId
+      ? resolveOpenAiReasoningEffortForModel(
+          openAiModelId,
+          options.openAiReasoningEffort,
+        )
+      : undefined;
+    const openAiTextConfig: ResponseTextConfig | undefined = openAiModelId
       ? {
           format: options.openAiTextFormat ?? { type: "text" },
-          verbosity: resolveOpenAiVerbosity(options.modelId),
+          verbosity: resolveOpenAiVerbosity(openAiModelId),
         }
       : undefined;
-    const openAiReasoningPayload = isOpenAi
+    const openAiReasoningPayload = openAiReasoningEffort
       ? {
           effort: toOpenAiReasoningEffort(openAiReasoningEffort),
           summary: "detailed" as const,
@@ -3347,34 +3352,16 @@ function extractOpenAiReasoningSummary(
   }
   const summaries: string[] = [];
   for (const item of output) {
-    if (!item || typeof item !== "object") {
+    if (item.type !== "reasoning") {
       continue;
     }
-    if ((item as { type?: unknown }).type !== "reasoning") {
-      continue;
-    }
-    const content = (item as { content?: unknown }).content;
-    if (!Array.isArray(content)) {
-      continue;
-    }
-    for (const entry of content) {
-      if (!entry || typeof entry !== "object") {
+    for (const entry of item.summary) {
+      if (entry.type !== "summary_text") {
         continue;
       }
-      const entryType = (entry as { type?: unknown }).type;
-      if (
-        entryType === "reasoning_summary_text" ||
-        entryType === "reasoning_summary"
-      ) {
-        const text =
-          typeof (entry as { text?: unknown }).text === "string"
-            ? (entry as { text?: unknown }).text
-            : typeof (entry as { summary?: unknown }).summary === "string"
-              ? (entry as { summary?: unknown }).summary
-              : undefined;
-        if (text && text.trim().length > 0) {
-          summaries.push(text.trim());
-        }
+      const trimmed = entry.text.trim();
+      if (trimmed.length > 0) {
+        summaries.push(trimmed);
       }
     }
   }
@@ -3391,42 +3378,75 @@ function truncateForLog(value: string, maxChars: number = 400): string {
   return `${value.slice(0, maxChars)}…(${value.length} chars)`;
 }
 
+function formatToolValue(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  switch (typeof value) {
+    case "string":
+      return value.length > 0 ? value : undefined;
+    case "number":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+      return value.toString();
+    default: {
+      try {
+        const json = JSON.stringify(value);
+        return typeof json === "string" && json.length > 0 ? json : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+  }
+}
+
 function summarizeToolCallInput(toolName: string, input: unknown): string {
   if (!input || typeof input !== "object") {
     return "";
   }
   const record = input as Record<string, unknown>;
   switch (toolName) {
-    case "read_file":
-      return record.path ? `path=${String(record.path)}` : "";
-    case "list_dir":
-      return record.path ? `path=${String(record.path)}` : "";
+    case "read_file": {
+      const pathValue = formatToolValue(record.path);
+      return pathValue ? `path=${pathValue}` : "";
+    }
+    case "list_dir": {
+      const pathValue = formatToolValue(record.path);
+      return pathValue ? `path=${pathValue}` : "";
+    }
     case "list_files": {
-      const pathLabel = record.path ? `path=${String(record.path)}` : "";
-      const depth =
-        record.maxDepth !== undefined
-          ? `maxDepth=${String(record.maxDepth)}`
-          : "";
+      const pathValue = formatToolValue(record.path);
+      const pathLabel = pathValue ? `path=${pathValue}` : "";
+      const depthValue = formatToolValue(record.maxDepth);
+      const depth = depthValue ? `maxDepth=${depthValue}` : "";
       return [pathLabel, depth].filter(Boolean).join(" ");
     }
     case "rg_search": {
-      const pattern = record.pattern
-        ? `pattern=${truncateForLog(String(record.pattern), 120)}`
+      const patternValue = formatToolValue(record.pattern);
+      const pattern = patternValue
+        ? `pattern=${truncateForLog(patternValue, 120)}`
         : "";
-      const pathLabel = record.path ? `path=${String(record.path)}` : "";
+      const pathValue = formatToolValue(record.path);
+      const pathLabel = pathValue ? `path=${pathValue}` : "";
       return [pattern, pathLabel].filter(Boolean).join(" ");
     }
     case "create_file": {
-      const pathLabel = record.path ? `path=${String(record.path)}` : "";
+      const pathValue = formatToolValue(record.path);
+      const pathLabel = pathValue ? `path=${pathValue}` : "";
       const content = typeof record.content === "string" ? record.content : "";
       const chars = content ? `chars=${content.length}` : "";
       return [pathLabel, chars].filter(Boolean).join(" ");
     }
-    case "delete_file":
-      return record.path ? `path=${String(record.path)}` : "";
+    case "delete_file": {
+      const pathValue = formatToolValue(record.path);
+      return pathValue ? `path=${pathValue}` : "";
+    }
     case "move_file": {
-      const fromLabel = record.from ? `from=${String(record.from)}` : "";
-      const toLabel = record.to ? `to=${String(record.to)}` : "";
+      const fromValue = formatToolValue(record.from);
+      const toValue = formatToolValue(record.to);
+      const fromLabel = fromValue ? `from=${fromValue}` : "";
+      const toLabel = toValue ? `to=${toValue}` : "";
       return [fromLabel, toLabel].filter(Boolean).join(" ");
     }
     case "apply_patch": {
@@ -3436,8 +3456,10 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
           return "op";
         }
         const opRec = op as Record<string, unknown>;
-        const type = opRec.type ? String(opRec.type) : "op";
-        const pathLabel = opRec.path ? `:${String(opRec.path)}` : "";
+        const typeValue = formatToolValue(opRec.type);
+        const type = typeValue ?? "op";
+        const pathValue = formatToolValue(opRec.path);
+        const pathLabel = pathValue ? `:${pathValue}` : "";
         const diffLen =
           typeof opRec.diff === "string" ? `(${opRec.diff.length} chars)` : "";
         return `${type}${pathLabel}${diffLen}`;
@@ -3448,12 +3470,10 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
         : "";
     }
     case "generate_text": {
-      const promptPath = record.promptPath
-        ? `promptPath=${String(record.promptPath)}`
-        : "";
-      const outputPath = record.outputPath
-        ? `outputPath=${String(record.outputPath)}`
-        : "";
+      const promptValue = formatToolValue(record.promptPath);
+      const outputValue = formatToolValue(record.outputPath);
+      const promptPath = promptValue ? `promptPath=${promptValue}` : "";
+      const outputPath = outputValue ? `outputPath=${outputValue}` : "";
       const tools = Array.isArray(record.tools)
         ? `tools=${record.tools.join(",")}`
         : "";
