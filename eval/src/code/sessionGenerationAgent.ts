@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
@@ -469,6 +469,18 @@ async function publishToWelcomeTemplate(options: {
 async function main(): Promise<void> {
   const options = parseCliOptions();
   const usage = new UsageAggregator();
+  const usagePath = path.join(options.workingDirectory, "debug", "usage.json");
+  let usageWritePromise: Promise<void> | undefined;
+  const scheduleUsageWrite = () => {
+    const payload = JSON.stringify(usage.summary(), null, 2);
+    const writeOp = async () => {
+      await mkdir(path.dirname(usagePath), { recursive: true });
+      await writeFile(usagePath, payload, "utf8");
+    };
+    usageWritePromise = usageWritePromise
+      ? usageWritePromise.then(writeOp).catch(() => undefined)
+      : writeOp().catch(() => undefined);
+  };
   const progress: JobProgressReporter = {
     log(message: string) {
       console.log(message);
@@ -485,6 +497,7 @@ async function main(): Promise<void> {
     },
     finishModelCall(handle: ModelCallHandle) {
       usage.finish(handle);
+      scheduleUsageWrite();
     },
     startStage(_stageName: string) {
       return Symbol("stage");
@@ -499,9 +512,13 @@ async function main(): Promise<void> {
       progress,
     });
     process.stdout.write("Smoke test succeeded.\n");
-    const usageSummary = usage.summary();
-    const usagePath = path.join(options.workingDirectory, "usage.json");
-    await writeFile(usagePath, JSON.stringify(usageSummary, null, 2), "utf8");
+    if (!usageWritePromise) {
+      scheduleUsageWrite();
+    }
+    await usageWritePromise;
+    const usageSummary = JSON.parse(
+      await readFile(usagePath, "utf8"),
+    ) as UsageSummary;
     printUsageSummary(usageSummary);
     return;
   }
@@ -542,9 +559,10 @@ async function main(): Promise<void> {
     });
   }
 
-  const usageSummary = usage.summary();
-  const usagePath = path.join(options.workingDirectory, "usage.json");
-  await writeFile(usagePath, JSON.stringify(usageSummary, null, 2), "utf8");
+  if (!usageWritePromise) {
+    scheduleUsageWrite();
+  }
+  await usageWritePromise;
   const loaded = JSON.parse(await readFile(usagePath, "utf8")) as UsageSummary;
   printUsageSummary(loaded);
 }

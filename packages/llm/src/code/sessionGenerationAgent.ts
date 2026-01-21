@@ -1467,22 +1467,45 @@ async function buildSessionAgentTools(options: {
                 next.toolUsePromptTokens ?? current.toolUsePromptTokens,
             };
           };
-          const trackingProgress: JobProgressReporter = {
-            log: () => {},
-            startModelCall: () => Symbol("summary-call"),
-            recordModelUsage: (_handle, chunk) => {
-              if (chunk.tokens) {
-                usageState.tokens = mergeTokens(usageState.tokens, chunk.tokens);
-              }
-              if (chunk.modelVersion) {
-                usageState.modelVersion = chunk.modelVersion;
-              }
-            },
-            finishModelCall: () => {},
-            startStage: () => Symbol("summary-stage"),
-            finishStage: () => {},
-            setActiveStages: () => {},
-          };
+          const trackingProgress: JobProgressReporter = (() => {
+            const handleMap = new Map<symbol, symbol>();
+            return {
+              log: () => {},
+              startModelCall: (details) => {
+                const handle = Symbol("summary-call");
+                if (progress) {
+                  const outerHandle = progress.startModelCall(details);
+                  handleMap.set(handle, outerHandle);
+                }
+                return handle;
+              },
+              recordModelUsage: (handle, chunk) => {
+                if (chunk.tokens) {
+                  usageState.tokens = mergeTokens(
+                    usageState.tokens,
+                    chunk.tokens,
+                  );
+                }
+                if (chunk.modelVersion) {
+                  usageState.modelVersion = chunk.modelVersion;
+                }
+                const outerHandle = handleMap.get(handle);
+                if (outerHandle && progress) {
+                  progress.recordModelUsage(outerHandle, chunk);
+                }
+              },
+              finishModelCall: (handle) => {
+                const outerHandle = handleMap.get(handle);
+                if (outerHandle && progress) {
+                  progress.finishModelCall(outerHandle);
+                }
+                handleMap.delete(handle);
+              },
+              startStage: () => Symbol("summary-stage"),
+              finishStage: () => {},
+              setActiveStages: () => {},
+            };
+          })();
           const debug: LlmDebugOptions | undefined = {
             rootDir: paths.debugDir,
             stage: "agent-tool",
@@ -1771,22 +1794,45 @@ async function buildSessionAgentTools(options: {
               next.toolUsePromptTokens ?? current.toolUsePromptTokens,
           };
         };
-        const trackingProgress: JobProgressReporter = {
-          log: () => {},
-          startModelCall: () => Symbol("generate-text-call"),
-          recordModelUsage: (_handle, chunk) => {
-            if (chunk.tokens) {
-              usageState.tokens = mergeTokens(usageState.tokens, chunk.tokens);
-            }
-            if (chunk.modelVersion) {
-              usageState.modelVersion = chunk.modelVersion;
-            }
-          },
-          finishModelCall: () => {},
-          startStage: () => Symbol("generate-text-stage"),
-          finishStage: () => {},
-          setActiveStages: () => {},
-        };
+        const trackingProgress: JobProgressReporter = (() => {
+          const handleMap = new Map<symbol, symbol>();
+          return {
+            log: () => {},
+            startModelCall: (details) => {
+              const handle = Symbol("generate-text-call");
+              if (progress) {
+                const outerHandle = progress.startModelCall(details);
+                handleMap.set(handle, outerHandle);
+              }
+              return handle;
+            },
+            recordModelUsage: (handle, chunk) => {
+              if (chunk.tokens) {
+                usageState.tokens = mergeTokens(
+                  usageState.tokens,
+                  chunk.tokens,
+                );
+              }
+              if (chunk.modelVersion) {
+                usageState.modelVersion = chunk.modelVersion;
+              }
+              const outerHandle = handleMap.get(handle);
+              if (outerHandle && progress) {
+                progress.recordModelUsage(outerHandle, chunk);
+              }
+            },
+            finishModelCall: (handle) => {
+              const outerHandle = handleMap.get(handle);
+              if (outerHandle && progress) {
+                progress.finishModelCall(outerHandle);
+              }
+              handleMap.delete(handle);
+            },
+            startStage: () => Symbol("generate-text-stage"),
+            finishStage: () => {},
+            setActiveStages: () => {},
+          };
+        })();
         const toolConfigs: LlmToolConfig[] = [];
         if (input.tools) {
           for (const toolType of input.tools) {
