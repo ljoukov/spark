@@ -107,7 +107,7 @@
 							)}
 							aria-label={step.label ?? `Question ${index + 1}`}
 							onclick={() => handleNavigate(index)}
-							disabled={disabled}
+							{disabled}
 						></button>
 					</div>
 				{:else}
@@ -135,7 +135,7 @@
 			class="flex size-8 items-center justify-center rounded-full border-2 border-border text-lg font-semibold text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive focus-visible:ring-4 focus-visible:ring-destructive/20 focus-visible:outline-none"
 			aria-label="Finish quiz"
 			onclick={handleFinish}
-			disabled={disabled}
+			{disabled}
 		>
 			×
 		</button>
