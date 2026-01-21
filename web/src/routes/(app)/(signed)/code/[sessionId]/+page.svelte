@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { navigating } from '$app/stores';
 	import { getContext, onDestroy } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import { z } from 'zod';
@@ -64,6 +65,16 @@
 	});
 
 	const stats = $derived(buildStats(liveStats ?? initialStats));
+	const navigationStore = fromStore(navigating);
+	const navigatingTo = $derived(navigationStore?.current?.to?.url?.pathname ?? null);
+	let pendingHref = $state<string | null>(null);
+	const activeLoadingHref = $derived(pendingHref ?? navigatingTo);
+
+	$effect(() => {
+		if (!navigatingTo) {
+			pendingHref = null;
+		}
+	});
 
 	const sessionId = $derived(data.session.id);
 	const sessionStatus = $derived(data.session.status ?? 'ready');
@@ -158,6 +169,13 @@
 				? `Continue with ${startLabel}`
 				: `Start ${startLabel}`
 	);
+
+	function handleTimelineClick(href: string): void {
+		if (activeLoadingHref) {
+			return;
+		}
+		pendingHref = href;
+	}
 
 	const lessonProposalSchema = z.object({
 		id: z.string().trim().min(1),
@@ -334,6 +352,7 @@
 			</header>
 			<div class="plan-body">
 				{#each timeline as item, index}
+					{@const isLoading = activeLoadingHref === item.href}
 					<a
 						class="timeline-row"
 						href={item.href}
@@ -341,6 +360,9 @@
 						data-last={index === timeline.length - 1}
 						data-done={item.status === 'completed'}
 						data-status={item.status}
+						data-loading={isLoading}
+						aria-busy={isLoading ? 'true' : undefined}
+						onclick={() => handleTimelineClick(item.href)}
 					>
 						<div class="timeline-hit">
 							<div class="timeline-point" data-done={item.status === 'completed'}>
@@ -362,6 +384,9 @@
 										<span>{item.description}</span>
 									</div>
 								</div>
+								<span class="timeline-loader" aria-hidden="true">
+									<span class="timeline-spinner" data-visible={isLoading}></span>
+								</span>
 							</div>
 						</div>
 					</a>
@@ -849,6 +874,11 @@
 		text-decoration: none;
 	}
 
+	.timeline-row[data-loading='true'] {
+		cursor: progress;
+		pointer-events: none;
+	}
+
 	.timeline-row:focus-visible {
 		outline: none;
 	}
@@ -924,6 +954,17 @@
 		}
 	}
 
+	.timeline-row[data-loading='true'] .timeline-hit {
+		background: rgba(59, 130, 246, 0.16);
+		border-color: rgba(59, 130, 246, 0.3);
+	}
+
+	:global([data-theme='dark'] .timeline-row[data-loading='true'] .timeline-hit),
+	:global(:root:not([data-theme='light']) .timeline-row[data-loading='true'] .timeline-hit) {
+		background: rgba(37, 99, 235, 0.26);
+		border-color: rgba(59, 130, 246, 0.4);
+	}
+
 	.timeline-point {
 		position: relative;
 		display: flex;
@@ -941,6 +982,48 @@
 		align-items: center;
 		gap: 0.65rem;
 		min-width: 0;
+	}
+
+	.timeline-loader {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.2rem;
+		margin-left: auto;
+	}
+
+	.timeline-spinner {
+		width: 1.1rem;
+		height: 1.1rem;
+		border-radius: 9999px;
+		border: 2px solid rgba(59, 130, 246, 0.2);
+		border-top-color: var(--timeline-line);
+		animation: timeline-spin 0.9s linear infinite;
+		opacity: 0;
+		--spinner-scale: 0.85;
+		transition:
+			opacity 0.2s ease,
+			--spinner-scale 0.2s ease;
+	}
+
+	.timeline-spinner[data-visible='true'] {
+		opacity: 1;
+		--spinner-scale: 1;
+	}
+
+	:global([data-theme='dark'] .timeline-spinner),
+	:global(:root:not([data-theme='light']) .timeline-spinner) {
+		border-color: rgba(96, 165, 250, 0.28);
+		border-top-color: var(--timeline-line);
+	}
+
+	@keyframes timeline-spin {
+		from {
+			transform: rotate(0deg) scale(var(--spinner-scale));
+		}
+		to {
+			transform: rotate(360deg) scale(var(--spinner-scale));
+		}
 	}
 
 	.timeline-circle {
