@@ -25,9 +25,15 @@ import {
   type Tool,
 } from "@google/genai";
 import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
-import { runGeminiCall, type GeminiModelId } from "./gemini";
+import {
+  getGeminiImagePreviewPricing,
+  getGeminiProPreviewPricing,
+  runGeminiCall,
+  type GeminiModelId,
+} from "./gemini";
 import {
   DEFAULT_OPENAI_REASONING_EFFORT,
+  getOpenAiPricing,
   isOpenAiModelId,
   runOpenAiCall,
   type OpenAiModelId,
@@ -186,6 +192,28 @@ function toOpenAiReasoningEffort(
     case "xhigh":
       return "high";
   }
+}
+
+function resolveOpenAiReasoningEffortForModel(
+  modelId: LlmTextModelId,
+  override?: OpenAiReasoningEffort,
+): OpenAiReasoningEffort {
+  if (override) {
+    return override;
+  }
+  if (modelId.includes("gpt-5.2-codex")) {
+    return "medium";
+  }
+  return DEFAULT_OPENAI_REASONING_EFFORT;
+}
+
+function resolveOpenAiVerbosity(
+  modelId: LlmTextModelId,
+): ResponseTextConfig["verbosity"] {
+  if (modelId.includes("gpt-5.2-codex")) {
+    return "medium";
+  }
+  return "high";
 }
 
 function orderedJsonSchemaKeys(
@@ -521,6 +549,121 @@ function toOpenAiInput(contents: readonly LlmContent[]): ResponseInput {
   });
 }
 
+function fromOpenAiRole(role: OpenAiInputRole): LlmRole {
+  switch (role) {
+    case "assistant":
+      return "model";
+    case "system":
+      return "system";
+    case "user":
+      return "user";
+    case "tool":
+      return "tool";
+    default:
+      return "user";
+  }
+}
+
+function openAiInputToDebugContents(input: ResponseInput): LlmContent[] {
+  const contents: LlmContent[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    if ("role" in item) {
+      const role = fromOpenAiRole(item.role as OpenAiInputRole);
+      const parts: LlmContentPart[] = [];
+      const content = (item as { content?: unknown }).content;
+      if (typeof content === "string") {
+        parts.push({ type: "text", text: content });
+      } else if (Array.isArray(content)) {
+        for (const entry of content) {
+          if (!entry || typeof entry !== "object") {
+            continue;
+          }
+          const entryType = (entry as { type?: unknown }).type;
+          if (entryType === "input_text") {
+            const text = (entry as { text?: unknown }).text;
+            if (typeof text === "string" && text.length > 0) {
+              parts.push({ type: "text", text });
+            }
+            continue;
+          }
+          if (entryType === "input_image") {
+            const imageUrl = (entry as { image_url?: unknown }).image_url;
+            const urlValue =
+              typeof imageUrl === "string"
+                ? imageUrl
+                : imageUrl &&
+                    typeof imageUrl === "object" &&
+                    typeof (imageUrl as { url?: unknown }).url === "string"
+                  ? (imageUrl as { url?: unknown }).url
+                  : undefined;
+            if (typeof urlValue === "string") {
+              const match = /^data:([^;]+);base64,(.*)$/.exec(urlValue);
+              if (match && match[1] && match[2]) {
+                parts.push({
+                  type: "inlineData",
+                  mimeType: match[1],
+                  data: match[2],
+                });
+              } else {
+                parts.push({
+                  type: "text",
+                  text: `[image] ${urlValue}`,
+                });
+              }
+            }
+          }
+        }
+      }
+      if (parts.length === 0) {
+        parts.push({ type: "text", text: "(empty content)" });
+      }
+      contents.push({ role, parts });
+      continue;
+    }
+    const itemType = (item as { type?: unknown }).type;
+    if (itemType === "function_call_output") {
+      const callId =
+        typeof (item as { call_id?: unknown }).call_id === "string"
+          ? (item as { call_id?: unknown }).call_id
+          : "unknown";
+      const output = (item as { output?: unknown }).output;
+      const outputText =
+        typeof output === "string"
+          ? output
+          : JSON.stringify(output ?? null, null, 2);
+      contents.push({
+        role: "tool",
+        parts: [
+          {
+            type: "text",
+            text: `function_call_output (${callId}):\n${outputText ?? ""}`,
+          },
+        ],
+      });
+      continue;
+    }
+    contents.push({
+      role: "tool",
+      parts: [
+        {
+          type: "text",
+          text: JSON.stringify(item, null, 2),
+        },
+      ],
+    });
+  }
+  if (contents.length === 0) {
+    contents.push({
+      role: "user",
+      parts: [{ type: "text", text: "(empty input)" }],
+    });
+  }
+  return contents;
+}
+
 function extractOpenAiResponseParts(response: {
   output?: unknown;
   output_text?: unknown;
@@ -560,13 +703,34 @@ function extractOpenAiResponseParts(response: {
               continue;
             }
             const entryType = (entry as { type?: unknown }).type;
-            if (entryType === "reasoning_text") {
-              const text = (entry as { text?: unknown }).text;
-              if (typeof text === "string" && text.length > 0) {
-                parts.push({ type: "text", text, thought: true });
+            if (
+              entryType === "reasoning_text" ||
+              entryType === "reasoning_summary_text" ||
+              entryType === "reasoning_summary"
+            ) {
+              const entryText =
+                typeof (entry as { text?: unknown }).text === "string"
+                  ? (entry as { text?: unknown }).text
+                  : typeof (entry as { summary?: unknown }).summary === "string"
+                    ? (entry as { summary?: unknown }).summary
+                    : undefined;
+              if (typeof entryText === "string" && entryText.length > 0) {
+                parts.push({ type: "text", text: entryText, thought: true });
               }
             }
           }
+        }
+      } else if (
+        itemType === "function_call" ||
+        itemType === "tool_call" ||
+        itemType === "custom_tool_call"
+      ) {
+        const serialized = JSON.stringify(item, null, 2);
+        if (serialized.length > 0) {
+          parts.push({
+            type: "text",
+            text: `[tool-call]\n${serialized}\n`,
+          });
         }
       }
     }
@@ -1423,6 +1587,41 @@ type ResponseSnapshotStats = {
   readonly thinkingChars: number;
 };
 
+function summariseResponseStats(
+  content: LlmContent | undefined,
+): ResponseSnapshotStats {
+  let responseTextChars = 0;
+  let responseImages = 0;
+  let responseImageBytes = 0;
+  let thinkingChars = 0;
+  if (!content) {
+    return {
+      responseTextChars,
+      responseImages,
+      responseImageBytes,
+      thinkingChars,
+    };
+  }
+  for (const part of content.parts) {
+    if (part.type === "text") {
+      if (part.thought === true) {
+        thinkingChars += part.text.length;
+      } else {
+        responseTextChars += part.text.length;
+      }
+      continue;
+    }
+    responseImages += 1;
+    responseImageBytes += estimateInlineBytes(part.data);
+  }
+  return {
+    responseTextChars,
+    responseImages,
+    responseImageBytes,
+    thinkingChars,
+  };
+}
+
 function formatOptionalNumber(value: number | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "n/a";
@@ -1482,28 +1681,6 @@ function buildResponseMediaSummaryLine(stats: ResponseSnapshotStats): string {
   ].join(" ");
 }
 
-const COST_PRO_PREVIEW_THRESHOLD = 200_000;
-const COST_PRO_PREVIEW_INPUT_RATE_LOW = 2 / 1_000_000;
-const COST_PRO_PREVIEW_INPUT_RATE_HIGH = 4 / 1_000_000;
-const COST_PRO_PREVIEW_OUTPUT_RATE_LOW = 12 / 1_000_000;
-const COST_PRO_PREVIEW_OUTPUT_RATE_HIGH = 18 / 1_000_000;
-const COST_PRO_PREVIEW_CACHED_RATE_LOW = 0.2 / 1_000_000;
-const COST_PRO_PREVIEW_CACHED_RATE_HIGH = 0.4 / 1_000_000;
-
-const COST_OPENAI_GPT_52_INPUT_RATE = 1.75 / 1_000_000;
-const COST_OPENAI_GPT_52_CACHED_RATE = 0.175 / 1_000_000;
-const COST_OPENAI_GPT_52_OUTPUT_RATE = 14 / 1_000_000;
-
-const COST_IMAGE_PREVIEW_INPUT_RATE = 2 / 1_000_000;
-const COST_IMAGE_PREVIEW_OUTPUT_TEXT_RATE = 12 / 1_000_000;
-const COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE = 120 / 1_000_000;
-const COST_IMAGE_PREVIEW_IMAGE_PRICES: Record<string, number> = {
-  "1K": 0.134,
-  "2K": 0.134,
-  "4K": 0.24,
-};
-const COST_IMAGE_PREVIEW_CACHED_RATE = 0.2 / 1_000_000;
-
 function resolveUsageNumber(value: number | undefined): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(0, value);
@@ -1511,7 +1688,7 @@ function resolveUsageNumber(value: number | undefined): number {
   return 0;
 }
 
-function estimateCallCostUsd({
+export function estimateCallCostUsd({
   modelId,
   tokens,
   responseImages,
@@ -1533,72 +1710,69 @@ function estimateCallCostUsd({
   const toolUsePromptTokens = resolveUsageNumber(tokens.toolUsePromptTokens);
   const promptTokenTotal = promptTokens + toolUsePromptTokens;
   const nonCachedPrompt = Math.max(0, promptTokenTotal - cachedTokens);
-  const pricingModel = (() => {
-    if (modelId.includes("image-preview")) {
-      return "image-preview" as const;
+  const imagePreviewPricing = getGeminiImagePreviewPricing(modelId);
+  if (imagePreviewPricing) {
+    const resolvedImageSize =
+      imageSize && imagePreviewPricing.imagePrices[imageSize]
+        ? imageSize
+        : "2K";
+    const imageRate = imagePreviewPricing.imagePrices[resolvedImageSize];
+    const tokensPerImage =
+      imagePreviewPricing.outputImageRate > 0
+        ? imageRate / imagePreviewPricing.outputImageRate
+        : 0;
+    let responseTextForPricing = Math.max(
+      0,
+      responseTokens - responseImageTokens,
+    );
+    let imageTokensForPricing = responseImageTokens;
+    if (
+      imageTokensForPricing <= 0 &&
+      responseImages > 0 &&
+      tokensPerImage > 0
+    ) {
+      const estimatedImageTokens = responseImages * tokensPerImage;
+      imageTokensForPricing = estimatedImageTokens;
+      if (responseTextForPricing >= estimatedImageTokens) {
+        responseTextForPricing -= estimatedImageTokens;
+      }
     }
-    if (modelId.includes("gemini-3-pro")) {
-      return "pro-preview" as const;
-    }
-    if (modelId.includes("gpt-5.2")) {
-      return "openai-gpt-5.2" as const;
-    }
-    return undefined;
-  })();
-  if (pricingModel === "pro-preview") {
-    const useHighTier = promptTokenTotal > COST_PRO_PREVIEW_THRESHOLD;
+    const textOutputCost =
+      (responseTextForPricing + thinkingTokens) *
+      imagePreviewPricing.outputTextRate;
+    const inputCost = nonCachedPrompt * imagePreviewPricing.inputRate;
+    const cachedCost = cachedTokens * imagePreviewPricing.cachedRate;
+    const imageOutputCost =
+      imageTokensForPricing * imagePreviewPricing.outputImageRate;
+    return inputCost + cachedCost + textOutputCost + imageOutputCost;
+  }
+  const geminiPricing = getGeminiProPreviewPricing(modelId);
+  if (geminiPricing) {
+    const useHighTier = promptTokenTotal > geminiPricing.threshold;
     const inputRate = useHighTier
-      ? COST_PRO_PREVIEW_INPUT_RATE_HIGH
-      : COST_PRO_PREVIEW_INPUT_RATE_LOW;
+      ? geminiPricing.inputRateHigh
+      : geminiPricing.inputRateLow;
     const cachedRate = useHighTier
-      ? COST_PRO_PREVIEW_CACHED_RATE_HIGH
-      : COST_PRO_PREVIEW_CACHED_RATE_LOW;
+      ? geminiPricing.cachedRateHigh
+      : geminiPricing.cachedRateLow;
     const outputRate = useHighTier
-      ? COST_PRO_PREVIEW_OUTPUT_RATE_HIGH
-      : COST_PRO_PREVIEW_OUTPUT_RATE_LOW;
+      ? geminiPricing.outputRateHigh
+      : geminiPricing.outputRateLow;
     const inputCost = nonCachedPrompt * inputRate;
     const cachedCost = cachedTokens * cachedRate;
     const outputTokens = responseTokens + thinkingTokens;
     const outputCost = outputTokens * outputRate;
     return inputCost + cachedCost + outputCost;
   }
-  if (pricingModel === "openai-gpt-5.2") {
-    const inputCost = nonCachedPrompt * COST_OPENAI_GPT_52_INPUT_RATE;
-    const cachedCost = cachedTokens * COST_OPENAI_GPT_52_CACHED_RATE;
+  const openAiPricing = getOpenAiPricing(modelId);
+  if (openAiPricing) {
+    const inputCost = nonCachedPrompt * openAiPricing.inputRate;
+    const cachedCost = cachedTokens * openAiPricing.cachedRate;
     const outputTokens = responseTokens + thinkingTokens;
-    const outputCost = outputTokens * COST_OPENAI_GPT_52_OUTPUT_RATE;
+    const outputCost = outputTokens * openAiPricing.outputRate;
     return inputCost + cachedCost + outputCost;
   }
-  if (pricingModel !== "image-preview") {
-    return 0;
-  }
-  const resolvedImageSize =
-    imageSize && COST_IMAGE_PREVIEW_IMAGE_PRICES[imageSize] ? imageSize : "2K";
-  const imageRate = COST_IMAGE_PREVIEW_IMAGE_PRICES[resolvedImageSize];
-  const tokensPerImage =
-    COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE > 0
-      ? imageRate / COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE
-      : 0;
-  let responseTextForPricing = Math.max(
-    0,
-    responseTokens - responseImageTokens,
-  );
-  let imageTokensForPricing = responseImageTokens;
-  if (imageTokensForPricing <= 0 && responseImages > 0 && tokensPerImage > 0) {
-    const estimatedImageTokens = responseImages * tokensPerImage;
-    imageTokensForPricing = estimatedImageTokens;
-    if (responseTextForPricing >= estimatedImageTokens) {
-      responseTextForPricing -= estimatedImageTokens;
-    }
-  }
-  const textOutputCost =
-    (responseTextForPricing + thinkingTokens) *
-    COST_IMAGE_PREVIEW_OUTPUT_TEXT_RATE;
-  const inputCost = nonCachedPrompt * COST_IMAGE_PREVIEW_INPUT_RATE;
-  const cachedCost = cachedTokens * COST_IMAGE_PREVIEW_CACHED_RATE;
-  const imageOutputCost =
-    imageTokensForPricing * COST_IMAGE_PREVIEW_OUTPUT_IMAGE_RATE;
-  return inputCost + cachedCost + textOutputCost + imageOutputCost;
+  return 0;
 }
 
 function escapeHtml(value: string): string {
@@ -1726,6 +1900,155 @@ function buildConversationHtml({
   });
   html.push("</body>", "</html>");
   return html.join("\n");
+}
+
+async function writeToolLoopDebugSnapshot(params: {
+  debug: LlmDebugOptions | undefined;
+  modelId: OpenAiModelId;
+  step: number;
+  maxSteps: number;
+  input: ResponseInput;
+  debugPromptContents?: readonly LlmContent[];
+  response: OpenAiResponse;
+  elapsedMs: number;
+  requestConfig: unknown;
+}): Promise<void> {
+  const {
+    debug,
+    modelId,
+    step,
+    maxSteps,
+    input,
+    debugPromptContents,
+    response,
+    elapsedMs,
+    requestConfig,
+  } = params;
+  if (!debug || !debug.rootDir || debug.enabled === false) {
+    return;
+  }
+  const stepLabel = `tool-loop-step-${String(step).padStart(2, "0")}`;
+  const stepDebug = appendDebugSubStage(debug, stepLabel);
+  const stage = buildCallStage({
+    modelId,
+    debug: stepDebug,
+    attempt: step,
+    maxAttempts: maxSteps,
+  });
+  const debugRootDir = debug.rootDir;
+  const debugLogSegment = normalisePathSegment(
+    new Date().toISOString().replace(/[:]/g, "-"),
+  );
+  const debugLogDir = path.join(
+    debugRootDir,
+    "log",
+    debugLogSegment,
+    normalisePathSegment(stepLabel),
+  );
+  const debugOutputDirs = Array.from(
+    new Set(
+      [stage.debugDir, debugLogDir].filter(
+        (dir): dir is string => typeof dir === "string",
+      ),
+    ),
+  );
+
+  await resetDebugDir(stage.debugDir);
+  await ensureDebugDir(stage.debugDir);
+  await ensureDebugDir(debugLogDir);
+
+  const promptContents =
+    debugPromptContents ?? openAiInputToDebugContents(input);
+  const promptStats = summarisePromptStats(promptContents);
+  const uploadBytes = estimateContentsUploadBytes(promptContents);
+
+  if (debugOutputDirs.length > 0) {
+    const requestSnapshot = buildRequestSnapshot({
+      modelId,
+      stageLabel: stage.label,
+      attempt: step,
+      maxAttempts: maxSteps,
+      uploadBytes,
+      config: requestConfig,
+      configLabel: "OpenAI Request",
+    });
+    await writeDebugTextFile({
+      dirs: debugOutputDirs,
+      filename: "request.txt",
+      contents: requestSnapshot,
+    });
+  }
+
+  if (stage.debugDir) {
+    await writePromptSnapshot(
+      path.join(stage.debugDir, "prompt.txt"),
+      promptContents,
+    );
+  }
+  if (debugLogDir) {
+    await writePromptSnapshot(
+      path.join(debugLogDir, "prompt.txt"),
+      promptContents,
+    );
+  }
+
+  const responseParts = extractOpenAiResponseParts(response).parts;
+  const mergedParts = mergeConsecutiveTextParts(responseParts);
+  const responseContent =
+    mergedParts.length > 0
+      ? {
+          role: "model",
+          parts: mergedParts,
+        }
+      : undefined;
+
+  const responseStats = summariseResponseStats(responseContent);
+  const usageTokens = extractOpenAiUsageTokens(response.usage);
+  const resolvedModel = response.model ?? modelId;
+  const costUsd = estimateCallCostUsd({
+    modelId: resolvedModel,
+    tokens: usageTokens,
+    responseImages: responseStats.responseImages,
+  });
+  const snapshotSummary: readonly string[] = [
+    `Model: ${resolvedModel}`,
+    `Elapsed: ${formatMillis(elapsedMs)}`,
+    buildTokenSummaryLine(usageTokens),
+    buildPromptMediaSummaryLine({ promptStats, uploadBytes }),
+    buildResponseMediaSummaryLine(responseStats),
+    `Estimated cost: ${usageTokens ? formatCurrencyUsd(costUsd) : "n/a"}`,
+  ];
+  const snapshotContents = responseContent ? [responseContent] : undefined;
+  const responseText = extractSnapshotText(responseContent);
+
+  if (stage.debugDir) {
+    await writeTextResponseSnapshot({
+      pathname: path.join(stage.debugDir, "response.txt"),
+      summary: snapshotSummary,
+      text: responseText,
+      contents: snapshotContents,
+    });
+  }
+  if (debugLogDir) {
+    await writeTextResponseSnapshot({
+      pathname: path.join(debugLogDir, "response.txt"),
+      summary: snapshotSummary,
+      text: responseText,
+      contents: snapshotContents,
+    });
+  }
+
+  if (debugOutputDirs.length > 0) {
+    const conversationHtml = buildConversationHtml({
+      promptContents,
+      responseContent,
+    });
+    await writeDebugTextFile({
+      dirs: debugOutputDirs,
+      filename: "conversation.html",
+      contents: conversationHtml,
+    });
+  }
 }
 
 function toMaybeNumber(value: unknown): number | undefined {
@@ -2032,12 +2355,14 @@ async function llmStream({
     const uploadBytes = estimateContentsUploadBytes(promptContents);
     const openAiInput = isOpenAi ? toOpenAiInput(promptContents) : undefined;
     const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
-    const openAiReasoningEffort =
-      options.openAiReasoningEffort ?? DEFAULT_OPENAI_REASONING_EFFORT;
+    const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
+      options.modelId,
+      options.openAiReasoningEffort,
+    );
     const openAiTextConfig: ResponseTextConfig | undefined = isOpenAi
       ? {
           format: options.openAiTextFormat ?? { type: "text" },
-          verbosity: "high",
+          verbosity: resolveOpenAiVerbosity(options.modelId),
         }
       : undefined;
     const openAiReasoningPayload = isOpenAi
@@ -3013,6 +3338,120 @@ function extractOpenAiText(response: OpenAiResponse): string {
   return "";
 }
 
+function extractOpenAiReasoningSummary(response: OpenAiResponse): string | undefined {
+  const output = response.output;
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+  const summaries: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    if ((item as { type?: unknown }).type !== "reasoning") {
+      continue;
+    }
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const entry of content) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const entryType = (entry as { type?: unknown }).type;
+      if (
+        entryType === "reasoning_summary_text" ||
+        entryType === "reasoning_summary"
+      ) {
+        const text =
+          typeof (entry as { text?: unknown }).text === "string"
+            ? (entry as { text?: unknown }).text
+            : typeof (entry as { summary?: unknown }).summary === "string"
+              ? (entry as { summary?: unknown }).summary
+              : undefined;
+        if (text && text.trim().length > 0) {
+          summaries.push(text.trim());
+        }
+      }
+    }
+  }
+  if (summaries.length === 0) {
+    return undefined;
+  }
+  return summaries.join("\n\n");
+}
+
+function truncateForLog(value: string, maxChars: number = 400): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}…(${value.length} chars)`;
+}
+
+function summarizeToolCallInput(toolName: string, input: unknown): string {
+  if (!input || typeof input !== "object") {
+    return "";
+  }
+  const record = input as Record<string, unknown>;
+  switch (toolName) {
+    case "read_file":
+      return record.path ? `path=${String(record.path)}` : "";
+    case "list_dir":
+      return record.path ? `path=${String(record.path)}` : "";
+    case "list_files": {
+      const pathLabel = record.path ? `path=${String(record.path)}` : "";
+      const depth =
+        record.maxDepth !== undefined ? `maxDepth=${String(record.maxDepth)}` : "";
+      return [pathLabel, depth].filter(Boolean).join(" ");
+    }
+    case "rg_search": {
+      const pattern = record.pattern ? `pattern=${truncateForLog(String(record.pattern), 120)}` : "";
+      const pathLabel = record.path ? `path=${String(record.path)}` : "";
+      return [pattern, pathLabel].filter(Boolean).join(" ");
+    }
+    case "create_file": {
+      const pathLabel = record.path ? `path=${String(record.path)}` : "";
+      const content = typeof record.content === "string" ? record.content : "";
+      const chars = content ? `chars=${content.length}` : "";
+      return [pathLabel, chars].filter(Boolean).join(" ");
+    }
+    case "delete_file":
+      return record.path ? `path=${String(record.path)}` : "";
+    case "move_file": {
+      const fromLabel = record.from ? `from=${String(record.from)}` : "";
+      const toLabel = record.to ? `to=${String(record.to)}` : "";
+      return [fromLabel, toLabel].filter(Boolean).join(" ");
+    }
+    case "apply_patch": {
+      const ops = Array.isArray(record.operations) ? record.operations : [];
+      const summaries = ops.slice(0, 3).map((op) => {
+        if (!op || typeof op !== "object") {
+          return "op";
+        }
+        const opRec = op as Record<string, unknown>;
+        const type = opRec.type ? String(opRec.type) : "op";
+        const pathLabel = opRec.path ? `:${String(opRec.path)}` : "";
+        const diffLen =
+          typeof opRec.diff === "string" ? `(${opRec.diff.length} chars)` : "";
+        return `${type}${pathLabel}${diffLen}`;
+      });
+      const extra = ops.length > 3 ? ` +${ops.length - 3} more` : "";
+      return summaries.length > 0
+        ? `ops=${ops.length} ${summaries.join(", ")}${extra}`
+        : "";
+    }
+    case "generate_text": {
+      const promptPath = record.promptPath ? `promptPath=${String(record.promptPath)}` : "";
+      const outputPath = record.outputPath ? `outputPath=${String(record.outputPath)}` : "";
+      const tools = Array.isArray(record.tools) ? `tools=${record.tools.join(",")}` : "";
+      return [promptPath, outputPath, tools].filter(Boolean).join(" ");
+    }
+    default:
+      return "";
+  }
+}
+
 function buildOpenAiFunctionTools(tools: LlmToolSet): OpenAiFunctionTool[] {
   const toolEntries = Object.entries(tools);
   const openAiTools: OpenAiFunctionTool[] = [];
@@ -3054,32 +3493,42 @@ export async function runToolLoop(
   const steps: LlmToolLoopStep[] = [];
   if (isOpenAiModelId(options.modelId)) {
     const openAiTools = buildOpenAiFunctionTools(options.tools);
-    const openAiReasoningEffort =
-      options.openAiReasoningEffort ?? DEFAULT_OPENAI_REASONING_EFFORT;
+    const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
+      options.modelId,
+      options.openAiReasoningEffort,
+    );
     const openAiTextConfig: ResponseTextConfig = {
       format: { type: "text" },
-      verbosity: "high",
+      verbosity: resolveOpenAiVerbosity(options.modelId),
     };
     const openAiReasoningPayload = {
       effort: toOpenAiReasoningEffort(openAiReasoningEffort),
       summary: "detailed" as const,
     };
     let previousResponseId: string | undefined;
+    let totalCostUsd = 0;
     let input: ResponseInput = toOpenAiInput(contents);
+    let debugPromptContents: LlmContent[] = [...contents];
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-      reporter.log(`[tool-loop] OpenAI step ${stepIndex + 1}`);
+      reporter.log(`OpenAI step ${stepIndex + 1}`);
+      const requestConfig = {
+        ...(previousResponseId
+          ? { previous_response_id: previousResponseId }
+          : {}),
+        ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
+        ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
+        reasoning: openAiReasoningPayload,
+        text: openAiTextConfig,
+      };
+      const startedAt = Date.now();
       const response = await runOpenAiCall(async (client) =>
         client.responses.create({
           model: options.modelId,
           input,
-          ...(previousResponseId
-            ? { previous_response_id: previousResponseId }
-            : {}),
-          ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
-          reasoning: openAiReasoningPayload,
-          text: openAiTextConfig,
+          ...requestConfig,
         }),
       );
+      const elapsedMs = Date.now() - startedAt;
       if (response.error) {
         const message =
           typeof response.error.message === "string"
@@ -3099,6 +3548,49 @@ export async function runToolLoop(
           }`,
         );
       }
+      try {
+        await writeToolLoopDebugSnapshot({
+          debug: options.debug,
+          modelId: options.modelId,
+          step: stepIndex + 1,
+          maxSteps,
+          input,
+          debugPromptContents,
+          response,
+          elapsedMs,
+          requestConfig,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        reporter.log(`failed to write debug snapshot: ${message}`);
+      }
+      const reasoningSummary = extractOpenAiReasoningSummary(response);
+      if (reasoningSummary) {
+        reporter.log(
+          `summary: ${truncateForLog(reasoningSummary, 800)}`,
+        );
+      }
+      const usageTokens = extractOpenAiUsageTokens(response.usage);
+      const resolvedModelId = response.model ?? options.modelId;
+      const stepCostUsd = estimateCallCostUsd({
+        modelId: resolvedModelId,
+        tokens: usageTokens,
+        responseImages: 0,
+      });
+      totalCostUsd += stepCostUsd;
+      reporter.log(
+        [
+          `step ${stepIndex + 1} usage`,
+          `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
+          `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
+          `response=${formatOptionalNumber(usageTokens?.responseTokens)}`,
+          `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
+          `total=${formatOptionalNumber(usageTokens?.totalTokens)}`,
+          `cost=${formatCurrencyUsd(stepCostUsd)}`,
+          `totalCost=${formatCurrencyUsd(totalCostUsd)}`,
+          `elapsed=${formatMillis(elapsedMs)}`,
+        ].join(" "),
+      );
       previousResponseId = response.id;
       const responseText = extractOpenAiText(response);
       const functionCalls = extractOpenAiFunctionCalls(response.output);
@@ -3120,6 +3612,12 @@ export async function runToolLoop(
         const toolName = call.name;
         const { value, error: parseError } = parseOpenAiToolArguments(
           call.arguments,
+        );
+        const toolSummary = summarizeToolCallInput(toolName, value);
+        reporter.log(
+          toolSummary
+            ? `tool: ${toolName} ${toolSummary}`
+            : `tool: ${toolName}`,
         );
         const { result, outputPayload } = await executeToolCall({
           toolName,
@@ -3143,13 +3641,18 @@ export async function runToolLoop(
         text: responseText.length > 0 ? responseText : undefined,
         toolCalls,
       });
+      if (toolOutputs.length > 0) {
+        debugPromptContents = debugPromptContents.concat(
+          openAiInputToDebugContents(toolOutputs),
+        );
+      }
       input = toolOutputs;
     }
   } else {
     const geminiTools = buildGeminiFunctionDeclarations(options.tools);
     const geminiContents = contents.map(convertLlmContentToGoogleContent);
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-      reporter.log(`[tool-loop] Gemini step ${stepIndex + 1}`);
+      reporter.log(`Gemini step ${stepIndex + 1}`);
       const response = await runGeminiCall(async (client) =>
         client.models.generateContent({
           model: options.modelId,

@@ -8,20 +8,38 @@ const START_JITTER_MS = 200;
 
 export const OPENAI_MODEL_IDS = [
   "gpt-5.2",
-  "gpt-4o-2024-08-06",
-  "gpt-4o-mini",
+  "gpt-5.2-codex",
 ] as const;
 
 export type OpenAiModelId = (typeof OPENAI_MODEL_IDS)[number];
 
 export const DEFAULT_OPENAI_MODEL_ID: OpenAiModelId = "gpt-5.2";
 
+export type OpenAiPricing = {
+  readonly inputRate: number;
+  readonly cachedRate: number;
+  readonly outputRate: number;
+};
+
+const OPENAI_GPT_52_PRICING: OpenAiPricing = {
+  inputRate: 1.75 / 1_000_000,
+  cachedRate: 0.175 / 1_000_000,
+  outputRate: 14 / 1_000_000,
+};
+
 export type OpenAiReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
-export const DEFAULT_OPENAI_REASONING_EFFORT: OpenAiReasoningEffort = "xhigh";
+export const DEFAULT_OPENAI_REASONING_EFFORT: OpenAiReasoningEffort = "medium";
 
 export function isOpenAiModelId(value: string): value is OpenAiModelId {
   return (OPENAI_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
+  if (modelId.includes("gpt-5.2")) {
+    return OPENAI_GPT_52_PRICING;
+  }
+  return undefined;
 }
 
 let activeCount = 0;

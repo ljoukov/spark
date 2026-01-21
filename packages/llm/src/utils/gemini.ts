@@ -32,8 +32,66 @@ export const GEMINI_MODEL_IDS = [
 
 export type GeminiModelId = (typeof GEMINI_MODEL_IDS)[number];
 
+export type GeminiProPreviewPricing = {
+  readonly threshold: number;
+  readonly inputRateLow: number;
+  readonly inputRateHigh: number;
+  readonly cachedRateLow: number;
+  readonly cachedRateHigh: number;
+  readonly outputRateLow: number;
+  readonly outputRateHigh: number;
+};
+
+export type GeminiImagePreviewPricing = {
+  readonly inputRate: number;
+  readonly cachedRate: number;
+  readonly outputTextRate: number;
+  readonly outputImageRate: number;
+  readonly imagePrices: Record<string, number>;
+};
+
+const GEMINI_PRO_PREVIEW_PRICING: GeminiProPreviewPricing = {
+  threshold: 200_000,
+  inputRateLow: 2 / 1_000_000,
+  inputRateHigh: 4 / 1_000_000,
+  cachedRateLow: 0.2 / 1_000_000,
+  cachedRateHigh: 0.4 / 1_000_000,
+  outputRateLow: 12 / 1_000_000,
+  outputRateHigh: 18 / 1_000_000,
+};
+
+const GEMINI_IMAGE_PREVIEW_PRICING: GeminiImagePreviewPricing = {
+  inputRate: 2 / 1_000_000,
+  cachedRate: 0.2 / 1_000_000,
+  outputTextRate: 12 / 1_000_000,
+  outputImageRate: 120 / 1_000_000,
+  imagePrices: {
+    "1K": 0.134,
+    "2K": 0.134,
+    "4K": 0.24,
+  },
+};
+
 export function isGeminiModelId(value: string): value is GeminiModelId {
   return (GEMINI_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function getGeminiProPreviewPricing(
+  modelId: string,
+): GeminiProPreviewPricing | undefined {
+  if (modelId.includes("gemini-3-pro")) {
+    return GEMINI_PRO_PREVIEW_PRICING;
+  }
+  return undefined;
+}
+
+export function getGeminiImagePreviewPricing(
+  modelId: string,
+): GeminiImagePreviewPricing | undefined {
+  if (modelId.includes("image-preview")) {
+    return GEMINI_IMAGE_PREVIEW_PRICING;
+  }
+  return undefined;
 }
 
 let activeCount = 0;
