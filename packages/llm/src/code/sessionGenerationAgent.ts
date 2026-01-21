@@ -13,11 +13,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
+import { zodToJsonSchema } from "@alcyone-labs/zod-to-json-schema";
 
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
   SessionSchema,
+  SessionMediaDocSchema,
   type CodeProblem,
   type QuizDefinition,
   type Session,
@@ -430,7 +432,7 @@ function buildSchemaSummary(
     "  - firestore/quiz/*.json (quiz docs; doc id = filename, omit id field)",
     "  - firestore/code/*.json (code docs; doc id = filename, omit slug field)",
     "- Drafts remain Markdown: session-plan.md, quizzes/*.md, problems/*.md, story.md.",
-    "- Full field definitions live in firestore-schema.md.",
+    "- Full field definitions live in firestore-schema.json.",
     "",
     "Story:",
     ...storySection,
@@ -488,48 +490,36 @@ function buildVerificationPromptContent(): string {
   ].join("\n");
 }
 
-function buildFirestoreSchemaContent(): string {
-  return [
-    "# Firestore output schema (authoritative)",
-    "",
-    "Write Firestore-ready JSON outputs under firestore/:",
-    "- firestore/session.json -> spark/{uid}/sessions/{sessionId}",
-    "- firestore/quiz/<quizId>.json -> spark/{uid}/sessions/{sessionId}/quiz/<quizId>",
-    "- firestore/code/<problemSlug>.json -> spark/{uid}/sessions/{sessionId}/code/<problemSlug>",
-    "- (optional) firestore/media/<planItemId>.json -> spark/{uid}/sessions/{sessionId}/media/<planItemId>",
-    "",
-    "General rules:",
-    "- Each file must be valid JSON (no trailing commas, no comments).",
-    "- Use ISO timestamps for createdAt/updatedAt (e.g. \"2026-01-20T00:00:00Z\").",
-    "- For quiz/code docs, do NOT include id/slug fields; the filename is the document ID.",
-    "",
-    "Session document (firestore/session.json) — based on SessionSchema:",
-    "- Required: id, createdAt, plan (array of plan items).",
-    "- Optional: title, summary, tagline, emoji, status, topics, sourceSessionId, sourceProposalId, nextLessonProposals.",
-    "- status defaults to \"ready\" if omitted. If status is not \"generating\" or \"error\", plan must be non-empty.",
-    "",
-    "Plan item shapes (plan array):",
-    "- quiz: { id, kind: \"quiz\", title, summary?, description?, icon?, meta?, progressKey? }",
-    "- problem: { id, kind: \"problem\", title, summary?, description?, icon?, meta?, difficulty?, topic? }",
-    "- media: { id, kind: \"media\", title, summary?, description?, icon?, meta?, duration? }",
-    "",
-    "Quiz document (firestore/quiz/<quizId>.json) — based on QuizDefinitionSchema (omit id):",
-    "- Required: title, description, progressKey, questions[]",
-    "- Optional: topic, estimatedMinutes",
-    "- Question base fields: id, prompt, hint?, explanation?, audioLabel?",
-    "- Question kinds:",
-    "  - multiple-choice: { kind: \"multiple-choice\", options[{id,label,text}], correctOptionId, correctFeedback{message,tone?,heading?} }",
-    "  - type-answer: { kind: \"type-answer\", answer, acceptableAnswers?, placeholder?, correctFeedback{...} }",
-    "  - info-card: { kind: \"info-card\", body, continueLabel?, eyebrow? }",
-    "",
-    "Code problem document (firestore/code/<problemSlug>.json) — based on CodeProblemSchema (omit slug):",
-    "- Required: title, topics[], difficulty, description, inputFormat, constraints[], examples[3], tests[>=3], hints[3], solution{language:\"python\", code}, metadataVersion",
-    "- Each example has title, input, output, explanation.",
-    "- Tests must include at least the example cases (inputs/outputs must match) and provide explanations for each test.",
-    "",
-    "Media document (optional) — based on SessionMediaDocSchema:",
-    "- id, planItemId, sessionId, audio{storagePath,durationSec,mimeType?}, images[{index,storagePath,startSec,durationSec}], narration[{speaker?,text,startSec,durationSec}], posterImage?, endingImage?, createdAt, updatedAt, metadataVersion",
-  ].join("\n");
+function safeToJsonSchema(
+  schema: z.ZodTypeAny,
+  name: string,
+): Record<string, unknown> {
+  try {
+    return z.toJSONSchema(schema, { target: "draft-07" }) as Record<
+      string,
+      unknown
+    >;
+  } catch (error) {
+    const fallback = zodToJsonSchema(schema, {
+      name,
+      target: "jsonSchema7",
+    }) as Record<string, unknown>;
+    return fallback;
+  }
+}
+
+function buildFirestoreSchemaJsonContent(): string {
+  const sessionSchema = safeToJsonSchema(SessionSchema, "Session");
+  const quizSchema = safeToJsonSchema(QuizDefinitionSchema, "QuizDefinition");
+  const codeSchema = safeToJsonSchema(CodeProblemSchema, "CodeProblem");
+  const mediaSchema = safeToJsonSchema(SessionMediaDocSchema, "SessionMediaDoc");
+  const payload = {
+    session: sessionSchema,
+    quiz: quizSchema,
+    code: codeSchema,
+    media: mediaSchema,
+  };
+  return JSON.stringify(payload, null, 2);
 }
 
 function buildTaskContent(options: {
@@ -538,6 +528,23 @@ function buildTaskContent(options: {
   includeCoding: boolean;
   brief: string;
 }): string {
+  const orderingLines = options.includeCoding
+    ? [
+        "Ordering (coding-first):",
+        "- Draft problems and verify solvability with code execution.",
+        "- Summarize verified techniques (summaries/techniques.md).",
+        "- Draft/adjust session-plan.md based on verified techniques.",
+        "- Draft quizzes from verified techniques (not just the initial plan).",
+        "- Draft story if enabled.",
+        "- Only after all drafts are verified, create firestore/*.json.",
+      ]
+    : [
+        "Ordering:",
+        "- Draft session-plan.md.",
+        "- Draft quizzes from the finalized plan.",
+        "- Draft story if enabled.",
+        "- Only after all drafts are verified, create firestore/*.json.",
+      ];
   return [
     "# Session Generation Task",
     "",
@@ -545,21 +552,24 @@ function buildTaskContent(options: {
     `Include story: ${options.includeStory ? "yes" : "no"}`,
     `Include coding: ${options.includeCoding ? "yes" : "no"}`,
     "",
-    "Goal: produce Firestore-ready JSON outputs (see firestore-schema.md).",
+    "Goal: produce Firestore-ready JSON outputs (see firestore-schema.json).",
     "Use markdown drafts for session-plan.md, quizzes/quiz-XX.md, problems/problem-XX.md, and story.md.",
     "Create one quiz file per quiz set and one problem file per coding problem.",
     "For each draft: generate -> grade with feedback -> revise using feedback.",
+    "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
     "Use generate_text tool for drafting and grading; avoid JSON except Firestore output files.",
     "generate_text should write directly to files via outputPath; do not paste large drafts into the tool response.",
     "generate_text should read its prompt from a file via promptPath; do not inline large prompts in tool arguments.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
     "Prompt templates may include {{path/to/file.md}} placeholders that will be replaced with file contents before calling generate_text.",
     "If only a subset of a large file is needed, create a shorter summary under summaries/ and reference that instead.",
+    "",
+    ...orderingLines,
     "Write Firestore JSON outputs under firestore/:",
     "- firestore/session.json",
     "- firestore/quiz/<quizId>.json",
     "- firestore/code/<problemSlug>.json",
-    "Refer to firestore-schema.md for exact Firestore fields and document rules.",
+    "Refer to firestore-schema.json for exact Firestore fields and document rules.",
     "Use story-prompt.md when drafting story.md.",
     "Use verification-prompt.md when writing verification.md.",
     "",
@@ -569,17 +579,34 @@ function buildTaskContent(options: {
   ].join("\n");
 }
 
-function buildPlanTrackerContent(): string {
-  return [
-    "# Plan",
-    "- [running] Review brief and list hard requirements.",
-    "- [pending] Draft session-plan.md (markdown).",
+function buildPlanTrackerContent(options: {
+  includeStory: boolean;
+  includeCoding: boolean;
+}): string {
+  const lines: string[] = ["# Plan", "- [running] Review brief and list hard requirements."];
+  if (options.includeCoding) {
+    lines.push(
+      "- [pending] Draft problems/problem-XX.md (one per problem), verify with code execution, and revise.",
+      "- [pending] Summarize verified techniques (summaries/techniques.md).",
+      "- [pending] Draft session-plan.md based on verified techniques.",
+    );
+  } else {
+    lines.push("- [pending] Draft session-plan.md (markdown).");
+  }
+  lines.push(
     "- [pending] Draft quizzes/quiz-XX.md (one per quiz set), grade, and revise.",
-    "- [pending] Draft problems/problem-XX.md (one per problem), grade, and revise.",
-    "- [pending] Draft story.md (markdown, if includeStory), grade, and revise.",
+  );
+  if (options.includeStory) {
+    lines.push(
+      "- [pending] Draft story.md (markdown), grade, and revise.",
+    );
+  }
+  lines.push(
     "- [pending] Compile Firestore JSON outputs from drafts.",
+    "- [pending] Run validate_schema (schemaPath=firestore-schema.json) and fix any errors.",
     "- [pending] Verify Firestore JSON outputs match markdown drafts (write verification.md).",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function buildAgentSystemPrompt(workspaceDir: string): string {
@@ -599,9 +626,11 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "If prompts need context from large files, create summaries under summaries/ and reference those instead.",
     "Prompt files must be self-contained: include all necessary context via placeholders or summaries. Do not reference p2/p3 or other content unless it is included in the prompt text.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
+    "Do not write any firestore/*.json outputs until all drafts are verified and finalized.",
+    "If coding is enabled, draft and verify problems first, then derive techniques and update session-plan.md before drafting quizzes.",
     "Read story-prompt.md before drafting story.md.",
     "Read verification-prompt.md before writing verification.md.",
-    "Read firestore-schema.md before writing firestore/*.json outputs.",
+    "Read firestore-schema.json before writing firestore/*.json outputs.",
     "Write Firestore JSON outputs under firestore/session.json, firestore/quiz/*.json, firestore/code/*.json.",
     "Use Markdown for drafts; only firestore/*.json files should contain JSON.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
@@ -609,6 +638,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Create problem drafts under problems/problem-01.md, problems/problem-02.md, etc.",
     "Write feedback in feedback/ with matching filenames (e.g., feedback/quiz-01.md).",
     "After Firestore JSON outputs are written, re-read all draft files and firestore/*.json, verify alignment, and write verification.md.",
+    "You can call validate_schema (schemaPath=firestore-schema.json) to check Firestore outputs mid-run; fix any errors before final verification.",
     "If independent steps exist, call tools in parallel (e.g., read multiple files or verify multiple problems simultaneously).",
     "Do not output large JSON in the chat response; write it to firestore/*.json.",
     "Stop after verification.md is written; respond DONE with no further tool calls.",
@@ -626,7 +656,7 @@ function buildAgentUserPrompt(options: {
     "Files:",
     "- task.md (goal + brief)",
     "- schema.md (schema summary)",
-    "- firestore-schema.md (Firestore doc requirements)",
+    "- firestore-schema.json (Firestore JSON schema)",
     "- story-prompt.md (story hook guidance)",
     "- verification-prompt.md (verification guidance)",
     "- plan.md (status tracker)",
@@ -651,9 +681,12 @@ function buildAgentUserPrompt(options: {
   sections.push(
     "",
     "Use the brief as authoritative. Respect exactness rules from the brief.",
-    "Use firestore-schema.md for the Firestore JSON output fields and rules.",
+    "Use firestore-schema.json for the Firestore JSON output fields and rules.",
     "Ensure quiz/problem counts match the plan parts.",
-    "Proceed in order: session-plan.md -> quizzes/quiz-XX.md -> problems/problem-XX.md -> story.md (if needed) -> firestore outputs.",
+    "Proceed in order:",
+    options.includeCoding
+      ? "problems/problem-XX.md -> verify with code execution -> summaries/techniques.md -> session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs."
+      : "session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Use generate_text for drafting and grading; set promptPath and outputPath so it reads/writes files directly; enable web-search or code-execution only when needed.",
     "Problem solution verification should use generate_text with code-execution.",
@@ -666,6 +699,7 @@ function buildAgentUserPrompt(options: {
     "For large rewrites, delete_file then create_file with full contents.",
     "After writing each draft and feedback, update plan.md statuses.",
     "Before finishing, re-read all drafts and firestore/*.json and write verification.md confirming alignment.",
+    "Use validate_schema (schemaPath=firestore-schema.json) to catch schema issues early; repair errors before final verification.",
     "After verification.md is complete, reply DONE (no summary).",
   );
   return sections.join("\n");
@@ -911,7 +945,22 @@ function applyDiff(original: string, diff: string): string {
 
 function buildValidationError(error: unknown): string {
   if (error instanceof z.ZodError) {
-    return error.issues.map((issue) => issue.message).join("; ");
+    return error.issues
+      .map((issue) => {
+        const pathLabel =
+          issue.path.length > 0 ? issue.path.join(".") : "(root)";
+        const codeLabel = issue.code ? ` [${issue.code}]` : "";
+        const expected =
+          "expected" in issue && issue.expected !== undefined
+            ? ` expected=${String(issue.expected)}`
+            : "";
+        const received =
+          "received" in issue && issue.received !== undefined
+            ? ` received=${String(issue.received)}`
+            : "";
+        return `${pathLabel}: ${issue.message}${codeLabel}${expected}${received}`;
+      })
+      .join("; ");
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -1052,8 +1101,8 @@ async function prepareWorkspace(options: {
     buildSchemaSummary(options.includeStory, options.includeCoding),
   );
   await ensureFile(
-    path.join(options.paths.workspaceDir, "firestore-schema.md"),
-    buildFirestoreSchemaContent(),
+    path.join(options.paths.workspaceDir, "firestore-schema.json"),
+    buildFirestoreSchemaJsonContent(),
   );
   await ensureFile(
     path.join(options.paths.workspaceDir, "story-prompt.md"),
@@ -1074,7 +1123,10 @@ async function prepareWorkspace(options: {
   );
   await ensureFile(
     path.join(options.paths.workspaceDir, "plan.md"),
-    buildPlanTrackerContent(),
+    buildPlanTrackerContent({
+      includeStory: options.includeStory,
+      includeCoding: options.includeCoding,
+    }),
   );
 }
 
@@ -1089,8 +1141,10 @@ function loadAgentEnv(): void {
 function buildSessionAgentTools(options: {
   paths: WorkspacePaths;
   progress?: JobProgressReporter;
+  includeStory: boolean;
+  includeCoding: boolean;
 }) {
-  const { paths, progress } = options;
+  const { paths, progress, includeStory, includeCoding } = options;
   const log = (message: string) => {
     if (progress) {
       progress.log(message);
@@ -1146,6 +1200,54 @@ function buildSessionAgentTools(options: {
             error: message,
           });
           throw error;
+        }
+      },
+    }),
+    validate_schema: tool({
+      description:
+        "Validate firestore outputs against schema and plan. Provide schemaPath to the JSON schema file. Returns errors without throwing so the agent can repair.",
+      inputSchema: z
+        .object({
+          schemaPath: z.string().trim().min(1),
+        })
+        .strict(),
+      execute: async ({ schemaPath }) => {
+        try {
+          const resolvedSchemaPath = resolveWorkspacePath(
+            paths.workspaceDir,
+            schemaPath,
+          );
+          const schemaText = await readFile(resolvedSchemaPath, "utf8");
+          const schemaJson = JSON.parse(schemaText);
+          if (!schemaJson || typeof schemaJson !== "object") {
+            throw new Error("Schema JSON must be an object.");
+          }
+          const outputs = await loadFirestoreOutputs({
+            paths,
+            includeStory,
+            includeCoding,
+          });
+          const output = {
+            ok: true,
+            sessionId: outputs.session.id,
+            quizzes: outputs.quizzes.map((quiz) => quiz.id),
+            problems: outputs.problems.map((problem) => problem.slug),
+          };
+          await logTool({
+            tool: "validate_schema",
+            input: { schemaPath },
+            output,
+          });
+          return output;
+        } catch (error) {
+          const message = buildValidationError(error);
+          const output = { ok: false, error: message };
+          await logTool({
+            tool: "validate_schema",
+            input: { schemaPath },
+            output,
+          });
+          return output;
         }
       },
     }),
@@ -1617,7 +1719,12 @@ export async function runSessionAgentSmokeTest(options: {
   await ensureDir(paths.debugDir);
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
-  const tools = buildSessionAgentTools({ paths, progress: options.progress });
+  const tools = buildSessionAgentTools({
+    paths,
+    progress: options.progress,
+    includeStory,
+    includeCoding,
+  });
   const systemPrompt = [
     "You are a tool-using agent.",
     `You may only edit files under: ${paths.workspaceDir}`,
@@ -1716,7 +1823,12 @@ export async function runSessionGenerationAgent(
     includeCoding,
   });
 
-  const tools = buildSessionAgentTools({ paths, progress: options.progress });
+  const tools = buildSessionAgentTools({
+    paths,
+    progress: options.progress,
+    includeStory,
+    includeCoding,
+  });
 
   const systemPrompt = buildAgentSystemPrompt(paths.workspaceDir);
   let validationError: string | undefined;
