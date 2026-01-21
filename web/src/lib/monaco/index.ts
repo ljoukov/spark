@@ -11,9 +11,7 @@ async function ensureMonacoStyles(): Promise<void> {
 	}
 
 	stylePromise = (async () => {
-		const { default: styleUrl } = await import(
-			'monaco-editor/min/vs/editor/editor.main.css?url'
-		);
+		const { default: styleUrl } = await import('monaco-editor/min/vs/editor/editor.main.css?url');
 		if (document.querySelector('link[data-monaco-style="true"]')) {
 			return;
 		}

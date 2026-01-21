@@ -21,6 +21,7 @@
     "session:generateTestSession": "FORCE_TEST_USER=true tsx src/code/generateTestSession.ts",
     "session:generateWelcomeSessions": "tsx src/code/generateWelcomeSessions.ts",
     "session:generateWelcomeSession": "tsx src/code/generateWelcomeSession.ts",
+    "session:agent": "tsx src/code/sessionGenerationAgent.ts",
     "session:story": "tsx src/code/generateTestStory.ts"
   },
   "dependencies": {
