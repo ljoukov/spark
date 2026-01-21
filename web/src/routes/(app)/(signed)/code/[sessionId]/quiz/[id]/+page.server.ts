@@ -12,6 +12,18 @@ import type {
 } from '$lib/types/quiz';
 
 function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
+	const renderAnswer = (answer?: string) => {
+		if (!answer) {
+			return undefined;
+		}
+		const hasLatex = /\\[a-zA-Z]+/.test(answer);
+		const hasDollar = answer.includes('$');
+		const candidate = !hasDollar && hasLatex ? `$${answer}$` : answer;
+		return renderMarkdownOptional(candidate);
+	};
+
+	const renderFeedback = (message: string) => renderMarkdownOptional(message);
+
 	return {
 		...quiz,
 		questions: quiz.questions.map((question) => {
@@ -25,6 +37,10 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 					promptHtml,
 					hintHtml,
 					explanationHtml,
+					correctFeedback: {
+						...question.correctFeedback,
+						messageHtml: renderFeedback(question.correctFeedback.message)
+					},
 					options: question.options.map((option) => ({
 						...option,
 						textHtml: renderMarkdownOptional(option.text)
@@ -46,7 +62,12 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 				...question,
 				promptHtml,
 				hintHtml,
-				explanationHtml
+				explanationHtml,
+				answerHtml: renderAnswer(question.answer),
+				correctFeedback: {
+					...question.correctFeedback,
+					messageHtml: renderFeedback(question.correctFeedback.message)
+				}
 			} satisfies QuizTypeAnswerQuestion;
 		}) as QuizQuestion[]
 	};
