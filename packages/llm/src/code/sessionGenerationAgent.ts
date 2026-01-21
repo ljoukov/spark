@@ -410,6 +410,7 @@ function buildSchemaSummary(
     "  - firestore/code/*.json (code docs; doc id = filename, omit slug field)",
     "- Drafts remain Markdown: session-plan.md, quizzes/*.md, problems/*.md, story.md.",
     "- Full field definitions live in firestore-schema.json.",
+    "- Plan item icon should be an emoji (single character). If unsure, omit icon so the UI uses defaults.",
     "",
     "Story:",
     ...storySection,
@@ -674,6 +675,7 @@ function buildAgentUserPrompt(options: {
     "Use the brief as authoritative. Respect exactness rules from the brief.",
     "Use firestore-schema.json for the Firestore JSON output fields and rules.",
     "Set session.id in firestore/session.json to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
+    "Plan item icons must be emoji (single character). If unsure, omit icon so the UI uses defaults.",
     "Ensure quiz/problem counts match the plan parts.",
     "Proceed in order:",
     options.includeCoding
