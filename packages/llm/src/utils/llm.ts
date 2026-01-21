@@ -3411,6 +3411,22 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
       const pathValue = formatToolValue(record.path);
       return pathValue ? `path=${pathValue}` : "";
     }
+    case "read_files": {
+      const paths = Array.isArray(record.paths) ? record.paths : [];
+      const count = paths.length > 0 ? `count=${paths.length}` : "";
+      const sample =
+        paths.length > 0 ? `sample=${truncateForLog(String(paths[0]), 80)}` : "";
+      return [count, sample].filter(Boolean).join(" ");
+    }
+    case "read_file_summary": {
+      const pathValue = formatToolValue(record.path);
+      const questionValue = formatToolValue(record.question);
+      const pathLabel = pathValue ? `path=${pathValue}` : "";
+      const question = questionValue
+        ? `question=${truncateForLog(questionValue, 80)}`
+        : "";
+      return [pathLabel, question].filter(Boolean).join(" ");
+    }
     case "list_dir": {
       const pathValue = formatToolValue(record.path);
       return pathValue ? `path=${pathValue}` : "";
@@ -3640,7 +3656,7 @@ export async function runToolLoop(
       }
       const toolCalls: LlmToolCallResult[] = [];
       const toolOutputs: ResponseInput = [];
-      for (const call of functionCalls) {
+      const callInputs = functionCalls.map((call) => {
         const toolName = call.name;
         const { value, error: parseError } = parseOpenAiToolArguments(
           call.arguments,
@@ -3651,19 +3667,27 @@ export async function runToolLoop(
             ? `tool: ${toolName} ${toolSummary}`
             : `tool: ${toolName}`,
         );
-        const { result, outputPayload } = await executeToolCall({
-          toolName,
-          tool: options.tools[toolName],
-          rawInput: value,
-          parseError,
-        });
+        return { call, toolName, value, parseError };
+      });
+      const callResults = await Promise.all(
+        callInputs.map(async (entry) => {
+          const { result, outputPayload } = await executeToolCall({
+            toolName: entry.toolName,
+            tool: options.tools[entry.toolName],
+            rawInput: entry.value,
+            parseError: entry.parseError,
+          });
+          return { entry, result, outputPayload };
+        }),
+      );
+      for (const { entry, result, outputPayload } of callResults) {
         toolCalls.push({
           ...result,
-          callId: call.call_id,
+          callId: entry.call.call_id,
         });
         toolOutputs.push({
           type: "function_call_output",
-          call_id: call.call_id,
+          call_id: entry.call.call_id,
           output: serializeToolOutput(outputPayload),
         } as ResponseInputItem.FunctionCallOutput);
       }
@@ -3729,23 +3753,32 @@ export async function runToolLoop(
         geminiContents.push({ role: "model", parts });
       }
       const responseParts: Part[] = [];
-      for (const call of functionCalls) {
-        const toolName = call.name ?? "unknown";
-        const { result, outputPayload } = await executeToolCall({
-          toolName,
-          tool: options.tools[toolName],
-          rawInput: call.args ?? {},
-        });
+      const callInputs = functionCalls.map((call) => ({
+        call,
+        toolName: call.name ?? "unknown",
+        rawInput: call.args ?? {},
+      }));
+      const callResults = await Promise.all(
+        callInputs.map(async (entry) => {
+          const { result, outputPayload } = await executeToolCall({
+            toolName: entry.toolName,
+            tool: options.tools[entry.toolName],
+            rawInput: entry.rawInput,
+          });
+          return { entry, result, outputPayload };
+        }),
+      );
+      for (const { entry, result, outputPayload } of callResults) {
         toolCalls.push({
           ...result,
-          callId: call.id,
+          callId: entry.call.id,
         });
         const responsePayload = wrapGeminiToolOutput(outputPayload);
         responseParts.push({
           functionResponse: {
-            name: toolName,
+            name: entry.toolName,
             response: responsePayload,
-            ...(call.id ? { id: call.id } : {}),
+            ...(entry.call.id ? { id: entry.call.id } : {}),
           },
         });
       }
