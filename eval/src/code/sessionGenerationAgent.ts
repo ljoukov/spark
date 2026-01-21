@@ -63,7 +63,7 @@ type CallState = {
 type UsageTotals = {
   calls: number;
   costUsd: number;
-  tokens: {
+  tokens?: {
     input: number;
     prompt: number;
     cached: number;
@@ -101,31 +101,32 @@ function resolveNumber(next: number | undefined, prev: number): number {
   return prev;
 }
 
-function ensureUsageTotals(target: UsageTotals | undefined): UsageTotals {
-  if (target) {
-    return target;
-  }
+function createUsageTotals(withTokens: boolean): UsageTotals {
   return {
     calls: 0,
     costUsd: 0,
-    tokens: {
-      input: 0,
-      prompt: 0,
-      cached: 0,
-      toolUsePrompt: 0,
-      output: 0,
-      response: 0,
-      responseImageTokens: 0,
-      thinking: 0,
-      total: 0,
-    },
+    ...(withTokens
+      ? {
+          tokens: {
+            input: 0,
+            prompt: 0,
+            cached: 0,
+            toolUsePrompt: 0,
+            output: 0,
+            response: 0,
+            responseImageTokens: 0,
+            thinking: 0,
+            total: 0,
+          },
+        }
+      : {}),
   };
 }
 
 class UsageAggregator {
   private readonly calls = new Map<ModelCallHandle, CallState>();
   private readonly modelTotals = new Map<string, UsageTotals>();
-  private readonly overallTotals: UsageTotals = ensureUsageTotals(undefined);
+  private readonly overallTotals: UsageTotals = createUsageTotals(false);
 
   start(details: { modelId: string; imageSize?: string }): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("usage-call");
@@ -188,19 +189,34 @@ class UsageAggregator {
       responseImages: state.responseImages,
       imageSize: state.imageSize,
     });
-    this.applyTotals(this.overallTotals, state, costUsd);
-    const modelTotals = ensureUsageTotals(this.modelTotals.get(modelId));
-    this.applyTotals(modelTotals, state, costUsd);
+    this.overallTotals.calls += 1;
+    this.overallTotals.costUsd += costUsd;
+    const modelTotals =
+      this.modelTotals.get(modelId) ?? createUsageTotals(true);
+    this.applyModelTotals(modelTotals, state, costUsd);
     this.modelTotals.set(modelId, modelTotals);
   }
 
-  private applyTotals(
+  private applyModelTotals(
     totals: UsageTotals,
     state: CallState,
     costUsd: number,
   ): void {
     totals.calls += 1;
     totals.costUsd += costUsd;
+    if (!totals.tokens) {
+      totals.tokens = {
+        input: 0,
+        prompt: 0,
+        cached: 0,
+        toolUsePrompt: 0,
+        output: 0,
+        response: 0,
+        responseImageTokens: 0,
+        thinking: 0,
+        total: 0,
+      };
+    }
     const inputTokens =
       state.tokens.promptTokens + state.tokens.toolUsePromptTokens;
     const outputTokens = state.tokens.responseTokens;
@@ -252,27 +268,22 @@ function printUsageSummary(summary: UsageSummary): void {
   );
   console.log("\nUsage summary:");
   for (const [modelId, totals] of entries) {
+    const tokens = totals.tokens;
     console.log(
       `- ${modelId}: calls=${formatNumber(totals.calls)} in=${formatNumber(
-        totals.tokens.input,
-      )} cached=${formatNumber(totals.tokens.cached)} out=${formatNumber(
-        totals.tokens.output,
+        tokens?.input ?? 0,
+      )} cached=${formatNumber(tokens?.cached ?? 0)} out=${formatNumber(
+        tokens?.output ?? 0,
       )} thinking=${formatNumber(
-        totals.tokens.thinking,
-      )} total=${formatNumber(totals.tokens.total)} cost=${formatUsd(
+        tokens?.thinking ?? 0,
+      )} total=${formatNumber(tokens?.total ?? 0)} cost=${formatUsd(
         totals.costUsd,
       )}`,
     );
   }
   const overall = summary.totals;
   console.log(
-    `Total: calls=${formatNumber(overall.calls)} in=${formatNumber(
-      overall.tokens.input,
-    )} cached=${formatNumber(overall.tokens.cached)} out=${formatNumber(
-      overall.tokens.output,
-    )} thinking=${formatNumber(
-      overall.tokens.thinking,
-    )} total=${formatNumber(overall.tokens.total)} cost=${formatUsd(
+    `Total: calls=${formatNumber(overall.calls)} cost=${formatUsd(
       overall.costUsd,
     )}`,
   );
