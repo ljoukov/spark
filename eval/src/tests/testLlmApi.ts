@@ -1,5 +1,9 @@
 import { ensureEvalEnvLoaded } from "../utils/paths";
 import { runToolLoop, tool, type LlmTextModelId } from "@spark/llm/utils/llm";
+import {
+  resolveOpenAiProvider,
+  type OpenAiProvider,
+} from "@spark/llm/utils/openai-provider";
 import { z } from "zod";
 
 ensureEvalEnvLoaded();
@@ -26,7 +30,10 @@ const tools = {
   }),
 };
 
-async function runToolCheck(modelId: LlmTextModelId): Promise<void> {
+async function runToolCheck(
+  modelId: LlmTextModelId,
+  openAiProvider: OpenAiProvider,
+): Promise<void> {
   const result = await runToolLoop({
     modelId,
     prompt:
@@ -34,6 +41,7 @@ async function runToolCheck(modelId: LlmTextModelId): Promise<void> {
       "Call weather first, then convertFahrenheitToCelsius with temperatureF.",
     tools,
     maxSteps: 6,
+    openAiProvider,
   });
   let hasToolCalls = false;
   for (const step of result.steps) {
@@ -58,7 +66,7 @@ async function main(): Promise<void> {
     return;
   }
   for (const modelId of options.data.modelIds) {
-    await runToolCheck(modelId);
+    await runToolCheck(modelId, options.data.openAiProvider);
   }
 }
 
@@ -68,7 +76,10 @@ void main().catch((error: unknown) => {
 });
 
 function parseCliOptions(args: readonly string[]):
-  | { success: true; data: { modelIds: LlmTextModelId[] } }
+  | {
+      success: true;
+      data: { modelIds: LlmTextModelId[]; openAiProvider: OpenAiProvider };
+    }
   | {
       success: false;
       error: z.ZodError;
@@ -76,23 +87,35 @@ function parseCliOptions(args: readonly string[]):
   const schema = z
     .object({
       model: z.enum(["openai", "gemini", "all"]).optional(),
+      openaiProvider: z.enum(["api", "chatgpt"]).optional(),
+      openaiModel: z.enum(["gpt-5.2", "gpt-5.2-codex"]).optional(),
     })
-    .transform(({ model }) => {
+    .transform(({ model, openaiProvider, openaiModel }) => {
       const selection = model ?? "all";
+      const provider = resolveOpenAiProvider(openaiProvider);
+      const resolvedOpenAiModel =
+        openaiModel ?? (provider === "chatgpt" ? "gpt-5.2-codex" : "gpt-5.2");
       const modelIds: LlmTextModelId[] = [];
       if (selection === "openai" || selection === "all") {
-        modelIds.push("gpt-5.2");
+        modelIds.push(resolvedOpenAiModel);
       }
       if (selection === "gemini" || selection === "all") {
         modelIds.push("gemini-2.5-pro");
       }
-      return { modelIds };
+      return { modelIds, openAiProvider: provider };
     });
 
-  const raw: { model?: string } = {};
+  const raw: { model?: string; openaiProvider?: string; openaiModel?: string } =
+    {};
   for (const arg of args) {
     if (arg.startsWith("--model=")) {
       raw.model = arg.slice("--model=".length);
+    }
+    if (arg.startsWith("--openai-provider=")) {
+      raw.openaiProvider = arg.slice("--openai-provider=".length);
+    }
+    if (arg.startsWith("--openai-model=")) {
+      raw.openaiModel = arg.slice("--openai-model=".length);
     }
   }
   const result = schema.safeParse(raw);
