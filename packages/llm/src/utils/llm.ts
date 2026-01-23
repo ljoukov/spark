@@ -679,6 +679,8 @@ type ChatGptInputBundle = {
   readonly input: ChatGptInputItem[];
 };
 
+const DEFAULT_CHATGPT_INSTRUCTIONS = "You are a helpful assistant.";
+
 function toChatGptInput(contents: readonly LlmContent[]): ChatGptInputBundle {
   const instructionsParts: string[] = [];
   const input: ChatGptInputItem[] = [];
@@ -2984,7 +2986,8 @@ async function llmStream({
           model: options.modelId,
           store: chatGptRequestConfig.store,
           stream: chatGptRequestConfig.stream,
-          instructions: chatGptInput.instructions,
+          instructions:
+            chatGptInput.instructions ?? DEFAULT_CHATGPT_INSTRUCTIONS,
           input: chatGptInput.input,
           ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
           include: ["reasoning.encrypted_content"],
@@ -3929,7 +3932,8 @@ export async function runToolLoop(
             model: options.modelId,
             store: false,
             stream: true,
-            instructions: toolLoopInput.instructions,
+            instructions:
+              toolLoopInput.instructions ?? DEFAULT_CHATGPT_INSTRUCTIONS,
             input,
             ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
             include: ["reasoning.encrypted_content"],
