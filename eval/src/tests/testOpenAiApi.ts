@@ -6,6 +6,10 @@ import {
   type LlmTextModelId,
 } from "@spark/llm/utils/llm";
 import {
+  resolveOpenAiProvider,
+  type OpenAiProvider,
+} from "@spark/llm/utils/openai-provider";
+import {
   DEFAULT_OPENAI_MODEL_ID,
   OPENAI_MODEL_IDS,
   type OpenAiModelId,
@@ -24,7 +28,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { modelId, jsonModelId, debugDir } = options.data;
+  const { modelId, jsonModelId, debugDir, openAiProvider } = options.data;
   const debug =
     typeof debugDir === "string" && debugDir.length > 0
       ? { rootDir: debugDir, stage: "openai-test" }
@@ -32,6 +36,7 @@ async function main(): Promise<void> {
 
   const text = await generateText({
     modelId,
+    openAiProvider,
     debug,
     contents: [
       {
@@ -48,8 +53,15 @@ async function main(): Promise<void> {
     }
   }
 
+  if (openAiProvider === "chatgpt") {
+    throw new Error(
+      "Code execution tools require the OpenAI API provider. Use --openai-provider=api.",
+    );
+  }
+
   const toolText = await generateText({
     modelId,
+    openAiProvider,
     debug,
     tools: [{ type: "code-execution" }],
     contents: [
@@ -85,6 +97,7 @@ async function main(): Promise<void> {
   try {
     const jsonPayload = await generateJson({
       modelId: jsonModelId,
+      openAiProvider,
       schema: z.object({
         greeting: z.string(),
       }),
@@ -132,6 +145,7 @@ function parseCliOptions(args: readonly string[]):
         modelId: OpenAiModelId;
         jsonModelId: LlmTextModelId;
         debugDir?: string;
+        openAiProvider: OpenAiProvider;
       };
     }
   | { success: false; error: z.ZodError } {
@@ -140,14 +154,21 @@ function parseCliOptions(args: readonly string[]):
       model: z.enum(OPENAI_MODEL_IDS).optional(),
       jsonModel: z.enum(OPENAI_MODEL_IDS).optional(),
       debugDir: z.string().optional(),
+      openaiProvider: z.enum(["api", "chatgpt"]).optional(),
     })
-    .transform(({ model, jsonModel, debugDir }) => {
+    .transform(({ model, jsonModel, debugDir, openaiProvider }) => {
       const modelId: OpenAiModelId = model ?? DEFAULT_OPENAI_MODEL_ID;
       const jsonModelId: LlmTextModelId = jsonModel ?? modelId;
-      return { modelId, jsonModelId, debugDir };
+      const provider = resolveOpenAiProvider(openaiProvider);
+      return { modelId, jsonModelId, debugDir, openAiProvider: provider };
     });
 
-  const raw: { model?: string; jsonModel?: string; debugDir?: string } = {};
+  const raw: {
+    model?: string;
+    jsonModel?: string;
+    debugDir?: string;
+    openaiProvider?: string;
+  } = {};
   for (const arg of args) {
     if (arg.startsWith("--model=")) {
       raw.model = arg.slice("--model=".length);
@@ -157,6 +178,9 @@ function parseCliOptions(args: readonly string[]):
     }
     if (arg.startsWith("--debug-dir=")) {
       raw.debugDir = arg.slice("--debug-dir=".length);
+    }
+    if (arg.startsWith("--openai-provider=")) {
+      raw.openaiProvider = arg.slice("--openai-provider=".length);
     }
   }
   const result = schema.safeParse(raw);

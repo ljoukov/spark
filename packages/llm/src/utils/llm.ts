@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -39,6 +39,12 @@ import {
   type OpenAiModelId,
   type OpenAiReasoningEffort,
 } from "./openai-llm";
+import {
+  collectChatGptCodexResponse,
+  type ChatGptInputItem,
+  type ChatGptInputMessagePart,
+} from "./chatgpt-codex";
+import { resolveOpenAiProvider, type OpenAiProvider } from "./openai-provider";
 import { z } from "zod";
 import type {
   EasyInputMessage,
@@ -668,6 +674,201 @@ function openAiInputToDebugContents(input: ResponseInput): LlmContent[] {
   return contents;
 }
 
+type ChatGptInputBundle = {
+  readonly instructions?: string;
+  readonly input: ChatGptInputItem[];
+};
+
+function toChatGptInput(contents: readonly LlmContent[]): ChatGptInputBundle {
+  const instructionsParts: string[] = [];
+  const input: ChatGptInputItem[] = [];
+  for (const content of contents) {
+    if (content.role === "system") {
+      for (const part of content.parts) {
+        if (part.type === "text") {
+          instructionsParts.push(part.text);
+        }
+      }
+      continue;
+    }
+    const isAssistant = content.role === "model";
+    const parts: ChatGptInputMessagePart[] = [];
+    for (const part of content.parts) {
+      if (part.type === "text") {
+        parts.push({
+          type: isAssistant ? "output_text" : "input_text",
+          text: part.text,
+        });
+        continue;
+      }
+      const mimeType = part.mimeType ?? "application/octet-stream";
+      const dataUrl = `data:${mimeType};base64,${part.data}`;
+      if (isAssistant) {
+        parts.push({
+          type: "output_text",
+          text: `[image:${mimeType}]`,
+        });
+      } else {
+        parts.push({
+          type: "input_image",
+          image_url: dataUrl,
+          detail: "auto",
+        });
+      }
+    }
+    if (parts.length === 0) {
+      parts.push({
+        type: isAssistant ? "output_text" : "input_text",
+        text: "(empty content)",
+      });
+    }
+    if (isAssistant) {
+      input.push({
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: parts,
+      });
+    } else {
+      input.push({
+        role: "user",
+        content: parts,
+      });
+    }
+  }
+  const instructions = instructionsParts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+  return {
+    instructions: instructions.length > 0 ? instructions : undefined,
+    input,
+  };
+}
+
+function chatGptInputToDebugContents(
+  input: readonly ChatGptInputItem[],
+): LlmContent[] {
+  const contents: LlmContent[] = [];
+  for (const item of input) {
+    if ("type" in item && item.type === "function_call_output") {
+      const output =
+        typeof item.output === "string"
+          ? item.output
+          : JSON.stringify(item.output ?? null, null, 2);
+      contents.push({
+        role: "tool",
+        parts: [
+          {
+            type: "text",
+            text: `function_call_output (${item.call_id}):\n${output}`,
+          },
+        ],
+      });
+      continue;
+    }
+    if ("type" in item && item.type === "function_call") {
+      contents.push({
+        role: "model",
+        parts: [
+          {
+            type: "text",
+            text: `function_call ${item.name}(${item.arguments})`,
+          },
+        ],
+      });
+      continue;
+    }
+    if ("role" in item) {
+      const role: LlmRole = item.role === "assistant" ? "model" : "user";
+      const parts: LlmContentPart[] = [];
+      const content = item.content;
+      if (typeof content === "string") {
+        parts.push({ type: "text", text: content });
+      } else if (Array.isArray(content)) {
+        for (const entry of content) {
+          if (!isPlainRecord(entry)) {
+            continue;
+          }
+          if (entry.type === "input_text" || entry.type === "output_text") {
+            if (typeof entry.text === "string") {
+              parts.push({ type: "text", text: entry.text });
+            }
+            continue;
+          }
+          if (entry.type === "input_image") {
+            const imageUrl = entry.image_url;
+            const urlValue =
+              typeof imageUrl === "string"
+                ? imageUrl
+                : isPlainRecord(imageUrl) && typeof imageUrl.url === "string"
+                  ? imageUrl.url
+                  : undefined;
+            if (typeof urlValue === "string") {
+              const match = /^data:([^;]+);base64,(.*)$/.exec(urlValue);
+              if (match && match[1] && match[2]) {
+                parts.push({
+                  type: "inlineData",
+                  mimeType: match[1],
+                  data: match[2],
+                });
+              } else {
+                parts.push({
+                  type: "text",
+                  text: `[image] ${urlValue}`,
+                });
+              }
+            }
+          }
+        }
+      }
+      if (parts.length === 0) {
+        parts.push({ type: "text", text: "(empty content)" });
+      }
+      contents.push({ role, parts });
+    }
+  }
+  return contents;
+}
+
+function normalizeChatGptToolIds({
+  callId,
+  itemId,
+}: {
+  callId?: string;
+  itemId?: string;
+}): { callId: string; itemId: string } {
+  let rawCallId = callId ?? "";
+  let rawItemId = itemId ?? "";
+  if (rawCallId.includes("|")) {
+    const [nextCallId, nextItemId] = rawCallId.split("|");
+    rawCallId = nextCallId ?? rawCallId;
+    if (nextItemId) {
+      rawItemId = nextItemId;
+    }
+  } else if (rawItemId.includes("|")) {
+    const [nextCallId, nextItemId] = rawItemId.split("|");
+    rawCallId = nextCallId ?? rawCallId;
+    rawItemId = nextItemId ?? rawItemId;
+  }
+  const callValue = sanitizeChatGptToolId(
+    rawCallId || rawItemId || randomBytes(8).toString("hex"),
+  );
+  let itemValue = sanitizeChatGptToolId(rawItemId || `fc-${callValue}`);
+  if (!itemValue.startsWith("fc")) {
+    itemValue = `fc-${itemValue}`;
+  }
+  return { callId: callValue, itemId: itemValue };
+}
+
+function sanitizeChatGptToolId(value: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9_-]/gu, "");
+  if (cleaned.length === 0) {
+    return randomBytes(8).toString("hex");
+  }
+  return cleaned.slice(0, 64);
+}
+
 function extractOpenAiResponseParts(response: {
   output?: unknown;
   output_text?: unknown;
@@ -918,6 +1119,7 @@ export type LlmCallBaseOptions = {
   readonly debug?: LlmDebugOptions;
   readonly imageSize?: LlmImageSize;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+  readonly openAiProvider?: OpenAiProvider;
 };
 
 type OpenAiTextFormat = ResponseTextConfig["format"];
@@ -1035,6 +1237,7 @@ export type LlmToolLoopOptions = {
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+  readonly openAiProvider?: OpenAiProvider;
 } & (LlmToolLoopPromptOptions | LlmToolLoopContentsOptions);
 
 function createFallbackProgress(label: string): JobProgressReporter {
@@ -2200,6 +2403,46 @@ function extractOpenAiUsageTokens(
   };
 }
 
+function extractChatGptUsageTokens(
+  usage: { [key: string]: unknown } | undefined,
+): LlmUsageTokenUpdate | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  const promptTokens = toMaybeNumber(usage.input_tokens);
+  const cachedTokens = toMaybeNumber(
+    (usage.input_tokens_details as { cached_tokens?: unknown } | undefined)
+      ?.cached_tokens,
+  );
+  const outputTokensRaw = toMaybeNumber(usage.output_tokens);
+  const reasoningTokens = toMaybeNumber(
+    (usage.output_tokens_details as { reasoning_tokens?: unknown } | undefined)
+      ?.reasoning_tokens,
+  );
+  const totalTokens = toMaybeNumber(usage.total_tokens);
+  let responseTokens: number | undefined;
+  if (outputTokensRaw !== undefined) {
+    const adjusted = outputTokensRaw - (reasoningTokens ?? 0);
+    responseTokens = adjusted >= 0 ? adjusted : 0;
+  }
+  if (
+    promptTokens === undefined &&
+    cachedTokens === undefined &&
+    responseTokens === undefined &&
+    reasoningTokens === undefined &&
+    totalTokens === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    promptTokens,
+    cachedTokens,
+    responseTokens,
+    thinkingTokens: reasoningTokens,
+    totalTokens,
+  };
+}
+
 function buildCallStage({
   modelId,
   debug,
@@ -2287,11 +2530,16 @@ async function llmStream({
   const openAiModelId = isOpenAiModelId(options.modelId)
     ? options.modelId
     : undefined;
-  const isOpenAi = openAiModelId !== undefined;
+  const openAiProvider = openAiModelId
+    ? resolveOpenAiProvider(options.openAiProvider)
+    : undefined;
+  const isChatGpt = openAiModelId !== undefined && openAiProvider === "chatgpt";
+  const isOpenAi = openAiModelId !== undefined && openAiProvider === "api";
+  const isGemini = openAiModelId === undefined;
   const effectiveImageSize =
-    !isOpenAi && options.modelId === "gemini-3-pro-image-preview"
+    isGemini && options.modelId === "gemini-3-pro-image-preview"
       ? (options.imageSize ?? "2K")
-      : !isOpenAi
+      : isGemini
         ? options.imageSize
         : undefined;
 
@@ -2362,6 +2610,12 @@ async function llmStream({
     const uploadBytes = estimateContentsUploadBytes(promptContents);
     const openAiInput = isOpenAi ? toOpenAiInput(promptContents) : undefined;
     const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
+    const chatGptInput = isChatGpt ? toChatGptInput(promptContents) : undefined;
+    if (isChatGpt && options.tools && options.tools.length > 0) {
+      throw new Error(
+        "ChatGPT Codex provider does not support web-search/code-execution tools.",
+      );
+    }
     const openAiReasoningEffort = openAiModelId
       ? resolveOpenAiReasoningEffortForModel(
           openAiModelId,
@@ -2374,10 +2628,20 @@ async function llmStream({
           verbosity: resolveOpenAiVerbosity(openAiModelId),
         }
       : undefined;
+    const chatGptTextConfig =
+      openAiTextConfig && openAiTextConfig.verbosity
+        ? { verbosity: openAiTextConfig.verbosity }
+        : undefined;
     const openAiReasoningPayload = openAiReasoningEffort
       ? {
           effort: toOpenAiReasoningEffort(openAiReasoningEffort),
           summary: "detailed" as const,
+        }
+      : undefined;
+    const chatGptReasoningPayload = openAiReasoningEffort
+      ? {
+          effort: toOpenAiReasoningEffort(openAiReasoningEffort),
+          summary: "auto" as const,
         }
       : undefined;
     const openAiInclude: ResponseIncludable[] | undefined = isOpenAi
@@ -2392,11 +2656,20 @@ async function llmStream({
           stream: true,
         }
       : undefined;
+    const chatGptRequestConfig = isChatGpt
+      ? {
+          reasoning: chatGptReasoningPayload,
+          ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
+          include: ["reasoning.encrypted_content"],
+          stream: true,
+          store: false,
+        }
+      : undefined;
 
-    const geminiPromptContents = !isOpenAi
+    const geminiPromptContents = isGemini
       ? promptContents.map(convertLlmContentToGoogleContent)
       : undefined;
-    const geminiConfig: GeminiCallConfig | undefined = !isOpenAi
+    const geminiConfig: GeminiCallConfig | undefined = isGemini
       ? {
           maxOutputTokens: 32_000,
         }
@@ -2461,8 +2734,16 @@ async function llmStream({
         attempt,
         maxAttempts,
         uploadBytes,
-        config: isOpenAi ? openAiRequestConfig : geminiConfig,
-        configLabel: isOpenAi ? "OpenAI Request" : "Gemini Call Config",
+        config: isOpenAi
+          ? openAiRequestConfig
+          : isChatGpt
+            ? chatGptRequestConfig
+            : geminiConfig,
+        configLabel: isOpenAi
+          ? "OpenAI Request"
+          : isChatGpt
+            ? "ChatGPT Codex Request"
+            : "Gemini Call Config",
       });
       await writeDebugTextFile({
         dirs: debugOutputDirs,
@@ -2695,6 +2976,54 @@ async function llmStream({
             }
           }
         });
+      } else if (isChatGpt) {
+        if (!chatGptInput || !chatGptRequestConfig) {
+          throw new Error("ChatGPT Codex call received an empty prompt");
+        }
+        const request = {
+          model: options.modelId,
+          store: chatGptRequestConfig.store,
+          stream: chatGptRequestConfig.stream,
+          instructions: chatGptInput.instructions,
+          input: chatGptInput.input,
+          ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
+          include: ["reasoning.encrypted_content"],
+          ...(chatGptReasoningPayload ? { reasoning: chatGptReasoningPayload } : {}),
+        };
+        const result = await collectChatGptCodexResponse({ request });
+        if (result.model) {
+          resolvedModelVersion = result.model;
+        }
+        if (
+          result.status &&
+          result.status !== "completed" &&
+          result.status !== "in_progress"
+        ) {
+          throw new Error(`ChatGPT response status ${result.status}`);
+        }
+        blocked = blocked || result.blocked;
+        const responseText = result.text ?? "";
+        const reasoningText = result.reasoningText ?? "";
+        if (reasoningText.length > 0) {
+          appendTextPart(reasoningText, true);
+          thinkingTextChars += reasoningText.length;
+          reporter.recordModelUsage(callHandle, {
+            thinking: { textCharsDelta: reasoningText.length },
+          });
+        }
+        if (responseText.length > 0) {
+          appendTextPart(responseText, false);
+          responseTextChars += responseText.length;
+          reporter.recordModelUsage(callHandle, {
+            response: { textCharsDelta: responseText.length },
+          });
+        }
+        if (responseText.length > 0 || reasoningText.length > 0) {
+          responseSnapshotWriter.flush();
+        }
+        latestUsageTokens = extractChatGptUsageTokens(
+          result.usage as { [key: string]: unknown } | undefined,
+        );
       } else {
         if (!geminiPromptContents || !geminiConfig) {
           throw new Error("Gemini call received an empty prompt");
@@ -3564,6 +3893,180 @@ export async function runToolLoop(
   };
   const steps: LlmToolLoopStep[] = [];
   if (isOpenAiModelId(options.modelId)) {
+    const openAiProvider = resolveOpenAiProvider(options.openAiProvider);
+    if (openAiProvider === "chatgpt") {
+      const openAiTools = buildOpenAiFunctionTools(options.tools);
+      const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
+        options.modelId,
+        options.openAiReasoningEffort,
+      );
+      const openAiTextConfig: ResponseTextConfig = {
+        format: { type: "text" },
+        verbosity: resolveOpenAiVerbosity(options.modelId),
+      };
+      const chatGptTextConfig =
+        openAiTextConfig.verbosity !== null && openAiTextConfig.verbosity
+          ? { verbosity: openAiTextConfig.verbosity }
+          : undefined;
+      const chatGptReasoningPayload = {
+        effort: toOpenAiReasoningEffort(openAiReasoningEffort),
+        summary: "auto" as const,
+      };
+      const toolLoopInput = toChatGptInput(contents);
+      let input: ChatGptInputItem[] = [...toolLoopInput.input];
+      let totalCostUsd = 0;
+      const loopStartedAt = Date.now();
+      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
+        reporter.log(`ChatGPT step ${stepIndex + 1}`);
+        const promptContents = chatGptInputToDebugContents(input);
+        const callHandle = reporter.startModelCall({
+          modelId: options.modelId,
+          uploadBytes: estimateContentsUploadBytes(promptContents),
+        });
+        recordPromptUsage(callHandle, promptContents);
+        try {
+          const request = {
+            model: options.modelId,
+            store: false,
+            stream: true,
+            instructions: toolLoopInput.instructions,
+            input,
+            ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
+            include: ["reasoning.encrypted_content"],
+            tools: openAiTools,
+            tool_choice: "auto" as const,
+            parallel_tool_calls: true,
+            reasoning: chatGptReasoningPayload,
+          };
+          const startedAt = Date.now();
+          const response = await collectChatGptCodexResponse({ request });
+          const elapsedMs = Date.now() - startedAt;
+          if (
+            response.status &&
+            response.status !== "completed" &&
+            response.status !== "in_progress"
+          ) {
+            throw new Error(`ChatGPT response status ${response.status}`);
+          }
+          const usageTokens = extractChatGptUsageTokens(
+            response.usage as { [key: string]: unknown } | undefined,
+          );
+          const resolvedModelId = response.model ?? options.modelId;
+          reporter.recordModelUsage(callHandle, {
+            modelVersion: resolvedModelId,
+            tokens: usageTokens,
+          });
+          const stepCostUsd = estimateCallCostUsd({
+            modelId: resolvedModelId,
+            tokens: usageTokens,
+            responseImages: 0,
+          });
+          totalCostUsd += stepCostUsd;
+          reporter.log(
+            [
+              `[tool-step:${stepIndex + 1}]`,
+              `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
+              `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
+              `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
+              `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
+              `${formatCurrencyUsd(stepCostUsd)}`,
+              `${formatMillis(elapsedMs)},`,
+              `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
+              `${formatCurrencyUsd(totalCostUsd)}`,
+              `${formatMillis(Date.now() - loopStartedAt)}`,
+            ].join(" "),
+          );
+          const responseText = response.text ?? "";
+          const functionCalls = response.toolCalls ?? [];
+          if (functionCalls.length === 0) {
+            if (!responseText) {
+              throw new Error(
+                "Tool loop response did not include text output.",
+              );
+            }
+            steps.push({
+              step: steps.length + 1,
+              modelId: options.modelId,
+              text: responseText,
+              toolCalls: [],
+            });
+            return { text: responseText, steps };
+          }
+          const toolCalls: LlmToolCallResult[] = [];
+          const toolOutputs: ChatGptInputItem[] = [];
+          const callInputs = functionCalls.map((call) => {
+            const toolName = call.name;
+            const { value, error: parseError } = parseOpenAiToolArguments(
+              call.arguments,
+            );
+            const toolSummary = summarizeToolCallInput(toolName, value);
+            reporter.log(
+              toolSummary
+                ? `tool: ${toolName} ${toolSummary}`
+                : `tool: ${toolName}`,
+            );
+            const ids = normalizeChatGptToolIds({
+              callId: call.callId,
+              itemId: call.id,
+            });
+            return {
+              call,
+              toolName,
+              value,
+              parseError,
+              ids,
+            };
+          });
+          const callResults = await Promise.all(
+            callInputs.map(async (entry) => {
+              const { result, outputPayload } = await executeToolCall({
+                toolName: entry.toolName,
+                tool: options.tools[entry.toolName],
+                rawInput: entry.value,
+                parseError: entry.parseError,
+              });
+              return { entry, result, outputPayload };
+            }),
+          );
+          if (responseText.length > 0) {
+            input.push({
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text: responseText }],
+            });
+          }
+          for (const { entry, result, outputPayload } of callResults) {
+            toolCalls.push({
+              ...result,
+              callId: entry.ids.callId,
+            });
+            toolOutputs.push({
+              type: "function_call",
+              id: entry.ids.itemId,
+              call_id: entry.ids.callId,
+              name: entry.toolName,
+              arguments: entry.call.arguments,
+              status: "completed",
+            });
+            toolOutputs.push({
+              type: "function_call_output",
+              call_id: entry.ids.callId,
+              output: serializeToolOutput(outputPayload),
+            });
+          }
+          steps.push({
+            step: steps.length + 1,
+            modelId: options.modelId,
+            text: responseText.length > 0 ? responseText : undefined,
+            toolCalls,
+          });
+          input = input.concat(toolOutputs);
+        } finally {
+          reporter.finishModelCall(callHandle);
+        }
+      }
+    } else {
     const openAiTools = buildOpenAiFunctionTools(options.tools);
     const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
       options.modelId,
@@ -3742,6 +4245,7 @@ export async function runToolLoop(
       } finally {
         reporter.finishModelCall(callHandle);
       }
+    }
     }
   } else {
     const geminiTools = buildGeminiFunctionDeclarations(options.tools);
