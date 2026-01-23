@@ -147,6 +147,8 @@ export async function collectChatGptCodexResponse(options: {
   const toolCallOrder: string[] = [];
   let text = "";
   let reasoningText = "";
+  let sawOutputTextDelta = false;
+  let sawReasoningDelta = false;
   let usage: ChatGptCodexUsage | undefined;
   let model: string | undefined;
   let status: string | undefined;
@@ -156,6 +158,7 @@ export async function collectChatGptCodexResponse(options: {
     if (type === "response.output_text.delta") {
       const delta = typeof event.delta === "string" ? event.delta : "";
       if (delta.length > 0) {
+        sawOutputTextDelta = true;
         text += delta;
       }
       continue;
@@ -166,6 +169,7 @@ export async function collectChatGptCodexResponse(options: {
     ) {
       const delta = typeof event.delta === "string" ? event.delta : "";
       if (delta.length > 0) {
+        sawReasoningDelta = true;
         reasoningText += delta;
       }
       continue;
@@ -174,21 +178,68 @@ export async function collectChatGptCodexResponse(options: {
       blocked = true;
       continue;
     }
-    if (type === "response.output_item.added") {
+    if (type === "response.output_item.added" || type === "response.output_item.done") {
       const item = event.item as Record<string, unknown> | undefined;
-      if (item && item.type === "function_call") {
-        const id = typeof item.id === "string" ? item.id : "";
-        const callId = typeof item.call_id === "string" ? item.call_id : id;
-        const name = typeof item.name === "string" ? item.name : "";
-        const args = typeof item.arguments === "string" ? item.arguments : "";
-        const resolved = {
-          id,
-          callId,
-          name,
-          arguments: args,
-        };
-        toolCalls.set(callId, resolved);
-        toolCallOrder.push(callId);
+      if (item) {
+        if (item.type === "function_call") {
+          const id = typeof item.id === "string" ? item.id : "";
+          const callId = typeof item.call_id === "string" ? item.call_id : id;
+          const name = typeof item.name === "string" ? item.name : "";
+          const args = typeof item.arguments === "string" ? item.arguments : "";
+          if (callId) {
+            const existing = toolCalls.get(callId);
+            if (existing) {
+              if (!existing.id && id) {
+                existing.id = id;
+              }
+              if (!existing.name && name) {
+                existing.name = name;
+              }
+              if (args.length > existing.arguments.length) {
+                existing.arguments = args;
+              }
+            } else {
+              toolCalls.set(callId, {
+                id,
+                callId,
+                name,
+                arguments: args,
+              });
+              toolCallOrder.push(callId);
+            }
+          }
+        } else if (item.type === "message" && !sawOutputTextDelta) {
+          const content = Array.isArray(item.content) ? item.content : [];
+          for (const entry of content) {
+            if (
+              entry &&
+              typeof entry === "object" &&
+              (entry as { type?: unknown }).type === "output_text"
+            ) {
+              const entryText = (entry as { text?: unknown }).text;
+              if (typeof entryText === "string" && entryText.length > 0) {
+                text += entryText;
+              }
+            }
+          }
+        } else if (item.type === "reasoning" && !sawReasoningDelta) {
+          const content = Array.isArray(item.content) ? item.content : [];
+          for (const entry of content) {
+            if (!entry || typeof entry !== "object") {
+              continue;
+            }
+            const entryType = (entry as { type?: unknown }).type;
+            if (
+              entryType === "reasoning_text" ||
+              entryType === "reasoning_summary_text"
+            ) {
+              const entryText = (entry as { text?: unknown }).text;
+              if (typeof entryText === "string" && entryText.length > 0) {
+                reasoningText += entryText;
+              }
+            }
+          }
+        }
       }
       continue;
     }

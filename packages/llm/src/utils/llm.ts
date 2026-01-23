@@ -34,8 +34,10 @@ import {
 import {
   DEFAULT_OPENAI_REASONING_EFFORT,
   getOpenAiPricing,
-  isOpenAiModelId,
+  isOpenAiModelVariantId,
+  resolveOpenAiModelVariant,
   runOpenAiCall,
+  type ChatGptOpenAiModelId,
   type OpenAiModelId,
   type OpenAiReasoningEffort,
 } from "./openai-llm";
@@ -44,7 +46,6 @@ import {
   type ChatGptInputItem,
   type ChatGptInputMessagePart,
 } from "./chatgpt-codex";
-import { resolveOpenAiProvider, type OpenAiProvider } from "./openai-provider";
 import { z } from "zod";
 import type {
   EasyInputMessage,
@@ -151,7 +152,10 @@ type LlmCallStage = {
   readonly debugDir?: string;
 };
 
-export type LlmTextModelId = GeminiModelId | OpenAiModelId;
+export type LlmTextModelId =
+  | GeminiModelId
+  | OpenAiModelId
+  | ChatGptOpenAiModelId;
 export type LlmImageModelId = "gemini-3-pro-image-preview";
 export type LlmModelId = LlmTextModelId | LlmImageModelId;
 export type LlmImageSize = "1K" | "2K" | "4K";
@@ -1121,7 +1125,6 @@ export type LlmCallBaseOptions = {
   readonly debug?: LlmDebugOptions;
   readonly imageSize?: LlmImageSize;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
-  readonly openAiProvider?: OpenAiProvider;
 };
 
 type OpenAiTextFormat = ResponseTextConfig["format"];
@@ -1239,7 +1242,6 @@ export type LlmToolLoopOptions = {
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
-  readonly openAiProvider?: OpenAiProvider;
 } & (LlmToolLoopPromptOptions | LlmToolLoopContentsOptions);
 
 function createFallbackProgress(label: string): JobProgressReporter {
@@ -2529,15 +2531,11 @@ async function llmStream({
     debugRootDir !== undefined ? path.join(debugRootDir, "media") : undefined;
   const promptContents = options.contents;
   const promptDebugContents = promptContents.map(cloneContentForDebug);
-  const openAiModelId = isOpenAiModelId(options.modelId)
-    ? options.modelId
-    : undefined;
-  const openAiProvider = openAiModelId
-    ? resolveOpenAiProvider(options.openAiProvider)
-    : undefined;
-  const isChatGpt = openAiModelId !== undefined && openAiProvider === "chatgpt";
-  const isOpenAi = openAiModelId !== undefined && openAiProvider === "api";
-  const isGemini = openAiModelId === undefined;
+  const openAiModelInfo = resolveOpenAiModelVariant(options.modelId);
+  const openAiModelId = openAiModelInfo?.modelId;
+  const isChatGpt = openAiModelInfo?.provider === "chatgpt";
+  const isOpenAi = openAiModelInfo?.provider === "api";
+  const isGemini = openAiModelInfo === undefined;
   const effectiveImageSize =
     isGemini && options.modelId === "gemini-3-pro-image-preview"
       ? (options.imageSize ?? "2K")
@@ -2883,7 +2881,7 @@ async function llmStream({
         }
         await runOpenAiCall(async (client) => {
           const stream = client.responses.stream({
-            model: options.modelId,
+            model: openAiModelId ?? options.modelId,
             input: openAiInput,
             reasoning: openAiReasoningPayload,
             ...(openAiTextConfig ? { text: openAiTextConfig } : {}),
@@ -2983,7 +2981,7 @@ async function llmStream({
           throw new Error("ChatGPT Codex call received an empty prompt");
         }
         const request = {
-          model: options.modelId,
+          model: openAiModelId ?? options.modelId,
           store: chatGptRequestConfig.store,
           stream: chatGptRequestConfig.stream,
           instructions:
@@ -2995,7 +2993,9 @@ async function llmStream({
         };
         const result = await collectChatGptCodexResponse({ request });
         if (result.model) {
-          resolvedModelVersion = result.model;
+          resolvedModelVersion = isChatGpt
+            ? (`chatgpt-${result.model}` as LlmModelId)
+            : result.model;
         }
         if (
           result.status &&
@@ -3370,7 +3370,7 @@ export async function generateJson<T>(
   };
   const maxAttempts =
     normaliseAttempts(maxAttemptsOption) ?? normaliseAttempts(maxRetries) ?? 2;
-  const isOpenAi = isOpenAiModelId(rest.modelId);
+  const isOpenAi = isOpenAiModelVariantId(rest.modelId);
   const resolvedSchemaName = normalisePathSegment(
     openAiSchemaName ?? rest.debug?.stage ?? "llm-response",
   );
@@ -3895,17 +3895,18 @@ export async function runToolLoop(
     });
   };
   const steps: LlmToolLoopStep[] = [];
-  if (isOpenAiModelId(options.modelId)) {
-    const openAiProvider = resolveOpenAiProvider(options.openAiProvider);
-    if (openAiProvider === "chatgpt") {
+  const openAiModelInfo = resolveOpenAiModelVariant(options.modelId);
+  if (openAiModelInfo) {
+    const openAiModelId = openAiModelInfo.modelId;
+    if (openAiModelInfo.provider === "chatgpt") {
       const openAiTools = buildOpenAiFunctionTools(options.tools);
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-        options.modelId,
+        openAiModelId,
         options.openAiReasoningEffort,
       );
       const openAiTextConfig: ResponseTextConfig = {
         format: { type: "text" },
-        verbosity: resolveOpenAiVerbosity(options.modelId),
+        verbosity: resolveOpenAiVerbosity(openAiModelId),
       };
       const chatGptTextConfig =
         openAiTextConfig.verbosity !== null && openAiTextConfig.verbosity
@@ -3929,7 +3930,7 @@ export async function runToolLoop(
         recordPromptUsage(callHandle, promptContents);
         try {
           const request = {
-            model: options.modelId,
+            model: openAiModelId,
             store: false,
             stream: true,
             instructions:
@@ -3955,7 +3956,9 @@ export async function runToolLoop(
           const usageTokens = extractChatGptUsageTokens(
             response.usage as { [key: string]: unknown } | undefined,
           );
-          const resolvedModelId = response.model ?? options.modelId;
+          const resolvedModelId = response.model
+            ? (`chatgpt-${response.model}` as LlmTextModelId)
+            : options.modelId;
           reporter.recordModelUsage(callHandle, {
             modelVersion: resolvedModelId,
             tokens: usageTokens,
@@ -4073,12 +4076,12 @@ export async function runToolLoop(
     } else {
     const openAiTools = buildOpenAiFunctionTools(options.tools);
     const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-      options.modelId,
+      openAiModelId,
       options.openAiReasoningEffort,
     );
     const openAiTextConfig: ResponseTextConfig = {
       format: { type: "text" },
-      verbosity: resolveOpenAiVerbosity(options.modelId),
+      verbosity: resolveOpenAiVerbosity(openAiModelId),
     };
     const openAiReasoningPayload = {
       effort: toOpenAiReasoningEffort(openAiReasoningEffort),
@@ -4110,7 +4113,7 @@ export async function runToolLoop(
         const startedAt = Date.now();
         const response = await runOpenAiCall(async (client) =>
           client.responses.create({
-            model: options.modelId,
+            model: openAiModelId,
             input,
             ...requestConfig,
           }),
@@ -4138,7 +4141,7 @@ export async function runToolLoop(
         try {
           await writeToolLoopDebugSnapshot({
             debug: options.debug,
-            modelId: options.modelId,
+            modelId: openAiModelId,
             step: stepIndex + 1,
             maxSteps,
             input,
@@ -4157,7 +4160,7 @@ export async function runToolLoop(
           reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
         }
         const usageTokens = extractOpenAiUsageTokens(response.usage);
-        const resolvedModelId = response.model ?? options.modelId;
+        const resolvedModelId = response.model ?? openAiModelId;
         reporter.recordModelUsage(callHandle, {
           modelVersion: resolvedModelId,
           tokens: usageTokens,

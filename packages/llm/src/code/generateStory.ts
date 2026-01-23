@@ -24,7 +24,7 @@ import {
 } from "../utils/firebaseAdmin";
 import type { MediaSegment } from "./schemas";
 import { getSharp } from "../utils/sharp";
-import { isOpenAiModelId } from "../utils/openai-llm";
+import { isOpenAiModelVariantId } from "../utils/openai-llm";
 
 import {
   createConsoleProgress,
@@ -47,7 +47,8 @@ const ENV_TEXT_MODEL_ID = process.env.SPARK_LLM_TEXT_MODEL_ID?.trim();
 
 export const TEXT_MODEL_ID: LlmTextModelId =
   ENV_TEXT_MODEL_ID &&
-  (isGeminiModelId(ENV_TEXT_MODEL_ID) || isOpenAiModelId(ENV_TEXT_MODEL_ID))
+  (isGeminiModelId(ENV_TEXT_MODEL_ID) ||
+    isOpenAiModelVariantId(ENV_TEXT_MODEL_ID))
     ? ENV_TEXT_MODEL_ID
     : DEFAULT_TEXT_MODEL_ID;
 export const IMAGE_MODEL_ID = "gemini-3-pro-image-preview" as const;

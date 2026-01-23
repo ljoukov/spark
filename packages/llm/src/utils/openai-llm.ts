@@ -10,6 +10,20 @@ export const OPENAI_MODEL_IDS = ["gpt-5.2", "gpt-5.2-codex"] as const;
 
 export type OpenAiModelId = (typeof OPENAI_MODEL_IDS)[number];
 
+export type ChatGptOpenAiModelId = `chatgpt-${OpenAiModelId}`;
+
+export type OpenAiModelVariantId = OpenAiModelId | ChatGptOpenAiModelId;
+
+export const OPENAI_MODEL_VARIANT_IDS = [
+  ...OPENAI_MODEL_IDS,
+  ...OPENAI_MODEL_IDS.map(
+    (modelId) => `chatgpt-${modelId}` as ChatGptOpenAiModelId,
+  ),
+] as const satisfies readonly [
+  OpenAiModelVariantId,
+  ...OpenAiModelVariantId[],
+];
+
 export const DEFAULT_OPENAI_MODEL_ID: OpenAiModelId = "gpt-5.2";
 
 export type OpenAiPricing = {
@@ -30,6 +44,32 @@ export const DEFAULT_OPENAI_REASONING_EFFORT: OpenAiReasoningEffort = "medium";
 
 export function isOpenAiModelId(value: string): value is OpenAiModelId {
   return (OPENAI_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function isChatGptModelId(value: string): value is ChatGptOpenAiModelId {
+  if (!value.startsWith("chatgpt-")) {
+    return false;
+  }
+  const base = value.slice("chatgpt-".length);
+  return isOpenAiModelId(base);
+}
+
+export function isOpenAiModelVariantId(
+  value: string,
+): value is OpenAiModelVariantId {
+  return isOpenAiModelId(value) || isChatGptModelId(value);
+}
+
+export function resolveOpenAiModelVariant(value: string):
+  | { provider: "api" | "chatgpt"; modelId: OpenAiModelId }
+  | undefined {
+  if (isOpenAiModelId(value)) {
+    return { provider: "api", modelId: value };
+  }
+  if (isChatGptModelId(value)) {
+    return { provider: "chatgpt", modelId: value.slice("chatgpt-".length) as OpenAiModelId };
+  }
+  return undefined;
 }
 
 export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
