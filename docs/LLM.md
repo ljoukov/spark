@@ -32,12 +32,15 @@ All calls accept:
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
 - `progress?`: `JobProgressReporter` (see below). If omitted, a concise fallback logger is used.
 - `debug?`: `{ rootDir: string; stage?: string; subStage?: string; attempt?: number|string; enabled?: boolean }`
-- `openAiProvider?`: `"api" | "chatgpt"` (defaults to `OPENAI_AUTH_PROVIDER`/`OPENAI_PROVIDER` or `"api"`). Use `"chatgpt"` to route OpenAI models through the ChatGPT Codex backend.
 - Optional generation controls:
   - `responseMimeType?`, `responseJsonSchema?` (text/JSON)
   - `responseModalities?` (e.g. `["IMAGE","TEXT"]`); images default to `["IMAGE","TEXT"]`
   - `imageAspectRatio?`
   - `tools?`: `{ type: 'web-search' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
+
+OpenAI model routing:
+- `gpt-5.2`, `gpt-5.2-codex` → OpenAI API.
+- `chatgpt-gpt-5.2`, `chatgpt-gpt-5.2-codex` → ChatGPT Codex backend (OAuth).
 
 ### JSON convenience
 
@@ -63,7 +66,7 @@ Defaults:
 - `maxSteps`: 8 (override if a longer chain is expected)
 
 OpenAI function tools are sent with `strict: true` and a normalized JSON schema. Gemini uses `FunctionCallingConfigMode.VALIDATED` with JSON schema + `propertyOrdering`.
-ChatGPT Codex routing (`openAiProvider: "chatgpt"`) supports the same function tools, but built-in `tools: [{ type: "web-search" | "code-execution" }]` are only supported via the OpenAI API provider.
+ChatGPT Codex routing (`chatgpt-` model IDs) supports the same function tools, but built-in `tools: [{ type: "web-search" | "code-execution" }]` are only supported via the OpenAI API provider.
 
 Example:
 
@@ -131,7 +134,7 @@ Notes:
 
 ## ChatGPT Codex Provider (OAuth)
 
-When `openAiProvider` is set to `"chatgpt"` (or `OPENAI_AUTH_PROVIDER=chatgpt`), OpenAI model calls are routed through the ChatGPT Codex backend using OAuth credentials stored as:
+When `modelId` starts with `chatgpt-`, OpenAI model calls are routed through the ChatGPT Codex backend using OAuth credentials stored as:
 
 ```
 ~/.spark/chatgpt-auth.json

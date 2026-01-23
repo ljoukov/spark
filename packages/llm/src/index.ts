@@ -20,7 +20,6 @@ export * from "./utils/googleAuth";
 export * from "./utils/googleTTS";
 export * from "./utils/openai";
 export * from "./utils/openai-llm";
-export * from "./utils/openai-provider";
 export * from "./utils/chatgpt-auth";
 export * from "./utils/chatgpt-codex";
 export * from "./utils/openaiTTS";
