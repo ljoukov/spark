@@ -32,6 +32,7 @@ All calls accept:
   - `{ type: 'inlineData', data: string, mimeType?: string }` (base64 preferred)
 - `progress?`: `JobProgressReporter` (see below). If omitted, a concise fallback logger is used.
 - `debug?`: `{ rootDir: string; stage?: string; subStage?: string; attempt?: number|string; enabled?: boolean }`
+- `openAiProvider?`: `"api" | "chatgpt"` (defaults to `OPENAI_AUTH_PROVIDER`/`OPENAI_PROVIDER` or `"api"`). Use `"chatgpt"` to route OpenAI models through the ChatGPT Codex backend.
 - Optional generation controls:
   - `responseMimeType?`, `responseJsonSchema?` (text/JSON)
   - `responseModalities?` (e.g. `["IMAGE","TEXT"]`); images default to `["IMAGE","TEXT"]`
@@ -62,6 +63,7 @@ Defaults:
 - `maxSteps`: 8 (override if a longer chain is expected)
 
 OpenAI function tools are sent with `strict: true` and a normalized JSON schema. Gemini uses `FunctionCallingConfigMode.VALIDATED` with JSON schema + `propertyOrdering`.
+ChatGPT Codex routing (`openAiProvider: "chatgpt"`) supports the same function tools, but built-in `tools: [{ type: "web-search" | "code-execution" }]` are only supported via the OpenAI API provider.
 
 Example:
 
@@ -126,6 +128,22 @@ Notes:
 - Thinking tokens are reported separately (text and tokens) and are included in the final cost calculation. Visible response text still determines the returned value from `generateText`.
 - OpenAI reasoning tokens are reported as `thinking` in logs/metrics.
 - Zero-value stats are omitted from the status line to keep it readable.
+
+## ChatGPT Codex Provider (OAuth)
+
+When `openAiProvider` is set to `"chatgpt"` (or `OPENAI_AUTH_PROVIDER=chatgpt`), OpenAI model calls are routed through the ChatGPT Codex backend using OAuth credentials stored as:
+
+```
+~/.spark/chatgpt-auth.json
+```
+
+The stored payload includes `{ access, refresh, expires, accountId }` and may also include `id_token` when available from the OAuth exchange.
+
+Run the helper to complete the browser-based OAuth flow and write the auth file:
+
+```
+npm --prefix eval run auth:chatgpt
+```
 
 ## Debug Snapshots (Prompts and Responses)
 

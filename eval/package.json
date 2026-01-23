@@ -11,6 +11,7 @@
     "tools:list-voices": "tsx src/tools/list-voices.ts",
     "tools:pdf-to-json": "tsx src/tools/pdf-to-json.ts",
     "tools:say": "tsx src/tools/say.ts",
+    "auth:chatgpt": "tsx src/tools/chatgpt-login.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
     "test:llm-openai": "tsx src/tests/testOpenAiApi.ts",
     "typecheck": "tsc --noEmit",
