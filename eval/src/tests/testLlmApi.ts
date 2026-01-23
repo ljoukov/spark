@@ -1,6 +1,7 @@
 import { ensureEvalEnvLoaded } from "../utils/paths";
 import { runToolLoop, tool, type LlmTextModelId } from "@spark/llm/utils/llm";
 import { OPENAI_MODEL_VARIANT_IDS } from "@spark/llm/utils/openai-llm";
+import { GEMINI_MODEL_IDS } from "@spark/llm/utils/gemini";
 import { z } from "zod";
 
 ensureEvalEnvLoaded();
@@ -79,31 +80,22 @@ function parseCliOptions(args: readonly string[]):
       success: false;
       error: z.ZodError;
     } {
+  const MODEL_IDS = [
+    ...OPENAI_MODEL_VARIANT_IDS,
+    ...GEMINI_MODEL_IDS,
+  ] as const satisfies readonly [LlmTextModelId, ...LlmTextModelId[]];
   const schema = z
     .object({
-      model: z.enum(["openai", "gemini", "all"]).optional(),
-      openaiModel: z.enum(OPENAI_MODEL_VARIANT_IDS).optional(),
+      model: z.enum(MODEL_IDS).optional(),
     })
-    .transform(({ model, openaiModel }) => {
-      const selection = model ?? "all";
-      const resolvedOpenAiModel = openaiModel ?? "gpt-5.2";
-      const modelIds: LlmTextModelId[] = [];
-      if (selection === "openai" || selection === "all") {
-        modelIds.push(resolvedOpenAiModel);
-      }
-      if (selection === "gemini" || selection === "all") {
-        modelIds.push("gemini-2.5-pro");
-      }
-      return { modelIds };
-    });
+    .transform(({ model }) => ({
+      modelIds: [model ?? "gpt-5.2"],
+    }));
 
-  const raw: { model?: string; openaiModel?: string } = {};
+  const raw: { model?: string } = {};
   for (const arg of args) {
     if (arg.startsWith("--model=")) {
       raw.model = arg.slice("--model=".length);
-    }
-    if (arg.startsWith("--openai-model=")) {
-      raw.openaiModel = arg.slice("--openai-model=".length);
     }
   }
   const result = schema.safeParse(raw);
