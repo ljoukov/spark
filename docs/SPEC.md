@@ -237,7 +237,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - IMPORTANT: read the docs in web/docs/shadcn-svelte.md to understand shadcn (UI Com ponents library)
 - Svelte 5 gotcha: do not capture reactive `data` (from `$props`) in top-level initializers. Use `$derived`, `$effect`, or lazy functions (e.g. for context) so values update and avoid `state_referenced_locally`.
 
-- Landing page (`/`) is a focused sign-in screen (gradient background + blobs). It accepts an optional `destination` query (`code` | `spark`) and otherwise routes authenticated users to `/c` (Spark Chat).
+- Landing page (`/`) is a logged-out home/marketing hero with the preview video and a visible `Log in` CTA; the sign-in UI opens in a dialog (Google + guest mode). It accepts an optional `destination` query (`code` | `spark`) and otherwise routes authenticated users to `/c` (Spark Chat).
 - /app and /admin pages are build with shadcn and SvelteKit
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
