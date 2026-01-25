@@ -14,6 +14,7 @@
 	import { untrack } from 'svelte';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
+	import { z } from 'zod';
 
 	type AttemptStatus = 'pending' | 'correct' | 'incorrect' | 'skipped';
 
@@ -25,6 +26,8 @@
 		value: string;
 		showContinue: boolean;
 		feedback: QuizFeedback | null;
+		grade: QuizQuestionState['grade'] | null;
+		gradingError: boolean;
 		seen: boolean;
 		dontKnow: boolean;
 		firstViewedAt: Date | null;
@@ -32,6 +35,16 @@
 	};
 
 	type FinishState = 'confirm' | 'saving';
+
+	const typeAnswerGradeResponseSchema = z.object({
+		status: z.literal('ok'),
+		result: z.enum(['correct', 'partial', 'incorrect']),
+		awardedMarks: z.number().int().nonnegative(),
+		maxMarks: z.number().int().positive(),
+		feedback: z.string().min(1)
+	});
+
+	type TypeAnswerGradeResponse = z.infer<typeof typeAnswerGradeResponseSchema>;
 
 	let { data }: { data: PageData } = $props();
 	const quiz = $derived(data.quiz);
@@ -71,6 +84,8 @@
 			value: '',
 			showContinue: false,
 			feedback: null,
+			grade: null,
+			gradingError: false,
 			seen,
 			dontKnow: false,
 			firstViewedAt: null,
@@ -122,6 +137,79 @@
 			};
 		}
 		return null;
+	}
+
+	function buildGradeFeedback(grade: NonNullable<QuizQuestionState['grade']>): QuizFeedback {
+		return {
+			heading: grade.heading ?? `Score: ${grade.awardedMarks}/${grade.maxMarks}`,
+			message: grade.feedback,
+			tone: grade.tone
+		};
+	}
+
+	function buildGradeState(response: TypeAnswerGradeResponse): QuizQuestionState['grade'] {
+		const heading =
+			response.result === 'correct'
+				? 'Full marks'
+				: `Score: ${response.awardedMarks}/${response.maxMarks}`;
+		const tone: QuizFeedback['tone'] =
+			response.result === 'correct'
+				? 'success'
+				: response.result === 'partial'
+					? 'info'
+					: 'warning';
+		return {
+			awardedMarks: response.awardedMarks,
+			maxMarks: response.maxMarks,
+			feedback: response.feedback,
+			heading,
+			tone
+		};
+	}
+
+	function supportsServerGrading(question: QuizQuestion): boolean {
+		if (question.kind !== 'type-answer') {
+			return false;
+		}
+		if (!quiz.gradingPrompt || quiz.gradingPrompt.trim().length === 0) {
+			return false;
+		}
+		if (!question.markScheme || question.markScheme.trim().length === 0) {
+			return false;
+		}
+		if (typeof question.marks !== 'number' || !Number.isFinite(question.marks)) {
+			return false;
+		}
+		return true;
+	}
+
+	async function requestTypeAnswerGrade(
+		questionId: string,
+		answer: string
+	): Promise<TypeAnswerGradeResponse> {
+		const response = await fetch(`/api/code/${data.sessionId}/quiz/${quiz.id}/grade`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				questionId,
+				answer
+			})
+		});
+		if (!response.ok) {
+			let details: unknown = null;
+			try {
+				details = await response.json();
+			} catch {
+				details = null;
+			}
+			const message =
+				details && typeof details === 'object' && 'error' in (details as Record<string, unknown>)
+					? `Grade request failed: ${(details as Record<string, unknown>).error}`
+					: `Grade request failed with status ${response.status}`;
+			throw new Error(message);
+		}
+		const payload = await response.json();
+		return typeAnswerGradeResponseSchema.parse(payload);
 	}
 
 	function cloneQuizState(state: PlanItemState): { base: PlanItemState; quiz: PlanItemQuizState } {
@@ -236,6 +324,10 @@
 		if (answeredAt) {
 			result.answeredAt = answeredAt;
 		}
+		const grade = overrides.grade ?? existing?.grade;
+		if (grade) {
+			result.grade = grade;
+		}
 		return result;
 	}
 
@@ -253,12 +345,16 @@
 			const seen = Boolean(saved.firstViewedAt) || status !== 'pending' || index === 0;
 			const locked = status !== 'pending';
 			const showContinue = question.kind === 'info-card' ? false : status !== 'pending';
-			const feedback = buildFeedback(
-				question,
-				status === 'skipped' ? 'incorrect' : status,
-				saved.selectedOptionId ?? null,
-				Boolean(saved.dontKnow)
-			);
+			const gradeFeedback =
+				question.kind === 'type-answer' && saved.grade ? buildGradeFeedback(saved.grade) : null;
+			const feedback =
+				gradeFeedback ??
+				buildFeedback(
+					question,
+					status === 'skipped' ? 'incorrect' : status,
+					saved.selectedOptionId ?? null,
+					Boolean(saved.dontKnow)
+				);
 			return {
 				status,
 				showHint: Boolean(saved.hintUsed),
@@ -267,6 +363,8 @@
 				value: saved.typedValue ?? '',
 				showContinue,
 				feedback,
+				grade: saved.grade ?? null,
+				gradingError: false,
 				seen,
 				dontKnow: Boolean(saved.dontKnow),
 				firstViewedAt: saved.firstViewedAt ?? null,
@@ -350,6 +448,11 @@
 	const activeAttempt = $derived(attempts[currentIndex] ?? createInitialAttempt());
 	const isLastQuestion = $derived(currentIndex === quiz.questions.length - 1);
 	const continueLabel = $derived(isLastQuestion ? 'Done' : 'Continue');
+	const activeContinueLabel = $derived(
+		activeQuestion.kind === 'type-answer' && activeAttempt.gradingError
+			? 'Network error, retry'
+			: continueLabel
+	);
 	const progressSteps = $derived(
 		quiz.questions.map<QuizProgressStep>((question, index) => {
 			const attempt = attempts[index];
@@ -527,6 +630,8 @@
 			locked: true,
 			showContinue: true,
 			feedback,
+			grade: null,
+			gradingError: false,
 			dontKnow: true,
 			answeredAt: now,
 			firstViewedAt
@@ -564,7 +669,16 @@
 		if (!attempt || attempt.locked) {
 			return;
 		}
-		updateAttempt(currentIndex, (prev) => ({ ...prev, value, dontKnow: false }));
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			value,
+			dontKnow: false,
+			gradingError: false,
+			feedback: prev.gradingError ? null : prev.feedback,
+			grade: prev.gradingError ? null : prev.grade,
+			showContinue: prev.gradingError ? false : prev.showContinue,
+			status: prev.gradingError ? 'pending' : prev.status
+		}));
 	}
 
 	async function handleTypeSubmit(value: string) {
@@ -579,18 +693,92 @@
 		if (question.kind !== 'type-answer') {
 			return;
 		}
-		pendingAction = 'submit';
-
-		const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
-			entry.trim().toLowerCase()
-		);
-		const isCorrect = accepted.includes(trimmed.toLowerCase());
-
 		const attempt = attempts[currentIndex] ?? createInitialAttempt();
-		const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
 		const now = new Date();
 		const firstViewedAt = attempt.firstViewedAt ?? now;
-		const feedback = buildFeedback(question, status, null, false);
+
+		if (!supportsServerGrading(question)) {
+			pendingAction = 'submit';
+			const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
+				entry.trim().toLowerCase()
+			);
+			const isCorrect = accepted.includes(trimmed.toLowerCase());
+			const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
+			const feedback = buildFeedback(question, status, null, false);
+
+			updateAttempt(currentIndex, (prev) => ({
+				...prev,
+				value: trimmed,
+				status,
+				locked: true,
+				showContinue: true,
+				feedback,
+				grade: null,
+				gradingError: false,
+				dontKnow: false,
+				answeredAt: now,
+				firstViewedAt
+			}));
+
+			completionSyncError = null;
+			try {
+				await persistQuestionState(
+					question.id,
+					{
+						status,
+						typedValue: trimmed,
+						hintUsed: attempt.showHint ? true : undefined,
+						dontKnow: false,
+						firstViewedAt,
+						answeredAt: now
+					},
+					{ sync: true, markInProgress: true }
+				);
+			} catch (error) {
+				console.error('Failed to sync typed answer submission', error);
+				completionSyncError = SYNC_ERROR_MESSAGE;
+			} finally {
+				pendingAction = null;
+			}
+			return;
+		}
+
+		pendingAction = 'continue';
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			value: trimmed,
+			status: 'pending',
+			locked: true,
+			showContinue: true,
+			feedback: null,
+			grade: null,
+			gradingError: false,
+			dontKnow: false,
+			answeredAt: now,
+			firstViewedAt
+		}));
+
+		let response: TypeAnswerGradeResponse;
+		try {
+			response = await requestTypeAnswerGrade(question.id, trimmed);
+		} catch (error) {
+			console.error('Failed to grade typed answer submission', error);
+			updateAttempt(currentIndex, (prev) => ({
+				...prev,
+				status: 'pending',
+				locked: false,
+				showContinue: true,
+				feedback: null,
+				grade: null,
+				gradingError: true
+			}));
+			pendingAction = null;
+			return;
+		}
+
+		const grade = buildGradeState(response);
+		const status: AttemptStatus = response.result === 'correct' ? 'correct' : 'incorrect';
+		const feedback = buildGradeFeedback(grade);
 
 		updateAttempt(currentIndex, (prev) => ({
 			...prev,
@@ -599,6 +787,8 @@
 			locked: true,
 			showContinue: true,
 			feedback,
+			grade,
+			gradingError: false,
 			dontKnow: false,
 			answeredAt: now,
 			firstViewedAt
@@ -614,7 +804,8 @@
 					hintUsed: attempt.showHint ? true : undefined,
 					dontKnow: false,
 					firstViewedAt,
-					answeredAt: now
+					answeredAt: now,
+					grade
 				},
 				{ sync: true, markInProgress: true }
 			);
@@ -774,6 +965,21 @@
 		}
 	}
 
+	async function handleTypeContinue() {
+		if (pendingAction) {
+			return;
+		}
+		if (activeQuestion.kind !== 'type-answer') {
+			await handleAdvanceFromAttempt();
+			return;
+		}
+		if (activeAttempt.gradingError) {
+			await handleTypeSubmit(activeAttempt.value);
+			return;
+		}
+		await handleAdvanceFromAttempt();
+	}
+
 	async function handleQuit() {
 		if (quitPending) {
 			return;
@@ -889,12 +1095,12 @@
 				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
-				{continueLabel}
+				continueLabel={activeContinueLabel}
 				onInput={(detail) => handleTypeInput(detail.value)}
 				onSubmit={(detail) => void handleTypeSubmit(detail.value)}
 				onRequestHint={handleHint}
 				onDontKnow={() => void handleDontKnow()}
-				onContinue={() => void handleAdvanceFromAttempt()}
+				onContinue={() => void handleTypeContinue()}
 			/>
 		{:else if activeQuestion.kind === 'info-card'}
 			<QuizInfoCard

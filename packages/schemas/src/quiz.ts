@@ -39,6 +39,8 @@ export const QuizTypeAnswerSchema = QuizQuestionWithFeedbackSchema.extend({
   answer: z.string().min(1),
   acceptableAnswers: z.array(trimmedString).optional(),
   placeholder: z.string().optional(),
+  marks: z.number().int().min(1).max(20).optional(),
+  markScheme: z.string().min(1).optional(),
 });
 
 export const QuizInfoCardSchema = QuizQuestionBaseSchema.extend({
@@ -62,6 +64,7 @@ export const QuizDefinitionSchema = z.object({
   id: trimmedString,
   title: trimmedString,
   description: trimmedString,
+  gradingPrompt: z.string().trim().min(1).optional(),
   topic: z.string().optional(),
   estimatedMinutes: z.number().int().positive().optional(),
   progressKey: trimmedString,

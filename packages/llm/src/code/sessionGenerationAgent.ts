@@ -408,9 +408,13 @@ function buildSchemaSummary(
     "  - firestore/session.json (session doc)",
     "  - firestore/quiz/*.json (quiz docs; doc id = filename, omit id field)",
     "  - firestore/code/*.json (code docs; doc id = filename, omit slug field)",
+    "- firestore/session.json must include: id, title, summary, tagline, emoji, createdAt, status=\"ready\", topics (non-empty), plan (non-empty).",
+    "- firestore/quiz/*.json must include gradingPrompt; type-answer questions must include marks and markScheme.",
+    "- Do NOT include draft/grade fields in firestore outputs: planDraft, planGrade, quizzesDraft, quizzesGrade, problemsDraft, problemsGrade, storyTitle.",
     "- Drafts remain Markdown: session-plan.md, quizzes/*.md, problems/*.md, story.md.",
     "- Full field definitions live in firestore-schema.json.",
     "- Plan item icon should be an emoji (single character). If unsure, omit icon so the UI uses defaults.",
+    "- Do not use generate_text to write firestore/*.json; write JSON directly after reading drafts + firestore-schema.json.",
     "",
     "Story:",
     ...storySection,
@@ -420,6 +424,117 @@ function buildSchemaSummary(
     "",
     "Remember: do not create a monolithic session.json. Use Firestore outputs instead.",
   ].join("\n");
+}
+
+const FORBIDDEN_SESSION_FIELDS = [
+  "planDraft",
+  "planGrade",
+  "quizzesDraft",
+  "quizzesGrade",
+  "problemsDraft",
+  "problemsGrade",
+  "storyTitle",
+];
+
+function validateQuizTemplateFields(quiz: QuizDefinition, quizId: string): void {
+  const gradingPrompt =
+    typeof quiz.gradingPrompt === "string" ? quiz.gradingPrompt.trim() : "";
+  if (gradingPrompt.length === 0) {
+    throw new Error(
+      `firestore/quiz/${quizId}.json must include gradingPrompt as a non-empty string.`,
+    );
+  }
+  for (const question of quiz.questions) {
+    if (question.kind !== "type-answer") {
+      continue;
+    }
+    const marks =
+      typeof question.marks === "number" ? question.marks : undefined;
+    if (!marks || !Number.isFinite(marks) || marks <= 0) {
+      throw new Error(
+        `firestore/quiz/${quizId}.json type-answer question "${question.id}" must include a positive marks value.`,
+      );
+    }
+    const markScheme =
+      typeof question.markScheme === "string"
+        ? question.markScheme.trim()
+        : "";
+    if (markScheme.length === 0) {
+      throw new Error(
+        `firestore/quiz/${quizId}.json type-answer question "${question.id}" must include markScheme.`,
+      );
+    }
+  }
+}
+
+function requireNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(
+      `firestore/session.json must include ${label} as a non-empty string.`,
+    );
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new Error(
+      `firestore/session.json must include ${label} as a non-empty string.`,
+    );
+  }
+  return trimmed;
+}
+
+function requireNonEmptyStringArray(
+  value: unknown,
+  label: string,
+): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(
+      `firestore/session.json must include ${label} as a non-empty array of strings.`,
+    );
+  }
+  const trimmed = value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
+  if (trimmed.length === 0) {
+    throw new Error(
+      `firestore/session.json must include ${label} as a non-empty array of strings.`,
+    );
+  }
+  return trimmed;
+}
+
+function validateSessionTemplateFields(rawSession: unknown): void {
+  if (!rawSession || typeof rawSession !== "object" || Array.isArray(rawSession)) {
+    throw new Error("firestore/session.json must be a JSON object.");
+  }
+  const session = rawSession as Record<string, unknown>;
+  const forbidden = FORBIDDEN_SESSION_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(session, field),
+  );
+  if (forbidden.length > 0) {
+    throw new Error(
+      `firestore/session.json must not include draft/grade fields: ${forbidden.join(", ")}.`,
+    );
+  }
+  requireNonEmptyString(session.title, "title");
+  requireNonEmptyString(session.summary, "summary");
+  requireNonEmptyString(session.tagline, "tagline");
+  requireNonEmptyString(session.emoji, "emoji");
+  requireNonEmptyStringArray(session.topics, "topics");
+  if (session.createdAt === undefined) {
+    throw new Error("firestore/session.json must include createdAt.");
+  }
+  if (!Array.isArray(session.plan) || session.plan.length === 0) {
+    throw new Error("firestore/session.json must include a non-empty plan array.");
+  }
+  const status = typeof session.status === "string" ? session.status.trim() : "";
+  if (status.length === 0) {
+    throw new Error('firestore/session.json must include status="ready".');
+  }
+  if (status !== "ready") {
+    throw new Error(
+      `firestore/session.json status must be "ready" (received "${status}").`,
+    );
+  }
 }
 
 function buildStoryPromptContent(): string {
@@ -460,9 +575,12 @@ function buildVerificationPromptContent(): string {
     "2) Read firestore/quiz/*.json and firestore/code/*.json outputs.",
     "3) Cross-check: counts, titles, IDs, prompts, answers, explanations, tags, techniques, constraints, examples, and tests.",
     "4) Ensure plan item IDs match quiz/problem filenames and contents.",
-    "5) Ensure story fields in story.md align with any media plan item (if present).",
-    "6) If mismatches exist, fix Firestore JSON outputs (do not change drafts unless absolutely necessary).",
-    "7) Write verification.md summarizing checks and confirming alignment.",
+    "5) Ensure firestore/session.json includes title, summary, tagline, emoji, topics, status=\"ready\", and no draft/grade fields.",
+    "6) Ensure each quiz includes gradingPrompt and type-answer questions include marks + markScheme.",
+    "7) Ensure quiz prompts/explanations are self-contained and do not reference the source documents, sections, or page numbers.",
+    "8) Ensure story fields in story.md align with any media plan item (if present).",
+    "9) If mismatches exist, fix Firestore JSON outputs (do not change drafts unless absolutely necessary).",
+    "10) Write verification.md summarizing checks and confirming alignment.",
     "",
     "Parallelize independent reads/verifications when possible.",
   ].join("\n");
@@ -486,8 +604,46 @@ function safeToJsonSchema(
   }
 }
 
+function enforceSessionTemplateSchema(schema: Record<string, unknown>): void {
+  const definitions = schema.definitions as Record<string, unknown> | undefined;
+  if (!definitions || typeof definitions !== "object") {
+    return;
+  }
+  const sessionSchema = definitions.Session as
+    | { required?: unknown; type?: unknown }
+    | undefined;
+  if (!sessionSchema || sessionSchema.type !== "object") {
+    return;
+  }
+  const required = new Set<string>();
+  const existing = sessionSchema.required;
+  if (Array.isArray(existing)) {
+    for (const entry of existing) {
+      if (typeof entry === "string") {
+        required.add(entry);
+      }
+    }
+  }
+  const mustHave = [
+    "id",
+    "title",
+    "summary",
+    "tagline",
+    "emoji",
+    "createdAt",
+    "status",
+    "topics",
+    "plan",
+  ];
+  for (const field of mustHave) {
+    required.add(field);
+  }
+  sessionSchema.required = Array.from(required);
+}
+
 function buildFirestoreSchemaJsonContent(): string {
   const sessionSchema = safeToJsonSchema(SessionSchema, "Session");
+  enforceSessionTemplateSchema(sessionSchema);
   const quizSchema = safeToJsonSchema(QuizDefinitionSchema, "QuizDefinition");
   const codeSchema = safeToJsonSchema(CodeProblemSchema, "CodeProblem");
   const mediaSchema = safeToJsonSchema(
@@ -539,10 +695,16 @@ function buildTaskContent(options: {
     "Create one quiz file per quiz set and one problem file per coding problem.",
     "For each draft: generate -> grade with feedback -> revise using feedback.",
     "When writing firestore/session.json, set session.id to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
+    "firestore/session.json must include title, summary, tagline, emoji, topics, and status=\"ready\".",
+    "Each firestore/quiz/*.json must include gradingPrompt and type-answer questions must include marks + markScheme.",
+    "Quiz prompts/explanations must be self-contained; do not mention the source documents, sections, or page numbers.",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
-    "Use generate_text tool for drafting and grading; avoid JSON except Firestore output files.",
+    "If validate_schema fails, fix firestore/*.json directly; do not regenerate draft prompts unless the drafts themselves are incorrect.",
+    "Use generate_text tool only for drafting/grading Markdown (session-plan.md, quizzes/*.md, problems/*.md, story.md, feedback).",
+    "Do NOT use generate_text to write firestore/*.json; read the drafts + firestore-schema.json and write JSON directly.",
+    "Do not create prompts/*-json.md; JSON outputs should be authored directly via create_file/apply_patch.",
     'For problem draft/revision/verification prompts, explicitly require code execution to run the solution against all tests and fix failures. Always call generate_text with tools=["code-execution"] for those.',
-    "generate_text should write directly to files via outputPath; do not paste large drafts into the tool response.",
+    "generate_text should write markdown drafts directly to files via outputPath; do not paste large drafts into the tool response.",
     "generate_text should read its prompt from a file via promptPath; do not inline large prompts in tool arguments.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
     "Prompt templates may include {{path/to/file.md}} placeholders that will be replaced with file contents before calling generate_text.",
@@ -589,7 +751,7 @@ function buildPlanTrackerContent(options: {
     lines.push("- [pending] Draft story.md (markdown), grade, and revise.");
   }
   lines.push(
-    "- [pending] Compile Firestore JSON outputs from drafts.",
+    "- [pending] Compile Firestore JSON outputs manually from drafts (no generate_text).",
     "- [pending] Run validate_schema (schemaPath=firestore-schema.json) and fix any errors.",
     "- [pending] Verify Firestore JSON outputs match markdown drafts (write verification.md).",
   );
@@ -610,7 +772,7 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Use read_file_summary (fast model) for quick checks; provide a short question.",
     "Work in the shortest path possible: avoid repeated listing/reading unless needed.",
     "Maintain plan.md with [running] and [done] updates as you progress.",
-    "Use generate_text tool for drafting and grading (gpt-5.2). Do not write large drafts directly.",
+    "Use generate_text tool for drafting/grading Markdown only. Do not use it for JSON outputs.",
     "When using generate_text, set outputPath so it writes files directly.",
     "When using generate_text, set promptPath so it reads prompts from files (avoid inline prompts).",
     "Prompt templates may include {{path/to/file.md}} placeholders that will be expanded before calling generate_text.",
@@ -618,6 +780,8 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Prompt files must be self-contained: include all necessary context via placeholders or summaries. Do not reference p2/p3 or other content unless it is included in the prompt text.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
     "Do not write any firestore/*.json outputs until all drafts are verified and finalized.",
+    "Never call generate_text with outputPath under firestore/ or any .json file.",
+    "Do not create prompts/*-json.md; write firestore/*.json manually using create_file/apply_patch.",
     "If coding is enabled, draft and verify problems first, then derive techniques and update session-plan.md before drafting quizzes.",
     'For all problem draft/revision/verification generate_text calls, set tools=["code-execution"] and include an explicit prompt instruction to run the solution against all tests and fix any failures.',
     "Read story-prompt.md before drafting story.md.",
@@ -628,6 +792,8 @@ function buildAgentSystemPrompt(workspaceDir: string): string {
     "Write Firestore JSON outputs under firestore/session.json, firestore/quiz/*.json, firestore/code/*.json.",
     "Use a descriptive kebab-case session.id in firestore/session.json; avoid generic ids like session-01.",
     "Use Markdown for drafts; only firestore/*.json files should contain JSON.",
+    "When creating firestore/*.json, read the finalized drafts + schema and author JSON directly; do not generate JSON via prompts.",
+    "If validate_schema fails, fix firestore/*.json directly; do not regenerate drafts unless the drafts are wrong.",
     "Store prompts under prompts/ (e.g., prompts/session-plan-draft.md).",
     "Create quiz drafts under quizzes/quiz-01.md, quizzes/quiz-02.md, etc.",
     "Create problem drafts under problems/problem-01.md, problems/problem-02.md, etc.",
@@ -678,6 +844,8 @@ function buildAgentUserPrompt(options: {
     "",
     "Use the brief as authoritative. Respect exactness rules from the brief.",
     "Use firestore-schema.json for the Firestore JSON output fields and rules.",
+    "firestore/session.json must include title, summary, tagline, emoji, topics, and status=\"ready\" (no draft/grade fields).",
+    "firestore/quiz/*.json must include gradingPrompt and type-answer questions must include marks + markScheme.",
     "Set session.id in firestore/session.json to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
     "Plan item icons must be emoji (single character). If unsure, omit icon so the UI uses defaults.",
     "Ensure quiz/problem counts match the plan parts.",
@@ -686,7 +854,9 @@ function buildAgentUserPrompt(options: {
       ? "problems/problem-XX.md -> verify with code execution -> summaries/techniques.md -> session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs."
       : "session-plan.md -> quizzes/quiz-XX.md -> story.md (if needed) -> firestore outputs.",
     "For each draft: generate -> grade (write feedback) -> revise using feedback.",
-    "Use generate_text for drafting and grading; set promptPath and outputPath so it reads/writes files directly; enable web-search or code-execution only when needed.",
+    "Use generate_text for drafting and grading Markdown only; set promptPath/outputPath so it reads/writes files directly; enable web-search or code-execution only when needed.",
+    "Do NOT use generate_text to write firestore/*.json; read drafts + firestore-schema.json and write JSON directly.",
+    "Do not create prompts/*-json.md; author firestore/*.json with create_file/apply_patch.",
     "Use read_files to pull multiple files in one call; use read_file_summary for quick checks instead of reading full files.",
     "Problem drafting, revision, and verification must use generate_text with code-execution.",
     "Problem prompts must explicitly instruct the model to run the solution against all tests and fix any failures.",
@@ -700,6 +870,7 @@ function buildAgentUserPrompt(options: {
     "Parallelize independent tool calls where possible.",
     "For large rewrites, delete_file then create_file with full contents.",
     "After writing each draft and feedback, update plan.md statuses.",
+    "If validate_schema fails, fix firestore/*.json directly; do not redo drafts unless the drafts are wrong.",
     "Before finishing, re-read all drafts and firestore/*.json and write verification.md confirming alignment.",
     "Use validate_schema (schemaPath=firestore-schema.json) to catch schema issues early; repair errors before final verification.",
     "After verification.md is complete, reply DONE (no summary).",
@@ -1015,6 +1186,7 @@ async function loadFirestoreOutputs(options: {
     "session.json",
   );
   const rawSession = await readJsonFile(sessionPath);
+  validateSessionTemplateFields(rawSession);
   const session = SessionSchema.parse(rawSession);
   if (!session.plan || session.plan.length === 0) {
     throw new Error("firestore/session.json must include a non-empty plan.");
@@ -1037,6 +1209,7 @@ async function loadFirestoreOutputs(options: {
       );
     }
     const quiz = QuizDefinitionSchema.parse({ id: quizId, ...(rawDoc ?? {}) });
+    validateQuizTemplateFields(quiz, quizId);
     quizzes.push(quiz);
   }
 
@@ -1867,8 +2040,21 @@ async function buildSessionAgentTools(options: {
           workspaceDir: paths.workspaceDir,
         });
         const promptText = expanded.text;
+        const normalizedOutputPath = input.outputPath
+          ? input.outputPath.replace(/\\/g, "/")
+          : undefined;
         const startedAt = Date.now();
         try {
+          if (
+            normalizedOutputPath &&
+            (normalizedOutputPath.endsWith(".json") ||
+              normalizedOutputPath.startsWith("firestore/") ||
+              normalizedOutputPath.includes("/firestore/"))
+          ) {
+            throw new Error(
+              "generate_text cannot write JSON outputs. Write firestore/*.json manually with create_file/apply_patch and run validate_schema.",
+            );
+          }
           const text = await generateText({
             modelId: generationModelId,
             openAiReasoningEffort: generationReasoning,
