@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FirestoreTimestampSchema } from "./firestore";
+import { QuizFeedbackToneSchema } from "./quiz";
 
 const trimmedId = z.string().trim().min(1, "id is required");
 
@@ -13,6 +14,14 @@ const quizAttemptStatus = z.enum([
 ]);
 const codeLanguage = z.enum(["python"]);
 const codeRunStatus = z.enum(["passed", "failed", "error"]);
+
+const QuizGradeSchema = z.object({
+  awardedMarks: z.number().int().min(0),
+  maxMarks: z.number().int().min(1),
+  feedback: z.string().min(1),
+  heading: z.string().optional(),
+  tone: QuizFeedbackToneSchema.optional(),
+});
 
 export const PlanItemCodeStateSchema = z
   .object({
@@ -58,6 +67,7 @@ export const QuizQuestionStateSchema = z
     dontKnow: z.boolean().optional(),
     firstViewedAt: FirestoreTimestampSchema.optional(),
     answeredAt: FirestoreTimestampSchema.optional(),
+    grade: QuizGradeSchema.optional(),
   })
   .transform((value) => {
     const result: {
@@ -68,6 +78,7 @@ export const QuizQuestionStateSchema = z
       dontKnow?: boolean;
       firstViewedAt?: Date;
       answeredAt?: Date;
+      grade?: z.infer<typeof QuizGradeSchema>;
     } = {
       status: value.status,
     };
@@ -90,6 +101,18 @@ export const QuizQuestionStateSchema = z
     }
     if (value.answeredAt) {
       result.answeredAt = value.answeredAt;
+    }
+    if (value.grade) {
+      const trimmedFeedback = value.grade.feedback.trim();
+      if (trimmedFeedback.length > 0) {
+        result.grade = {
+          awardedMarks: value.grade.awardedMarks,
+          maxMarks: value.grade.maxMarks,
+          feedback: trimmedFeedback,
+          heading: value.grade.heading?.trim() || undefined,
+          tone: value.grade.tone,
+        };
+      }
     }
 
     return result;

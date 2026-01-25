@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import {
   runSessionAgentSmokeTest,
@@ -428,6 +428,9 @@ function getTemplateDocRef(sessionId: string) {
 
 function stripUndefined<T>(value: T): T;
 function stripUndefined(value: unknown): unknown {
+  if (value instanceof FieldValue || value instanceof Timestamp) {
+    return value;
+  }
   if (Array.isArray(value)) {
     const next: unknown[] = [];
     for (const item of value) {
@@ -446,6 +449,66 @@ function stripUndefined(value: unknown): unknown {
     return result;
   }
   return value;
+}
+
+function truncateWords(value: string, maxWords: number): string {
+  const words = value.trim().split(/\s+/u);
+  if (words.length <= maxWords) {
+    return words.join(" ");
+  }
+  return words.slice(0, maxWords).join(" ");
+}
+
+function extractEmoji(value: string): string | undefined {
+  const match = value.match(/\p{Extended_Pictographic}/u);
+  return match?.[0];
+}
+
+function resolveTemplateTagline(session: Record<string, unknown>): string | undefined {
+  const tagline = typeof session.tagline === "string" ? session.tagline.trim() : "";
+  if (tagline.length > 0) {
+    return tagline;
+  }
+  const summary = typeof session.summary === "string" ? session.summary.trim() : "";
+  if (summary.length > 0) {
+    return truncateWords(summary, 10);
+  }
+  const title = typeof session.title === "string" ? session.title.trim() : "";
+  if (title.length > 0) {
+    return truncateWords(title, 10);
+  }
+  return undefined;
+}
+
+function resolveTemplateEmoji(session: Record<string, unknown>): string | undefined {
+  const emoji = typeof session.emoji === "string" ? session.emoji.trim() : "";
+  if (emoji.length > 0) {
+    return emoji;
+  }
+  const title = typeof session.title === "string" ? session.title : undefined;
+  if (title) {
+    const match = extractEmoji(title);
+    if (match) {
+      return match;
+    }
+  }
+  const plan = session.plan;
+  if (Array.isArray(plan)) {
+    for (const item of plan) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const itemTitle = (item as { title?: unknown }).title;
+      if (typeof itemTitle !== "string") {
+        continue;
+      }
+      const match = extractEmoji(itemTitle);
+      if (match) {
+        return match;
+      }
+    }
+  }
+  return "📘";
 }
 
 function deriveTopicFromBrief(text: string): string {
@@ -518,11 +581,13 @@ async function publishToWelcomeTemplate(options: {
   if (session.plan) {
     payload.plan = session.plan;
   }
-  if (typeof session.tagline === "string") {
-    payload.tagline = session.tagline;
+  const resolvedTagline = resolveTemplateTagline(session);
+  if (resolvedTagline) {
+    payload.tagline = resolvedTagline;
   }
-  if (typeof session.emoji === "string") {
-    payload.emoji = session.emoji;
+  const resolvedEmoji = resolveTemplateEmoji(session);
+  if (resolvedEmoji) {
+    payload.emoji = resolvedEmoji;
   }
   if (typeof session.summary === "string") {
     payload.summary = session.summary;
@@ -665,11 +730,12 @@ async function main(): Promise<void> {
   if (options.publish) {
     const topic =
       options.topic ??
+      result.session.title ??
       (options.briefFile
         ? deriveTopicFromBrief(
             await readFile(options.briefFile, "utf8"),
           )
-        : result.session.title ?? "session");
+        : "session");
     await publishToWelcomeTemplate({
       sessionId: result.sessionId,
       topic,

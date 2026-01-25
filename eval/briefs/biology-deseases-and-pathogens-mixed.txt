@@ -1,0 +1,660 @@
+Please read the following documents and produce a lesson with 5 parts, all quizes.
+Each quiz should have about 20 questions (quiz 1 = 20 20 questions, quiz 2 also 20 questions, ... quiz 5 also 20).
+Include a good mix of multiple-choice and free-text (type-answer) questions in every quiz.
+For every free-text question, explicitly state the number of marks (focus on 3-6 marks) and provide a brief mark scheme.
+All quiz questions must be self-contained and must not reference the source documents, sections, or page numbers.
+It is imporatant to cover material from the attached DOCUMENTS (below) and aim at GCSE Biology grade 8+.
+
+<DOCUMENTS>
+## AQA Biology GCSE – Student Progress Sheet (Unit 4.3: Infection and Response) 
+
+**Name:** ____________________
+**Target:** ____________________
+
+---
+
+### Page 1 of 4
+
+#### Unit 4.3 – Infection and Response
+
+#### 4.3.1. Communicable Diseases
+
+##### 4.3.1.1. Communicable (Infectious) Diseases
+
+* **a** I know that pathogens are microorganisms that cause infectious disease.
+* **b** I know that pathogens may be viruses, bacteria, protists or fungi that can infect plants or animals.
+* **c** I know that bacteria can produce poisons (toxins) that damage tissues and make us feel ill.
+* **d** I know that viruses live and reproduce inside body cells, which causes damage to the cell.
+* **e** I can explain how pathogens can be spread by direct contact, by water or by air.
+* **f** I can explain how the spread of disease can be reduced or prevented.
+
+##### 4.3.1.2. Viral Diseases
+
+* **a** I know that measles is a viral disease showing symptoms of fever and a red skin rash and that it is a serious illness that can be fatal if complications arise (which is why most young children are vaccinated against measles).
+* **b** I can describe how the measles virus is spread by air (by inhalation of droplets from sneezes and coughs).
+* **c** I know that HIV (Human Immunodeficiency Virus) infection initially causes a flu-like illness and that the virus attacks the body’s immune cells (white blood cells) if it is not successfully controlled with antiretroviral drugs.
+* **d** I know that AIDS occurs when the body's immune system becomes so badly damaged it can no longer deal with other infections or cancers.
+* **e** I can explain how HIV is spread (by sexual contact or exchange of body fluids such as blood which occurs when drug users share needles).
+* **f** I know that TMV (Tobacco Mosaic Virus) is a widespread plant pathogen affecting many species of plants including tomatoes and that it gives a distinctive ‘mosaic’ pattern of discolouration on the leaves which affects the growth of the plant due to lack of photosynthesis.
+
+##### 4.3.1.3. Bacterial Diseases
+
+* **a** I know that Salmonella food poisoning is caused by bacteria that are spread by ingesting (eating) contaminated food.
+* **b** I can describe the symptoms of Salmonella food poisoning as; fever, abdominal cramps, vomiting and diarrhoea which are caused by the bacteria and the toxins they secrete.
+* **c** I know that, in the UK, poultry are vaccinated against Salmonella to control the spread.
+* **d** I know that gonorrhoea is a sexually transmitted disease (STD) that is caused by bacteria.
+* **e** I can describe the symptoms of gonorrhoea as; a thick yellow or green discharge from the vagina or penis and pain on urinating.
+* **f** I know that gonorrhoea was easily treated with penicillin (an antibiotic), until many resistant strains of the bacteria appeared.
+
+---
+
+### Page 2 of 4
+
+##### 4.3.1.4. Fungal Diseases
+
+* **a** I know that rose black spot is a fungal disease where purple or black spots develop on leaves, which often turn yellow and drop early.
+* **b** I know that rose black spot fungus affects the growth of the plant because photosynthesis is reduced.
+* **c** I can describe how rose black spot fungus is spread by water and air.
+* **d** I can explain how rose black spot fungus can be treated by using fungicides and/or removing and destroying the affected leaves.
+
+##### 4.3.1.5. Protist Diseases
+
+* **a** I know that the pathogens that cause malaria are protists.
+* **b** I know that malaria causes recurrent episodes of fever and can be fatal.
+* **c** I can describe the life cycle of the malarial protist, including the role of the mosquito.
+* **d** I can explain how the spread of malaria can be controlled by preventing mosquitos (the vector) from breeding and by using nets to avoid bites.
+
+##### 4.3.1.6. Human Defence Systems
+
+* **a** I can describe how the non-specific defence systems of the human body (including skin, nose, trachea and bronchi and stomach) protect against pathogens.
+* **b** I can explain how white blood cells use phagocytosis to defend against pathogens.
+* **c** I can explain how white blood cells produce antibodies to defend against pathogens.
+* **d** I can explain how white blood cells produce antitoxins to defend against pathogens.
+
+##### 4.3.1.7. Vaccination
+
+* **a** I know that a vaccine contains small quantities of dead or inactive forms of a pathogen.
+* **b** I can explain how having a vaccination stimulates the white blood cells to produce antibodies against a particular pathogen and that if the same pathogen then enters the body, the white blood cells are able to respond quickly to produce the correct antibodies, preventing infection.
+* **c** I can explain how the spread of pathogens can be reduced by immunising a large proportion of the population.
+
+##### 4.3.1.8. Antibiotics and Painkillers
+
+* **a** I know that antibiotics, such as penicillin, are medicines that help to cure bacterial disease by killing bacteria inside the body.
+* **b** I know that it is important that specific bacteria should be treated by specific antibiotics.
+* **c** I know that antibiotics cannot kill viral pathogens and that it is difficult to develop drugs that kill viruses without also damaging the body’s tissues.
+* **d** I can describe how the use of antibiotics has greatly reduced deaths from infectious bacterial diseases, but the emergence of strains of bacteria that are resistant to antibiotics is of great concern.
+* **e** I know that painkillers and other medicines are used to treat the symptoms of disease but do not kill pathogens.
+
+---
+
+### Page 3 of 4
+
+##### 4.3.1.9. Discovery and Development of Drugs
+
+* **a** I can describe how, traditionally, drugs were extracted from plants and microorganisms, for example;
+
+  * the heart drug digitalis originates from foxgloves;
+  * the painkiller aspirin originates from the willow tree;
+  * penicillin was discovered by Alexander Fleming from the Penicillium mould.
+* **b** I can describe how most new drugs are synthesised by chemists in the pharmaceutical industry, but that the starting point may still be a chemical extracted from a plant.
+* **c** I know that new drugs have to be extensively tested for toxicity, efficacy and dose.
+* **d** I can describe how preclinical testing is done in a laboratory using cells, tissues and live animals.
+* **e** I can describe how clinical trials use healthy volunteers and patients and that very low doses of the drug are given at the start of a clinical trial.
+* **f** I know that if the drug is found to be safe after initial trials, further clinical trials are carried out to find the optimum dose for the drug.
+* **g** I know that, in double blind trials, some patients are given a placebo.
+
+#### 4.3.2. Monoclonal Antibodies (Biology Only) (HT Only)
+
+##### 4.3.2.1. Producing Monoclonal Antibodies
+
+* **a** I know that monoclonal antibodies are produced from a single clone of cells.
+* **b** I know that the antibodies produced are specific to one binding site on one protein antigen and so are able to target a specific chemical or specific cells in the body.
+* **c** I know that specific antibodies are produced by stimulating mouse lymphocytes.
+* **d** I know that the lymphocytes are combined with a kind of tumour cell to make a cell called a hybridoma cell and that this hybridoma cell can both divide and make the antibody.
+* **e** I know that single hybridoma cells can be cloned to produce many identical cells that all produce the same antibody and that a large amount of the antibody can be collected and purified.
+* **c** I know that malignant tumour cells are cancers. They invade neighbouring tissues and spread to different parts of the body (via the bloodstream) where they form secondary tumours.
+
+##### 4.3.2.2. Uses of Monoclonal Antibodies
+
+* **a** I can describe some of the ways in which monoclonal antibodies can be used, including:
+
+  * pregnancy tests;
+  * measuring the levels of hormones and other chemicals in blood, or to detect pathogens;
+  * locating or identifying specific molecules in a cell or tissue by binding to them with a fluorescent dye;
+  * treating diseases such as cancer.
+* **b** I can discuss the importance of monoclonal antibodies and evaluate the advantages and disadvantages associated with their use.
+
+---
+
+### Page 4 of 4
+
+#### 4.3.3. Plant Diseases (Biology Only)
+
+##### 4.3.3.1. Detection and Identification of Plant Diseases
+
+* **a** I know that plants can be infected by a range of viral (tobacco mosaic virus), bacterial and fungal (black spot fungus) pathogens as well as by insects (aphids).
+* **b** I know that plant diseases can be detected by:
+
+  * stunted growth;
+  * spots on leaves;
+  * areas of decay (rot);
+  * growths;
+  * malformed stems or leaves;
+  * discolouration;
+  * the presence of pests. (HT Only)
+* **c** I know that plant diseases can be identified by:
+
+  * reference to a gardening manual or website;
+  * taking infected plants to a laboratory to identify the pathogen;
+  * using testing kits that contain monoclonal antibodies. (HT Only)
+* **d** I know that plants can be damaged by a range of ion deficiency conditions, including
+
+  * stunted growth caused by nitrate deficiency (affects protein synthesis and therefore, growth);
+  * chlorosis caused by magnesium deficiency (affects production of chlorophyll).
+* **e** I can describe how an understanding of ion deficiencies allows horticulturists to provide optimum conditions for plants.
+
+##### 4.3.3.2. Plant Defence Responses
+
+* **a** I can describe the physical defence responses plants use to resist invasion of microorganisms;
+
+  * cellulose cell walls;
+  * tough waxy cuticle on leaves;
+  * layers of dead cells around stems (bark on trees) which fall off.
+* **b** I can describe chemical defence responses used by plants;
+
+  * antibacterial chemicals;
+  * poisons to deter herbivores.
+* **c** I can describe mechanical adaptations of plants;
+
+  * thorns and hairs deter animals;
+  * leaves which droop or curl when touched;
+  * mimicry to trick animals.
+
+---
+
+---
+
+## Infection and Response Knowledge Organiser – Foundation and Higher 
+
+### Page 1 of 2
+
+#### Communicable Disease
+
+Pathogens are microorganisms that enter the body and cause communicable disease (infectious). Plants and animals can be infected by them.
+
+#### Viral Diseases
+
+**Measles** is spread by droplets of liquid from sneezes and coughs etc., symptoms include a red rash on the skin and a fever. Measles can be serious or even fatal, it can lead to pneumonia. Most people are vaccinated against measles when they are very young.
+
+**HIV** is spread by sexual contact or exchanging body fluids. HIV can be controlled be antiviral drugs; this stops the viruses replicating. The virus attacks the cells in the immune system. If the immune system is badly damaged, the body cannot cope with other infections. This is the late stage and is called aids.
+
+**Tobacco mosaic virus** affects plants, parts of the leaves become discoloured. This means plants cannot carry out photosynthesis; this will affect the plants growth.
+
+#### Bacterial Diseases
+
+**Salmonella** bacteria causes food poisoning. Symptoms include fever, stomach cramps, vomiting and diarrhoea. The symptoms are caused by the toxins produced by the bacteria. Food contaminated with salmonella can give you food poisoning. Most poultry in the UK will have had a vaccination against salmonella.
+
+**Gonorrhoea** is a sexually transmitted bacterial disease, passed on by sexual contact. Symptoms include pain when urinating and thick yellow/green discharge from the vagina or penis. To prevent the spread, people should be treated with antibiotics and use a condom.
+
+#### How to prevent the spread:
+
+* **Being hygienic** – washing hands thoroughly.
+* **Destroying vectors** – killing vectors by using insecticides or destroying their habitat.
+* **Isolation** – isolating an infected person will prevent the spread.
+* **Vaccination** – people cannot develop the infection and then pass it on.
+
+#### Fungal and Protist Diseases
+
+**Fungal**
+Rose black spot shows as black spots on the leaves of the plant, this means less photosynthesis occurs. As a result, the plant does not grow as well. It is spread by the wind or the water. They can be treated by using fungicides and taking the leaves off the infected plant.
+
+**Protists**
+Malaria is caused by a protist, mosquitoes are the vectors. They become infected when they feed on an infected animal. The protist is inserted into the blood vessel. Malaria can cause fever, it can also be fatal.
+
+#### Types of pathogen (descriptions)
+
+* **Bacteria** are small cells that can reproduce very quickly in the body. They produce toxins that make you feel ill, damaging your cells and tissues.
+* **Viruses** are much smaller than bacteria; they can also reproduce quickly in the body. Viruses live inside your cell where they replicate. They then burst out of the cell, releasing new viruses.
+* **Protists** are eukaryotes (multicellular). Some are parasites which live on or inside other organisms, often carried by a vector.
+* **Fungi** are sometimes single celled, others have hyphae that grow and penetrate human skin and the surface of plants. They can produce spores which can spread to other plants.
+
+#### How Pathogens Are Spread
+
+Pathogens can be spread in many ways, for example:
+
+* **Water** – by drinking dirty water, e.g. cholera.
+* **Air** – carried by air and breathed in, e.g. influenza.
+* **Direct contact** – touching contaminated surfaces including the skin, e.g. athlete's foot.
+
+**Diagram labels (page 1):** stem; hyphae; spore case (bursts); sporangium.
+
+---
+
+### Page 2 of 2
+
+#### Fighting Diseases
+
+##### Defence System
+
+1. The skin acts as a barrier to pathogens.
+2. Hairs and mucus in your nose trap particles.
+3. The trachea and bronchi secrete mucus to trap pathogens. They also have cilia which move backwards and forwards to transport the mucus towards the throat. This traps any pathogens and the mucus is usually swallowed.
+4. The stomach contains hydrochloric acid to kill any pathogens that enter the body via the mouth.
+
+##### The Immune System
+
+This kills any pathogens that enter the body.
+White blood cells:
+
+* **Phagocytosis** is when white blood cells engulf pathogens and then digest them.
+* They produce **antitoxins** to neutralise the toxins.
+* They also produce **antibodies**. Pathogens have **antigens** on their surface, antibodies produced by the white blood cells lock on to the antigen on the outside of the pathogen. White blood cells can then destroy the pathogens. Antibodies are specific to one antigen and will only work on that pathogen.
+
+##### Vaccinations
+
+Vaccinations have been developed to protect us from future infections. A vaccination involves an injection of a dead or weakened version of the pathogen. They carry antigens which cause your body to produce antibodies which will attack the pathogen. If you are infected again, the white blood cells can produce antibodies quickly.
+
+##### Developing Drugs
+
+There are three main stages in drug testing:
+
+**Pre-clinical testing:**
+
+1. Drugs are tested on human cells and tissues.
+2. Testing carried out on living animals.
+
+**Clinical testing:**
+3. Tested on healthy human volunteers in clinical trials. Starts with a very low dose, then tested on people with the illness to find the optimum dose.
+
+**Placebo** is a substance that is like the drug, but does not do anything.
+**Placebo effect** is when the patient thinks the treatment will work even though their treatment isn’t doing anything.
+**Blind trial** is when the patient does not know whether they are getting the drug or the placebo.
+**Double-blind trial** is when both the doctor and the patient do not know whether they are getting the drug.
+
+##### Fighting Disease – Drugs
+
+* **Painkillers** relive the pain and symptoms, but do not tackle the cause.
+* **Antibiotics** kill the bacteria causing the problem, but do not work on viruses. Viruses are very difficult to kill because they live inside the body cells.
+
+##### Drugs from Plants
+
+Chemicals produced by plants to defend themselves can be used to treat human diseases or help with symptoms.
+New drugs are now made by chemists, who work for the pharmaceutical industry, in laboratories.
+
+| Pros                                                                | Cons                                                                           |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Helps to control communicable diseases that used to be very common. | They don’t always work.                                                        |
+| Epidemics can be prevented.                                         | Some people can have a bad reaction to a vaccine – however, that is very rare. |
+
+| Drug       | Plant/Microorganism |
+| ---------- | ------------------- |
+| aspirin    | willow              |
+| digitalis  | foxglove            |
+| penicillin | mould - penicillium |
+
+##### Key Vocabulary
+
+antibodies; antigens; antitoxins; bacteria; blind trial; double-blind; fungus; microorganism; phagocytosis; placebo; protist; toxins; vaccination; vector; virus
+
+---
+
+---
+
+## AQA Trilogy Biology Unit 4.3: Infection and Response (Higher Revision Mat + Answers) 
+
+### Page 1 of 2 (Worksheet)
+
+visit twinkl.com
+
+#### a) Write a definition for each type of disease and give two examples.
+
+* **communicable disease:** __________________________________________
+
+  ---
+* **non-communicable disease:** ______________________________________
+
+  ---
+
+#### b) Label the pathogens below that cause infectious diseases.
+
+(Labels for four pictures) ___________________________________________
+
+#### d) How do pathogens cause disease? Fill in the gaps.
+
+* __________________ reproduce rapidly by __________________. They may produce __________________ that damage tissues and make us feel ill.
+* __________________ take over the cells of your body. They live and rapidly __________________ inside, this causes cell damage.
+
+#### e) Simple hygiene measures are one of the most effective ways of preventing the spread of pathogens. List 5 ways we can be more hygienic below:
+
+1. ---
+2. ---
+3. ---
+4. ---
+5. ---
+
+#### c) Name three ways that pathogens are spread and give at least one example.
+
+* ---
+* ---
+* ---
+
+#### f) List three other methods for preventing the spread of pathogens.
+
+1. ---
+2. ---
+3. ---
+
+#### g) Salmonella
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### h) Measles
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### i) Tobacco Mosaic Virus
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### j) Explain how your skin prevents microorganisms getting into your body.
+
+---
+
+---
+
+---
+
+#### k) Gonorrhoea
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### l) HIV
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### m) Explain how the respiratory system is adapted to reduce the entry of microorganisms.
+
+---
+
+---
+
+---
+
+(Page footer text: “Page 1 of 2”)
+
+---
+
+### Page 2 of 2 (Worksheet)
+
+visit twinkl.com
+
+#### n) Malaria
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### o) Rose Black Spot
+
+* What type of pathogen is it caused by? _____________________________
+* What are the symptoms? __________________________________________
+* How is it spread? ________________________________________________
+* What can we do about it? _________________________________________
+
+#### p) Describe how vaccinations prevent illness.
+
+---
+
+---
+
+---
+
+#### q) Explain how the digestive system is adapted to reduce the entry of microorganisms.
+
+---
+
+---
+
+#### r) Describe each role of a white blood cell and explain how it protects you against disease.
+
+---
+
+---
+
+---
+
+#### s) Tick the correct boxes.
+
+|             | Treat Symptoms | Kills Bacteria | Kills Viruses |
+| ----------- | -------------: | -------------: | ------------: |
+| painkillers |              ☐ |              ☐ |             ☐ |
+| antibiotics |              ☐ |              ☐ |             ☐ |
+
+#### t) Define the following terms:
+
+* **vaccine:** _________________________________________________
+* **antigen:** _________________________________________________
+* **antibody:** ________________________________________________
+* **herd immunity:** ___________________________________________
+
+#### u) Fill in the missing words:
+
+The use of __________________ has greatly reduced the deaths from infectious __________________ diseases. However the evolution of strains that are __________________ to antibiotics is a concern.
+__________________ are specific which means they __________________.
+
+#### v) State where the following drugs were discovered.
+
+* The heart drug digitalis: _________________________________________
+* The painkiller aspirin: ___________________________________________
+* The antibiotic penicillin: _________________________________________
+* Who discovered penicillin? _______________________________________
+* Why is it difficult to discover new medicines? ______________________
+
+  ---
+
+#### w) Where do most new drugs now come from?
+
+---
+
+What has to happen before a drug can be used?
+
+---
+
+---
+
+---
+
+#### x) Describe each process of drug testing.
+
+* **preclinical testing:** ____________________________________________
+* **clinical trials:** ________________________________________________
+* **double-blind trials:** ___________________________________________
+
+(Page footer text: “Page 2 of 2”)
+
+---
+
+### Page 1 of 2 (Answers)
+
+visit twinkl.com
+
+#### a) Definitions + examples
+
+* **communicable disease:** Caused by pathogens and can be passed from one person to another. Possible examples: measles, salmonella, gonorrhoea, HIV, tobacco mosaic virus, rose black spot, malaria.
+* **non-communicable disease:** Can not be passed on from one person to another. Possible examples: heart disease, diabetes, cancer.
+
+#### b) Label the pathogens
+
+bacteria; virus; protist; fungi
+
+#### d) How pathogens cause disease (filled)
+
+Bacteria reproduce rapidly by binary fission. They may produce toxins that damage tissues and make us feel ill.
+Viruses take over the cells of your body. They live and rapidly reproduce inside, this causes cell damage.
+
+#### e) Hygiene (5 examples)
+
+* Washing hands after using the toilet, before cooking or eating, and after contact with animals or sick people.
+* Using disinfectants on surfaces.
+* Keeping raw meat away from food that is eaten uncooked.
+* Coughing or sneezing into a tissue.
+* Keeping agricultural machinery, and people using it, clean to prevent the spread of plant diseases.
+
+#### c) Ways pathogens are spread (examples)
+
+* By air: cold, flu, tuberculosis.
+* By direct contact: malaria, STDs, HIV.
+* By water: cholera, salmonellosis.
+
+#### g) Salmonella
+
+* Type of pathogen: bacteria
+* Symptoms: Fever, abdominal cramps, vomiting and diarrhoea.
+* Spread: Eating undercooked food or food contaminated from contact with raw meat, e.g. raw chicken.
+* What can we do about it?: Poultry are vaccinated to control the spread.
+
+#### f) Three other methods for preventing spread
+
+1. Keep infected individuals in isolation.
+2. Destroy the vectors that carry pathogens.
+3. vaccination
+
+#### h) Measles
+
+* Type of pathogen: virus
+* Symptoms: A fever and red rash on the skin. Can be fatal if there are complications.
+* Spread: By air - the inhalation of droplets from coughs and sneezes.
+* What can we do about it?: There is no treatment, so young children are vaccinated against it.
+
+#### i) Tobacco Mosaic Virus
+
+* Type of pathogen: virus
+* Symptoms: Mosaic discolouration of the leaves which reduces photosynthesis and affects the growth of the plant.
+* Spread: Direct contact between diseased plant material and healthy plants. Insects can also act as vectors.
+* What can we do about it?: TMV resistant strains. Good hygiene and pest control.
+
+#### j) Skin defence
+
+It acts as a barrier to prevent pathogens reaching the tissues beneath. Platelets quickly form scabs to seal any cuts.
+It produces antimicrobial secretions to kill pathogens.
+It is covered with microorganisms that act as an extra barrier to entry.
+
+#### k) Gonorrhoea
+
+* Type of pathogen: bacteria
+* Symptoms: Thick yellow or green discharge from the vagina or penis and pain on urinating.
+* Spread: Sexual contact
+* What can we do about it?: Treat with antibiotics. Use a barrier method of contraception.
+
+#### l) HIV
+
+* Type of pathogen: virus
+* Symptoms: Initially causes a flu-like illness. Damages the immune system so that it can’t deal with other infections or cancers.
+* Spread: Sexual contact or exchange of bodily fluids, such as blood.
+* What can we do about it?: Antiretroviral drugs help to stop the virus attacking the immune system. There is no cure or vaccine.
+
+#### m) Respiratory system adaptations
+
+The lining of the nose produces mucus and is full of hairs to trap particles in the air that may contain pathogens.
+The lining of the trachea and bronchi produce mucus which is moved to the back of the throat by the cilia projections of epithelial cells.
+
+(Page footer text: “Page 1 of 2”)
+
+---
+
+### Page 2 of 2 (Answers)
+
+visit twinkl.com
+
+#### q) Digestive system adaptation
+
+The stomach produces hydrochloric acid that destroys pathogens.
+
+#### r) Roles of white blood cells
+
+Some white blood cells ingest pathogens, digesting and destroying them.
+Some white blood cells produce antibodies which are chemicals that target specific pathogens and destroy them. An antibody only works for one type of pathogen.
+Some white blood cells produce antitoxins that counteract the toxins released by pathogens.
+
+#### p) Vaccinations (how they prevent illness)
+
+1. Introduce small quantities of dead or inactive virus;
+2. this stimulates white blood cells to produce antibodies;
+3. if the live pathogen enters the body, the white blood cells recognise it and respond quickly so you don’t get ill.
+
+#### s) Tick boxes (answers)
+
+|             | Treat Symptoms | Kills Bacteria | Kills Viruses |
+| ----------- | -------------: | -------------: | ------------: |
+| painkillers |              X |                |               |
+| antibiotics |                |              X |               |
+
+#### t) Definitions
+
+* **vaccine:** Dead or inactivated form of a disease causing microorganism.
+* **antigen:** Unique protein on the surface of cells.
+* **antibody:** Produced by white blood cells to recognise specific antigens.
+* **herd immunity:** When vaccination of a significant proportion of the population provides protection for individuals who haven’t got immunity.
+
+#### u) Fill in the missing words (answers)
+
+The use of antibiotics has greatly reduced the deaths from infectious bacterial diseases. However the evolution of strains that are resistant to antibiotics is a concern.
+Antibiotics are specific which means they only work against certain bacteria.
+
+#### u) Malaria
+
+* Type of pathogen: protist
+* Symptoms: Recurrent fever. Can be fatal.
+* Spread: Mosquitos act as a vector, passing the protist to the human bloodstream when they feed on the blood.
+* What can we do about it?: Preventing the vectors (mosquitos) from breeding.Using mosquito nets and repellents to avoid being bitten. Taking antimalarial drugs.
+
+#### n) Rose Black Spot
+
+* Type of pathogen: fungus
+* Symptoms: Purple or black spots develop on the leaves. Leaves turn yellow and fall of prematurely which reduces photosynthesis, affecting the growth of the plant.
+* Spread: Spores are carried by water or wind.
+* What can we do about it?: Use fungicides to treat the plant. Remove and destroy affected leaves.
+
+#### o) Drug testing processes
+
+* **preclinical testing:** This happens in a laboratory using cells, tissues and animals.
+* **clinical trials:** To use healthy volunteers and patients. Starting off with very low doses to check for side effects. If it is safe it is tested on patients.
+* **double-blind trials:** These tell you how effective a medicine is. Neither the patient or the doctor know whether the patient has been given a placebo or the real drug.
+
+#### v) Drug origins + discovery
+
+* The heart drug digitalis: foxglove
+* The painkiller aspirin: willow
+* The antibiotic penicillin: Penicillium mould
+* Who discovered penicillin? Alexander Fleming
+* Why is it difficult to discover new medicines? You need to find a chemical that kills bacteria without damaging human cells.
+
+#### w) New drugs + requirements before use
+
+Where do most new drugs now come from?
+Synthesised by chemists in a lab, but they might still start from a chemical extracted from a plant.
+
+What has to happen before a drug can be used?
+
+1. Test whether the drug is effective against the disease.
+2. Check that the drug is not toxic.
+3. Work out what dose to use.
+
+(Page footer text: “Page 2 of 2”)
+</DOCUMENTS>
