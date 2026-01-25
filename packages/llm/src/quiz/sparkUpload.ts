@@ -60,6 +60,8 @@ const SparkTypeAnswerQuestionSchema = z.object({
   explanation: trimmedString,
   answer: trimmedString,
   acceptableAnswers: z.array(trimmedString).max(6).optional(),
+  marks: z.number().int().min(1).max(12),
+  markScheme: trimmedString,
 });
 
 export const SparkUploadQuizQuestionSchema = z.discriminatedUnion("kind", [
@@ -75,6 +77,7 @@ export const SparkUploadQuizPayloadSchema = z.object({
   quizId: trimmedString,
   title: trimmedString,
   description: z.string().optional(),
+  gradingPrompt: trimmedString,
   topic: z.string().optional(),
   subject: z.string().optional(),
   board: z.string().optional(),
@@ -146,6 +149,8 @@ function convertTypeAnswerQuestion(
     correctFeedback: buildCorrectFeedback(question.explanation),
     answer: question.answer.trim(),
     acceptableAnswers: acceptable.length > 0 ? acceptable : undefined,
+    marks: question.marks,
+    markScheme: question.markScheme.trim(),
   };
 }
 
@@ -187,6 +192,7 @@ export function convertSparkUploadPayloadToQuizDefinition(
     id: options.quizId,
     title: title.length > 0 ? title : "Spark Quiz",
     description,
+    gradingPrompt: payload.gradingPrompt.trim(),
     topic: topic && topic.length > 0 ? topic : undefined,
     progressKey: options.quizId,
     questions,
@@ -214,6 +220,7 @@ function buildSparkUploadQuizPrompt(
     "- quizId: reuse the provided quiz identifier when supplied.",
     "- title: concise quiz title derived from the material.",
     "- description: optional single-paragraph overview of the set.",
+    "- gradingPrompt: short instruction to grade free-text answers using the mark scheme.",
     "- topic / subject / board: optional metadata when confidently deduced.",
     "- questionCount: must match the number of questions returned.",
     "- questions: ordered list of question objects.",
@@ -221,11 +228,12 @@ function buildSparkUploadQuizPrompt(
     "Question rules:",
     "- IDs should follow Q1, Q2, ... (duplicates will be normalised downstream).",
     "- Prompts must stand alone without referencing page numbers.",
+    "- Do not mention the source documents, sections, or page numbers in the questions or explanations.",
     "- Provide hints sparingly; they should nudge, not give away the answer.",
     "- Explanations must justify the correct response referencing the source.",
     "- Formulas: inline `$...$` or block `$$...$$` LaTeX is allowed; stay within KaTeX-supported math (fractions, exponents, subscripts, roots) and avoid LaTeX packages/environments.",
     "- Multiple-choice: supply 3-5 options, uncluttered text, one correct option marked by correctOptionIndex (1-based).",
-    "- Type-answer: keep answers short; include acceptableAnswers when multiple phrasings are equivalent.",
+    "- Type-answer: keep answers short; include acceptableAnswers when multiple phrasings are equivalent; include marks (3-6 preferred) and a concise markScheme.",
     "- Do not include true/false or numeric kinds; stick to multiple-choice and type-answer.",
     "",
     "Return JSON only.",

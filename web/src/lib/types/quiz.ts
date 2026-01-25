@@ -41,6 +41,8 @@ export type QuizTypeAnswerQuestion = QuizQuestionWithFeedback & {
 	answerHtml?: string;
 	acceptableAnswers?: string[];
 	placeholder?: string;
+	marks?: number;
+	markScheme?: string;
 };
 
 export type QuizInfoCardQuestion = QuizQuestionBase & {
@@ -68,6 +70,7 @@ export type QuizDefinition = {
 	id: string;
 	title: string;
 	description: string;
+	gradingPrompt?: string;
 	topic?: string;
 	estimatedMinutes?: number;
 	progressKey: string;

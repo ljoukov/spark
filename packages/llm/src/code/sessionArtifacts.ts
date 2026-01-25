@@ -90,13 +90,16 @@ function buildQuizDefinitionsPrompt(
     "- Convert each draft question into a supported quiz kind (multiple-choice or type-answer); include correctFeedback (heading/message) for graded questions and keep it friendly and brief.",
     "- Draft question type mapping guidance: mcq -> multiple-choice; short/numeric -> type-answer; code_reading -> multiple-choice or type-answer with the snippet in the prompt; multi -> rewrite into a single-answer multiple-choice (options can be combinations like “A and C”).",
     "- Every graded question MUST include a short hint and a short explanation (1-2 sentences each). Do not omit these fields or leave them blank.",
-    "- Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId; type-answer uses answer plus optional acceptableAnswers.",
+    "- Quizzes must be self-contained: do NOT mention source documents, sections, page numbers, or quotes from the materials.",
+    "- Each quiz must include a gradingPrompt: a short instruction for how to grade type-answer responses across the quiz.",
+    "- Multiple-choice options need ids/labels (A, B, C, ...), text, and correctOptionId.",
+    "- Type-answer questions must include answer, marks (integer, typically 3-6), and markScheme (short bullet list or concise rubric). acceptableAnswers is optional.",
     "- Keep prompts short, avoid jargon, and stick to the promised skills.",
     "- Populate every required field; never emit empty objects or empty strings. Every quiz must include a non-empty description and progressKey.",
     "- IDs must be stable slugs (reuse any ids in the draft input when present). Titles must be non-empty. Each quiz requires at least one question.",
-    "- JSON schema (informal): { quizzes: [ { id, title, description, progressKey, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind } ] } ] }",
+    "- JSON schema (informal): { quizzes: [ { id, title, description, progressKey, gradingPrompt, topic?, estimatedMinutes?, questions: [ { kind: 'multiple-choice' | 'type-answer' | 'info-card', id, prompt, hint (required for graded), explanation (required for graded), correctFeedback? (for graded kinds), options/answer/body depending on kind, marks/markScheme for type-answer } ] } ] }",
     "- If you are unsure about any field, copy the draft value instead of leaving it blank, and still provide a helpful hint/explanation.",
-    '- Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"}]}]}',
+    '- Sample shape (do NOT copy text, just the structure): {"quizzes":[{"id":"intro","title":"Starter Quiz","gradingPrompt":"Grade free-text answers using the mark scheme...","questions":[{"id":"intro_q1","kind":"multiple-choice","prompt":"...","options":[{"id":"A","label":"A","text":"..."},{"id":"B","label":"B","text":"..."}],"correctOptionId":"A","correctFeedback":{"heading":"Nice!","message":"Short friendly note"},"explanation":"One-line why"},{"id":"intro_q2","kind":"type-answer","prompt":"...","answer":"...","marks":4,"markScheme":"- point one\\n- point two","correctFeedback":{"heading":"Great!","message":"..."}}]}]}',
   ];
   if (lessonBrief) {
     parts.push("", "## Lesson brief (authoritative)", lessonBrief);
@@ -172,6 +175,9 @@ function rawSubsectionsToQuizzes(
     const id = asString(q.id, `quiz_${quizIndex + 1}`)!;
     const title = asString(q.title, `Quiz ${quizIndex + 1}`)!;
     const description = asString(q.description);
+    const gradingPrompt =
+      asString(q.gradingPrompt) ??
+      "Grade free-text answers using the provided mark scheme. Award partial credit and keep feedback concise.";
     const topic = asString(q.topic);
     const estimatedMinutes = asNumber(q.estimatedMinutes);
     const progressKey = asString(q.progressKey);
@@ -205,6 +211,10 @@ function rawSubsectionsToQuizzes(
 
         if (kind === "type-answer") {
           const answer = asString(rq.answer, "TODO")!;
+          const marks = asNumber(rq.marks);
+          const markScheme =
+            asString(rq.markScheme) ??
+            `Award marks for including the key idea: ${answer}.`;
           const acceptableAnswers = asArray<string>(rq.acceptableAnswers).map(
             (value) => value ?? "",
           );
@@ -227,6 +237,8 @@ function rawSubsectionsToQuizzes(
             id: questionId,
             prompt,
             answer,
+            marks: marks ?? 3,
+            markScheme,
             acceptableAnswers,
             hint,
             explanation,
@@ -283,6 +295,7 @@ function rawSubsectionsToQuizzes(
       id,
       title,
       description,
+      gradingPrompt,
       topic,
       estimatedMinutes,
       progressKey,
