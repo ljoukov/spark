@@ -88,8 +88,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					result: grading.result,
 					awardedMarks: grading.awardedMarks,
 					maxMarks: grading.maxMarks,
-					feedback: grading.feedback,
-					feedbackHtml: grading.feedbackHtml
+					feedback: grading.feedback
 				})
 			});
 		} catch (error) {

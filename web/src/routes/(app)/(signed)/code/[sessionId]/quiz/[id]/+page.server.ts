@@ -84,27 +84,12 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	}
 
 	const planItemState = sessionState.items[planItem.id] ?? null;
-	const gradeFeedbackHtml: Record<string, string> = {};
-	if (planItemState?.quiz?.questions) {
-		for (const [questionId, questionState] of Object.entries(planItemState.quiz.questions)) {
-			const feedback = questionState.grade?.feedback;
-			if (!feedback) {
-				continue;
-			}
-			const rendered = renderMarkdownOptional(feedback);
-			if (rendered) {
-				gradeFeedbackHtml[questionId] = rendered;
-			}
-		}
-	}
-
 	return {
 		planItem,
 		quiz: enrichQuizWithHtml(quiz),
 		sessionId: session.id,
 		userId,
 		sessionState,
-		planItemState,
-		gradeFeedbackHtml
+		planItemState
 	};
 };

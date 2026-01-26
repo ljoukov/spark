@@ -1,10 +1,10 @@
-import { generateText, TEXT_MODEL_ID, type LlmTextDelta } from '@spark/llm';
-import { renderMarkdownOptional } from '$lib/server/markdown';
+import { generateText, type LlmTextDelta, type LlmTextModelId } from '@spark/llm';
 
 export const DEFAULT_GRADING_PROMPT =
 	'Use GCSE Biology marking standards. Award marks for each distinct point in the mark scheme.';
 export const DEFAULT_MARK_SCHEME =
 	'Derive the mark scheme from the model answer. Award one mark per distinct correct idea.';
+const INTERACTIVE_QUIZ_GRADING_MODEL_ID: LlmTextModelId = 'gemini-flash-latest';
 
 export type GradeTypeAnswerInput = {
 	gradingPrompt: string;
@@ -20,7 +20,6 @@ export type GradeTypeAnswerResult = {
 	awardedMarks: number;
 	maxMarks: number;
 	feedback: string;
-	feedbackHtml?: string;
 	result: 'correct' | 'partial' | 'incorrect';
 };
 
@@ -33,7 +32,7 @@ async function requestGradeFromModel(
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		try {
 			const text = await generateText({
-				modelId: TEXT_MODEL_ID,
+				modelId: INTERACTIVE_QUIZ_GRADING_MODEL_ID,
 				contents: [{ role: 'user', parts: [{ type: 'text', text: prompt }] }],
 				onDelta
 			});
@@ -222,7 +221,6 @@ export async function gradeTypeAnswer(input: GradeTypeAnswerInput): Promise<Grad
 	const parsed = parseGradeOutput(rawText, input.maxMarks);
 	const awardedMarks = Math.max(0, Math.min(parsed.awardedMarks, input.maxMarks));
 	const feedback = parsed.feedback.trim();
-	const feedbackHtml = renderMarkdownOptional(feedback);
 	const result: GradeTypeAnswerResult['result'] =
 		awardedMarks >= input.maxMarks ? 'correct' : awardedMarks === 0 ? 'incorrect' : 'partial';
 
@@ -230,7 +228,6 @@ export async function gradeTypeAnswer(input: GradeTypeAnswerInput): Promise<Grad
 		awardedMarks,
 		maxMarks: input.maxMarks,
 		feedback,
-		feedbackHtml,
 		result
 	};
 }
@@ -261,7 +258,6 @@ export async function gradeTypeAnswerStreaming(
 	const parsed = parseGradeOutput(rawText, input.maxMarks);
 	const awardedMarks = Math.max(0, Math.min(parsed.awardedMarks, input.maxMarks));
 	const feedback = parsed.feedback.trim();
-	const feedbackHtml = renderMarkdownOptional(feedback);
 	const result: GradeTypeAnswerResult['result'] =
 		awardedMarks >= input.maxMarks ? 'correct' : awardedMarks === 0 ? 'incorrect' : 'partial';
 
@@ -269,7 +265,6 @@ export async function gradeTypeAnswerStreaming(
 		awardedMarks,
 		maxMarks: input.maxMarks,
 		feedback,
-		feedbackHtml,
 		result
 	};
 }
