@@ -475,7 +475,10 @@
 
 	const scoredAttempts = $derived(
 		quiz.questions
-			.map((question, index) => ({ question, attempt: attempts[index] }))
+			.map((question, index) => ({
+				question,
+				attempt: attempts[index] ?? createInitialAttempt(index === 0)
+			}))
 			.filter(
 				(
 					entry
