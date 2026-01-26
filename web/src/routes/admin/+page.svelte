@@ -22,7 +22,7 @@
 		{
 			title: 'UI previews',
 			description: 'Full-screen previews for UI smoke checks.',
-			href: '/admin/ui/quiz'
+			href: '/admin/ui'
 		}
 	] as const;
 </script>

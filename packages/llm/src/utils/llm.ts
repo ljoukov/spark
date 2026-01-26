@@ -1129,11 +1129,17 @@ export type LlmCallBaseOptions = {
 
 type OpenAiTextFormat = ResponseTextConfig["format"];
 
+export type LlmTextDelta = {
+  readonly textDelta?: string;
+  readonly thoughtDelta?: string;
+};
+
 export type LlmTextCallOptions = LlmCallBaseOptions & {
   readonly responseMimeType?: string;
   readonly responseJsonSchema?: JsonSchema;
   readonly tools?: readonly LlmToolConfig[];
   readonly openAiTextFormat?: OpenAiTextFormat;
+  readonly onDelta?: (delta: LlmTextDelta) => void;
 };
 
 // Gemini does not support tool calls when responseJsonSchema/JSON mode is used, so tools are excluded here.
@@ -2474,6 +2480,7 @@ type LlmStreamCallOptions = LlmCallBaseOptions & {
   readonly imageSize?: LlmImageSize;
   readonly tools?: readonly LlmToolConfig[];
   readonly openAiTextFormat?: OpenAiTextFormat;
+  readonly onDelta?: (delta: LlmTextDelta) => void;
 };
 
 export type LlmStreamContent = LlmContent;
@@ -2795,6 +2802,7 @@ async function llmStream({
     let responseImageBytes = 0;
     let thinkingTextChars = 0;
 
+    const onDelta = options.onDelta;
     const appendTextPart = (text: string, isThought: boolean): void => {
       if (text.length === 0) {
         return;
@@ -2805,6 +2813,13 @@ async function llmStream({
         thought: isThought ? true : undefined,
       });
       responseSnapshotWriter.appendText(text, { isThought });
+      if (onDelta) {
+        if (isThought) {
+          onDelta({ thoughtDelta: text });
+        } else {
+          onDelta({ textDelta: text });
+        }
+      }
     };
 
     const appendInlinePart = (
