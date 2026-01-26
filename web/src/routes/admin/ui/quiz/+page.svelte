@@ -28,6 +28,11 @@
 			title: 'Free-text math check',
 			description: 'Type-answer preview with LaTeX display blocks.',
 			href: '/admin/ui/quiz/free-text-1'
+		},
+		{
+			title: 'Free-text grading (biology)',
+			description: 'Mark-scheme grading layout with multi-mark answers.',
+			href: '/admin/ui/quiz/free-text-grading-1'
 		}
 	] as const;
 </script>

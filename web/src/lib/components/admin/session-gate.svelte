@@ -130,7 +130,7 @@
 <div class="min-h-[100vh] bg-background px-4 py-16">
 	<div class="mx-auto flex max-w-lg flex-col gap-10">
 		<header class="text-center">
-			<h1 class="text-3xl font-semibold text-foreground">GCSE Spark Admin</h1>
+			<h1 class="text-3xl font-semibold text-foreground">Spark Admin</h1>
 			<p class="mt-2 text-sm text-muted-foreground">
 				Secure area for internal tools. Sign in with an authorized Google account to continue.
 			</p>

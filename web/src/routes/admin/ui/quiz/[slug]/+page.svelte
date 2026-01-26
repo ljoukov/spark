@@ -6,23 +6,44 @@
 		QuizInfoCard
 	} from '$lib/components/quiz/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import type { QuizProgressStep } from '$lib/types/quiz';
+	import type { QuizFeedback, QuizProgressStep } from '$lib/types/quiz';
 	import type { PageData } from './$types';
 	import { cn } from '$lib/utils.js';
+	import { streamSse } from '$lib/client/sse';
+	import { renderMarkdownOptional } from '$lib/markdown';
+	import { z } from 'zod';
 
-	let { data }: { data: PageData } = $props();
+	const props = $props<{ data: PageData }>();
+	const data = $derived(props.data);
 
 	const quiz = $derived(data.quiz);
 	let activeIndex = $state(0);
 	const activeQuestion = $derived(quiz.questions[activeIndex]);
 	let hintVisible = $state(false);
 	let explanationVisible = $state(false);
+	let typedValue = $state('');
+	let typedFeedback = $state<QuizFeedback | null>(null);
+	let typedStatus = $state<'neutral' | 'correct' | 'incorrect'>('neutral');
+	let typedBusy = $state(false);
+	let typedBusyAction = $state<'submit' | 'dontKnow' | 'continue' | null>(null);
+	let typedSubmitPhase = $state<'submitting' | 'grading'>('submitting');
+	let typedThinking = $state('');
+	let gradingError = $state<string | null>(null);
 	const progressSteps = $derived(
 		quiz.questions.map<QuizProgressStep>((_, index) => ({
 			status: index === activeIndex ? 'active' : 'seen',
 			label: `Question ${index + 1}`
 		}))
 	);
+
+	const typeAnswerGradeResponseSchema = z.object({
+		status: z.literal('ok'),
+		result: z.enum(['correct', 'partial', 'incorrect']),
+		awardedMarks: z.number().int().nonnegative(),
+		maxMarks: z.number().int().positive(),
+		feedback: z.string().min(1),
+		feedbackHtml: z.string().optional()
+	});
 
 	$effect(() => {
 		if (!quiz.questions.length) {
@@ -38,6 +59,14 @@
 		void activeQuestion;
 		hintVisible = false;
 		explanationVisible = false;
+		typedValue = '';
+		typedFeedback = null;
+		typedStatus = 'neutral';
+		typedBusy = false;
+		typedBusyAction = null;
+		typedSubmitPhase = 'submitting';
+		typedThinking = '';
+		gradingError = null;
 	});
 
 	function handleHintRequest() {
@@ -47,6 +76,119 @@
 	function handleDontKnow() {
 		hintVisible = true;
 		explanationVisible = true;
+	}
+
+	function handleTypeInput(value: string) {
+		typedValue = value;
+		if (typedFeedback) {
+			typedFeedback = null;
+			typedStatus = 'neutral';
+			gradingError = null;
+		}
+		if (typedThinking) {
+			typedThinking = '';
+		}
+	}
+
+	function buildGradeFeedback(
+		result: z.infer<typeof typeAnswerGradeResponseSchema>
+	): QuizFeedback {
+		return {
+			message: result.feedback,
+			messageHtml: result.feedbackHtml,
+			tone: result.result === 'correct' ? 'success' : result.result === 'partial' ? 'info' : 'warning'
+		};
+	}
+
+	function appendThinking(current: string, delta: string): string {
+		const next = `${current}${delta}`;
+		const lines = next.split(/\r?\n/u);
+		if (lines.length <= 4) {
+			return next;
+		}
+		return lines.slice(-4).join('\n');
+	}
+
+	async function requestTypeAnswerGradeStream(questionId: string, answer: string) {
+		let result: z.infer<typeof typeAnswerGradeResponseSchema> | null = null;
+		await streamSse(
+			`/admin/ui/quiz/${data.slug}/grade`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ questionId, answer })
+			},
+			{
+				onEvent: (event) => {
+					if (event.event === 'thought') {
+						typedSubmitPhase = 'grading';
+						typedThinking = appendThinking(typedThinking, event.data);
+						return;
+					}
+					if (event.event === 'text') {
+						typedSubmitPhase = 'grading';
+						const nextMessage = `${typedFeedback?.message ?? ''}${event.data}`;
+						const messageHtml = renderMarkdownOptional(nextMessage);
+						typedFeedback = {
+							message: nextMessage,
+							messageHtml,
+							tone: 'info'
+						};
+						return;
+					}
+					if (event.event === 'done') {
+						const parsed = typeAnswerGradeResponseSchema.parse(JSON.parse(event.data));
+						result = parsed;
+						return;
+					}
+					if (event.event === 'error') {
+						let message = 'Unable to grade this response right now';
+						try {
+							const payload = JSON.parse(event.data) as { message?: string };
+							if (payload?.message) {
+								message = payload.message;
+							}
+						} catch {
+							// ignore
+						}
+						throw new Error(message);
+					}
+				}
+			}
+		);
+		if (!result) {
+			throw new Error('Grade stream closed without a result');
+		}
+		return result;
+	}
+
+	async function handleTypeSubmit(value: string) {
+		if (!value.trim()) {
+			return;
+		}
+		if (activeQuestion.kind !== 'type-answer') {
+			return;
+		}
+		typedBusy = true;
+		typedBusyAction = 'submit';
+		typedSubmitPhase = 'submitting';
+		typedThinking = '';
+		typedFeedback = null;
+		typedStatus = 'neutral';
+		gradingError = null;
+		try {
+			const response = await requestTypeAnswerGradeStream(activeQuestion.id, value.trim());
+			typedFeedback = buildGradeFeedback(response);
+			typedStatus = response.result === 'correct' ? 'correct' : 'incorrect';
+			typedThinking = '';
+		} catch (error) {
+			console.error('Failed to grade admin preview answer', error);
+			gradingError = 'Network error, retry';
+		} finally {
+			typedBusy = false;
+			typedBusyAction = null;
+			typedSubmitPhase = 'submitting';
+		}
 	}
 </script>
 
@@ -101,14 +243,24 @@
 					<QuizTypeAnswer
 						question={activeQuestion}
 						eyebrow={quiz.topic ?? null}
-						value=""
-						status="neutral"
+						value={typedValue}
+						status={typedStatus}
 						showHint={hintVisible}
 						showExplanation={explanationVisible}
 						showContinue={false}
+						busy={typedBusy}
+						busyAction={typedBusyAction}
+						submitPhase={typedSubmitPhase}
+						thinkingText={typedThinking || null}
+						feedback={typedFeedback}
 						onRequestHint={handleHintRequest}
 						onDontKnow={handleDontKnow}
+						onInput={(detail) => handleTypeInput(detail.value)}
+						onSubmit={(detail) => void handleTypeSubmit(detail.value)}
 					/>
+					{#if gradingError}
+						<p class="text-sm font-medium text-destructive">{gradingError}</p>
+					{/if}
 				{:else if activeQuestion.kind === 'info-card'}
 					<QuizInfoCard question={activeQuestion} status="neutral" />
 				{/if}

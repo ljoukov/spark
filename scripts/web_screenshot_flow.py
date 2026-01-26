@@ -207,6 +207,15 @@ def run() -> int:
                     else:
                         click_by_text(page, text, timeout_ms)
                     maybe_wait(page, raw_step.get("afterMs"))
+                elif action == "fill":
+                    selector = raw_step.get("selector")
+                    value = raw_step.get("value")
+                    if not isinstance(selector, str):
+                        raise SpecError("fill requires selector")
+                    if not isinstance(value, str):
+                        raise SpecError("fill requires value")
+                    page.fill(selector, value, timeout=timeout_ms)
+                    maybe_wait(page, raw_step.get("afterMs"))
                 elif action == "sleep":
                     sleep_ms = raw_step.get("ms")
                     if not isinstance(sleep_ms, int):

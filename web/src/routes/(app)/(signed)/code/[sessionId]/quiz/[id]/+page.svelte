@@ -13,6 +13,8 @@
 	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
+	import { streamSse } from '$lib/client/sse';
+	import { renderMarkdownOptional } from '$lib/markdown';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 	import { z } from 'zod';
 
@@ -28,6 +30,8 @@
 		feedback: QuizFeedback | null;
 		grade: QuizQuestionState['grade'] | null;
 		gradingError: boolean;
+		streamingThoughts: string;
+		submitPhase: 'submitting' | 'grading' | null;
 		seen: boolean;
 		dontKnow: boolean;
 		firstViewedAt: Date | null;
@@ -47,23 +51,31 @@
 
 	type TypeAnswerGradeResponse = z.infer<typeof typeAnswerGradeResponseSchema>;
 
-	let { data }: { data: PageData } = $props();
+	const props = $props<{ data: PageData }>();
+	const data = $derived(props.data);
 	const quiz = $derived(data.quiz);
+	const sessionId = $derived(data.sessionId);
+	const planItemId = $derived(data.planItem.id);
+	const sessionState = $derived(data.sessionState);
+	const planItemStateData = $derived(data.planItemState);
+	const gradeFeedbackHtml = $derived(data.gradeFeedbackHtml);
+	const quizId = $derived(data.quiz.id);
 	const SYNC_ERROR_MESSAGE =
 		"We couldn't save your latest progress. Check your connection and try again.";
 	let sessionStateStore: ReturnType<typeof createSessionStateStore> | null = null;
 	let planItemState = $state<PlanItemState | null>(null);
 	let completionSyncError = $state<string | null>(null);
 	let pendingAction = $state<'submit' | 'dontKnow' | 'continue' | null>(null);
+	let gradeFeedbackHtmlByQuestionId = $state<Record<string, string>>({});
 
 	$effect(() => {
-		const store = createSessionStateStore(data.sessionId, data.sessionState);
+		const store = createSessionStateStore(sessionId, sessionState);
 		sessionStateStore = store;
-		planItemState = data.planItemState ?? null;
+		planItemState = planItemStateData ?? null;
+		gradeFeedbackHtmlByQuestionId = gradeFeedbackHtml ?? {};
 		completionSyncError = null;
 		const stop = store.subscribe((value) => {
-			const nextPlanItemState =
-				(value.items[data.planItem.id] as PlanItemState | undefined) ?? null;
+			const nextPlanItemState = (value.items[planItemId] as PlanItemState | undefined) ?? null;
 			planItemState = nextPlanItemState;
 			if (nextPlanItemState?.status === 'completed') {
 				completionSyncError = null;
@@ -87,6 +99,8 @@
 			feedback: null,
 			grade: null,
 			gradingError: false,
+			streamingThoughts: '',
+			submitPhase: null,
 			seen,
 			dontKnow: false,
 			firstViewedAt: null,
@@ -127,15 +141,7 @@
 			};
 		}
 		if (question.kind === 'type-answer') {
-			if (resolvedStatus === 'correct') {
-				return question.correctFeedback;
-			}
-			return {
-				heading: dontKnow ? 'No worries' : "Here's the catch",
-				message: dontKnow
-					? 'Read the explanation and keep the momentum going.'
-					: 'The answer we needed appears below—study it and move forward.'
-			};
+			return null;
 		}
 		return null;
 	}
@@ -145,7 +151,6 @@
 		messageHtml?: string
 	): QuizFeedback {
 		return {
-			heading: `Score: ${grade.awardedMarks}/${grade.maxMarks}`,
 			message: grade.feedback,
 			messageHtml,
 			tone: grade.tone
@@ -153,10 +158,6 @@
 	}
 
 	function buildGradeState(response: TypeAnswerGradeResponse): QuizQuestionState['grade'] {
-		const heading =
-			response.result === 'correct'
-				? 'Full marks'
-				: `Score: ${response.awardedMarks}/${response.maxMarks}`;
 		const tone: QuizFeedback['tone'] =
 			response.result === 'correct'
 				? 'success'
@@ -167,7 +168,6 @@
 			awardedMarks: response.awardedMarks,
 			maxMarks: response.maxMarks,
 			feedback: response.feedback,
-			heading,
 			tone
 		};
 	}
@@ -176,42 +176,63 @@
 		if (question.kind !== 'type-answer') {
 			return false;
 		}
-		if (!question.markScheme || question.markScheme.trim().length === 0) {
-			return false;
-		}
 		if (typeof question.marks !== 'number' || !Number.isFinite(question.marks)) {
 			return false;
 		}
 		return true;
 	}
 
-	async function requestTypeAnswerGrade(
+	async function requestTypeAnswerGradeStream(
 		questionId: string,
-		answer: string
+		answer: string,
+		onThoughtDelta: (delta: string) => void,
+		onTextDelta: (delta: string) => void
 	): Promise<TypeAnswerGradeResponse> {
-		const response = await fetch(`/api/code/${data.sessionId}/quiz/${quiz.id}/grade`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				questionId,
-				answer
-			})
-		});
-		if (!response.ok) {
-			let details: unknown = null;
-			try {
-				details = await response.json();
-			} catch {
-				details = null;
+		let result: TypeAnswerGradeResponse | null = null;
+		await streamSse(
+			`/api/code/${sessionId}/quiz/${quizId}/grade`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					questionId,
+					answer
+				})
+			},
+			{
+				onEvent: (event) => {
+					if (event.event === 'thought') {
+						onThoughtDelta(event.data);
+						return;
+					}
+					if (event.event === 'text') {
+						onTextDelta(event.data);
+						return;
+					}
+					if (event.event === 'done') {
+						const parsed = typeAnswerGradeResponseSchema.parse(JSON.parse(event.data));
+						result = parsed;
+						return;
+					}
+					if (event.event === 'error') {
+						let message = 'Unable to grade this response right now';
+						try {
+							const payload = JSON.parse(event.data) as { message?: string };
+							if (payload?.message) {
+								message = payload.message;
+							}
+						} catch {
+							// ignore
+						}
+						throw new Error(message);
+					}
+				}
 			}
-			const message =
-				details && typeof details === 'object' && 'error' in (details as Record<string, unknown>)
-					? `Grade request failed: ${(details as Record<string, unknown>).error}`
-					: `Grade request failed with status ${response.status}`;
-			throw new Error(message);
+		);
+		if (!result) {
+			throw new Error('Grade stream closed without a result');
 		}
-		const payload = await response.json();
-		return typeAnswerGradeResponseSchema.parse(payload);
+		return result;
 	}
 
 	function cloneQuizState(state: PlanItemState): { base: PlanItemState; quiz: PlanItemQuizState } {
@@ -243,7 +264,7 @@
 		}
 		try {
 			await sessionStateStore.updateItem(
-				data.planItem.id,
+				planItemId,
 				(current) => {
 					const { base, quiz } = cloneQuizState(current);
 					const next = mutator(base, quiz);
@@ -348,7 +369,9 @@
 			const locked = status !== 'pending';
 			const showContinue = question.kind === 'info-card' ? false : status !== 'pending';
 			const gradeFeedback =
-				question.kind === 'type-answer' && saved.grade ? buildGradeFeedback(saved.grade) : null;
+				question.kind === 'type-answer' && saved.grade
+					? buildGradeFeedback(saved.grade, gradeFeedbackHtmlByQuestionId[question.id])
+					: null;
 			const feedback =
 				gradeFeedback ??
 				buildFeedback(
@@ -367,6 +390,8 @@
 				feedback,
 				grade: saved.grade ?? null,
 				gradingError: false,
+				streamingThoughts: '',
+				submitPhase: null,
 				seen,
 				dontKnow: Boolean(saved.dontKnow),
 				firstViewedAt: saved.firstViewedAt ?? null,
@@ -454,24 +479,6 @@
 		activeQuestion.kind === 'type-answer' && activeAttempt.gradingError
 			? 'Network error, retry'
 			: continueLabel
-	);
-	const activeScore = $derived(
-		activeAttempt.grade &&
-			Number.isFinite(activeAttempt.grade.awardedMarks) &&
-			Number.isFinite(activeAttempt.grade.maxMarks)
-			? {
-					awarded: activeAttempt.grade.awardedMarks,
-					max: activeAttempt.grade.maxMarks
-				}
-			: activeQuestion.kind === 'type-answer' &&
-					typeof activeQuestion.marks === 'number' &&
-					Number.isFinite(activeQuestion.marks) &&
-					activeAttempt.status !== 'pending'
-				? {
-						awarded: activeAttempt.status === 'correct' ? activeQuestion.marks : 0,
-						max: activeQuestion.marks
-					}
-				: null
 	);
 	const progressSteps = $derived(
 		quiz.questions.map<QuizProgressStep>((question, index) => {
@@ -684,6 +691,15 @@
 		}
 	}
 
+	function appendStreamingThoughts(current: string, delta: string): string {
+		const next = `${current}${delta}`;
+		const lines = next.split(/\r?\n/u);
+		if (lines.length <= 4) {
+			return next;
+		}
+		return lines.slice(-4).join('\n');
+	}
+
 	function handleTypeInput(value: string) {
 		if (pendingAction) {
 			return;
@@ -700,7 +716,9 @@
 			feedback: prev.gradingError ? null : prev.feedback,
 			grade: prev.gradingError ? null : prev.grade,
 			showContinue: prev.gradingError ? false : prev.showContinue,
-			status: prev.gradingError ? 'pending' : prev.status
+			status: prev.gradingError ? 'pending' : prev.status,
+			streamingThoughts: prev.gradingError ? '' : prev.streamingThoughts,
+			submitPhase: prev.gradingError ? null : prev.submitPhase
 		}));
 	}
 
@@ -721,55 +739,58 @@
 		const firstViewedAt = attempt.firstViewedAt ?? now;
 
 		if (!supportsServerGrading(question)) {
-		pendingAction = 'submit';
-		const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
-			entry.trim().toLowerCase()
-		);
-		const isCorrect = accepted.includes(trimmed.toLowerCase());
-		const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
-		const fallbackGrade =
-			typeof question.marks === 'number' && Number.isFinite(question.marks)
-				? {
-						awardedMarks: isCorrect ? question.marks : 0,
-						maxMarks: question.marks,
-						feedback: isCorrect
-							? 'Full marks for covering the expected points.'
-							: 'No credit for this response. Review the model answer and try again.',
-						heading: `Score: ${isCorrect ? question.marks : 0}/${question.marks}`,
-						tone: isCorrect ? 'success' : 'warning'
-					}
-				: null;
-		const feedback = fallbackGrade ? buildGradeFeedback(fallbackGrade) : buildFeedback(question, status, null, false);
+			pendingAction = 'submit';
+			const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
+				entry.trim().toLowerCase()
+			);
+			const isCorrect = accepted.includes(trimmed.toLowerCase());
+			const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
+			const fallbackGrade =
+				typeof question.marks === 'number' && Number.isFinite(question.marks)
+					? {
+							awardedMarks: isCorrect ? question.marks : 0,
+							maxMarks: question.marks,
+							feedback: isCorrect
+								? 'Full marks for covering the expected points.'
+								: 'No credit for this response. Review the model answer and try again.',
+							tone: isCorrect ? 'success' : 'warning'
+						}
+					: null;
+			const feedback = fallbackGrade
+				? buildGradeFeedback(fallbackGrade)
+				: buildFeedback(question, status, null, false);
 
-		updateAttempt(currentIndex, (prev) => ({
-			...prev,
-			value: trimmed,
-			status,
-			locked: true,
-			showContinue: true,
+			updateAttempt(currentIndex, (prev) => ({
+				...prev,
+				value: trimmed,
+				status,
+				locked: true,
+				showContinue: true,
 			feedback,
 			grade: fallbackGrade,
 			gradingError: false,
-			dontKnow: false,
-			answeredAt: now,
-			firstViewedAt
-		}));
+			streamingThoughts: '',
+			submitPhase: null,
+				dontKnow: false,
+				answeredAt: now,
+				firstViewedAt
+			}));
 
 			completionSyncError = null;
 			try {
-			await persistQuestionState(
-				question.id,
-				{
-					status,
-					typedValue: trimmed,
-					hintUsed: attempt.showHint ? true : undefined,
-					dontKnow: false,
-					firstViewedAt,
-					answeredAt: now,
-					grade: fallbackGrade ?? undefined
-				},
-				{ sync: true, markInProgress: true }
-			);
+				await persistQuestionState(
+					question.id,
+					{
+						status,
+						typedValue: trimmed,
+						hintUsed: attempt.showHint ? true : undefined,
+						dontKnow: false,
+						firstViewedAt,
+						answeredAt: now,
+						grade: fallbackGrade ?? undefined
+					},
+					{ sync: true, markInProgress: true }
+				);
 			} catch (error) {
 				console.error('Failed to sync typed answer submission', error);
 				completionSyncError = SYNC_ERROR_MESSAGE;
@@ -779,24 +800,52 @@
 			return;
 		}
 
-		pendingAction = 'continue';
+		pendingAction = 'submit';
 		updateAttempt(currentIndex, (prev) => ({
 			...prev,
 			value: trimmed,
 			status: 'pending',
 			locked: true,
-			showContinue: true,
+			showContinue: false,
 			feedback: null,
 			grade: null,
 			gradingError: false,
+			streamingThoughts: '',
+			submitPhase: 'submitting',
 			dontKnow: false,
 			answeredAt: now,
 			firstViewedAt
 		}));
 
 		let response: TypeAnswerGradeResponse;
+		let streamingFeedback = '';
+		let streamingThoughts = '';
 		try {
-			response = await requestTypeAnswerGrade(question.id, trimmed);
+			response = await requestTypeAnswerGradeStream(
+				question.id,
+				trimmed,
+				(delta) => {
+					streamingThoughts = appendStreamingThoughts(streamingThoughts, delta);
+					updateAttempt(currentIndex, (prev) => ({
+						...prev,
+						streamingThoughts,
+						submitPhase: 'grading'
+					}));
+				},
+				(delta) => {
+					streamingFeedback = `${streamingFeedback}${delta}`;
+					const messageHtml = renderMarkdownOptional(streamingFeedback);
+					updateAttempt(currentIndex, (prev) => ({
+						...prev,
+						submitPhase: 'grading',
+						feedback: {
+							message: streamingFeedback,
+							messageHtml,
+							tone: 'info'
+						}
+					}));
+				}
+			);
 		} catch (error) {
 			console.error('Failed to grade typed answer submission', error);
 			updateAttempt(currentIndex, (prev) => ({
@@ -806,10 +855,19 @@
 				showContinue: true,
 				feedback: null,
 				grade: null,
-				gradingError: true
+				gradingError: true,
+				streamingThoughts: '',
+				submitPhase: null
 			}));
 			pendingAction = null;
 			return;
+		}
+
+		if (response.feedbackHtml) {
+			gradeFeedbackHtmlByQuestionId = {
+				...gradeFeedbackHtmlByQuestionId,
+				[question.id]: response.feedbackHtml
+			};
 		}
 
 		const grade = buildGradeState(response);
@@ -825,6 +883,8 @@
 			feedback,
 			grade,
 			gradingError: false,
+			streamingThoughts: '',
+			submitPhase: null,
 			dontKnow: false,
 			answeredAt: now,
 			firstViewedAt
@@ -920,12 +980,12 @@
 		}
 		try {
 			await sessionStateStore.markStatus(
-				data.planItem.id,
+				planItemId,
 				'completed',
 				{
 					completedAt
 				},
-				{ quizCompletion: { quizId: quiz.id } }
+				{ quizCompletion: { quizId } }
 			);
 			completionSyncError = null;
 			return true;
@@ -954,7 +1014,7 @@
 			await persistLastQuestionIndex(currentIndex, { sync: true });
 			const synced = await finalizeCompletion('manual');
 			if (synced && typeof window !== 'undefined') {
-				await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+				await goto(`/code/${sessionId}`, { replaceState: true, invalidateAll: true });
 				return true;
 			}
 		} catch (error) {
@@ -971,7 +1031,7 @@
 		completionSyncError = null;
 		const synced = await finalizeCompletion('manual');
 		if (synced && typeof window !== 'undefined') {
-			await goto(`/code/${data.sessionId}`, { replaceState: true, invalidateAll: true });
+			await goto(`/code/${sessionId}`, { replaceState: true, invalidateAll: true });
 		} else {
 			completionSyncError = SYNC_ERROR_MESSAGE;
 		}
@@ -1027,7 +1087,7 @@
 			return;
 		}
 		try {
-			await goto(`/code/${data.sessionId}`, {
+			await goto(`/code/${sessionId}`, {
 				replaceState: true,
 				invalidateAll: true
 			});
@@ -1110,6 +1170,8 @@
 				locked={activeAttempt.locked}
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
+				submitPhase={activeAttempt.submitPhase ?? 'submitting'}
+				thinkingText={activeAttempt.streamingThoughts || null}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
@@ -1130,7 +1192,6 @@
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
-				score={activeScore}
 				showContinue={activeAttempt.showContinue}
 				continueLabel={activeContinueLabel}
 				onInput={(detail) => handleTypeInput(detail.value)}
