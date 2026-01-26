@@ -129,10 +129,8 @@ export function parseGradeOutput(rawText: string, maxMarks: number): GradeOutput
 		throw new Error('Empty grading response');
 	}
 	const feedbackMatch = trimmed.match(/%FEEDBACK%:\s*([\s\S]*)/i);
-	const feedbackRaw =
-		feedbackMatch?.[1]?.trim() ??
-		trimmed.match(/(###\s*\(a\)[\s\S]*)/i)?.[1]?.trim() ??
-		trimmed;
+	const sectionMatch = trimmed.match(/(###\s*\(a\)[\s\S]*)/i);
+	const feedbackRaw = feedbackMatch?.[1]?.trim() ?? sectionMatch?.[1]?.trim();
 	if (!feedbackRaw) {
 		throw new Error('Missing feedback in grading response');
 	}
@@ -143,7 +141,7 @@ export function parseGradeOutput(rawText: string, maxMarks: number): GradeOutput
 	let parsedMaxMarks = maxMatch ? Number.parseInt(maxMatch[1], 10) : maxMarks;
 
 	if (!Number.isFinite(awardedMarks)) {
-		const markMatch = feedbackRaw.match(/Mark:\s*\**\s*(\d+)\s*\/\s*(\d+)/i);
+		const markMatch = feedbackRaw.match(/Mark:\s*.*?(\d+)\s*\/\s*(\d+)/i);
 		if (markMatch) {
 			awardedMarks = Number.parseInt(markMatch[1], 10);
 			parsedMaxMarks = Number.parseInt(markMatch[2], 10);
@@ -169,7 +167,7 @@ function normalizeMarkingPointsSection(feedback: string): string {
 	for (const line of lines) {
 		const trimmed = line.trim();
 		const isHeading = /^###\s+/i.test(trimmed);
-		const isSectionC = /^###\s*\(c\)\b/i.test(trimmed);
+		const isSectionC = /^###\s*\(c\)\s*/i.test(trimmed);
 
 		if (isHeading) {
 			inMarkingSection = isSectionC;
