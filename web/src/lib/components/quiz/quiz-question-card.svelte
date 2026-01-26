@@ -161,7 +161,7 @@
 						{@html feedback.messageHtml}
 					</div>
 				{:else}
-					<p class="mt-1 text-base leading-relaxed">{feedback.message}</p>
+					<p class="mt-1 whitespace-pre-wrap text-base leading-relaxed">{feedback.message}</p>
 				{/if}
 			</div>
 		{/if}
@@ -197,6 +197,14 @@
 	.markdown :global(ol) {
 		margin: 0.5rem 0 0.75rem 1.25rem;
 		padding: 0;
+	}
+
+	.markdown :global(ul) {
+		list-style: disc;
+	}
+
+	.markdown :global(ol) {
+		list-style: decimal;
 	}
 
 	.markdown :global(li + li) {

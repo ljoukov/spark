@@ -170,7 +170,7 @@
 					class="size-10 rounded-lg border border-sidebar-border object-cover"
 				/>
 				<div>
-					<p class="font-semibold">GCSE Spark</p>
+					<p class="font-semibold">Spark</p>
 					<p class="text-xs text-sidebar-foreground/70">Admin tools</p>
 				</div>
 			</div>

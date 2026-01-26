@@ -1,7 +1,6 @@
 <script lang="ts">
 	import QuizQuestionCard from './quiz-question-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import type { QuizFeedback, QuizTypeAnswerQuestion } from '$lib/types/quiz';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
@@ -14,7 +13,6 @@
 		showHint?: boolean;
 		locked?: boolean;
 		feedback?: QuizFeedback | null;
-		score?: { awarded: number; max: number } | null;
 		showExplanation?: boolean;
 		showContinue?: boolean;
 		answerLabel?: string;
@@ -25,6 +23,8 @@
 		eyebrow?: string | null;
 		busy?: boolean;
 		busyAction?: BusyAction | null;
+		thinkingText?: string | null;
+		submitPhase?: 'submitting' | 'grading';
 		onInput?: (detail: { value: string }) => void;
 		onSubmit?: (detail: { value: string }) => void;
 		onRequestHint?: () => void;
@@ -39,7 +39,6 @@
 		showHint = false,
 		locked = false,
 		feedback = null,
-		score = null,
 		showExplanation: showExplanationProp = undefined,
 		showContinue = false,
 		answerLabel = 'Submit',
@@ -50,6 +49,8 @@
 		eyebrow = undefined,
 		busy = false,
 		busyAction = null,
+		thinkingText = null,
+		submitPhase: submitPhaseProp = 'submitting',
 		onInput = undefined,
 		onSubmit = undefined,
 		onRequestHint = undefined,
@@ -57,9 +58,29 @@
 		onContinue = undefined
 	}: Props = $props();
 
+	const MAX_LINES = 7;
+	const MAX_CHARS = 1000;
+	let textareaEl = $state<HTMLTextAreaElement | null>(null);
+
+	function resizeTextarea() {
+		if (!textareaEl) {
+			return;
+		}
+		textareaEl.style.height = 'auto';
+		const style = getComputedStyle(textareaEl);
+		const lineHeight = Number.parseFloat(style.lineHeight) || 20;
+		const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+		const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+		const maxHeight = lineHeight * MAX_LINES + paddingTop + paddingBottom;
+		const nextHeight = Math.min(textareaEl.scrollHeight, maxHeight);
+		textareaEl.style.height = `${nextHeight}px`;
+		textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+	}
+
 	function handleInput(event: Event) {
-		const target = event.target as HTMLInputElement;
+		const target = event.target as HTMLTextAreaElement;
 		value = target.value;
+		resizeTextarea();
 		onInput?.({ value });
 	}
 
@@ -83,19 +104,25 @@
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && !event.shiftKey) {
+		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 			event.preventDefault();
 			handleSubmit();
 		}
 	}
 
 	const revealExplanation = $derived(showExplanationProp ?? statusProp !== 'neutral');
-	const showAnswerPanel = $derived(statusProp !== 'neutral');
 	const trimmedValue = $derived(value.trim());
 	const isSubmitBusy = $derived(busy && busyAction === 'submit');
 	const isDontKnowBusy = $derived(busy && busyAction === 'dontKnow');
 	const isContinueBusy = $derived(busy && busyAction === 'continue');
 	const inputDisabled = $derived(locked || busy);
+	const submitPhase = $derived(submitPhaseProp ?? 'submitting');
+
+	$effect(() => {
+		void value;
+		resizeTextarea();
+	});
+
 </script>
 
 <QuizQuestionCard
@@ -107,58 +134,40 @@
 	hintHtml={question.hintHtml}
 	{showHint}
 	{feedback}
-	explanation={question.explanation}
-	explanationHtml={question.explanationHtml}
 	showExplanation={revealExplanation}
 >
-		<div class="space-y-4">
-			<div class="flex items-center justify-between gap-3">
-				<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
-					Your answer
-				</p>
-				{#if question.marks}
-					<span class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
-						{question.marks} mark{question.marks === 1 ? '' : 's'}
-					</span>
-				{/if}
-			</div>
-			<Input
-				class="h-12 w-full rounded-2xl border-2 border-input bg-background px-4 text-base shadow-sm transition-colors focus-visible:border-ring"
-				type="text"
-				bind:value
+	<div class="space-y-3">
+		{#if question.marks}
+			<p class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
+				{question.marks} mark{question.marks === 1 ? '' : 's'}
+			</p>
+		{/if}
+		<textarea
+			class="min-h-[2.75rem] w-full resize-none rounded-2xl border-2 border-input bg-background px-4 py-3 text-base shadow-sm transition-colors focus-visible:border-ring"
+			bind:this={textareaEl}
+			bind:value
 			oninput={handleInput}
 			onkeydown={handleKeyDown}
 			disabled={inputDisabled}
-				autocomplete="off"
-				spellcheck="false"
-				{placeholder}
-			/>
-			{#if score && Number.isFinite(score.awarded) && Number.isFinite(score.max)}
-				<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/70 uppercase">
-					Your answer: {score.awarded} / {score.max}
-				</p>
-			{/if}
-		</div>
+			autocomplete="off"
+			spellcheck="false"
+			rows={1}
+			maxlength={MAX_CHARS}
+			aria-label="Answer"
+			{placeholder}
+		></textarea>
+	</div>
 
-	{#if showAnswerPanel}
-		<div
-			class="rounded-2xl border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-		>
-			<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/80 uppercase">
-				Correct answer
+	{#if thinkingText}
+		<div class="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-primary/90">
+			<p class="text-[0.65rem] font-semibold tracking-[0.22em] text-primary/70 uppercase">
+				Thinking
 			</p>
-			<p class="mt-1 text-base leading-relaxed text-foreground/90">
-				{#if question.answerHtml}
-					<span class="markdown">{@html question.answerHtml}</span>
-				{:else}
-					{question.answer}
-				{/if}
-			</p>
-			{#if question.acceptableAnswers?.length}
-				<p class="mt-3 text-sm text-muted-foreground/90">
-					Also accepted: {question.acceptableAnswers.join(', ')}
-				</p>
-			{/if}
+			<div
+				class="mt-1 h-[5.25rem] overflow-hidden whitespace-pre-wrap text-xs leading-5 text-foreground/80"
+			>
+				{thinkingText}
+			</div>
 		</div>
 	{/if}
 
@@ -200,7 +209,7 @@
 							<span
 								class="mr-2 inline-flex size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
 							></span>
-							<span>Submitting…</span>
+							<span>{submitPhase === 'submitting' ? 'Submitting…' : 'Grading…'}</span>
 						{:else}
 							{answerLabel}
 						{/if}

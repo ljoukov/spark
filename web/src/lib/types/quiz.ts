@@ -13,9 +13,12 @@ export type QuizQuestionBase = {
 	promptHtml?: string;
 	hint?: string;
 	hintHtml?: string;
+	audioLabel?: string;
+};
+
+export type QuizQuestionWithExplanation = QuizQuestionBase & {
 	explanation?: string;
 	explanationHtml?: string;
-	audioLabel?: string;
 };
 
 export type QuizChoiceOption = {
@@ -25,7 +28,7 @@ export type QuizChoiceOption = {
 	textHtml?: string;
 };
 
-export type QuizQuestionWithFeedback = QuizQuestionBase & {
+export type QuizQuestionWithFeedback = QuizQuestionWithExplanation & {
 	correctFeedback: QuizFeedback;
 };
 
@@ -35,7 +38,8 @@ export type QuizMultipleChoiceQuestion = QuizQuestionWithFeedback & {
 	correctOptionId: string;
 };
 
-export type QuizTypeAnswerQuestion = QuizQuestionWithFeedback & {
+export type QuizTypeAnswerQuestion = QuizQuestionBase & {
+	correctFeedback: QuizFeedback;
 	kind: 'type-answer';
 	answer: string;
 	answerHtml?: string;

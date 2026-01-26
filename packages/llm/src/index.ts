@@ -10,6 +10,7 @@ export * from "./code/generateStory";
 export * from "./code/generateSession";
 export * from "./code/sessionGenerationAgent";
 export * from "./code/sessionArtifacts";
+export * from "./code/sessionLlm";
 export * from "./code/problemValidation";
 export * from "./code/welcomeTemplates";
 export * from "./utils/env";

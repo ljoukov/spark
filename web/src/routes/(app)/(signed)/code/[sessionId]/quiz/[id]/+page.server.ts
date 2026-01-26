@@ -29,9 +29,9 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 		questions: quiz.questions.map((question) => {
 			const promptHtml = renderMarkdownOptional(question.prompt);
 			const hintHtml = renderMarkdownOptional(question.hint);
-			const explanationHtml = renderMarkdownOptional(question.explanation);
 
 			if (question.kind === 'multiple-choice') {
+				const explanationHtml = renderMarkdownOptional(question.explanation);
 				return {
 					...question,
 					promptHtml,
@@ -53,7 +53,6 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 					...question,
 					promptHtml,
 					hintHtml,
-					explanationHtml,
 					bodyHtml: renderMarkdownOptional(question.body)
 				} satisfies QuizInfoCardQuestion;
 			}
@@ -62,7 +61,6 @@ function enrichQuizWithHtml(quiz: SchemaQuizDefinition): UiQuizDefinition {
 				...question,
 				promptHtml,
 				hintHtml,
-				explanationHtml,
 				answerHtml: renderAnswer(question.answer),
 				correctFeedback: {
 					...question.correctFeedback,
@@ -85,12 +83,28 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw error(404, { message: 'Quiz definition not found' });
 	}
 
+	const planItemState = sessionState.items[planItem.id] ?? null;
+	const gradeFeedbackHtml: Record<string, string> = {};
+	if (planItemState?.quiz?.questions) {
+		for (const [questionId, questionState] of Object.entries(planItemState.quiz.questions)) {
+			const feedback = questionState.grade?.feedback;
+			if (!feedback) {
+				continue;
+			}
+			const rendered = renderMarkdownOptional(feedback);
+			if (rendered) {
+				gradeFeedbackHtml[questionId] = rendered;
+			}
+		}
+	}
+
 	return {
 		planItem,
 		quiz: enrichQuizWithHtml(quiz),
 		sessionId: session.id,
 		userId,
 		sessionState,
-		planItemState: sessionState.items[planItem.id] ?? null
+		planItemState,
+		gradeFeedbackHtml
 	};
 };

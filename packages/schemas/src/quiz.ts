@@ -20,13 +20,22 @@ const QuizQuestionBaseSchema = z.object({
   id: trimmedString,
   prompt: z.string().min(1),
   hint: z.string().optional(),
-  explanation: z.string().optional(),
   audioLabel: z.string().optional(),
 });
 
-const QuizQuestionWithFeedbackSchema = QuizQuestionBaseSchema.extend({
+const QuizQuestionWithExplanationSchema = QuizQuestionBaseSchema.extend({
+  explanation: z.string().optional(),
+});
+
+const QuizQuestionWithFeedbackSchema = QuizQuestionWithExplanationSchema.extend({
   correctFeedback: QuizFeedbackSchema,
 });
+
+const QuizQuestionWithFeedbackNoExplanationSchema = QuizQuestionBaseSchema.extend(
+  {
+    correctFeedback: QuizFeedbackSchema,
+  },
+);
 
 export const QuizMultipleChoiceSchema = QuizQuestionWithFeedbackSchema.extend({
   kind: z.literal("multiple-choice"),
@@ -34,14 +43,15 @@ export const QuizMultipleChoiceSchema = QuizQuestionWithFeedbackSchema.extend({
   correctOptionId: trimmedString,
 });
 
-export const QuizTypeAnswerSchema = QuizQuestionWithFeedbackSchema.extend({
-  kind: z.literal("type-answer"),
-  answer: z.string().min(1),
-  acceptableAnswers: z.array(trimmedString).optional(),
-  placeholder: z.string().optional(),
-  marks: z.number().int().min(1).max(20).optional(),
-  markScheme: z.string().min(1).optional(),
-});
+export const QuizTypeAnswerSchema =
+  QuizQuestionWithFeedbackNoExplanationSchema.extend({
+    kind: z.literal("type-answer"),
+    answer: z.string().min(1),
+    acceptableAnswers: z.array(trimmedString).optional(),
+    placeholder: z.string().optional(),
+    marks: z.number().int().min(1).max(20).optional(),
+    markScheme: z.string().min(1).optional(),
+  });
 
 export const QuizInfoCardSchema = QuizQuestionBaseSchema.extend({
   kind: z.literal("info-card"),
