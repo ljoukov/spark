@@ -1,0 +1,40 @@
+{
+  "url": "http://127.0.0.1:8080/admin/ui/quiz/free-text-grading-1",
+  "viewport": {"width": 1400, "height": 2400},
+  "fullPage": true,
+  "timeoutMs": 60000,
+  "waitUntil": "domcontentloaded",
+  "headless": true,
+  "steps": [
+    {"action": "waitFor", "selector": "textarea[aria-label=\"Answer\"]"},
+    {
+      "action": "fill",
+      "selector": "textarea[aria-label=\"Answer\"]",
+      "value": "have protected sex only"
+    },
+    {"action": "clickText", "text": "Submit"},
+    {"action": "waitFor", "selector": "text=Grading"},
+    {"action": "waitFor", "selector": "button:has-text(\"Submit\"):not([disabled])"},
+    {"action": "screenshot", "path": "01-wrong.jpg", "quality": 90},
+
+    {
+      "action": "fill",
+      "selector": "textarea[aria-label=\"Answer\"]",
+      "value": "Because the disease first needs to fight and immobilise the immune system so that when the person gets another disease the immune system won't be able to fight back."
+    },
+    {"action": "clickText", "text": "Submit"},
+    {"action": "waitFor", "selector": "text=Grading"},
+    {"action": "waitFor", "selector": "button:has-text(\"Submit\"):not([disabled])"},
+    {"action": "screenshot", "path": "02-incomplete.jpg", "quality": 90},
+
+    {
+      "action": "fill",
+      "selector": "textarea[aria-label=\"Answer\"]",
+      "value": "Early HIV symptoms are often mild or flu-like (fever, sore throat, rash) or short-lived. In AIDS, the immune system is severely weakened so opportunistic infections and cancers cause serious symptoms and weight loss. The delay happens because HIV gradually destroys T helper cells over years; at first the immune system keeps the virus under control, and AIDS only develops once T cell counts fall very low."
+    },
+    {"action": "clickText", "text": "Submit"},
+    {"action": "waitFor", "selector": "text=Grading"},
+    {"action": "waitFor", "selector": "button:has-text(\"Submit\"):not([disabled])"},
+    {"action": "screenshot", "path": "03-correct.jpg", "quality": 90}
+  ]
+}
