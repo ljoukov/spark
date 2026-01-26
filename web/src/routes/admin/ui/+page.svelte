@@ -40,7 +40,9 @@
 		</Card.Header>
 		<Card.Content class="grid gap-3 md:grid-cols-2">
 			{#each widgets as widget}
-				<div class="flex h-full flex-col justify-between gap-4 rounded-xl border border-border/70 p-4">
+				<div
+					class="flex h-full flex-col justify-between gap-4 rounded-xl border border-border/70 p-4"
+				>
 					<div class="space-y-1">
 						<p class="text-sm font-semibold text-foreground">{widget.title}</p>
 						<p class="text-xs text-muted-foreground">{widget.description}</p>
@@ -56,7 +58,7 @@
 						<span
 							class={cn(
 								buttonVariants({ variant: 'secondary', size: 'sm' }),
-								'self-start pointer-events-none opacity-60'
+								'pointer-events-none self-start opacity-60'
 							)}
 						>
 							{widget.cta}
