@@ -111,33 +111,34 @@
 	explanationHtml={question.explanationHtml}
 	showExplanation={revealExplanation}
 >
-	<div class="space-y-4">
-		<div class="flex items-center justify-between gap-3">
-			<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
-				Your answer
-			</p>
-				{#if score && Number.isFinite(score.awarded) && Number.isFinite(score.max)}
+		<div class="space-y-4">
+			<div class="flex items-center justify-between gap-3">
+				<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
+					Your answer
+				</p>
+				{#if question.marks}
 					<span class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
-						Score: {score.awarded}/{score.max}
+						{question.marks} mark{question.marks === 1 ? '' : 's'}
 					</span>
-			{:else if question.marks}
-				<span class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
-					{question.marks} mark{question.marks === 1 ? '' : 's'}
-				</span>
-			{/if}
-		</div>
-		<Input
-			class="h-12 w-full rounded-2xl border-2 border-input bg-background px-4 text-base shadow-sm transition-colors focus-visible:border-ring"
-			type="text"
-			bind:value
+				{/if}
+			</div>
+			<Input
+				class="h-12 w-full rounded-2xl border-2 border-input bg-background px-4 text-base shadow-sm transition-colors focus-visible:border-ring"
+				type="text"
+				bind:value
 			oninput={handleInput}
 			onkeydown={handleKeyDown}
 			disabled={inputDisabled}
-			autocomplete="off"
-			spellcheck="false"
-			{placeholder}
-		/>
-	</div>
+				autocomplete="off"
+				spellcheck="false"
+				{placeholder}
+			/>
+			{#if score && Number.isFinite(score.awarded) && Number.isFinite(score.max)}
+				<p class="text-xs font-semibold tracking-[0.22em] text-muted-foreground/70 uppercase">
+					Your answer: {score.awarded} / {score.max}
+				</p>
+			{/if}
+		</div>
 
 	{#if showAnswerPanel}
 		<div
