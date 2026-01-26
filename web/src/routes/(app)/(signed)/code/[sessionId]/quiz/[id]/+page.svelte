@@ -41,7 +41,8 @@
 		result: z.enum(['correct', 'partial', 'incorrect']),
 		awardedMarks: z.number().int().nonnegative(),
 		maxMarks: z.number().int().positive(),
-		feedback: z.string().min(1)
+		feedback: z.string().min(1),
+		feedbackHtml: z.string().optional()
 	});
 
 	type TypeAnswerGradeResponse = z.infer<typeof typeAnswerGradeResponseSchema>;
@@ -139,10 +140,14 @@
 		return null;
 	}
 
-	function buildGradeFeedback(grade: NonNullable<QuizQuestionState['grade']>): QuizFeedback {
+	function buildGradeFeedback(
+		grade: NonNullable<QuizQuestionState['grade']>,
+		messageHtml?: string
+	): QuizFeedback {
 		return {
 			heading: `Score: ${grade.awardedMarks}/${grade.maxMarks}`,
 			message: grade.feedback,
+			messageHtml,
 			tone: grade.tone
 		};
 	}
@@ -169,9 +174,6 @@
 
 	function supportsServerGrading(question: QuizQuestion): boolean {
 		if (question.kind !== 'type-answer') {
-			return false;
-		}
-		if (!quiz.gradingPrompt || quiz.gradingPrompt.trim().length === 0) {
 			return false;
 		}
 		if (!question.markScheme || question.markScheme.trim().length === 0) {
@@ -812,7 +814,7 @@
 
 		const grade = buildGradeState(response);
 		const status: AttemptStatus = response.result === 'correct' ? 'correct' : 'incorrect';
-		const feedback = buildGradeFeedback(grade);
+		const feedback = buildGradeFeedback(grade, response.feedbackHtml);
 
 		updateAttempt(currentIndex, (prev) => ({
 			...prev,
