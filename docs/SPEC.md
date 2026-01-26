@@ -37,11 +37,11 @@ Example spec:
   "headless": true,
   "steps": [
     { "action": "waitFor", "selector": "text=LOGIN" },
-    { "action": "screenshot", "path": "01-landing.png" },
+    { "action": "screenshot", "path": "01-landing.jpg", "quality": 90 },
     { "action": "click", "selector": "text=LOGIN" },
-    { "action": "screenshot", "path": "02-after-login-click.png", "afterMs": 100 },
+    { "action": "screenshot", "path": "02-after-login-click.jpg", "afterMs": 100, "quality": 90 },
     { "action": "clickText", "text": "Continue with Google" },
-    { "action": "screenshot", "path": "03-after-google-click.png", "afterMs": 100 }
+    { "action": "screenshot", "path": "03-after-google-click.jpg", "afterMs": 100, "quality": 90 }
   ]
 }
 ```
@@ -51,7 +51,7 @@ Run (outputs relative screenshots into the specified output dir):
 ```bash
 python3 -m pip install playwright
 python3 -m playwright install chromium
-python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir /tmp/spark-shots
+python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir screenshots/webflow
 ```
 
 #### 0.1.1) Local No-Auth Mode (Test User)
@@ -104,6 +104,7 @@ Manual checks:
 
 Automated screenshots (Playwright template):
 - Create a temporary JSON spec outside the repo (e.g. `/tmp/spark-webflow.json`) listing each click/wait and every screenshot.
+- Save repo screenshots under `screenshots/<flow>/` (not `.logs/`) and use `.jpg` with `quality: 90`.
 - Use a consistent viewport and include an explicit wait after navigation or actions that trigger spinners.
 
 Example run:
@@ -111,7 +112,7 @@ Example run:
 ```
 python3 -m pip install playwright
 python3 -m playwright install chromium
-python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir /tmp/spark-shots
+python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir screenshots/webflow
 ```
 
 Recommended defaults:
