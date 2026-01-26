@@ -454,7 +454,11 @@
 			: continueLabel
 	);
 	const activeScore = $derived(() => {
-		if (activeAttempt.grade) {
+		if (
+			activeAttempt.grade &&
+			Number.isFinite(activeAttempt.grade.awardedMarks) &&
+			Number.isFinite(activeAttempt.grade.maxMarks)
+		) {
 			return {
 				awarded: activeAttempt.grade.awardedMarks,
 				max: activeAttempt.grade.maxMarks
