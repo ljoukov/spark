@@ -47,7 +47,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_body', issues: error.issues }, { status: 400 });
 		}
-		return json({ error: 'invalid_body', message: 'Unable to parse request body' }, { status: 400 });
+		return json(
+			{ error: 'invalid_body', message: 'Unable to parse request body' },
+			{ status: 400 }
+		);
 	}
 
 	const session = await getSession(userId, sessionId);

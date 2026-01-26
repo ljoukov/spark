@@ -3004,7 +3004,9 @@ async function llmStream({
           input: chatGptInput.input,
           ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
           include: ["reasoning.encrypted_content"],
-          ...(chatGptReasoningPayload ? { reasoning: chatGptReasoningPayload } : {}),
+          ...(chatGptReasoningPayload
+            ? { reasoning: chatGptReasoningPayload }
+            : {}),
         };
         const result = await collectChatGptCodexResponse({ request });
         if (result.model) {
@@ -3766,7 +3768,9 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
       const paths = Array.isArray(record.paths) ? record.paths : [];
       const count = paths.length > 0 ? `count=${paths.length}` : "";
       const sample =
-        paths.length > 0 ? `sample=${truncateForLog(String(paths[0]), 80)}` : "";
+        paths.length > 0
+          ? `sample=${truncateForLog(String(paths[0]), 80)}`
+          : "";
       return [count, sample].filter(Boolean).join(" ");
     }
     case "read_file_summary": {
@@ -4089,185 +4093,187 @@ export async function runToolLoop(
         }
       }
     } else {
-    const openAiTools = buildOpenAiFunctionTools(options.tools);
-    const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-      openAiModelId,
-      options.openAiReasoningEffort,
-    );
-    const openAiTextConfig: ResponseTextConfig = {
-      format: { type: "text" },
-      verbosity: resolveOpenAiVerbosity(openAiModelId),
-    };
-    const openAiReasoningPayload = {
-      effort: toOpenAiReasoningEffort(openAiReasoningEffort),
-      summary: "detailed" as const,
-    };
-    let previousResponseId: string | undefined;
-    let totalCostUsd = 0;
-    const loopStartedAt = Date.now();
-    let input: ResponseInput = toOpenAiInput(contents);
-    let debugPromptContents: LlmContent[] = [...contents];
-    for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-      reporter.log(`OpenAI step ${stepIndex + 1}`);
-      const promptContents = openAiInputToDebugContents(input);
-      const callHandle = reporter.startModelCall({
-        modelId: options.modelId,
-        uploadBytes: estimateContentsUploadBytes(promptContents),
-      });
-      recordPromptUsage(callHandle, promptContents);
-      try {
-        const requestConfig = {
-          ...(previousResponseId
-            ? { previous_response_id: previousResponseId }
-            : {}),
-          ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
-          ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
-          reasoning: openAiReasoningPayload,
-          text: openAiTextConfig,
-        };
-        const startedAt = Date.now();
-        const response = await runOpenAiCall(async (client) =>
-          client.responses.create({
-            model: openAiModelId,
-            input,
-            ...requestConfig,
-          }),
-        );
-        const elapsedMs = Date.now() - startedAt;
-        if (response.error) {
-          const message =
-            typeof response.error.message === "string"
-              ? response.error.message
-              : "OpenAI response failed";
-          throw new Error(message);
-        }
-        if (
-          response.status &&
-          response.status !== "completed" &&
-          response.status !== "in_progress"
-        ) {
-          const detail = response.incomplete_details?.reason;
-          throw new Error(
-            `OpenAI response status ${response.status}${
-              detail ? ` (${detail})` : ""
-            }`,
-          );
-        }
+      const openAiTools = buildOpenAiFunctionTools(options.tools);
+      const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
+        openAiModelId,
+        options.openAiReasoningEffort,
+      );
+      const openAiTextConfig: ResponseTextConfig = {
+        format: { type: "text" },
+        verbosity: resolveOpenAiVerbosity(openAiModelId),
+      };
+      const openAiReasoningPayload = {
+        effort: toOpenAiReasoningEffort(openAiReasoningEffort),
+        summary: "detailed" as const,
+      };
+      let previousResponseId: string | undefined;
+      let totalCostUsd = 0;
+      const loopStartedAt = Date.now();
+      let input: ResponseInput = toOpenAiInput(contents);
+      let debugPromptContents: LlmContent[] = [...contents];
+      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
+        reporter.log(`OpenAI step ${stepIndex + 1}`);
+        const promptContents = openAiInputToDebugContents(input);
+        const callHandle = reporter.startModelCall({
+          modelId: options.modelId,
+          uploadBytes: estimateContentsUploadBytes(promptContents),
+        });
+        recordPromptUsage(callHandle, promptContents);
         try {
-          await writeToolLoopDebugSnapshot({
-            debug: options.debug,
-            modelId: openAiModelId,
-            step: stepIndex + 1,
-            maxSteps,
-            input,
-            debugPromptContents,
-            response,
-            elapsedMs,
-            requestConfig,
+          const requestConfig = {
+            ...(previousResponseId
+              ? { previous_response_id: previousResponseId }
+              : {}),
+            ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
+            ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
+            reasoning: openAiReasoningPayload,
+            text: openAiTextConfig,
+          };
+          const startedAt = Date.now();
+          const response = await runOpenAiCall(async (client) =>
+            client.responses.create({
+              model: openAiModelId,
+              input,
+              ...requestConfig,
+            }),
+          );
+          const elapsedMs = Date.now() - startedAt;
+          if (response.error) {
+            const message =
+              typeof response.error.message === "string"
+                ? response.error.message
+                : "OpenAI response failed";
+            throw new Error(message);
+          }
+          if (
+            response.status &&
+            response.status !== "completed" &&
+            response.status !== "in_progress"
+          ) {
+            const detail = response.incomplete_details?.reason;
+            throw new Error(
+              `OpenAI response status ${response.status}${
+                detail ? ` (${detail})` : ""
+              }`,
+            );
+          }
+          try {
+            await writeToolLoopDebugSnapshot({
+              debug: options.debug,
+              modelId: openAiModelId,
+              step: stepIndex + 1,
+              maxSteps,
+              input,
+              debugPromptContents,
+              response,
+              elapsedMs,
+              requestConfig,
+            });
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            reporter.log(`failed to write debug snapshot: ${message}`);
+          }
+          const reasoningSummary = extractOpenAiReasoningSummary(response);
+          if (reasoningSummary) {
+            reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
+          }
+          const usageTokens = extractOpenAiUsageTokens(response.usage);
+          const resolvedModelId = response.model ?? openAiModelId;
+          reporter.recordModelUsage(callHandle, {
+            modelVersion: resolvedModelId,
+            tokens: usageTokens,
           });
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          reporter.log(`failed to write debug snapshot: ${message}`);
-        }
-        const reasoningSummary = extractOpenAiReasoningSummary(response);
-        if (reasoningSummary) {
-          reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
-        }
-        const usageTokens = extractOpenAiUsageTokens(response.usage);
-        const resolvedModelId = response.model ?? openAiModelId;
-        reporter.recordModelUsage(callHandle, {
-          modelVersion: resolvedModelId,
-          tokens: usageTokens,
-        });
-        const stepCostUsd = estimateCallCostUsd({
-          modelId: resolvedModelId,
-          tokens: usageTokens,
-          responseImages: 0,
-        });
-        totalCostUsd += stepCostUsd;
-        reporter.log(
-          [
-            `[tool-step:${stepIndex + 1}]`,
-            `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
-            `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
-            `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
-            `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
-            `${formatCurrencyUsd(stepCostUsd)}`,
-            `${formatMillis(elapsedMs)},`,
-            `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
-            `${formatCurrencyUsd(totalCostUsd)}`,
-            `${formatMillis(Date.now() - loopStartedAt)}`,
-          ].join(" "),
-        );
-        previousResponseId = response.id;
-        const responseText = extractOpenAiText(response);
-        const functionCalls = extractOpenAiFunctionCalls(response.output);
-        if (functionCalls.length === 0) {
-          if (!responseText) {
-            throw new Error("Tool loop response did not include text output.");
+          const stepCostUsd = estimateCallCostUsd({
+            modelId: resolvedModelId,
+            tokens: usageTokens,
+            responseImages: 0,
+          });
+          totalCostUsd += stepCostUsd;
+          reporter.log(
+            [
+              `[tool-step:${stepIndex + 1}]`,
+              `prompt=${formatOptionalNumber(usageTokens?.promptTokens)}`,
+              `cached=${formatOptionalNumber(usageTokens?.cachedTokens)}`,
+              `thinking=${formatOptionalNumber(usageTokens?.thinkingTokens)}`,
+              `out=${formatOptionalNumber(usageTokens?.responseTokens)}`,
+              `${formatCurrencyUsd(stepCostUsd)}`,
+              `${formatMillis(elapsedMs)},`,
+              `total: out=${formatOptionalNumber(usageTokens?.totalTokens)}`,
+              `${formatCurrencyUsd(totalCostUsd)}`,
+              `${formatMillis(Date.now() - loopStartedAt)}`,
+            ].join(" "),
+          );
+          previousResponseId = response.id;
+          const responseText = extractOpenAiText(response);
+          const functionCalls = extractOpenAiFunctionCalls(response.output);
+          if (functionCalls.length === 0) {
+            if (!responseText) {
+              throw new Error(
+                "Tool loop response did not include text output.",
+              );
+            }
+            steps.push({
+              step: steps.length + 1,
+              modelId: options.modelId,
+              text: responseText,
+              toolCalls: [],
+            });
+            return { text: responseText, steps };
+          }
+          const toolCalls: LlmToolCallResult[] = [];
+          const toolOutputs: ResponseInput = [];
+          const callInputs = functionCalls.map((call) => {
+            const toolName = call.name;
+            const { value, error: parseError } = parseOpenAiToolArguments(
+              call.arguments,
+            );
+            const toolSummary = summarizeToolCallInput(toolName, value);
+            reporter.log(
+              toolSummary
+                ? `tool: ${toolName} ${toolSummary}`
+                : `tool: ${toolName}`,
+            );
+            return { call, toolName, value, parseError };
+          });
+          const callResults = await Promise.all(
+            callInputs.map(async (entry) => {
+              const { result, outputPayload } = await executeToolCall({
+                toolName: entry.toolName,
+                tool: options.tools[entry.toolName],
+                rawInput: entry.value,
+                parseError: entry.parseError,
+              });
+              return { entry, result, outputPayload };
+            }),
+          );
+          for (const { entry, result, outputPayload } of callResults) {
+            toolCalls.push({
+              ...result,
+              callId: entry.call.call_id,
+            });
+            toolOutputs.push({
+              type: "function_call_output",
+              call_id: entry.call.call_id,
+              output: serializeToolOutput(outputPayload),
+            } as ResponseInputItem.FunctionCallOutput);
           }
           steps.push({
             step: steps.length + 1,
             modelId: options.modelId,
-            text: responseText,
-            toolCalls: [],
+            text: responseText.length > 0 ? responseText : undefined,
+            toolCalls,
           });
-          return { text: responseText, steps };
+          if (toolOutputs.length > 0) {
+            debugPromptContents = debugPromptContents.concat(
+              openAiInputToDebugContents(toolOutputs),
+            );
+          }
+          input = toolOutputs;
+        } finally {
+          reporter.finishModelCall(callHandle);
         }
-        const toolCalls: LlmToolCallResult[] = [];
-        const toolOutputs: ResponseInput = [];
-        const callInputs = functionCalls.map((call) => {
-          const toolName = call.name;
-          const { value, error: parseError } = parseOpenAiToolArguments(
-            call.arguments,
-          );
-          const toolSummary = summarizeToolCallInput(toolName, value);
-          reporter.log(
-            toolSummary
-              ? `tool: ${toolName} ${toolSummary}`
-              : `tool: ${toolName}`,
-          );
-          return { call, toolName, value, parseError };
-        });
-        const callResults = await Promise.all(
-          callInputs.map(async (entry) => {
-            const { result, outputPayload } = await executeToolCall({
-              toolName: entry.toolName,
-              tool: options.tools[entry.toolName],
-              rawInput: entry.value,
-              parseError: entry.parseError,
-            });
-            return { entry, result, outputPayload };
-          }),
-        );
-        for (const { entry, result, outputPayload } of callResults) {
-          toolCalls.push({
-            ...result,
-            callId: entry.call.call_id,
-          });
-          toolOutputs.push({
-            type: "function_call_output",
-            call_id: entry.call.call_id,
-            output: serializeToolOutput(outputPayload),
-          } as ResponseInputItem.FunctionCallOutput);
-        }
-        steps.push({
-          step: steps.length + 1,
-          modelId: options.modelId,
-          text: responseText.length > 0 ? responseText : undefined,
-          toolCalls,
-        });
-        if (toolOutputs.length > 0) {
-          debugPromptContents = debugPromptContents.concat(
-            openAiInputToDebugContents(toolOutputs),
-          );
-        }
-        input = toolOutputs;
-      } finally {
-        reporter.finishModelCall(callHandle);
       }
-    }
     }
   } else {
     const geminiTools = buildGeminiFunctionDeclarations(options.tools);

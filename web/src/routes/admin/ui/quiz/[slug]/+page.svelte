@@ -90,13 +90,12 @@
 		}
 	}
 
-	function buildGradeFeedback(
-		result: z.infer<typeof typeAnswerGradeResponseSchema>
-	): QuizFeedback {
+	function buildGradeFeedback(result: z.infer<typeof typeAnswerGradeResponseSchema>): QuizFeedback {
 		return {
 			message: result.feedback,
 			messageHtml: result.feedbackHtml,
-			tone: result.result === 'correct' ? 'success' : result.result === 'partial' ? 'info' : 'warning'
+			tone:
+				result.result === 'correct' ? 'success' : result.result === 'partial' ? 'info' : 'warning'
 		};
 	}
 

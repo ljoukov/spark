@@ -89,9 +89,7 @@ export function createChatGptPkce(): {
   state: string;
 } {
   const verifier = toBase64Url(randomBytes(64));
-  const challenge = toBase64Url(
-    createHash("sha256").update(verifier).digest(),
-  );
+  const challenge = toBase64Url(createHash("sha256").update(verifier).digest());
   const state = toBase64Url(randomBytes(32));
   return { verifier, challenge, state };
 }
@@ -218,7 +216,9 @@ export async function startChatGptOauthCallbackServer(options: {
   const redirectUri = options.redirectUri ?? CHATGPT_OAUTH_REDIRECT_URI;
   const url = new URL(redirectUri);
   if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
-    throw new Error("OAuth redirect URI must be localhost for callback server.");
+    throw new Error(
+      "OAuth redirect URI must be localhost for callback server.",
+    );
   }
   const port = Number.parseInt(url.port || "1455", 10);
   const pathName = url.pathname || "/auth/callback";
@@ -320,7 +320,9 @@ async function resolveAuthProfile(): Promise<{
       }
     } catch (error) {
       errors.push(
-        error instanceof Error ? error.message : String(error ?? "Unknown error"),
+        error instanceof Error
+          ? error.message
+          : String(error ?? "Unknown error"),
       );
     }
   }
@@ -342,7 +344,9 @@ function resolveAuthSourceOrder(): ChatGptAuthSource[] {
   }
   const parsed = z.array(ChatGptAuthSourceSchema).safeParse(entries);
   if (!parsed.success) {
-    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("\n");
     throw new Error(`Invalid ${CHATGPT_AUTH_SOURCE_ENV}: ${message}`);
   }
   return parsed.data;
@@ -385,7 +389,9 @@ function loadAuthProfileFromEnv(): ChatGptAuthProfile | null {
     idToken: process.env.CHATGPT_ID_TOKEN?.trim() || undefined,
   });
   if (!parsed.success) {
-    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("\n");
     throw new Error(`Invalid ChatGPT env credentials: ${message}`);
   }
   return normalizeAuthProfile(parsed.data);
@@ -413,7 +419,9 @@ async function loadAuthProfileFromStore(): Promise<ChatGptAuthProfile | null> {
   }
   const parsed = StoredAuthSchema.safeParse(raw);
   if (!parsed.success) {
-    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("\n");
     throw new Error(`Invalid ChatGPT auth store payload: ${message}`);
   }
   return normalizeAuthProfile(parsed.data);
@@ -507,9 +515,7 @@ function profileFromTokenResponse(payload: {
 }
 
 function normalizeAuthProfile(
-  data:
-    | z.infer<typeof StoredAuthSchema>
-    | z.infer<typeof EnvAuthSchema>,
+  data: z.infer<typeof StoredAuthSchema> | z.infer<typeof EnvAuthSchema>,
 ): ChatGptAuthProfile {
   const access =
     "access" in data ? data.access : (data as { access?: string }).access;
@@ -523,8 +529,8 @@ function normalizeAuthProfile(
   const idToken =
     "id_token" in data
       ? data.id_token
-      : (data as { idToken?: string }).idToken ??
-        (data as { id_token?: string }).id_token;
+      : ((data as { idToken?: string }).idToken ??
+        (data as { id_token?: string }).id_token);
   const expires =
     normalizeEpochMillis(expiresRaw) ??
     extractJwtExpiry(idToken ?? access) ??
@@ -532,9 +538,9 @@ function normalizeAuthProfile(
   const accountId =
     "accountId" in data
       ? data.accountId
-      : (data as { accountId?: string }).accountId ??
+      : ((data as { accountId?: string }).accountId ??
         extractChatGptAccountId(idToken ?? "") ??
-        extractChatGptAccountId(access);
+        extractChatGptAccountId(access));
   if (!accountId) {
     throw new Error("ChatGPT credentials missing chatgpt_account_id.");
   }

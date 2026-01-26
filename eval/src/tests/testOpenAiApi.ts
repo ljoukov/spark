@@ -50,9 +50,7 @@ async function main(): Promise<void> {
   }
 
   if (resolveOpenAiModelVariant(modelId)?.provider === "chatgpt") {
-    throw new Error(
-      "Code execution tools require the OpenAI API provider.",
-    );
+    throw new Error("Code execution tools require the OpenAI API provider.");
   }
 
   const toolText = await generateText({
@@ -149,8 +147,7 @@ function parseCliOptions(args: readonly string[]):
       debugDir: z.string().optional(),
     })
     .transform(({ model, jsonModel, debugDir }) => {
-      const modelId: OpenAiModelVariantId =
-        model ?? DEFAULT_OPENAI_MODEL_ID;
+      const modelId: OpenAiModelVariantId = model ?? DEFAULT_OPENAI_MODEL_ID;
       const jsonModelId: LlmTextModelId = jsonModel ?? modelId;
       return { modelId, jsonModelId, debugDir };
     });

@@ -216,9 +216,7 @@ export function resolveMarkScheme(value?: string | null): string {
 	return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_MARK_SCHEME;
 }
 
-export async function gradeTypeAnswer(
-	input: GradeTypeAnswerInput
-): Promise<GradeTypeAnswerResult> {
+export async function gradeTypeAnswer(input: GradeTypeAnswerInput): Promise<GradeTypeAnswerResult> {
 	const prompt = buildGradingPrompt(input);
 	const rawText = await requestGradeFromModel(prompt, input.maxAttempts ?? 3);
 	const parsed = parseGradeOutput(rawText, input.maxMarks);

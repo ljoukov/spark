@@ -28,9 +28,7 @@ const tools = {
   }),
 };
 
-async function runToolCheck(
-  modelId: LlmTextModelId,
-): Promise<void> {
+async function runToolCheck(modelId: LlmTextModelId): Promise<void> {
   const result = await runToolLoop({
     modelId,
     prompt:

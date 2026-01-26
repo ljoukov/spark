@@ -122,7 +122,6 @@
 		void value;
 		resizeTextarea();
 	});
-
 </script>
 
 <QuizQuestionCard
@@ -159,12 +158,14 @@
 	</div>
 
 	{#if thinkingText}
-		<div class="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-primary/90">
+		<div
+			class="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-primary/90"
+		>
 			<p class="text-[0.65rem] font-semibold tracking-[0.22em] text-primary/70 uppercase">
 				Thinking
 			</p>
 			<div
-				class="mt-1 h-[5.25rem] overflow-hidden whitespace-pre-wrap text-xs leading-5 text-foreground/80"
+				class="mt-1 h-[5.25rem] overflow-hidden text-xs leading-5 whitespace-pre-wrap text-foreground/80"
 			>
 				{thinkingText}
 			</div>
