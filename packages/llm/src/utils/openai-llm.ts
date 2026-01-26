@@ -19,10 +19,7 @@ export const OPENAI_MODEL_VARIANT_IDS = [
   ...OPENAI_MODEL_IDS.map(
     (modelId) => `chatgpt-${modelId}` as ChatGptOpenAiModelId,
   ),
-] as const satisfies readonly [
-  OpenAiModelVariantId,
-  ...OpenAiModelVariantId[],
-];
+] as const satisfies readonly [OpenAiModelVariantId, ...OpenAiModelVariantId[]];
 
 export const DEFAULT_OPENAI_MODEL_ID: OpenAiModelId = "gpt-5.2";
 
@@ -60,14 +57,17 @@ export function isOpenAiModelVariantId(
   return isOpenAiModelId(value) || isChatGptModelId(value);
 }
 
-export function resolveOpenAiModelVariant(value: string):
-  | { provider: "api" | "chatgpt"; modelId: OpenAiModelId }
-  | undefined {
+export function resolveOpenAiModelVariant(
+  value: string,
+): { provider: "api" | "chatgpt"; modelId: OpenAiModelId } | undefined {
   if (isOpenAiModelId(value)) {
     return { provider: "api", modelId: value };
   }
   if (isChatGptModelId(value)) {
-    return { provider: "chatgpt", modelId: value.slice("chatgpt-".length) as OpenAiModelId };
+    return {
+      provider: "chatgpt",
+      modelId: value.slice("chatgpt-".length) as OpenAiModelId,
+    };
   }
   return undefined;
 }

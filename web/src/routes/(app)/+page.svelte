@@ -401,8 +401,8 @@
 				<span class="slogan__secondary">Scan. Learn. Spark.</span>
 			</h1>
 			<p class="hero-copy">
-				Turn notes into guided practice. Jump between quizzes, chat, and coding sessions
-				without losing your progress.
+				Turn notes into guided practice. Jump between quizzes, chat, and coding sessions without
+				losing your progress.
 			</p>
 			<div class="cta">
 				<Button
@@ -576,8 +576,7 @@
 		--halo-after-width: min(clamp(20rem, 52vw, 32rem), 100%);
 		width: min(1160px, 100%);
 		margin: 0 auto;
-		padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 6vw, 3.75rem)
-			clamp(2.5rem, 8vw, 4rem);
+		padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 6vw, 3.75rem) clamp(2.5rem, 8vw, 4rem);
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2.25rem, 5vw, 3.75rem);
@@ -610,9 +609,7 @@
 		height: clamp(16rem, 46vw, 28rem);
 		width: var(--halo-after-width);
 		background: radial-gradient(circle at 60% 60%, rgba(16, 185, 129, 0.22), transparent 75%);
-		transform: translate(
-			-min(var(--page-inline-gutter), calc(var(--halo-after-width) * 0.26))
-		);
+		transform: translate(-min(var(--page-inline-gutter), calc(var(--halo-after-width) * 0.26)));
 	}
 
 	:global([data-theme='dark'] .page)::before {
@@ -625,19 +622,11 @@
 
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light']) .page)::before {
-			background: radial-gradient(
-				circle at 30% 40%,
-				rgba(129, 140, 248, 0.42),
-				transparent 70%
-			);
+			background: radial-gradient(circle at 30% 40%, rgba(129, 140, 248, 0.42), transparent 70%);
 		}
 
 		:global(:root:not([data-theme='light']) .page)::after {
-			background: radial-gradient(
-				circle at 60% 60%,
-				rgba(56, 189, 248, 0.26),
-				transparent 75%
-			);
+			background: radial-gradient(circle at 60% 60%, rgba(56, 189, 248, 0.26), transparent 75%);
 		}
 	}
 
@@ -858,11 +847,7 @@
 
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light']) .video-shell__halo) {
-			background: radial-gradient(
-				circle at 45% 55%,
-				rgba(129, 140, 248, 0.42),
-				transparent 72%
-			);
+			background: radial-gradient(circle at 45% 55%, rgba(129, 140, 248, 0.42), transparent 72%);
 			opacity: 0.6;
 		}
 	}

@@ -161,7 +161,7 @@
 						{@html feedback.messageHtml}
 					</div>
 				{:else}
-					<p class="mt-1 whitespace-pre-wrap text-base leading-relaxed">{feedback.message}</p>
+					<p class="mt-1 text-base leading-relaxed whitespace-pre-wrap">{feedback.message}</p>
 				{/if}
 			</div>
 		{/if}

@@ -408,7 +408,7 @@ function buildSchemaSummary(
     "  - firestore/session.json (session doc)",
     "  - firestore/quiz/*.json (quiz docs; doc id = filename, omit id field)",
     "  - firestore/code/*.json (code docs; doc id = filename, omit slug field)",
-    "- firestore/session.json must include: id, title, summary, tagline, emoji, createdAt, status=\"ready\", topics (non-empty), plan (non-empty).",
+    '- firestore/session.json must include: id, title, summary, tagline, emoji, createdAt, status="ready", topics (non-empty), plan (non-empty).',
     "- firestore/quiz/*.json must include gradingPrompt; type-answer questions must include marks and markScheme.",
     "- Do NOT include draft/grade fields in firestore outputs: planDraft, planGrade, quizzesDraft, quizzesGrade, problemsDraft, problemsGrade, storyTitle.",
     "- Drafts remain Markdown: session-plan.md, quizzes/*.md, problems/*.md, story.md.",
@@ -436,7 +436,10 @@ const FORBIDDEN_SESSION_FIELDS = [
   "storyTitle",
 ];
 
-function validateQuizTemplateFields(quiz: QuizDefinition, quizId: string): void {
+function validateQuizTemplateFields(
+  quiz: QuizDefinition,
+  quizId: string,
+): void {
   const gradingPrompt =
     typeof quiz.gradingPrompt === "string" ? quiz.gradingPrompt.trim() : "";
   if (gradingPrompt.length === 0) {
@@ -456,9 +459,7 @@ function validateQuizTemplateFields(quiz: QuizDefinition, quizId: string): void 
       );
     }
     const markScheme =
-      typeof question.markScheme === "string"
-        ? question.markScheme.trim()
-        : "";
+      typeof question.markScheme === "string" ? question.markScheme.trim() : "";
     if (markScheme.length === 0) {
       throw new Error(
         `firestore/quiz/${quizId}.json type-answer question "${question.id}" must include markScheme.`,
@@ -482,10 +483,7 @@ function requireNonEmptyString(value: unknown, label: string): string {
   return trimmed;
 }
 
-function requireNonEmptyStringArray(
-  value: unknown,
-  label: string,
-): string[] {
+function requireNonEmptyStringArray(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(
       `firestore/session.json must include ${label} as a non-empty array of strings.`,
@@ -503,7 +501,11 @@ function requireNonEmptyStringArray(
 }
 
 function validateSessionTemplateFields(rawSession: unknown): void {
-  if (!rawSession || typeof rawSession !== "object" || Array.isArray(rawSession)) {
+  if (
+    !rawSession ||
+    typeof rawSession !== "object" ||
+    Array.isArray(rawSession)
+  ) {
     throw new Error("firestore/session.json must be a JSON object.");
   }
   const session = rawSession as Record<string, unknown>;
@@ -524,9 +526,12 @@ function validateSessionTemplateFields(rawSession: unknown): void {
     throw new Error("firestore/session.json must include createdAt.");
   }
   if (!Array.isArray(session.plan) || session.plan.length === 0) {
-    throw new Error("firestore/session.json must include a non-empty plan array.");
+    throw new Error(
+      "firestore/session.json must include a non-empty plan array.",
+    );
   }
-  const status = typeof session.status === "string" ? session.status.trim() : "";
+  const status =
+    typeof session.status === "string" ? session.status.trim() : "";
   if (status.length === 0) {
     throw new Error('firestore/session.json must include status="ready".');
   }
@@ -575,7 +580,7 @@ function buildVerificationPromptContent(): string {
     "2) Read firestore/quiz/*.json and firestore/code/*.json outputs.",
     "3) Cross-check: counts, titles, IDs, prompts, answers, explanations, tags, techniques, constraints, examples, and tests.",
     "4) Ensure plan item IDs match quiz/problem filenames and contents.",
-    "5) Ensure firestore/session.json includes title, summary, tagline, emoji, topics, status=\"ready\", and no draft/grade fields.",
+    '5) Ensure firestore/session.json includes title, summary, tagline, emoji, topics, status="ready", and no draft/grade fields.',
     "6) Ensure each quiz includes gradingPrompt and type-answer questions include marks + markScheme.",
     "7) Ensure quiz prompts/explanations are self-contained and do not reference the source documents, sections, or page numbers.",
     "8) Ensure story fields in story.md align with any media plan item (if present).",
@@ -695,7 +700,7 @@ function buildTaskContent(options: {
     "Create one quiz file per quiz set and one problem file per coding problem.",
     "For each draft: generate -> grade with feedback -> revise using feedback.",
     "When writing firestore/session.json, set session.id to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
-    "firestore/session.json must include title, summary, tagline, emoji, topics, and status=\"ready\".",
+    'firestore/session.json must include title, summary, tagline, emoji, topics, and status="ready".',
     "Each firestore/quiz/*.json must include gradingPrompt and type-answer questions must include marks + markScheme.",
     "Quiz prompts/explanations must be self-contained; do not mention the source documents, sections, or page numbers.",
     "After writing or updating any firestore/*.json outputs, run validate_schema with schemaPath=firestore-schema.json. If it returns ok:false, fix and re-run until ok:true before proceeding.",
@@ -844,7 +849,7 @@ function buildAgentUserPrompt(options: {
     "",
     "Use the brief as authoritative. Respect exactness rules from the brief.",
     "Use firestore-schema.json for the Firestore JSON output fields and rules.",
-    "firestore/session.json must include title, summary, tagline, emoji, topics, and status=\"ready\" (no draft/grade fields).",
+    'firestore/session.json must include title, summary, tagline, emoji, topics, and status="ready" (no draft/grade fields).',
     "firestore/quiz/*.json must include gradingPrompt and type-answer questions must include marks + markScheme.",
     "Set session.id in firestore/session.json to a descriptive kebab-case slug derived from the topic (avoid generic ids like session-01).",
     "Plan item icons must be emoji (single character). If unsure, omit icon so the UI uses defaults.",

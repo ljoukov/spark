@@ -8,10 +8,7 @@ import {
   runSessionAgentSmokeTest,
   runSessionGenerationAgent,
 } from "@spark/llm/code/sessionGenerationAgent";
-import {
-  estimateCallCostUsd,
-  type LlmTextModelId,
-} from "@spark/llm/utils/llm";
+import { estimateCallCostUsd, type LlmTextModelId } from "@spark/llm/utils/llm";
 import type {
   JobProgressReporter,
   LlmUsageChunk,
@@ -191,8 +188,14 @@ class UsageAggregator {
     if (chunk.tokens) {
       const prev = state.tokens;
       state.tokens = {
-        promptTokens: resolveNumber(chunk.tokens.promptTokens, prev.promptTokens),
-        cachedTokens: resolveNumber(chunk.tokens.cachedTokens, prev.cachedTokens),
+        promptTokens: resolveNumber(
+          chunk.tokens.promptTokens,
+          prev.promptTokens,
+        ),
+        cachedTokens: resolveNumber(
+          chunk.tokens.cachedTokens,
+          prev.cachedTokens,
+        ),
         responseTokens: resolveNumber(
           chunk.tokens.responseTokens,
           prev.responseTokens,
@@ -267,7 +270,9 @@ class UsageAggregator {
     const totalTokens =
       state.tokens.totalTokens > 0
         ? state.tokens.totalTokens
-        : inputTokens + state.tokens.responseTokens + state.tokens.thinkingTokens;
+        : inputTokens +
+          state.tokens.responseTokens +
+          state.tokens.thinkingTokens;
     totals.tokens.input += inputTokens;
     totals.tokens.prompt += state.tokens.promptTokens;
     totals.tokens.cached += state.tokens.cachedTokens;
@@ -464,12 +469,16 @@ function extractEmoji(value: string): string | undefined {
   return match?.[0];
 }
 
-function resolveTemplateTagline(session: Record<string, unknown>): string | undefined {
-  const tagline = typeof session.tagline === "string" ? session.tagline.trim() : "";
+function resolveTemplateTagline(
+  session: Record<string, unknown>,
+): string | undefined {
+  const tagline =
+    typeof session.tagline === "string" ? session.tagline.trim() : "";
   if (tagline.length > 0) {
     return tagline;
   }
-  const summary = typeof session.summary === "string" ? session.summary.trim() : "";
+  const summary =
+    typeof session.summary === "string" ? session.summary.trim() : "";
   if (summary.length > 0) {
     return truncateWords(summary, 10);
   }
@@ -480,7 +489,9 @@ function resolveTemplateTagline(session: Record<string, unknown>): string | unde
   return undefined;
 }
 
-function resolveTemplateEmoji(session: Record<string, unknown>): string | undefined {
+function resolveTemplateEmoji(
+  session: Record<string, unknown>,
+): string | undefined {
   const emoji = typeof session.emoji === "string" ? session.emoji.trim() : "";
   if (emoji.length > 0) {
     return emoji;
@@ -642,11 +653,7 @@ async function main(): Promise<void> {
   const callStartTimes = new Map<ModelCallHandle, number>();
   const scheduleUsageWrite = () => {
     const totalElapsedMs = baselineElapsedMs + (Date.now() - runStartedAt);
-    const payload = JSON.stringify(
-      usage.summary(totalElapsedMs),
-      null,
-      2,
-    );
+    const payload = JSON.stringify(usage.summary(totalElapsedMs), null, 2);
     const writeOp = async () => {
       await mkdir(path.dirname(usagePath), { recursive: true });
       await writeFile(usagePath, payload, "utf8");
@@ -732,9 +739,7 @@ async function main(): Promise<void> {
       options.topic ??
       result.session.title ??
       (options.briefFile
-        ? deriveTopicFromBrief(
-            await readFile(options.briefFile, "utf8"),
-          )
+        ? deriveTopicFromBrief(await readFile(options.briefFile, "utf8"))
         : "session");
     await publishToWelcomeTemplate({
       sessionId: result.sessionId,

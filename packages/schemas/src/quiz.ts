@@ -27,15 +27,16 @@ const QuizQuestionWithExplanationSchema = QuizQuestionBaseSchema.extend({
   explanation: z.string().optional(),
 });
 
-const QuizQuestionWithFeedbackSchema = QuizQuestionWithExplanationSchema.extend({
-  correctFeedback: QuizFeedbackSchema,
-});
-
-const QuizQuestionWithFeedbackNoExplanationSchema = QuizQuestionBaseSchema.extend(
+const QuizQuestionWithFeedbackSchema = QuizQuestionWithExplanationSchema.extend(
   {
     correctFeedback: QuizFeedbackSchema,
   },
 );
+
+const QuizQuestionWithFeedbackNoExplanationSchema =
+  QuizQuestionBaseSchema.extend({
+    correctFeedback: QuizFeedbackSchema,
+  });
 
 export const QuizMultipleChoiceSchema = QuizQuestionWithFeedbackSchema.extend({
   kind: z.literal("multiple-choice"),

@@ -178,7 +178,10 @@ export async function collectChatGptCodexResponse(options: {
       blocked = true;
       continue;
     }
-    if (type === "response.output_item.added" || type === "response.output_item.done") {
+    if (
+      type === "response.output_item.added" ||
+      type === "response.output_item.done"
+    ) {
       const item = event.item as Record<string, unknown> | undefined;
       if (item) {
         if (item.type === "function_call") {
@@ -261,9 +264,13 @@ export async function collectChatGptCodexResponse(options: {
       continue;
     }
     if (type === "response.completed" || type === "response.done") {
-      const responsePayload = event.response as Record<string, unknown> | undefined;
+      const responsePayload = event.response as
+        | Record<string, unknown>
+        | undefined;
       if (responsePayload) {
-        const usagePayload = responsePayload.usage as ChatGptCodexUsage | undefined;
+        const usagePayload = responsePayload.usage as
+          | ChatGptCodexUsage
+          | undefined;
         usage = usagePayload ?? usage;
         const modelValue =
           typeof responsePayload.model === "string"
