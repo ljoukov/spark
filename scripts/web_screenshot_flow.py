@@ -10,13 +10,17 @@ Spec format (JSON):
   "headless": true,
   "steps": [
     {"action": "waitFor", "selector": "text=LOGIN"},
-    {"action": "screenshot", "path": "01-landing.png"},
+    {"action": "screenshot", "path": "01-landing.jpg", "quality": 90},
     {"action": "click", "selector": "text=LOGIN"},
-    {"action": "screenshot", "path": "02-after-login-click.png", "afterMs": 100},
+    {"action": "screenshot", "path": "02-after-login-click.jpg", "afterMs": 100, "quality": 90},
     {"action": "clickText", "text": "Continue with Google"},
-    {"action": "screenshot", "path": "03-after-google-click.png", "afterMs": 100}
+    {"action": "screenshot", "path": "03-after-google-click.jpg", "afterMs": 100, "quality": 90}
   ]
 }
+
+Notes:
+- Save repo screenshots under screenshots/<flow>/ (not .logs/).
+- Use .jpg with quality 90 for consistent size.
 """
 
 from __future__ import annotations
@@ -228,7 +232,23 @@ def run() -> int:
                     maybe_wait(page, raw_step.get("afterMs"))
                     out_path = resolve_path(path, base_dir)
                     out_path.parent.mkdir(parents=True, exist_ok=True)
-                    page.screenshot(path=str(out_path), full_page=full_page)
+                    screenshot_args: dict[str, Any] = {
+                        "path": str(out_path),
+                        "full_page": full_page,
+                    }
+                    quality = raw_step.get("quality", raw_step.get("jpegQuality"))
+                    if quality is not None:
+                        if not isinstance(quality, int) or not (0 <= quality <= 100):
+                            raise SpecError("screenshot quality must be an integer between 0 and 100")
+                        screenshot_args["quality"] = quality
+                    image_type = raw_step.get("type")
+                    if image_type is not None:
+                        if image_type not in ("png", "jpeg"):
+                            raise SpecError("screenshot type must be png or jpeg")
+                        screenshot_args["type"] = image_type
+                    elif out_path.suffix.lower() in {".jpg", ".jpeg"}:
+                        screenshot_args["type"] = "jpeg"
+                    page.screenshot(**screenshot_args)
                     print(f"Saved screenshot: {out_path}")
                 elif action == "goto":
                     next_url = raw_step.get("url")
