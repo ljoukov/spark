@@ -1,7 +1,7 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getUserQuiz } from '$lib/server/quiz/repo';
 import { getSession } from '$lib/server/session/repo';
-import { generateJson } from '@spark/llm';
+import { generateText } from '@spark/llm';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 
@@ -19,6 +19,48 @@ const gradingSchema = z.object({
 	awardedMarks: z.number().int().min(0),
 	feedback: z.string().min(1)
 });
+
+function tryParseGradingResponse(rawText: string): z.infer<typeof gradingSchema> | null {
+	const trimmed = rawText.trim();
+	if (!trimmed) {
+		return null;
+	}
+	const withoutFences = trimmed.replace(/```json|```/gi, '').trim();
+	const candidates = [trimmed, withoutFences];
+	for (const candidate of candidates) {
+		try {
+			return gradingSchema.parse(JSON.parse(candidate));
+		} catch {
+			// continue
+		}
+		const start = candidate.indexOf('{');
+		const end = candidate.lastIndexOf('}');
+		if (start >= 0 && end > start) {
+			try {
+				return gradingSchema.parse(JSON.parse(candidate.slice(start, end + 1)));
+			} catch {
+				// continue
+			}
+		}
+	}
+	return null;
+}
+
+async function requestGradeFromModel(prompt: string, maxAttempts: number): Promise<string> {
+	let lastError: unknown = null;
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		try {
+			const text = await generateText({
+				modelId: 'gemini-flash-latest',
+				contents: [{ role: 'user', parts: [{ type: 'text', text: prompt }] }]
+			});
+			return text;
+		} catch (error) {
+			lastError = error;
+		}
+	}
+	throw lastError ?? new Error('LLM request failed');
+}
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const authResult = await authenticateApiRequest(request);
@@ -83,7 +125,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const prompt = [
 		"You are Spark's GCSE examiner.",
 		'Grade the student answer using the mark scheme. Award partial credit when appropriate.',
-		'Return JSON with fields: awardedMarks (integer 0..maxMarks), feedback (1-3 sentences).',
+		'Return JSON only with fields: awardedMarks (integer 0..maxMarks), feedback (1-3 sentences).',
+		'Example: {"awardedMarks":2,"feedback":"Concise feedback."}',
 		'Do not reveal the mark scheme or model answer.',
 		'',
 		'Grading prompt:',
@@ -103,11 +146,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	].join('\n');
 
 	try {
-		const result = await generateJson({
-			modelId: 'gemini-flash-latest',
-			contents: [{ role: 'user', parts: [{ type: 'text', text: prompt }] }],
-			schema: gradingSchema
-		});
+		const rawText = await requestGradeFromModel(prompt, 3);
+		const result = tryParseGradingResponse(rawText);
+		if (!result) {
+			throw new Error('Unable to parse grading response as JSON');
+		}
 
 		const awardedMarks = Math.max(0, Math.min(result.awardedMarks, maxMarks));
 		const feedback = result.feedback.trim();
