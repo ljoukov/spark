@@ -14,6 +14,7 @@
 		showHint?: boolean;
 		locked?: boolean;
 		feedback?: QuizFeedback | null;
+		score?: { awarded: number; max: number } | null;
 		showExplanation?: boolean;
 		showContinue?: boolean;
 		answerLabel?: string;
@@ -38,6 +39,7 @@
 		showHint = false,
 		locked = false,
 		feedback = null,
+		score = null,
 		showExplanation: showExplanationProp = undefined,
 		showContinue = false,
 		answerLabel = 'Submit',
@@ -114,7 +116,11 @@
 			<p class="text-sm font-medium tracking-[0.18em] text-muted-foreground/80 uppercase">
 				Your answer
 			</p>
-			{#if question.marks}
+			{#if score}
+				<span class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
+					Score: {score.awarded}/{score.max}
+				</span>
+			{:else if question.marks}
 				<span class="text-xs font-semibold tracking-[0.2em] text-muted-foreground/70 uppercase">
 					{question.marks} mark{question.marks === 1 ? '' : 's'}
 				</span>

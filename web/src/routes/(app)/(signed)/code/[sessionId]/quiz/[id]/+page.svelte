@@ -141,7 +141,7 @@
 
 	function buildGradeFeedback(grade: NonNullable<QuizQuestionState['grade']>): QuizFeedback {
 		return {
-			heading: grade.heading ?? `Score: ${grade.awardedMarks}/${grade.maxMarks}`,
+			heading: `Score: ${grade.awardedMarks}/${grade.maxMarks}`,
 			message: grade.feedback,
 			tone: grade.tone
 		};
@@ -1097,6 +1097,11 @@
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
+				score={
+					activeAttempt.grade
+						? { awarded: activeAttempt.grade.awardedMarks, max: activeAttempt.grade.maxMarks }
+						: null
+				}
 				showContinue={activeAttempt.showContinue}
 				continueLabel={activeContinueLabel}
 				onInput={(detail) => handleTypeInput(detail.value)}
