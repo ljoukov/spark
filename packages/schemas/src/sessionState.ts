@@ -105,13 +105,25 @@ export const QuizQuestionStateSchema = z
     if (value.grade) {
       const trimmedFeedback = value.grade.feedback.trim();
       if (trimmedFeedback.length > 0) {
-        result.grade = {
+        const nextGrade: {
+          awardedMarks: number;
+          maxMarks: number;
+          feedback: string;
+          heading?: string;
+          tone?: z.infer<typeof QuizFeedbackToneSchema>;
+        } = {
           awardedMarks: value.grade.awardedMarks,
           maxMarks: value.grade.maxMarks,
           feedback: trimmedFeedback,
-          heading: value.grade.heading?.trim() || undefined,
-          tone: value.grade.tone,
         };
+        const trimmedHeading = value.grade.heading?.trim();
+        if (trimmedHeading) {
+          nextGrade.heading = trimmedHeading;
+        }
+        if (value.grade.tone) {
+          nextGrade.tone = value.grade.tone;
+        }
+        result.grade = nextGrade;
       }
     }
 
