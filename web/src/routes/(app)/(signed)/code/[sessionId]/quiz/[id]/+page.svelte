@@ -453,6 +453,26 @@
 			? 'Network error, retry'
 			: continueLabel
 	);
+	const activeScore = $derived(() => {
+		if (activeAttempt.grade) {
+			return {
+				awarded: activeAttempt.grade.awardedMarks,
+				max: activeAttempt.grade.maxMarks
+			};
+		}
+		if (
+			activeQuestion.kind === 'type-answer' &&
+			typeof activeQuestion.marks === 'number' &&
+			Number.isFinite(activeQuestion.marks) &&
+			activeAttempt.status !== 'pending'
+		) {
+			return {
+				awarded: activeAttempt.status === 'correct' ? activeQuestion.marks : 0,
+				max: activeQuestion.marks
+			};
+		}
+		return null;
+	});
 	const progressSteps = $derived(
 		quiz.questions.map<QuizProgressStep>((question, index) => {
 			const attempt = attempts[index];
@@ -701,42 +721,55 @@
 		const firstViewedAt = attempt.firstViewedAt ?? now;
 
 		if (!supportsServerGrading(question)) {
-			pendingAction = 'submit';
-			const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
-				entry.trim().toLowerCase()
-			);
-			const isCorrect = accepted.includes(trimmed.toLowerCase());
-			const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
-			const feedback = buildFeedback(question, status, null, false);
+		pendingAction = 'submit';
+		const accepted = [question.answer, ...(question.acceptableAnswers ?? [])].map((entry) =>
+			entry.trim().toLowerCase()
+		);
+		const isCorrect = accepted.includes(trimmed.toLowerCase());
+		const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
+		const fallbackGrade =
+			typeof question.marks === 'number' && Number.isFinite(question.marks)
+				? {
+						awardedMarks: isCorrect ? question.marks : 0,
+						maxMarks: question.marks,
+						feedback: isCorrect
+							? 'Full marks for covering the expected points.'
+							: 'No credit for this response. Review the model answer and try again.',
+						heading: `Score: ${isCorrect ? question.marks : 0}/${question.marks}`,
+						tone: isCorrect ? 'success' : 'warning'
+					}
+				: null;
+		const feedback = fallbackGrade ? buildGradeFeedback(fallbackGrade) : buildFeedback(question, status, null, false);
 
-			updateAttempt(currentIndex, (prev) => ({
-				...prev,
-				value: trimmed,
-				status,
-				locked: true,
-				showContinue: true,
-				feedback,
-				grade: null,
-				gradingError: false,
-				dontKnow: false,
-				answeredAt: now,
-				firstViewedAt
-			}));
+		updateAttempt(currentIndex, (prev) => ({
+			...prev,
+			value: trimmed,
+			status,
+			locked: true,
+			showContinue: true,
+			feedback,
+			grade: fallbackGrade,
+			gradingError: false,
+			dontKnow: false,
+			answeredAt: now,
+			firstViewedAt
+		}));
 
 			completionSyncError = null;
 			try {
-				await persistQuestionState(
-					question.id,
-					{
-						status,
-						typedValue: trimmed,
-						hintUsed: attempt.showHint ? true : undefined,
-						dontKnow: false,
-						firstViewedAt,
-						answeredAt: now
-					},
-					{ sync: true, markInProgress: true }
-				);
+			await persistQuestionState(
+				question.id,
+				{
+					status,
+					typedValue: trimmed,
+					hintUsed: attempt.showHint ? true : undefined,
+					dontKnow: false,
+					firstViewedAt,
+					answeredAt: now,
+					grade: fallbackGrade ?? undefined
+				},
+				{ sync: true, markInProgress: true }
+			);
 			} catch (error) {
 				console.error('Failed to sync typed answer submission', error);
 				completionSyncError = SYNC_ERROR_MESSAGE;
@@ -1097,11 +1130,7 @@
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
 				feedback={activeAttempt.feedback}
-				score={
-					activeAttempt.grade
-						? { awarded: activeAttempt.grade.awardedMarks, max: activeAttempt.grade.maxMarks }
-						: null
-				}
+				score={activeScore}
 				showContinue={activeAttempt.showContinue}
 				continueLabel={activeContinueLabel}
 				onInput={(detail) => handleTypeInput(detail.value)}
