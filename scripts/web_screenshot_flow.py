@@ -21,6 +21,7 @@ Spec format (JSON):
 Notes:
 - Save repo screenshots under screenshots/<flow>/ (not .logs/).
 - Use .jpg with quality 90 for consistent size.
+- For reusable flows, keep the spec under screenshots/<flow>/flow.json.
 """
 
 from __future__ import annotations

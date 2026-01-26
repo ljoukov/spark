@@ -18,13 +18,13 @@
 
 ### 0.1) Web UI Automation (Screenshot Template)
 
-For quick UI verification, use the repo template script `scripts/web_screenshot_flow.py`. This script is only a **template**; the AI coding assistant should normally generate a **temporary** JSON spec for each investigation that explicitly lists:
+For quick UI verification, use the repo template script `scripts/web_screenshot_flow.py`. This script is only a **template**; the AI coding assistant should normally generate a JSON spec for each investigation that explicitly lists:
 
 - Which buttons/links to click (exact labels or selectors).
 - The exact **sequence** of those clicks.
 - When to take screenshots (including “immediately after click” with short waits to catch spinners).
 
-The temporary spec should live outside the repo (e.g. `/tmp/spark-webflow.json`) unless we decide to keep it.
+For repeatable flows we want to re-run, keep the spec under `screenshots/<flow>/flow.json` and commit it. For one-off investigations, place the spec outside the repo (e.g. `/tmp/spark-webflow.json`).
 
 Example spec:
 
@@ -103,7 +103,7 @@ Manual checks:
 - Use the browser screenshot tool (full-page if needed) for quick evidence.
 
 Automated screenshots (Playwright template):
-- Create a temporary JSON spec outside the repo (e.g. `/tmp/spark-webflow.json`) listing each click/wait and every screenshot.
+- Create a JSON spec listing each click/wait and every screenshot. Store reusable flows under `screenshots/<flow>/flow.json` and commit them; otherwise use a temp spec outside the repo (e.g. `/tmp/spark-webflow.json`).
 - Save repo screenshots under `screenshots/<flow>/` (not `.logs/`) and use `.jpg` with `quality: 90`.
 - Use a consistent viewport and include an explicit wait after navigation or actions that trigger spinners.
 
