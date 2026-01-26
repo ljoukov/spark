@@ -135,8 +135,6 @@ const QUIZZES: QuizDefinition[] = [
         prompt:
           "Name the data structure we use to keep the next places to visit lined up in Breadth-first Search.",
         hint: "It behaves like a line at a theme park: first in, first out.",
-        explanation:
-          "We use a queue so the earliest discoveries get explored first, keeping the levels in order.",
         answer: "queue",
         acceptableAnswers: ["Queue", "a queue"],
         correctFeedback: {
@@ -214,8 +212,6 @@ const QUIZZES: QuizDefinition[] = [
         prompt:
           "What word do we use for the group of rooms that are the same number of steps away from the start?",
         hint: "We number them 0, 1, 2, … as we explore.",
-        explanation:
-          "Breadth-first Search organises the map into levels that measure distance from the start.",
         answer: "level",
         acceptableAnswers: ["levels", "Layer", "layer", "layers"],
         correctFeedback: {
@@ -364,8 +360,6 @@ const QUIZZES: QuizDefinition[] = [
         prompt:
           "If Breadth-first Search never reaches the treasure, what number should the program print to show it is impossible?",
         hint: "Use the value promised in both practice problems.",
-        explanation:
-          "Both practice tasks use -1 to mean the goal cannot be reached.",
         answer: "-1",
         acceptableAnswers: ["-1"],
         correctFeedback: {

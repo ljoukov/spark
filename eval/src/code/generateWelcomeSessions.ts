@@ -173,8 +173,6 @@ const BFS_QUIZZES: QuizDefinition[] = [
         prompt:
           "Name the data structure we use to keep the next places to visit lined up in Breadth-first Search.",
         hint: "It behaves like a line at a theme park: first in, first out.",
-        explanation:
-          "We use a queue so the earliest discoveries get explored first, keeping the levels in order.",
         answer: "queue",
         acceptableAnswers: ["Queue", "a queue"],
         correctFeedback: {
@@ -252,8 +250,6 @@ const BFS_QUIZZES: QuizDefinition[] = [
         prompt:
           "What word do we use for the group of rooms that are the same number of steps away from the start?",
         hint: "We number them 0, 1, 2, … as we explore.",
-        explanation:
-          "Breadth-first Search organises the map into levels that measure distance from the start.",
         answer: "level",
         acceptableAnswers: ["levels", "Layer", "layer", "layers"],
         correctFeedback: {
@@ -400,8 +396,6 @@ const BFS_QUIZZES: QuizDefinition[] = [
         prompt:
           "If Breadth-first Search never reaches the treasure, what number should the program print to show it is impossible?",
         hint: "Use the value promised in both practice problems.",
-        explanation:
-          "Both practice tasks use -1 to mean the goal cannot be reached.",
         answer: "-1",
         acceptableAnswers: ["-1"],
         correctFeedback: {
@@ -988,8 +982,6 @@ const DP_QUIZZES: QuizDefinition[] = [
         prompt:
           "What do we call the technique where we fill the DP table from the smallest state upward without recursion?",
         hint: 'It rhymes with "calculation" and starts with a t.',
-        explanation:
-          "Tabulation fills the table iteratively, always using answers that were already written.",
         answer: "tabulation",
         acceptableAnswers: ["Tabulation"],
         correctFeedback: {
@@ -1085,8 +1077,6 @@ const DP_QUIZZES: QuizDefinition[] = [
         prompt:
           "What one-word name do we give to the smaller questions a DP solution reuses over and over?",
         hint: "They sit inside the big problem like puzzle pieces.",
-        explanation:
-          "We break the original challenge into subproblems so their answers can be reused.",
         answer: "subproblems",
         acceptableAnswers: ["Subproblem", "subproblem", "Subproblems"],
         correctFeedback: {
@@ -1175,8 +1165,6 @@ const DP_QUIZZES: QuizDefinition[] = [
         prompt:
           "In Museum Guard, how many previous DP values must you keep at any moment to update the next answer?",
         hint: "Look at the recurrence `dp[i] = max(dp[i-1], value[i] + dp[i-2])`.",
-        explanation:
-          "You only need `dp[i-1]` and `dp[i-2]`, so two running totals are enough.",
         answer: "2",
         acceptableAnswers: ["two", "Two"],
         correctFeedback: {
@@ -1518,8 +1506,6 @@ const FLT_QUIZZES: QuizDefinition[] = [
           "`gcd(a, p) = 1`.",
         ].join("\n"),
         hint: "_It's a single digit._",
-        explanation:
-          "The blank is `1`, showing the cycle resets after `p - 1` steps.",
         answer: "1",
         acceptableAnswers: ["one"],
         correctFeedback: {
@@ -1570,8 +1556,6 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt:
           "Name the fast algorithm that squares the base and halves the exponent to compute powers quickly.",
         hint: "_Two words_: starts with `binary`.",
-        explanation:
-          "`Binary exponentiation` (a.k.a. exponentiation by squaring) computes large powers in **O(log b)** steps.",
         answer: "binary exponentiation",
         acceptableAnswers: [
           "Binary exponentiation",
@@ -1653,8 +1637,6 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt:
           "If `a` is divisible by `p`, what value should our modular inverse routine output?",
         hint: "_It signals that no inverse exists._",
-        explanation:
-          "When `a ≡ 0 (mod p)` there is no multiplicative inverse; returning `-1` keeps the contract clear.",
         answer: "-1",
         acceptableAnswers: ["negative one", "- 1"],
         correctFeedback: {
@@ -1726,8 +1708,6 @@ const FLT_QUIZZES: QuizDefinition[] = [
         prompt:
           "What operation do we apply after each multiplication step to keep numbers bounded by the modulus?",
         hint: "_It's a three-letter word._",
-        explanation:
-          "Taking the result `mod p` after every multiply keeps values small and correct.",
         answer: "mod",
         acceptableAnswers: ["modulo", "take mod"],
         correctFeedback: {
