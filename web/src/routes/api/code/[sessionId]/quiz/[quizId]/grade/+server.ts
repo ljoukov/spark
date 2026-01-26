@@ -2,6 +2,7 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getUserQuiz } from '$lib/server/quiz/repo';
 import { getSession } from '$lib/server/session/repo';
 import { generateText } from '@spark/llm';
+import { renderMarkdownOptional } from '$lib/server/markdown';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 
@@ -112,10 +113,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'not_found', message: 'Question not found' }, { status: 404 });
 	}
 
-	const gradingPrompt = quiz.gradingPrompt?.trim();
+	const gradingPrompt =
+		quiz.gradingPrompt?.trim() ??
+		'Use GCSE Biology marking standards. Award marks for each distinct point in the mark scheme.';
 	const markScheme = question.markScheme?.trim();
 	const maxMarks = question.marks;
-	if (!gradingPrompt || !markScheme || typeof maxMarks !== 'number' || !Number.isFinite(maxMarks)) {
+	if (!markScheme || typeof maxMarks !== 'number' || !Number.isFinite(maxMarks)) {
 		return json(
 			{ error: 'grading_unavailable', message: 'Mark scheme or grading prompt is missing' },
 			{ status: 400 }
@@ -159,6 +162,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const awardedMarks = Math.max(0, Math.min(result.awardedMarks, maxMarks));
 		const feedback = result.feedback.trim();
+		const feedbackHtml = renderMarkdownOptional(feedback);
 		const gradingResult =
 			awardedMarks >= maxMarks ? 'correct' : awardedMarks === 0 ? 'incorrect' : 'partial';
 
@@ -167,7 +171,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			result: gradingResult,
 			awardedMarks,
 			maxMarks,
-			feedback
+			feedback,
+			feedbackHtml
 		});
 	} catch (error) {
 		console.error('Failed to grade type-answer response', {
