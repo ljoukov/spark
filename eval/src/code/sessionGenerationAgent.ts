@@ -135,31 +135,29 @@ class UsageAggregator {
     if (!initial) {
       return;
     }
-    this.overallTotals.calls = initial.totals?.calls ?? 0;
-    this.overallTotals.costUsd = initial.totals?.costUsd ?? 0;
-    if (initial.elapsedMs?.model) {
+    this.overallTotals.calls = initial.totals.calls;
+    this.overallTotals.costUsd = initial.totals.costUsd;
+    if (initial.elapsedMs) {
       this.modelElapsedMs = initial.elapsedMs.model;
     }
-    if (initial.models) {
-      for (const [modelId, totals] of Object.entries(initial.models)) {
-        const hydrated = createUsageTotals(Boolean(totals.tokens));
-        hydrated.calls = totals.calls ?? 0;
-        hydrated.costUsd = totals.costUsd ?? 0;
-        if (totals.tokens) {
-          hydrated.tokens = {
-            input: totals.tokens.input ?? 0,
-            prompt: totals.tokens.prompt ?? 0,
-            cached: totals.tokens.cached ?? 0,
-            toolUsePrompt: totals.tokens.toolUsePrompt ?? 0,
-            output: totals.tokens.output ?? 0,
-            response: totals.tokens.response ?? 0,
-            responseImageTokens: totals.tokens.responseImageTokens ?? 0,
-            thinking: totals.tokens.thinking ?? 0,
-            total: totals.tokens.total ?? 0,
-          };
-        }
-        this.modelTotals.set(modelId, hydrated);
+    for (const [modelId, totals] of Object.entries(initial.models)) {
+      const hydrated = createUsageTotals(Boolean(totals.tokens));
+      hydrated.calls = totals.calls;
+      hydrated.costUsd = totals.costUsd;
+      if (totals.tokens) {
+        hydrated.tokens = {
+          input: totals.tokens.input,
+          prompt: totals.tokens.prompt,
+          cached: totals.tokens.cached,
+          toolUsePrompt: totals.tokens.toolUsePrompt,
+          output: totals.tokens.output,
+          response: totals.tokens.response,
+          responseImageTokens: totals.tokens.responseImageTokens,
+          thinking: totals.tokens.thinking,
+          total: totals.tokens.total,
+        };
       }
+      this.modelTotals.set(modelId, hydrated);
     }
   }
 
@@ -691,11 +689,11 @@ async function main(): Promise<void> {
       usage.finish(handle);
       scheduleUsageWrite();
     },
-    startStage(_stageName: string) {
+    startStage() {
       return Symbol("stage");
     },
-    finishStage(_handle: symbol) {},
-    setActiveStages(_stages?: Iterable<string>) {},
+    finishStage() {},
+    setActiveStages() {},
   };
   if (options.smokeTest) {
     await runSessionAgentSmokeTest({
@@ -737,10 +735,10 @@ async function main(): Promise<void> {
   if (options.publish) {
     const topic =
       options.topic ??
-      result.session.title ??
-      (options.briefFile
-        ? deriveTopicFromBrief(await readFile(options.briefFile, "utf8"))
-        : "session");
+      (result.session.title ||
+        (options.briefFile
+          ? deriveTopicFromBrief(await readFile(options.briefFile, "utf8"))
+          : "session"));
     await publishToWelcomeTemplate({
       sessionId: result.sessionId,
       topic,
