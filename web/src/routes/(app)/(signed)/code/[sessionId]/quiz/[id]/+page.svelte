@@ -45,34 +45,29 @@
 		result: z.enum(['correct', 'partial', 'incorrect']),
 		awardedMarks: z.number().int().nonnegative(),
 		maxMarks: z.number().int().positive(),
-		feedback: z.string().min(1),
-		feedbackHtml: z.string().optional()
+		feedback: z.string().min(1)
 	});
 
 	type TypeAnswerGradeResponse = z.infer<typeof typeAnswerGradeResponseSchema>;
 
 	const props = $props<{ data: PageData }>();
-	const data = $derived(props.data);
-	const quiz = $derived(data.quiz);
-	const sessionId = $derived(data.sessionId);
-	const planItemId = $derived(data.planItem.id);
-	const sessionState = $derived(data.sessionState);
-	const planItemStateData = $derived(data.planItemState);
-	const gradeFeedbackHtml = $derived(data.gradeFeedbackHtml);
-	const quizId = $derived(data.quiz.id);
+	const quiz = $derived(props.data.quiz) as PageData['quiz'];
+	const sessionId = $derived(props.data.sessionId);
+	const planItemId = $derived(props.data.planItem.id);
+	const sessionState = $derived(props.data.sessionState);
+	const planItemStateData = $derived(props.data.planItemState);
+	const quizId = $derived(props.data.quiz.id);
 	const SYNC_ERROR_MESSAGE =
 		"We couldn't save your latest progress. Check your connection and try again.";
 	let sessionStateStore: ReturnType<typeof createSessionStateStore> | null = null;
 	let planItemState = $state<PlanItemState | null>(null);
 	let completionSyncError = $state<string | null>(null);
 	let pendingAction = $state<'submit' | 'dontKnow' | 'continue' | null>(null);
-	let gradeFeedbackHtmlByQuestionId = $state<Record<string, string>>({});
 
 	$effect(() => {
 		const store = createSessionStateStore(sessionId, sessionState);
 		sessionStateStore = store;
 		planItemState = planItemStateData ?? null;
-		gradeFeedbackHtmlByQuestionId = gradeFeedbackHtml ?? {};
 		completionSyncError = null;
 		const stop = store.subscribe((value) => {
 			const nextPlanItemState = (value.items[planItemId] as PlanItemState | undefined) ?? null;
@@ -146,10 +141,8 @@
 		return null;
 	}
 
-	function buildGradeFeedback(
-		grade: NonNullable<QuizQuestionState['grade']>,
-		messageHtml?: string
-	): QuizFeedback {
+	function buildGradeFeedback(grade: NonNullable<QuizQuestionState['grade']>): QuizFeedback {
+		const messageHtml = renderMarkdownOptional(grade.feedback);
 		return {
 			message: grade.feedback,
 			messageHtml,
@@ -157,7 +150,9 @@
 		};
 	}
 
-	function buildGradeState(response: TypeAnswerGradeResponse): QuizQuestionState['grade'] {
+	function buildGradeState(
+		response: TypeAnswerGradeResponse
+	): NonNullable<QuizQuestionState['grade']> {
 		const tone: QuizFeedback['tone'] =
 			response.result === 'correct'
 				? 'success'
@@ -369,9 +364,7 @@
 			const locked = status !== 'pending';
 			const showContinue = question.kind === 'info-card' ? false : status !== 'pending';
 			const gradeFeedback =
-				question.kind === 'type-answer' && saved.grade
-					? buildGradeFeedback(saved.grade, gradeFeedbackHtmlByQuestionId[question.id])
-					: null;
+				question.kind === 'type-answer' && saved.grade ? buildGradeFeedback(saved.grade) : null;
 			const feedback =
 				gradeFeedback ??
 				buildFeedback(
@@ -745,7 +738,7 @@
 			);
 			const isCorrect = accepted.includes(trimmed.toLowerCase());
 			const status: AttemptStatus = isCorrect ? 'correct' : 'incorrect';
-			const fallbackGrade =
+			const fallbackGrade: NonNullable<QuizQuestionState['grade']> | null =
 				typeof question.marks === 'number' && Number.isFinite(question.marks)
 					? {
 							awardedMarks: isCorrect ? question.marks : 0,
@@ -863,16 +856,9 @@
 			return;
 		}
 
-		if (response.feedbackHtml) {
-			gradeFeedbackHtmlByQuestionId = {
-				...gradeFeedbackHtmlByQuestionId,
-				[question.id]: response.feedbackHtml
-			};
-		}
-
 		const grade = buildGradeState(response);
 		const status: AttemptStatus = response.result === 'correct' ? 'correct' : 'incorrect';
-		const feedback = buildGradeFeedback(grade, response.feedbackHtml);
+		const feedback = buildGradeFeedback(grade);
 
 		updateAttempt(currentIndex, (prev) => ({
 			...prev,
@@ -1170,8 +1156,6 @@
 				locked={activeAttempt.locked}
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
-				submitPhase={activeAttempt.submitPhase ?? 'submitting'}
-				thinkingText={activeAttempt.streamingThoughts || null}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				{continueLabel}
@@ -1191,6 +1175,8 @@
 				locked={activeAttempt.locked}
 				busy={pendingAction !== null}
 				busyAction={pendingAction}
+				submitPhase={activeAttempt.submitPhase ?? 'submitting'}
+				thinkingText={activeAttempt.streamingThoughts || null}
 				feedback={activeAttempt.feedback}
 				showContinue={activeAttempt.showContinue}
 				continueLabel={activeContinueLabel}
