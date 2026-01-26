@@ -56,7 +56,7 @@ const StoredAuthSchema = z
     id_token: z.string().optional(),
     idToken: z.string().optional(),
   })
-  .passthrough();
+  .loose();
 
 const EnvAuthSchema = z.object({
   access: z.string().min(1),
@@ -319,11 +319,15 @@ async function resolveAuthProfile(): Promise<{
         return { profile, source };
       }
     } catch (error) {
-      errors.push(
+      const message =
         error instanceof Error
           ? error.message
-          : String(error ?? "Unknown error"),
-      );
+          : typeof error === "string"
+            ? error
+            : error && typeof error === "object"
+              ? JSON.stringify(error)
+              : "Unknown error";
+      errors.push(message);
     }
   }
   const details = errors.length > 0 ? `\n${errors.join("\n")}` : "";

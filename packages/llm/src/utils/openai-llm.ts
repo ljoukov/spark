@@ -17,7 +17,7 @@ export type OpenAiModelVariantId = OpenAiModelId | ChatGptOpenAiModelId;
 export const OPENAI_MODEL_VARIANT_IDS = [
   ...OPENAI_MODEL_IDS,
   ...OPENAI_MODEL_IDS.map(
-    (modelId) => `chatgpt-${modelId}` as ChatGptOpenAiModelId,
+    (modelId): ChatGptOpenAiModelId => `chatgpt-${modelId}`,
   ),
 ] as const satisfies readonly [OpenAiModelVariantId, ...OpenAiModelVariantId[]];
 
