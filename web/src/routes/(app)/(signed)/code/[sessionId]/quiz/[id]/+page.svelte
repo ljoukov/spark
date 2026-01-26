@@ -453,30 +453,24 @@
 			? 'Network error, retry'
 			: continueLabel
 	);
-	const activeScore = $derived(() => {
-		if (
-			activeAttempt.grade &&
+	const activeScore = $derived(
+		activeAttempt.grade &&
 			Number.isFinite(activeAttempt.grade.awardedMarks) &&
 			Number.isFinite(activeAttempt.grade.maxMarks)
-		) {
-			return {
-				awarded: activeAttempt.grade.awardedMarks,
-				max: activeAttempt.grade.maxMarks
-			};
-		}
-		if (
-			activeQuestion.kind === 'type-answer' &&
-			typeof activeQuestion.marks === 'number' &&
-			Number.isFinite(activeQuestion.marks) &&
-			activeAttempt.status !== 'pending'
-		) {
-			return {
-				awarded: activeAttempt.status === 'correct' ? activeQuestion.marks : 0,
-				max: activeQuestion.marks
-			};
-		}
-		return null;
-	});
+			? {
+					awarded: activeAttempt.grade.awardedMarks,
+					max: activeAttempt.grade.maxMarks
+				}
+			: activeQuestion.kind === 'type-answer' &&
+					typeof activeQuestion.marks === 'number' &&
+					Number.isFinite(activeQuestion.marks) &&
+					activeAttempt.status !== 'pending'
+				? {
+						awarded: activeAttempt.status === 'correct' ? activeQuestion.marks : 0,
+						max: activeQuestion.marks
+					}
+				: null
+	);
 	const progressSteps = $derived(
 		quiz.questions.map<QuizProgressStep>((question, index) => {
 			const attempt = attempts[index];
