@@ -1348,7 +1348,7 @@ function loadAgentEnv(): void {
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
 }
 
-async function buildSessionAgentTools(options: {
+function buildSessionAgentTools(options: {
   paths: WorkspacePaths;
   progress?: JobProgressReporter;
   includeStory: boolean;
@@ -2167,7 +2167,7 @@ export async function runSessionAgentSmokeTest(options: {
   const includeStory = true;
   const includeCoding = true;
   const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
-  const tools = await buildSessionAgentTools({
+  const tools = buildSessionAgentTools({
     paths,
     progress: options.progress,
     includeStory,
@@ -2271,7 +2271,7 @@ export async function runSessionGenerationAgent(
     includeCoding,
   });
 
-  const tools = await buildSessionAgentTools({
+  const tools = buildSessionAgentTools({
     paths,
     progress: options.progress,
     includeStory,

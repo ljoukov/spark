@@ -320,8 +320,16 @@ async function* parseEventStream(
 ): AsyncIterable<ChatGptCodexStreamEvent> {
   const decoder = new TextDecoder();
   let buffer = "";
-  for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true });
+  const reader = stream.getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+    buffer += decoder.decode(value, { stream: true });
     let boundary = findEventBoundary(buffer);
     while (boundary) {
       const raw = buffer.slice(0, boundary.index);
