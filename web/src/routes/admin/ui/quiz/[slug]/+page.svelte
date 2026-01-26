@@ -14,9 +14,10 @@
 	import { z } from 'zod';
 
 	const props = $props<{ data: PageData }>();
-	const data = $derived(props.data);
-
-	const quiz = $derived(data.quiz);
+	const quiz = $derived(props.data.quiz) as PageData['quiz'];
+	const slug = $derived(props.data.slug);
+	const title = $derived(props.data.title);
+	const description = $derived(props.data.description);
 	let activeIndex = $state(0);
 	const activeQuestion = $derived(quiz.questions[activeIndex]);
 	let hintVisible = $state(false);
@@ -41,8 +42,7 @@
 		result: z.enum(['correct', 'partial', 'incorrect']),
 		awardedMarks: z.number().int().nonnegative(),
 		maxMarks: z.number().int().positive(),
-		feedback: z.string().min(1),
-		feedbackHtml: z.string().optional()
+		feedback: z.string().min(1)
 	});
 
 	$effect(() => {
@@ -91,9 +91,10 @@
 	}
 
 	function buildGradeFeedback(result: z.infer<typeof typeAnswerGradeResponseSchema>): QuizFeedback {
+		const messageHtml = renderMarkdownOptional(result.feedback);
 		return {
 			message: result.feedback,
-			messageHtml: result.feedbackHtml,
+			messageHtml,
 			tone:
 				result.result === 'correct' ? 'success' : result.result === 'partial' ? 'info' : 'warning'
 		};
@@ -108,10 +109,13 @@
 		return lines.slice(-4).join('\n');
 	}
 
-	async function requestTypeAnswerGradeStream(questionId: string, answer: string) {
+	async function requestTypeAnswerGradeStream(
+		questionId: string,
+		answer: string
+	): Promise<z.infer<typeof typeAnswerGradeResponseSchema>> {
 		let result: z.infer<typeof typeAnswerGradeResponseSchema> | null = null;
 		await streamSse(
-			`/admin/ui/quiz/${data.slug}/grade`,
+			`/admin/ui/quiz/${slug}/grade`,
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -192,7 +196,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.title} · Admin UI Preview</title>
+	<title>{title} · Admin UI Preview</title>
 </svelte:head>
 
 <div class="fixed inset-0 z-50 flex min-h-screen flex-col bg-background">
@@ -203,8 +207,8 @@
 			<p class="text-xs font-semibold tracking-[0.32em] text-muted-foreground uppercase">
 				Admin UI preview
 			</p>
-			<h1 class="text-lg font-semibold tracking-tight text-foreground md:text-xl">{data.title}</h1>
-			<p class="text-xs text-muted-foreground">{data.description}</p>
+			<h1 class="text-lg font-semibold tracking-tight text-foreground md:text-xl">{title}</h1>
+			<p class="text-xs text-muted-foreground">{description}</p>
 		</div>
 		<a
 			href="/admin/ui/quiz"
