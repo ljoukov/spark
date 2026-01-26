@@ -125,7 +125,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const prompt = [
 		"You are Spark's GCSE examiner.",
 		'Grade the student answer using the mark scheme. Award partial credit when appropriate.',
-		'Return JSON only with fields: awardedMarks (integer 0..maxMarks), feedback (1-3 sentences).',
+		'Return JSON only with fields: awardedMarks (integer 0..maxMarks), feedback.',
+		'feedback must be 2-4 short sentences (or bullet points) covering: what is correct, what is missing/incorrect, and how to improve to full marks.',
+		'If no correct points are present, explicitly say so before listing missing points.',
 		'Example: {"awardedMarks":2,"feedback":"Concise feedback."}',
 		'Do not reveal the mark scheme or model answer.',
 		'',
