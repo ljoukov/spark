@@ -10,14 +10,15 @@
 	import type { PageData } from './$types';
 	import { cn } from '$lib/utils.js';
 	import { streamSse } from '$lib/client/sse';
+	import { createFeedbackStreamParser } from '$lib/client/feedbackStream';
 	import { renderMarkdownOptional } from '$lib/markdown';
 	import { z } from 'zod';
 
-	const props = $props<{ data: PageData }>();
-	const quiz = $derived(props.data.quiz) as PageData['quiz'];
-	const slug = $derived(props.data.slug);
-	const title = $derived(props.data.title);
-	const description = $derived(props.data.description);
+	let { data }: { data: PageData } = $props();
+	const quiz = $derived(data.quiz) as PageData['quiz'];
+	const slug = $derived(data.slug);
+	const title = $derived(data.title);
+	const description = $derived(data.description);
 	let activeIndex = $state(0);
 	const activeQuestion = $derived(quiz.questions[activeIndex]);
 	let hintVisible = $state(false);
@@ -114,6 +115,7 @@
 		answer: string
 	): Promise<z.infer<typeof typeAnswerGradeResponseSchema>> {
 		let result: z.infer<typeof typeAnswerGradeResponseSchema> | null = null;
+		const feedbackParser = createFeedbackStreamParser();
 		await streamSse(
 			`/admin/ui/quiz/${slug}/grade`,
 			{
@@ -130,13 +132,15 @@
 					}
 					if (event.event === 'text') {
 						typedSubmitPhase = 'grading';
-						const nextMessage = `${typedFeedback?.message ?? ''}${event.data}`;
-						const messageHtml = renderMarkdownOptional(nextMessage);
-						typedFeedback = {
-							message: nextMessage,
-							messageHtml,
-							tone: 'info'
-						};
+						const nextMessage = feedbackParser.append(event.data);
+						if (nextMessage) {
+							const messageHtml = renderMarkdownOptional(nextMessage);
+							typedFeedback = {
+								message: nextMessage,
+								messageHtml,
+								tone: 'info'
+							};
+						}
 						return;
 					}
 					if (event.event === 'done') {

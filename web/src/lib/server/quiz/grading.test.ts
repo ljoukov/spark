@@ -8,7 +8,7 @@ describe('parseGradeOutput', () => {
 			'%MAX_MARKS%: 4',
 			'%FEEDBACK%:',
 			'### (a) Your grade and feedback',
-			'**Mark:** **2/4**',
+			'**Your answer:** **2/4**',
 			'Reason: Clear start but missing immune detail.',
 			'',
 			'---',
@@ -30,7 +30,7 @@ describe('parseGradeOutput', () => {
 			'%AWARDED_MARKS%: 3',
 			'%FEEDBACK%:',
 			'### (a) Your grade and feedback',
-			'**Mark:** **3/6**',
+			'**Your answer:** **3/6**',
 			'Reason: ...'
 		].join('\n');
 
@@ -41,7 +41,7 @@ describe('parseGradeOutput', () => {
 	it('derives marks from the Mark line when keys are missing', () => {
 		const raw = [
 			'### (a) Your grade and feedback',
-			'**Mark:** **3/5**',
+			'**Your answer:** **3/5**',
 			'Reason: ...',
 			'',
 			'---',
