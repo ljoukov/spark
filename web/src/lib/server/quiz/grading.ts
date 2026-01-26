@@ -52,16 +52,18 @@ function buildGradingPrompt(input: GradeTypeAnswerInput): string {
 		'%AWARDED_MARKS%: X',
 		'%MAX_MARKS%: Y',
 		'%FEEDBACK%:',
-		'<Markdown block starts on the next line>',
+		'<Markdown block starts on the next line after a blank line>',
+		'(Leave exactly one blank line after %FEEDBACK%: before the Markdown.)',
 		'',
 		'The Markdown block must be fluent, student-facing, and use the exact structure below.',
 		'Use headings that read naturally (not robotic or copy-pasted).',
 		'### (a) Your grade and feedback',
-		'**Mark:** **X/Y**',
+		'**Your answer:** **X/Y**',
 		'Reason: 1-2 sentences explaining what is correct/missing (be specific, student-facing).',
 		'If awardedMarks < maxMarks, add two short lines immediately after Reason:',
 		'Where you got marks: ...',
 		'What you missed: ...',
+		'If awardedMarks = maxMarks, skip the Where/What lines entirely.',
 		'',
 		'---',
 		'',
@@ -72,6 +74,7 @@ function buildGradingPrompt(input: GradeTypeAnswerInput): string {
 		'',
 		'### (c) Marking points (1 bullet per mark)',
 		'Use a hyphen list with one bullet per mark (e.g. "- point"). Do not use numbered lists.',
+		'Put a blank line before the bullet list.',
 		'',
 		'You may use 0-2 subject-relevant emoji total (e.g. 🧬 🦠 🧪) to improve clarity or memorability.',
 		'If no correct points are present, explicitly say so in section (a) before listing missing points.',
@@ -79,8 +82,9 @@ function buildGradingPrompt(input: GradeTypeAnswerInput): string {
 		'%AWARDED_MARKS%: 2',
 		'%MAX_MARKS%: 4',
 		'%FEEDBACK%:',
+		'',
 		'### (a) Your grade and feedback 🧪',
-		'**Mark:** **2/4**',
+		'**Your answer:** **2/4**',
 		'Reason: You correctly stated that antibiotics don’t work on viruses and mentioned symptom relief, but you didn’t explain how the immune system clears the virus.',
 		'Where you got marks: antibiotics only kill **bacteria**, not **viruses**.',
 		'What you missed: the **immune system** makes **antibodies** and uses **phagocytosis** to remove the virus.',
@@ -93,6 +97,7 @@ function buildGradingPrompt(input: GradeTypeAnswerInput): string {
 		'---',
 		'',
 		'### (c) Marking points (1 bullet per mark)',
+		'',
 		'- Antibiotics do not work on **viruses** (only bacteria).',
 		'- **Painkillers** relieve symptoms.',
 		'- The **immune system** produces **antibodies**.',
@@ -140,7 +145,9 @@ export function parseGradeOutput(rawText: string, maxMarks: number): GradeOutput
 	let parsedMaxMarks = maxMatch ? Number.parseInt(maxMatch[1], 10) : maxMarks;
 
 	if (!Number.isFinite(awardedMarks)) {
-		const markMatch = feedbackRaw.match(/Mark:\s*.*?(\d+)\s*\/\s*(\d+)/i);
+		const markMatch = feedbackRaw.match(
+			/(?:Mark|Your answer|Your grade|Score)\s*:\s*.*?(\d+)\s*\/\s*(\d+)/i
+		);
 		if (markMatch) {
 			awardedMarks = Number.parseInt(markMatch[1], 10);
 			parsedMaxMarks = Number.parseInt(markMatch[2], 10);

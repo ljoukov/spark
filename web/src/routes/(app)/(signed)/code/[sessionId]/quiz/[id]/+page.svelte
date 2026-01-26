@@ -14,6 +14,7 @@
 	import { untrack } from 'svelte';
 	import { createSessionStateStore, type SessionUpdateOptions } from '$lib/client/sessionState';
 	import { streamSse } from '$lib/client/sse';
+	import { createFeedbackStreamParser } from '$lib/client/feedbackStream';
 	import { renderMarkdownOptional } from '$lib/markdown';
 	import type { PlanItemState, PlanItemQuizState, QuizQuestionState } from '@spark/schemas';
 	import { z } from 'zod';
@@ -50,13 +51,13 @@
 
 	type TypeAnswerGradeResponse = z.infer<typeof typeAnswerGradeResponseSchema>;
 
-	const props = $props<{ data: PageData }>();
-	const quiz = $derived(props.data.quiz) as PageData['quiz'];
-	const sessionId = $derived(props.data.sessionId);
-	const planItemId = $derived(props.data.planItem.id);
-	const sessionState = $derived(props.data.sessionState);
-	const planItemStateData = $derived(props.data.planItemState);
-	const quizId = $derived(props.data.quiz.id);
+	let { data }: { data: PageData } = $props();
+	const quiz = $derived(data.quiz) as PageData['quiz'];
+	const sessionId = $derived(data.sessionId);
+	const planItemId = $derived(data.planItem.id);
+	const sessionState = $derived(data.sessionState);
+	const planItemStateData = $derived(data.planItemState);
+	const quizId = $derived(data.quiz.id);
 	const SYNC_ERROR_MESSAGE =
 		"We couldn't save your latest progress. Check your connection and try again.";
 	let sessionStateStore: ReturnType<typeof createSessionStateStore> | null = null;
@@ -811,6 +812,7 @@
 		}));
 
 		let response: TypeAnswerGradeResponse;
+		const feedbackParser = createFeedbackStreamParser();
 		let streamingFeedback = '';
 		let streamingThoughts = '';
 		try {
@@ -826,17 +828,26 @@
 					}));
 				},
 				(delta) => {
-					streamingFeedback = `${streamingFeedback}${delta}`;
-					const messageHtml = renderMarkdownOptional(streamingFeedback);
-					updateAttempt(currentIndex, (prev) => ({
-						...prev,
-						submitPhase: 'grading',
-						feedback: {
-							message: streamingFeedback,
-							messageHtml,
-							tone: 'info'
+					const nextFeedback = feedbackParser.append(delta);
+					updateAttempt(currentIndex, (prev) => {
+						if (nextFeedback === null) {
+							return {
+								...prev,
+								submitPhase: 'grading'
+							};
 						}
-					}));
+						streamingFeedback = nextFeedback;
+						const messageHtml = renderMarkdownOptional(nextFeedback);
+						return {
+							...prev,
+							submitPhase: 'grading',
+							feedback: {
+								message: nextFeedback,
+								messageHtml,
+								tone: 'info'
+							}
+						};
+					});
 				}
 			);
 		} catch (error) {
