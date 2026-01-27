@@ -6,35 +6,29 @@ service cloud.firestore {
     return request.auth != null && request.auth.uid == userId;
   }
 
-  function isTestUser(userId) {
-    // Read the admin doc and see if userId is whitelisted
-    let adminDoc = get(/databases/$(database)/documents/spark-admin/admin);
-    let testers = adminDoc.data['test-users'];
-    return testers != null && testers.hasAny([userId]);
-  }
-
-  function canAccess(userId) {
-    // Allow if real owner OR the path userId is whitelisted for testing
-    return isOwner(userId) || isTestUser(userId);
-  }
-
   match /databases/{database}/documents {
     // Example user-scoped doc
     match /users/{userId}/toons/client {
-      allow read: if canAccess(userId);
+      allow read: if isOwner(userId);
     }
 
     // Your existing spark paths
     match /spark/{userId}/{docId=*} {
-      allow read: if canAccess(userId);
+      allow read: if isOwner(userId);
     }
 
     match /spark/{userId}/docs/{docId=**} {
-      allow read: if canAccess(userId);
+      allow read: if isOwner(userId);
     }
 
     match /spark/{userId}/state/{docId=**} {
-      allow read, write: if canAccess(userId);
+      allow read, write: if isOwner(userId);
+    }
+
+    // Spark AI Agent client-safe conversations
+    match /{userId}/client/{docId=**} {
+      allow read: if isOwner(userId);
+      allow write: if false;
     }
   }
 }

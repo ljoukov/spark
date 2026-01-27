@@ -4,9 +4,7 @@
 	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 	import { applyDocumentTheme, startAutomaticThemeSync } from '$lib/utils/theme';
 	import { themePreference, type ThemePreference } from '$lib/stores/themePreference';
-	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
-	import { getAuth } from 'firebase/auth';
 
 	injectAnalytics({ mode: dev ? 'development' : 'production' });
 
@@ -28,9 +26,7 @@
 		});
 
 		try {
-			const app = getFirebaseApp();
-			const auth = getAuth(app);
-			stopTokenSync = startIdTokenCookieSync(auth);
+			stopTokenSync = startIdTokenCookieSync();
 		} catch (error) {
 			console.warn('Failed to start Firebase ID token cookie sync', error);
 		}
