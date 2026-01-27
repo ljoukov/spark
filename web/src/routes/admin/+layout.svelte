@@ -16,6 +16,7 @@
 		startGoogleSignInRedirect,
 		firebaseSignOut
 	} from '$lib/utils/firebaseClient';
+	import { ensureFreshIdToken, startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { getFirestore, doc, onSnapshot, type Firestore } from 'firebase/firestore';
 	import type { Snippet } from 'svelte';
@@ -120,6 +121,7 @@
 
 		// Subscribe to Firestore user profile for name/email/photo/loginUrl
 		let stopProfile = () => {};
+		let stopTokenSync: (() => void) | null = null;
 		try {
 			if (adminUser.uid && adminUser.uid !== 'guest') {
 				const db: Firestore = getFirestore(getFirebaseApp());
@@ -169,18 +171,21 @@
 		let stopAuth: () => void = () => {};
 		if (!data.authDisabled) {
 			const auth = getAuth(getFirebaseApp());
+			stopTokenSync = startIdTokenCookieSync(auth);
 			let refreshed = false;
 			stopAuth = onIdTokenChanged(auth, (user) => {
 				if (user && !refreshed) {
 					refreshed = true;
-					setTimeout(() => {
-						void invalidateAll();
-					}, 0);
+					void (async () => {
+						await ensureFreshIdToken();
+						await invalidateAll();
+					})();
 				}
 			});
 		}
 		return () => {
 			stopProfile();
+			stopTokenSync?.();
 			stopAuth();
 		};
 	});
