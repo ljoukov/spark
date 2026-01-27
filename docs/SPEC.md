@@ -2,14 +2,14 @@
 
 ## 0) Monorepo Layout & Tooling Assumptions
 
-- `proto/` — Source of truth for Protocol Buffer definitions shared by client and server.
-  - inside `proto/` run "npm run generate" ro ptoduce TypeScript and Swift protos.
-  - TypeScript: alias `$proto` is configured to simplify importing.
-  - Swift types via `swift-protobuf` into `Spark/proto`.
+- `proto/` — Reserved for future Protocol Buffer definitions (mobile-only, not used by the web app yet).
+  - Inside `proto/` run `npm run generate` to produce TypeScript and Swift protos once enabled.
+  - TypeScript: alias `$proto` is configured to simplify importing when the proto API is turned on.
+  - Swift types via `swift-protobuf` into `Spark/proto` (future).
 - `web/` — SvelteKit (latest) project deployed to Vercel. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
   - UI theming + color tokens are documented in `web/docs/color-system.md`.
 - API logic lives under `web/src/routes/api/*`.
-- Web app lives under `web/src/routes/app`
+- Web app routes live under `web/src/routes`.
 - Admin dashboard lives under `web/src/routes/admin`
 - `packages/schemas/` — shared Zod schemas + TypeScript types for Firestore docs (sessions, session state, user stats). Browser-safe and imported by both `web` and `eval` workspaces.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
@@ -89,8 +89,8 @@ http://127.0.0.1:8080/
 ```
 
 Useful entry points:
-- `/` or `/?destination=code` or `/?destination=spark`
-- `/c` (Spark Chat), `/code`, `/spark`
+- `/` (logged-out landing), `/login`
+- `/spark` (signed-in home), `/spark/code`, `/spark/code/lessons`
 - `/admin` (requires `test-admin-` prefix)
 
 To return to normal auth, stop the server and run `npm --prefix web run dev` without `FORCE_TEST_USER` or `TEST_USER`.
@@ -127,7 +127,7 @@ Recommended defaults:
     - Help GCSE students learn from their own study materials by turning photos of notes, textbooks, and past papers into short quizzes and flashcards, then summarizing progress after each quiz.
     - Focus: GCSE Triple Science (Biology, Chemistry, Physics) across AQA, Edexcel, OCR. Provide fast feedback loops: immediate acknowledgement that generation started and continuous progress updates via Firestore.
   - Spark Code (British Informatics Olympiad prep)
-    - Help students prepare for the British Informatics Olympiad (BIO) with coding practice sessions and problems delivered via the web app (e.g., under `/code`), with session progress persisted through SvelteKit APIs that proxy Firestore.
+    - Help students prepare for the British Informatics Olympiad (BIO) with coding practice sessions and problems delivered via the web app (e.g., under `/spark/code`), with session progress persisted through SvelteKit APIs that proxy Firestore.
 
 **Non-Goals**
 
@@ -151,7 +151,7 @@ Recommended defaults:
 
 ### API endpoint
 
-`/api/spark` accepts SparkApiRequestProto and responds with SparkApiResponseProto, to simplify logging
+The protobuf API is reserved for the mobile app (future); the web app does not use protobufs yet. `/api/spark` is currently disabled in the web server while the /spark flow is being rebuilt.
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
 `/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
@@ -173,7 +173,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 ### 3.1 Data Flow
 
-1. User captures/upload content in the SwiftUI app.
+1. User captures/upload content in the SwiftUI app (future flow; not used by the web app yet).
 2. App serializes a Protocol Buffer `GenerateFromUploadRequest` and uploads file(s) to Firebase Storage (`/spark/<userId>/<timestamp>.jpg|pdf`).
 3. App calls API endpoint (`POST /api/spark`) with binary proto payload referencing the upload.
 4. API endpoint validates input, writes initial job document to Firestore, and kicks off LLM processing using the Vercel Edge Runtime `event.waitUntil()` hook so work continues even if the HTTP client disconnects.
@@ -198,19 +198,19 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - Uses SvelteKit
 - API routes implemented as server modules in `web/src/routes/api/*/+server.ts`.
-- Request handling pipeline:
-  1. Parse binary proto payload using generated TypeScript classes.
+- Request handling pipeline (proto endpoints are future/mobile-only; web routes use JSON today):
+  1. (Proto) Parse binary proto payload using generated TypeScript classes.
   2. Validate auth (Firebase ID token in headers) using Admin SDK instance warmed at module scope.
   3. Persist initial Firestore documents and enqueue background workflow by scheduling async functions with `event.waitUntil()` when running in the Edge Runtime.
-  4. Return minimal proto response (`AckResponse` with `job_id`, `received_at`, optimistic status).
+  4. (Proto) Return minimal proto response (`AckResponse` with `job_id`, `received_at`, optimistic status).
 - Long-running operations (LLM generations, PDF parsing, summarization) run entirely inside the Edge Runtime `event.waitUntil` hook. The handler writes updates back to Firestore as discrete steps (`started`, `ingesting`, `generating`, `ready`...). If rate limits require, delegate to Cloud Tasks or other queueing primitives in later iterations.
 - Firestore access uses REST RPC with service account JWT stored in Vercel environment secrets; ensure connection pooling via `fetch`. All writes batched to stay within limit.
-- API surface (proto-based):
+- API surface (proto-based, future/mobile-only):
   - `SparkApiRequest.request = GenerateFromUploadRequest`
   - `SparkApiRequest.request = CheckAnswerRequest`
   - `SparkApiRequest.request = SummarizeRequest`
   - `SparkApiRequest.request = SyncRequest` (optional to bootstrap client caches)
-- Non-proto HTTP endpoints (JSON) for marketing forms or health checks kept separate (`/api/health`, `/api/newsletter`).
+- Web app uses JSON endpoints under `/api/*`; non-proto marketing endpoints remain separate (`/api/health`, `/api/newsletter`).
 - Logging & tracing: console logs captured via Vercel logging/observability; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
 
 ## 5) iOS App (SwiftUI)
@@ -238,23 +238,23 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - IMPORTANT: read the docs in web/docs/shadcn-svelte.md to understand shadcn (UI Com ponents library)
 - Svelte 5 gotcha: do not capture reactive `data` (from `$props`) in top-level initializers. Use `$derived`, `$effect`, or lazy functions (e.g. for context) so values update and avoid `state_referenced_locally`.
 
-- Landing page (`/`) is a logged-out home/marketing hero with the preview video and a visible `Log in` CTA; the sign-in UI opens in a dialog (Google + guest mode). It accepts an optional `destination` query (`code` | `spark`) and otherwise routes authenticated users to `/c` (Spark Chat).
-- /app and /admin pages are build with shadcn and SvelteKit
+- Landing page (`/`) is a logged-out home/marketing hero with the preview video and a visible `LOGIN` CTA; clicking it navigates to `/login`. If the server detects an authenticated session it redirects straight to `/spark` (no `destination` query, no guest mode).
+- `/login` renders the sign-in dialog (Google auth) and redirects to `/spark` on success.
+- Web app pages (including `/spark` and `/admin`) are built with shadcn and SvelteKit.
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
-- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/c`, `/spark`, and `/code`.
-- `/c` is the default signed-in home (Spark Chat). It shows a Slack-style channel list, a default “New chat” channel, and a message composer. The left panel keeps the Spark logo, Search, and “New chat” pinned above the scrollable channel list; on small screens it collapses behind a hamburger in the top bar. The composer stays pinned above the scrollable transcript and caps its height at ~14 lines before it scrolls internally. When the channel is empty it shows quick links to `/code` and `/spark` until the full card-based home is implemented.
-- `/spark` hosts the Spark Quiz flow. The Spark hub card includes a dotted “Upload” dropzone that accepts PDFs up to 25 MB; uploads flow through the SvelteKit API to Firebase Storage under `spark/uploads/{uid}/{sha}.pdf` and immediately register Firestore metadata at `spark/{uid}/uploads/{sha}` with a pending 20-question quiz run.
-  - Learners can trigger additional quiz runs for a stored upload via `POST /api/spark/uploads/{uploadId}/quiz`; each request creates a new `spark/{uid}/uploads/{uploadId}/quiz/{quizId}` document and enqueues processing without duplicating the underlying PDF.
-- `/welcome` is deprecated and now redirects to `/`.
-- `/logout` honours a `from` query (`code` | `spark`) and routes the “Back to Spark” action to `/?destination=<from>` so learners land in the correct experience, otherwise `/?` for the standard login screen.
+- Signed-in experiences live under `/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
+- `/spark` is the signed-in home with cards linking to `/spark/code` and `/spark/code/lessons`.
+- `/spark/code` hosts the Spark Code experience (quizzes, problems, media steps).
+- `/logout` signs out and returns to `/`.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.
 - CSR avoided for marketing pages; islands used sparingly for forms.
 
 ## 7) Firestore Data Model
 
 - `users/{uid}`: profile info, preferences, current programme, board (optional), subscriber flags.
+- Spark Chat UI is currently removed from the web app; channel/message collections are reserved for future reuse.
 - `spark/{uid}/channels/{channelId}`: Spark Chat channels scoped to a single user (current default scope).
   - Fields: `{ title: string, scope: 'private', createdAt: Timestamp, updatedAt: Timestamp, lastMessageAt?: Timestamp }`.
   - Default channel id: `home` (title “New chat”).
@@ -269,20 +269,20 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Copy convention: info-card eyebrow uses single-word labels from a small whitelist: `Idea`, `Concept`, `Insight`, `Rules`, `Tips`, `Facts`, `Shortcut` (default `Idea`). Avoid phrases like "Idea card".
 - Quiz content (prompts, hints, multiple-choice explanations, info-card bodies, and choice labels) accepts lightweight Markdown authored in the schema. Type-answer questions do **not** store explanations; their feedback is produced by the grader. The SvelteKit loader renders Markdown with `marked` (GFM enabled, soft line breaks) plus the KaTeX extension so `$...$` / `$$...$$` formulas display inline or block-level before hydrating the quiz components. When no Markdown is present the components fall back to the existing plain-text rendering, so data authors do not need to escape anything manually.
 - `spark/{uid}/sessions/{sessionId}`: server-only session plans. Each document stores `{ id, title, summary?, tagline?, emoji?, createdAt: Timestamp, status?: 'generating' | 'ready' | 'in_progress' | 'completed' | 'error', topics?: string[], sourceSessionId?, sourceProposalId?, nextLessonProposals?: Array<{ id, title, tagline, topics: string[], emoji }>, nextLessonProposalsGeneratedAt?: Timestamp, plan: PlanItem[] }` where `PlanItem` may be a quiz (`{ id, kind: 'quiz', title, summary?, icon?, meta? }`), problem (`{ id, kind: 'problem', title, summary?, icon?, meta?, difficulty?, topic? }`), or media clip (`{ id, kind: 'media', title, summary?, icon?, meta?, duration? }`). Session IDs are short human-readable slugs used in URLs. Only SvelteKit server routes read/write this collection; the client receives sessions through the authenticated layout load. Session-specific content lives in subcollections:
-  - `quiz/{quizId}`: quiz definitions delivered to the `/code` experience. Shape follows `QuizDefinitionSchema` (id, title, optional metadata, gradingPrompt, and an ordered array of questions). Type-answer questions include `marks` + `markScheme` for server grading. Written by server tooling; client never writes or reads directly.
+  - `quiz/{quizId}`: quiz definitions delivered to the `/spark/code` experience. Shape follows `QuizDefinitionSchema` (id, title, optional metadata, gradingPrompt, and an ordered array of questions). Type-answer questions include `marks` + `markScheme` for server grading. Written by server tooling; client never writes or reads directly.
   - `code/{problemId}`: code problem metadata (slug, topics, markdown description, examples, test cases, stdin/stdout solution) scoped to the user and session. Mirrors the structure in `CodeProblemSchema` and is used by the problem detail page.
 - `media/{planItemId}`: narration clips with synced imagery. Documents follow `SessionMediaDocSchema` (`id`, `planItemId`, `sessionId`, `audio: { storagePath, mimeType?, durationSec }`, `images: Array<{ index, storagePath, startSec, durationSec }>` for the story panels (default 10, configurable), `narration: Array<{ text, startSec, durationSec, speaker? }>`, optional `posterImage`/`endingImage` stills (`{ storagePath }`), `metadataVersion` (current v3), timestamps). Audio files live in Firebase Storage at `spark/{userId}/sessions/{sessionId}/{planItemId}.mp3` and remain server-authored via the Admin SDK.
-- On a user's first visit to `/code`, if no sessions exist the server fetches available welcome templates from `spark-admin/templates/sessions`. Each template document provides `{ id, title, summary?, plan, tagline, emoji, topic, key? }` plus child collections for `quiz/`, `code/`, and `media/`. The `/code` welcome screen lists the templates as lesson cards (poster image or emoji, two-line-clamped tagline, and a “Launch” CTA); picking one clones the template into `spark/{uid}/sessions/{sessionId}` with matching subcollections, copies any narration media into the user namespace, and updates `currentSessionId`.
+- On a user's first visit to `/spark/code`, if no sessions exist the server fetches available welcome templates from `spark-admin/templates/sessions`. Each template document provides `{ id, title, summary?, plan, tagline, emoji, topic, key? }` plus child collections for `quiz/`, `code/`, and `media/`. The `/spark/code` welcome screen lists the templates as lesson cards (poster image or emoji, two-line-clamped tagline, and a “Launch” CTA); picking one clones the template into `spark/{uid}/sessions/{sessionId}` with matching subcollections, copies any narration media into the user namespace, and updates `currentSessionId`.
 - `spark/{uid}/state/{sessionId}`: session state document mirrored into SvelteKit responses. Shape `{ sessionId, items: Record<planItemId, { status: 'not_started' | 'in_progress' | 'completed', startedAt?, completedAt?, quiz?: { lastQuestionIndex?: number, serverCompletedAt?: Timestamp, questions: Record<questionId, { status: 'pending' | 'correct' | 'incorrect' | 'skipped', selectedOptionId?, typedValue?, hintUsed?, dontKnow?, firstViewedAt?, answeredAt?, grade?: { awardedMarks, maxMarks, feedback, heading?, tone? } }> }, code?: { language: 'python', source: string, savedAt: Timestamp, lastRunStatus?: 'passed' | 'failed' | 'error', lastRunAt?: Timestamp } }>, lastUpdatedAt }`. `feedback` stores Markdown only; HTML is derived at render time and never persisted. Only the server reads/writes this collection; browser code receives the state through `load` functions and applies changes by POSTing to `/api/code/{sessionId}/update`, which validates via `@spark/schemas` before persisting.
-- Loading feedback (web `/code`): any user action that triggers a server round-trip must surface a visible loading cue. Prefer subtle inline spinners on the action target (timeline rows, dialog buttons) for quick navigations; reserve full-screen or modal overlays for major page transitions (opening a lesson from `/code/lessons`, generating new lesson flows) so learners feel the weight of the transition without unnecessary friction. Free-text grading shows a spinner inside the quiz Submit button with “Submitting…” then “Grading…” once the stream starts; network errors swap the button label to “Network error, retry.”
-- Free-text answer UI (web `/code`): starts as a single-line textarea that auto-expands up to 7 lines (then scrolls), with a 1,000 character cap. Grader feedback renders as a single Markdown block; the UI does not inject a separate “correct answer” panel. Grading streams via SSE: thinking tokens render in a fixed-height 4-line box and are cleared once the final answer arrives.
-- Quiz exit UX (web `/code`): clicking the "x" in the quiz progress rail shows the "Take a break?" dialog only when there are unanswered questions. The dialog offers `Keep practicing` and `Quit now`; choosing `Quit now` shows an inline spinner on the quit button while the server completes the route back to `/code/{sessionId}` and the dialog stays open until navigation finishes to avoid flicker. If every question is already answered the exit control navigates straight to the session dashboard.
-- Code dashboard CTA (web `/code/{sessionId}`): the plan footer button shows `Start` until any item advances, switches to `Continue` once progress exists, and softens into a completed state (`🎉 Finish`) when every step is finished. When finished, the CTA opens the next-lesson dialog instead of routing; the dialog shows a spinner (“Deciding on your next sessions…”) while the server drafts three proposals with Gemini 3 Pro, caches them under `sessions/{sessionId}.nextLessonProposals`, and reuses them on reopen. Each proposal carries `{ title, tagline, topics, emoji }`; picking one enqueues `createTask({ type: 'generateLesson' })`, seeds a `status='generating'` session stub, switches `currentSessionId`, and routes to that session. Sessions in `status='generating'` render the “Generating...” view with a link to `/code/lessons` rather than the plan timeline.
-- Lessons list (web `/code/lessons`): mirrors the `/code` shell with a single panel that lists all lessons newest-first, showing emoji, title/tagline, creation date, derived status (`generating` | `ready` | `in_progress` | `completed` | `error`), and simple step progress; each row links to `/code/{sessionId}`. The user menu includes a `Lessons` entry for quick access. The page also shows all welcome templates with a “Start lesson” action that posts to `/code/lessons?/start`; submitting clones the template into the user’s sessions (same flow as first-time welcome) and redirects to the new `/code/{sessionId}` even when other sessions already exist.
-- Plan header (web `/code/{sessionId}`) displays the session-level summary when available, falling back to the tagline and then the first plan item; individual plan item summaries remain short (<= 15 words) for the timeline rows.
-- Code editor autosave (web `/code/[sessionId]/p/[id]`): the learner's Python source mirrors into `state.items[planItemId].code`. Saves trigger when the user runs code, submits a solution, navigates away / closes the tab (via `keepalive` fetch), and on an edit throttle of ~10 s to avoid spamming Firestore.
-- Problem submission flow: submit first re-runs every test. Submission is blocked until all tests pass, then a completion payload (including the latest code snapshot and run metadata) is sent to `/api/code/{sessionId}/update`. The handler grants XP once per problem based on difficulty, increments `stats.solvedCount`, records the event under `spark/{uid}/progress`, and the client shows a celebratory modal with XP earned plus an “OK” action that routes back to the `/code` dashboard.
-- Media plan steps (intro/outro clips) route to `/code/{sessionId}/m/{planItemId}`. The page renders a timeline-synced player that relies on keyboard left/right navigation (no on-screen arrow controls), a large slide canvas that bleeds edge-to-edge (no frame padding, fixed 16:9), a fixed-height subtitle banner sized for up to two lines of the current caption (no speaker label), and a control bar with an icon-only play/pause control that flips to a replay icon once playback reaches the final 50ms window, plus the speaker toggle, timestamp, and progress scrubber. Slides reuse the non-question card styling; seeking via the keyboard shortcuts or slider also seeks the audio element. All slide images preload before playback or navigation becomes available, with a centered spinner shown in the card and the controls disabled until everything is ready. If any image fails to load we surface an inline error message in the card with a `Retry` button that re-attempts the preload. The server returns a short-lived signed URL derived from the Firebase Storage object to stream the MP3. While the clip is in progress a compact circular `×` button floats over the card header and opens the same gradient “Take a break?” dialog used in quizzes (copy tweaked for media, actions `Keep watching` / `Quit now`). After the clip finishes (or when the plan item was already marked complete) the same `×` routes straight back to `/code/{sessionId}` without surfacing the dialog, re-affirming completion as needed; there is no separate `Done` button. When present, the optional `posterImage` is shown at the very start for 50ms (no Ken Burns), and the optional `endingImage` is shown for the final 50ms; transitions into/out of these frames use the same image fade as other slides.
+- Loading feedback (web `/spark/code`): any user action that triggers a server round-trip must surface a visible loading cue. Prefer subtle inline spinners on the action target (timeline rows, dialog buttons) for quick navigations; reserve full-screen or modal overlays for major page transitions (opening a lesson from `/spark/code/lessons`, generating new lesson flows) so learners feel the weight of the transition without unnecessary friction. Free-text grading shows a spinner inside the quiz Submit button with “Submitting…” then “Grading…” once the stream starts; network errors swap the button label to “Network error, retry.”
+- Free-text answer UI (web `/spark/code`): starts as a single-line textarea that auto-expands up to 7 lines (then scrolls), with a 1,000 character cap. Grader feedback renders as a single Markdown block; the UI does not inject a separate “correct answer” panel. Grading streams via SSE: thinking tokens render in a fixed-height 4-line box and are cleared once the final answer arrives.
+- Quiz exit UX (web `/spark/code`): clicking the "x" in the quiz progress rail shows the "Take a break?" dialog only when there are unanswered questions. The dialog offers `Keep practicing` and `Quit now`; choosing `Quit now` shows an inline spinner on the quit button while the server completes the route back to `/spark/code/{sessionId}` and the dialog stays open until navigation finishes to avoid flicker. If every question is already answered the exit control navigates straight to the session dashboard.
+- Code dashboard CTA (web `/spark/code/{sessionId}`): the plan footer button shows `Start` until any item advances, switches to `Continue` once progress exists, and softens into a completed state (`🎉 Finish`) when every step is finished. When finished, the CTA opens the next-lesson dialog instead of routing; the dialog shows a spinner (“Deciding on your next sessions…”) while the server drafts three proposals with Gemini 3 Pro, caches them under `sessions/{sessionId}.nextLessonProposals`, and reuses them on reopen. Each proposal carries `{ title, tagline, topics, emoji }`; picking one enqueues `createTask({ type: 'generateLesson' })`, seeds a `status='generating'` session stub, switches `currentSessionId`, and routes to that session. Sessions in `status='generating'` render the “Generating...” view with a link to `/spark/code/lessons` rather than the plan timeline.
+- Lessons list (web `/spark/code/lessons`): mirrors the `/spark/code` shell with a single panel that lists all lessons newest-first, showing emoji, title/tagline, creation date, derived status (`generating` | `ready` | `in_progress` | `completed` | `error`), and simple step progress; each row links to `/spark/code/{sessionId}`. The user menu includes a `Lessons` entry for quick access. The page also shows all welcome templates with a “Start lesson” action that posts to `/spark/code/lessons?/start`; submitting clones the template into the user’s sessions (same flow as first-time welcome) and redirects to the new `/spark/code/{sessionId}` even when other sessions already exist.
+- Plan header (web `/spark/code/{sessionId}`) displays the session-level summary when available, falling back to the tagline and then the first plan item; individual plan item summaries remain short (<= 15 words) for the timeline rows.
+- Code editor autosave (web `/spark/code/[sessionId]/p/[id]`): the learner's Python source mirrors into `state.items[planItemId].code`. Saves trigger when the user runs code, submits a solution, navigates away / closes the tab (via `keepalive` fetch), and on an edit throttle of ~10 s to avoid spamming Firestore.
+- Problem submission flow: submit first re-runs every test. Submission is blocked until all tests pass, then a completion payload (including the latest code snapshot and run metadata) is sent to `/api/code/{sessionId}/update`. The handler grants XP once per problem based on difficulty, increments `stats.solvedCount`, records the event under `spark/{uid}/progress`, and the client shows a celebratory modal with XP earned plus an “OK” action that routes back to the `/spark/code` dashboard.
+- Media plan steps (intro/outro clips) route to `/spark/code/{sessionId}/m/{planItemId}`. The page renders a timeline-synced player that relies on keyboard left/right navigation (no on-screen arrow controls), a large slide canvas that bleeds edge-to-edge (no frame padding, fixed 16:9), a fixed-height subtitle banner sized for up to two lines of the current caption (no speaker label), and a control bar with an icon-only play/pause control that flips to a replay icon once playback reaches the final 50ms window, plus the speaker toggle, timestamp, and progress scrubber. Slides reuse the non-question card styling; seeking via the keyboard shortcuts or slider also seeks the audio element. All slide images preload before playback or navigation becomes available, with a centered spinner shown in the card and the controls disabled until everything is ready. If any image fails to load we surface an inline error message in the card with a `Retry` button that re-attempts the preload. The server returns a short-lived signed URL derived from the Firebase Storage object to stream the MP3. While the clip is in progress a compact circular `×` button floats over the card header and opens the same gradient “Take a break?” dialog used in quizzes (copy tweaked for media, actions `Keep watching` / `Quit now`). After the clip finishes (or when the plan item was already marked complete) the same `×` routes straight back to `/spark/code/{sessionId}` without surfacing the dialog, re-affirming completion as needed; there is no separate `Done` button. When present, the optional `posterImage` is shown at the very start for 50ms (no Ken Burns), and the optional `endingImage` is shown for the final 50ms; transitions into/out of these frames use the same image fade as other slides.
 - `spark/{uid}/progress/{docId}`: server-managed bookkeeping for awarded milestones (quiz, code, or media completions). Docs store `{ sessionId, planItemId, xpAwarded, createdAt, quizId?, problemId?, difficulty?, language?, mediaId?, durationSec? }` so XP increments remain idempotent across retries.
 - `summary/{uid}/current`: latest 2–3 bullet summary plus timestamp and underlying attempt refs.
 - `quizzes/{quizId}`: quiz metadata; subcollection `questions/{questionId}` storing prompt, answer, type, mark scheme/rubric, board tagging, plus explanations only for multiple-choice questions.
