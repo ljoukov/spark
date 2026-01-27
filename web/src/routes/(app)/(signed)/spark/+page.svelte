@@ -600,24 +600,24 @@
 		padding: 1rem 1.2rem 1.4rem;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.35rem;
 	}
 
 	.agent-message {
 		display: flex;
 		flex-direction: column;
 		gap: 0.45rem;
+		width: 100%;
+		align-items: flex-start;
 	}
 
-	.agent-message.is-user .message-bubble {
-		align-self: flex-end;
-		background: rgba(59, 130, 246, 0.12);
-		border-color: rgba(59, 130, 246, 0.25);
+	.agent-message.is-user {
+		align-items: flex-end;
+		text-align: right;
 	}
 
-	.agent-message.is-agent .message-bubble {
-		background: rgba(15, 23, 42, 0.04);
-		border-color: rgba(148, 163, 184, 0.25);
+	.agent-message.is-user .message-label {
+		text-align: right;
 	}
 
 	.message-label {
@@ -630,8 +630,10 @@
 	.message-bubble {
 		padding: 0.85rem 1rem;
 		border-radius: 1.2rem;
-		border: 1px solid transparent;
-		max-width: 36rem;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: rgba(15, 23, 42, 0.04);
+		max-width: min(42rem, 100%);
+		width: fit-content;
 		white-space: pre-wrap;
 		line-height: 1.5;
 	}
