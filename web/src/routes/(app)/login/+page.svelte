@@ -257,7 +257,10 @@
 
 		<Button
 			onclick={handleGoogleSignIn}
-			disabled={ui.signingInWithGoogle || ui.signingInAnonymously || ui.syncingProfile || redirecting}
+			disabled={ui.signingInWithGoogle ||
+				ui.signingInAnonymously ||
+				ui.syncingProfile ||
+				redirecting}
 			class={buttonVariants({ variant: 'default', size: 'lg' }) +
 				' w-full justify-center rounded-full'}
 		>
