@@ -8,14 +8,14 @@
 
 	type LogoutStatus = 'checking' | 'signing_out' | 'signed_out' | 'not_signed_in' | 'error';
 
-	function headingForStatus(status: LogoutStatus): string {
+	function headingForStatus(status: LogoutStatus, wasGuest: boolean): string {
 		switch (status) {
 			case 'checking':
 				return 'Just a moment…';
 			case 'signing_out':
-				return 'Signing you out';
+				return wasGuest ? 'Deleting guest account' : 'Signing you out';
 			case 'signed_out':
-				return 'Signed out of Spark';
+				return wasGuest ? 'Guest account deleted' : 'Signed out of Spark';
 			case 'not_signed_in':
 				return 'You are not logged into Spark';
 			case 'error':
@@ -24,14 +24,18 @@
 		}
 	}
 
-	function descriptionForStatus(status: LogoutStatus): string {
+	function descriptionForStatus(status: LogoutStatus, wasGuest: boolean): string {
 		switch (status) {
 			case 'checking':
 				return 'Checking your session details.';
 			case 'signing_out':
-				return "We're clearing your Spark session securely.";
+				return wasGuest
+					? "We're clearing this guest session from the device."
+					: "We're clearing your Spark session securely.";
 			case 'signed_out':
-				return 'You can now close this tab or head back to the Spark login page.';
+				return wasGuest
+					? 'Your guest session has been cleared on this device.'
+					: 'You can now close this tab or head back to the Spark login page.';
 			case 'not_signed_in':
 				return 'Use the button below to sign in and pick up where you left off.';
 			case 'error':
@@ -40,20 +44,26 @@
 		}
 	}
 
-	function busyLabelForStatus(status: LogoutStatus): string {
-		return status === 'signing_out' ? 'Signing you out…' : 'Checking your session…';
+	function busyLabelForStatus(status: LogoutStatus, wasGuest: boolean): string {
+		if (status === 'signing_out') {
+			return wasGuest ? 'Deleting guest account…' : 'Signing you out…';
+		}
+		return 'Checking your session…';
 	}
 
-	function hintForStatus(status: LogoutStatus): string | null {
+	function hintForStatus(status: LogoutStatus, wasGuest: boolean): string | null {
 		if (status === 'signed_out') {
-			return 'You are fully signed out. Head back to the Spark login page whenever you are ready.';
+			return wasGuest
+				? 'Guest account deleted. You can sign in whenever you are ready.'
+				: 'You are fully signed out. Head back to the Spark login page whenever you are ready.';
 		}
 		return null;
 	}
 
 	const ui = $state({
 		status: 'checking' as LogoutStatus,
-		errorMessage: ''
+		errorMessage: '',
+		wasGuest: false
 	});
 
 	const returnHref = $derived('/');
@@ -61,10 +71,10 @@
 	let authInstance: Auth | null = null;
 
 	const isBusy = $derived(ui.status === 'checking' || ui.status === 'signing_out');
-	const heading = $derived(headingForStatus(ui.status));
-	const description = $derived(descriptionForStatus(ui.status));
-	const busyLabel = $derived(busyLabelForStatus(ui.status));
-	const hint = $derived(hintForStatus(ui.status));
+	const heading = $derived(headingForStatus(ui.status, ui.wasGuest));
+	const description = $derived(descriptionForStatus(ui.status, ui.wasGuest));
+	const busyLabel = $derived(busyLabelForStatus(ui.status, ui.wasGuest));
+	const hint = $derived(hintForStatus(ui.status, ui.wasGuest));
 	const showLoginLink = $derived(ui.status === 'signed_out' || ui.status === 'not_signed_in');
 	const showRetry = $derived(ui.status === 'error');
 
@@ -91,6 +101,7 @@
 
 	async function attemptSignOut(user: User | null): Promise<void> {
 		ui.errorMessage = '';
+		ui.wasGuest = Boolean(user?.isAnonymous);
 		if (!user) {
 			clearIdTokenCookie();
 			ui.status = 'not_signed_in';
