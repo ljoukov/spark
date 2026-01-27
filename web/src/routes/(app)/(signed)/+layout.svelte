@@ -25,10 +25,10 @@
 		if (!routeId) {
 			return null;
 		}
-		if (routeId.startsWith('/(signed)/spark/code')) {
+		if (routeId.includes('/spark/code')) {
 			return 'code';
 		}
-		if (routeId.startsWith('/(signed)/spark')) {
+		if (routeId.includes('/spark')) {
 			return 'spark';
 		}
 		return null;
