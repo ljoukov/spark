@@ -208,6 +208,10 @@ function toOpenAiReasoningEffort(
   }
 }
 
+function isOpenAiCodexModel(modelId: LlmTextModelId): boolean {
+  return modelId.includes("codex");
+}
+
 function resolveOpenAiReasoningEffortForModel(
   modelId: LlmTextModelId,
   override?: OpenAiReasoningEffort,
@@ -215,7 +219,7 @@ function resolveOpenAiReasoningEffortForModel(
   if (override) {
     return override;
   }
-  if (modelId.includes("gpt-5.2-codex")) {
+  if (isOpenAiCodexModel(modelId)) {
     return "medium";
   }
   return DEFAULT_OPENAI_REASONING_EFFORT;
@@ -224,7 +228,7 @@ function resolveOpenAiReasoningEffortForModel(
 function resolveOpenAiVerbosity(
   modelId: LlmTextModelId,
 ): ResponseTextConfig["verbosity"] {
-  if (modelId.includes("gpt-5.2-codex")) {
+  if (isOpenAiCodexModel(modelId)) {
     return "medium";
   }
   return "high";
@@ -2625,14 +2629,14 @@ async function llmStream({
     }
     const openAiReasoningEffort = openAiModelId
       ? resolveOpenAiReasoningEffortForModel(
-          openAiModelId,
+          options.modelId,
           options.openAiReasoningEffort,
         )
       : undefined;
     const openAiTextConfig: ResponseTextConfig | undefined = openAiModelId
       ? {
           format: options.openAiTextFormat ?? { type: "text" },
-          verbosity: resolveOpenAiVerbosity(openAiModelId),
+          verbosity: resolveOpenAiVerbosity(options.modelId),
         }
       : undefined;
     const chatGptTextConfig =
@@ -3920,12 +3924,12 @@ export async function runToolLoop(
     if (openAiModelInfo.provider === "chatgpt") {
       const openAiTools = buildOpenAiFunctionTools(options.tools);
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-        openAiModelId,
+        options.modelId,
         options.openAiReasoningEffort,
       );
       const openAiTextConfig: ResponseTextConfig = {
         format: { type: "text" },
-        verbosity: resolveOpenAiVerbosity(openAiModelId),
+        verbosity: resolveOpenAiVerbosity(options.modelId),
       };
       const chatGptTextConfig =
         openAiTextConfig.verbosity !== null && openAiTextConfig.verbosity

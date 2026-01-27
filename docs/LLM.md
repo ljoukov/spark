@@ -40,7 +40,7 @@ All calls accept:
 
 OpenAI model routing:
 - `gpt-5.2`, `gpt-5.2-codex` → OpenAI API.
-- `chatgpt-gpt-5.2`, `chatgpt-gpt-5.2-codex` → ChatGPT Codex backend (OAuth).
+- `chatgpt-gpt-5.2`, `chatgpt-gpt-5.2-codex`, `chatgpt-gpt-5.1-codex-mini` → ChatGPT Codex backend (OAuth).
 
 ### JSON convenience
 
