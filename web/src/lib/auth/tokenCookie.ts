@@ -107,7 +107,7 @@ function scheduleProactiveRefresh(
 
 /**
  * Subscribes to Firebase ID token changes and mirrors the token into a
- * SameSite=Lax cookie scoped to "/app" so server hooks can validate it.
+ * SameSite=Lax cookie scoped to "/" so server hooks can validate it.
  * Returns an unsubscribe function.
  */
 export function startIdTokenCookieSync(auth?: Auth): Unsubscribe {
