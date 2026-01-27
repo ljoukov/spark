@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
-import { getTestUserId, isTestUser } from '$lib/server/auth/testUser';
 import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 
 export type VerifiedFirebaseToken = Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
@@ -9,7 +8,6 @@ export type ApiAuthUser = {
 	uid: string;
 	token: string | null;
 	decodedToken: VerifiedFirebaseToken | null;
-	isTestUser: boolean;
 };
 
 export type ApiAuthResult = { ok: true; user: ApiAuthUser } | { ok: false; response: Response };
@@ -51,18 +49,6 @@ function extractCookieToken(header: string | null): string | null {
 }
 
 export async function authenticateApiRequest(request: Request): Promise<ApiAuthResult> {
-	if (isTestUser()) {
-		return {
-			ok: true,
-			user: {
-				uid: getTestUserId(),
-				token: null,
-				decodedToken: null,
-				isTestUser: true
-			}
-		};
-	}
-
 	const tokenFromCookie = extractCookieToken(request.headers.get('cookie'));
 	const token = tokenFromCookie ?? extractBearerToken(request.headers.get('authorization'));
 	if (!token) {
@@ -82,8 +68,7 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
 			user: {
 				uid: decodedToken.sub,
 				token,
-				decodedToken,
-				isTestUser: false
+				decodedToken
 			}
 		};
 	} catch (error) {

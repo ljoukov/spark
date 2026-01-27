@@ -1,7 +1,7 @@
 This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs are here: https://svelte.dev/llms.txt
 
 - Product spec and flows: see `../docs/SPEC.md`.
-- Signed-in home is `/c` (Spark Chat). `/` is the login screen and accepts optional `destination=code|spark`. `/welcome` now redirects to `/`.
+- Signed-in home is `/spark` (Spark AI Agent). `/` is the login screen. `/welcome` now redirects to `/`.
 
 # Technology Stack
 
@@ -30,7 +30,7 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 
 - Notes
   - Follow `docs/SPEC.md` for auth and validation requirements. All external inputs must be validated with `zod` and normalized before use.
-  - Local testing already sets the `TEST_USER` environment variable to a valid test account (see `docs/SPEC.md`). When this flag is present the hooks short-circuit authentication so you can browse pages such as `/code` without signing in.
+  - Local testing uses a real Firebase user via `/login-with-email`, configured by `TEST_USER_EMAIL_ID_PASSWORD` in `web/.env.local` (see `docs/SPEC.md`). Auth is not bypassed.
 
 **Gemini**
 
