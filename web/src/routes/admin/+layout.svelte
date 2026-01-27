@@ -169,20 +169,18 @@
 		}
 
 		let stopAuth: () => void = () => {};
-		if (!data.authDisabled) {
-			const auth = getAuth(getFirebaseApp());
-			stopTokenSync = startIdTokenCookieSync(auth);
-			let refreshed = false;
-			stopAuth = onIdTokenChanged(auth, (user) => {
-				if (user && !refreshed) {
-					refreshed = true;
-					void (async () => {
-						await ensureFreshIdToken();
-						await invalidateAll();
-					})();
-				}
-			});
-		}
+		const auth = getAuth(getFirebaseApp());
+		stopTokenSync = startIdTokenCookieSync(auth);
+		let refreshed = false;
+		stopAuth = onIdTokenChanged(auth, (user) => {
+			if (user && !refreshed) {
+				refreshed = true;
+				void (async () => {
+					await ensureFreshIdToken();
+					await invalidateAll();
+				})();
+			}
+		});
 		return () => {
 			stopProfile();
 			stopTokenSync?.();

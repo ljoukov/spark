@@ -2,6 +2,7 @@
 	import QuizQuestionCard from './quiz-question-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { QuizFeedback, QuizTypeAnswerQuestion } from '$lib/types/quiz';
+	import { ChatInput } from '$lib/components/chat/index.js';
 
 	type Status = 'neutral' | 'correct' | 'incorrect';
 	type BusyAction = 'submit' | 'dontKnow' | 'continue';
@@ -60,35 +61,18 @@
 
 	const MAX_LINES = 7;
 	const MAX_CHARS = 1000;
-	let textareaEl = $state<HTMLTextAreaElement | null>(null);
-
-	function resizeTextarea() {
-		if (!textareaEl) {
-			return;
-		}
-		textareaEl.style.height = 'auto';
-		const style = getComputedStyle(textareaEl);
-		const lineHeight = Number.parseFloat(style.lineHeight) || 20;
-		const paddingTop = Number.parseFloat(style.paddingTop) || 0;
-		const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-		const maxHeight = lineHeight * MAX_LINES + paddingTop + paddingBottom;
-		const nextHeight = Math.min(textareaEl.scrollHeight, maxHeight);
-		textareaEl.style.height = `${nextHeight}px`;
-		textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
-	}
-
-	function handleInput(event: Event) {
-		const target = event.target as HTMLTextAreaElement;
-		value = target.value;
-		resizeTextarea();
-		onInput?.({ value });
-	}
 
 	function handleSubmit() {
-		if (!value.trim()) {
+		const trimmed = value.trim();
+		if (!trimmed) {
 			return;
 		}
-		onSubmit?.({ value: value.trim() });
+		onSubmit?.({ value: trimmed });
+	}
+
+	function handleSubmitFromInput(detail: { value: string }) {
+		value = detail.value;
+		handleSubmit();
 	}
 
 	function handleHint() {
@@ -103,13 +87,6 @@
 		onContinue?.();
 	}
 
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-			event.preventDefault();
-			handleSubmit();
-		}
-	}
-
 	const revealExplanation = $derived(showExplanationProp ?? statusProp !== 'neutral');
 	const trimmedValue = $derived(value.trim());
 	const isSubmitBusy = $derived(busy && busyAction === 'submit');
@@ -117,11 +94,6 @@
 	const isContinueBusy = $derived(busy && busyAction === 'continue');
 	const inputDisabled = $derived(locked || busy);
 	const submitPhase = $derived(submitPhaseProp ?? 'submitting');
-
-	$effect(() => {
-		void value;
-		resizeTextarea();
-	});
 </script>
 
 <QuizQuestionCard
@@ -141,20 +113,16 @@
 				{question.marks} mark{question.marks === 1 ? '' : 's'}
 			</p>
 		{/if}
-		<textarea
-			class="min-h-[2.75rem] w-full resize-none rounded-2xl border-2 border-input bg-background px-4 py-3 text-base shadow-sm transition-colors focus-visible:border-ring"
-			bind:this={textareaEl}
+		<ChatInput
 			bind:value
-			oninput={handleInput}
-			onkeydown={handleKeyDown}
 			disabled={inputDisabled}
-			autocomplete="off"
-			spellcheck="false"
-			rows={1}
-			maxlength={MAX_CHARS}
-			aria-label="Answer"
 			{placeholder}
-		></textarea>
+			ariaLabel="Answer"
+			maxLines={MAX_LINES}
+			maxChars={MAX_CHARS}
+			onInput={(detail) => onInput?.(detail)}
+			onSubmit={handleSubmitFromInput}
+		/>
 	</div>
 
 	{#if thinkingText}

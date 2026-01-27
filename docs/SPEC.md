@@ -54,46 +54,39 @@ python3 -m playwright install chromium
 python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir screenshots/webflow
 ```
 
-#### 0.1.1) Local No-Auth Mode (Test User)
+#### 0.1.1) Local Test User Login (Email/Password)
 
-The web app supports a no-auth mode for local UI checks. When enabled, the server bypasses Firebase Auth and always treats requests as the test user.
+Local UI checks use a real Firebase user (no auth bypass). Configure the test user with a single env var and sign in via a dedicated email/password route.
 
 Steps:
 
-1) Create or update `.env.local` at the repo root (not inside `web/`) with a valid test user id:
+1) Add this to `web/.env.local`:
 
 ```
-TEST_USER=test-free-0123456789ABCDEF
+TEST_USER_EMAIL_ID_PASSWORD=you@example.com/firestoreUserId/your-password
 ```
 
-Admin access requires the `test-admin-` prefix:
+If you need `/admin`, include the userId in `ADMIN_USER_IDS`.
+
+2) Start the web dev server:
 
 ```
-TEST_USER=test-admin-0123456789ABCDEF
+npm --prefix web run dev
 ```
 
-The value must match `test-(admin|free|paid)-[A-Za-z0-9]{16}`.
-
-2) Start the web dev server in test-user mode:
+3) Open the email login page and sign in using the credentials from `.env.local`:
 
 ```
-npm --prefix web run dev:test-user
+http://127.0.0.1:8080/login-with-email
 ```
 
-This sets `FORCE_TEST_USER=true` and reads `TEST_USER` from `.env.local`.
-
-3) Open the app in a browser:
-
-```
-http://127.0.0.1:8080/
-```
-
-Useful entry points:
-- `/` (logged-out landing), `/login`
+Useful entry points after sign-in:
 - `/spark` (signed-in home), `/spark/code`, `/spark/code/lessons`
-- `/admin` (requires `test-admin-` prefix)
+- `/admin` (requires the userId in `ADMIN_USER_IDS`)
 
-To return to normal auth, stop the server and run `npm --prefix web run dev` without `FORCE_TEST_USER` or `TEST_USER`.
+Notes:
+- Auth is fully enforced; Firestore rules have no test-user exceptions.
+- The test user is a normal production user, so it is fast for verifying real Firestore behavior.
 
 #### 0.1.2) Browser UI Checks and Screenshots
 
@@ -128,6 +121,11 @@ Recommended defaults:
     - Focus: GCSE Triple Science (Biology, Chemistry, Physics) across AQA, Edexcel, OCR. Provide fast feedback loops: immediate acknowledgement that generation started and continuous progress updates via Firestore.
   - Spark Code (British Informatics Olympiad prep)
     - Help students prepare for the British Informatics Olympiad (BIO) with coding practice sessions and problems delivered via the web app (e.g., under `/spark/code`), with session progress persisted through SvelteKit APIs that proxy Firestore.
+  - Spark AI Agent (web, Phase 1)
+    - Logged-in web home at `/spark` is the Spark AI Agent chat experience.
+    - The chat stream is sectioned with a table of contents; older sections collapse by default to keep visible scroll depth manageable.
+    - Conversations are stored in Firestore as a single append-only document per thread.
+    - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
 
 **Non-Goals**
 
@@ -152,6 +150,11 @@ Recommended defaults:
 ### API endpoint
 
 The protobuf API is reserved for the mobile app (future); the web app does not use protobufs yet. `/api/spark` is currently disabled in the web server while the /spark flow is being rebuilt.
+Spark AI Agent uses a dedicated endpoint:
+
+- `POST /api/spark/agent/messages` accepts `{ conversationId?, text, attachments? }` and returns SSE (`text/event-stream`) for streaming assistant tokens.
+- Non-streaming clients receive `202 Accepted` JSON with `{ conversationId, messageId }`.
+- Auth uses Firebase ID tokens (including email/password sign-in for local test-user flows).
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
 `/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
@@ -190,9 +193,15 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - **Firebase Auth**: Apple Sign-In, email/password fallback. Tokens verified server-side by the Vercel Edge Runtime using the Admin SDK (running via `firebase-admin` configured for edge-compatible builds).
 
-  Test/preview mode override: when environment variable `TEST_USER` is set to a valid test ID (format `test-(admin|free|paid)-[A-Za-z0-9]{16}`), authentication is fully disabled. The server does not validate ID tokens and forces the authenticated user ID to `TEST_USER`. The client does not rely on Firebase Auth in this mode; UI renders as signed-in with the server-provided user. Admin access in this mode follows the `test-admin-` prefix (admin allowed) vs other prefixes (admin denied). The user display name is read from `/spark/<TEST_USER>/name` in Firestore.
+  Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership. The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
+
+### 3.4 Spark AI Agent Firestore (Phase 1)
+
+- Conversations live under `/{userId}/client/conversations/{conversationId}` (client-safe read path; server writes only).
+- Each conversation document stores an append-only `messages` array (OpenAI Response-style with `content[]` parts).
+- Streaming writes to Firestore are throttled to at most one update every 500 ms; the SSE stream is used for immediate UI updates.
 
 ## 4) Backend (SvelteKit)
 

@@ -1,0 +1,26 @@
+{
+  "url": "http://127.0.0.1:8080/spark",
+  "viewport": { "width": 1440, "height": 900 },
+  "fullPage": true,
+  "timeoutMs": 60000,
+  "headless": true,
+  "waitUntil": "domcontentloaded",
+  "steps": [
+    { "action": "waitFor", "selector": "textarea" },
+    { "action": "screenshot", "path": "01-empty.jpg", "quality": 90 },
+    {
+      "action": "fill",
+      "selector": "textarea",
+      "value": "Plan a 3-day GCSE Biology revision sprint."
+    },
+    { "action": "click", "selector": "button:has-text(\"Send\")" },
+    { "action": "sleep", "ms": 500 },
+    { "action": "screenshot", "path": "02-after-send-0p5s.jpg", "quality": 90 },
+    { "action": "sleep", "ms": 500 },
+    { "action": "screenshot", "path": "03-after-send-1s.jpg", "quality": 90 },
+    { "action": "sleep", "ms": 500 },
+    { "action": "screenshot", "path": "04-after-send-1p5s.jpg", "quality": 90 },
+    { "action": "sleep", "ms": 8500 },
+    { "action": "screenshot", "path": "05-after-send-10s.jpg", "quality": 90 }
+  ]
+}

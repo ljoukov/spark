@@ -4,8 +4,9 @@ Use `scripts/web_screenshot_flow.py` to regenerate screenshots. Flows live under
 
 ## Prereqs
 
-- Run the web dev server with auth disabled (use the test-user flow):
-  - `cd web && npm run dev:test-user`
+- Run the web dev server:
+  - `cd web && npm run dev`
+- Sign in using `/login-with-email` and the credentials from `web/.env.local` (`TEST_USER_EMAIL_ID_PASSWORD`).
 - Ensure it is reachable at `http://127.0.0.1:8080`.
 
 ## Free-text grading (admin preview)

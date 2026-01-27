@@ -1,63 +1,127 @@
+import path from "node:path";
 import { z } from "zod";
-import { loadLocalEnv } from "./env";
+import { loadEnvFromFile, loadLocalEnv } from "./env";
 
-const testUserIdRegex = /^(test-(admin|free|paid)-[A-Za-z0-9]{16})$/;
+export type TestUserCredentials = {
+  email: string;
+  userId: string;
+  password: string;
+};
 
-const testUserSchema = z.union([
-  z.undefined(),
-  z.string().regex(testUserIdRegex),
-]);
+const testUserEnvSchema = z.string().trim().min(1);
 
-function isForceTestUser(): boolean {
-  const raw = process.env.FORCE_TEST_USER;
-  if (raw === undefined) {
-    return false;
-  }
-  return raw.toLowerCase() !== "false";
-}
-
-let resolved = false;
-let cachedTestUserId: string | undefined;
-
-function resolveTestUserId(): string | undefined {
-  if (resolved) {
-    return cachedTestUserId;
-  }
-
-  resolved = true;
-  loadLocalEnv();
-
-  if (isForceTestUser()) {
-    const id = testUserSchema.parse(process.env.TEST_USER);
-    if (id === undefined) {
-      const erroressage =
-        "testUserId: TEST_USER environment variable is not set";
-      console.error(erroressage);
-      throw new Error(erroressage);
+const testUserCredentialsSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .transform((raw, ctx) => {
+    const parts = raw.split("/");
+    if (parts.length !== 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "TEST_USER_EMAIL_ID_PASSWORD must be email/userId/password.",
+      });
+      return z.NEVER;
     }
-    console.log("testUserId: running as test user");
-    cachedTestUserId = id;
-    return cachedTestUserId;
-  } else {
-    cachedTestUserId = undefined;
-    return cachedTestUserId;
+    const [emailRaw, userIdRaw, passwordRaw] = parts;
+    const email = emailRaw?.trim() ?? "";
+    const userId = userIdRaw?.trim() ?? "";
+    const password = passwordRaw ?? "";
+
+    const emailParsed = z.string().email().safeParse(email);
+    if (!emailParsed.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "TEST_USER_EMAIL_ID_PASSWORD has an invalid email.",
+      });
+      return z.NEVER;
+    }
+    if (!userId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "TEST_USER_EMAIL_ID_PASSWORD missing userId.",
+      });
+      return z.NEVER;
+    }
+    if (!password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "TEST_USER_EMAIL_ID_PASSWORD missing password.",
+      });
+      return z.NEVER;
+    }
+
+    return {
+      email: emailParsed.data.toLowerCase(),
+      userId,
+      password,
+    } satisfies TestUserCredentials;
+  });
+
+let envLoaded = false;
+let resolved = false;
+let cachedTestUser: TestUserCredentials | null = null;
+
+function loadTestUserEnv(): void {
+  if (envLoaded) {
+    return;
   }
+  loadLocalEnv();
+  if (!process.env.TEST_USER_EMAIL_ID_PASSWORD) {
+    let current = process.cwd();
+    for (let i = 0; i < 6; i += 1) {
+      const candidate = current.endsWith(`${path.sep}web`)
+        ? path.join(current, ".env.local")
+        : path.join(current, "web", ".env.local");
+      loadEnvFromFile(candidate);
+      if (process.env.TEST_USER_EMAIL_ID_PASSWORD) {
+        break;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+  }
+  envLoaded = true;
 }
 
-export function isTestUser(): boolean {
-  return resolveTestUserId() !== undefined;
+function resolveTestUserCredentials(): TestUserCredentials | null {
+  if (resolved) {
+    return cachedTestUser;
+  }
+  resolved = true;
+  loadTestUserEnv();
+  const raw = process.env.TEST_USER_EMAIL_ID_PASSWORD;
+  if (!raw || !raw.trim()) {
+    cachedTestUser = null;
+    return cachedTestUser;
+  }
+  const parsed = testUserCredentialsSchema.safeParse(testUserEnvSchema.parse(raw));
+  if (!parsed.success) {
+    console.error("Invalid TEST_USER_EMAIL_ID_PASSWORD", parsed.error.flatten());
+    throw new Error("Invalid TEST_USER_EMAIL_ID_PASSWORD");
+  }
+  cachedTestUser = parsed.data;
+  return cachedTestUser;
 }
 
-export function isTestUserAdmin(): boolean {
-  const id = resolveTestUserId();
-  return id !== undefined && id.startsWith("test-admin-");
+export const testUser = resolveTestUserCredentials();
+export const hasTestUser = testUser !== null;
+export const testUserEmail = testUser?.email ?? null;
+export const testUserId = testUser?.userId ?? null;
+export const testUserPassword = testUser?.password ?? null;
+
+export function getTestUserCredentials(): TestUserCredentials {
+  const resolvedCreds = resolveTestUserCredentials();
+  if (!resolvedCreds) {
+    throw new Error("TEST_USER_EMAIL_ID_PASSWORD is not configured");
+  }
+  return resolvedCreds;
 }
 
 export function getTestUserId(): string {
-  const id = resolveTestUserId();
-  if (id === undefined) {
-    console.error("No test user ID set");
-    throw new Error("No test user ID set");
-  }
-  return id;
+  return getTestUserCredentials().userId;
 }

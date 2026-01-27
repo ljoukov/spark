@@ -1,6 +1,5 @@
 import type { LayoutServerLoad } from './$types';
 import { isUserAdmin } from '$lib/server/utils/admin';
-import { isTestUser } from '$lib/server/auth/testUser';
 
 type AdminAuthState = 'anonymous' | 'allowed' | 'forbidden';
 
@@ -10,8 +9,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		return {
 			user: null,
 			isAdmin: false,
-			authState: 'anonymous' as const satisfies AdminAuthState,
-			authDisabled: isTestUser()
+			authState: 'anonymous' as const satisfies AdminAuthState
 		};
 	}
 
@@ -26,15 +24,13 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		return {
 			user,
 			isAdmin: false,
-			authState: 'forbidden' as const satisfies AdminAuthState,
-			authDisabled: isTestUser()
+			authState: 'forbidden' as const satisfies AdminAuthState
 		};
 	}
 
 	return {
 		user,
 		isAdmin: true,
-		authState: 'allowed' as const satisfies AdminAuthState,
-		authDisabled: isTestUser()
+		authState: 'allowed' as const satisfies AdminAuthState
 	};
 };

@@ -19,7 +19,7 @@
     "lint": "npm run typecheck && npm run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run",
-    "session:generateTestSession": "FORCE_TEST_USER=true tsx src/code/generateTestSession.ts",
+    "session:generateTestSession": "tsx src/code/generateTestSession.ts",
     "session:generateWelcomeSessions": "tsx src/code/generateWelcomeSessions.ts",
     "session:generateWelcomeSession": "tsx src/code/generateWelcomeSession.ts",
     "session:agent": "tsx src/code/sessionGenerationAgent.ts",

@@ -12,7 +12,7 @@ Source of truth for platform + APIs: `docs/SPEC.md`
 ## Home Layout
 
 - The logged-in home is a single chat stream centered on Spark AI Agent.
-- Web home route is `/spark` (see `docs/SPEC.md` local test-user entry points).
+- Web home route is `/spark` (see `docs/SPEC.md` for local test-user login steps).
 - The stream is automatically organized into sections with a table of contents.
 - Tasks appear as sections inside the same stream (not separate tabs).
 - Keep the visible scroll depth limited (target: ~5x screen height). Older content is pulled in as collapsed sections on demand.
@@ -158,7 +158,7 @@ Ack-only JSON (fallback / non-streaming clients):
 Notes:
 - Clients listen to Firestore for the canonical message history.
 - The API streams assistant tokens via SSE; Firestore remains the source of truth for the rendered conversation.
-- Auth uses Firebase ID token (or TEST_USER in local test mode, per `docs/SPEC.md`).
+- Auth uses Firebase ID tokens; local testing signs in with the test user credentials described in `docs/SPEC.md`.
 - Prefer 200 for SSE streams; 202 for ack-only JSON responses.
 - SSE is limited to assistant token streaming; task scheduling stays internal and only shows up via conversation updates.
 

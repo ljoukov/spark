@@ -1,7 +1,6 @@
 import { TASKS_API_KEY } from '$env/static/private';
 import { isUserAdmin } from '$lib/server/utils/admin';
 import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
-import { getTestUserId, isTestUser, isTestUserAdmin } from '$lib/server/auth/testUser';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { z } from 'zod';
 import { json, type Handle, redirect } from '@sveltejs/kit';
@@ -90,27 +89,6 @@ export const handle = (async ({ event, resolve }) => {
 			return null;
 		}
 	};
-
-	// In test mode, short-circuit all authentication and force test user
-	if (isTestUser()) {
-		const uid = getTestUserId();
-		event.locals.appUser = {
-			uid,
-			email: null,
-			name: null,
-			photoUrl: null,
-			isAnonymous: false
-		};
-		// For admin routes, enforce admin access based on test user admin flag
-		if (pathname.startsWith('/admin')) {
-			const isAdmin = isTestUserAdmin();
-			const isAdminRoot = pathname === '/admin' || pathname === '/admin/';
-			if (!isAdminRoot && !isAdmin) {
-				throw redirect(303, '/admin');
-			}
-		}
-		return await resolve(event);
-	}
 
 	if (shouldHydrateAppUser(pathname)) {
 		const verified = await verifyCookie('app-auth');

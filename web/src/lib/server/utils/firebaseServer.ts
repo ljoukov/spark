@@ -1,5 +1,4 @@
 import { clientFirebaseConfig } from '$lib/config/firebase';
-import { getTestUserId, isTestUser } from '$lib/server/auth/testUser';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { getFirebaseAdminAuth } from '@spark/llm';
@@ -33,17 +32,6 @@ const FirebaseIdTokenSchema = z
 export type FirebaseIdToken = z.infer<typeof FirebaseIdTokenSchema>;
 
 export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseIdToken> {
-	if (isTestUser()) {
-		// In test mode, bypass verification entirely and return a minimal payload
-		const uid = getTestUserId();
-		const testToken = {
-			aud: 'spark-test',
-			iss: 'spark-test',
-			sub: uid,
-			user_id: uid
-		} satisfies FirebaseIdToken;
-		return testToken;
-	}
 	const { payload } = await jwtVerify(idToken, jwks, {
 		issuer: ISSUER,
 		audience: PROJECT_ID
@@ -57,25 +45,6 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseId
 }
 
 export async function verifyFirebaseSessionCookie(sessionCookie: string): Promise<DecodedIdToken> {
-	if (isTestUser()) {
-		// In test mode, bypass verification and return a shaped object
-		const uid = getTestUserId();
-		const issuedAtSeconds = Math.floor(Date.now() / 1000);
-		const testSession: DecodedIdToken = {
-			aud: 'spark-test',
-			iss: 'spark-test',
-			sub: uid,
-			uid,
-			exp: issuedAtSeconds + 60 * 60,
-			iat: issuedAtSeconds,
-			auth_time: issuedAtSeconds,
-			firebase: {
-				identities: {},
-				sign_in_provider: 'custom'
-			}
-		};
-		return testSession;
-	}
 	const auth = getAuth();
 	// By default, do not check for revocation here; call sites can decide policy.
 	const decoded = await auth.verifySessionCookie(sessionCookie, false);
