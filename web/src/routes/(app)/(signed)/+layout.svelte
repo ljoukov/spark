@@ -66,6 +66,7 @@
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
+	const logoutLabel = $derived(user?.isAnonymous ? 'Delete guest account' : 'Log out');
 	let theme = $state<ThemePreference>('auto');
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
@@ -309,7 +310,7 @@
 							onSelect={handleLogout}
 							variant="destructive"
 						>
-							Log out
+							{logoutLabel}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>

@@ -1,21 +1,27 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import { getFirebaseApp, startGoogleSignInRedirect } from '$lib/utils/firebaseClient';
 	import { clearIdTokenCookie, setIdTokenCookie } from '$lib/auth/tokenCookie';
-	import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
+	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
 
 	let redirecting = $state(false);
 	let lastSyncedUid = $state<string | null>(null);
 
 	const ui = $state({
+		showAnonConfirm: false,
 		signingInWithGoogle: false,
+		signingInAnonymously: false,
 		syncingProfile: false,
 		errorMessage: ''
 	});
 
 	const googleButtonLabel = $derived(
 		ui.signingInWithGoogle ? 'Redirecting to Google…' : 'Continue with Google'
+	);
+	const guestButtonLabel = $derived(
+		ui.signingInAnonymously ? 'Setting up guest mode…' : 'Use guest mode'
 	);
 	const syncingMessage = $derived(
 		ui.syncingProfile && !ui.errorMessage ? 'Finishing sign-in…' : ''
@@ -141,7 +147,7 @@
 	}
 
 	async function handleGoogleSignIn() {
-		if (ui.signingInWithGoogle || ui.syncingProfile || redirecting) {
+		if (ui.signingInWithGoogle || ui.signingInAnonymously || ui.syncingProfile || redirecting) {
 			return;
 		}
 		resetError();
@@ -155,6 +161,39 @@
 		}
 	}
 
+	function handleOpenAnonymousConfirm() {
+		if (ui.signingInWithGoogle || ui.syncingProfile || redirecting) {
+			return;
+		}
+		ui.showAnonConfirm = true;
+	}
+
+	function handleAnonymousDialogChange(open: boolean) {
+		ui.showAnonConfirm = open;
+	}
+
+	function handleCancelAnonymous() {
+		ui.showAnonConfirm = false;
+	}
+
+	async function handleAnonymousContinue() {
+		if (ui.signingInAnonymously || ui.signingInWithGoogle || ui.syncingProfile || redirecting) {
+			return;
+		}
+		resetError();
+		ui.signingInAnonymously = true;
+		try {
+			const auth = getAuth(getFirebaseApp());
+			await signInAnonymously(auth);
+			ui.showAnonConfirm = false;
+		} catch (error) {
+			const fallback = 'Guest mode is unavailable right now. Please try again in a moment.';
+			ui.errorMessage = error instanceof Error ? error.message : fallback;
+		} finally {
+			ui.signingInAnonymously = false;
+		}
+	}
+
 	onMount(() => {
 		if (typeof window === 'undefined') {
 			return () => {};
@@ -165,12 +204,16 @@
 			if (!user) {
 				clearIdTokenCookie();
 				ui.signingInWithGoogle = false;
+				ui.signingInAnonymously = false;
+				ui.showAnonConfirm = false;
 				lastSyncedUid = null;
 				return;
 			}
 
 			const navigateToSpark = () => {
 				ui.errorMessage = '';
+				ui.signingInAnonymously = false;
+				ui.showAnonConfirm = false;
 				redirectToSpark();
 			};
 
@@ -214,7 +257,7 @@
 
 		<Button
 			onclick={handleGoogleSignIn}
-			disabled={ui.signingInWithGoogle || ui.syncingProfile || redirecting}
+			disabled={ui.signingInWithGoogle || ui.signingInAnonymously || ui.syncingProfile || redirecting}
 			class={buttonVariants({ variant: 'default', size: 'lg' }) +
 				' w-full justify-center rounded-full'}
 		>
@@ -244,6 +287,14 @@
 			<span>{googleButtonLabel}</span>
 		</Button>
 
+		<div class="auth-alt-copy">
+			<p class="auth-alt-label">or</p>
+			<p class="auth-alt-text">
+				Use guest mode and keep this session on this device. Add your email later to sync
+				everywhere.
+			</p>
+		</div>
+
 		{#if syncingMessage}
 			<p class="auth-alert info">{syncingMessage}</p>
 		{/if}
@@ -251,8 +302,41 @@
 		{#if ui.errorMessage}
 			<p class="auth-alert error">{ui.errorMessage}</p>
 		{/if}
+
+		<footer class="auth-footer">
+			<span class="auth-footer__prompt">Need a quick start?</span>
+			<button type="button" onclick={handleOpenAnonymousConfirm}>Use guest mode</button>
+		</footer>
 	</div>
 </div>
+
+<Dialog.Root open={ui.showAnonConfirm} onOpenChange={handleAnonymousDialogChange}>
+	<Dialog.Content class="anon-dialog">
+		<Dialog.Header class="anon-header">
+			<Dialog.Title>Use guest mode?</Dialog.Title>
+			<Dialog.Description>
+				Guest mode keeps this session on this device. Add your email later if you want to sync
+				across phones and laptops.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer class="anon-footer">
+			<Button
+				variant="secondary"
+				onclick={handleCancelAnonymous}
+				class={buttonVariants({ size: 'lg', variant: 'secondary' }) + ' anon-cancel'}
+			>
+				Back
+			</Button>
+			<Button
+				onclick={handleAnonymousContinue}
+				disabled={ui.signingInAnonymously}
+				class={buttonVariants({ size: 'lg' }) + ' anon-continue'}
+			>
+				{guestButtonLabel}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <style>
 	.auth-backdrop {
@@ -278,6 +362,7 @@
 		--blob-blue: hsla(184 95% 91% / 0.82);
 		--blob-opacity: 0.6;
 		--app-content-bg: rgba(255, 255, 255, 0.96);
+		--auth-dialog-bg: var(--app-content-bg);
 		--app-content-border: rgba(255, 255, 255, 0.55);
 		--app-subtitle-color: var(--text-secondary, rgba(30, 41, 59, 0.78));
 		--auth-dialog-border: rgba(15, 23, 42, 0.12);
@@ -353,6 +438,22 @@
 		font-weight: 500;
 	}
 
+	.auth-alt-copy {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		color: var(--app-subtitle-color);
+	}
+
+	.auth-alt-label {
+		text-transform: uppercase;
+		letter-spacing: 0.35em;
+		font-size: 0.65rem;
+		color: var(--app-subtitle-color);
+		font-weight: 600;
+	}
+
 	.auth-alert {
 		margin: 0;
 		border-radius: 1rem;
@@ -374,6 +475,157 @@
 		color: #fee2e2;
 	}
 
+	.auth-footer {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 1.25rem;
+		background: rgba(148, 163, 184, 0.12);
+		padding: 0.85rem 1.1rem;
+		font-size: 0.8rem;
+		color: var(--app-subtitle-color);
+		font-weight: 500;
+	}
+
+	.auth-footer__prompt {
+		flex: 1;
+		text-align: center;
+	}
+
+	.auth-footer button {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--auth-footer-link, #1d4ed8);
+		font-weight: 600;
+		text-decoration: underline;
+		text-decoration-color: transparent;
+		cursor: pointer;
+		transition:
+			color 0.25s ease,
+			text-decoration-color 0.25s ease;
+	}
+
+	.auth-footer button:hover {
+		color: var(--auth-footer-link-hover, #0f172a);
+		text-decoration-color: currentColor;
+	}
+
+	.auth-footer button:focus-visible {
+		outline: 2px solid currentColor;
+		outline-offset: 2px;
+	}
+
+	:global([data-slot='dialog-overlay']) {
+		background: rgba(2, 6, 23, 0.68);
+		backdrop-filter: blur(4px);
+	}
+
+	:global(.anon-dialog [data-slot='dialog-close']) {
+		display: none !important;
+	}
+
+	:global(.anon-dialog) {
+		--anon-surface: rgba(255, 255, 255, 0.92);
+		--anon-border: rgba(15, 23, 42, 0.12);
+		--anon-foreground: #0f172a;
+		--anon-subtitle: rgba(15, 23, 42, 0.72);
+		--anon-shadow: 0 30px 80px rgba(15, 23, 42, 0.55);
+		max-width: 26rem;
+		border-radius: 1.5rem;
+		border: 1px solid var(--auth-dialog-border, var(--anon-border));
+		background: var(--auth-dialog-bg, var(--anon-surface));
+		color: var(--auth-dialog-foreground, var(--anon-foreground));
+		box-shadow: var(--auth-dialog-shadow, var(--anon-shadow));
+	}
+
+	:global([data-theme='dark'] .anon-dialog),
+	:global(:root:not([data-theme='light']) .anon-dialog) {
+		--anon-surface: rgba(6, 11, 25, 0.86);
+		--anon-border: rgba(148, 163, 184, 0.28);
+		--anon-foreground: #e2e8f0;
+		--anon-subtitle: rgba(226, 232, 240, 0.78);
+		--anon-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+	}
+
+	:global(.anon-header) {
+		padding: 2rem 2rem 0;
+		text-align: center;
+	}
+
+	:global(.anon-header [data-slot='dialog-title']) {
+		font-size: 1.4rem;
+		font-weight: 600;
+	}
+
+	:global(.anon-header [data-slot='dialog-description']) {
+		margin-top: 0.85rem;
+		font-size: 0.95rem;
+		line-height: 1.6;
+		color: var(--auth-dialog-subtitle, var(--anon-subtitle));
+		font-weight: 500;
+	}
+
+	:global(.anon-footer) {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 2rem;
+		align-items: stretch;
+	}
+
+	@media (min-width: 40rem) {
+		:global(.anon-footer) {
+			flex-direction: row;
+			align-items: center;
+		}
+	}
+
+	:global(.anon-footer [data-slot='button']) {
+		width: 100%;
+	}
+
+	:global(.anon-cancel) {
+		flex: 1;
+		background: #0284c7 !important;
+		color: #ffffff !important;
+		justify-content: center;
+		box-shadow: 0 18px 40px rgba(14, 165, 233, 0.35);
+	}
+
+	:global(.anon-cancel:hover) {
+		background: #0ea5e9 !important;
+	}
+
+	:global(.anon-continue) {
+		flex: 1;
+		background: #f97316 !important;
+		color: #ffffff !important;
+		justify-content: center;
+		box-shadow: 0 18px 40px rgba(251, 146, 60, 0.35);
+	}
+
+	:global(.anon-continue:hover) {
+		background: #fb923c !important;
+	}
+
+	:global(.anon-continue:disabled) {
+		opacity: 0.75;
+		cursor: progress;
+	}
+
+	@media (max-width: 520px) {
+		.auth-card {
+			gap: 1.25rem;
+		}
+
+		.auth-footer {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.75rem;
+		}
+	}
+
 	:global([data-theme='dark'] .auth-backdrop) {
 		--app-surface: linear-gradient(175deg, rgba(2, 6, 23, 0.98), rgba(6, 11, 25, 0.94));
 		--app-halo: rgba(129, 140, 248, 0.36);
@@ -390,6 +642,8 @@
 		--auth-dialog-foreground: #e2e8f0;
 		--auth-dialog-subtitle: rgba(226, 232, 240, 0.78);
 		--auth-dialog-shadow: 0 30px 80px rgba(2, 6, 23, 0.75);
+		--auth-footer-link: #93c5fd;
+		--auth-footer-link-hover: #e2e8f0;
 		color: var(--foreground);
 	}
 
@@ -397,6 +651,12 @@
 		background: rgba(14, 165, 233, 0.22);
 		border: 1px solid rgba(56, 189, 248, 0.45);
 		color: #e0f2fe;
+	}
+
+	:global([data-theme='dark'] .auth-alert.error) {
+		background: rgba(239, 68, 68, 0.24);
+		border: 1px solid rgba(248, 113, 113, 0.55);
+		color: #fecaca;
 	}
 
 	:global([data-theme='dark'] .auth-blob-field) {
