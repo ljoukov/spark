@@ -241,10 +241,11 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Landing page (`/`) is a logged-out home/marketing hero with the preview video and a visible `LOGIN` CTA; clicking it navigates to `/login`. If the server detects an authenticated session it redirects straight to `/spark` (no `destination` query, no guest mode).
 - `/login` renders the sign-in dialog (Google auth) and redirects to `/spark` on success.
 - Web app pages (including `/spark` and `/admin`) are built with shadcn and SvelteKit.
+- The main web app experience (landing, auth, and signed-in pages) lives under the `(app)` layout group so that `/admin` does not inherit app-only client effects.
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
-- Signed-in experiences live under `/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
+- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
 - `/spark` is the signed-in home with cards linking to `/spark/code` and `/spark/code/lessons`.
 - `/spark/code` hosts the Spark Code experience (quizzes, problems, media steps).
 - `/logout` signs out and returns to `/`.
