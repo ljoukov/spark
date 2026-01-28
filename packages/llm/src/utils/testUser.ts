@@ -18,9 +18,8 @@ const testUserCredentialsSchema = z
     const parts = raw.split("/");
     if (parts.length !== 3) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "TEST_USER_EMAIL_ID_PASSWORD must be email/userId/password.",
+        code: "custom",
+        message: "TEST_USER_EMAIL_ID_PASSWORD must be email/userId/password.",
       });
       return z.NEVER;
     }
@@ -29,24 +28,24 @@ const testUserCredentialsSchema = z
     const userId = userIdRaw?.trim() ?? "";
     const password = passwordRaw ?? "";
 
-    const emailParsed = z.string().email().safeParse(email);
+    const emailParsed = z.email().safeParse(email);
     if (!emailParsed.success) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "TEST_USER_EMAIL_ID_PASSWORD has an invalid email.",
       });
       return z.NEVER;
     }
     if (!userId) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "TEST_USER_EMAIL_ID_PASSWORD missing userId.",
       });
       return z.NEVER;
     }
     if (!password) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "TEST_USER_EMAIL_ID_PASSWORD missing password.",
       });
       return z.NEVER;
@@ -99,9 +98,14 @@ function resolveTestUserCredentials(): TestUserCredentials | null {
     cachedTestUser = null;
     return cachedTestUser;
   }
-  const parsed = testUserCredentialsSchema.safeParse(testUserEnvSchema.parse(raw));
+  const parsed = testUserCredentialsSchema.safeParse(
+    testUserEnvSchema.parse(raw),
+  );
   if (!parsed.success) {
-    console.error("Invalid TEST_USER_EMAIL_ID_PASSWORD", parsed.error.flatten());
+    console.error(
+      "Invalid TEST_USER_EMAIL_ID_PASSWORD",
+      z.treeifyError(parsed.error),
+    );
     throw new Error("Invalid TEST_USER_EMAIL_ID_PASSWORD");
   }
   cachedTestUser = parsed.data;
