@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { HTMLTextareaAttributes } from 'svelte/elements';
+
 	type ChatInputVariant = 'default' | 'chat';
 
 	type SubmitMode = 'modEnter' | 'enter';
@@ -10,7 +12,7 @@
 		maxLines?: number;
 		maxChars?: number;
 		ariaLabel?: string;
-		autocomplete?: string;
+		autocomplete?: HTMLTextareaAttributes['autocomplete'];
 		spellcheck?: boolean;
 		inputClass?: string;
 		variant?: ChatInputVariant;
@@ -82,8 +84,7 @@
 		const lineHeight = Number.parseFloat(style.lineHeight) || 20;
 		const paddingTop = Number.parseFloat(style.paddingTop) || 0;
 		const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-		const wantsExtraLine =
-			variant === 'chat' && submitMode === 'enter' && value.includes('\n');
+		const wantsExtraLine = variant === 'chat' && submitMode === 'enter' && value.includes('\n');
 		const singleHeight = lineHeight + paddingTop + paddingBottom;
 		const minLines = wantsExtraLine ? Math.max(3, Math.min(maxLines, 3)) : 1;
 		const minHeight = lineHeight * minLines + paddingTop + paddingBottom;
@@ -141,9 +142,9 @@
 	bind:value
 	oninput={handleInput}
 	onkeydown={handleKeyDown}
-	disabled={disabled}
+	{disabled}
 	{autocomplete}
-	spellcheck={spellcheck}
+	{spellcheck}
 	rows={1}
 	maxlength={maxChars}
 	aria-label={ariaLabel}

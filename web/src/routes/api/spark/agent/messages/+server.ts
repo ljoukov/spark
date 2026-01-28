@@ -1,12 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import {
-	getFirebaseAdminFirestore,
-	getFirebaseAdminFirestoreModule,
-	generateText,
-	loadEnvFromFile,
-	loadLocalEnv
-} from '@spark/llm';
+import { getFirebaseAdminFirestore, generateText, loadEnvFromFile, loadLocalEnv } from '@spark/llm';
 import type { LlmContent, LlmTextDelta } from '@spark/llm';
 import type { SparkAgentContentPart, SparkAgentMessage } from '@spark/schemas';
 import { dev } from '$app/environment';
@@ -54,9 +48,9 @@ type ConversationDoc = {
 	id: string;
 	familyId?: string;
 	participantIds: string[];
-	createdAt: FirebaseFirestore.Timestamp;
-	updatedAt: FirebaseFirestore.Timestamp;
-	lastMessageAt: FirebaseFirestore.Timestamp;
+	createdAt: Date;
+	updatedAt: Date;
+	lastMessageAt: Date;
 	messages: SparkAgentMessage[];
 };
 
@@ -104,13 +98,17 @@ function resolveConversationDoc(
 	raw: FirebaseFirestore.DocumentData | undefined,
 	userId: string,
 	conversationId: string,
-	now: FirebaseFirestore.Timestamp
+	now: Date
 ): ConversationInit {
-	const messages = Array.isArray(raw?.messages) ? (raw?.messages as SparkAgentMessage[]) : [];
+	const messages = Array.isArray(raw?.messages)
+		? raw.messages
+				.map((entry) => normalizeMessage(entry, now))
+				.filter((entry): entry is SparkAgentMessage => entry !== null)
+		: [];
 	const participantIds = Array.isArray(raw?.participantIds)
 		? raw.participantIds.filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
 		: [];
-	const createdAt = (raw?.createdAt as FirebaseFirestore.Timestamp | undefined) ?? now;
+	const createdAt = resolveTimestamp(raw?.createdAt, now);
 	const conversation: ConversationDoc = {
 		id: conversationId,
 		familyId: typeof raw?.familyId === 'string' ? raw.familyId : undefined,
@@ -166,7 +164,49 @@ function appendMessage(conversation: ConversationDoc, message: SparkAgentMessage
 	conversation.messages = [...conversation.messages, message];
 }
 
-function updateAssistantMessage(conversation: ConversationDoc, messageId: string, text: string): void {
+function resolveTimestamp(value: unknown, fallback: Date): Date {
+	if (value instanceof Date) {
+		return value;
+	}
+	if (value && typeof value === 'object') {
+		const candidate = value as { toDate?: () => Date; seconds?: unknown; nanoseconds?: unknown };
+		if (typeof candidate.toDate === 'function') {
+			const resolved = candidate.toDate();
+			if (resolved instanceof Date && !Number.isNaN(resolved.getTime())) {
+				return resolved;
+			}
+		}
+		const seconds = typeof candidate.seconds === 'number' ? candidate.seconds : NaN;
+		const nanoseconds = typeof candidate.nanoseconds === 'number' ? candidate.nanoseconds : NaN;
+		if (!Number.isNaN(seconds) && !Number.isNaN(nanoseconds)) {
+			return new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000));
+		}
+	}
+	if (typeof value === 'string' || typeof value === 'number') {
+		const date = new Date(value);
+		if (!Number.isNaN(date.getTime())) {
+			return date;
+		}
+	}
+	return fallback;
+}
+
+function normalizeMessage(raw: unknown, fallback: Date): SparkAgentMessage | null {
+	if (!raw || typeof raw !== 'object') {
+		return null;
+	}
+	const message = raw as SparkAgentMessage;
+	return {
+		...message,
+		createdAt: resolveTimestamp((message as { createdAt?: unknown }).createdAt, fallback)
+	};
+}
+
+function updateAssistantMessage(
+	conversation: ConversationDoc,
+	messageId: string,
+	text: string
+): void {
 	for (let i = conversation.messages.length - 1; i >= 0; i -= 1) {
 		const message = conversation.messages[i];
 		if (message && message.id === messageId) {
@@ -280,8 +320,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const conversationId = resolveConversationId(parsedBody.conversationId);
 	const firestore = getFirebaseAdminFirestore();
-	const { Timestamp } = getFirebaseAdminFirestoreModule();
-	const now = Timestamp.now();
+	const now = new Date();
 	const conversationRef = firestore
 		.collection(userId)
 		.doc('client')
@@ -299,7 +338,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		).conversation;
 	} catch (error) {
 		console.error('Spark AI Agent Firestore access failed', { error, userId });
-		return json({ error: 'server_misconfigured', message: 'Firestore unavailable' }, { status: 500 });
+		return json(
+			{ error: 'server_misconfigured', message: 'Firestore unavailable' },
+			{ status: 500 }
+		);
 	}
 
 	const messageId = randomUUID();
@@ -347,7 +389,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		let flushInFlight = false;
 
 		const flushUpdate = async (force: boolean): Promise<void> => {
-			const nowTimestampValue = Timestamp.now();
+			const nowTimestampValue = new Date();
 			const elapsed = Date.now() - lastUpdate;
 			if (!force && elapsed < MIN_UPDATE_INTERVAL_MS) {
 				if (!pendingFlush) {
@@ -408,8 +450,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		} catch (error) {
 			console.error('Failed to generate Spark AI Agent response', { error, userId });
-			const fallback =
-				'Sorry — Spark AI Agent could not respond just now. Please try again.';
+			const fallback = 'Sorry — Spark AI Agent could not respond just now. Please try again.';
 			assistantText = fallback;
 			await flushUpdate(true);
 			sendEvent?.({

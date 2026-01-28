@@ -331,9 +331,20 @@
 		pendingScrollText = null;
 		requestAnimationFrame(() => {
 			const node = document.querySelector(`[data-message-id="${target?.id}"]`);
-			if (node instanceof HTMLElement) {
-				node.scrollIntoView({ block: 'start' });
+			const container = document.querySelector('.app-main');
+			if (!(node instanceof HTMLElement) || !(container instanceof HTMLElement)) {
+				return;
 			}
+			const appPage = document.querySelector('.app-page');
+			if (appPage instanceof HTMLElement && appPage.scrollTop !== 0) {
+				appPage.scrollTop = 0;
+			}
+			const nodeRect = node.getBoundingClientRect();
+			const containerRect = container.getBoundingClientRect();
+			const offset = nodeRect.top - containerRect.top;
+			const padding = 16;
+			const targetTop = container.scrollTop + offset - padding;
+			container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
 		});
 	});
 </script>
