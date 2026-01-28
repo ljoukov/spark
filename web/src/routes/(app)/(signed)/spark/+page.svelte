@@ -4,6 +4,9 @@
 	import { fromStore, type Readable } from 'svelte/store';
 	import { getFirestore, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import Mic from '@lucide/svelte/icons/mic';
+	import Plus from '@lucide/svelte/icons/plus';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { ChatInput } from '$lib/components/chat/index.js';
@@ -23,9 +26,6 @@
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
-	const displayName = $derived(
-		user?.name?.trim() || user?.email?.split('@')[0]?.trim() || 'there'
-	);
 
 	let conversationId = $state<string | null>(null);
 	let conversation = $state<SparkAgentConversation | null>(null);
@@ -34,8 +34,10 @@
 	let error = $state<string | null>(null);
 	let streamingByMessageId = $state<Record<string, string>>({});
 	let authReady = $state(false);
+	let composerExpanded = $state(false);
 
 	const VISIBLE_SECTION_COUNT = 4;
+	const isComposerExpanded = $derived(composerExpanded);
 
 	type Section = {
 		id: string;
@@ -73,7 +75,6 @@
 		}
 		return base;
 	}
-
 
 	function shorten(text: string, limit: number): string {
 		const trimmed = text.trim().replace(/\s+/gu, ' ');
@@ -142,14 +143,6 @@
 	}
 
 	const sections = $derived(buildSections(conversation?.messages ?? []));
-	const tocItems = $derived(
-		sections.map((section, index) => ({
-			id: section.id,
-			title: section.title,
-			index
-		}))
-	);
-
 	function setConversationId(nextId: string | null): void {
 		conversationId = nextId;
 		if (!browser) {
@@ -265,6 +258,7 @@
 		} finally {
 			sending = false;
 			draft = '';
+			composerExpanded = false;
 		}
 	}
 
@@ -328,6 +322,12 @@
 			stop?.();
 		};
 	});
+
+	$effect(() => {
+		if (!draft) {
+			composerExpanded = false;
+		}
+	});
 </script>
 
 <svelte:head>
@@ -335,22 +335,13 @@
 </svelte:head>
 
 <section class="agent-shell">
-	<header class="agent-hero">
-		<div>
-			<p class="agent-eyebrow">Spark AI Agent</p>
-			<h1>Hi {displayName}, ready to build your next study win?</h1>
-			<p class="agent-subtitle">
-				Ask Spark AI Agent to plan lessons, review work, or organise your learning tasks.
-			</p>
-		</div>
-		<div class="agent-actions">
+	<div class="agent-layout">
+		<div class="agent-toolbar">
 			<Button variant="outline" size="sm" onclick={resetConversation} disabled={sending}>
 				New chat
 			</Button>
 		</div>
-	</header>
 
-	<div class="agent-layout">
 		<div class="agent-stream">
 			{#if error}
 				<div class="agent-error" role="alert">
@@ -372,144 +363,152 @@
 					</div>
 				</div>
 			{:else}
-				<div class="agent-sections">
-					{#each sections as section (section.id)}
-						<details
-							class={`agent-section ${section.collapsed ? 'is-collapsed' : 'is-open'}`}
-							id={`section-${section.id}`}
-							open={!section.collapsed}
-						>
-							<summary>
-								<div class="section-summary">
-									<span class="section-title">{section.title}</span>
-									<span class="section-meta">{section.messages.length} message{section.messages.length === 1 ? '' : 's'}</span>
-								</div>
-							</summary>
-							<div class="section-body">
-								{#each section.messages as message (message.id)}
-									<div
-										class={`agent-message ${
-											message.role === 'user' ? 'is-user' : 'is-agent'
-										}`}
-									>
-										<div class="message-label">
-											{message.role === 'user' ? 'You' : 'Spark AI Agent'}
-										</div>
-										<div class="message-bubble">
-											{#if resolveMessageText(message)}
-												<p>{resolveMessageText(message)}</p>
-											{:else}
-												<p class="message-placeholder">…</p>
-											{/if}
-										</div>
+				<div class="agent-thread">
+					<div class="agent-sections">
+						{#each sections as section (section.id)}
+							<details
+								class={`agent-section ${section.collapsed ? 'is-collapsed' : 'is-open'}`}
+								id={`section-${section.id}`}
+								open={!section.collapsed}
+							>
+								<summary>
+									<div class="section-summary">
+										<span class="section-title">{section.title}</span>
+										<span class="section-meta">
+											{section.messages.length} message{section.messages.length === 1 ? '' : 's'}
+										</span>
 									</div>
-								{/each}
-							</div>
-						</details>
-					{/each}
+								</summary>
+								<div class="section-body">
+									{#each section.messages as message (message.id)}
+										<div
+											class={`agent-message ${
+												message.role === 'user' ? 'is-user' : 'is-agent'
+											}`}
+										>
+											<span class="sr-only">
+												{message.role === 'user' ? 'You' : 'Spark AI Agent'}
+											</span>
+											<div class="message-bubble">
+												{#if resolveMessageText(message)}
+													<p>{resolveMessageText(message)}</p>
+												{:else}
+													<p class="message-placeholder">…</p>
+												{/if}
+											</div>
+										</div>
+									{/each}
+								</div>
+							</details>
+						{/each}
+					</div>
 				</div>
 			{/if}
 
 			<div class="agent-composer">
-				<div class="composer-card">
-					<ChatInput
-						bind:value={draft}
-						placeholder="Message Spark AI Agent…"
-						ariaLabel="Message Spark AI Agent"
-						maxLines={6}
-						maxChars={1200}
-						disabled={sending}
-						onSubmit={() => void sendMessage()}
-					/>
-					<div class="composer-actions">
-						<span class="composer-hint">Ctrl/Cmd + Enter to send</span>
-						<Button size="lg" onclick={() => void sendMessage()} disabled={sending || !draft.trim()}>
-							{sending ? 'Sending…' : 'Send'}
-						</Button>
+				<div class="composer-stack">
+					<div class="composer-card">
+						<div class={`composer-field ${isComposerExpanded ? 'is-expanded' : ''}`}>
+							<button
+								class="composer-btn composer-attach composer-leading"
+								type="button"
+								aria-label="Attach"
+								disabled={sending}
+							>
+								<Plus class="composer-icon" />
+							</button>
+							<div class="composer-input">
+								<ChatInput
+									bind:value={draft}
+									placeholder="Ask anything"
+									ariaLabel="Message Spark AI Agent"
+									maxLines={6}
+									maxChars={1200}
+									disabled={sending}
+									variant="chat"
+									inputClass="composer-textarea"
+									submitMode="enter"
+									onInput={({ value, isExpanded }) => {
+										composerExpanded = isExpanded ?? value.includes('\n');
+									}}
+									onSubmit={() => void sendMessage()}
+								/>
+							</div>
+							<div class="composer-trailing">
+								<button
+									class="composer-btn composer-mic"
+									type="button"
+									aria-label="Voice input"
+									disabled={sending}
+								>
+									<Mic class="composer-icon" />
+								</button>
+								<button
+									class="composer-btn composer-send"
+									type="button"
+									aria-label="Send message"
+									onclick={() => void sendMessage()}
+									disabled={sending || !draft.trim()}
+								>
+									<ArrowUp class="composer-icon" />
+								</button>
+							</div>
+							<div class="composer-spacer" aria-hidden="true"></div>
+						</div>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<aside class="agent-toc">
-			<div class="toc-card">
-				<p class="toc-title">Sections</p>
-				{#if tocItems.length === 0}
-					<p class="toc-empty">Your conversation will appear here.</p>
-				{:else}
-					<ol>
-						{#each tocItems as item}
-							<li>
-								<a href={`#section-${item.id}`}>{item.title}</a>
-							</li>
-						{/each}
-					</ol>
-				{/if}
-			</div>
-		</aside>
 	</div>
 </section>
 
 <style>
 	.agent-shell {
-		width: min(1200px, 92vw);
+		width: min(780px, 92vw);
 		margin: 0 auto;
-		padding: clamp(1.5rem, 3vw, 2.5rem) 0 clamp(2rem, 4vw, 3.5rem);
+		padding: clamp(1.5rem, 3vw, 2.5rem) 0 1rem;
 		display: flex;
 		flex-direction: column;
 		gap: clamp(1.5rem, 3vw, 2.4rem);
+		--chat-surface: color-mix(in srgb, var(--app-content-bg, #ffffff) 82%, transparent);
+		--chat-border: color-mix(in srgb, var(--app-content-border, rgba(148, 163, 184, 0.3)) 75%, transparent);
+		--chat-user-bg: color-mix(in srgb, var(--app-content-bg, #ffffff) 70%, rgba(15, 23, 42, 0.06));
+		--chat-user-border: color-mix(
+			in srgb,
+			var(--app-content-border, rgba(148, 163, 184, 0.35)) 70%,
+			transparent
+		);
+		--chat-send-bg: var(--foreground);
+		--chat-send-fg: var(--background);
 	}
 
-	.agent-hero {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		align-items: flex-start;
-		justify-content: space-between;
-		padding: clamp(1.5rem, 3vw, 2.4rem);
-		border-radius: 1.75rem;
-		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 80%, transparent);
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		box-shadow: 0 28px 80px -50px rgba(15, 23, 42, 0.4);
-	}
-
-	.agent-hero h1 {
-		margin: 0;
-		font-size: clamp(2rem, 3.4vw, 2.8rem);
-		letter-spacing: -0.02em;
-	}
-
-	.agent-eyebrow {
-		margin: 0 0 0.4rem 0;
-		font-size: 0.75rem;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		color: rgba(59, 130, 246, 0.75);
-		font-weight: 600;
-	}
-
-	.agent-subtitle {
-		margin: 0;
-		max-width: 40rem;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.72));
-		line-height: 1.6;
-	}
-
-	.agent-actions {
-		display: flex;
-		gap: 0.75rem;
+	:global(:root:not([data-theme='light']) .agent-shell),
+	:global([data-theme='dark'] .agent-shell),
+	:global(.dark .agent-shell) {
+		--chat-surface: color-mix(in srgb, rgba(15, 23, 42, 0.92) 75%, transparent);
+		--chat-border: rgba(148, 163, 184, 0.3);
+		--chat-user-bg: rgba(30, 41, 59, 0.45);
+		--chat-user-border: rgba(148, 163, 184, 0.3);
+		--chat-send-bg: rgba(248, 250, 252, 0.92);
+		--chat-send-fg: rgba(15, 23, 42, 0.92);
 	}
 
 	.agent-layout {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: clamp(1.5rem, 3vw, 2.5rem);
+		display: flex;
+		flex-direction: column;
+		gap: clamp(1.5rem, 3vw, 2.2rem);
+	}
+
+	.agent-toolbar {
+		display: flex;
+		justify-content: flex-end;
 	}
 
 	.agent-stream {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
+		gap: 2rem;
 		min-height: 0;
 	}
 
@@ -525,16 +524,17 @@
 	.agent-empty {
 		padding: clamp(1.6rem, 3vw, 2.4rem);
 		border-radius: 1.5rem;
-		border: 1px dashed rgba(148, 163, 184, 0.4);
-		background: rgba(148, 163, 184, 0.08);
+		border: 1px dashed rgba(148, 163, 184, 0.3);
+		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 65%, transparent);
 		display: flex;
 		flex-direction: column;
 		gap: 0.8rem;
+		text-align: center;
 	}
 
 	.agent-empty h2 {
 		margin: 0;
-		font-size: 1.4rem;
+		font-size: 1.35rem;
 	}
 
 	.agent-empty p {
@@ -544,35 +544,57 @@
 
 	.agent-empty__examples {
 		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		font-size: 0.95rem;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
 		color: var(--text-secondary, rgba(30, 41, 59, 0.7));
+	}
+
+	.agent-empty__examples span {
+		padding: 0.4rem 0.8rem;
+		border-radius: 1.75rem;
+		border: 1px solid var(--chat-border);
+		background: var(--chat-surface);
+	}
+
+	.agent-thread {
+		display: flex;
+		flex-direction: column;
+		gap: 1.75rem;
 	}
 
 	.agent-sections {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.5rem;
 	}
 
 	.agent-section {
 		border-radius: 1.5rem;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 75%, transparent);
-		box-shadow: 0 18px 50px -38px rgba(15, 23, 42, 0.35);
-		overflow: hidden;
+		border: 1px solid transparent;
+		background: transparent;
 	}
 
 	.agent-section summary {
 		cursor: pointer;
 		list-style: none;
-		padding: 1rem 1.2rem;
-		background: rgba(15, 23, 42, 0.04);
+		padding: 0.6rem 0.9rem;
+		border-radius: 999px;
+		background: var(--chat-surface);
+		border: 1px solid var(--chat-border);
+		transition: background 0.2s ease, border-color 0.2s ease;
 	}
 
 	.agent-section summary::-webkit-details-marker {
 		display: none;
+	}
+
+	.agent-section.is-open summary {
+		background: transparent;
+		border-color: transparent;
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	.section-summary {
@@ -597,16 +619,16 @@
 	}
 
 	.section-body {
-		padding: 1rem 1.2rem 1.4rem;
+		padding: 0.2rem 0 0.6rem;
 		display: flex;
 		flex-direction: column;
-		gap: 1.35rem;
+		gap: 1.4rem;
 	}
 
 	.agent-message {
 		display: flex;
 		flex-direction: column;
-		gap: 0.45rem;
+		gap: 0.35rem;
 		width: 100%;
 		align-items: flex-start;
 	}
@@ -616,30 +638,31 @@
 		text-align: right;
 	}
 
-	.agent-message.is-user .message-label {
-		text-align: right;
-	}
-
-	.message-label {
-		font-size: 0.72rem;
-		text-transform: uppercase;
-		letter-spacing: 0.18em;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.6));
-	}
-
 	.message-bubble {
-		padding: 0.85rem 1rem;
-		border-radius: 1.2rem;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: rgba(15, 23, 42, 0.04);
-		max-width: min(42rem, 100%);
-		width: fit-content;
+		padding: 0;
+		border-radius: 0;
+		border: none;
+		background: transparent;
+		max-width: min(46rem, 100%);
+		width: 100%;
 		white-space: pre-wrap;
-		line-height: 1.5;
+		line-height: 1.7;
+		font-size: 1rem;
+		color: var(--text-primary, var(--foreground));
 	}
 
 	.message-bubble p {
 		margin: 0;
+	}
+
+	.agent-message.is-user .message-bubble {
+		padding: 0.65rem 1rem;
+		border-radius: 1.5rem 1.5rem 0.5rem 1.5rem;
+		border: 1px solid var(--chat-user-border);
+		background: var(--chat-user-bg);
+		width: auto;
+		max-width: min(28rem, 100%);
+		box-shadow: 0 10px 30px -26px rgba(15, 23, 42, 0.3);
 	}
 
 	.message-placeholder {
@@ -652,90 +675,135 @@
 		z-index: 2;
 	}
 
-	.composer-card {
-		padding: 1rem;
-		border-radius: 1.5rem;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 90%, transparent);
-		backdrop-filter: blur(16px);
-		box-shadow: 0 20px 60px -40px rgba(15, 23, 42, 0.35);
+	.composer-stack {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.6rem;
 	}
 
-	.composer-actions {
+	.composer-card {
+		padding: 0.625rem;
+		border-radius: 1.75rem;
+		border: 1px solid var(--chat-border);
+		background: var(--chat-surface);
+		backdrop-filter: blur(16px);
+		box-shadow:
+			0 18px 45px -32px rgba(15, 23, 42, 0.35),
+			inset 0 1px 0 rgba(255, 255, 255, 0.55);
 		display: flex;
-		justify-content: space-between;
+		flex-direction: column;
+		gap: 0.6rem;
+		overflow: clip;
+		background-clip: padding-box;
+	}
+
+	.composer-card:focus-within {
+		border-color: color-mix(in srgb, var(--text-secondary, rgba(30, 41, 59, 0.6)) 40%, transparent);
+		box-shadow:
+			0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent),
+			0 18px 45px -32px rgba(15, 23, 42, 0.35),
+			inset 0 1px 0 rgba(255, 255, 255, 0.55);
+	}
+
+	.composer-field {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-areas: 'leading input trailing';
 		align-items: center;
-		gap: 1rem;
-		flex-wrap: wrap;
+		gap: 0.6rem;
 	}
 
-	.composer-hint {
-		font-size: 0.75rem;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.65));
+	.composer-input {
+		grid-area: input;
+		min-width: 0;
+		display: flex;
+		align-items: stretch;
 	}
 
-	.agent-toc {
+	:global(.composer-textarea) {
+		padding: 0.15rem 0.2rem 0.25rem;
+		width: 100%;
+	}
+
+	.composer-leading {
+		grid-area: leading;
+	}
+
+	.composer-trailing {
+		grid-area: trailing;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.composer-spacer {
+		grid-area: spacer;
 		display: none;
 	}
 
-	.toc-card {
-		position: sticky;
-		top: 1rem;
-		padding: 1.2rem 1.3rem;
-		border-radius: 1.4rem;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: color-mix(in srgb, var(--app-content-bg, #ffffff) 85%, transparent);
-		box-shadow: 0 20px 60px -40px rgba(15, 23, 42, 0.3);
+	.composer-field.is-expanded {
+		grid-template-areas:
+			'input input input'
+			'leading spacer trailing';
+		row-gap: 0.45rem;
+		align-items: end;
 	}
 
-	.toc-title {
-		margin: 0 0 0.75rem 0;
-		font-size: 0.75rem;
-		letter-spacing: 0.2em;
-		text-transform: uppercase;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.65));
-		font-weight: 600;
+	.composer-field.is-expanded .composer-spacer {
+		display: block;
 	}
 
-	.toc-card ol {
-		margin: 0;
-		padding-left: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		font-size: 0.9rem;
+	.composer-field.is-expanded .composer-input {
+		padding-bottom: 0.25rem;
 	}
 
-	.toc-card a {
-		color: inherit;
-		text-decoration: none;
+	.composer-btn {
+		display: grid;
+		place-items: center;
+		height: 2.25rem;
+		width: 2.25rem;
+		border-radius: 999px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.6));
+		transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
 	}
 
-	.toc-card a:hover {
-		color: rgba(59, 130, 246, 0.9);
+	.composer-field.is-expanded .composer-btn {
+		align-self: end;
 	}
 
-	.toc-empty {
-		margin: 0;
-		font-size: 0.9rem;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.65));
+	.composer-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
-	@media (min-width: 960px) {
-		.agent-hero {
-			flex-direction: row;
-			align-items: center;
-		}
-
-		.agent-layout {
-			grid-template-columns: minmax(0, 1fr) 260px;
-		}
-
-		.agent-toc {
-			display: block;
-		}
+	.composer-btn:not(.composer-send):not(:disabled):hover {
+		background: rgba(148, 163, 184, 0.18);
+		color: var(--text-primary, var(--foreground));
+		transform: translateY(-1px);
 	}
+
+	.composer-send {
+		background: var(--chat-send-bg);
+		color: var(--chat-send-fg);
+		box-shadow: 0 12px 30px -18px rgba(15, 23, 42, 0.35);
+	}
+
+	.composer-send:not(:disabled):hover {
+		background: color-mix(in srgb, var(--chat-send-bg) 88%, transparent);
+		color: var(--chat-send-fg);
+		transform: translateY(-1px) scale(1.02);
+	}
+
+	.composer-send:disabled {
+		background: color-mix(in srgb, var(--chat-send-bg) 60%, transparent);
+		color: color-mix(in srgb, var(--chat-send-fg) 70%, transparent);
+	}
+
+	.composer-icon {
+		height: 1.05rem;
+		width: 1.05rem;
+	}
+
 </style>

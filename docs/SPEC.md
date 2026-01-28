@@ -123,7 +123,10 @@ Recommended defaults:
     - Help students prepare for the British Informatics Olympiad (BIO) with coding practice sessions and problems delivered via the web app (e.g., under `/spark/code`), with session progress persisted through SvelteKit APIs that proxy Firestore.
   - Spark AI Agent (web, Phase 1)
     - Logged-in web home at `/spark` is the Spark AI Agent chat experience.
-    - The chat stream is sectioned with a table of contents; older sections collapse by default to keep visible scroll depth manageable.
+    - The chat stream is sectioned; older sections collapse by default to keep visible scroll depth manageable.
+    - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles.
+    - The composer is sticky at the bottom with a rounded “Ask anything” input, leading attach button, and trailing send control.
+    - Keyboard: Enter submits; Shift+Enter inserts a new line.
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
 
