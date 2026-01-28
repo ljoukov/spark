@@ -1,0 +1,144 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{array}
+
+\begin{document}
+
+\section*{Hamilton Olympiad: curriculum, structure, and a new paper}
+
+\section*{1. Curriculum beyond school mathematics}
+\textbf{Number theory.} Divisibility tests, modular arithmetic, prime factorization, highest common factor and least common multiple, properties of terminating decimals, parity, and working with digit constraints.\\
+\textbf{Algebra.} Factorization (including difference of squares), manipulating expressions and equations, inequalities, sequences, and interpreting algebraic conditions from worded problems.\\
+\textbf{Geometry.} Angle chasing, similarity and congruence, circle theorems, area and length ratios, properties of polygons, and basic coordinate geometry when helpful.\\
+\textbf{Combinatorics and counting.} Systematic counting, case splits, inclusion--exclusion at a basic level, invariants, and double counting arguments.\\
+\textbf{Proof techniques.} Direct proof, contradiction, extremal arguments, invariants, and clear reasoning with well-labelled diagrams.
+
+\section*{2. Structure and difficulty across recent papers}
+Across 2015--2025 the Hamilton papers have 6 questions, each worth 10 marks, with a steady increase in difficulty. The distribution of topics is stable: typically 2 geometry questions, 2 number theory or algebra questions, 1 combinatorics question, and 1 mixed or harder problem (often an invariant, functional, or deeper number theory question).
+
+\begin{center}
+\begin{tabular}{|p{0.08\textwidth}|p{0.58\textwidth}|p{0.26\textwidth}|}
+\hline
+\textbf{Q} & \textbf{Typical themes (2015--2025)} & \textbf{Typical difficulty} \\
+\hline
+1 & Divisibility, digit constraints, simple diophantine or arithmetic set-up. & Accessible, short solution. \\
+\hline
+2 & Counting with small cases or linear diophantine; occasionally a basic geometry computation. & Easy to moderate. \\
+\hline
+3 & Geometry ratio or proof (similarity, area ratios, circles or polygons). & Moderate, requires proof. \\
+\hline
+4 & Algebraic or number puzzle (pairwise sums, functional constraints, or structured counting). & Moderate to hard. \\
+\hline
+5 & Number theory or algebra with tighter constraints (terminating decimals, exponent structure, or modular reasoning). & Hard. \\
+\hline
+6 & The hardest problem: invariants, games, floor functions, or deeper number theory/geometry. & Very hard, full-solution proof. \\
+\hline
+\end{tabular}
+\end{center}
+
+\section*{3. Plan for a new Hamilton-style paper}
+The new paper below follows the same structure: Q1 is a quick divisibility/digits problem; Q2 is a short counting/diophantine task; Q3 is a geometry ratio proof; Q4 is an algebraic puzzle about pairwise sums; Q5 is a number theory problem about terminating decimals; and Q6 is a harder floor-function equation requiring careful interval analysis.
+
+\section*{4. New Hamilton-style paper (problems)}
+\begin{enumerate}
+\item The five-digit integer $6a4b8$ is divisible by $99$. Find the digits $a$ and $b$.
+
+\item Stamps cost 4p, 6p and 9p. A collector buys at least one stamp of each type and spends exactly 60p. In how many different ways can this be done? (Two ways are different if the numbers of any stamp type differ.)
+
+\item $ABCD$ is a trapezium with $AB \parallel CD$ and $AB=2CD$. The diagonals $AC$ and $BD$ intersect at $P$. Prove that $AP:PC=BP:PD=2:1$, and find the ratio of the areas of triangles $APB$ and $CPD$.
+
+\item Four distinct integers are chosen. The six pairwise sums (in no particular order) are\\
+$3,4,7,8,11,12$. Find the possible value(s) of the largest integer.
+
+\item Find all integers $n$ with $0\le n\le 2026$ and $n\ne 2$ for which $\dfrac{1}{n^2-4}$ is a terminating decimal.
+
+\item Find all real numbers $x$ such that
+\[
+\lfloor x\rfloor + \lfloor 2x\rfloor + \lfloor 3x\rfloor = \lfloor 6x\rfloor.
+\]
+\end{enumerate}
+
+\section*{5. Solutions}
+\subsection*{Solution 1}
+Divisibility by $99$ means divisibility by $9$ and $11$.
+
+For $9$, the digit sum is $6+a+4+b+8=18+a+b$, so $a+b\equiv 0\pmod 9$.
+
+For $11$, the alternating sum is $(6- a +4- b +8)=18-a-b$, so $18-a-b\equiv 0\pmod{11}$.
+
+Let $s=a+b$. Since $0\le s\le 18$ and $s\equiv 0\pmod 9$, we have $s\in\{0,9,18\}$. Only $s=18$ gives $18-s\equiv 0\pmod{11}$. Hence $a+b=18$, and the only digit solution is $a=b=9$. The number is $69498$.
+
+\subsection*{Solution 2}
+Let the numbers of 4p, 6p and 9p stamps be $a,b,c$ respectively, with $a,b,c\ge 1$. Then
+\[
+4a+6b+9c=60.
+\]
+Subtracting $19$ gives $4(a-1)+6(b-1)+9(c-1)=41$. The left-hand side is even unless $c-1$ is odd, so $c$ is even. Write $c=2w$ with $w\ge 1$. Then
+\[
+4a+6b=60-18w.
+\]
+Since $w\ge 1$, we try $w=1,2,3$. If $w=1$, then $4a+6b=42$, i.e. $2a+3b=21$. The nonnegative solutions are $(a,b)=(9,1),(6,3),(3,5)$.
+If $w=2$, then $4a+6b=24$, i.e. $2a+3b=12$, giving $(a,b)=(3,2)$. If $w=3$, then $4a+6b=6$, which has no solution with $a,b\ge 1$.
+
+Hence there are four solutions:
+\[(a,b,c)=(9,1,2),(6,3,2),(3,5,2),(3,2,4),\]
+so there are $4$ ways.
+
+\subsection*{Solution 3}
+Since $AB\parallel CD$, we have $\angle ABP=\angle CDP$ (alternate angles) and $\angle APB=\angle CPD$ (vertically opposite angles). Hence triangles $\triangle ABP$ and $\triangle CDP$ are similar.
+Therefore
+\[
+\frac{AP}{PC}=\frac{AB}{CD}=2,\qquad \frac{BP}{PD}=\frac{AB}{CD}=2,
+\]
+so $AP:PC=BP:PD=2:1$.
+
+For areas,
+\[
+\frac{[\triangle APB]}{[\triangle CPD]}=\frac{AP\cdot BP}{PC\cdot PD}=\left(\frac{AP}{PC}\right)\left(\frac{BP}{PD}\right)=2\cdot 2=4.
+\]
+Thus the area ratio is $4:1$.
+
+\subsection*{Solution 4}
+Let the integers be $x<y<z<w$. The smallest sum is $x+y=3$ and the largest is $z+w=12$. The second smallest must be $x+z=4$, so $z=4-x$ and $y=3-x$.
+The second largest must be $y+w=11$, so $w=11-y=8+x$. This also agrees with $z+w=12$ since $z=4-x$.
+
+The remaining two sums are $x+w=8+2x$ and $y+z=(3-x)+(4-x)=7-2x$. These must be $7$ and $8$ in some order. Hence $8+2x=8$ and $7-2x=7$, giving $x=0$.
+Thus $(x,y,z,w)=(0,3,4,8)$ and the largest integer is $8$.
+
+\subsection*{Solution 5}
+A fraction $1/(n^2-4)$ terminates if and only if $|n^2-4|$ has no prime factors other than $2$ and $5$.
+
+If $n=0$, then $n^2-4=-4$ and the decimal terminates.
+For $n\ge 3$, write $n^2-4=(n-2)(n+2)$, with $n-2$ and $n+2$ positive and differing by $4$.
+Each factor must be of the form $2^a5^b$.
+
+If both are odd, they are powers of $5$. The only powers of $5$ differing by $4$ are $1$ and $5$, giving $n-2=1$, $n+2=5$, so $n=3$.
+
+If both are even, write $n-2=4u$ and $n+2=4v$, so $v-u=1$ and $u,v$ have only prime factors $2$ and $5$. Consecutive integers have opposite parity, so the odd one must be a power of $5$. If $5^k\ge 25$, then $5^k\pm 1$ is divisible by $3$, so it cannot have only factors $2$ and $5$. Hence the only possible odd values are $1$ and $5$, giving the consecutive pairs $(1,2)$ and $(4,5)$. Therefore
+\[(n-2,n+2)=(4,8) \Rightarrow n=6,\qquad (n-2,n+2)=(16,20) \Rightarrow n=18.
+\]
+
+Thus the solutions in the given range are
+\[n\in\{0,3,6,18\}.
+\]
+
+\subsection*{Solution 6}
+Write $x=k+t$ where $k\in\mathbb{Z}$ and $t\in[0,1)$. Then
+\[
+\lfloor x\rfloor + \lfloor 2x\rfloor + \lfloor 3x\rfloor = k + (2k+\lfloor 2t\rfloor) + (3k+\lfloor 3t\rfloor)
+=6k+\lfloor 2t\rfloor+\lfloor 3t\rfloor.
+\]
+Also $\lfloor 6x\rfloor=6k+\lfloor 6t\rfloor$. Therefore the equation reduces to
+\[
+\lfloor 2t\rfloor+\lfloor 3t\rfloor=\lfloor 6t\rfloor,\qquad t\in[0,1).
+\]
+The breakpoints are multiples of $1/6$. For $0\le t<1/6$, we have $2t<1/3$, $3t<1/2$, $6t<1$, so all three floors are $0$ and the equality holds.
+For $1/6\le t<1$, we have $\lfloor 6t\rfloor\ge 1$, while $\lfloor 2t\rfloor+\lfloor 3t\rfloor\le 2$, and a short check on each interval $[m/6,(m+1)/6)$ for $m=1,2,3,4,5$ shows the equality fails.
+
+Hence $t\in[0,1/6)$, and the solution set is
+\[
+\{x\in\mathbb{R}: x\in[k, k+1/6)\text{ for some }k\in\mathbb{Z}\}.
+\]
+
+\end{document}
