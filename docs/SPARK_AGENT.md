@@ -13,7 +13,7 @@ Source of truth for platform + APIs: `docs/SPEC.md`
 
 - The logged-in home is a single chat stream centered on Spark AI Agent.
 - Web home route is `/spark` (see `docs/SPEC.md` for local test-user login steps).
-- The stream is automatically organized into sections with a table of contents.
+- The stream is a continuous list of messages (no summary sections).
 - Tasks appear as sections inside the same stream (not separate tabs).
 - Keep the visible scroll depth limited (target: ~5x screen height). Older content is pulled in as collapsed sections on demand.
 
