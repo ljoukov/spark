@@ -423,6 +423,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		};
 
 		const handleDelta = (delta: LlmTextDelta): void => {
+			if (delta.thoughtDelta) {
+				sendEvent?.({ event: 'thought', data: delta.thoughtDelta });
+			}
 			if (delta.textDelta) {
 				assistantText += delta.textDelta;
 				sendEvent?.({ event: 'text', data: delta.textDelta });
