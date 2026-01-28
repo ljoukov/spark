@@ -2544,6 +2544,9 @@ async function llmStream({
   const promptDebugContents = promptContents.map(cloneContentForDebug);
   const openAiModelInfo = resolveOpenAiModelVariant(options.modelId);
   const openAiModelId = openAiModelInfo?.modelId;
+  const openAiTextModelId = openAiModelInfo
+    ? (options.modelId as LlmTextModelId)
+    : undefined;
   const isChatGpt = openAiModelInfo?.provider === "chatgpt";
   const isOpenAi = openAiModelInfo?.provider === "api";
   const isGemini = openAiModelInfo === undefined;
@@ -2627,16 +2630,16 @@ async function llmStream({
         "ChatGPT Codex provider does not support web-search/code-execution tools.",
       );
     }
-    const openAiReasoningEffort = openAiModelId
+    const openAiReasoningEffort = openAiTextModelId
       ? resolveOpenAiReasoningEffortForModel(
-          options.modelId,
+          openAiTextModelId,
           options.openAiReasoningEffort,
         )
       : undefined;
-    const openAiTextConfig: ResponseTextConfig | undefined = openAiModelId
+    const openAiTextConfig: ResponseTextConfig | undefined = openAiTextModelId
       ? {
           format: options.openAiTextFormat ?? { type: "text" },
-          verbosity: resolveOpenAiVerbosity(options.modelId),
+          verbosity: resolveOpenAiVerbosity(openAiTextModelId),
         }
       : undefined;
     const chatGptTextConfig =
@@ -3920,16 +3923,17 @@ export async function runToolLoop(
   const steps: LlmToolLoopStep[] = [];
   const openAiModelInfo = resolveOpenAiModelVariant(options.modelId);
   if (openAiModelInfo) {
-    const openAiModelId = openAiModelInfo.modelId;
     if (openAiModelInfo.provider === "chatgpt") {
+      const chatGptModelId = openAiModelInfo.modelId;
+      const textModelId = options.modelId;
       const openAiTools = buildOpenAiFunctionTools(options.tools);
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
-        options.modelId,
+        textModelId,
         options.openAiReasoningEffort,
       );
       const openAiTextConfig: ResponseTextConfig = {
         format: { type: "text" },
-        verbosity: resolveOpenAiVerbosity(options.modelId),
+        verbosity: resolveOpenAiVerbosity(textModelId),
       };
       const chatGptTextConfig =
         openAiTextConfig.verbosity !== null && openAiTextConfig.verbosity
@@ -3953,7 +3957,7 @@ export async function runToolLoop(
         recordPromptUsage(callHandle, promptContents);
         try {
           const request = {
-            model: openAiModelId,
+            model: chatGptModelId,
             store: false,
             stream: true,
             instructions:
@@ -4097,6 +4101,7 @@ export async function runToolLoop(
         }
       }
     } else {
+      const openAiModelId = openAiModelInfo.modelId;
       const openAiTools = buildOpenAiFunctionTools(options.tools);
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
         openAiModelId,
