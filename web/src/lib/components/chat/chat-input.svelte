@@ -38,6 +38,7 @@
 	}: Props = $props();
 
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
+	let hasExpanded = $state(false);
 
 	function resolveBaseClass(currentVariant: ChatInputVariant): string {
 		if (currentVariant === 'chat') {
@@ -84,15 +85,23 @@
 		const lineHeight = Number.parseFloat(style.lineHeight) || 20;
 		const paddingTop = Number.parseFloat(style.paddingTop) || 0;
 		const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-		const wantsExtraLine = variant === 'chat' && submitMode === 'enter' && value.includes('\n');
+		const hasValue = value.length > 0;
+		const wantsExtraLine = variant === 'chat' && value.includes('\n');
 		const singleHeight = lineHeight + paddingTop + paddingBottom;
-		const minLines = wantsExtraLine ? Math.max(3, Math.min(maxLines, 3)) : 1;
+		if (!hasValue) {
+			hasExpanded = false;
+		}
+		if (hasValue && (wantsExtraLine || textareaEl.scrollHeight > singleHeight + 1)) {
+			hasExpanded = true;
+		}
+		const baseMinLines = wantsExtraLine ? 3 : hasExpanded ? 2 : 1;
+		const minLines = Math.min(maxLines, baseMinLines);
 		const minHeight = lineHeight * minLines + paddingTop + paddingBottom;
 		const maxHeight = lineHeight * maxLines + paddingTop + paddingBottom;
 		const nextHeight = Math.min(Math.max(textareaEl.scrollHeight, minHeight), maxHeight);
 		textareaEl.style.height = `${nextHeight}px`;
 		textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
-		const isExpanded = wantsExtraLine || textareaEl.scrollHeight > singleHeight + 1;
+		const isExpanded = hasValue && (hasExpanded || wantsExtraLine);
 		textareaEl.dataset.expanded = isExpanded ? 'true' : 'false';
 	}
 

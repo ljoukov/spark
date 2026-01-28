@@ -5,12 +5,15 @@
 	import { getFirestore, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import Camera from '@lucide/svelte/icons/camera';
 	import Mic from '@lucide/svelte/icons/mic';
 	import Plus from '@lucide/svelte/icons/plus';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { ChatInput } from '$lib/components/chat/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import { renderMarkdown } from '$lib/markdown';
 	import { streamSse } from '$lib/client/sse';
 	import {
 		SparkAgentConversationSchema,
@@ -33,14 +36,44 @@
 	let sending = $state(false);
 	let error = $state<string | null>(null);
 	let streamingByMessageId = $state<Record<string, string>>({});
+	let streamingThoughtsByMessageId = $state<Record<string, string>>({});
 	let authReady = $state(false);
 	let composerExpanded = $state(false);
 	let composerRef = $state<HTMLDivElement | null>(null);
 	let streamAbort = $state<AbortController | null>(null);
 	let pendingScrollText = $state<string | null>(null);
 	let lastScrollMessageId = $state<string | null>(null);
+	let attachmentInputRef = $state<HTMLInputElement | null>(null);
+	let photoInputRef = $state<HTMLInputElement | null>(null);
 
 	const isComposerExpanded = $derived(composerExpanded);
+	const isMobileDevice = $derived.by(() => {
+		if (!browser) {
+			return false;
+		}
+		const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } })
+			.userAgentData;
+		if (userAgentData && typeof userAgentData.mobile === 'boolean') {
+			return userAgentData.mobile;
+		}
+		if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+			return true;
+		}
+		return navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform);
+	});
+	const isMacPlatform = $derived.by(() => {
+		if (!browser) {
+			return false;
+		}
+		return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+	});
+	const attachmentShortcutLabel = $derived.by(() => {
+		if (!browser || isMobileDevice) {
+			return null;
+		}
+		return isMacPlatform ? '⌘U' : 'Ctrl+U';
+	});
+	const canTakePhoto = $derived(isMobileDevice);
 
 	function resolveConversationStorageKey(uid: string): string {
 		return `spark:agent:conversation:${uid}`;
@@ -72,6 +105,15 @@
 		return base;
 	}
 
+	function appendStreamingThoughts(current: string, delta: string): string {
+		const next = `${current}${delta}`;
+		const lines = next.split(/\r?\n/u);
+		if (lines.length <= 4) {
+			return next;
+		}
+		return lines.slice(-4).join('\n');
+	}
+
 	function reconcileStreaming(nextConversation: SparkAgentConversation): void {
 		const next: Record<string, string> = {};
 		const messageMap = new Map<string, SparkAgentMessage>();
@@ -89,6 +131,21 @@
 			}
 		}
 		streamingByMessageId = next;
+	}
+
+	function reconcileStreamingThoughts(nextConversation: SparkAgentConversation): void {
+		const next: Record<string, string> = {};
+		const messageIds = new Set(nextConversation.messages.map((message) => message.id));
+		for (const [id, value] of Object.entries(streamingThoughtsByMessageId)) {
+			if (!messageIds.has(id)) {
+				continue;
+			}
+			if (value.trim().length === 0) {
+				continue;
+			}
+			next[id] = value;
+		}
+		streamingThoughtsByMessageId = next;
 	}
 
 	const messages = $derived(conversation?.messages ?? []);
@@ -113,10 +170,34 @@
 		setConversationId(null);
 		conversation = null;
 		streamingByMessageId = {};
+		streamingThoughtsByMessageId = {};
 		error = null;
 		draft = '';
 		pendingScrollText = null;
 		lastScrollMessageId = null;
+	}
+
+	function openFilePicker(input: HTMLInputElement | null): void {
+		if (!input) {
+			return;
+		}
+		input.value = '';
+		input.click();
+	}
+
+	function handleAttachmentSelect(): void {
+		openFilePicker(attachmentInputRef);
+	}
+
+	function handleTakePhotoSelect(): void {
+		openFilePicker(photoInputRef);
+	}
+
+	function resetFileInput(event: Event): void {
+		const target = event.target as HTMLInputElement | null;
+		if (target) {
+			target.value = '';
+		}
 	}
 
 	async function sendMessage(): Promise<void> {
@@ -173,10 +254,26 @@
 										...streamingByMessageId,
 										[payload.assistantMessageId]: ''
 									};
+									streamingThoughtsByMessageId = {
+										...streamingThoughtsByMessageId,
+										[payload.assistantMessageId]: ''
+									};
 								}
 							} catch {
 								// ignore
 							}
+							return;
+						}
+						if (event.event === 'thought') {
+							if (!activeAssistantId) {
+								return;
+							}
+							const existing = streamingThoughtsByMessageId[activeAssistantId] ?? '';
+							const nextThoughts = appendStreamingThoughts(existing, event.data);
+							streamingThoughtsByMessageId = {
+								...streamingThoughtsByMessageId,
+								[activeAssistantId]: nextThoughts
+							};
 							return;
 						}
 						if (event.event === 'text') {
@@ -198,9 +295,19 @@
 							} catch {
 								error = 'Spark AI Agent ran into a problem.';
 							}
+							if (activeAssistantId) {
+								const next = { ...streamingThoughtsByMessageId };
+								delete next[activeAssistantId];
+								streamingThoughtsByMessageId = next;
+							}
 							return;
 						}
 						if (event.event === 'done') {
+							if (activeAssistantId) {
+								const next = { ...streamingThoughtsByMessageId };
+								delete next[activeAssistantId];
+								streamingThoughtsByMessageId = next;
+							}
 							return;
 						}
 					},
@@ -273,6 +380,7 @@
 				}
 				conversation = parsed.data;
 				reconcileStreaming(parsed.data);
+				reconcileStreamingThoughts(parsed.data);
 			},
 			(snapError) => {
 				console.warn('Firestore subscription failed', snapError);
@@ -353,7 +461,7 @@
 	<title>Spark AI Agent</title>
 </svelte:head>
 
-<section class="agent-shell">
+<section class={`agent-shell ${messages.length > 0 ? 'has-thread' : ''}`}>
 	<div class="agent-layout">
 		<div class="agent-toolbar">
 			<Button variant="outline" size="sm" onclick={resetConversation} disabled={sending}>
@@ -384,6 +492,10 @@
 				<div class="agent-thread">
 					<div class="agent-messages">
 						{#each messages as message (message.id)}
+							{@const messageText = resolveMessageText(message)}
+							{@const messageHtml =
+								message.role === 'assistant' && messageText ? renderMarkdown(messageText) : ''}
+							{@const thinkingText = streamingThoughtsByMessageId[message.id] ?? ''}
 							<div
 								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'}`}
 								data-message-id={message.id}
@@ -392,8 +504,20 @@
 									{message.role === 'user' ? 'You' : 'Spark AI Agent'}
 								</span>
 								<div class="message-bubble">
-									{#if resolveMessageText(message)}
-										<p>{resolveMessageText(message)}</p>
+									{#if message.role === 'assistant'}
+										{#if thinkingText}
+											<div class="message-thinking">
+												<p class="message-thinking__label">Thinking</p>
+												<div class="message-thinking__body">{thinkingText}</div>
+											</div>
+										{/if}
+										{#if messageHtml}
+											<div class="message-markdown markdown">{@html messageHtml}</div>
+										{:else if !thinkingText}
+											<p class="message-placeholder">…</p>
+										{/if}
+									{:else if messageText}
+										<p class="message-plain">{messageText}</p>
 									{:else}
 										<p class="message-placeholder">…</p>
 									{/if}
@@ -407,15 +531,73 @@
 			<div class="agent-composer" bind:this={composerRef}>
 				<div class="composer-stack">
 					<div class="composer-card">
+						<input
+							class="sr-only"
+							type="file"
+							multiple
+							accept="image/*,application/pdf"
+							bind:this={attachmentInputRef}
+							onchange={resetFileInput}
+						/>
+						<input
+							class="sr-only"
+							type="file"
+							accept="image/*"
+							capture="environment"
+							bind:this={photoInputRef}
+							onchange={resetFileInput}
+						/>
 						<div class={`composer-field ${isComposerExpanded ? 'is-expanded' : ''}`}>
-							<button
-								class="composer-btn composer-attach composer-leading"
-								type="button"
-								aria-label="Attach"
-								disabled={sending}
-							>
-								<Plus class="composer-icon" />
-							</button>
+							<DropdownMenu.Root>
+								<DropdownMenu.Trigger
+									class="composer-btn composer-attach composer-leading"
+									type="button"
+									aria-label="Attach"
+									disabled={sending}
+								>
+									<Plus class="composer-icon" />
+								</DropdownMenu.Trigger>
+								<DropdownMenu.Content class="composer-menu" sideOffset={12} align="start">
+									<DropdownMenu.Item
+										class="composer-menu__item"
+										onSelect={handleAttachmentSelect}
+										disabled={sending}
+									>
+										<span class="composer-menu__icon" aria-hidden="true">
+											<svg
+												width="18"
+												height="18"
+												viewBox="0 0 24 24"
+												fill="none"
+												xmlns="http://www.w3.org/2000/svg"
+												class="composer-menu__paperclip"
+											>
+												<path
+													d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8"
+													stroke="currentColor"
+												></path>
+											</svg>
+										</span>
+										<span>Add photos &amp; files</span>
+										{#if attachmentShortcutLabel}
+											<DropdownMenu.Shortcut>{attachmentShortcutLabel}</DropdownMenu.Shortcut>
+										{/if}
+									</DropdownMenu.Item>
+									{#if canTakePhoto}
+										<DropdownMenu.Separator />
+										<DropdownMenu.Item
+											class="composer-menu__item"
+											onSelect={handleTakePhotoSelect}
+											disabled={sending}
+										>
+											<span class="composer-menu__icon" aria-hidden="true">
+												<Camera class="composer-icon" />
+											</span>
+											<span>Take photo</span>
+										</DropdownMenu.Item>
+									{/if}
+								</DropdownMenu.Content>
+							</DropdownMenu.Root>
 							<div class="composer-input">
 								<ChatInput
 									bind:value={draft}
@@ -426,7 +608,7 @@
 									disabled={sending}
 									variant="chat"
 									inputClass="composer-textarea"
-									submitMode="enter"
+									submitMode={isMobileDevice ? 'modEnter' : 'enter'}
 									onInput={({ value, isExpanded }) => {
 										composerExpanded = isExpanded ?? value.includes('\n');
 									}}
@@ -488,6 +670,11 @@
 		--chat-send-fg: var(--background);
 	}
 
+	.agent-shell.has-thread {
+		padding-top: clamp(1rem, 2.5vw, 1.6rem);
+		gap: clamp(1rem, 2.5vw, 1.8rem);
+	}
+
 	:global(:root:not([data-theme='light']) .agent-shell),
 	:global([data-theme='dark'] .agent-shell),
 	:global(.dark .agent-shell) {
@@ -507,6 +694,10 @@
 		gap: clamp(1.5rem, 3vw, 2.2rem);
 	}
 
+	.agent-shell.has-thread .agent-layout {
+		gap: clamp(1rem, 2.5vw, 1.6rem);
+	}
+
 	.agent-toolbar {
 		display: flex;
 		justify-content: flex-end;
@@ -518,6 +709,10 @@
 		flex: 1 1 auto;
 		min-height: 0;
 		gap: 2rem;
+	}
+
+	.agent-shell.has-thread .agent-stream {
+		gap: 1.5rem;
 	}
 
 	.agent-error {
@@ -573,12 +768,19 @@
 		min-height: 0;
 		gap: 1.75rem;
 		padding-bottom: calc(var(--spark-composer-offset, 6rem) + env(safe-area-inset-bottom, 0px));
+		min-height: calc(100dvh - var(--spark-composer-offset, 6rem) - 10rem);
 	}
 
 	.agent-messages {
 		display: flex;
 		flex-direction: column;
 		gap: 1.4rem;
+	}
+
+	.agent-shell.has-thread .agent-messages::after {
+		content: '';
+		display: block;
+		min-height: max(0px, calc(100dvh - var(--spark-composer-offset, 6rem) - 12rem));
 	}
 
 	.agent-message {
@@ -601,14 +803,92 @@
 		background: transparent;
 		max-width: min(46rem, 100%);
 		width: 100%;
-		white-space: pre-wrap;
 		line-height: 1.7;
 		font-size: 1rem;
 		color: var(--text-primary, var(--foreground));
 	}
 
-	.message-bubble p {
+	.message-markdown {
+		font-size: 0.98rem;
+		line-height: 1.65;
+	}
+
+	.message-plain {
 		margin: 0;
+		white-space: pre-wrap;
+	}
+
+	:global(.message-markdown > * + *) {
+		margin-top: 0.75rem;
+	}
+
+	:global(.message-markdown h2),
+	:global(.message-markdown h3) {
+		margin-top: 1rem;
+		margin-bottom: 0.4rem;
+		font-size: 1.05rem;
+		font-weight: 600;
+	}
+
+	:global(.message-markdown p) {
+		margin: 0;
+	}
+
+	:global(.message-markdown ul),
+	:global(.message-markdown ol) {
+		padding-left: 1.25rem;
+	}
+
+	:global(.message-markdown code) {
+		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+		font-size: 0.85rem;
+		padding: 0.1rem 0.3rem;
+		border-radius: 0.3rem;
+		background: color-mix(in srgb, currentColor 12%, transparent);
+	}
+
+	:global(.message-markdown pre) {
+		margin: 0.85rem 0;
+		padding: 0.95rem;
+		border-radius: 0.6rem;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		background: color-mix(in srgb, currentColor 14%, transparent);
+		overflow-x: auto;
+	}
+
+	:global(.message-markdown pre code) {
+		display: block;
+		padding: 0;
+		background: transparent;
+		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+		font-size: 0.85rem;
+	}
+
+	.message-thinking {
+		border-radius: 0.9rem;
+		border: 1px solid color-mix(in srgb, var(--chat-border) 70%, transparent);
+		background: color-mix(in srgb, var(--chat-surface) 70%, transparent);
+		padding: 0.6rem 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.message-thinking__label {
+		margin: 0;
+		font-size: 0.6rem;
+		font-weight: 600;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.65));
+	}
+
+	.message-thinking__body {
+		margin-top: 0.35rem;
+		white-space: pre-wrap;
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.75));
+		max-height: 6.5rem;
+		overflow: hidden;
 	}
 
 	.agent-message.is-user .message-bubble {
@@ -764,5 +1044,34 @@
 	.composer-icon {
 		height: 1.05rem;
 		width: 1.05rem;
+	}
+
+	:global(.composer-menu) {
+		min-width: 15.5rem;
+		padding: 0.35rem;
+		border-radius: 1rem;
+	}
+
+	:global(.composer-menu__item) {
+		gap: 0.65rem;
+		padding: 0.6rem 0.65rem;
+		border-radius: 0.75rem;
+		font-size: 0.92rem;
+	}
+
+	:global(.composer-menu__icon) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: 0.6rem;
+		background: color-mix(in srgb, var(--text-secondary, rgba(30, 41, 59, 0.6)) 12%, transparent);
+		color: var(--text-primary, var(--foreground));
+	}
+
+	:global(.composer-menu__paperclip) {
+		stroke-width: 2;
+		color: var(--text-primary, var(--foreground));
 	}
 </style>

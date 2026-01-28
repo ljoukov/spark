@@ -126,7 +126,10 @@ Recommended defaults:
     - The chat stream is a continuous list of messages (no section summaries/collapsed sections); the composer stays pinned at the bottom.
     - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles.
     - The composer is sticky at the bottom with a rounded “Ask anything” input, leading attach button, and trailing send control.
-    - Keyboard: Enter submits; Shift+Enter inserts a new line.
+    - Keyboard: desktop Enter submits (Shift+Enter inserts a new line); on mobile Enter inserts a new line and sending uses the send button.
+    - Assistant output renders markdown (including LaTeX + code blocks).
+    - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
+    - Streaming may include a short “thinking” preview while the assistant response is generated.
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
 
