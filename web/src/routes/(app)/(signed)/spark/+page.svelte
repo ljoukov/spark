@@ -35,16 +35,12 @@
 	let streamingByMessageId = $state<Record<string, string>>({});
 	let authReady = $state(false);
 	let composerExpanded = $state(false);
+	let composerRef = $state<HTMLDivElement | null>(null);
+	let streamAbort = $state<AbortController | null>(null);
+	let pendingScrollText = $state<string | null>(null);
+	let lastScrollMessageId = $state<string | null>(null);
 
-	const VISIBLE_SECTION_COUNT = 4;
 	const isComposerExpanded = $derived(composerExpanded);
-
-	type Section = {
-		id: string;
-		title: string;
-		messages: SparkAgentMessage[];
-		collapsed: boolean;
-	};
 
 	function resolveConversationStorageKey(uid: string): string {
 		return `spark:agent:conversation:${uid}`;
@@ -76,53 +72,6 @@
 		return base;
 	}
 
-	function shorten(text: string, limit: number): string {
-		const trimmed = text.trim().replace(/\s+/gu, ' ');
-		if (trimmed.length <= limit) {
-			return trimmed;
-		}
-		return `${trimmed.slice(0, Math.max(0, limit - 1))}…`;
-	}
-
-	function resolveSectionTitle(message: SparkAgentMessage): string {
-		const base = extractTextParts(message);
-		if (base.length > 0) {
-			return shorten(base, 52);
-		}
-		return message.role === 'assistant' ? 'Spark AI Agent update' : 'New message';
-	}
-
-	function buildSections(messages: SparkAgentMessage[]): Section[] {
-		const output: Section[] = [];
-		let current: Section | null = null;
-
-		for (const message of messages) {
-			if (!current || message.role === 'user') {
-				if (current) {
-					output.push(current);
-				}
-				current = {
-					id: message.id,
-					title: resolveSectionTitle(message),
-					messages: [message],
-					collapsed: false
-				};
-				continue;
-			}
-			current.messages = [...current.messages, message];
-		}
-
-		if (current) {
-			output.push(current);
-		}
-
-		const cutoff = Math.max(0, output.length - VISIBLE_SECTION_COUNT);
-		return output.map((section, index) => ({
-			...section,
-			collapsed: index < cutoff
-		}));
-	}
-
 	function reconcileStreaming(nextConversation: SparkAgentConversation): void {
 		const next: Record<string, string> = {};
 		const messageMap = new Map<string, SparkAgentMessage>();
@@ -142,7 +91,8 @@
 		streamingByMessageId = next;
 	}
 
-	const sections = $derived(buildSections(conversation?.messages ?? []));
+	const messages = $derived(conversation?.messages ?? []);
+
 	function setConversationId(nextId: string | null): void {
 		conversationId = nextId;
 		if (!browser) {
@@ -165,6 +115,8 @@
 		streamingByMessageId = {};
 		error = null;
 		draft = '';
+		pendingScrollText = null;
+		lastScrollMessageId = null;
 	}
 
 	async function sendMessage(): Promise<void> {
@@ -179,6 +131,8 @@
 
 		sending = true;
 		error = null;
+		pendingScrollText = trimmed;
+		draft = '';
 
 		let nextConversationId = conversationId;
 		if (!nextConversationId) {
@@ -186,6 +140,8 @@
 			setConversationId(nextConversationId);
 		}
 
+		const abortController = new AbortController();
+		streamAbort = abortController;
 		let activeAssistantId: string | null = null;
 
 		try {
@@ -194,6 +150,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
+					signal: abortController.signal,
 					body: JSON.stringify({
 						conversationId: nextConversationId,
 						text: trimmed
@@ -253,11 +210,15 @@
 				}
 			);
 		} catch (err) {
-			console.error('Spark AI Agent request failed', err);
-			error = err instanceof Error ? err.message : 'Unable to reach Spark AI Agent.';
+			if (err instanceof DOMException && err.name === 'AbortError') {
+				// stream stopped by user
+			} else {
+				console.error('Spark AI Agent request failed', err);
+				error = err instanceof Error ? err.message : 'Unable to reach Spark AI Agent.';
+			}
 		} finally {
 			sending = false;
-			draft = '';
+			streamAbort = null;
 			composerExpanded = false;
 		}
 	}
@@ -328,6 +289,53 @@
 			composerExpanded = false;
 		}
 	});
+
+	$effect(() => {
+		if (!browser || !composerRef) {
+			return;
+		}
+		const shell = composerRef.closest('.agent-shell') as HTMLElement | null;
+		const target = shell ?? document.documentElement;
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			const height = entry ? entry.contentRect.height : 0;
+			target.style.setProperty('--spark-composer-offset', `${height + 16}px`);
+		});
+		observer.observe(composerRef);
+		return () => {
+			observer.disconnect();
+			target.style.removeProperty('--spark-composer-offset');
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !conversation || !pendingScrollText) {
+			return;
+		}
+		const messages = conversation.messages;
+		let target: SparkAgentMessage | null = null;
+		for (let i = messages.length - 1; i >= 0; i -= 1) {
+			const message = messages[i];
+			if (message.role !== 'user') {
+				continue;
+			}
+			if (extractTextParts(message).trim() === pendingScrollText) {
+				target = message;
+				break;
+			}
+		}
+		if (!target || target.id === lastScrollMessageId) {
+			return;
+		}
+		lastScrollMessageId = target.id;
+		pendingScrollText = null;
+		requestAnimationFrame(() => {
+			const node = document.querySelector(`[data-message-id="${target?.id}"]`);
+			if (node instanceof HTMLElement) {
+				node.scrollIntoView({ block: 'start' });
+			}
+		});
+	});
 </script>
 
 <svelte:head>
@@ -349,12 +357,11 @@
 				</div>
 			{/if}
 
-			{#if sections.length === 0}
+			{#if messages.length === 0}
 				<div class="agent-empty">
 					<h2>Start a new conversation</h2>
 					<p>
-						Spark AI Agent can map out lessons, generate practice prompts, and review
-						your uploads.
+						Spark AI Agent can map out lessons, generate practice prompts, and review your uploads.
 					</p>
 					<div class="agent-empty__examples">
 						<span>“Plan a 3-day GCSE Biology revision sprint.”</span>
@@ -364,48 +371,29 @@
 				</div>
 			{:else}
 				<div class="agent-thread">
-					<div class="agent-sections">
-						{#each sections as section (section.id)}
-							<details
-								class={`agent-section ${section.collapsed ? 'is-collapsed' : 'is-open'}`}
-								id={`section-${section.id}`}
-								open={!section.collapsed}
+					<div class="agent-messages">
+						{#each messages as message (message.id)}
+							<div
+								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'}`}
+								data-message-id={message.id}
 							>
-								<summary>
-									<div class="section-summary">
-										<span class="section-title">{section.title}</span>
-										<span class="section-meta">
-											{section.messages.length} message{section.messages.length === 1 ? '' : 's'}
-										</span>
-									</div>
-								</summary>
-								<div class="section-body">
-									{#each section.messages as message (message.id)}
-										<div
-											class={`agent-message ${
-												message.role === 'user' ? 'is-user' : 'is-agent'
-											}`}
-										>
-											<span class="sr-only">
-												{message.role === 'user' ? 'You' : 'Spark AI Agent'}
-											</span>
-											<div class="message-bubble">
-												{#if resolveMessageText(message)}
-													<p>{resolveMessageText(message)}</p>
-												{:else}
-													<p class="message-placeholder">…</p>
-												{/if}
-											</div>
-										</div>
-									{/each}
+								<span class="sr-only">
+									{message.role === 'user' ? 'You' : 'Spark AI Agent'}
+								</span>
+								<div class="message-bubble">
+									{#if resolveMessageText(message)}
+										<p>{resolveMessageText(message)}</p>
+									{:else}
+										<p class="message-placeholder">…</p>
+									{/if}
 								</div>
-							</details>
+							</div>
 						{/each}
 					</div>
 				</div>
 			{/if}
 
-			<div class="agent-composer">
+			<div class="agent-composer" bind:this={composerRef}>
 				<div class="composer-stack">
 					<div class="composer-card">
 						<div class={`composer-field ${isComposerExpanded ? 'is-expanded' : ''}`}>
@@ -459,7 +447,6 @@
 				</div>
 			</div>
 		</div>
-
 	</div>
 </section>
 
@@ -470,9 +457,16 @@
 		padding: clamp(1.5rem, 3vw, 2.5rem) 0 1rem;
 		display: flex;
 		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
 		gap: clamp(1.5rem, 3vw, 2.4rem);
+		--spark-composer-offset: 6rem;
 		--chat-surface: color-mix(in srgb, var(--app-content-bg, #ffffff) 82%, transparent);
-		--chat-border: color-mix(in srgb, var(--app-content-border, rgba(148, 163, 184, 0.3)) 75%, transparent);
+		--chat-border: color-mix(
+			in srgb,
+			var(--app-content-border, rgba(148, 163, 184, 0.3)) 75%,
+			transparent
+		);
 		--chat-user-bg: color-mix(in srgb, var(--app-content-bg, #ffffff) 70%, rgba(15, 23, 42, 0.06));
 		--chat-user-border: color-mix(
 			in srgb,
@@ -497,6 +491,8 @@
 	.agent-layout {
 		display: flex;
 		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
 		gap: clamp(1.5rem, 3vw, 2.2rem);
 	}
 
@@ -508,8 +504,9 @@
 	.agent-stream {
 		display: flex;
 		flex-direction: column;
-		gap: 2rem;
+		flex: 1 1 auto;
 		min-height: 0;
+		gap: 2rem;
 	}
 
 	.agent-error {
@@ -561,65 +558,13 @@
 	.agent-thread {
 		display: flex;
 		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
 		gap: 1.75rem;
+		padding-bottom: calc(var(--spark-composer-offset, 6rem) + env(safe-area-inset-bottom, 0px));
 	}
 
-	.agent-sections {
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-	}
-
-	.agent-section {
-		border-radius: 1.5rem;
-		border: 1px solid transparent;
-		background: transparent;
-	}
-
-	.agent-section summary {
-		cursor: pointer;
-		list-style: none;
-		padding: 0.6rem 0.9rem;
-		border-radius: 999px;
-		background: var(--chat-surface);
-		border: 1px solid var(--chat-border);
-		transition: background 0.2s ease, border-color 0.2s ease;
-	}
-
-	.agent-section summary::-webkit-details-marker {
-		display: none;
-	}
-
-	.agent-section.is-open summary {
-		background: transparent;
-		border-color: transparent;
-		padding-left: 0;
-		padding-right: 0;
-	}
-
-	.section-summary {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-	}
-
-	.section-title {
-		font-weight: 600;
-		color: var(--text-primary, var(--foreground));
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.section-meta {
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.2em;
-		color: var(--text-secondary, rgba(30, 41, 59, 0.6));
-	}
-
-	.section-body {
-		padding: 0.2rem 0 0.6rem;
+	.agent-messages {
 		display: flex;
 		flex-direction: column;
 		gap: 1.4rem;
@@ -671,8 +616,9 @@
 
 	.agent-composer {
 		position: sticky;
-		bottom: 1rem;
+		bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
 		z-index: 2;
+		margin-top: auto;
 	}
 
 	.composer-stack {
@@ -766,7 +712,10 @@
 		border: 1px solid transparent;
 		background: transparent;
 		color: var(--text-secondary, rgba(30, 41, 59, 0.6));
-		transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+		transition:
+			transform 0.2s ease,
+			background 0.2s ease,
+			color 0.2s ease;
 	}
 
 	.composer-field.is-expanded .composer-btn {
@@ -805,5 +754,4 @@
 		height: 1.05rem;
 		width: 1.05rem;
 	}
-
 </style>
