@@ -149,6 +149,16 @@
 	}
 
 	const messages = $derived(conversation?.messages ?? []);
+	const assistantMessageCount = $derived.by(() => {
+		let count = 0;
+		for (const message of messages) {
+			if (message.role === 'assistant') {
+				count += 1;
+			}
+		}
+		return count;
+	});
+	const shouldUseThreadPadding = $derived(assistantMessageCount > 1);
 
 	function setConversationId(nextId: string | null): void {
 		conversationId = nextId;
@@ -489,8 +499,8 @@
 					</div>
 				</div>
 			{:else}
-				<div class="agent-thread">
-					<div class="agent-messages">
+				<div class={`agent-thread ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}>
+					<div class={`agent-messages ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}>
 						{#each messages as message (message.id)}
 							{@const messageText = resolveMessageText(message)}
 							{@const messageHtml =
@@ -768,6 +778,9 @@
 		min-height: 0;
 		gap: 1.75rem;
 		padding-bottom: calc(var(--spark-composer-offset, 6rem) + env(safe-area-inset-bottom, 0px));
+	}
+
+	.agent-thread.has-thread-padding {
 		min-height: calc(100dvh - var(--spark-composer-offset, 6rem) - 10rem);
 	}
 
@@ -777,7 +790,7 @@
 		gap: 1.4rem;
 	}
 
-	.agent-shell.has-thread .agent-messages::after {
+	.agent-messages.has-thread-padding::after {
 		content: '';
 		display: block;
 		min-height: max(0px, calc(100dvh - var(--spark-composer-offset, 6rem) - 12rem));
