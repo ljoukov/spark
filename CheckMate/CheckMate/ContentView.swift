@@ -28,13 +28,16 @@ struct ContentView: View {
             if isRunningPreview() {
                 return
             }
+            let auth = firebaseClients.auth
             _ = firebaseClients.firestore
             if authListenerHandle == nil {
-                authListenerHandle = firebaseClients.auth.addStateDidChangeListener { _, user in
-                    isSignedIn = user != nil
+                authListenerHandle = auth.addStateDidChangeListener { _, user in
+                    Task { @MainActor in
+                        isSignedIn = user != nil
+                    }
                 }
             }
-            isSignedIn = firebaseClients.auth.currentUser != nil
+            isSignedIn = auth.currentUser != nil
         }
         .onDisappear {
             if let handle = authListenerHandle {

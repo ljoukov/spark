@@ -10,78 +10,90 @@ import UIKit
 
 struct AuthView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var firebaseClients: FirebaseClients
     @State private var currentNonce: String?
     @State private var errorMessage: String?
     @State private var isSigningIn = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color(.secondarySystemBackground)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        GeometryReader { proxy in
+            let isCompactHeight = proxy.size.height < 700
+            let horizontalPadding = min(32, proxy.size.width * 0.08)
+            let buttonHeight: CGFloat = isCompactHeight ? 48 : 52
+            let verticalSpacing: CGFloat = isCompactHeight ? 16 : 24
+            let titleFont: Font = isCompactHeight ? .title2.weight(.semibold) : .largeTitle.weight(.semibold)
+            let subtitleFont: Font = isCompactHeight ? .callout : .body
 
-            VStack(spacing: 24) {
-                Spacer()
-                VStack(spacing: 12) {
-                    Text("CheckMate")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("Sign in to keep your progress in sync.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(.systemBackground),
+                        Color(.secondarySystemBackground)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
 
-                Spacer()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: verticalSpacing) {
+                        Spacer(minLength: isCompactHeight ? 12 : 24)
 
-                SignInWithAppleButton(.continue) { request in
-                    guard let nonce = randomNonceString() else {
-                        errorMessage = "Unable to generate a secure sign-in request."
-                        return
+                        VStack(spacing: 12) {
+                            Text("CheckMate")
+                                .font(titleFont)
+                            Text("Sign in to keep your progress in sync.")
+                                .font(subtitleFont)
+                                .foregroundStyle(.secondary)
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, horizontalPadding)
+
+                        Spacer(minLength: isCompactHeight ? 8 : 16)
+
+                        SignInWithAppleButton(.continue) { request in
+                            guard let nonce = randomNonceString() else {
+                                errorMessage = "Unable to generate a secure sign-in request."
+                                return
+                            }
+                            currentNonce = nonce
+                            isSigningIn = true
+                            request.requestedScopes = [.fullName, .email]
+                            request.nonce = sha256(nonce)
+                        } onCompletion: { result in
+                            handleSignInWithApple(result)
+                        }
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                        .frame(height: buttonHeight)
+                        .padding(.horizontal, horizontalPadding)
+                        .disabled(isSigningIn)
+
+                        Button(action: handleSignInWithGoogle) {
+                            HStack(spacing: 12) {
+                                Image("GoogleG")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                    .accessibilityHidden(true)
+                                Text("Continue with Google")
+                                    .font(.headline)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: buttonHeight)
+                            .background(Color(.secondarySystemBackground))
+                            .foregroundStyle(.primary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(.separator), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .padding(.horizontal, horizontalPadding)
+                        .disabled(isSigningIn)
+
+                        Spacer(minLength: isCompactHeight ? 12 : 24)
                     }
-                    currentNonce = nonce
-                    isSigningIn = true
-                    request.requestedScopes = [.fullName, .email]
-                    request.nonce = sha256(nonce)
-                } onCompletion: { result in
-                    handleSignInWithApple(result)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 52)
-                .padding(.horizontal, 32)
-                .disabled(isSigningIn)
-
-                Button(action: handleSignInWithGoogle) {
-                    HStack(spacing: 12) {
-                        Image("GoogleG")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .accessibilityHidden(true)
-                        Text("Continue with Google")
-                            .font(.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color(.secondarySystemBackground))
-                    .foregroundStyle(.primary)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(.separator), lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .padding(.horizontal, 32)
-                .disabled(isSigningIn)
-
-                Spacer(minLength: 24)
             }
         }
         .alert(
@@ -128,7 +140,8 @@ struct AuthView: View {
                 fullName: appleCredential.fullName
             )
 
-            firebaseClients.auth.signIn(with: credential) { _, error in
+            let auth = Auth.auth()
+            auth.signIn(with: credential) { _, error in
                 if let error = error {
                     finishSignIn(withError: error)
                     return
@@ -179,7 +192,8 @@ struct AuthView: View {
                 withIDToken: idToken,
                 accessToken: user.accessToken.tokenString
             )
-            firebaseClients.auth.signIn(with: credential) { _, error in
+            let auth = Auth.auth()
+            auth.signIn(with: credential) { _, error in
                 if let error = error {
                     finishSignIn(withError: error)
                     return
