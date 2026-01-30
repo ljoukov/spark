@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = F18EC7766AF8507ADB404C4E /* GoogleSignIn */; };
 		C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC52F2CD62800CB6413 /* FirebaseAuth */; };
 		C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC72F2CD62800CB6413 /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
@@ -34,9 +35,22 @@
 		C22E6AB12F2CC89500CB6413 /* CheckMateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CheckMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		556C23B0CE941075D6285A02 /* Exceptions for "CheckMate" folder in "CheckMate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C22E6A992F2CC89400CB6413 /* CheckMate */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C22E6A9C2F2CC89400CB6413 /* CheckMate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				556C23B0CE941075D6285A02 /* Exceptions for "CheckMate" folder in "CheckMate" target */,
+			);
 			path = CheckMate;
 			sourceTree = "<group>";
 		};
@@ -59,6 +73,7 @@
 			files = (
 				C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */,
 				C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */,
+				3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +136,7 @@
 			packageProductDependencies = (
 				C22E6AC52F2CD62800CB6413 /* FirebaseAuth */,
 				C22E6AC72F2CD62800CB6413 /* FirebaseFirestore */,
+				F18EC7766AF8507ADB404C4E /* GoogleSignIn */,
 			);
 			productName = CheckMate;
 			productReference = C22E6A9A2F2CC89400CB6413 /* CheckMate.app */;
@@ -206,6 +222,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C22E6A9B2F2CC89400CB6413 /* Products */;
@@ -407,11 +424,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CheckMate/CheckMate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = US92AKFW63;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = CheckMate/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -440,11 +459,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CheckMate/CheckMate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = US92AKFW63;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = CheckMate/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -594,6 +615,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 		C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -614,6 +643,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		F18EC7766AF8507ADB404C4E /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
