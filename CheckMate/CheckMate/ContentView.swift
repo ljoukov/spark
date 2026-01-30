@@ -118,7 +118,11 @@ private extension ContentView {
         let name = displayName ?? email ?? "there"
 
         do {
-            let response = try await rpcClient.greet(name: name)
+            let response = try await rpcClient.greet(
+                request: .init {
+                    $0.name = name
+                }
+            )
             greetMessage = response.message
         } catch {
             if let localizedError = error as? LocalizedError {
