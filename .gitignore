@@ -6,4 +6,5 @@ eval/output/
 *.tsbuildinfo
 **/*.tsbuildinfo
 dist
-CheckMate/CheckMate.xcodeproj/project.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcworkspace/xcuserdata/
