@@ -10,6 +10,8 @@
 		3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = F18EC7766AF8507ADB404C4E /* GoogleSignIn */; };
 		C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC52F2CD62800CB6413 /* FirebaseAuth */; };
 		C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC72F2CD62800CB6413 /* FirebaseFirestore */; };
+		C250A9D62F2D2E7400681648 /* Connect in Frameworks */ = {isa = PBXBuildFile; productRef = C250A9D52F2D2E7400681648 /* Connect */; };
+		C29F38F82F2D18EF00163F1C /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = C29F38F72F2D18EF00163F1C /* SwiftProtobuf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +66,11 @@
 			path = CheckMateUITests;
 			sourceTree = "<group>";
 		};
+		C2B8B1E92F3E1F2A00D0C0A1 /* proto */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = proto;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,7 +80,9 @@
 			files = (
 				C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */,
 				C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */,
+				C250A9D62F2D2E7400681648 /* Connect in Frameworks */,
 				3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */,
+				C29F38F82F2D18EF00163F1C /* SwiftProtobuf in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				C22E6A9C2F2CC89400CB6413 /* CheckMate */,
+				C2B8B1E92F3E1F2A00D0C0A1 /* proto */,
 				C22E6AAA2F2CC89500CB6413 /* CheckMateTests */,
 				C22E6AB42F2CC89500CB6413 /* CheckMateUITests */,
 				C22E6A9B2F2CC89400CB6413 /* Products */,
@@ -131,12 +141,15 @@
 			);
 			fileSystemSynchronizedGroups = (
 				C22E6A9C2F2CC89400CB6413 /* CheckMate */,
+				C2B8B1E92F3E1F2A00D0C0A1 /* proto */,
 			);
 			name = CheckMate;
 			packageProductDependencies = (
 				C22E6AC52F2CD62800CB6413 /* FirebaseAuth */,
 				C22E6AC72F2CD62800CB6413 /* FirebaseFirestore */,
 				F18EC7766AF8507ADB404C4E /* GoogleSignIn */,
+				C29F38F72F2D18EF00163F1C /* SwiftProtobuf */,
+				C250A9D52F2D2E7400681648 /* Connect */,
 			);
 			productName = CheckMate;
 			productReference = C22E6A9A2F2CC89400CB6413 /* CheckMate.app */;
@@ -223,6 +236,8 @@
 			packageReferences = (
 				C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				C29F38F62F2D18EF00163F1C /* XCRemoteSwiftPackageReference "swift-protobuf" */,
+				C250A9D42F2D2E7400681648 /* XCRemoteSwiftPackageReference "connect-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C22E6A9B2F2CC89400CB6413 /* Products */;
@@ -639,6 +654,22 @@
 				minimumVersion = 12.8.0;
 			};
 		};
+		C250A9D42F2D2E7400681648 /* XCRemoteSwiftPackageReference "connect-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/connectrpc/connect-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.0;
+			};
+		};
+		C29F38F62F2D18EF00163F1C /* XCRemoteSwiftPackageReference "swift-protobuf" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-protobuf";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.33.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -651,6 +682,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		C250A9D52F2D2E7400681648 /* Connect */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C250A9D42F2D2E7400681648 /* XCRemoteSwiftPackageReference "connect-swift" */;
+			productName = Connect;
+		};
+		C29F38F72F2D18EF00163F1C /* SwiftProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C29F38F62F2D18EF00163F1C /* XCRemoteSwiftPackageReference "swift-protobuf" */;
+			productName = SwiftProtobuf;
 		};
 		F18EC7766AF8507ADB404C4E /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;

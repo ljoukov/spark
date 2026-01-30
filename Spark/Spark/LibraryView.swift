@@ -17,7 +17,9 @@ struct LibraryView: View {
           Section {
             ForEach(appState.uploads) { upload in
               LibraryRow(upload: upload) {
-                quizSetupContext = QuizSetupContext(upload: upload, defaultScope: .thisUpload, allowScopeToggle: false, mode: .standard, preferredSize: .ten)
+                quizSetupContext = QuizSetupContext(
+                  upload: upload, defaultScope: .thisUpload, allowScopeToggle: false,
+                  mode: .standard, preferredSize: .ten)
               } onRename: {
                 uploadToRename = upload
                 draftTitle = upload.title
@@ -40,13 +42,18 @@ struct LibraryView: View {
       }
       .presentationDetents([.fraction(0.3)])
     }
-    .alert("Delete upload?", isPresented: Binding(get: {
-      uploadToDelete != nil
-    }, set: { flag in
-      if !flag {
-        uploadToDelete = nil
-      }
-    })) {
+    .alert(
+      "Delete upload?",
+      isPresented: Binding(
+        get: {
+          uploadToDelete != nil
+        },
+        set: { flag in
+          if !flag {
+            uploadToDelete = nil
+          }
+        })
+    ) {
       Button("Delete", role: .destructive) {
         if let upload = uploadToDelete {
           appState.delete(upload: upload)

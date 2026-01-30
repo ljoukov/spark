@@ -50,24 +50,29 @@ struct HomeView: View {
       CreateSheet { source in
         showCreateSheet = false
         let upload = appState.createUpload(from: source)
-        quizSetupContext = QuizSetupContext(upload: upload, defaultScope: .thisUpload, allowScopeToggle: true, mode: .standard, preferredSize: .ten)
+        quizSetupContext = QuizSetupContext(
+          upload: upload, defaultScope: .thisUpload, allowScopeToggle: true, mode: .standard,
+          preferredSize: .ten)
       }
       .presentationDetents([.medium])
     }
     .sheet(item: $quizSetupContext) { context in
       QuizSetupSheet(context: context) { size, scope, mode in
-        let session = appState.startSession(from: context.upload, size: size, scope: scope, mode: mode)
+        let session = appState.startSession(
+          from: context.upload, size: size, scope: scope, mode: mode)
         activeQuizHandle = QuizSessionHandle(id: session.id)
       }
       .presentationDetents([.fraction(0.45), .medium])
     }
     .sheet(item: $progressDetailSubject) { subject in
       ProgressDetailSheet(subject: subject) { startSubject in
-        let upload = appState.uploads.first { candidate in
-          candidate.subject == startSubject
-        } ?? appState.latestUpload
+        let upload =
+          appState.uploads.first { candidate in
+            candidate.subject == startSubject
+          } ?? appState.latestUpload
         if let upload {
-          let session = appState.startSession(from: upload, size: .ten, scope: .thisUpload, mode: .standard)
+          let session = appState.startSession(
+            from: upload, size: .ten, scope: .thisUpload, mode: .standard)
           activeQuizHandle = QuizSessionHandle(id: session.id)
         }
       }
@@ -212,59 +217,64 @@ struct HomeView: View {
     }
     let detail = isActive ? "\(session.remaining) left" : "Ready"
 
-    return AnyView(Card {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-              .font(.headline)
-            Text(subtitle)
+    return AnyView(
+      Card {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text(title)
+                .font(.headline)
+              Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Menu {
+              Button("Change size") {
+                if let upload = uploadFor(session: session) {
+                  quizSetupContext = QuizSetupContext(
+                    upload: upload, defaultScope: session.scope, allowScopeToggle: true,
+                    mode: session.mode, preferredSize: session.size)
+                }
+              }
+              Button("New variant") {
+                if let upload = uploadFor(session: session) {
+                  let newSession = appState.startSession(
+                    from: upload, size: session.size, scope: session.scope, mode: .standard)
+                  activeQuizHandle = QuizSessionHandle(id: newSession.id)
+                }
+              }
+            } label: {
+              Image(systemName: "ellipsis")
+                .rotationEffect(.degrees(90))
+                .padding(.horizontal, 4)
+            }
+            .buttonStyle(.plain)
+          }
+          HStack {
+            Text(detail)
               .font(.subheadline)
               .foregroundStyle(.secondary)
-          }
-          Spacer()
-          Menu {
-            Button("Change size") {
-              if let upload = uploadFor(session: session) {
-                quizSetupContext = QuizSetupContext(upload: upload, defaultScope: session.scope, allowScopeToggle: true, mode: session.mode, preferredSize: session.size)
-              }
-            }
-            Button("New variant") {
-              if let upload = uploadFor(session: session) {
-                let newSession = appState.startSession(from: upload, size: session.size, scope: session.scope, mode: .standard)
+            Spacer()
+            Button {
+              if isActive {
+                activeQuizHandle = QuizSessionHandle(id: session.id)
+              } else if let upload = uploadFor(session: session) {
+                let newSession = appState.startSession(
+                  from: upload, size: session.size, scope: session.scope, mode: .standard)
                 activeQuizHandle = QuizSessionHandle(id: newSession.id)
               }
+            } label: {
+              Text(isActive ? "Resume" : "Start")
+                .fontWeight(.semibold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.accentColor.opacity(0.12))
+                .clipShape(Capsule())
             }
-          } label: {
-            Image(systemName: "ellipsis")
-              .rotationEffect(.degrees(90))
-              .padding(.horizontal, 4)
-          }
-          .buttonStyle(.plain)
-        }
-        HStack {
-          Text(detail)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-          Spacer()
-          Button {
-            if isActive {
-              activeQuizHandle = QuizSessionHandle(id: session.id)
-            } else if let upload = uploadFor(session: session) {
-              let newSession = appState.startSession(from: upload, size: session.size, scope: session.scope, mode: .standard)
-              activeQuizHandle = QuizSessionHandle(id: newSession.id)
-            }
-          } label: {
-            Text(isActive ? "Resume" : "Start")
-              .fontWeight(.semibold)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 10)
-              .background(Color.accentColor.opacity(0.12))
-              .clipShape(Capsule())
           }
         }
-      }
-    })
+      })
   }
 
   private var libraryCard: some View {
@@ -301,7 +311,9 @@ struct HomeView: View {
 
           Button {
             if let latest = appState.latestUpload {
-              quizSetupContext = QuizSetupContext(upload: latest, defaultScope: .thisUpload, allowScopeToggle: true, mode: .standard, preferredSize: .ten)
+              quizSetupContext = QuizSetupContext(
+                upload: latest, defaultScope: .thisUpload, allowScopeToggle: true, mode: .standard,
+                preferredSize: .ten)
             }
           } label: {
             Text("Start from last upload")
@@ -367,14 +379,16 @@ struct HomeView: View {
     guard let session = appState.sessions.first(where: { $0.id == sessionID }) else {
       return nil
     }
-    return Binding(get: {
-      appState.sessions.first(where: { $0.id == sessionID }) ?? session
-    }, set: { updated in
-      appState.update(session: updated)
-      if updated.status != .active {
-        appState.finishSession(id: updated.id, status: updated.status)
-      }
-    })
+    return Binding(
+      get: {
+        appState.sessions.first(where: { $0.id == sessionID }) ?? session
+      },
+      set: { updated in
+        appState.update(session: updated)
+        if updated.status != .active {
+          appState.finishSession(id: updated.id, status: updated.status)
+        }
+      })
   }
 
   private func handleQuizAction(_ action: QuizFlowAction) {
@@ -404,7 +418,8 @@ struct HomeView: View {
       activeQuizHandle = nil
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         if let upload = uploadFor(session: session) {
-          let newSession = appState.startSession(from: upload, size: size, scope: .thisUpload, mode: .focus(size.rawValue))
+          let newSession = appState.startSession(
+            from: upload, size: size, scope: .thisUpload, mode: .focus(size.rawValue))
           activeQuizHandle = QuizSessionHandle(id: newSession.id)
         }
       }
@@ -412,7 +427,8 @@ struct HomeView: View {
       activeQuizHandle = nil
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         if let upload = uploadFor(session: session) {
-          let newSession = appState.startSession(from: upload, size: session.size, scope: session.scope, mode: .standard)
+          let newSession = appState.startSession(
+            from: upload, size: session.size, scope: session.scope, mode: .standard)
           activeQuizHandle = QuizSessionHandle(id: newSession.id)
         }
       }
@@ -420,7 +436,8 @@ struct HomeView: View {
       activeQuizHandle = nil
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         if let upload = uploadFor(session: session) {
-          let newSession = appState.startSession(from: upload, size: session.size, scope: session.scope, mode: .standard)
+          let newSession = appState.startSession(
+            from: upload, size: session.size, scope: session.scope, mode: .standard)
           activeQuizHandle = QuizSessionHandle(id: newSession.id)
         }
       }
@@ -457,7 +474,7 @@ private struct SettingsSheet: View {
     ("star", "Referral code"),
     ("square.and.arrow.up", "Export study receipt"),
     ("questionmark.circle", "Help"),
-    ("arrow.backward.square", "Logout")
+    ("arrow.backward.square", "Logout"),
   ]
 
   var body: some View {
@@ -528,7 +545,8 @@ private struct QuizSetupSheet: View {
   @State private var selectedScope: QuizScope
   @State private var isTimed: Bool
 
-  init(context: QuizSetupContext, onStart: @escaping (SessionSize, QuizScope, SessionMode) -> Void) {
+  init(context: QuizSetupContext, onStart: @escaping (SessionSize, QuizScope, SessionMode) -> Void)
+  {
     self.context = context
     self.onStart = onStart
     _selectedSize = State(initialValue: context.preferredSize)
@@ -568,7 +586,9 @@ private struct QuizSetupSheet: View {
               .fontWeight(.semibold)
               .frame(maxWidth: .infinity)
               .padding(.vertical, 12)
-              .background(size == selectedSize ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1))
+              .background(
+                size == selectedSize ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1)
+              )
               .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           }
           .buttonStyle(.plain)

@@ -1,9 +1,9 @@
 {
   "scripts": {
-    "generate": "rm -rf ../Spark/proto && && mkdir -p ../Spark/proto && protoc --swift_out=../Spark/proto/ --ts_out=../eval/proto/ --ts_opt eslint_disable,long_type_string,ts_nocheck --proto_path=src/ src/*.proto src/third_party/*.proto",
+    "generate": "rm -rf ../packages/proto/src/gen ../CheckMate/proto && mkdir -p ../packages/proto/src/gen ../CheckMate/proto && buf generate",
     "format": "clang-format --style=google -i src/*.proto"
   },
-  "dependencies": {
-    "@protobuf-ts/plugin": "^2.11.1"
+  "devDependencies": {
+    "@bufbuild/buf": "^1.34.0"
   }
 }
