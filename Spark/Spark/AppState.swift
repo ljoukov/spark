@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import SwiftUI
-import Combine
 
 enum Subject: String, CaseIterable, Identifiable {
   case biology
@@ -109,7 +109,10 @@ struct Upload: Identifiable, Hashable {
   var createdAt: Date
   var lastUsedAt: Date?
 
-  init(id: UUID = UUID(), title: String, subject: Subject, itemCount: Int, createdAt: Date = Date(), lastUsedAt: Date? = nil) {
+  init(
+    id: UUID = UUID(), title: String, subject: Subject, itemCount: Int, createdAt: Date = Date(),
+    lastUsedAt: Date? = nil
+  ) {
     self.id = id
     self.title = title
     self.subject = subject
@@ -139,7 +142,11 @@ struct Session: Identifiable, Equatable {
     status == .finished
   }
 
-  init(id: UUID = UUID(), uploadId: UUID?, subject: Subject?, size: SessionSize, completedCount: Int = 0, status: SessionStatus = .active, startedAt: Date = Date(), updatedAt: Date = Date(), scope: QuizScope, mode: SessionMode = .standard) {
+  init(
+    id: UUID = UUID(), uploadId: UUID?, subject: Subject?, size: SessionSize,
+    completedCount: Int = 0, status: SessionStatus = .active, startedAt: Date = Date(),
+    updatedAt: Date = Date(), scope: QuizScope, mode: SessionMode = .standard
+  ) {
     self.id = id
     self.uploadId = uploadId
     self.subject = subject
@@ -211,27 +218,47 @@ final class AppState: ObservableObject {
   @Published var streakDays: Int
   @Published var totalMinutes: Int
   @Published var pinnedConcepts: [PinnedConcept]
-  
-  init(uploads: [Upload] = [], sessions: [Session] = [], streakDays: Int = 0, totalMinutes: Int = 0) {
+
+  init(uploads: [Upload] = [], sessions: [Session] = [], streakDays: Int = 0, totalMinutes: Int = 0)
+  {
     if uploads.isEmpty {
       let now = Date()
       let sampleUploads: [Upload] = [
-        Upload(title: "Cell structure notes", subject: .biology, itemCount: 36, createdAt: now.addingTimeInterval(-86_400 * 4), lastUsedAt: now.addingTimeInterval(-86_400)),
-        Upload(title: "Organic chemistry prompts", subject: .chemistry, itemCount: 28, createdAt: now.addingTimeInterval(-86_400 * 8), lastUsedAt: now.addingTimeInterval(-86_400 * 5)),
-        Upload(title: "Waves recap", subject: .physics, itemCount: 18, createdAt: now.addingTimeInterval(-86_400 * 11), lastUsedAt: now.addingTimeInterval(-86_400 * 3))
+        Upload(
+          title: "Cell structure notes", subject: .biology, itemCount: 36,
+          createdAt: now.addingTimeInterval(-86_400 * 4),
+          lastUsedAt: now.addingTimeInterval(-86_400)),
+        Upload(
+          title: "Organic chemistry prompts", subject: .chemistry, itemCount: 28,
+          createdAt: now.addingTimeInterval(-86_400 * 8),
+          lastUsedAt: now.addingTimeInterval(-86_400 * 5)),
+        Upload(
+          title: "Waves recap", subject: .physics, itemCount: 18,
+          createdAt: now.addingTimeInterval(-86_400 * 11),
+          lastUsedAt: now.addingTimeInterval(-86_400 * 3)),
       ]
       self.uploads = sampleUploads
       self.sessions = [
-        Session(uploadId: sampleUploads.first?.id, subject: .biology, size: .twentyFive, completedCount: 17, status: .active, startedAt: now.addingTimeInterval(-3_600), updatedAt: now.addingTimeInterval(-600), scope: .thisUpload, mode: .standard),
-        Session(uploadId: sampleUploads.first?.id, subject: .biology, size: .ten, completedCount: 10, status: .finished, startedAt: now.addingTimeInterval(-86_400 * 2), updatedAt: now.addingTimeInterval(-86_400 * 2 + 2_700), scope: .thisUpload, mode: .focus(10)),
-        Session(uploadId: sampleUploads[1].id, subject: .chemistry, size: .forty, completedCount: 40, status: .finished, startedAt: now.addingTimeInterval(-86_400 * 6), updatedAt: now.addingTimeInterval(-86_400 * 6 + 5_400), scope: .allDocs, mode: .timed)
+        Session(
+          uploadId: sampleUploads.first?.id, subject: .biology, size: .twentyFive,
+          completedCount: 17, status: .active, startedAt: now.addingTimeInterval(-3_600),
+          updatedAt: now.addingTimeInterval(-600), scope: .thisUpload, mode: .standard),
+        Session(
+          uploadId: sampleUploads.first?.id, subject: .biology, size: .ten, completedCount: 10,
+          status: .finished, startedAt: now.addingTimeInterval(-86_400 * 2),
+          updatedAt: now.addingTimeInterval(-86_400 * 2 + 2_700), scope: .thisUpload,
+          mode: .focus(10)),
+        Session(
+          uploadId: sampleUploads[1].id, subject: .chemistry, size: .forty, completedCount: 40,
+          status: .finished, startedAt: now.addingTimeInterval(-86_400 * 6),
+          updatedAt: now.addingTimeInterval(-86_400 * 6 + 5_400), scope: .allDocs, mode: .timed),
       ]
       self.streakDays = 5
       self.totalMinutes = 186
       self.pinnedConcepts = [
         PinnedConcept(code: "B2.3", title: "Cell division", subject: .biology),
         PinnedConcept(code: "C7.1", title: "Fractional distillation", subject: .chemistry),
-        PinnedConcept(code: "P4.4", title: "Wave behaviour", subject: .physics)
+        PinnedConcept(code: "P4.4", title: "Wave behaviour", subject: .physics),
       ]
     } else {
       self.uploads = uploads
@@ -288,9 +315,10 @@ final class AppState: ObservableObject {
   }
 
   func progressSnapshot() -> SubjectProgress {
-    let breakdown = Dictionary(uniqueKeysWithValues: Subject.allCases.map { subject in
-      (subject, subjectProgress(for: subject))
-    })
+    let breakdown = Dictionary(
+      uniqueKeysWithValues: Subject.allCases.map { subject in
+        (subject, subjectProgress(for: subject))
+      })
     return SubjectProgress(overall: overallProgress(), subjectBreakdown: breakdown)
   }
 
@@ -308,7 +336,8 @@ final class AppState: ObservableObject {
     }
     let subject = Subject.allCases.randomElement() ?? .biology
     let count = [18, 24, 32, 40].randomElement() ?? 24
-    let upload = Upload(title: title, subject: subject, itemCount: count, createdAt: Date(), lastUsedAt: nil)
+    let upload = Upload(
+      title: title, subject: subject, itemCount: count, createdAt: Date(), lastUsedAt: nil)
     uploads.insert(upload, at: 0)
     return upload
   }
@@ -337,8 +366,12 @@ final class AppState: ObservableObject {
   }
 
   @discardableResult
-  func startSession(from upload: Upload?, size: SessionSize, scope: QuizScope, mode: SessionMode = .standard) -> Session {
-    let session = Session(uploadId: upload?.id, subject: upload?.subject, size: size, completedCount: 0, status: .active, startedAt: Date(), updatedAt: Date(), scope: scope, mode: mode)
+  func startSession(
+    from upload: Upload?, size: SessionSize, scope: QuizScope, mode: SessionMode = .standard
+  ) -> Session {
+    let session = Session(
+      uploadId: upload?.id, subject: upload?.subject, size: size, completedCount: 0,
+      status: .active, startedAt: Date(), updatedAt: Date(), scope: scope, mode: mode)
     sessions.insert(session, at: 0)
     if let upload {
       markUse(of: upload)

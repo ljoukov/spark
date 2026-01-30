@@ -21,7 +21,11 @@
 		"all-tests": "npm run lint && npm run test && npm run build"
 	},
 	"dependencies": {
+		"@connectrpc/connect": "^2.1.1",
+		"@connectrpc/connect-node": "^2.1.1",
+		"@connectrpc/connect-web": "^2.1.1",
 		"@spark/llm": "file:../packages/llm",
+		"@spark/proto": "file:../packages/proto",
 		"@spark/schemas": "file:../packages/schemas",
 		"@vercel/analytics": "^1.6.1",
 		"firebase-admin": "^13.6.0",

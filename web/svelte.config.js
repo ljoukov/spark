@@ -1,5 +1,6 @@
 import adapter from '@sveltejs/adapter-auto';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { fileURLToPath } from 'url';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -11,10 +12,14 @@ const config = {
 		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
+		alias: {
+			$proto: fileURLToPath(new URL('../packages/proto/src', import.meta.url))
+		},
 		typescript: {
 			config(config) {
 				const references = config.references ?? [];
 				references.push({ path: '../packages/llm' });
+				references.push({ path: '../packages/proto' });
 				references.push({ path: '../packages/schemas' });
 				config.references = references;
 				return config;

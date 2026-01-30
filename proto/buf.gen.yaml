@@ -1,0 +1,16 @@
+version: v2
+plugins:
+  - remote: buf.build/bufbuild/es
+    out: ../packages/proto/src/gen
+    opt:
+      - target=ts
+  - remote: buf.build/apple/swift
+    out: ../CheckMate/proto
+    opt:
+      - Visibility=Public
+  - remote: buf.build/connectrpc/swift
+    out: ../CheckMate/proto
+    opt:
+      - GenerateAsyncMethods=true
+      - GenerateCallbackMethods=true
+      - Visibility=Public

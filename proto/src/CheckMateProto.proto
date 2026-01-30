@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+service CheckMateService {
+  rpc Greet(GreetRequestProto) returns (GreetResponseProto);
+}
+
+message GreetRequestProto {
+  string name = 1;
+}
+
+message GreetResponseProto {
+  string message = 1;
+}

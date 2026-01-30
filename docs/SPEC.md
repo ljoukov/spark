@@ -2,10 +2,10 @@
 
 ## 0) Monorepo Layout & Tooling Assumptions
 
-- `proto/` — Reserved for future Protocol Buffer definitions (mobile-only, not used by the web app yet).
-  - Inside `proto/` run `npm run generate` to produce TypeScript and Swift protos once enabled.
-  - TypeScript: alias `$proto` is configured to simplify importing when the proto API is turned on.
-  - Swift types via `swift-protobuf` into `Spark/proto` (future).
+- `proto/` — Protocol Buffer definitions for mobile APIs (CheckMate first).
+  - Run `npm run generate` to emit TypeScript protos into `packages/proto/src/gen` and Swift protos into `CheckMate/proto`.
+  - TypeScript: alias `$proto` points at `packages/proto/src`.
+  - Swift types are generated via `swift-protobuf` and used by the iOS apps.
 - `web/` — SvelteKit (latest) project deployed to Vercel. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
   - UI theming + color tokens are documented in `web/docs/color-system.md`.
 - API logic lives under `web/src/routes/api/*`.
@@ -14,7 +14,7 @@
 - `packages/schemas/` — shared Zod schemas + TypeScript types for Firestore docs (sessions, session state, user stats). Browser-safe and imported by both `web` and `eval` workspaces.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
-- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode.
+- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode. The signed-in view includes a Call Greet button that hits the CheckMate RPC endpoint for smoke testing.
 - For long-lived local processes, prefer background execution with logs redirected to files; tmux is optional and not required.
 
 ### 0.1) Web UI Automation (Screenshot Template)
@@ -165,6 +165,14 @@ Spark AI Agent uses a dedicated endpoint:
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
 `/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
+
+### CheckMate RPC endpoint (Connect protocol)
+
+- Connect protocol over HTTP/1.1 served by SvelteKit routes.
+- RPC path: `/api/cm/rpc/<Service>/<Method>` (for example `/api/cm/rpc/CheckMateService/Greet`).
+- Auth: Firebase ID token in `Authorization: Bearer <idToken>`.
+- Initial RPC: `CheckMateService.Greet(GreetRequestProto) -> GreetResponseProto`.
+- Streaming will use Connect’s framed envelopes (future).
 
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
