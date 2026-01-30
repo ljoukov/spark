@@ -9,7 +9,9 @@
   ],
   "scripts": {
     "postinstall": "npm -w web run prepare || true",
-    "repo:format": "npm run format --workspace eval && npm run format --workspace web && npm run format --workspace @spark/llm && npm run format --workspace @spark/schemas",
+    "format": "bash scripts/format-swift.sh",
+    "generate": "npm --prefix proto run generate",
+    "repo:format": "npm run format --workspace eval && npm run format --workspace web && npm run format --workspace @spark/llm && npm run format --workspace @spark/schemas && npm run format",
     "repo:lint": "npm run lint --workspace eval && npm run lint --workspace web && npm run lint --workspace @spark/llm && npm run lint --workspace @spark/schemas",
     "repo:typecheck": "npm run typecheck --workspace eval && npm run typecheck --workspace web && npm run typecheck --workspace @spark/llm && npm run typecheck --workspace @spark/schemas",
     "repo:check": "npm run repo:format && npm run repo:lint && npm run repo:typecheck",

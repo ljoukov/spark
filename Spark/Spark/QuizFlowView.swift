@@ -14,7 +14,10 @@ struct QuizFlowView: View {
   @State private var completed = false
   @State private var startedAt = Date()
 
-  init(session: Binding<Session>, onAction: @escaping (QuizFlowAction) -> Void, onFinished: @escaping (QuizResult) -> Void) {
+  init(
+    session: Binding<Session>, onAction: @escaping (QuizFlowAction) -> Void,
+    onFinished: @escaping (QuizResult) -> Void
+  ) {
     self._session = session
     self.onAction = onAction
     self.onFinished = onFinished
@@ -225,7 +228,8 @@ struct QuizFlowView: View {
       let duration = Date().timeIntervalSince(startedAt)
       let total = session.completedCount
       let score = max(total - wrongCount, 0)
-      let result = QuizResult(session: session, score: score, total: total, timeSpent: duration, wrongCount: wrongCount)
+      let result = QuizResult(
+        session: session, score: score, total: total, timeSpent: duration, wrongCount: wrongCount)
       onFinished(result)
     }
   }
@@ -290,21 +294,40 @@ private struct QuizQuestion: Identifiable {
     switch subject {
     case .biology:
       return [
-        QuizQuestion(prompt: "Which organelle contains genetic material?", choices: ["Mitochondria", "Nucleus", "Ribosome", "Golgi apparatus"], answerIndex: 1),
-        QuizQuestion(prompt: "What is the function of chloroplasts?", choices: ["Protein synthesis", "Photosynthesis", "Cell division", "Respiration"], answerIndex: 1),
-        QuizQuestion(prompt: "Which blood component carries oxygen?", choices: ["Plasma", "White cells", "Platelets", "Red cells"], answerIndex: 3)
+        QuizQuestion(
+          prompt: "Which organelle contains genetic material?",
+          choices: ["Mitochondria", "Nucleus", "Ribosome", "Golgi apparatus"], answerIndex: 1),
+        QuizQuestion(
+          prompt: "What is the function of chloroplasts?",
+          choices: ["Protein synthesis", "Photosynthesis", "Cell division", "Respiration"],
+          answerIndex: 1),
+        QuizQuestion(
+          prompt: "Which blood component carries oxygen?",
+          choices: ["Plasma", "White cells", "Platelets", "Red cells"], answerIndex: 3),
       ]
     case .chemistry:
       return [
-        QuizQuestion(prompt: "What is the pH of a neutral solution?", choices: ["0", "3", "7", "14"], answerIndex: 2),
-        QuizQuestion(prompt: "Which bond involves sharing electrons?", choices: ["Ionic", "Metallic", "Covalent", "Hydrogen"], answerIndex: 2),
-        QuizQuestion(prompt: "What is the formula for sodium chloride?", choices: ["Na2", "NaCl", "NaO", "NaCO3"], answerIndex: 1)
+        QuizQuestion(
+          prompt: "What is the pH of a neutral solution?", choices: ["0", "3", "7", "14"],
+          answerIndex: 2),
+        QuizQuestion(
+          prompt: "Which bond involves sharing electrons?",
+          choices: ["Ionic", "Metallic", "Covalent", "Hydrogen"], answerIndex: 2),
+        QuizQuestion(
+          prompt: "What is the formula for sodium chloride?",
+          choices: ["Na2", "NaCl", "NaO", "NaCO3"], answerIndex: 1),
       ]
     case .physics:
       return [
-        QuizQuestion(prompt: "What is the unit of force?", choices: ["Joule", "Newton", "Watt", "Pascal"], answerIndex: 1),
-        QuizQuestion(prompt: "Speed equals distance divided by?", choices: ["Velocity", "Time", "Acceleration", "Mass"], answerIndex: 1),
-        QuizQuestion(prompt: "Which energy store is involved when an object is lifted?", choices: ["Chemical", "Elastic", "Gravitational", "Thermal"], answerIndex: 2)
+        QuizQuestion(
+          prompt: "What is the unit of force?", choices: ["Joule", "Newton", "Watt", "Pascal"],
+          answerIndex: 1),
+        QuizQuestion(
+          prompt: "Speed equals distance divided by?",
+          choices: ["Velocity", "Time", "Acceleration", "Mass"], answerIndex: 1),
+        QuizQuestion(
+          prompt: "Which energy store is involved when an object is lifted?",
+          choices: ["Chemical", "Elastic", "Gravitational", "Thermal"], answerIndex: 2),
       ]
     }
   }
@@ -317,7 +340,11 @@ private struct QuizQuestion: Identifiable {
 private struct QuizFlowPreview: View {
   @State private var session: Session = {
     let state = AppState()
-    return state.sessions.first ?? Session(uploadId: state.uploads.first?.id, subject: state.uploads.first?.subject, size: .ten, completedCount: 0, status: .active, startedAt: Date(), updatedAt: Date(), scope: .thisUpload, mode: .standard)
+    return state.sessions.first
+      ?? Session(
+        uploadId: state.uploads.first?.id, subject: state.uploads.first?.subject, size: .ten,
+        completedCount: 0, status: .active, startedAt: Date(), updatedAt: Date(),
+        scope: .thisUpload, mode: .standard)
   }()
 
   var body: some View {

@@ -1,0 +1,24 @@
+{
+  "name": "@spark/proto",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "lint": "npm run typecheck"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -130,10 +130,19 @@ private struct ResultsSheetPreview: View {
 
   var body: some View {
     if let session = state.sessions.first {
-      ResultsSheet(result: QuizResult(session: session, score: 18, total: session.size.rawValue, timeSpent: 420, wrongCount: 2)) { _ in
+      ResultsSheet(
+        result: QuizResult(
+          session: session, score: 18, total: session.size.rawValue, timeSpent: 420, wrongCount: 2)
+      ) { _ in
       }
     } else {
-      ResultsSheet(result: QuizResult(session: Session(uploadId: nil, subject: .biology, size: .ten, completedCount: 10, status: .finished, startedAt: Date(), updatedAt: Date(), scope: .thisUpload, mode: .standard), score: 8, total: 10, timeSpent: 320, wrongCount: 2)) { _ in
+      ResultsSheet(
+        result: QuizResult(
+          session: Session(
+            uploadId: nil, subject: .biology, size: .ten, completedCount: 10, status: .finished,
+            startedAt: Date(), updatedAt: Date(), scope: .thisUpload, mode: .standard), score: 8,
+          total: 10, timeSpent: 320, wrongCount: 2)
+      ) { _ in
       }
     }
   }
