@@ -33,15 +33,12 @@ final class CheckMateRpcClient {
         self.client = CheckMateServiceClient(client: protocolClient)
     }
 
-    func greet(name: String) async throws -> GreetResponseProto {
+    func greet(request: GreetRequestProto) async throws -> GreetResponseProto {
         guard let user = auth.currentUser else {
             throw CheckMateRpcError.notSignedIn
         }
 
         let token = try await user.getIDToken()
-        var request = GreetRequestProto()
-        request.name = name
-
         let response = await client.greet(
             request: request,
             headers: [
