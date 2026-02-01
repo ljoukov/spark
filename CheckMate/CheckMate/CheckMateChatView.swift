@@ -48,7 +48,7 @@ struct CheckMateChatView: View {
                 ScrollToBottomButton {
                     scrollToBottomOfResponse()
                 }
-                .padding(.bottom, composerContainerHeight + 12)
+                .padding(.bottom, composerContainerHeight + 16)
                 .transition(.scale.combined(with: .opacity))
             }
         }
