@@ -790,9 +790,7 @@
 		gap: 1.4rem;
 	}
 
-	.agent-messages.has-thread-padding::after {
-		content: '';
-		display: block;
+	.agent-messages.has-thread-padding > .agent-message.is-agent:last-child .message-bubble {
 		min-height: max(0px, calc(100dvh - var(--spark-composer-offset, 6rem) - 12rem));
 	}
 

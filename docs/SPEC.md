@@ -14,7 +14,7 @@
 - `packages/schemas/` — shared Zod schemas + TypeScript types for Firestore docs (sessions, session state, user stats). Browser-safe and imported by both `web` and `eval` workspaces.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
-- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode. The sign-in and signed-in surfaces adopt Liquid Glass styling on iOS 26+ using SwiftUI `glassEffect`, while iOS 16-25 fall back to Material-based blur treatments. The signed-in view is a full-screen chat UI that streams thinking + response text over Connect/protobuf; requirements live in `docs/CHECK_MATE.md`.
+- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode. The sign-in and signed-in surfaces adopt Liquid Glass styling on iOS 26+ using SwiftUI `glassEffect`, while iOS 16-25 fall back to Material-based blur treatments. After sign-in, the main surface is a two-page, full-screen horizontal pager: the left page is a vertically scrolling chat list (with a **New chat** button and first-line + date summaries) and the right page is the active chat view. Users can drag horizontally between the pages with snap-to-page behavior, while the inactive pane dims during the transition (light + dark mode). Each chat uses a `conversationId`; the chat view streams thinking + response text over Connect/protobuf while listening to Firestore for persisted history. Requirements live in `docs/CHECK_MATE.md`.
 - For long-lived local processes, prefer background execution with logs redirected to files; tmux is optional and not required.
 
 ### 0.1) Web UI Automation (Screenshot Template)
@@ -69,16 +69,16 @@ TEST_USER_EMAIL_ID_PASSWORD=you@example.com/firestoreUserId/your-password
 
 If you need `/admin`, include the userId in `ADMIN_USER_IDS`.
 
-2) Start the web dev server:
+2) Start the web dev server (HTTPS for Firebase Auth):
 
 ```
-npm --prefix web run dev
+npm --prefix web run dev:https
 ```
 
 3) Open the email login page and sign in using the credentials from `.env.local`:
 
 ```
-http://127.0.0.1:8080/login-with-email
+https://localhost:8081/login-with-email
 ```
 
 Useful entry points after sign-in:
@@ -88,6 +88,7 @@ Useful entry points after sign-in:
 Notes:
 - Auth is fully enforced; Firestore rules have no test-user exceptions.
 - The test user is a normal production user, so it is fast for verifying real Firestore behavior.
+- HTTP dev for iOS still runs on `http://127.0.0.1:8080` via `npm --prefix web run dev`.
 
 #### 0.1.2) Browser UI Checks and Screenshots
 
@@ -126,6 +127,7 @@ Recommended defaults:
     - Logged-in web home at `/spark` is the Spark AI Agent chat experience.
     - The chat stream is a continuous list of messages (no section summaries/collapsed sections); the composer stays pinned at the bottom.
     - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles.
+    - After the second assistant reply, the latest assistant response expands to a minimum height to keep breathing room above the composer without adding trailing spacer after the response.
     - The composer is sticky at the bottom with a rounded “Ask anything” input, leading attach button, and trailing send control.
     - Keyboard: desktop Enter submits (Shift+Enter inserts a new line); on mobile Enter inserts a new line and sending uses the send button.
     - Assistant output renders markdown (including LaTeX + code blocks).
@@ -171,8 +173,9 @@ name of the oneof in `SparkApiRequestProto.request`.
 - Connect protocol over HTTP/1.1 served by SvelteKit routes.
 - RPC path: `/api/cm/rpc/<Service>/<Method>` (for example `/api/cm/rpc/CheckMateService/Greet`).
 - Auth: Firebase ID token in `Authorization: Bearer <idToken>`.
-- Initial RPC: `CheckMateService.Greet(GreetRequestProto) -> GreetResponseProto`.
-- Streaming will use Connect’s framed envelopes (future).
+- RPCs: `CheckMateService.Greet(GreetRequestProto) -> GreetResponseProto`, `CheckMateService.ListChats(ListChatsRequestProto) -> ListChatsResponseProto`, and `CheckMateService.StreamChat(StreamChatRequestProto) -> stream StreamChatResponseProto`.
+- `ListChats` returns chat summaries (conversation id, title, snippet, last message timestamp) from `/{userId}/client/checkmate_conversations/{conversationId}`.
+- `StreamChat` accepts a `conversation_id` to identify chats. The server persists conversation docs under `/{userId}/client/checkmate_conversations/{conversationId}` and throttles Firestore updates to roughly once every 10 seconds when content changes. Generation runs under `waitUntil()` so it can finish even if the client disconnects; clients stream via Connect and listen to Firestore for the canonical history.
 
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
