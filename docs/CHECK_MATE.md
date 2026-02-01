@@ -6,7 +6,7 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 ## Scope
 - Implement the full-screen chat UI shown after login.
 - Match the look/feel of the provided ChatGPT/Grok screenshots where feasible.
-- Provide a dummy server response for now.
+- Stream responses from the backend via Connect/protobuf.
 
 ## Target Platforms
 - Mobile-first layout (iOS-like proportions and controls).
@@ -19,7 +19,7 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 4. User submits the message.
 5. Input clears immediately and a stop button appears (waiting state).
 6. User message appears immediately in the conversation.
-7. Server responds with a dummy response; response message appears with a copy button.
+7. Server streams thinking text followed by the response text; response message appears with a copy button.
 
 ## UI Layout Requirements
 ### Screen Layout
@@ -41,9 +41,13 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - Light gray background or subtle tint.
 
 ### Server Message (Incoming)
-- Appears after the dummy server response resolves.
+- Appears as streamed text from the server.
 - Left-aligned text (minimal bubble or no bubble) consistent with the screenshots.
 - Under each server message, show a row of actions; for now only the **Copy** action is required.
+
+### Thinking Message (Incoming)
+- Streamed separately from the response and shown in its own visual container.
+- Uses a distinct background that is darker in light mode.
 
 ### Copy Button (Response Action)
 - Single button labeled "Copy" under each server message.
@@ -93,11 +97,12 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - Menu style can be action sheet, bottom sheet, or popover per platform conventions.
 - Selecting any option can be a no-op for now (placeholder action), but the selection should close the menu.
 
-## Dummy Server Behavior
-- For now, responses are mocked locally.
-- Response text must be exactly:
-  - `My response to your message: {user_message}`
-- Response should appear after a short simulated delay (optional but preferred) to mimic server latency.
+## Server Streaming Behavior
+- Client sends the full conversation to the server via Connect/protobuf.
+- Server forwards the conversation to `gemini-flash-latest` and streams back:
+  - `thinking_delta` chunks (rendered in the thinking container).
+  - `response_delta` chunks (rendered as the main assistant response).
+- Stream ends with a `done` marker.
 
 ## Interaction Details
 - Enter key submits if the platform supports it. For mobile, a send button is sufficient.
@@ -105,9 +110,7 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - Conversation should remain readable when the keyboard is visible (input area should move above keyboard).
 
 ## Non-Goals (for now)
-- Real backend integration.
 - Rich attachments handling.
-- Streaming responses or partial tokens.
 - Message reactions beyond the Copy action.
 
 ## Edge Cases
@@ -121,5 +124,5 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - Resize button appears after 4+ lines and opens a full-screen bottom sheet for editing.
 - Plus menu offers Camera, Photos, Files.
 - Sending a message clears input, shows Stop, and renders user message immediately.
-- A mocked response arrives with the exact required text and includes a Copy button.
+- The server streams thinking + response text; the response includes a Copy button.
 - UI visually resembles the provided ChatGPT/Grok screenshots for layout and spacing.
