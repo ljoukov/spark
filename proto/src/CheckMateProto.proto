@@ -1,7 +1,10 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 service CheckMateService {
   rpc Greet(GreetRequestProto) returns (GreetResponseProto);
+  rpc ListChats(ListChatsRequestProto) returns (ListChatsResponseProto);
   rpc StreamChat(StreamChatRequestProto) returns (stream StreamChatResponseProto);
 }
 
@@ -25,6 +28,35 @@ message CheckMateChatMessageProto {
 
 message StreamChatRequestProto {
   repeated CheckMateChatMessageProto messages = 1;
+  string conversation_id = 2;
+}
+
+message CheckMateChatStatusProto {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_IDLE = 1;
+    STATE_STREAMING = 2;
+    STATE_ERROR = 3;
+  }
+  State state = 1;
+  google.protobuf.Timestamp updated_at = 2;
+  string error_message = 3;
+}
+
+message CheckMateChatSummaryProto {
+  string conversation_id = 1;
+  string title = 2;
+  string snippet = 3;
+  google.protobuf.Timestamp last_message_at = 4;
+  CheckMateChatStatusProto status = 5;
+}
+
+message ListChatsRequestProto {
+  int32 limit = 1;
+}
+
+message ListChatsResponseProto {
+  repeated CheckMateChatSummaryProto chats = 1;
 }
 
 message StreamChatResponseProto {
@@ -32,5 +64,6 @@ message StreamChatResponseProto {
     string thinking_delta = 1;
     string response_delta = 2;
     bool done = 3;
+    CheckMateChatStatusProto status = 4;
   }
 }
