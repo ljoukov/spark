@@ -22,7 +22,15 @@ final class CheckMateRpcClient {
     private let auth: Auth
     private let host: String
 
-    init(auth: Auth, host: String = "http://127.0.0.1:8080/api/cm/rpc") {
+    nonisolated private static var defaultHost: String {
+#if targetEnvironment(simulator)
+        return "http://127.0.0.1:8080/api/cm/rpc"
+#else
+        return "https://spark.eviworld.com/api/cm/rpc"
+#endif
+    }
+
+    init(auth: Auth, host: String = CheckMateRpcClient.defaultHost) {
         self.auth = auth
         self.host = host
         let config = ProtocolClientConfig(

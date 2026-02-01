@@ -22,73 +22,69 @@ struct AuthView: View {
             let verticalSpacing: CGFloat = isCompactHeight ? 16 : 24
             let titleFont: Font = isCompactHeight ? .title2.weight(.semibold) : .largeTitle.weight(.semibold)
             let subtitleFont: Font = isCompactHeight ? .callout : .body
+            let cardCornerRadius: CGFloat = isCompactHeight ? 22 : 28
+            let cardPadding: CGFloat = isCompactHeight ? 20 : 28
 
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(.systemBackground),
-                        Color(.secondarySystemBackground)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                CheckMateBackground()
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: verticalSpacing) {
                         Spacer(minLength: isCompactHeight ? 12 : 24)
 
-                        VStack(spacing: 12) {
-                            Text("CheckMate")
-                                .font(titleFont)
-                            Text("Sign in to keep your progress in sync.")
-                                .font(subtitleFont)
-                                .foregroundStyle(.secondary)
-                        }
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, horizontalPadding)
-
-                        Spacer(minLength: isCompactHeight ? 8 : 16)
-
-                        SignInWithAppleButton(.continue) { request in
-                            guard let nonce = randomNonceString() else {
-                                errorMessage = "Unable to generate a secure sign-in request."
-                                return
+                        VStack(spacing: verticalSpacing) {
+                            VStack(spacing: 12) {
+                                Text("CheckMate")
+                                    .font(titleFont)
+                                Text("Sign in to keep your progress in sync.")
+                                    .font(subtitleFont)
+                                    .foregroundStyle(.secondary)
                             }
-                            currentNonce = nonce
-                            isSigningIn = true
-                            request.requestedScopes = [.fullName, .email]
-                            request.nonce = sha256(nonce)
-                        } onCompletion: { result in
-                            handleSignInWithApple(result)
-                        }
-                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                        .frame(height: buttonHeight)
-                        .padding(.horizontal, horizontalPadding)
-                        .disabled(isSigningIn)
+                            .multilineTextAlignment(.center)
 
-                        Button(action: handleSignInWithGoogle) {
-                            HStack(spacing: 12) {
-                                Image("GoogleG")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                                    .accessibilityHidden(true)
-                                Text("Continue with Google")
-                                    .font(.headline)
+                            SignInWithAppleButton(.continue) { request in
+                                guard let nonce = randomNonceString() else {
+                                    errorMessage = "Unable to generate a secure sign-in request."
+                                    return
+                                }
+                                currentNonce = nonce
+                                isSigningIn = true
+                                request.requestedScopes = [.fullName, .email]
+                                request.nonce = sha256(nonce)
+                            } onCompletion: { result in
+                                handleSignInWithApple(result)
                             }
+                            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                             .frame(maxWidth: .infinity)
                             .frame(height: buttonHeight)
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundStyle(.primary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(.separator), lineWidth: 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .disabled(isSigningIn)
+
+                            Button(action: handleSignInWithGoogle) {
+                                HStack(spacing: 12) {
+                                    Image("GoogleG")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 20, height: 20)
+                                        .accessibilityHidden(true)
+                                    Text("Continue with Google")
+                                        .font(.headline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: buttonHeight)
+                                .background(Color(.secondarySystemBackground))
+                                .foregroundStyle(.primary)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color(.separator), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .disabled(isSigningIn)
                         }
+                        .padding(.vertical, cardPadding)
+                        .padding(.horizontal, cardPadding)
+                        .glassSurface(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
                         .padding(.horizontal, horizontalPadding)
-                        .disabled(isSigningIn)
 
                         Spacer(minLength: isCompactHeight ? 12 : 24)
                     }
