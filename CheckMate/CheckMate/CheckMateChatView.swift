@@ -84,23 +84,25 @@ struct CheckMateChatView: View {
         GeometryReader { proxy in
             ScrollViewReader { scrollProxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        ForEach(messages) { message in
-                            ChatMessageRow(message: message) { selected in
-                                copyToClipboard(selected.text)
+                    VStack(alignment: .leading, spacing: 0) {
+                        LazyVStack(alignment: .leading, spacing: 18) {
+                            ForEach(messages) { message in
+                                ChatMessageRow(message: message) { selected in
+                                    copyToClipboard(selected.text)
+                                }
+                                .measureHeight(for: message.id)
+                                .measureFrame(in: ChatScrollSpace.name, for: message.id)
+                                .id(message.id)
                             }
-                            .measureHeight(for: message.id)
-                            .measureFrame(in: ChatScrollSpace.name, for: message.id)
-                            .id(message.id)
-                        }
-                        if shouldShowPendingIndicator {
-                            PendingResponseRow()
-                                .measureFrame(in: ChatScrollSpace.name, for: pendingIndicatorId)
-                                .id(pendingIndicatorId)
-                        }
-                        if shouldReserveResponseSpace {
-                            Color.clear
-                                .frame(minHeight: pendingResponseMinHeight)
+                            if shouldShowPendingIndicator {
+                                PendingResponseRow()
+                                    .measureFrame(in: ChatScrollSpace.name, for: pendingIndicatorId)
+                                    .id(pendingIndicatorId)
+                            }
+                            if shouldReserveResponseSpace {
+                                Color.clear
+                                    .frame(minHeight: pendingResponseMinHeight)
+                            }
                         }
                         Color.clear
                             .frame(height: composerContainerHeight + ChatComposerMetrics.actionButtonSize + 32)
@@ -123,7 +125,7 @@ struct CheckMateChatView: View {
                     guard let targetId = scrollTargetId else {
                         return
                     }
-                    withAnimation(.easeOut(duration: 0.35)) {
+                    withAnimation(.easeOut(duration: 0.12)) {
                         scrollProxy.scrollTo(targetId, anchor: scrollTargetAnchor)
                     }
                 }
