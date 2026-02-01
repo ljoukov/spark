@@ -39,11 +39,14 @@ if (isHttpsDev && !hasCustomCert) {
 
 const httpsServerOption: HttpsServerOptions | undefined = isHttpsDev ? httpsOption : undefined;
 const plugins = [tailwindcss(), sveltekit(), devtoolsJson()];
+const rawDevPort = process.env.VITE_DEV_PORT;
+const parsedDevPort = rawDevPort ? Number.parseInt(rawDevPort, 10) : 8080;
+const devPort = Number.isFinite(parsedDevPort) ? parsedDevPort : 8080;
 
 const serverOptions = {
 	host: 'localhost',
-	port: 8080,
-	strictPort: true, // avoid silently switching ports; fail if 8080 is taken
+	port: devPort,
+	strictPort: true, // avoid silently switching ports; fail if the chosen port is taken
 	...(httpsServerOption ? { https: httpsServerOption } : {})
 };
 
