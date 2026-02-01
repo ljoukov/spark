@@ -1,3 +1,4 @@
+import Connect
 import FirebaseAuth
 import Foundation
 import SwiftUI
@@ -125,7 +126,10 @@ private extension ContentView {
             )
             greetMessage = response.message
         } catch {
-            if let localizedError = error as? LocalizedError {
+            if let connectError = error as? ConnectError {
+                let message = connectError.message ?? "Internal error"
+                greetError = "[\(connectError.code)] \(message)"
+            } else if let localizedError = error as? LocalizedError {
                 greetError = localizedError.errorDescription ?? "Something went wrong."
             } else {
                 greetError = error.localizedDescription

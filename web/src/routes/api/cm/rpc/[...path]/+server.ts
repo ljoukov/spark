@@ -1,4 +1,5 @@
 import { registerCheckMateRoutes } from '$lib/server/rpc/checkmateService';
+import { logServerEvent } from '$lib/server/utils/logger';
 import { createConnectRouter } from '@connectrpc/connect';
 import { createFetchHandler } from '@connectrpc/connect/protocol';
 
@@ -19,6 +20,13 @@ async function handle(request: Request): Promise<Response> {
 	const url = new URL(request.url);
 	const handler = handlers.get(url.pathname);
 	if (!handler) {
+		logServerEvent({
+			level: 'warn',
+			message: 'CheckMate RPC handler not found.',
+			context: {
+				path: url.pathname
+			}
+		});
 		return new Response(null, { status: 404 });
 	}
 	return createFetchHandler(handler, { httpVersion: '1.1' })(request);
