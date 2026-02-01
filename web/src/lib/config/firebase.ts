@@ -6,7 +6,8 @@ function currentHostAuthDomain(): string {
 	}
 	// SSR fallback: prefer localhost in dev so any server-side code that
 	// stringifies config is consistent during local development.
-	return dev ? 'localhost:8080' : 'spark.flipflop.workers.dev';
+	const devAuthHost = import.meta.env.VITE_DEV_AUTH_HOST ?? 'localhost:8080';
+	return dev ? devAuthHost : 'spark.flipflop.workers.dev';
 }
 
 export const clientFirebaseConfig = {

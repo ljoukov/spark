@@ -4,8 +4,8 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --host 127.0.0.1 --port 8080",
-		"dev:https": "vite dev --port 8080",
+		"dev": "VITE_DEV_PORT=8080 VITE_DEV_AUTH_HOST=127.0.0.1:8080 vite dev --host 127.0.0.1",
+		"dev:https": "VITE_DEV_PORT=8081 VITE_DEV_AUTH_HOST=localhost:8081 vite dev",
 		"build": "vite build",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
 		"build:vercel": "VERCEL=dummy npm run build",

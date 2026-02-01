@@ -1,5 +1,5 @@
 {
-  "url": "http://127.0.0.1:8080/spark",
+  "url": "https://localhost:8081/spark",
   "viewport": { "width": 1440, "height": 900 },
   "fullPage": true,
   "timeoutMs": 60000,
