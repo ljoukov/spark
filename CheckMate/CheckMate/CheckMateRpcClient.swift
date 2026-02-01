@@ -21,7 +21,7 @@ final class CheckMateRpcClient {
     private let client: CheckMateServiceClient
     private let auth: Auth
 
-    init(auth: Auth, host: String = "http://localhost:8080/api/cm/rpc") {
+    init(auth: Auth, host: String = "http://127.0.0.1:8080/api/cm/rpc") {
         self.auth = auth
         let config = ProtocolClientConfig(
             host: host,
