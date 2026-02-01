@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "generate": "rm -rf ../packages/proto/src/gen ../CheckMate/proto && mkdir -p ../packages/proto/src/gen ../CheckMate/proto && buf generate",
+    "generate": "rm -rf ../packages/proto/src/gen ../CheckMate/proto && mkdir -p ../packages/proto/src/gen ../CheckMate/proto && buf generate && rm -rf ../CheckMate/proto/google",
     "format": "clang-format --style=google -i src/*.proto"
   },
   "devDependencies": {
