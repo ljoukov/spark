@@ -22,6 +22,13 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 7. Server streams thinking text followed by the response text; response message appears with a copy button.
 
 ## UI Layout Requirements
+### Main Surface (Chats + Chat View)
+- Two full-screen pages: a chat list (left) and the active chat view (right).
+- Horizontal drag between pages with snap-to-page behavior; the inactive pane dims during the transition (light + dark mode).
+- Chat list includes a **New chat** button and shows each chat’s first line (truncated) plus the latest timestamp.
+- Chat list data is loaded via `ListChats` over Connect/protobuf.
+ - Chats with an in-flight response show a spinner indicator; status is driven by server timestamps.
+
 ### Screen Layout
 - Full-screen chat view.
 - Primary regions:
@@ -98,11 +105,18 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - Selecting any option can be a no-op for now (placeholder action), but the selection should close the menu.
 
 ## Server Streaming Behavior
-- Client sends the full conversation to the server via Connect/protobuf.
+- Client sends the full conversation plus `conversation_id` to the server via Connect/protobuf.
 - Server forwards the conversation to `gemini-flash-latest` and streams back:
   - `thinking_delta` chunks (rendered in the thinking container).
   - `response_delta` chunks (rendered as the main assistant response).
+  - `status` updates with server timestamps (`streaming`, `idle`, or `error`).
 - Stream ends with a `done` marker.
+- The server persists the conversation to Firestore roughly every 10 seconds when the response changes, using `waitUntil()` so generation completes even if the client disconnects.
+- The client streams live deltas via Connect and listens to Firestore for the canonical conversation history.
+
+## Chat List API
+- `ListChats(ListChatsRequestProto) -> ListChatsResponseProto` returns summaries for recent chats.
+- Summary fields: `conversation_id`, `title`, `snippet`, `last_message_at`, `status`.
 
 ## Interaction Details
 - Enter key submits if the platform supports it. For mobile, a send button is sufficient.
@@ -119,7 +133,9 @@ Define the functional and UI/UX requirements for the CheckMate in-app chat exper
 - If the user taps Stop, the pending response is cancelled and no server message is shown for that request.
 
 ## Acceptance Criteria
-- After login, the user sees a full-screen chat UI with bottom input.
+- After login, the user sees a two-page chat surface (chat list + chat view) with horizontal swipe + snap, and the inactive pane dims during the transition.
+- Chat list includes a **New chat** button and shows each chat’s first line (truncated) plus the latest timestamp.
+- After login, the user sees a full-screen chat UI with bottom input on the chat view page.
 - Input grows up to 8 lines and then scrolls.
 - Resize button appears after 4+ lines and opens a full-screen bottom sheet for editing.
 - Plus menu offers Camera, Photos, Files.

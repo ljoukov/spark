@@ -1,7 +1,11 @@
 import { registerCheckMateRoutes } from '$lib/server/rpc/checkmateService';
+import { CheckMateWaitUntilContextKey } from '$lib/server/rpc/checkmateContext';
 import { logServerEvent } from '$lib/server/utils/logger';
-import { createConnectRouter } from '@connectrpc/connect';
-import { createFetchHandler } from '@connectrpc/connect/protocol';
+import { createConnectRouter, createContextValues } from '@connectrpc/connect';
+import {
+	universalServerRequestFromFetch,
+	universalServerResponseToFetch
+} from '@connectrpc/connect/protocol';
 import type { RequestEvent } from '@sveltejs/kit';
 
 const requestPathPrefix = '/api/cm/rpc';
@@ -30,7 +34,14 @@ async function handle(event: RequestEvent): Promise<Response> {
 		});
 		return new Response(null, { status: 404 });
 	}
-	return createFetchHandler(handler, { httpVersion: '1.1' })(event.request);
+	const waitUntil =
+		(event.platform as { context?: { waitUntil?: (promise: Promise<void>) => void } } | undefined)
+			?.context?.waitUntil ?? (event as { waitUntil?: (promise: Promise<void>) => void }).waitUntil;
+	const contextValues = createContextValues().set(CheckMateWaitUntilContextKey, waitUntil ?? null);
+	const request = universalServerRequestFromFetch(event.request, { httpVersion: '1.1' });
+	request.contextValues = contextValues;
+	const response = await handler(request);
+	return universalServerResponseToFetch(response);
 }
 
 export const POST = handle;

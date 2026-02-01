@@ -174,8 +174,8 @@ name of the oneof in `SparkApiRequestProto.request`.
 - RPC path: `/api/cm/rpc/<Service>/<Method>` (for example `/api/cm/rpc/CheckMateService/Greet`).
 - Auth: Firebase ID token in `Authorization: Bearer <idToken>`.
 - RPCs: `CheckMateService.Greet(GreetRequestProto) -> GreetResponseProto`, `CheckMateService.ListChats(ListChatsRequestProto) -> ListChatsResponseProto`, and `CheckMateService.StreamChat(StreamChatRequestProto) -> stream StreamChatResponseProto`.
-- `ListChats` returns chat summaries (conversation id, title, snippet, last message timestamp) from `/{userId}/client/checkmate_conversations/{conversationId}`.
-- `StreamChat` accepts a `conversation_id` to identify chats. The server persists conversation docs under `/{userId}/client/checkmate_conversations/{conversationId}` and throttles Firestore updates to roughly once every 10 seconds when content changes. Generation runs under `waitUntil()` so it can finish even if the client disconnects; clients stream via Connect and listen to Firestore for the canonical history.
+- `ListChats` returns chat summaries (conversation id, title, snippet, last message timestamp, status) from `/{userId}/client/checkmate_conversations/{conversationId}`.
+- `StreamChat` accepts a `conversation_id` to identify chats. The server persists conversation docs under `/{userId}/client/checkmate_conversations/{conversationId}` and throttles Firestore updates to roughly once every 10 seconds when content changes. It also writes status transitions (`streaming`, `idle`, `error`) with server timestamps and emits status updates in the stream. Generation runs under `waitUntil()` so it can finish even if the client disconnects; clients stream via Connect and listen to Firestore for the canonical history.
 
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 

@@ -129,6 +129,55 @@ final class CheckMateRpcClient {
         return stream
     }
 
+    func listChats(limit: Int32 = 50) async throws -> ListChatsResponseProto {
+        guard let user = auth.currentUser else {
+            log("ListChats failed: no signed-in user.")
+            throw CheckMateRpcError.notSignedIn
+        }
+
+        let token = try await user.getIDToken()
+        var request = ListChatsRequestProto()
+        request.limit = limit
+        log(
+            "ListChats request starting.",
+            context: [
+                "host": host,
+                "limit": String(limit),
+                "tokenLength": String(token.count)
+            ]
+        )
+        let response = await client.listChats(
+            request: request,
+            headers: [
+                "authorization": ["Bearer \(token)"]
+            ]
+        )
+
+        if let message = response.message {
+            log(
+                "ListChats response OK.",
+                context: [
+                    "code": String(describing: response.code),
+                    "chatCount": String(message.chats.count)
+                ]
+            )
+            return message
+        }
+
+        if let error = response.error {
+            log(
+                "ListChats response error.",
+                context: [
+                    "error": describe(error)
+                ]
+            )
+            throw error
+        }
+
+        log("ListChats response missing message and error.")
+        throw CheckMateRpcError.missingResponse
+    }
+
     private func log(_ message: String, context: [String: String] = [:]) {
         if context.isEmpty {
             print("[CheckMateRpcClient] \(message)")

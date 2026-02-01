@@ -4,13 +4,15 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "./google/protobuf/timestamp_pb";
+import { file_google_protobuf_timestamp } from "./google/protobuf/timestamp_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file CheckMateProto.proto.
  */
 export const file_CheckMateProto: GenFile = /*@__PURE__*/
-  fileDesc("ChRDaGVja01hdGVQcm90by5wcm90byIhChFHcmVldFJlcXVlc3RQcm90bxIMCgRuYW1lGAEgASgJIiUKEkdyZWV0UmVzcG9uc2VQcm90bxIPCgdtZXNzYWdlGAEgASgJIpkBChlDaGVja01hdGVDaGF0TWVzc2FnZVByb3RvEi0KBHJvbGUYASABKA4yHy5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvLlJvbGUSDAoEdGV4dBgCIAEoCSI/CgRSb2xlEhQKEFJPTEVfVU5TUEVDSUZJRUQQABINCglST0xFX1VTRVIQARISCg5ST0xFX0FTU0lTVEFOVBACIkYKFlN0cmVhbUNoYXRSZXF1ZXN0UHJvdG8SLAoIbWVzc2FnZXMYASADKAsyGi5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvImgKF1N0cmVhbUNoYXRSZXNwb25zZVByb3RvEhgKDnRoaW5raW5nX2RlbHRhGAEgASgJSAASGAoOcmVzcG9uc2VfZGVsdGEYAiABKAlIABIOCgRkb25lGAMgASgISABCCQoHcGF5bG9hZDKHAQoQQ2hlY2tNYXRlU2VydmljZRIwCgVHcmVldBISLkdyZWV0UmVxdWVzdFByb3RvGhMuR3JlZXRSZXNwb25zZVByb3RvEkEKClN0cmVhbUNoYXQSFy5TdHJlYW1DaGF0UmVxdWVzdFByb3RvGhguU3RyZWFtQ2hhdFJlc3BvbnNlUHJvdG8wAWIGcHJvdG8z");
+  fileDesc("ChRDaGVja01hdGVQcm90by5wcm90byIhChFHcmVldFJlcXVlc3RQcm90bxIMCgRuYW1lGAEgASgJIiUKEkdyZWV0UmVzcG9uc2VQcm90bxIPCgdtZXNzYWdlGAEgASgJIpkBChlDaGVja01hdGVDaGF0TWVzc2FnZVByb3RvEi0KBHJvbGUYASABKA4yHy5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvLlJvbGUSDAoEdGV4dBgCIAEoCSI/CgRSb2xlEhQKEFJPTEVfVU5TUEVDSUZJRUQQABINCglST0xFX1VTRVIQARISCg5ST0xFX0FTU0lTVEFOVBACIl8KFlN0cmVhbUNoYXRSZXF1ZXN0UHJvdG8SLAoIbWVzc2FnZXMYASADKAsyGi5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvEhcKD2NvbnZlcnNhdGlvbl9pZBgCIAEoCSLnAQoYQ2hlY2tNYXRlQ2hhdFN0YXR1c1Byb3RvEi4KBXN0YXRlGAEgASgOMh8uQ2hlY2tNYXRlQ2hhdFN0YXR1c1Byb3RvLlN0YXRlEi4KCnVwZGF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiVAoFU3RhdGUSFQoRU1RBVEVfVU5TUEVDSUZJRUQQABIOCgpTVEFURV9JRExFEAESEwoPU1RBVEVfU1RSRUFNSU5HEAISDwoLU1RBVEVfRVJST1IQAyK0AQoZQ2hlY2tNYXRlQ2hhdFN1bW1hcnlQcm90bxIXCg9jb252ZXJzYXRpb25faWQYASABKAkSDQoFdGl0bGUYAiABKAkSDwoHc25pcHBldBgDIAEoCRIzCg9sYXN0X21lc3NhZ2VfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEikKBnN0YXR1cxgFIAEoCzIZLkNoZWNrTWF0ZUNoYXRTdGF0dXNQcm90byImChVMaXN0Q2hhdHNSZXF1ZXN0UHJvdG8SDQoFbGltaXQYASABKAUiQwoWTGlzdENoYXRzUmVzcG9uc2VQcm90bxIpCgVjaGF0cxgBIAMoCzIaLkNoZWNrTWF0ZUNoYXRTdW1tYXJ5UHJvdG8ilQEKF1N0cmVhbUNoYXRSZXNwb25zZVByb3RvEhgKDnRoaW5raW5nX2RlbHRhGAEgASgJSAASGAoOcmVzcG9uc2VfZGVsdGEYAiABKAlIABIOCgRkb25lGAMgASgISAASKwoGc3RhdHVzGAQgASgLMhkuQ2hlY2tNYXRlQ2hhdFN0YXR1c1Byb3RvSABCCQoHcGF5bG9hZDLFAQoQQ2hlY2tNYXRlU2VydmljZRIwCgVHcmVldBISLkdyZWV0UmVxdWVzdFByb3RvGhMuR3JlZXRSZXNwb25zZVByb3RvEjwKCUxpc3RDaGF0cxIWLkxpc3RDaGF0c1JlcXVlc3RQcm90bxoXLkxpc3RDaGF0c1Jlc3BvbnNlUHJvdG8SQQoKU3RyZWFtQ2hhdBIXLlN0cmVhbUNoYXRSZXF1ZXN0UHJvdG8aGC5TdHJlYW1DaGF0UmVzcG9uc2VQcm90bzABYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message GreetRequestProto
@@ -102,6 +104,11 @@ export type StreamChatRequestProto = Message<"StreamChatRequestProto"> & {
    * @generated from field: repeated CheckMateChatMessageProto messages = 1;
    */
   messages: CheckMateChatMessageProto[];
+
+  /**
+   * @generated from field: string conversation_id = 2;
+   */
+  conversationId: string;
 };
 
 /**
@@ -110,6 +117,135 @@ export type StreamChatRequestProto = Message<"StreamChatRequestProto"> & {
  */
 export const StreamChatRequestProtoSchema: GenMessage<StreamChatRequestProto> = /*@__PURE__*/
   messageDesc(file_CheckMateProto, 3);
+
+/**
+ * @generated from message CheckMateChatStatusProto
+ */
+export type CheckMateChatStatusProto = Message<"CheckMateChatStatusProto"> & {
+  /**
+   * @generated from field: CheckMateChatStatusProto.State state = 1;
+   */
+  state: CheckMateChatStatusProto_State;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 2;
+   */
+  updatedAt?: Timestamp;
+
+  /**
+   * @generated from field: string error_message = 3;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message CheckMateChatStatusProto.
+ * Use `create(CheckMateChatStatusProtoSchema)` to create a new message.
+ */
+export const CheckMateChatStatusProtoSchema: GenMessage<CheckMateChatStatusProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 4);
+
+/**
+ * @generated from enum CheckMateChatStatusProto.State
+ */
+export enum CheckMateChatStatusProto_State {
+  /**
+   * @generated from enum value: STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: STATE_IDLE = 1;
+   */
+  IDLE = 1,
+
+  /**
+   * @generated from enum value: STATE_STREAMING = 2;
+   */
+  STREAMING = 2,
+
+  /**
+   * @generated from enum value: STATE_ERROR = 3;
+   */
+  ERROR = 3,
+}
+
+/**
+ * Describes the enum CheckMateChatStatusProto.State.
+ */
+export const CheckMateChatStatusProto_StateSchema: GenEnum<CheckMateChatStatusProto_State> = /*@__PURE__*/
+  enumDesc(file_CheckMateProto, 4, 0);
+
+/**
+ * @generated from message CheckMateChatSummaryProto
+ */
+export type CheckMateChatSummaryProto = Message<"CheckMateChatSummaryProto"> & {
+  /**
+   * @generated from field: string conversation_id = 1;
+   */
+  conversationId: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string snippet = 3;
+   */
+  snippet: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_message_at = 4;
+   */
+  lastMessageAt?: Timestamp;
+
+  /**
+   * @generated from field: CheckMateChatStatusProto status = 5;
+   */
+  status?: CheckMateChatStatusProto;
+};
+
+/**
+ * Describes the message CheckMateChatSummaryProto.
+ * Use `create(CheckMateChatSummaryProtoSchema)` to create a new message.
+ */
+export const CheckMateChatSummaryProtoSchema: GenMessage<CheckMateChatSummaryProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 5);
+
+/**
+ * @generated from message ListChatsRequestProto
+ */
+export type ListChatsRequestProto = Message<"ListChatsRequestProto"> & {
+  /**
+   * @generated from field: int32 limit = 1;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message ListChatsRequestProto.
+ * Use `create(ListChatsRequestProtoSchema)` to create a new message.
+ */
+export const ListChatsRequestProtoSchema: GenMessage<ListChatsRequestProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 6);
+
+/**
+ * @generated from message ListChatsResponseProto
+ */
+export type ListChatsResponseProto = Message<"ListChatsResponseProto"> & {
+  /**
+   * @generated from field: repeated CheckMateChatSummaryProto chats = 1;
+   */
+  chats: CheckMateChatSummaryProto[];
+};
+
+/**
+ * Describes the message ListChatsResponseProto.
+ * Use `create(ListChatsResponseProtoSchema)` to create a new message.
+ */
+export const ListChatsResponseProtoSchema: GenMessage<ListChatsResponseProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 7);
 
 /**
  * @generated from message StreamChatResponseProto
@@ -136,6 +272,12 @@ export type StreamChatResponseProto = Message<"StreamChatResponseProto"> & {
      */
     value: boolean;
     case: "done";
+  } | {
+    /**
+     * @generated from field: CheckMateChatStatusProto status = 4;
+     */
+    value: CheckMateChatStatusProto;
+    case: "status";
   } | { case: undefined; value?: undefined };
 };
 
@@ -144,7 +286,7 @@ export type StreamChatResponseProto = Message<"StreamChatResponseProto"> & {
  * Use `create(StreamChatResponseProtoSchema)` to create a new message.
  */
 export const StreamChatResponseProtoSchema: GenMessage<StreamChatResponseProto> = /*@__PURE__*/
-  messageDesc(file_CheckMateProto, 4);
+  messageDesc(file_CheckMateProto, 8);
 
 /**
  * @generated from service CheckMateService
@@ -157,6 +299,14 @@ export const CheckMateService: GenService<{
     methodKind: "unary";
     input: typeof GreetRequestProtoSchema;
     output: typeof GreetResponseProtoSchema;
+  },
+  /**
+   * @generated from rpc CheckMateService.ListChats
+   */
+  listChats: {
+    methodKind: "unary";
+    input: typeof ListChatsRequestProtoSchema;
+    output: typeof ListChatsResponseProtoSchema;
   },
   /**
    * @generated from rpc CheckMateService.StreamChat

@@ -17,6 +17,12 @@ public protocol CheckMateServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `greet`(request: GreetRequestProto, headers: Connect.Headers) async -> ResponseMessage<GreetResponseProto>
 
+    @discardableResult
+    func `listChats`(request: ListChatsRequestProto, headers: Connect.Headers, completion: @escaping @Sendable (ResponseMessage<ListChatsResponseProto>) -> Void) -> Connect.Cancelable
+
+    @available(iOS 13, *)
+    func `listChats`(request: ListChatsRequestProto, headers: Connect.Headers) async -> ResponseMessage<ListChatsResponseProto>
+
     func `streamChat`(headers: Connect.Headers, onResult: @escaping @Sendable (Connect.StreamResult<StreamChatResponseProto>) -> Void) -> any Connect.ServerOnlyStreamInterface<StreamChatRequestProto>
 
     @available(iOS 13, *)
@@ -41,6 +47,16 @@ public final class CheckMateServiceClient: CheckMateServiceClientInterface, Send
         return await self.client.unary(path: "/CheckMateService/Greet", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @discardableResult
+    public func `listChats`(request: ListChatsRequestProto, headers: Connect.Headers = [:], completion: @escaping @Sendable (ResponseMessage<ListChatsResponseProto>) -> Void) -> Connect.Cancelable {
+        return self.client.unary(path: "/CheckMateService/ListChats", idempotencyLevel: .unknown, request: request, headers: headers, completion: completion)
+    }
+
+    @available(iOS 13, *)
+    public func `listChats`(request: ListChatsRequestProto, headers: Connect.Headers = [:]) async -> ResponseMessage<ListChatsResponseProto> {
+        return await self.client.unary(path: "/CheckMateService/ListChats", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public func `streamChat`(headers: Connect.Headers = [:], onResult: @escaping @Sendable (Connect.StreamResult<StreamChatResponseProto>) -> Void) -> any Connect.ServerOnlyStreamInterface<StreamChatRequestProto> {
         return self.client.serverOnlyStream(path: "/CheckMateService/StreamChat", headers: headers, onResult: onResult)
     }
@@ -53,6 +69,7 @@ public final class CheckMateServiceClient: CheckMateServiceClientInterface, Send
     public enum Metadata {
         public enum Methods {
             public static let greet = Connect.MethodSpec(name: "Greet", service: "CheckMateService", type: .unary)
+            public static let listChats = Connect.MethodSpec(name: "ListChats", service: "CheckMateService", type: .unary)
             public static let streamChat = Connect.MethodSpec(name: "StreamChat", service: "CheckMateService", type: .serverStream)
         }
     }
