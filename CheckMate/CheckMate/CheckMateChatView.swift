@@ -8,6 +8,8 @@ struct CheckMateChatView: View {
     @EnvironmentObject private var firebaseClients: FirebaseClients
     @Binding private var conversationId: String?
     private let rpcClient: CheckMateRpcClient?
+    private let safeAreaTop: CGFloat
+    private let safeAreaBottom: CGFloat
     private let onStatusUpdate: ((String, CheckMateConversationStatus) -> Void)?
     @State private var messages: [ChatMessage]
     @State private var draftText: String
@@ -37,6 +39,8 @@ struct CheckMateChatView: View {
     init(
         conversationId: Binding<String?> = .constant(nil),
         rpcClient: CheckMateRpcClient? = nil,
+        safeAreaTop: CGFloat = 0,
+        safeAreaBottom: CGFloat = 0,
         onStatusUpdate: ((String, CheckMateConversationStatus) -> Void)? = nil,
         initialMessages: [ChatMessage] = [],
         initialDraftText: String = "",
@@ -44,6 +48,8 @@ struct CheckMateChatView: View {
     ) {
         _conversationId = conversationId
         self.rpcClient = rpcClient
+        self.safeAreaTop = safeAreaTop
+        self.safeAreaBottom = safeAreaBottom
         self.onStatusUpdate = onStatusUpdate
         _messages = State(initialValue: initialMessages)
         _draftText = State(initialValue: initialDraftText)
@@ -54,16 +60,22 @@ struct CheckMateChatView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeBottom = proxy.safeAreaInsets.bottom
-            ZStack(alignment: .bottom) {
-                CheckMateBackground()
-                    .ignoresSafeArea()
-                messageList(safeAreaBottom: safeBottom)
-                    .ignoresSafeArea()
-            }
-            .overlay(alignment: .bottom) {
-                composerBar(safeAreaBottom: safeBottom)
+        ZStack(alignment: .bottom) {
+            CheckMateBackground()
+                .ignoresSafeArea()
+            messageList(safeAreaTop: safeAreaTop, safeAreaBottom: safeAreaBottom)
+                .ignoresSafeArea()
+        }
+        .overlay(alignment: .bottom) {
+            composerBar(safeAreaBottom: safeAreaBottom)
+        }
+        .overlay(alignment: .bottom) {
+            if shouldShowScrollToBottom {
+                ScrollToBottomButton {
+                    scrollToBottomOfResponse()
+                }
+                .padding(.bottom, composerBarHeight(safeAreaBottom: safeAreaBottom))
+                .transition(.scale.combined(with: .opacity))
             }
         }
         .fullScreenCover(isPresented: $isShowingExpandedComposer) {
@@ -84,11 +96,13 @@ struct CheckMateChatView: View {
         }
     }
 
-    private func messageList(safeAreaBottom: CGFloat) -> some View {
+    private func messageList(safeAreaTop: CGFloat, safeAreaBottom: CGFloat) -> some View {
         GeometryReader { proxy in
             ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        Color.clear
+                            .frame(height: safeAreaTop)
                         LazyVStack(alignment: .leading, spacing: 18) {
                             ForEach(messages) { message in
                                 ChatMessageRow(message: message) { selected in
@@ -114,7 +128,6 @@ struct CheckMateChatView: View {
                             .id(bottomSpacerId)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 12)
                     .padding(.bottom, 8)
                 }
                 .coordinateSpace(name: ChatScrollSpace.name)
@@ -145,13 +158,7 @@ struct CheckMateChatView: View {
 
     private func composerBar(safeAreaBottom: CGFloat) -> some View {
         let bottomPadding = barBottomPadding(for: safeAreaBottom)
-        return VStack(spacing: 16) {
-            if shouldShowScrollToBottom {
-                ScrollToBottomButton {
-                    scrollToBottomOfResponse()
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
+        return VStack(spacing: 0) {
             ChatComposerView(
                 text: $draftText,
                 lineCount: $composerLineCount,
@@ -173,6 +180,7 @@ struct CheckMateChatView: View {
                 fallbackColor: Color(.systemBackground)
             )
             .ignoresSafeArea(edges: .bottom)
+            .opacity(0.72)
         )
     }
 
