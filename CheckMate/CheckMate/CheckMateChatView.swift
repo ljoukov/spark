@@ -44,7 +44,6 @@ struct CheckMateChatView: View {
         ZStack(alignment: .bottom) {
             CheckMateBackground()
             messageList
-                .padding(.bottom, composerContainerHeight + 16)
             if shouldShowScrollToBottom {
                 ScrollToBottomButton {
                     scrollToBottomOfResponse()
@@ -100,6 +99,8 @@ struct CheckMateChatView: View {
                             Color.clear
                                 .frame(minHeight: pendingResponseMinHeight)
                         }
+                        Color.clear
+                            .frame(height: composerContainerHeight + ChatComposerMetrics.actionButtonSize + 32)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -537,6 +538,7 @@ private struct ChatComposerView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, textInsets.left + 2)
                             .padding(.vertical, textInsets.top)
+                            .allowsHitTesting(false)
                     }
                 }
 
@@ -759,6 +761,7 @@ enum ChatRole {
 }
 
 private struct ChatGlassBackground<S: Shape>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let shape: S
     let fallbackColor: Color
 
@@ -766,8 +769,20 @@ private struct ChatGlassBackground<S: Shape>: View {
         if #available(iOS 26.0, *) {
             Color.clear.glassEffect(.regular, in: shape)
         } else {
-            shape.fill(fallbackColor)
+            shape
+                .fill(fallbackColor)
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(borderColor, lineWidth: 1))
+                .shadow(color: shadowColor, radius: 12, x: 0, y: 4)
         }
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
+    }
+
+    private var shadowColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.12)
     }
 }
 
