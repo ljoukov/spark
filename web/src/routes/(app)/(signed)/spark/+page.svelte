@@ -923,6 +923,17 @@
 		margin-top: auto;
 	}
 
+	@supports (-webkit-touch-callout: none) {
+		.agent-composer {
+			position: fixed;
+			left: 50%;
+			transform: translateX(-50%);
+			width: min(780px, 92vw);
+			margin-top: 0;
+			z-index: 12;
+		}
+	}
+
 	.composer-stack {
 		display: flex;
 		flex-direction: column;
