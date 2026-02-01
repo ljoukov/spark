@@ -2,15 +2,15 @@
 // @generated from file CheckMateProto.proto (syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file CheckMateProto.proto.
  */
 export const file_CheckMateProto: GenFile = /*@__PURE__*/
-  fileDesc("ChRDaGVja01hdGVQcm90by5wcm90byIhChFHcmVldFJlcXVlc3RQcm90bxIMCgRuYW1lGAEgASgJIiUKEkdyZWV0UmVzcG9uc2VQcm90bxIPCgdtZXNzYWdlGAEgASgJMkQKEENoZWNrTWF0ZVNlcnZpY2USMAoFR3JlZXQSEi5HcmVldFJlcXVlc3RQcm90bxoTLkdyZWV0UmVzcG9uc2VQcm90b2IGcHJvdG8z");
+  fileDesc("ChRDaGVja01hdGVQcm90by5wcm90byIhChFHcmVldFJlcXVlc3RQcm90bxIMCgRuYW1lGAEgASgJIiUKEkdyZWV0UmVzcG9uc2VQcm90bxIPCgdtZXNzYWdlGAEgASgJIpkBChlDaGVja01hdGVDaGF0TWVzc2FnZVByb3RvEi0KBHJvbGUYASABKA4yHy5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvLlJvbGUSDAoEdGV4dBgCIAEoCSI/CgRSb2xlEhQKEFJPTEVfVU5TUEVDSUZJRUQQABINCglST0xFX1VTRVIQARISCg5ST0xFX0FTU0lTVEFOVBACIkYKFlN0cmVhbUNoYXRSZXF1ZXN0UHJvdG8SLAoIbWVzc2FnZXMYASADKAsyGi5DaGVja01hdGVDaGF0TWVzc2FnZVByb3RvImgKF1N0cmVhbUNoYXRSZXNwb25zZVByb3RvEhgKDnRoaW5raW5nX2RlbHRhGAEgASgJSAASGAoOcmVzcG9uc2VfZGVsdGEYAiABKAlIABIOCgRkb25lGAMgASgISABCCQoHcGF5bG9hZDKHAQoQQ2hlY2tNYXRlU2VydmljZRIwCgVHcmVldBISLkdyZWV0UmVxdWVzdFByb3RvGhMuR3JlZXRSZXNwb25zZVByb3RvEkEKClN0cmVhbUNoYXQSFy5TdHJlYW1DaGF0UmVxdWVzdFByb3RvGhguU3RyZWFtQ2hhdFJlc3BvbnNlUHJvdG8wAWIGcHJvdG8z");
 
 /**
  * @generated from message GreetRequestProto
@@ -47,6 +47,106 @@ export const GreetResponseProtoSchema: GenMessage<GreetResponseProto> = /*@__PUR
   messageDesc(file_CheckMateProto, 1);
 
 /**
+ * @generated from message CheckMateChatMessageProto
+ */
+export type CheckMateChatMessageProto = Message<"CheckMateChatMessageProto"> & {
+  /**
+   * @generated from field: CheckMateChatMessageProto.Role role = 1;
+   */
+  role: CheckMateChatMessageProto_Role;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message CheckMateChatMessageProto.
+ * Use `create(CheckMateChatMessageProtoSchema)` to create a new message.
+ */
+export const CheckMateChatMessageProtoSchema: GenMessage<CheckMateChatMessageProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 2);
+
+/**
+ * @generated from enum CheckMateChatMessageProto.Role
+ */
+export enum CheckMateChatMessageProto_Role {
+  /**
+   * @generated from enum value: ROLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ROLE_USER = 1;
+   */
+  USER = 1,
+
+  /**
+   * @generated from enum value: ROLE_ASSISTANT = 2;
+   */
+  ASSISTANT = 2,
+}
+
+/**
+ * Describes the enum CheckMateChatMessageProto.Role.
+ */
+export const CheckMateChatMessageProto_RoleSchema: GenEnum<CheckMateChatMessageProto_Role> = /*@__PURE__*/
+  enumDesc(file_CheckMateProto, 2, 0);
+
+/**
+ * @generated from message StreamChatRequestProto
+ */
+export type StreamChatRequestProto = Message<"StreamChatRequestProto"> & {
+  /**
+   * @generated from field: repeated CheckMateChatMessageProto messages = 1;
+   */
+  messages: CheckMateChatMessageProto[];
+};
+
+/**
+ * Describes the message StreamChatRequestProto.
+ * Use `create(StreamChatRequestProtoSchema)` to create a new message.
+ */
+export const StreamChatRequestProtoSchema: GenMessage<StreamChatRequestProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 3);
+
+/**
+ * @generated from message StreamChatResponseProto
+ */
+export type StreamChatResponseProto = Message<"StreamChatResponseProto"> & {
+  /**
+   * @generated from oneof StreamChatResponseProto.payload
+   */
+  payload: {
+    /**
+     * @generated from field: string thinking_delta = 1;
+     */
+    value: string;
+    case: "thinkingDelta";
+  } | {
+    /**
+     * @generated from field: string response_delta = 2;
+     */
+    value: string;
+    case: "responseDelta";
+  } | {
+    /**
+     * @generated from field: bool done = 3;
+     */
+    value: boolean;
+    case: "done";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message StreamChatResponseProto.
+ * Use `create(StreamChatResponseProtoSchema)` to create a new message.
+ */
+export const StreamChatResponseProtoSchema: GenMessage<StreamChatResponseProto> = /*@__PURE__*/
+  messageDesc(file_CheckMateProto, 4);
+
+/**
  * @generated from service CheckMateService
  */
 export const CheckMateService: GenService<{
@@ -57,6 +157,14 @@ export const CheckMateService: GenService<{
     methodKind: "unary";
     input: typeof GreetRequestProtoSchema;
     output: typeof GreetResponseProtoSchema;
+  },
+  /**
+   * @generated from rpc CheckMateService.StreamChat
+   */
+  streamChat: {
+    methodKind: "server_streaming";
+    input: typeof StreamChatRequestProtoSchema;
+    output: typeof StreamChatResponseProtoSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_CheckMateProto, 0);

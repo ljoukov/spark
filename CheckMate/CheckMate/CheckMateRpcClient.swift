@@ -5,6 +5,7 @@ import Foundation
 enum CheckMateRpcError: LocalizedError {
     case notSignedIn
     case missingResponse
+    case streamUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +13,8 @@ enum CheckMateRpcError: LocalizedError {
             return "You need to sign in before calling the server."
         case .missingResponse:
             return "The server did not return a response message."
+        case .streamUnavailable:
+            return "The chat stream could not be started."
         }
     }
 }
@@ -88,6 +91,42 @@ final class CheckMateRpcClient {
 
         log("Greet response missing message and error.")
         throw CheckMateRpcError.missingResponse
+    }
+
+    func startChatStream(
+        request: StreamChatRequestProto
+    ) async throws -> any ServerOnlyAsyncStreamInterface<StreamChatRequestProto, StreamChatResponseProto> {
+        guard let user = auth.currentUser else {
+            log("StreamChat failed: no signed-in user.")
+            throw CheckMateRpcError.notSignedIn
+        }
+
+        let token = try await user.getIDToken()
+        log(
+            "StreamChat request starting.",
+            context: [
+                "host": host,
+                "messageCount": String(request.messages.count),
+                "tokenLength": String(token.count)
+            ]
+        )
+        let stream = client.streamChat(
+            headers: [
+                "authorization": ["Bearer \(token)"]
+            ]
+        )
+        do {
+            try stream.send(request)
+        } catch {
+            log(
+                "StreamChat failed to send request.",
+                context: [
+                    "error": describe(error)
+                ]
+            )
+            throw error
+        }
+        return stream
     }
 
     private func log(_ message: String, context: [String: String] = [:]) {
