@@ -16,41 +16,47 @@ struct ContentView: View {
         Group {
             if isSignedIn {
                 NavigationStack {
-                    VStack(spacing: 16) {
-                        Image(systemName: "globe")
-                            .imageScale(.large)
-                            .foregroundStyle(.tint)
-                        Text("Hello, world!")
-                        Text(isSignedIn ? "Signed in" : "Signed out")
-                            .foregroundStyle(.secondary)
+                    ZStack {
+                        CheckMateBackground()
+                        VStack(spacing: 16) {
+                            Image(systemName: "globe")
+                                .imageScale(.large)
+                                .foregroundStyle(.tint)
+                            Text("Hello, world!")
+                            Text(isSignedIn ? "Signed in" : "Signed out")
+                                .foregroundStyle(.secondary)
 
-                        Button {
-                            Task { await callGreet() }
-                        } label: {
-                            HStack(spacing: 8) {
-                                if isCallingGreet {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
+                            Button {
+                                Task { await callGreet() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isCallingGreet {
+                                        ProgressView()
+                                            .progressViewStyle(.circular)
+                                    }
+                                    Text("Call Greet")
                                 }
-                                Text("Call Greet")
+                                .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isCallingGreet)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isCallingGreet)
 
-                        if let greetMessage {
-                            Text(greetMessage)
-                                .font(.headline)
-                        }
+                            if let greetMessage {
+                                Text(greetMessage)
+                                    .font(.headline)
+                            }
 
-                        if let greetError {
-                            Text(greetError)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
+                            if let greetError {
+                                Text(greetError)
+                                    .foregroundStyle(.red)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
+                        .padding(.vertical, 24)
+                        .padding(.horizontal, 20)
+                        .glassSurface(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .padding()
                     }
-                    .padding()
                 }
             } else {
                 AuthView()

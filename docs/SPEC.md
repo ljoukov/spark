@@ -14,7 +14,7 @@
 - `packages/schemas/` — shared Zod schemas + TypeScript types for Firestore docs (sessions, session state, user stats). Browser-safe and imported by both `web` and `eval` workspaces.
 - Shared Firebase project (Auth, Firestore, Storage) configured via environment-specific `.env` files for SvelteKit and plist/xcconfig for the iOS app. Secrets flow through Vercel project environment variables and Xcode build settings.
 - `Spark/` — Native iOS app written in SwiftUI. Targets iOS 17+, integrates with Firebase SDKs plus generated Swift Protobuf types.
-- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode. The signed-in view includes a Call Greet button that hits the CheckMate RPC endpoint for smoke testing.
+- `CheckMate/` — Native iOS app written in SwiftUI. Targets iOS 16+, uses Firebase Auth + Firestore. The initial authentication screen includes standard Sign in with Apple plus a Google sign-in button with the standard Google "G" icon, and adapts to light/dark mode. The sign-in and signed-in surfaces adopt Liquid Glass styling on iOS 26+ using SwiftUI `glassEffect`, while iOS 16-25 fall back to Material-based blur treatments. The signed-in view includes a Call Greet button that hits the CheckMate RPC endpoint for smoke testing.
 - For long-lived local processes, prefer background execution with logs redirected to files; tmux is optional and not required.
 
 ### 0.1) Web UI Automation (Screenshot Template)
