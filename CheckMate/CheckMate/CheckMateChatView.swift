@@ -24,6 +24,7 @@ struct CheckMateChatView: View {
     @State private var messageHeights: [UUID: CGFloat] = [:]
     @State private var messageFrames: [UUID: CGRect] = [:]
     @State private var pendingIndicatorId = UUID()
+    @State private var bottomSpacerId = UUID()
 
     init(
         rpcClient: CheckMateRpcClient? = nil,
@@ -44,27 +45,29 @@ struct CheckMateChatView: View {
         ZStack(alignment: .bottom) {
             CheckMateBackground()
             messageList
-            if shouldShowScrollToBottom {
-                ScrollToBottomButton {
-                    scrollToBottomOfResponse()
-                }
-                .padding(.bottom, composerContainerHeight + 16)
-                .transition(.scale.combined(with: .opacity))
-            }
         }
         .overlay(alignment: .bottom) {
-            ChatComposerView(
-                text: $draftText,
-                lineCount: $composerLineCount,
-                measuredHeight: $composerHeight,
-                isAwaitingResponse: isAwaitingResponse,
-                onSend: sendMessage,
-                onStop: stopResponse,
-                onExpand: { isShowingExpandedComposer = true }
-            )
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
-            .measureHeight($composerContainerHeight)
+            VStack(spacing: 16) {
+                if shouldShowScrollToBottom {
+                    ScrollToBottomButton {
+                        scrollToBottomOfResponse()
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+                ChatComposerView(
+                    text: $draftText,
+                    lineCount: $composerLineCount,
+                    measuredHeight: $composerHeight,
+                    isAwaitingResponse: isAwaitingResponse,
+                    onSend: sendMessage,
+                    onStop: stopResponse,
+                    onExpand: { isShowingExpandedComposer = true }
+                )
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+                .measureHeight($composerContainerHeight)
+            }
+            .frame(maxWidth: .infinity)
         }
         .fullScreenCover(isPresented: $isShowingExpandedComposer) {
             ExpandedComposerSheet(text: $draftText)
@@ -101,6 +104,8 @@ struct CheckMateChatView: View {
                         }
                         Color.clear
                             .frame(height: composerContainerHeight + ChatComposerMetrics.actionButtonSize + 32)
+                            .measureFrame(in: ChatScrollSpace.name, for: bottomSpacerId)
+                            .id(bottomSpacerId)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -320,10 +325,7 @@ struct CheckMateChatView: View {
     }
 
     private func scrollToBottomOfResponse() {
-        guard let targetId = lastResponseAnchorId else {
-            return
-        }
-        requestScroll(to: targetId, anchor: .bottom)
+        requestScroll(to: bottomSpacerId, anchor: .bottom)
     }
 
     private func updatePinnedUserMessageId(for id: UUID) {
@@ -362,26 +364,13 @@ struct CheckMateChatView: View {
     }
 
     private var shouldShowScrollToBottom: Bool {
-        guard let targetId = lastResponseAnchorId else {
+        guard scrollViewHeight > 0 else {
             return false
         }
-        guard let frame = messageFrames[targetId] else {
+        guard let frame = messageFrames[bottomSpacerId] else {
             return false
         }
-        return frame.maxY > (scrollViewHeight - 12)
-    }
-
-    private var lastResponseAnchorId: UUID? {
-        if let assistantId = messages.last(where: { $0.role == .assistant })?.id {
-            return assistantId
-        }
-        if let thinkingId = messages.last(where: { $0.role == .assistantThinking })?.id {
-            return thinkingId
-        }
-        if shouldShowPendingIndicator {
-            return pendingIndicatorId
-        }
-        return nil
+        return frame.maxY > (scrollViewHeight + 1)
     }
 }
 
