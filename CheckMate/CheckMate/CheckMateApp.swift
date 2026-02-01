@@ -33,7 +33,7 @@ struct CheckMateApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CheckMateRootView()
                 .environmentObject(firebaseClients)
         }
     }

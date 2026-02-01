@@ -16,6 +16,11 @@ public protocol CheckMateServiceClientInterface: Sendable {
 
     @available(iOS 13, *)
     func `greet`(request: GreetRequestProto, headers: Connect.Headers) async -> ResponseMessage<GreetResponseProto>
+
+    func `streamChat`(headers: Connect.Headers, onResult: @escaping @Sendable (Connect.StreamResult<StreamChatResponseProto>) -> Void) -> any Connect.ServerOnlyStreamInterface<StreamChatRequestProto>
+
+    @available(iOS 13, *)
+    func `streamChat`(headers: Connect.Headers) -> any Connect.ServerOnlyAsyncStreamInterface<StreamChatRequestProto, StreamChatResponseProto>
 }
 
 /// Concrete implementation of `CheckMateServiceClientInterface`.
@@ -36,9 +41,19 @@ public final class CheckMateServiceClient: CheckMateServiceClientInterface, Send
         return await self.client.unary(path: "/CheckMateService/Greet", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    public func `streamChat`(headers: Connect.Headers = [:], onResult: @escaping @Sendable (Connect.StreamResult<StreamChatResponseProto>) -> Void) -> any Connect.ServerOnlyStreamInterface<StreamChatRequestProto> {
+        return self.client.serverOnlyStream(path: "/CheckMateService/StreamChat", headers: headers, onResult: onResult)
+    }
+
+    @available(iOS 13, *)
+    public func `streamChat`(headers: Connect.Headers = [:]) -> any Connect.ServerOnlyAsyncStreamInterface<StreamChatRequestProto, StreamChatResponseProto> {
+        return self.client.serverOnlyStream(path: "/CheckMateService/StreamChat", headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let greet = Connect.MethodSpec(name: "Greet", service: "CheckMateService", type: .unary)
+            public static let streamChat = Connect.MethodSpec(name: "StreamChat", service: "CheckMateService", type: .serverStream)
         }
     }
 }
