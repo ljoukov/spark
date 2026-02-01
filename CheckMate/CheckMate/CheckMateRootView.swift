@@ -105,6 +105,8 @@ struct CheckMateMainView: View {
     var body: some View {
         GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
+            let safeInsets = proxy.safeAreaInsets
+            let fullHeight = proxy.size.height + safeInsets.top + safeInsets.bottom
             let clampedDrag = clampedDragOffset(for: width)
             let baseOffset = -CGFloat(activeIndex) * width
             let currentOffset = baseOffset + clampedDrag
@@ -113,12 +115,13 @@ struct CheckMateMainView: View {
             let leftDim = position * maxDimOpacity
             let rightDim = (1 - position) * maxDimOpacity
 
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 CheckMateChatListView(
                     conversations: conversations,
                     activeConversationId: activeConversationId,
                     isLoading: isLoadingChats,
                     errorText: conversationsError,
+                    safeTop: safeInsets.top,
                     onSelectChat: { conversationId in
                         selectConversation(conversationId)
                     },
@@ -129,23 +132,25 @@ struct CheckMateMainView: View {
                         refreshChats()
                     }
                 )
-                .ignoresSafeArea()
-                .frame(width: width)
+                .frame(width: width, height: fullHeight, alignment: .top)
                 .clipped()
                 .overlay(Color.black.opacity(leftDim).allowsHitTesting(false))
 
                 CheckMateChatView(
                     conversationId: $activeConversationId,
                     rpcClient: rpcClient,
+                    safeAreaTop: safeInsets.top,
+                    safeAreaBottom: safeInsets.bottom,
                     onStatusUpdate: { conversationId, status in
                         applyStatusUpdate(conversationId, status)
                     }
                 )
-                    .frame(width: width)
-                    .clipped()
-                    .overlay(Color.black.opacity(rightDim).allowsHitTesting(false))
+                .frame(width: width, height: fullHeight, alignment: .top)
+                .clipped()
+                .overlay(Color.black.opacity(rightDim).allowsHitTesting(false))
             }
-            .offset(x: currentOffset)
+            .frame(height: fullHeight, alignment: .top)
+            .offset(x: currentOffset, y: -safeInsets.top)
             .contentShape(Rectangle())
             .simultaneousGesture(horizontalDragGesture(width: width))
         }
@@ -379,20 +384,21 @@ private struct CheckMateChatListView: View {
     let activeConversationId: String?
     let isLoading: Bool
     let errorText: String?
+    let safeTop: CGFloat
     let onSelectChat: (String) -> Void
     let onNewChat: () -> Void
     let onRefresh: () -> Void
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeTop = proxy.safeAreaInsets.top
-            ZStack {
-                CheckMateBackground()
-                    .ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 0) {
-                    header
-                        .padding(.top, safeTop)
-                    ScrollView {
+        ZStack {
+            CheckMateBackground()
+                .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Color.clear
+                            .frame(height: safeTop)
+                        header
                         LazyVStack(spacing: 12) {
                             if let errorText {
                                 Text(errorText)
@@ -421,14 +427,14 @@ private struct CheckMateChatListView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 16)
                         .padding(.top, 12)
-                        .padding(.bottom, 28)
                     }
-                    .refreshable {
-                        onRefresh()
-                    }
+                    .padding(.horizontal, 16)
                 }
+                .refreshable {
+                    onRefresh()
+                }
+                .ignoresSafeArea(edges: [.top, .bottom])
             }
         }
     }
@@ -454,8 +460,6 @@ private struct CheckMateChatListView: View {
             }
             .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), fallbackMaterial: .thinMaterial)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 24)
         .padding(.bottom, 8)
     }
 
