@@ -1,9 +1,14 @@
 import Connect
+import FirebaseAuth
+import FirebaseFirestore
 import SwiftUI
 import UIKit
 
 struct CheckMateChatView: View {
+    @EnvironmentObject private var firebaseClients: FirebaseClients
+    @Binding private var conversationId: String?
     private let rpcClient: CheckMateRpcClient?
+    private let onStatusUpdate: ((String, CheckMateConversationStatus) -> Void)?
     @State private var messages: [ChatMessage]
     @State private var draftText: String
     @State private var composerHeight: CGFloat
@@ -25,14 +30,21 @@ struct CheckMateChatView: View {
     @State private var messageFrames: [UUID: CGRect] = [:]
     @State private var pendingIndicatorId = UUID()
     @State private var bottomSpacerId = UUID()
+    @State private var conversationListener: ListenerRegistration?
+    @State private var listeningConversationId: String?
+    @State private var pendingFirestoreMessages: [ChatMessage]?
 
     init(
+        conversationId: Binding<String?> = .constant(nil),
         rpcClient: CheckMateRpcClient? = nil,
+        onStatusUpdate: ((String, CheckMateConversationStatus) -> Void)? = nil,
         initialMessages: [ChatMessage] = [],
         initialDraftText: String = "",
         initialAwaitingResponse: Bool = false
     ) {
+        _conversationId = conversationId
         self.rpcClient = rpcClient
+        self.onStatusUpdate = onStatusUpdate
         _messages = State(initialValue: initialMessages)
         _draftText = State(initialValue: initialDraftText)
         _composerHeight = State(initialValue: ChatComposerMetrics.minHeight)
@@ -42,45 +54,37 @@ struct CheckMateChatView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            CheckMateBackground()
-            messageList
-        }
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 16) {
-                if shouldShowScrollToBottom {
-                    ScrollToBottomButton {
-                        scrollToBottomOfResponse()
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
-                ChatComposerView(
-                    text: $draftText,
-                    lineCount: $composerLineCount,
-                    measuredHeight: $composerHeight,
-                    isAwaitingResponse: isAwaitingResponse,
-                    onSend: sendMessage,
-                    onStop: stopResponse,
-                    onExpand: { isShowingExpandedComposer = true }
-                )
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
-                .measureHeight($composerContainerHeight)
+        GeometryReader { proxy in
+            let safeBottom = proxy.safeAreaInsets.bottom
+            ZStack(alignment: .bottom) {
+                CheckMateBackground()
+                    .ignoresSafeArea()
+                messageList(safeAreaBottom: safeBottom)
+                    .ignoresSafeArea()
             }
-            .frame(maxWidth: .infinity)
+            .overlay(alignment: .bottom) {
+                composerBar(safeAreaBottom: safeBottom)
+            }
         }
         .fullScreenCover(isPresented: $isShowingExpandedComposer) {
             ExpandedComposerSheet(text: $draftText)
+        }
+        .onAppear {
+            handleConversationChange(conversationId)
+        }
+        .onChange(of: conversationId) { newValue in
+            handleConversationChange(newValue)
         }
         .onDisappear {
             streamTask?.cancel()
             streamTask = nil
             activeStream?.cancel()
             activeStream = nil
+            stopConversationListener()
         }
     }
 
-    private var messageList: some View {
+    private func messageList(safeAreaBottom: CGFloat) -> some View {
         GeometryReader { proxy in
             ScrollViewReader { scrollProxy in
                 ScrollView {
@@ -105,7 +109,7 @@ struct CheckMateChatView: View {
                             }
                         }
                         Color.clear
-                            .frame(height: composerContainerHeight + ChatComposerMetrics.actionButtonSize + 32)
+                            .frame(height: max(composerBarHeight(safeAreaBottom: safeAreaBottom), scrollViewHeight * 0.33))
                             .measureFrame(in: ChatScrollSpace.name, for: bottomSpacerId)
                             .id(bottomSpacerId)
                     }
@@ -139,6 +143,164 @@ struct CheckMateChatView: View {
         }
     }
 
+    private func composerBar(safeAreaBottom: CGFloat) -> some View {
+        let bottomPadding = barBottomPadding(for: safeAreaBottom)
+        return VStack(spacing: 16) {
+            if shouldShowScrollToBottom {
+                ScrollToBottomButton {
+                    scrollToBottomOfResponse()
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+            ChatComposerView(
+                text: $draftText,
+                lineCount: $composerLineCount,
+                measuredHeight: $composerHeight,
+                isAwaitingResponse: isAwaitingResponse,
+                onSend: sendMessage,
+                onStop: stopResponse,
+                onExpand: { isShowingExpandedComposer = true }
+            )
+            .padding(.horizontal, ChatComposerMetrics.barHorizontalPadding)
+            .measureHeight($composerContainerHeight)
+        }
+        .padding(.top, ChatComposerMetrics.barTopPadding)
+        .padding(.bottom, bottomPadding)
+        .frame(maxWidth: .infinity)
+        .background(
+            ChatGlassBackground(
+                shape: Rectangle(),
+                fallbackColor: Color(.systemBackground)
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private func handleConversationChange(_ newValue: String?) {
+        if isRunningPreview() {
+            return
+        }
+        if newValue == listeningConversationId {
+            return
+        }
+        let previousId = listeningConversationId
+        listeningConversationId = newValue
+        stopConversationListener()
+        if previousId != nil && previousId != newValue {
+            pendingFirestoreMessages = nil
+            stopResponse()
+            messages = []
+            activeThinkingId = nil
+            activeResponseId = nil
+            hasStreamedContent = false
+            pinnedUserMessageId = nil
+        }
+        guard let newValue else {
+            pendingFirestoreMessages = nil
+            messages = []
+            pinnedUserMessageId = nil
+            return
+        }
+        startConversationListener(for: newValue)
+    }
+
+    private func startConversationListener(for conversationId: String) {
+        guard let userId = firebaseClients.auth.currentUser?.uid else {
+            return
+        }
+        let ref = firebaseClients.firestore
+            .collection(userId)
+            .document("client")
+            .collection("checkmate_conversations")
+            .document(conversationId)
+        conversationListener = ref.addSnapshotListener { snapshot, error in
+            DispatchQueue.main.async {
+                if let error {
+                    print("[CheckMateChatView] Conversation listener error: \(error)")
+                    return
+                }
+                guard let snapshot, snapshot.exists, let data = snapshot.data() else {
+                    return
+                }
+                let firestoreMessages = parseFirestoreMessages(data)
+                if isAwaitingResponse {
+                    pendingFirestoreMessages = firestoreMessages
+                } else {
+                    applyFirestoreMessages(firestoreMessages)
+                }
+            }
+        }
+    }
+
+    private func stopConversationListener() {
+        conversationListener?.remove()
+        conversationListener = nil
+    }
+
+    private func applyFirestoreMessages(_ newMessages: [ChatMessage]) {
+        messages = newMessages
+        activeThinkingId = nil
+        activeResponseId = nil
+        hasStreamedContent = false
+        pinnedUserMessageId = nil
+    }
+
+    private func applyPendingFirestoreMessagesIfNeeded() {
+        guard let pendingFirestoreMessages else {
+            return
+        }
+        self.pendingFirestoreMessages = nil
+        applyFirestoreMessages(pendingFirestoreMessages)
+    }
+
+    private func parseFirestoreMessages(_ data: [String: Any]) -> [ChatMessage] {
+        guard let rawMessages = data["messages"] as? [[String: Any]] else {
+            return []
+        }
+        let hasAssistantResponse = rawMessages.contains { entry in
+            let roleValue = entry["role"] as? String ?? ""
+            if roleValue != "assistant" {
+                return false
+            }
+            let text = entry["text"] as? String ?? ""
+            return !text.isEmpty
+        }
+        var parsed: [ChatMessage] = []
+        for entry in rawMessages {
+            let roleValue = entry["role"] as? String ?? ""
+            let text = entry["text"] as? String ?? ""
+            let role: ChatRole
+            switch roleValue {
+            case "user":
+                role = .user
+            case "assistant":
+                role = .assistant
+            case "thinking":
+                if hasAssistantResponse {
+                    continue
+                }
+                role = .assistantThinking
+            default:
+                continue
+            }
+            parsed.append(ChatMessage(role: role, text: text))
+        }
+        return parsed
+    }
+
+    private func ensureConversationId() -> String {
+        if let conversationId {
+            return conversationId
+        }
+        let newId = UUID().uuidString
+        conversationId = newId
+        return newId
+    }
+
+    private func isRunningPreview() -> Bool {
+        ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    }
+
     private func scrollToLatestMessageIfNeeded(using proxy: ScrollViewProxy) {
         guard let lastMessage = messages.last else {
             return
@@ -157,6 +319,7 @@ struct CheckMateChatView: View {
         if trimmed.isEmpty {
             return
         }
+        let activeConversationId = ensureConversationId()
         dismissKeyboard()
         let userText = draftText
         let userMessage = ChatMessage(role: .user, text: userText)
@@ -166,6 +329,7 @@ struct CheckMateChatView: View {
         hasStreamedContent = false
         activeThinkingId = nil
         activeResponseId = nil
+        pendingFirestoreMessages = nil
         pendingIndicatorId = UUID()
         updatePinnedUserMessageId(for: userMessage.id)
         if let pinnedUserMessageId {
@@ -173,7 +337,7 @@ struct CheckMateChatView: View {
         } else {
             requestScroll(to: userMessage.id, anchor: .bottom)
         }
-        startChatStream()
+        startChatStream(conversationId: activeConversationId)
     }
 
     private func stopResponse() {
@@ -185,9 +349,10 @@ struct CheckMateChatView: View {
         activeStream?.cancel()
         activeStream = nil
         isAwaitingResponse = false
+        applyPendingFirestoreMessagesIfNeeded()
     }
 
-    private func startChatStream() {
+    private func startChatStream(conversationId: String) {
         guard let rpcClient else {
             appendSystemMessage("Chat is unavailable. Please try again.")
             isAwaitingResponse = false
@@ -195,6 +360,7 @@ struct CheckMateChatView: View {
         }
         var request = StreamChatRequestProto()
         request.messages = buildChatRequestMessages()
+        request.conversationID = conversationId
         streamTask?.cancel()
         let task = Task {
             do {
@@ -253,6 +419,7 @@ struct CheckMateChatView: View {
             isAwaitingResponse = false
             activeStream = nil
             streamTask = nil
+            applyPendingFirestoreMessagesIfNeeded()
         case .headers:
             break
         }
@@ -271,11 +438,27 @@ struct CheckMateChatView: View {
             isAwaitingResponse = false
             activeStream = nil
             streamTask = nil
+            applyPendingFirestoreMessagesIfNeeded()
+        case .status(let status):
+            handleStatusUpdate(status)
         }
+    }
+
+    private func handleStatusUpdate(_ status: CheckMateChatStatusProto) {
+        guard let resolvedStatus = CheckMateConversationStatus(proto: status) else {
+            return
+        }
+        guard let conversationId else {
+            return
+        }
+        onStatusUpdate?(conversationId, resolvedStatus)
     }
 
     private func applyThinkingDelta(_ delta: String) {
         if delta.isEmpty {
+            return
+        }
+        if activeResponseId != nil {
             return
         }
         hasStreamedContent = true
@@ -294,6 +477,7 @@ struct CheckMateChatView: View {
             return
         }
         hasStreamedContent = true
+        removeThinkingMessagesIfNeeded()
         if let activeResponseId,
            let index = messages.firstIndex(where: { $0.id == activeResponseId }) {
             messages[index].text += delta
@@ -302,6 +486,14 @@ struct CheckMateChatView: View {
         let message = ChatMessage(role: .assistant, text: delta)
         messages.append(message)
         activeResponseId = message.id
+    }
+
+    private func removeThinkingMessagesIfNeeded() {
+        if activeThinkingId == nil && !messages.contains(where: { $0.role == .assistantThinking }) {
+            return
+        }
+        messages.removeAll(where: { $0.role == .assistantThinking })
+        activeThinkingId = nil
     }
 
     private func appendSystemMessage(_ text: String) {
@@ -363,6 +555,18 @@ struct CheckMateChatView: View {
         }
         let availableHeight = scrollViewHeight
         return max(0, availableHeight - messageHeight)
+    }
+
+    private func composerBarHeight(safeAreaBottom: CGFloat) -> CGFloat {
+        composerContainerHeight
+            + ChatComposerMetrics.actionButtonSize
+            + ChatComposerMetrics.barTopPadding
+            + barBottomPadding(for: safeAreaBottom)
+            + 24
+    }
+
+    private func barBottomPadding(for safeAreaBottom: CGFloat) -> CGFloat {
+        safeAreaBottom > 0 ? safeAreaBottom : 8
     }
 
     private var shouldShowScrollToBottom: Bool {
@@ -714,6 +918,8 @@ private enum ChatComposerMetrics {
     static let font = UIFont.preferredFont(forTextStyle: .body)
     static let textInsets = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
     static let containerPadding: CGFloat = 4
+    static let barTopPadding: CGFloat = 10
+    static let barHorizontalPadding: CGFloat = 12
     static var minHeight: CGFloat {
         font.lineHeight + textInsets.top + textInsets.bottom
     }
@@ -836,32 +1042,44 @@ private extension View {
 }
 
 #Preview("Chat Empty") {
-    CheckMateChatView()
+    CheckMateChatView(conversationId: .constant(nil))
+        .environmentObject(FirebaseClients())
 }
 
 #Preview("Chat With Messages") {
-    CheckMateChatView(initialMessages: [
-        ChatMessage(role: .user, text: "Hello"),
-        ChatMessage(role: .assistant, text: "Hey! Good to see you. What's up?")
-    ])
+    CheckMateChatView(
+        conversationId: .constant(nil),
+        initialMessages: [
+            ChatMessage(role: .user, text: "Hello"),
+            ChatMessage(role: .assistant, text: "Hey! Good to see you. What's up?")
+        ]
+    )
+    .environmentObject(FirebaseClients())
 }
 
 #Preview("Chat Thinking") {
-    CheckMateChatView(initialMessages: [
-        ChatMessage(role: .user, text: "Explain inertia."),
-        ChatMessage(role: .assistantThinking, text: "Thinking through a concise explanation...")
-    ])
+    CheckMateChatView(
+        conversationId: .constant(nil),
+        initialMessages: [
+            ChatMessage(role: .user, text: "Explain inertia."),
+            ChatMessage(role: .assistantThinking, text: "Thinking through a concise explanation...")
+        ]
+    )
+    .environmentObject(FirebaseClients())
 }
 
 #Preview("Chat Multiline Draft") {
-    CheckMateChatView(initialDraftText: "Hello\n2\n3\n4\n5\n6\n7\n8")
+    CheckMateChatView(conversationId: .constant(nil), initialDraftText: "Hello\n2\n3\n4\n5\n6\n7\n8")
+        .environmentObject(FirebaseClients())
 }
 
 #Preview("Chat Awaiting Response") {
     CheckMateChatView(
+        conversationId: .constant(nil),
         initialMessages: [
             ChatMessage(role: .user, text: "Hello")
         ],
         initialAwaitingResponse: true
     )
+    .environmentObject(FirebaseClients())
 }
