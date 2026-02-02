@@ -576,16 +576,24 @@
 		}
 	}
 
-	function setCopyButtonState(button: HTMLButtonElement, label: string): void {
-		const previous = button.dataset.copyLabel ?? button.textContent ?? 'Copy code';
-		button.dataset.copyLabel = previous;
-		button.textContent = label;
+	function setCopyButtonState(
+		button: HTMLButtonElement,
+		state: 'idle' | 'copied' | 'error' | 'empty',
+		label: string
+	): void {
+		button.setAttribute('aria-label', label);
+		if (state === 'idle') {
+			delete button.dataset.copyState;
+		} else {
+			button.dataset.copyState = state;
+		}
 		const existingTimer = copyResetTimers.get(button);
 		if (existingTimer !== undefined) {
 			window.clearTimeout(existingTimer);
 		}
 		const timeoutId = window.setTimeout(() => {
-			button.textContent = button.dataset.copyLabel ?? 'Copy code';
+			button.setAttribute('aria-label', 'Copy code');
+			delete button.dataset.copyState;
 		}, 1400);
 		copyResetTimers.set(button, timeoutId);
 	}
@@ -600,11 +608,11 @@
 		const codeEl = button.closest('.code-block')?.querySelector('code');
 		const code = codeEl?.textContent ?? '';
 		if (!code) {
-			setCopyButtonState(button, 'No code');
+			setCopyButtonState(button, 'empty', 'No code');
 			return;
 		}
 		const ok = await copyText(code);
-		setCopyButtonState(button, ok ? 'Copied' : 'Copy failed');
+		setCopyButtonState(button, ok ? 'copied' : 'error', ok ? 'Copied' : 'Copy failed');
 	}
 
 	function appendStreamingThoughts(current: string, delta: string): string {
@@ -1959,14 +1967,40 @@
 	:global(.message-markdown .code-block__copy) {
 		border: none;
 		background: transparent;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid transparent;
 		color: var(--code-muted);
-		font-size: 0.7rem;
 		cursor: pointer;
-		transition: color 0.15s ease;
+		transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 	}
 
 	:global(.message-markdown .code-block__copy:hover) {
 		color: var(--code-text);
+		background: color-mix(in srgb, var(--code-border) 55%, transparent);
+		border-color: var(--code-border);
+	}
+
+	:global(.message-markdown .code-block__copy-icon) {
+		width: 1rem;
+		height: 1rem;
+		stroke: currentColor;
+		fill: none;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	:global(.message-markdown .code-block__copy[data-copy-state='copied']) {
+		color: var(--code-string);
+	}
+
+	:global(.message-markdown .code-block__copy[data-copy-state='error']) {
+		color: #ef4444;
 	}
 
 	:global(.message-markdown .code-block pre) {
