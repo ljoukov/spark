@@ -93,8 +93,15 @@ struct CheckMateChatView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $isShowingExpandedComposer) {
-            ExpandedComposerSheet(text: $draftText)
+        .sheet(isPresented: $isShowingExpandedComposer) {
+            ExpandedComposerSheet(
+                text: $draftText,
+                onSubmit: {
+                    sendMessage()
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .onAppear {
             handleConversationChange(conversationId)
@@ -832,28 +839,88 @@ private struct ComposerActionButton: View {
 private struct ExpandedComposerSheet: View {
     @Binding var text: String
     @Environment(\.dismiss) private var dismiss
+    let onSubmit: () -> Void
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(.systemBackground)
-                    .ignoresSafeArea()
-                TextEditor(text: $text)
-                    .font(.body)
-                    .padding(16)
-                    .focused($isFocused)
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+            TextEditor(text: $text)
+                .font(.body)
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+                .padding(.bottom, 0)
+                .focused($isFocused)
+        }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(.label))
+                    .frame(width: 42, height: 42)
+                    .background(
+                        ChatGlassBackground(
+                            shape: Circle(),
+                            fallbackColor: Color(.systemBackground)
+                        )
+                    )
+                    .clipShape(Circle())
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+            .padding(.top, 8)
+            .padding(.trailing, 8)
+        }
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 12) {
+                Menu {
                     Button {
-                        dismiss()
                     } label: {
-                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        Label("Camera", systemImage: "camera")
                     }
+                    Button {
+                    } label: {
+                        Label("Photos", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                    } label: {
+                        Label("Files", systemImage: "doc")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color(.label))
+                        .frame(width: 42, height: 42)
+                        .background(
+                            ChatGlassBackground(
+                                shape: Circle(),
+                                fallbackColor: Color(.systemBackground)
+                            )
+                        )
+                        .clipShape(Circle())
+                }
+
+                Spacer()
+
+                Button {
+                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty {
+                        return
+                    }
+                    onSubmit()
+                    dismiss()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color(.systemBackground))
+                        .frame(width: 42, height: 42)
+                        .background(Color(.label))
+                        .clipShape(Circle())
                 }
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 10)
         }
         .onAppear {
             isFocused = true
