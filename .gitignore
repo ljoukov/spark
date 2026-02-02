@@ -8,3 +8,5 @@ eval/output/
 dist
 **/*.xcodeproj/xcuserdata/
 **/*.xcworkspace/xcuserdata/
+**/.build/
+**/.swiftpm/
