@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = F18EC7766AF8507ADB404C4E /* GoogleSignIn */; };
+		223B9E8CEB7D41F8A50F43C8 /* SparkMarkdown in Frameworks */ = {isa = PBXBuildFile; productRef = B10240C09273499E8F5A732B /* SparkMarkdown */; };
 		C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC52F2CD62800CB6413 /* FirebaseAuth */; };
 		C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C22E6AC72F2CD62800CB6413 /* FirebaseFirestore */; };
 		C250A9D62F2D2E7400681648 /* Connect in Frameworks */ = {isa = PBXBuildFile; productRef = C250A9D52F2D2E7400681648 /* Connect */; };
@@ -80,6 +81,7 @@
 			files = (
 				C22E6AC62F2CD62800CB6413 /* FirebaseAuth in Frameworks */,
 				C22E6AC82F2CD62800CB6413 /* FirebaseFirestore in Frameworks */,
+				223B9E8CEB7D41F8A50F43C8 /* SparkMarkdown in Frameworks */,
 				C250A9D62F2D2E7400681648 /* Connect in Frameworks */,
 				3E6C4E3ABA72C6E7AC6889D9 /* GoogleSignIn in Frameworks */,
 				C29F38F82F2D18EF00163F1C /* SwiftProtobuf in Frameworks */,
@@ -150,6 +152,7 @@
 				F18EC7766AF8507ADB404C4E /* GoogleSignIn */,
 				C29F38F72F2D18EF00163F1C /* SwiftProtobuf */,
 				C250A9D52F2D2E7400681648 /* Connect */,
+				B10240C09273499E8F5A732B /* SparkMarkdown */,
 			);
 			productName = CheckMate;
 			productReference = C22E6A9A2F2CC89400CB6413 /* CheckMate.app */;
@@ -238,6 +241,7 @@
 				3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				C29F38F62F2D18EF00163F1C /* XCRemoteSwiftPackageReference "swift-protobuf" */,
 				C250A9D42F2D2E7400681648 /* XCRemoteSwiftPackageReference "connect-swift" */,
+				908E453D6A8641CCA95518E5 /* XCLocalSwiftPackageReference "SparkMarkdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C22E6A9B2F2CC89400CB6413 /* Products */;
@@ -647,6 +651,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		908E453D6A8641CCA95518E5 /* XCLocalSwiftPackageReference "SparkMarkdown" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SparkMarkdown;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		3416A0855CD1454B23419347 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -683,6 +694,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B10240C09273499E8F5A732B /* SparkMarkdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 908E453D6A8641CCA95518E5 /* XCLocalSwiftPackageReference "SparkMarkdown" */;
+			productName = SparkMarkdown;
+		};
 		C22E6AC52F2CD62800CB6413 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C22E6AC42F2CD62800CB6413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
