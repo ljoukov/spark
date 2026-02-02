@@ -1,5 +1,39 @@
 import { marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import c from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
+
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('c', c);
+hljs.registerLanguage('cpp', cpp);
+
+const LANGUAGE_ALIASES = new Map<string, string>([
+	['js', 'javascript'],
+	['javascript', 'javascript'],
+	['ts', 'typescript'],
+	['typescript', 'typescript'],
+	['py', 'python'],
+	['python', 'python'],
+	['c', 'c'],
+	['c++', 'cpp'],
+	['cpp', 'cpp'],
+	['cc', 'cpp'],
+	['cxx', 'cpp']
+]);
+
+const LANGUAGE_LABELS = new Map<string, string>([
+	['javascript', 'js'],
+	['typescript', 'ts'],
+	['python', 'python'],
+	['c', 'c'],
+	['cpp', 'c++']
+]);
 
 marked.setOptions({ breaks: true, gfm: true });
 marked.use(
@@ -9,6 +43,47 @@ marked.use(
 		nonStandard: true
 	})
 );
+
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function resolveLanguageLabel(raw: string, normalized: string): string {
+	if (normalized && LANGUAGE_LABELS.has(normalized)) {
+		return LANGUAGE_LABELS.get(normalized) ?? raw;
+	}
+	return raw || normalized || 'text';
+}
+
+const renderer = new marked.Renderer();
+renderer.code = (token) => {
+	const code = typeof token.text === 'string' ? token.text : '';
+	const rawLanguage = (token.lang ?? '').trim().split(/\s+/u)[0]?.toLowerCase() ?? '';
+	const normalized = LANGUAGE_ALIASES.get(rawLanguage) ?? rawLanguage;
+	const resolvedLanguage = normalized && hljs.getLanguage(normalized) ? normalized : '';
+	const languageLabel = resolveLanguageLabel(rawLanguage, normalized);
+	const highlighted = resolvedLanguage
+		? hljs.highlight(code, { language: resolvedLanguage }).value
+		: escapeHtml(code);
+	const languageClass = resolvedLanguage
+		? `hljs language-${resolvedLanguage}`
+		: 'hljs language-text';
+
+	return [
+		'<div class="code-block">',
+		'<div class="code-block__header">',
+		`<span class="code-block__lang">${escapeHtml(languageLabel)}</span>`,
+		'<button class="code-block__copy" type="button" data-code-copy>Copy code</button>',
+		'</div>',
+		`<pre><code class="${languageClass}">${highlighted}</code></pre>`,
+		'</div>'
+	].join('');
+};
 
 function normalizeLatexLists(markdown: string): string {
 	const lines = markdown.split(/\r?\n/u);
@@ -116,7 +191,7 @@ function normalizeDisplayMathBlocks(markdown: string): string {
 
 export function renderMarkdown(markdown: string): string {
 	const normalized = normalizeDisplayMathBlocks(normalizeLatexLists(markdown));
-	const parsed = marked.parse(normalized);
+	const parsed = marked.parse(normalized, { renderer });
 	return typeof parsed === 'string' ? parsed : '';
 }
 
