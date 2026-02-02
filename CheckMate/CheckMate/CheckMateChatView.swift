@@ -1,6 +1,7 @@
 import Connect
 import FirebaseAuth
 import FirebaseFirestore
+import SparkMarkdown
 import SwiftUI
 import UIKit
 
@@ -641,10 +642,7 @@ private struct ChatMessageRow: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
             VStack(alignment: .leading, spacing: 8) {
-                Text(message.text)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
+                SparkMarkdownView(message.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     onCopy(message)
@@ -657,10 +655,7 @@ private struct ChatMessageRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .assistantThinking:
-            Text(message.text)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
+            SparkMarkdownView(message.text)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(
@@ -674,6 +669,7 @@ private struct ChatMessageRow: View {
     private var thinkingBackground: Color {
         colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray5)
     }
+
 }
 
 private struct PendingResponseRow: View {
