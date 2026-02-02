@@ -453,12 +453,12 @@ private struct CheckMateChatListView: View {
             Button {
                 onNewChat()
             } label: {
-                Text("New chat")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(.label))
+                    .frame(width: 36, height: 36)
             }
-            .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous), fallbackMaterial: .thinMaterial)
+            .glassSurface(Circle(), fallbackMaterial: .thinMaterial)
         }
         .padding(.bottom, 8)
     }
