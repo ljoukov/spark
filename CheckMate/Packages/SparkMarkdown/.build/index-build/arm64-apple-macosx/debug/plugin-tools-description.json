@@ -1,0 +1,1294 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_AMS-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_AMS-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_AMS-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_AMS-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Bold.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Bold.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Bold.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Bold.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Caligraphic-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Caligraphic-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Bold.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Bold.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Bold.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Bold.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Fraktur-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Fraktur-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Bold.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Bold.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Bold.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Bold.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-BoldItalic.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-BoldItalic.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-BoldItalic.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-BoldItalic.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Italic.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Italic.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Italic.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Italic.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Main-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Main-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-BoldItalic.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-BoldItalic.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-BoldItalic.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-BoldItalic.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-Italic.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-Italic.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Math-Italic.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Math-Italic.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Bold.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Bold.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Bold.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Bold.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Italic.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Italic.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Italic.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Italic.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_SansSerif-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_SansSerif-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Script-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Script-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Script-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Script-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size1-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size1-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size1-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size1-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size2-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size2-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size2-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size2-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size3-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size3-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size3-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size3-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size4-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size4-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Size4-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Size4-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.ttf" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Typewriter-Regular.ttf"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.ttf"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.woff" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Typewriter-Regular.woff"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.woff"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.woff2" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/fonts/KaTeX_Typewriter-Regular.woff2"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/KaTeX_Typewriter-Regular.woff2"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/c.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/languages/c.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/c.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/core.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/core.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/core.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/cpp.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/languages/cpp.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/cpp.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/index.html" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/index.html"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/index.html"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/javascript.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/languages/javascript.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/javascript.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/katex.min.css" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/katex.min.css"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/katex.min.css"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/katex.min.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/katex.min.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/katex.min.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/markdown.css" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/markdown.css"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/markdown.css"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/markdown.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/markdown.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/markdown.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/marked-katex-extension.umd.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/marked-katex-extension.umd.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/marked-katex-extension.umd.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/marked.umd.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/marked.umd.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/marked.umd.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/python.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/languages/python.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/python.js"
+        }
+      ]
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/typescript.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/Resources/vendor/highlight/languages/typescript.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown_SparkMarkdown.bundle/typescript.js"
+        }
+      ]
+    }
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.SparkMarkdown-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/sources",
+      "importPath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownWKWebView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/DerivedSources/resource_bundle_accessor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<SparkMarkdown-arm64-apple-macosx26.0-debug.module-resources>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "SparkMarkdown",
+      "moduleOutputPath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/Modules/SparkMarkdown.swiftmodule",
+      "objects" : [
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/SparkMarkdownView.swift.o",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/SparkMarkdownWKWebView.swift.o",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/resource_bundle_accessor.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx10.13",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+        "-module-cache-path",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/include/SparkMarkdown-Swift.h",
+        "-swift-version",
+        "5",
+        "-Xfrontend",
+        "-experimental-lazy-typecheck",
+        "-Xfrontend",
+        "-experimental-skip-all-function-bodies",
+        "-Xfrontend",
+        "-experimental-allow-module-with-compiler-errors",
+        "-Xfrontend",
+        "-empty-abi-descriptor",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "sparkmarkdown"
+      ],
+      "outputFileMapPath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/Modules/SparkMarkdown.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : true,
+      "sources" : [
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownView.swift",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownWKWebView.swift",
+        "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/DerivedSources/resource_bundle_accessor.swift"
+      ],
+      "tempsPath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "SparkMarkdown" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "SparkMarkdown",
+      "-package-name",
+      "sparkmarkdown",
+      "-c",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownView.swift",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownWKWebView.swift",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/DerivedSources/resource_bundle_accessor.swift",
+      "-I",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx10.13",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+      "-module-cache-path",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/include/SparkMarkdown-Swift.h",
+      "-swift-version",
+      "5",
+      "-Xfrontend",
+      "-experimental-lazy-typecheck",
+      "-Xfrontend",
+      "-experimental-skip-all-function-bodies",
+      "-Xfrontend",
+      "-experimental-allow-module-with-compiler-errors",
+      "-Xfrontend",
+      "-empty-abi-descriptor",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "sparkmarkdown",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "SparkMarkdown" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/Sources/SparkMarkdown/SparkMarkdownWKWebView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/DerivedSources/resource_bundle_accessor.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/SparkMarkdown.build/sources"
+    },
+    "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/yaroslavvolovich/projects/spark/CheckMate/Packages/SparkMarkdown/.build/index-build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}
