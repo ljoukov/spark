@@ -17,6 +17,7 @@ struct CheckMateChatView: View {
     @State private var composerLineCount: Int
     @State private var composerContainerHeight: CGFloat
     @State private var composerBarMeasuredHeight: CGFloat = 0
+    @State private var isComposerFocused = false
     @State private var isAwaitingResponse: Bool
     @State private var hasStreamedContent = false
     @State private var isShowingExpandedComposer = false
@@ -145,6 +146,13 @@ struct CheckMateChatView: View {
                     .padding(.bottom, 8)
                 }
                 .coordinateSpace(name: ChatScrollSpace.name)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        if isComposerFocused {
+                            dismissKeyboard()
+                        }
+                    }
+                )
                 .onAppear {
                     scrollViewHeight = proxy.size.height
                     scrollToLatestMessageIfNeeded(using: scrollProxy)
@@ -171,12 +179,14 @@ struct CheckMateChatView: View {
     }
 
     private func composerBar(safeAreaBottom: CGFloat) -> some View {
-        let bottomPadding = barBottomPadding(for: safeAreaBottom)
+        let focusPadding = isComposerFocused ? ChatComposerMetrics.barTopPadding : 0
+        let bottomPadding = barBottomPadding(for: safeAreaBottom) + focusPadding
         return VStack(spacing: 0) {
             ChatComposerView(
                 text: $draftText,
                 lineCount: $composerLineCount,
                 measuredHeight: $composerHeight,
+                isFocused: $isComposerFocused,
                 isAwaitingResponse: isAwaitingResponse,
                 onSend: sendMessage,
                 onStop: stopResponse,
@@ -195,15 +205,6 @@ struct CheckMateChatView: View {
             )
             .ignoresSafeArea(edges: .bottom)
             .opacity(0.72)
-        )
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(
-                        key: ComposerBarFramePreferenceKey.self,
-                        value: proxy.frame(in: .named(ChatOverlaySpace.name))
-                    )
-            }
         )
     }
 
@@ -541,6 +542,7 @@ struct CheckMateChatView: View {
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        isComposerFocused = false
     }
 
     private func requestScroll(to id: UUID, anchor: UnitPoint) {
@@ -592,10 +594,12 @@ struct CheckMateChatView: View {
         if composerBarMeasuredHeight > 0 {
             return composerBarMeasuredHeight
         }
+        let focusPadding = isComposerFocused ? ChatComposerMetrics.barTopPadding : 0
         return composerContainerHeight
             + ChatComposerMetrics.actionButtonSize
             + ChatComposerMetrics.barTopPadding
             + barBottomPadding(for: safeAreaBottom)
+            + focusPadding
             + 24
     }
 
@@ -707,6 +711,7 @@ private struct ChatComposerView: View {
     @Binding var text: String
     @Binding var lineCount: Int
     @Binding var measuredHeight: CGFloat
+    @Binding var isFocused: Bool
     let isAwaitingResponse: Bool
     let onSend: () -> Void
     let onStop: () -> Void
@@ -754,6 +759,7 @@ private struct ChatComposerView: View {
                         text: $text,
                         calculatedHeight: $measuredHeight,
                         lineCount: $lineCount,
+                        isFocused: $isFocused,
                         minHeight: minHeight,
                         maxHeight: maxHeight,
                         font: font,
@@ -867,6 +873,7 @@ private struct GrowingTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var calculatedHeight: CGFloat
     @Binding var lineCount: Int
+    @Binding var isFocused: Bool
     let minHeight: CGFloat
     let maxHeight: CGFloat
     let font: UIFont
@@ -943,9 +950,17 @@ private struct GrowingTextView: UIViewRepresentable {
             self.parent = parent
         }
 
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.isFocused = true
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             parent.recalculateHeight(textView)
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.isFocused = false
         }
     }
 }
