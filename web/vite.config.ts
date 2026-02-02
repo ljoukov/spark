@@ -52,6 +52,9 @@ const serverOptions = {
 
 export default defineConfig({
 	plugins,
+	optimizeDeps: {
+		exclude: ['@spark/schemas']
+	},
 	server: {
 		...serverOptions,
 		fs: {

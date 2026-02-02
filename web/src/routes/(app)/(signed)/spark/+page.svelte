@@ -848,6 +848,26 @@
 		}
 	}
 
+	function clearComposerAttachments(
+		activeConversationId: string,
+		entries: LocalAttachment[]
+	): void {
+		if (entries.length === 0) {
+			return;
+		}
+		const ignoredIds = resolveIgnoredAttachmentIds(activeConversationId);
+		const ignoredFingerprints = resolveIgnoredFingerprints(activeConversationId);
+		const localIds = new Set(entries.map((entry) => entry.localId));
+		for (const entry of entries) {
+			cleanupPreviewUrl(entry.previewUrl);
+			ignoredFingerprints.add(entry.fingerprint);
+			if (entry.id) {
+				ignoredIds.add(entry.id);
+			}
+		}
+		attachments = attachments.filter((entry) => !localIds.has(entry.localId));
+	}
+
 	async function sendMessage(): Promise<void> {
 		const trimmed = draft.trim();
 		if (sending || hasPendingUploads) {
@@ -880,6 +900,7 @@
 		const abortController = new AbortController();
 		streamAbort = abortController;
 		let activeAssistantId: string | null = null;
+		let clearedComposer = false;
 
 		try {
 			await streamSse(
@@ -912,6 +933,10 @@
 								};
 								if (payload.conversationId) {
 									setConversationId(payload.conversationId);
+								}
+								if (!clearedComposer) {
+									clearComposerAttachments(nextConversationId, attachmentsToSend);
+									clearedComposer = true;
 								}
 								if (payload.messageId) {
 									pendingScrollMessageId = payload.messageId;

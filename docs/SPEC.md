@@ -137,6 +137,7 @@ Recommended defaults:
     - Streaming may include a short “thinking” preview while the assistant response is generated.
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
+    - The server downloads any attachments on the latest user message and submits them to the LLM as inline parts.
 
 **Non-Goals**
 

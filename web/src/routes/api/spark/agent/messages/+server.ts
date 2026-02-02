@@ -1,7 +1,14 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import { getFirebaseAdminFirestore, generateText, loadEnvFromFile, loadLocalEnv } from '@spark/llm';
-import type { LlmContent, LlmTextDelta } from '@spark/llm';
+import {
+	getFirebaseAdminFirestore,
+	getFirebaseAdminStorage,
+	getFirebaseStorageBucketName,
+	generateText,
+	loadEnvFromFile,
+	loadLocalEnv
+} from '@spark/llm';
+import type { LlmContent, LlmContentPart, LlmTextDelta } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
@@ -17,6 +24,13 @@ import { z } from 'zod';
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
 const MODEL_ID = 'gemini-flash-latest' as const;
+const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
+const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
+	'image/jpeg',
+	'image/png',
+	'image/webp',
+	'application/pdf'
+]);
 const FALLBACK_RESPONSE = [
 	'Here is a quick 3-day GCSE Biology sprint you can follow:',
 	'',
@@ -301,7 +315,75 @@ function extractTextParts(parts: SparkAgentContentPart[]): string {
 	return chunks.join('\n').trim();
 }
 
-function buildLlmContents(messages: SparkAgentMessage[]): LlmContent[] {
+function isSupportedAttachmentMime(value: string): boolean {
+	return SUPPORTED_ATTACHMENT_MIME_TYPES.has(value);
+}
+
+function isAttachmentStoragePathForUser(userId: string, storagePath: string): boolean {
+	const prefix = `spark/uploads/${userId}/`;
+	return storagePath.startsWith(prefix);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+	let timeoutHandle: NodeJS.Timeout | null = null;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutHandle = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+	});
+	try {
+		return await Promise.race([promise, timeoutPromise]);
+	} finally {
+		if (timeoutHandle) {
+			clearTimeout(timeoutHandle);
+		}
+	}
+}
+
+async function downloadAttachmentParts(
+	userId: string,
+	attachments: z.infer<typeof attachmentSchema>[]
+): Promise<LlmContentPart[]> {
+	if (attachments.length === 0) {
+		return [];
+	}
+	const storage = getFirebaseAdminStorage();
+	const bucket = storage.bucket(getFirebaseStorageBucketName());
+	const downloadTasks = attachments.map(async (attachment) => {
+		if (!isSupportedAttachmentMime(attachment.contentType)) {
+			throw new Error(`Unsupported attachment type ${attachment.contentType}`);
+		}
+		if (!isAttachmentStoragePathForUser(userId, attachment.storagePath)) {
+			throw new Error(`Attachment storage path mismatch: ${attachment.storagePath}`);
+		}
+		const fileRef = bucket.file(attachment.storagePath);
+		const downloadPromise = fileRef.download();
+		downloadPromise.catch(() => {});
+		const [buffer] = await withTimeout(
+			downloadPromise,
+			ATTACHMENT_DOWNLOAD_TIMEOUT_MS,
+			`Attachment ${attachment.id}`
+		);
+		if (!buffer || buffer.length === 0) {
+			throw new Error(`Attachment ${attachment.id} is empty`);
+		}
+		return {
+			data: buffer,
+			mimeType: attachment.contentType
+		};
+	});
+	const buffers = await Promise.all(downloadTasks);
+	return buffers.map((entry) => ({
+		type: 'inlineData',
+		data: entry.data.toString('base64'),
+		mimeType: entry.mimeType
+	}));
+}
+
+function buildLlmContents(
+	messages: SparkAgentMessage[],
+	options?: { attachmentMessageId?: string; attachmentParts?: LlmContentPart[] }
+): LlmContent[] {
 	const contents: LlmContent[] = [{ role: 'user', parts: [{ type: 'text', text: SYSTEM_PROMPT }] }];
 	const start = Math.max(0, messages.length - MAX_HISTORY_MESSAGES);
 	for (let i = start; i < messages.length; i += 1) {
@@ -310,12 +392,24 @@ function buildLlmContents(messages: SparkAgentMessage[]): LlmContent[] {
 			continue;
 		}
 		const text = extractTextParts(message.content);
-		if (!text) {
+		const hasAttachmentParts =
+			message.role === 'user' &&
+			options?.attachmentMessageId === message.id &&
+			options.attachmentParts &&
+			options.attachmentParts.length > 0;
+		if (!text && !hasAttachmentParts) {
 			continue;
+		}
+		const parts: LlmContentPart[] = [];
+		if (hasAttachmentParts && options?.attachmentParts) {
+			parts.push(...options.attachmentParts);
+		}
+		if (text) {
+			parts.push({ type: 'text', text });
 		}
 		contents.push({
 			role: ROLE_TO_LLM[message.role],
-			parts: [{ type: 'text', text }]
+			parts
 		});
 	}
 	return contents;
@@ -327,9 +421,18 @@ type StreamHandlers = {
 
 async function generateAssistantResponse(
 	conversation: ConversationDoc,
+	options: {
+		userId: string;
+		messageId: string;
+		attachments: z.infer<typeof attachmentSchema>[];
+	},
 	handlers: StreamHandlers
 ): Promise<string> {
-	const contents = buildLlmContents(conversation.messages);
+	const attachmentParts = await downloadAttachmentParts(options.userId, options.attachments);
+	const contents = buildLlmContents(conversation.messages, {
+		attachmentMessageId: options.messageId,
+		attachmentParts
+	});
 	return await generateText({
 		modelId: MODEL_ID,
 		contents,
@@ -547,7 +650,15 @@ export const POST: RequestHandler = async ({ request }) => {
 				await streamFallbackText(FALLBACK_RESPONSE, handleDelta);
 				assistantText = FALLBACK_RESPONSE;
 			} else {
-				await generateAssistantResponse(conversation, { onDelta: handleDelta });
+				await generateAssistantResponse(
+					conversation,
+					{
+						userId,
+						messageId,
+						attachments: attachmentForMessage
+					},
+					{ onDelta: handleDelta }
+				);
 			}
 			await flushUpdate(true);
 			sendEvent?.({
