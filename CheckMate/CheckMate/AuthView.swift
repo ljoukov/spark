@@ -138,18 +138,24 @@ struct AuthView: View {
 
             let auth = Auth.auth()
             auth.signIn(with: credential) { _, error in
-                if let error = error {
-                    finishSignIn(withError: error)
-                    return
+                Task { @MainActor in
+                    if let error = error {
+                        finishSignIn(withError: error)
+                        return
+                    }
+                    finishSignIn(withMessage: nil)
                 }
-                finishSignIn(withMessage: nil)
             }
         case .failure(let error):
             if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-                finishSignIn(withMessage: nil)
+                Task { @MainActor in
+                    finishSignIn(withMessage: nil)
+                }
                 return
             }
-            finishSignIn(withError: error)
+            Task { @MainActor in
+                finishSignIn(withError: error)
+            }
         }
     }
 
@@ -169,18 +175,26 @@ struct AuthView: View {
             if let error = error {
                 let nsError = error as NSError
                 if nsError.domain == "com.google.GIDSignIn" && nsError.code == -5 {
-                    finishSignIn(withMessage: nil)
+                    Task { @MainActor in
+                        finishSignIn(withMessage: nil)
+                    }
                     return
                 }
-                finishSignIn(withError: error)
+                Task { @MainActor in
+                    finishSignIn(withError: error)
+                }
                 return
             }
             guard let user = signInResult?.user else {
-                finishSignIn(withMessage: "Google sign-in returned no user.")
+                Task { @MainActor in
+                    finishSignIn(withMessage: "Google sign-in returned no user.")
+                }
                 return
             }
             guard let idToken = user.idToken?.tokenString else {
-                finishSignIn(withMessage: "Missing Google ID token.")
+                Task { @MainActor in
+                    finishSignIn(withMessage: "Missing Google ID token.")
+                }
                 return
             }
 
@@ -190,11 +204,13 @@ struct AuthView: View {
             )
             let auth = Auth.auth()
             auth.signIn(with: credential) { _, error in
-                if let error = error {
-                    finishSignIn(withError: error)
-                    return
+                Task { @MainActor in
+                    if let error = error {
+                        finishSignIn(withError: error)
+                        return
+                    }
+                    finishSignIn(withMessage: nil)
                 }
-                finishSignIn(withMessage: nil)
             }
         }
     }

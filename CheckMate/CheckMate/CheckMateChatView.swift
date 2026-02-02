@@ -690,19 +690,7 @@ private struct ScrollToBottomButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.down")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color(.label))
-                .frame(width: 38, height: 38)
-                .background(
-                    ChatGlassBackground(
-                        shape: Circle(),
-                        fallbackColor: Color(.systemBackground)
-                    )
-                )
-                .clipShape(Circle())
-        }
+        GlassIconButton(systemName: "arrow.down", size: 38, iconSize: 16, action: action)
     }
 }
 
@@ -724,88 +712,78 @@ private struct ChatComposerView: View {
         let actionButtonSize = ChatComposerMetrics.actionButtonSize
         let cornerRadius = ChatComposerMetrics.singleLineCornerRadius
 
-        HStack(alignment: .bottom, spacing: 12) {
-            Menu {
-                Button {
-                } label: {
-                    Label("Camera", systemImage: "camera")
+        GlassEffectGroup {
+            HStack(alignment: .bottom, spacing: 12) {
+                GlassIconMenu(systemName: "plus", size: actionButtonSize, iconSize: 22) {
+                    Button {
+                    } label: {
+                        Label("Camera", systemImage: "camera")
+                    }
+                    Button {
+                    } label: {
+                        Label("Photos", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                    } label: {
+                        Label("Files", systemImage: "doc")
+                    }
                 }
-                Button {
-                } label: {
-                    Label("Photos", systemImage: "photo.on.rectangle")
-                }
-                Button {
-                } label: {
-                    Label("Files", systemImage: "doc")
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color(.label))
-                    .frame(width: actionButtonSize, height: actionButtonSize)
-                    .background(
-                        ChatGlassBackground(
-                            shape: Circle(),
-                            fallbackColor: Color(.systemBackground)
+
+                ZStack(alignment: .topTrailing) {
+                    ZStack(alignment: .leading) {
+                        GrowingTextView(
+                            text: $text,
+                            calculatedHeight: $measuredHeight,
+                            lineCount: $lineCount,
+                            isFocused: $isFocused,
+                            minHeight: minHeight,
+                            maxHeight: maxHeight,
+                            font: font,
+                            textInsets: textInsets
                         )
-                    )
-                    .clipShape(Circle())
-            }
+                        .frame(height: measuredHeight)
 
-            ZStack(alignment: .topTrailing) {
-                ZStack(alignment: .leading) {
-                    GrowingTextView(
-                        text: $text,
-                        calculatedHeight: $measuredHeight,
-                        lineCount: $lineCount,
-                        isFocused: $isFocused,
-                        minHeight: minHeight,
-                        maxHeight: maxHeight,
-                        font: font,
-                        textInsets: textInsets
-                    )
-                    .frame(height: measuredHeight)
+                        if text.isEmpty {
+                            Text("Ask anything")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, textInsets.left + 2)
+                                .padding(.vertical, textInsets.top)
+                                .allowsHitTesting(false)
+                        }
+                    }
 
-                    if text.isEmpty {
-                        Text("Ask anything")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, textInsets.left + 2)
-                            .padding(.vertical, textInsets.top)
-                            .allowsHitTesting(false)
+                    if lineCount > ChatComposerMetrics.expandThresholdLines {
+                        GlassIconButton(
+                            systemName: "arrow.up.left.and.arrow.down.right",
+                            size: 42,
+                            iconSize: 16,
+                            foreground: .secondary,
+                            action: onExpand
+                        )
+                        .zIndex(1)
+                        .padding(.top, 6)
+                        .padding(.trailing, 2)
                     }
                 }
-
-                if lineCount > ChatComposerMetrics.expandThresholdLines {
-                    Button(action: onExpand) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(Color(.systemBackground).opacity(0.85))
-                            .clipShape(Circle())
-                    }
-                    .padding(.top, 6)
-                    .padding(.trailing, 2)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 6)
-            .padding(.vertical, ChatComposerMetrics.containerPadding)
-            .background(
-                ChatGlassBackground(
-                    shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                    fallbackColor: Color(.secondarySystemBackground)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 6)
+                .padding(.vertical, ChatComposerMetrics.containerPadding)
+                .glassSurface(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                    fallbackMaterial: .thinMaterial,
+                    strokeOpacity: 0.12
                 )
-            )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
 
-            if isAwaitingResponse {
-                ComposerActionButton(systemImage: "stop.fill", action: onStop)
-            } else if text.isEmpty {
-                ComposerActionButton(systemImage: "mic.fill", action: {
-                })
-            } else {
-                ComposerActionButton(systemImage: "arrow.up", action: onSend)
+                if isAwaitingResponse {
+                    ComposerActionButton(systemImage: "stop.fill", action: onStop)
+                } else if text.isEmpty {
+                    ComposerActionButton(systemImage: "mic.fill", action: {
+                    })
+                } else {
+                    ComposerActionButton(systemImage: "arrow.up", action: onSend)
+                }
             }
         }
         .padding(.vertical, 2)
@@ -822,17 +800,24 @@ private enum ChatOverlaySpace {
 
 private struct ComposerActionButton: View {
     let systemImage: String
+    let size: CGFloat
+    let iconSize: CGFloat
     let action: () -> Void
 
+    init(
+        systemImage: String,
+        size: CGFloat = ChatComposerMetrics.actionButtonSize,
+        iconSize: CGFloat = 20,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = systemImage
+        self.size = size
+        self.iconSize = iconSize
+        self.action = action
+    }
+
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(Color(.systemBackground))
-                .frame(width: ChatComposerMetrics.actionButtonSize, height: ChatComposerMetrics.actionButtonSize)
-                .background(Color(.label))
-                .clipShape(Circle())
-        }
+        GlassIconButton(systemName: systemImage, size: size, iconSize: iconSize, action: action)
     }
 }
 
@@ -843,84 +828,74 @@ private struct ExpandedComposerSheet: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
-            TextEditor(text: $text)
-                .font(.body)
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
-                .padding(.bottom, 0)
-                .focused($isFocused)
-        }
-        .overlay(alignment: .topTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(.label))
-                    .frame(width: 42, height: 42)
+        let inputShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        GlassEffectGroup {
+            ZStack {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+                TextEditor(text: $text)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                    .focused($isFocused)
                     .background(
-                        ChatGlassBackground(
-                            shape: Circle(),
-                            fallbackColor: Color(.systemBackground)
+                        Color.clear.glassSurface(
+                            inputShape,
+                            fallbackMaterial: .thinMaterial,
+                            strokeOpacity: 0.12
                         )
                     )
-                    .clipShape(Circle())
+                    .clipShape(inputShape)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
             }
-            .padding(.top, 8)
-            .padding(.trailing, 8)
-        }
-        .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 12) {
-                Menu {
-                    Button {
-                    } label: {
-                        Label("Camera", systemImage: "camera")
-                    }
-                    Button {
-                    } label: {
-                        Label("Photos", systemImage: "photo.on.rectangle")
-                    }
-                    Button {
-                    } label: {
-                        Label("Files", systemImage: "doc")
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color(.label))
-                        .frame(width: 42, height: 42)
-                        .background(
-                            ChatGlassBackground(
-                                shape: Circle(),
-                                fallbackColor: Color(.systemBackground)
-                            )
-                        )
-                        .clipShape(Circle())
-                }
-
-                Spacer()
-
-                Button {
-                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if trimmed.isEmpty {
-                        return
-                    }
-                    onSubmit()
-                    dismiss()
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(Color(.systemBackground))
-                        .frame(width: 42, height: 42)
-                        .background(Color(.label))
-                        .clipShape(Circle())
-                }
+            .overlay(alignment: .topTrailing) {
+                GlassIconButton(
+                    systemName: "arrow.down.right.and.arrow.up.left",
+                    size: 42,
+                    iconSize: 16,
+                    action: { dismiss() }
+                )
+                .padding(.top, 8)
+                .padding(.trailing, 8)
             }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 10)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 12) {
+                    GlassIconMenu(systemName: "plus", size: 42, iconSize: 22) {
+                        Button {
+                        } label: {
+                            Label("Camera", systemImage: "camera")
+                        }
+                        Button {
+                        } label: {
+                            Label("Photos", systemImage: "photo.on.rectangle")
+                        }
+                        Button {
+                        } label: {
+                            Label("Files", systemImage: "doc")
+                        }
+                    }
+
+                    Spacer()
+
+                    GlassIconButton(
+                        systemName: "arrow.up",
+                        size: 42,
+                        iconSize: 20
+                    ) {
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            return
+                        }
+                        onSubmit()
+                        dismiss()
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+            }
         }
         .onAppear {
             isFocused = true
@@ -1069,34 +1044,8 @@ enum ChatRole {
     case assistantThinking
 }
 
-private struct ChatGlassBackground<S: Shape>: View {
-    @Environment(\.colorScheme) private var colorScheme
-    let shape: S
-    let fallbackColor: Color
-
-    var body: some View {
-        if #available(iOS 26.0, *) {
-            Color.clear.glassEffect(.regular, in: shape)
-        } else {
-            shape
-                .fill(fallbackColor)
-                .background(.ultraThinMaterial, in: shape)
-                .overlay(shape.stroke(borderColor, lineWidth: 1))
-                .shadow(color: shadowColor, radius: 12, x: 0, y: 4)
-        }
-    }
-
-    private var borderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
-    }
-
-    private var shadowColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.12)
-    }
-}
-
 private struct HeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
@@ -1104,7 +1053,7 @@ private struct HeightPreferenceKey: PreferenceKey {
 }
 
 private struct ComposerBarHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
@@ -1112,7 +1061,7 @@ private struct ComposerBarHeightPreferenceKey: PreferenceKey {
 }
 
 private struct ComposerBarBoundsPreferenceKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>? = nil
+    static let defaultValue: Anchor<CGRect>? = nil
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
         if value == nil {
@@ -1122,7 +1071,7 @@ private struct ComposerBarBoundsPreferenceKey: PreferenceKey {
 }
 
 private struct MessageHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: [UUID: CGFloat] = [:]
+    static let defaultValue: [UUID: CGFloat] = [:]
 
     static func reduce(value: inout [UUID: CGFloat], nextValue: () -> [UUID: CGFloat]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
@@ -1130,7 +1079,7 @@ private struct MessageHeightPreferenceKey: PreferenceKey {
 }
 
 private struct MessageFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [UUID: CGRect] = [:]
+    static let defaultValue: [UUID: CGRect] = [:]
 
     static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
