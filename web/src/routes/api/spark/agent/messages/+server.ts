@@ -2,7 +2,12 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import { getFirebaseAdminFirestore, generateText, loadEnvFromFile, loadLocalEnv } from '@spark/llm';
 import type { LlmContent, LlmTextDelta } from '@spark/llm';
-import type { SparkAgentContentPart, SparkAgentMessage } from '@spark/schemas';
+import {
+	SparkAgentAttachmentSchema,
+	type SparkAgentAttachment,
+	type SparkAgentContentPart,
+	type SparkAgentMessage
+} from '@spark/schemas';
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
@@ -31,18 +36,32 @@ const FALLBACK_RESPONSE = [
 ].join('\n');
 
 const attachmentSchema = z.object({
+	id: z.string().trim().min(1, 'id is required'),
 	storagePath: z.string().trim().min(1, 'storagePath is required'),
 	contentType: z.string().trim().min(1, 'contentType is required'),
+	filename: z.string().trim().min(1).optional(),
+	downloadUrl: z.string().trim().min(1).optional(),
 	sizeBytes: z.number().int().min(1, 'sizeBytes must be positive'),
 	pageCount: z.number().int().min(1).optional()
 });
 
-const requestSchema = z.object({
-	conversationId: z.string().trim().min(1).optional(),
-	text: z.string().trim().min(1, 'text is required'),
-	attachments: z.array(attachmentSchema).optional(),
-	targetUserId: z.string().trim().min(1).optional()
-});
+const requestSchema = z
+	.object({
+		conversationId: z.string().trim().min(1).optional(),
+		text: z.string().trim().optional(),
+		attachments: z.array(attachmentSchema).optional(),
+		targetUserId: z.string().trim().min(1).optional()
+	})
+	.superRefine((value, ctx) => {
+		const hasText = Boolean(value.text && value.text.trim().length > 0);
+		const hasAttachments = Boolean(value.attachments && value.attachments.length > 0);
+		if (!hasText && !hasAttachments) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'text or attachments are required'
+			});
+		}
+	});
 
 type ConversationDoc = {
 	id: string;
@@ -52,6 +71,7 @@ type ConversationDoc = {
 	updatedAt: Date;
 	lastMessageAt: Date;
 	messages: SparkAgentMessage[];
+	attachments?: SparkAgentAttachment[];
 };
 
 type ConversationInit = {
@@ -123,6 +143,25 @@ function resolveConversationDoc(
 	return { conversation, isNew };
 }
 
+function normalizeAttachments(raw: unknown, fallback: Date): SparkAgentAttachment[] {
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	const attachments: SparkAgentAttachment[] = [];
+	for (const entry of raw) {
+		const result = SparkAgentAttachmentSchema.safeParse(entry);
+		if (!result.success) {
+			continue;
+		}
+		attachments.push({
+			...result.data,
+			createdAt: result.data.createdAt ?? fallback,
+			updatedAt: result.data.updatedAt ?? fallback
+		});
+	}
+	return attachments;
+}
+
 function toConversationPayload(conversation: ConversationDoc): Record<string, unknown> {
 	const payload: Record<string, unknown> = {
 		id: conversation.id,
@@ -132,6 +171,9 @@ function toConversationPayload(conversation: ConversationDoc): Record<string, un
 		lastMessageAt: conversation.lastMessageAt,
 		messages: conversation.messages
 	};
+	if (conversation.attachments) {
+		payload.attachments = conversation.attachments;
+	}
 	if (conversation.familyId) {
 		payload.familyId = conversation.familyId;
 	}
@@ -139,23 +181,43 @@ function toConversationPayload(conversation: ConversationDoc): Record<string, un
 }
 
 function resolveContentParts(
-	text: string,
+	text: string | null,
 	attachments: z.infer<typeof attachmentSchema>[]
 ): SparkAgentContentPart[] {
-	const parts: SparkAgentContentPart[] = [{ type: 'text', text }];
+	const parts: SparkAgentContentPart[] = [];
 	for (const attachment of attachments) {
 		const isImage = attachment.contentType.startsWith('image/');
-		const filePart = {
+		const filePart: {
+			id?: string;
+			storagePath: string;
+			contentType: string;
+			sizeBytes: number;
+			filename?: string;
+			downloadUrl?: string;
+			pageCount?: number;
+		} = {
+			id: attachment.id,
 			storagePath: attachment.storagePath,
 			contentType: attachment.contentType,
-			sizeBytes: attachment.sizeBytes,
-			pageCount: attachment.pageCount
+			sizeBytes: attachment.sizeBytes
 		};
+		if (attachment.filename) {
+			filePart.filename = attachment.filename;
+		}
+		if (attachment.downloadUrl) {
+			filePart.downloadUrl = attachment.downloadUrl;
+		}
+		if (typeof attachment.pageCount === 'number' && attachment.pageCount > 0) {
+			filePart.pageCount = attachment.pageCount;
+		}
 		if (isImage) {
 			parts.push({ type: 'image', file: filePart });
 		} else {
 			parts.push({ type: 'file', file: filePart });
 		}
+	}
+	if (text && text.trim().length > 0) {
+		parts.push({ type: 'text', text });
 	}
 	return parts;
 }
@@ -327,9 +389,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		.collection('conversations')
 		.doc(conversationId);
 	let conversation: ConversationDoc;
+	let conversationAttachments: SparkAgentAttachment[] = [];
 
 	try {
 		const snapshot = await conversationRef.get();
+		conversationAttachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		conversation = resolveConversationDoc(
 			snapshot.exists ? snapshot.data() : undefined,
 			userId,
@@ -347,13 +411,39 @@ export const POST: RequestHandler = async ({ request }) => {
 	const messageId = randomUUID();
 	const assistantMessageId = randomUUID();
 	const attachments = parsedBody.attachments ?? [];
-	const trimmedText = parsedBody.text.trim();
+	const trimmedText = parsedBody.text?.trim() ?? '';
+	const attachmentById = new Map(conversationAttachments.map((entry) => [entry.id, entry]));
+	const attachmentForMessage: z.infer<typeof attachmentSchema>[] = [];
+	for (const attachment of attachments) {
+		const existing = attachmentById.get(attachment.id);
+		if (!existing) {
+			continue;
+		}
+		if (existing.status === 'failed' || existing.status === 'uploading') {
+			continue;
+		}
+		attachmentForMessage.push({
+			id: existing.id,
+			storagePath: existing.storagePath,
+			contentType: existing.contentType,
+			filename: existing.filename,
+			downloadUrl: existing.downloadUrl,
+			sizeBytes: existing.sizeBytes,
+			pageCount: existing.pageCount
+		});
+	}
+	if (!trimmedText && attachmentForMessage.length === 0) {
+		return json(
+			{ error: 'invalid_body', message: 'text or attachments are required' },
+			{ status: 400 }
+		);
+	}
 	const userMessage: SparkAgentMessage = {
 		id: messageId,
 		role: 'user',
 		author: { userId },
 		createdAt: now,
-		content: resolveContentParts(trimmedText, attachments)
+		content: resolveContentParts(trimmedText, attachmentForMessage)
 	};
 	const assistantMessage: SparkAgentMessage = {
 		id: assistantMessageId,
@@ -365,12 +455,28 @@ export const POST: RequestHandler = async ({ request }) => {
 	appendMessage(conversation, userMessage);
 	appendMessage(conversation, assistantMessage);
 
+	if (attachmentForMessage.length > 0) {
+		const ids = new Set(attachmentForMessage.map((entry) => entry.id));
+		conversationAttachments = conversationAttachments.map((entry) => {
+			if (!ids.has(entry.id)) {
+				return entry;
+			}
+			return {
+				...entry,
+				status: 'attached',
+				messageId,
+				updatedAt: now
+			};
+		});
+	}
+
 	await conversationRef.set(
 		toConversationPayload({
 			...conversation,
 			updatedAt: now,
 			lastMessageAt: now,
-			messages: conversation.messages
+			messages: conversation.messages,
+			attachments: conversationAttachments
 		}),
 		{ merge: true }
 	);
