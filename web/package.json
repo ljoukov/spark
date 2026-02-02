@@ -30,6 +30,7 @@
 		"@spark/schemas": "file:../packages/schemas",
 		"@vercel/analytics": "^1.6.1",
 		"firebase-admin": "^13.6.0",
+		"highlight.js": "^11.11.1",
 		"katex": "^0.16.27",
 		"marked-katex-extension": "^5.1.6",
 		"monaco-editor": "^0.55.1"
