@@ -71,12 +71,14 @@
 	let lastScrollMessageId = $state<string | null>(null);
 	let attachmentInputRef = $state<HTMLInputElement | null>(null);
 	let photoInputRef = $state<HTMLInputElement | null>(null);
+	let agentStreamRef = $state<HTMLDivElement | null>(null);
 	let attachments = $state<LocalAttachment[]>([]);
 	let attachmentError = $state<string | null>(null);
 	let lastAttachmentConversationId = $state<string | null>(null);
 	const pendingRemovalByLocalId = new Set<string>();
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
 	const ignoredFingerprintsByConversation = new Map<string, Set<string>>();
+	const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
 	let tooltipState = $state({
 		text: '',
 		x: 0,
@@ -543,6 +545,66 @@
 				node.removeEventListener('focusout', handleLeave);
 			}
 		};
+	}
+
+	async function copyText(value: string): Promise<boolean> {
+		if (!browser) {
+			return false;
+		}
+		if (navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(value);
+				return true;
+			} catch {
+				// fall through
+			}
+		}
+		try {
+			const textarea = document.createElement('textarea');
+			textarea.value = value;
+			textarea.setAttribute('readonly', 'true');
+			textarea.style.position = 'fixed';
+			textarea.style.opacity = '0';
+			textarea.style.pointerEvents = 'none';
+			document.body.appendChild(textarea);
+			textarea.select();
+			const ok = document.execCommand('copy');
+			textarea.remove();
+			return ok;
+		} catch {
+			return false;
+		}
+	}
+
+	function setCopyButtonState(button: HTMLButtonElement, label: string): void {
+		const previous = button.dataset.copyLabel ?? button.textContent ?? 'Copy code';
+		button.dataset.copyLabel = previous;
+		button.textContent = label;
+		const existingTimer = copyResetTimers.get(button);
+		if (existingTimer !== undefined) {
+			window.clearTimeout(existingTimer);
+		}
+		const timeoutId = window.setTimeout(() => {
+			button.textContent = button.dataset.copyLabel ?? 'Copy code';
+		}, 1400);
+		copyResetTimers.set(button, timeoutId);
+	}
+
+	async function handleCodeCopyClick(event: MouseEvent): Promise<void> {
+		const target = event.target as HTMLElement | null;
+		const button = target?.closest<HTMLButtonElement>('[data-code-copy]');
+		if (!button) {
+			return;
+		}
+		event.preventDefault();
+		const codeEl = button.closest('.code-block')?.querySelector('code');
+		const code = codeEl?.textContent ?? '';
+		if (!code) {
+			setCopyButtonState(button, 'No code');
+			return;
+		}
+		const ok = await copyText(code);
+		setCopyButtonState(button, ok ? 'Copied' : 'Copy failed');
 	}
 
 	function appendStreamingThoughts(current: string, delta: string): string {
@@ -1141,6 +1203,17 @@
 	});
 
 	$effect(() => {
+		if (!browser || !agentStreamRef) {
+			return;
+		}
+		const stream = agentStreamRef;
+		stream.addEventListener('click', handleCodeCopyClick);
+		return () => {
+			stream.removeEventListener('click', handleCodeCopyClick);
+		};
+	});
+
+	$effect(() => {
 		if (!browser || !composerRef) {
 			return;
 		}
@@ -1223,7 +1296,7 @@
 			</Button>
 		</div>
 
-		<div class="agent-stream">
+		<div class="agent-stream" bind:this={agentStreamRef}>
 			{#if error}
 				<div class="agent-error" role="alert">
 					{error}
@@ -1531,6 +1604,24 @@
 		);
 		--chat-send-bg: var(--foreground);
 		--chat-send-fg: var(--background);
+		--code-bg: color-mix(in srgb, var(--app-content-bg, #ffffff) 86%, rgba(15, 23, 42, 0.04));
+		--code-border: color-mix(
+			in srgb,
+			var(--app-content-border, rgba(148, 163, 184, 0.35)) 70%,
+			transparent
+		);
+		--code-header-bg: color-mix(
+			in srgb,
+			var(--app-content-bg, #ffffff) 80%,
+			rgba(15, 23, 42, 0.08)
+		);
+		--code-text: var(--text-primary, var(--foreground));
+		--code-muted: var(--text-secondary, rgba(30, 41, 59, 0.7));
+		--code-keyword: #2563eb;
+		--code-string: #16a34a;
+		--code-number: #ea580c;
+		--code-function: #0f766e;
+		--code-type: #b45309;
 	}
 
 	.agent-shell.has-thread {
@@ -1547,6 +1638,16 @@
 		--chat-user-border: rgba(148, 163, 184, 0.3);
 		--chat-send-bg: rgba(248, 250, 252, 0.92);
 		--chat-send-fg: rgba(15, 23, 42, 0.92);
+		--code-bg: color-mix(in srgb, rgba(15, 23, 42, 0.92) 82%, transparent);
+		--code-border: rgba(148, 163, 184, 0.3);
+		--code-header-bg: rgba(30, 41, 59, 0.65);
+		--code-text: rgba(226, 232, 240, 0.98);
+		--code-muted: rgba(148, 163, 184, 0.8);
+		--code-keyword: #60a5fa;
+		--code-string: #4ade80;
+		--code-number: #fb923c;
+		--code-function: #2dd4bf;
+		--code-type: #fbbf24;
 	}
 
 	.agent-layout {
@@ -1658,6 +1759,7 @@
 	.agent-message.is-user {
 		align-items: flex-end;
 		text-align: right;
+		padding-left: 1rem;
 	}
 
 	.message-bubble {
@@ -1819,7 +1921,7 @@
 		padding-left: 1.25rem;
 	}
 
-	:global(.message-markdown code) {
+	:global(.message-markdown :not(pre) > code) {
 		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
 		font-size: 0.85rem;
 		padding: 0.1rem 0.3rem;
@@ -1827,21 +1929,95 @@
 		background: color-mix(in srgb, currentColor 12%, transparent);
 	}
 
-	:global(.message-markdown pre) {
+	:global(.message-markdown .code-block) {
 		margin: 0.85rem 0;
-		padding: 0.95rem;
-		border-radius: 0.6rem;
-		border: 1px solid rgba(148, 163, 184, 0.26);
-		background: color-mix(in srgb, currentColor 14%, transparent);
-		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid var(--code-border);
+		background: var(--code-bg);
+		overflow: hidden;
+		box-shadow: 0 16px 30px -28px rgba(15, 23, 42, 0.25);
 	}
 
-	:global(.message-markdown pre code) {
+	:global(.message-markdown .code-block__header) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.45rem 0.75rem;
+		background: var(--code-header-bg);
+		border-bottom: 1px solid var(--code-border);
+		font-size: 0.7rem;
+		letter-spacing: 0.01em;
+		text-transform: lowercase;
+	}
+
+	:global(.message-markdown .code-block__lang) {
+		font-weight: 600;
+		color: var(--code-muted);
+	}
+
+	:global(.message-markdown .code-block__copy) {
+		border: none;
+		background: transparent;
+		color: var(--code-muted);
+		font-size: 0.7rem;
+		cursor: pointer;
+		transition: color 0.15s ease;
+	}
+
+	:global(.message-markdown .code-block__copy:hover) {
+		color: var(--code-text);
+	}
+
+	:global(.message-markdown .code-block pre) {
+		margin: 0;
+		padding: 0.85rem 0.9rem 0.95rem;
+		overflow-x: auto;
+		background: transparent;
+	}
+
+	:global(.message-markdown .code-block pre code) {
 		display: block;
 		padding: 0;
-		background: transparent;
 		font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
 		font-size: 0.85rem;
+		color: var(--code-text);
+	}
+
+	:global(.message-markdown .hljs-comment),
+	:global(.message-markdown .hljs-quote) {
+		color: var(--code-muted);
+		font-style: italic;
+	}
+
+	:global(.message-markdown .hljs-keyword),
+	:global(.message-markdown .hljs-selector-tag),
+	:global(.message-markdown .hljs-literal) {
+		color: var(--code-keyword);
+		font-weight: 600;
+	}
+
+	:global(.message-markdown .hljs-string),
+	:global(.message-markdown .hljs-symbol),
+	:global(.message-markdown .hljs-template-tag) {
+		color: var(--code-string);
+	}
+
+	:global(.message-markdown .hljs-number),
+	:global(.message-markdown .hljs-regexp),
+	:global(.message-markdown .hljs-attr) {
+		color: var(--code-number);
+	}
+
+	:global(.message-markdown .hljs-title),
+	:global(.message-markdown .hljs-function) {
+		color: var(--code-function);
+	}
+
+	:global(.message-markdown .hljs-type),
+	:global(.message-markdown .hljs-built_in),
+	:global(.message-markdown .hljs-class) {
+		color: var(--code-type);
 	}
 
 	.message-thinking {
@@ -1877,7 +2053,7 @@
 		border: 1px solid var(--chat-user-border);
 		background: var(--chat-user-bg);
 		width: auto;
-		max-width: min(28rem, 100%);
+		max-width: min(46rem, 100%);
 		box-shadow: 0 10px 30px -26px rgba(15, 23, 42, 0.3);
 	}
 
