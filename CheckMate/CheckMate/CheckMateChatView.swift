@@ -16,6 +16,7 @@ struct CheckMateChatView: View {
     @State private var composerHeight: CGFloat
     @State private var composerLineCount: Int
     @State private var composerContainerHeight: CGFloat
+    @State private var composerBarMeasuredHeight: CGFloat = 0
     @State private var isAwaitingResponse: Bool
     @State private var hasStreamedContent = false
     @State private var isShowingExpandedComposer = false
@@ -65,17 +66,30 @@ struct CheckMateChatView: View {
                 .ignoresSafeArea()
             messageList(safeAreaTop: safeAreaTop, safeAreaBottom: safeAreaBottom)
                 .ignoresSafeArea()
-        }
-        .overlay(alignment: .bottom) {
             composerBar(safeAreaBottom: safeAreaBottom)
-        }
-        .overlay(alignment: .bottom) {
-            if shouldShowScrollToBottom {
-                ScrollToBottomButton {
-                    scrollToBottomOfResponse()
+                .measureComposerBarHeight($composerBarMeasuredHeight)
+                .anchorPreference(key: ComposerBarBoundsPreferenceKey.self, value: .bounds) { anchor in
+                    anchor
                 }
-                .padding(.bottom, composerBarHeight(safeAreaBottom: safeAreaBottom))
-                .transition(.scale.combined(with: .opacity))
+        }
+        .coordinateSpace(name: ChatOverlaySpace.name)
+        .overlayPreferenceValue(ComposerBarBoundsPreferenceKey.self) { anchor in
+            GeometryReader { proxy in
+                let frame = anchor.map { proxy[$0] } ?? .zero
+                let buttonSize: CGFloat = 38
+                let targetY = max(buttonSize / 2, frame.minY - 8 - (buttonSize / 2))
+                ZStack {
+                    if shouldShowScrollToBottom, frame != .zero {
+                        ScrollToBottomButton {
+                            scrollToBottomOfResponse()
+                        }
+                        .position(
+                            x: frame.midX,
+                            y: targetY
+                        )
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
             }
         }
         .fullScreenCover(isPresented: $isShowingExpandedComposer) {
@@ -181,6 +195,15 @@ struct CheckMateChatView: View {
             )
             .ignoresSafeArea(edges: .bottom)
             .opacity(0.72)
+        )
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(
+                        key: ComposerBarFramePreferenceKey.self,
+                        value: proxy.frame(in: .named(ChatOverlaySpace.name))
+                    )
+            }
         )
     }
 
@@ -566,7 +589,10 @@ struct CheckMateChatView: View {
     }
 
     private func composerBarHeight(safeAreaBottom: CGFloat) -> CGFloat {
-        composerContainerHeight
+        if composerBarMeasuredHeight > 0 {
+            return composerBarMeasuredHeight
+        }
+        return composerContainerHeight
             + ChatComposerMetrics.actionButtonSize
             + ChatComposerMetrics.barTopPadding
             + barBottomPadding(for: safeAreaBottom)
@@ -785,6 +811,10 @@ private enum ChatScrollSpace {
     static let name = "checkmate-chat-scroll"
 }
 
+private enum ChatOverlaySpace {
+    static let name = "checkmate-chat-overlay"
+}
+
 private struct ComposerActionButton: View {
     let systemImage: String
     let action: () -> Void
@@ -999,6 +1029,24 @@ private struct HeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct ComposerBarHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ComposerBarBoundsPreferenceKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        if value == nil {
+            value = nextValue()
+        }
+    }
+}
+
 private struct MessageHeightPreferenceKey: PreferenceKey {
     static var defaultValue: [UUID: CGFloat] = [:]
 
@@ -1024,6 +1072,20 @@ private extension View {
             }
         )
         .onPreferenceChange(HeightPreferenceKey.self) { newValue in
+            if height.wrappedValue != newValue {
+                height.wrappedValue = newValue
+            }
+        }
+    }
+
+    func measureComposerBarHeight(_ height: Binding<CGFloat>) -> some View {
+        background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ComposerBarHeightPreferenceKey.self, value: proxy.size.height)
+            }
+        )
+        .onPreferenceChange(ComposerBarHeightPreferenceKey.self) { newValue in
             if height.wrappedValue != newValue {
                 height.wrappedValue = newValue
             }
