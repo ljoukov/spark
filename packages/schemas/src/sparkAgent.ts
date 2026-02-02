@@ -22,13 +22,46 @@ export const SparkAgentAuthorSchema = z.object({
 export type SparkAgentAuthor = z.infer<typeof SparkAgentAuthorSchema>;
 
 export const SparkAgentFileSchema = z.object({
+  id: trimmedString.optional(),
   storagePath: trimmedString,
   contentType: trimmedString,
+  filename: trimmedString.optional(),
+  downloadUrl: trimmedString.optional(),
   sizeBytes: z.number().int().min(1),
   pageCount: z.number().int().min(1).optional(),
 });
 
 export type SparkAgentFile = z.infer<typeof SparkAgentFileSchema>;
+
+export const SparkAgentAttachmentStatusSchema = z.enum([
+  "uploading",
+  "attaching",
+  "attached",
+  "failed",
+]);
+
+export type SparkAgentAttachmentStatus = z.infer<
+  typeof SparkAgentAttachmentStatusSchema
+>;
+
+export const SparkAgentAttachmentSchema = z.object({
+  id: trimmedString,
+  storagePath: trimmedString,
+  contentType: trimmedString,
+  filename: trimmedString.optional(),
+  downloadUrl: trimmedString.optional(),
+  sizeBytes: z.number().int().min(1),
+  pageCount: z.number().int().min(1).optional(),
+  status: SparkAgentAttachmentStatusSchema,
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
+  messageId: trimmedString.optional(),
+  error: trimmedString.optional(),
+});
+
+export type SparkAgentAttachment = z.infer<
+  typeof SparkAgentAttachmentSchema
+>;
 
 export const SparkAgentToolCallSchema = z.object({
   id: trimmedString,
@@ -99,6 +132,7 @@ export const SparkAgentConversationSchema = z.object({
   updatedAt: FirestoreTimestampSchema,
   lastMessageAt: FirestoreTimestampSchema,
   messages: z.array(SparkAgentMessageSchema),
+  attachments: z.array(SparkAgentAttachmentSchema).optional(),
 });
 
 export type SparkAgentConversation = z.infer<

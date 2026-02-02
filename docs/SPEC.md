@@ -132,6 +132,8 @@ Recommended defaults:
     - Keyboard: desktop Enter submits (Shift+Enter inserts a new line); on mobile Enter inserts a new line and sending uses the send button.
     - Assistant output renders markdown (including LaTeX + code blocks).
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
+    - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
+    - The send button is disabled until all uploads finish; while uploading it shows an inline spinner.
     - Streaming may include a short “thinking” preview while the assistant response is generated.
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
@@ -142,7 +144,7 @@ Recommended defaults:
 
 ## 2) Key Functional Requirements
 
-- Inputs: JPEG/PNG photos (normalized to JPEG) and PDFs (full or page selection). Max 25 MB per upload; enforced client-side and server-side with 413 rejection.
+- Inputs: JPG/PNG/WEBP images and PDFs. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
 - Metadata: `programme = gcse_triple_science`, optional `subject`, `board`, `topic`, `subtopic`. Server enriches or corrects metadata when confident; clients treat board/subject as optional choices.
 - Generation modes:
   - **Extraction mode** when source already contains Q&A pairs — preserve wording verbatim.
@@ -161,8 +163,9 @@ Recommended defaults:
 The protobuf API is reserved for the mobile app (future); the web app does not use protobufs yet. `/api/spark` is currently disabled in the web server while the /spark flow is being rebuilt.
 Spark AI Agent uses a dedicated endpoint:
 
-- `POST /api/spark/agent/messages` accepts `{ conversationId?, text, attachments? }` and returns SSE (`text/event-stream`) for streaming assistant tokens.
+- `POST /api/spark/agent/messages` accepts `{ conversationId?, text?, attachments? }` and returns SSE (`text/event-stream`) for streaming assistant tokens.
 - Non-streaming clients receive `202 Accepted` JSON with `{ conversationId, messageId }`.
+- `POST /api/spark/agent/attachments` accepts multipart form data with `conversationId` + `file` and returns `{ attachment }`.
 - Auth uses Firebase ID tokens (including email/password sign-in for local test-user flows).
 additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
 name of the oneof in `SparkApiRequestProto.request`.
@@ -213,12 +216,13 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
   Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
-- **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/<uid>/...` with security rules enforcing ownership. The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
+- **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/uploads/<uid>/<md5>` with security rules enforcing ownership. Metadata includes `chatIds` (JSON array of conversation IDs) and `firebaseStorageDownloadTokens`. The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
 
 ### 3.4 Spark AI Agent Firestore (Phase 1)
 
 - Conversations live under `/{userId}/client/conversations/{conversationId}` (client-safe read path; server writes only).
 - Each conversation document stores an append-only `messages` array (OpenAI Response-style with `content[]` parts).
+- Conversation documents include `attachments[]` entries with `{ id, storagePath, contentType, filename?, downloadUrl?, sizeBytes, status, createdAt, updatedAt, messageId? }`, where status ∈ `uploading | attaching | attached | failed`.
 - Streaming writes to Firestore are throttled to at most one update every 500 ms; the SSE stream is used for immediate UI updates.
 
 ## 4) Backend (SvelteKit)
