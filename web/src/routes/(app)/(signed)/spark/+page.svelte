@@ -1927,6 +1927,16 @@
 	:global(.message-markdown ul),
 	:global(.message-markdown ol) {
 		padding-left: 1.25rem;
+		margin: 0;
+		list-style-position: outside;
+	}
+
+	:global(.message-markdown ul) {
+		list-style-type: disc;
+	}
+
+	:global(.message-markdown ol) {
+		list-style-type: decimal;
 	}
 
 	:global(.message-markdown :not(pre) > code) {
