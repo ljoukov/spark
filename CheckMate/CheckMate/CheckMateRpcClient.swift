@@ -19,7 +19,6 @@ enum CheckMateRpcError: LocalizedError {
     }
 }
 
-@MainActor
 final class CheckMateRpcClient {
     private let client: CheckMateServiceClient
     private let auth: Auth
@@ -47,12 +46,11 @@ final class CheckMateRpcClient {
     }
 
     func greet(request: GreetRequestProto) async throws -> GreetResponseProto {
-        guard let user = auth.currentUser else {
+        guard let token = try await auth.currentUser?.getIDToken() else {
             log("Greet failed: no signed-in user.")
             throw CheckMateRpcError.notSignedIn
         }
 
-        let token = try await user.getIDToken()
         log(
             "Greet request starting.",
             context: [
@@ -96,12 +94,11 @@ final class CheckMateRpcClient {
     func startChatStream(
         request: StreamChatRequestProto
     ) async throws -> any ServerOnlyAsyncStreamInterface<StreamChatRequestProto, StreamChatResponseProto> {
-        guard let user = auth.currentUser else {
+        guard let token = try await auth.currentUser?.getIDToken() else {
             log("StreamChat failed: no signed-in user.")
             throw CheckMateRpcError.notSignedIn
         }
 
-        let token = try await user.getIDToken()
         log(
             "StreamChat request starting.",
             context: [
@@ -130,12 +127,11 @@ final class CheckMateRpcClient {
     }
 
     func listChats(limit: Int32 = 50) async throws -> ListChatsResponseProto {
-        guard let user = auth.currentUser else {
+        guard let token = try await auth.currentUser?.getIDToken() else {
             log("ListChats failed: no signed-in user.")
             throw CheckMateRpcError.notSignedIn
         }
 
-        let token = try await user.getIDToken()
         var request = ListChatsRequestProto()
         request.limit = limit
         log(
