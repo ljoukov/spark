@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "VITE_DEV_PORT=8080 VITE_DEV_AUTH_HOST=127.0.0.1:8080 vite dev --host 127.0.0.1",
+		"dev:http": "VITE_DEV_PORT=8080 VITE_DEV_AUTH_HOST=127.0.0.1:8080 vite dev --host 127.0.0.1",
 		"dev:https": "VITE_DEV_PORT=8081 VITE_DEV_AUTH_HOST=localhost:8081 vite dev",
 		"build": "vite build",
 		"build:cloudflare": "CF_PAGES=dummy npm run build",
