@@ -138,7 +138,7 @@ struct CheckMateChatView: View {
                             }
                         }
                         Color.clear
-                            .frame(height: max(composerBarHeight(safeAreaBottom: safeAreaBottom), scrollViewHeight * 0.33))
+                            .frame(height: max(composerBarHeight(safeAreaBottom: safeAreaBottom), scrollViewHeight * 0.66))
                             .measureFrame(in: ChatScrollSpace.name, for: bottomSpacerId)
                             .id(bottomSpacerId)
                     }
@@ -198,14 +198,6 @@ struct CheckMateChatView: View {
         .padding(.top, ChatComposerMetrics.barTopPadding)
         .padding(.bottom, bottomPadding)
         .frame(maxWidth: .infinity)
-        .background(
-            ChatGlassBackground(
-                shape: Rectangle(),
-                fallbackColor: Color(.systemBackground)
-            )
-            .ignoresSafeArea(edges: .bottom)
-            .opacity(0.72)
-        )
     }
 
     private func handleConversationChange(_ newValue: String?) {
