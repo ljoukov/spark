@@ -423,7 +423,7 @@ private struct CheckMateChatListView: View {
                                     } label: {
                                         chatRow(chat)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(PressableScaleButtonStyle())
                                 }
                             }
                         }
@@ -450,15 +450,12 @@ private struct CheckMateChatListView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                onNewChat()
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(.label))
-                    .frame(width: 36, height: 36)
-            }
-            .glassSurface(Circle(), fallbackMaterial: .thinMaterial)
+            GlassIconButton(
+                systemName: "square.and.pencil",
+                size: 36,
+                iconSize: 16,
+                action: onNewChat
+            )
         }
         .padding(.bottom, 8)
     }
@@ -502,7 +499,12 @@ private struct CheckMateChatListView: View {
             }
         }
         .padding(12)
-        .glassSurface(shape, fallbackMaterial: .thinMaterial, strokeOpacity: isActive ? 0.2 : 0.12)
+        .glassSurface(
+            shape,
+            fallbackMaterial: .thinMaterial,
+            strokeOpacity: isActive ? 0.2 : 0.12,
+            interactive: true
+        )
     }
 
     private func initials(for title: String) -> String {
