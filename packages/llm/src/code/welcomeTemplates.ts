@@ -4,9 +4,11 @@ import { type CodeProblem, type QuizDefinition } from "@spark/schemas";
 import { z } from "zod";
 
 import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-} from "../utils/firebaseAdmin";
+  commitFirestoreWrites,
+  getFirestoreDocument,
+  patchFirestoreDocument,
+  setFirestoreDocument,
+} from "../utils/gcp/firestoreRest";
 import { generateSession } from "./generateSession";
 import type { GenerateStoryResult } from "./generateStory";
 import {
@@ -20,6 +22,14 @@ const TEMPLATE_ROOT_COLLECTION = "spark-admin";
 const TEMPLATE_ROOT_DOC = "templates";
 const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
+
+function requireServiceAccountJson(): string {
+  const value = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+  if (!value || value.trim().length === 0) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
+  }
+  return value;
+}
 
 const GenerateWelcomeSessionOptionsSchema = z.object({
   topic: z.string().trim().min(1, "topic is required"),
@@ -56,88 +66,95 @@ function slugifyTopic(topic: string): string {
 }
 
 function getTemplateDocRef(sessionId: string) {
-  const firestore = getFirebaseAdminFirestore();
-  return firestore
-    .collection(TEMPLATE_ROOT_COLLECTION)
-    .doc(TEMPLATE_ROOT_DOC)
-    .collection(TEMPLATE_SESSIONS_COLLECTION)
-    .doc(sessionId);
+  return `${TEMPLATE_ROOT_COLLECTION}/${TEMPLATE_ROOT_DOC}/${TEMPLATE_SESSIONS_COLLECTION}/${sessionId}`;
 }
 
 async function copyStoryToTemplate(
+  serviceAccountJson: string,
   sessionId: string,
   planItemId: string,
   storyResult: GenerateStoryResult,
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const sourceDoc = firestore.doc(storyResult.narration.documentPath);
-  const snapshot = await sourceDoc.get();
-  if (!snapshot.exists) {
+  const snapshot = await getFirestoreDocument({
+    serviceAccountJson,
+    documentPath: storyResult.narration.documentPath,
+  });
+  if (!snapshot.exists || !snapshot.data) {
     console.warn(
       `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing; skipping copy`,
     );
     return;
   }
 
-  const targetDoc = getTemplateDocRef(sessionId)
-    .collection("media")
-    .doc(planItemId);
-  const payload = snapshot.data();
-  if (!payload) {
-    console.warn(
-      `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing data; skipping copy`,
-    );
-    return;
-  }
-  await targetDoc.set(payload);
+  const targetDocPath = `${getTemplateDocRef(sessionId)}/media/${planItemId}`;
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: targetDocPath,
+    data: snapshot.data,
+  });
   console.log(
-    `[welcome/${sessionId}] published story media to ${targetDoc.path}`,
+    `[welcome/${sessionId}] published story media to ${targetDocPath}`,
   );
 }
 
 async function writeQuizzesToTemplate(
+  serviceAccountJson: string,
   sessionId: string,
   quizzes: readonly QuizDefinition[],
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const batch = firestore.batch();
   const templateDoc = getTemplateDocRef(sessionId);
-
-  for (const quiz of quizzes) {
-    const target = templateDoc.collection("quiz").doc(quiz.id);
+  const writes = quizzes.map((quiz) => {
     const { id, ...rest } = quiz;
     void id;
-    batch.set(target, rest);
-  }
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/quiz/${quiz.id}`,
+      data: rest,
+    };
+  });
 
-  await batch.commit();
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
   console.log(
     `[welcome/${sessionId}] published ${quizzes.length} quizzes to template`,
   );
 }
 
 async function writeProblemsToTemplate(
+  serviceAccountJson: string,
   sessionId: string,
   problems: readonly CodeProblem[],
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const batch = firestore.batch();
   const templateDoc = getTemplateDocRef(sessionId);
-
-  for (const problem of problems) {
-    const target = templateDoc.collection("code").doc(problem.slug);
+  const writes = problems.map((problem) => {
     const { slug, ...rest } = problem;
     void slug;
-    batch.set(target, rest);
-  }
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/code/${problem.slug}`,
+      data: rest,
+    };
+  });
 
-  await batch.commit();
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
   console.log(
     `[welcome/${sessionId}] published ${problems.length} problems to template`,
   );
 }
 
 async function writeTemplateDoc(
+  serviceAccountJson: string,
   sessionId: string,
   topic: string,
   finalData: {
@@ -148,12 +165,11 @@ async function writeTemplateDoc(
     title?: string;
   },
 ): Promise<void> {
-  const { FieldValue, Timestamp } = getFirebaseAdminFirestoreModule();
   const templateDoc = getTemplateDocRef(sessionId);
   const payload: Record<string, unknown> = {
     id: sessionId,
     topic,
-    updatedAt: Timestamp.now(),
+    updatedAt: new Date(),
   };
 
   payload.plan = finalData.plan;
@@ -175,16 +191,19 @@ async function writeTemplateDoc(
     "problemsGrade",
     "storyTitle",
   ];
-  for (const field of draftFieldsToDelete) {
-    payload[field] = FieldValue.delete();
-  }
 
-  await templateDoc.set(payload, { merge: true });
+  await patchFirestoreDocument({
+    serviceAccountJson,
+    documentPath: templateDoc,
+    updates: payload,
+    deletes: draftFieldsToDelete,
+  });
 }
 
 export async function generateWelcomeSessionTemplate(
   options: GenerateWelcomeSessionOptions,
 ): Promise<{ sessionId: string; topic: string; title: string }> {
+  const serviceAccountJson = requireServiceAccountJson();
   const parsed = GenerateWelcomeSessionOptionsSchema.parse(options);
   const sessionId = parsed.sessionId ?? slugifyTopic(parsed.topic);
   const storyPlanItemId = parsed.storyPlanItemId ?? DEFAULT_STORY_PLAN_ITEM_ID;
@@ -226,9 +245,14 @@ export async function generateWelcomeSessionTemplate(
     storyPlanItemId,
   );
 
-  await copyStoryToTemplate(sessionId, storyPlanItemId, generation.story);
+  await copyStoryToTemplate(
+    serviceAccountJson,
+    sessionId,
+    storyPlanItemId,
+    generation.story,
+  );
 
-  await writeTemplateDoc(sessionId, parsed.topic, {
+  await writeTemplateDoc(serviceAccountJson, sessionId, parsed.topic, {
     plan: finalPlan,
     tagline: metadata.tagline,
     emoji: metadata.emoji,
@@ -236,8 +260,8 @@ export async function generateWelcomeSessionTemplate(
     title: storyTitle,
   });
 
-  await writeQuizzesToTemplate(sessionId, quizDefinitions);
-  await writeProblemsToTemplate(sessionId, codeProblems);
+  await writeQuizzesToTemplate(serviceAccountJson, sessionId, quizDefinitions);
+  await writeProblemsToTemplate(serviceAccountJson, sessionId, codeProblems);
 
   return { sessionId, topic: parsed.topic, title: storyTitle };
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { decodeBase64ToBytes, encodeBytesToBase64Url } from './base64';
 
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
@@ -30,16 +31,8 @@ export function parseGoogleServiceAccountJson(raw: string): GoogleServiceAccount
 	return ServiceAccountSchema.parse(parsed);
 }
 
-function base64UrlEncodeBytes(bytes: Uint8Array): string {
-	return Buffer.from(bytes)
-		.toString('base64')
-		.replace(/\+/g, '-')
-		.replace(/\//g, '_')
-		.replace(/=+$/g, '');
-}
-
 function base64UrlEncodeJson(value: unknown): string {
-	return base64UrlEncodeBytes(Buffer.from(JSON.stringify(value), 'utf8'));
+	return encodeBytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
 }
 
 function pemToPkcs8DerBytes(pem: string): Uint8Array {
@@ -48,7 +41,7 @@ function pemToPkcs8DerBytes(pem: string): Uint8Array {
 		.replace(/-----BEGIN PRIVATE KEY-----/g, '')
 		.replace(/-----END PRIVATE KEY-----/g, '')
 		.replace(/\s+/g, '');
-	return Buffer.from(normalized, 'base64');
+	return decodeBase64ToBytes(normalized);
 }
 
 type TokenCache = {
@@ -104,7 +97,7 @@ export async function getGoogleAccessToken(options: {
 		privateKey,
 		new TextEncoder().encode(signingInput)
 	);
-	const jwt = `${signingInput}.${base64UrlEncodeBytes(new Uint8Array(signature))}`;
+	const jwt = `${signingInput}.${encodeBytesToBase64Url(new Uint8Array(signature))}`;
 
 	const body = new URLSearchParams();
 	body.set('grant_type', 'urn:ietf:params:oauth:grant-type:jwt-bearer');

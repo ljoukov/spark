@@ -1,22 +1,22 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z, ZodError } from 'zod';
-import { getFirebaseAdminFirestore } from '@spark/llm';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 // The document holds arbitrary diagnostic data; validate as an object with any keys.
 const DocSchema = z.object({}).loose();
 
 export const GET: RequestHandler = async () => {
-	console.log('GET: testing firestore admin SDK setup');
+	console.log('GET: testing Firestore REST setup');
 	try {
-		const db = getFirebaseAdminFirestore();
-		const ref = db
-			.collection('spark')
-			.doc('test-user')
-			.collection('docs')
-			.doc('adminSdkDiagnostics');
+		const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+		if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+			return json({ error: 'misconfigured', message: 'GOOGLE_SERVICE_ACCOUNT_JSON missing' }, { status: 500 });
+		}
 
-		const snap = await ref.get();
-		if (!snap.exists) {
+		const documentPath = 'spark/test-user/docs/adminSdkDiagnostics';
+		const snap = await getFirestoreDocument({ serviceAccountJson, documentPath });
+		if (!snap.exists || !snap.data) {
 			return json(
 				{
 					error: 'not_found',
@@ -26,7 +26,7 @@ export const GET: RequestHandler = async () => {
 			);
 		}
 
-		const parsed = DocSchema.parse(snap.data());
+		const parsed = DocSchema.parse(snap.data);
 		return json(parsed);
 	} catch (err) {
 		console.log('GET: failed:', err);

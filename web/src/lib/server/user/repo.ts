@@ -1,22 +1,32 @@
 import { UserDocSchema, DEFAULT_USER_STATS, type UserDoc, type UserStats } from '@spark/schemas';
-import { getFirebaseAdminFirestore } from '@spark/llm';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 
-function resolveUserDocRef(userId: string) {
-	const firestore = getFirebaseAdminFirestore();
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
+
+function resolveUserDocPath(userId: string): string {
 	const id = userIdSchema.parse(userId);
-	return firestore.collection('spark').doc(id);
+	return `spark/${id}`;
 }
 
 export async function getUserDoc(userId: string): Promise<UserDoc | null> {
-	const snapshot = await resolveUserDocRef(userId).get();
-	if (!snapshot.exists) {
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: resolveUserDocPath(userId)
+	});
+	if (!snapshot.exists || !snapshot.data) {
 		return null;
 	}
-	const raw = snapshot.data() ?? {};
-	return UserDocSchema.parse(raw);
+	return UserDocSchema.parse(snapshot.data ?? {});
 }
 
 export async function getUserStats(userId: string): Promise<UserStats> {

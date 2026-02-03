@@ -1,12 +1,12 @@
-import { TASKS_API_KEY } from '$env/static/private';
 import { isUserAdmin } from '$lib/server/utils/admin';
 import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { z } from 'zod';
 import { json, type Handle, redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 
-if (typeof global !== 'undefined') {
-	global.process.on('unhandledRejection', (reason, promise) => {
+if (typeof process !== 'undefined' && typeof process.on === 'function') {
+	process.on('unhandledRejection', (reason, promise) => {
 		console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 	});
 }
@@ -32,13 +32,14 @@ export const handle = (async ({ event, resolve }) => {
 			);
 		}
 
-		if (!TASKS_API_KEY) {
+		const tasksApiKey = env.TASKS_API_KEY ?? '';
+		if (!tasksApiKey || tasksApiKey.trim().length === 0) {
 			console.error('TASKS_API_KEY is not configured');
 			return json({ error: 'server_misconfigured' }, { status: 500 });
 		}
 
 		const authorization = event.request.headers.get('authorization');
-		const expectedToken = `Bearer ${TASKS_API_KEY}`;
+		const expectedToken = `Bearer ${tasksApiKey}`;
 		if (authorization !== expectedToken) {
 			return json(
 				{ error: 'unauthorized' },

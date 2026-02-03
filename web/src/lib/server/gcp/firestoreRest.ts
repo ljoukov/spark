@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getGoogleAccessToken } from './googleAccessToken';
+import { encodeBytesToBase64 } from './base64';
 
 const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
 
@@ -44,15 +45,14 @@ function toFirestoreValue(value: unknown): FirestoreValue {
 	if (value instanceof Date) {
 		return { timestampValue: value.toISOString() };
 	}
-	if (Buffer.isBuffer(value)) {
-		return { bytesValue: value.toString('base64') };
-	}
 	if (value instanceof Uint8Array) {
-		return { bytesValue: Buffer.from(value).toString('base64') };
+		return { bytesValue: encodeBytesToBase64(value) };
 	}
 	if (Array.isArray(value)) {
 		return {
-			arrayValue: { values: value.filter((v) => v !== undefined).map((v) => toFirestoreValue(v)) }
+			arrayValue: {
+				values: value.filter((v) => v !== undefined).map((v) => toFirestoreValue(v))
+			}
 		};
 	}
 	if (typeof value === 'object' && value !== null) {
@@ -139,10 +139,29 @@ function firestoreDocUrl(projectId: string, documentPath: string): string {
 	)}/databases/(default)/documents/${encoded}`;
 }
 
+function firestoreDocName(projectId: string, documentPath: string): string {
+	const normalizedPath = FirestoreDocumentPathSchema.parse(documentPath);
+	return `projects/${projectId}/databases/(default)/documents/${normalizedPath}`;
+}
+
+const FirestoreCollectionPathSchema = z
+	.string()
+	.trim()
+	.min(1)
+	.refine((value) => !value.startsWith('/'), { message: 'Firestore collection path must be relative.' })
+	.refine((value) => value.split('/').filter(Boolean).length % 2 === 1, {
+		message: 'Firestore collection path must have an odd number of segments.'
+	});
+
 export async function getFirestoreDocument(options: {
 	serviceAccountJson: string;
 	documentPath: string;
-}): Promise<{ exists: boolean; data: Record<string, unknown> | null }> {
+}): Promise<{
+	exists: boolean;
+	data: Record<string, unknown> | null;
+	updateTime?: string;
+	createTime?: string;
+}> {
 	const { accessToken, projectId } = await getGoogleAccessToken({
 		serviceAccountJson: options.serviceAccountJson,
 		scopes: [FIRESTORE_SCOPE]
@@ -166,7 +185,221 @@ export async function getFirestoreDocument(options: {
 	for (const [k, v] of Object.entries(fields)) {
 		out[k] = fromFirestoreValue(v);
 	}
-	return { exists: true, data: out };
+	return { exists: true, data: out, updateTime: doc.updateTime, createTime: doc.createTime };
+}
+
+function decodeDocumentName(docName: string): string {
+	// projects/<projectId>/databases/(default)/documents/<path...>
+	const marker = '/documents/';
+	const idx = docName.indexOf(marker);
+	if (idx < 0) {
+		return docName;
+	}
+	return docName.slice(idx + marker.length);
+}
+
+export async function listFirestoreDocuments(options: {
+	serviceAccountJson: string;
+	collectionPath: string;
+	limit?: number;
+	orderBy?: string;
+}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>> {
+	const { accessToken, projectId } = await getGoogleAccessToken({
+		serviceAccountJson: options.serviceAccountJson,
+		scopes: [FIRESTORE_SCOPE]
+	});
+
+	const normalizedPath = FirestoreCollectionPathSchema.parse(options.collectionPath);
+	const encoded = normalizedPath
+		.split('/')
+		.map((segment) => encodeURIComponent(segment))
+		.join('/');
+
+	const url = new URL(
+		`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+			projectId
+		)}/databases/(default)/documents/${encoded}`
+	);
+	if (options.limit !== undefined) {
+		url.searchParams.set('pageSize', String(options.limit));
+	}
+	if (options.orderBy) {
+		url.searchParams.set('orderBy', options.orderBy);
+	}
+
+	const resp = await fetch(url.toString(), {
+		headers: { authorization: `Bearer ${accessToken}` }
+	});
+	if (!resp.ok) {
+		const text = await resp.text().catch(() => '');
+		throw new Error(`Firestore list failed (${resp.status}): ${text.slice(0, 500)}`);
+	}
+
+	const json = (await resp.json()) as { documents?: FirestoreDocument[] };
+	const docs = json.documents ?? [];
+	const out: Array<{ documentPath: string; data: Record<string, unknown> }> = [];
+	for (const doc of docs) {
+		const fields = doc.fields ?? {};
+		const data: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(fields)) {
+			data[k] = fromFirestoreValue(v);
+		}
+		out.push({ documentPath: decodeDocumentName(doc.name), data });
+	}
+	return out;
+}
+
+export async function runFirestoreQuery(options: {
+	serviceAccountJson: string;
+	parentPath?: string;
+	structuredQuery: Record<string, unknown>;
+}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>> {
+	const { accessToken, projectId } = await getGoogleAccessToken({
+		serviceAccountJson: options.serviceAccountJson,
+		scopes: [FIRESTORE_SCOPE]
+	});
+
+	const parentPath = options.parentPath ? FirestoreDocumentPathSchema.parse(options.parentPath) : '';
+	const encodedParent = parentPath
+		? parentPath
+				.split('/')
+				.map((segment) => encodeURIComponent(segment))
+				.join('/')
+		: '';
+
+	const url = encodedParent
+		? `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+				projectId
+			)}/databases/(default)/documents/${encodedParent}:runQuery`
+		: `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+				projectId
+			)}/databases/(default)/documents:runQuery`;
+
+	const resp = await fetch(url, {
+		method: 'POST',
+		headers: {
+			authorization: `Bearer ${accessToken}`,
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify({ structuredQuery: options.structuredQuery })
+	});
+
+	if (!resp.ok) {
+		const text = await resp.text().catch(() => '');
+		throw new Error(`Firestore runQuery failed (${resp.status}): ${text.slice(0, 500)}`);
+	}
+
+	const results = (await resp.json()) as Array<{ document?: FirestoreDocument }>;
+	const out: Array<{ documentPath: string; data: Record<string, unknown> }> = [];
+	for (const result of results) {
+		const doc = result.document;
+		if (!doc) {
+			continue;
+		}
+		const fields = doc.fields ?? {};
+		const data: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(fields)) {
+			data[k] = fromFirestoreValue(v);
+		}
+		out.push({ documentPath: decodeDocumentName(doc.name), data });
+	}
+	return out;
+}
+
+function splitFieldPath(path: string): string[] {
+	const trimmed = path.trim();
+	if (!trimmed) {
+		return [];
+	}
+	const segments: string[] = [];
+	let current = '';
+	let inBackticks = false;
+	for (let i = 0; i < trimmed.length; i += 1) {
+		const ch = trimmed[i];
+		if (ch === '`') {
+			inBackticks = !inBackticks;
+			continue;
+		}
+		if (!inBackticks && ch === '.') {
+			if (current.length > 0) {
+				segments.push(current);
+				current = '';
+			}
+			continue;
+		}
+		if (ch === '\\' && inBackticks && trimmed[i + 1] === '`') {
+			current += '`';
+			i += 1;
+			continue;
+		}
+		current += ch;
+	}
+	if (current.length > 0) {
+		segments.push(current);
+	}
+	return segments;
+}
+
+function escapeFieldPathSegment(segment: string): string {
+	// Firestore field paths require backticks when a segment isn't a simple identifier.
+	if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(segment)) {
+		return segment;
+	}
+	const escaped = segment.replace(/`/g, '\\`');
+	return `\`${escaped}\``;
+}
+
+function normalizeFieldPath(path: string): string {
+	const segments = splitFieldPath(path);
+	if (segments.length === 0) {
+		return '';
+	}
+	return segments.map((segment) => escapeFieldPathSegment(segment)).join('.');
+}
+
+function buildNestedObjectFromFieldPaths(entries: Array<{ path: string; value: unknown }>): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const entry of entries) {
+		const segments = splitFieldPath(entry.path);
+		if (segments.length === 0) {
+			continue;
+		}
+		let cursor: Record<string, unknown> = out;
+		for (let i = 0; i < segments.length; i += 1) {
+			const segment = segments[i]!;
+			const isLeaf = i === segments.length - 1;
+			if (isLeaf) {
+				cursor[segment] = entry.value;
+				continue;
+			}
+			const existing = cursor[segment];
+			if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+				cursor = existing as Record<string, unknown>;
+				continue;
+			}
+			const next: Record<string, unknown> = {};
+			cursor[segment] = next;
+			cursor = next;
+		}
+	}
+	return out;
+}
+
+function dedupeFieldPaths(paths: string[]): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const path of paths) {
+		const normalized = normalizeFieldPath(path);
+		if (!normalized) {
+			continue;
+		}
+		if (seen.has(normalized)) {
+			continue;
+		}
+		seen.add(normalized);
+		out.push(normalized);
+	}
+	return out;
 }
 
 export async function setFirestoreDocument(options: {
@@ -192,5 +425,131 @@ export async function setFirestoreDocument(options: {
 	if (!resp.ok) {
 		const text = await resp.text().catch(() => '');
 		throw new Error(`Firestore PATCH failed (${resp.status}): ${text.slice(0, 500)}`);
+	}
+}
+
+export async function patchFirestoreDocument(options: {
+	serviceAccountJson: string;
+	documentPath: string;
+	updates: Record<string, unknown>;
+	deletes?: string[];
+}): Promise<void> {
+	const { accessToken, projectId } = await getGoogleAccessToken({
+		serviceAccountJson: options.serviceAccountJson,
+		scopes: [FIRESTORE_SCOPE]
+	});
+
+	const updateEntries = Object.entries(options.updates)
+		.filter(([, value]) => value !== undefined)
+		.map(([path, value]) => ({ path, value }));
+	const nested = buildNestedObjectFromFieldPaths(updateEntries);
+	const fields = documentFieldsFromData(nested);
+
+	const fieldPaths = dedupeFieldPaths([
+		...updateEntries.map((entry) => entry.path),
+		...(options.deletes ?? [])
+	]);
+
+	const url = new URL(firestoreDocUrl(projectId, options.documentPath));
+	for (const fieldPath of fieldPaths) {
+		url.searchParams.append('updateMask.fieldPaths', fieldPath);
+	}
+
+	const resp = await fetch(url.toString(), {
+		method: 'PATCH',
+		headers: {
+			authorization: `Bearer ${accessToken}`,
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify({ fields })
+	});
+
+	if (!resp.ok) {
+		const text = await resp.text().catch(() => '');
+		throw new Error(`Firestore PATCH failed (${resp.status}): ${text.slice(0, 500)}`);
+	}
+}
+
+type CommitWrite =
+	| {
+			type: 'patch';
+			documentPath: string;
+			updates: Record<string, unknown>;
+			deletes?: string[];
+			precondition?: { exists?: boolean };
+	  }
+	| {
+			type: 'set';
+			documentPath: string;
+			data: Record<string, unknown>;
+			precondition?: { exists?: boolean };
+	  };
+
+export async function commitFirestoreWrites(options: {
+	serviceAccountJson: string;
+	writes: CommitWrite[];
+}): Promise<void> {
+	const { accessToken, projectId } = await getGoogleAccessToken({
+		serviceAccountJson: options.serviceAccountJson,
+		scopes: [FIRESTORE_SCOPE]
+	});
+
+	const writes = options.writes.map((write) => {
+		if (write.type === 'set') {
+			const fields = documentFieldsFromData(write.data);
+			const out: Record<string, unknown> = {
+				update: {
+					name: firestoreDocName(projectId, write.documentPath),
+					fields
+				}
+			};
+			if (write.precondition?.exists !== undefined) {
+				out.currentDocument = { exists: write.precondition.exists };
+			}
+			return out;
+		}
+
+		const updateEntries = Object.entries(write.updates)
+			.filter(([, value]) => value !== undefined)
+			.map(([path, value]) => ({ path, value }));
+		const nested = buildNestedObjectFromFieldPaths(updateEntries);
+		const fields = documentFieldsFromData(nested);
+		const fieldPaths = dedupeFieldPaths([
+			...updateEntries.map((entry) => entry.path),
+			...(write.deletes ?? [])
+		]);
+
+		const out: Record<string, unknown> = {
+			update: {
+				name: firestoreDocName(projectId, write.documentPath),
+				fields
+			},
+			updateMask: {
+				fieldPaths
+			}
+		};
+		if (write.precondition?.exists !== undefined) {
+			out.currentDocument = { exists: write.precondition.exists };
+		}
+		return out;
+	});
+
+	const resp = await fetch(
+		`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+			projectId
+		)}/databases/(default)/documents:commit`,
+		{
+			method: 'POST',
+			headers: {
+				authorization: `Bearer ${accessToken}`,
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify({ writes })
+		}
+	);
+
+	if (!resp.ok) {
+		const text = await resp.text().catch(() => '');
+		throw new Error(`Firestore commit failed (${resp.status}): ${text.slice(0, 500)}`);
 	}
 }

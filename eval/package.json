@@ -30,7 +30,6 @@
     "@spark/llm": "file:../packages/llm",
     "@spark/schemas": "file:../packages/schemas",
     "commander": "^14.0.2",
-    "firebase-admin": "^13.6.0",
     "pyodide": "^0.29.1",
     "sharp": "^0.34.5"
   },

@@ -2,7 +2,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import {
   runSessionAgentSmokeTest,
@@ -15,11 +14,12 @@ import type {
   ModelCallHandle,
 } from "@spark/llm/utils/concurrency";
 import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-} from "@spark/llm/utils/firebaseAdmin";
+  commitFirestoreWrites,
+  patchFirestoreDocument,
+} from "@spark/llm/utils/gcp/firestoreRest";
 import type { CodeProblem, QuizDefinition, Session } from "@spark/schemas";
 import { ensureEvalEnvLoaded } from "../utils/paths";
+import { requireServiceAccountJson } from "../utils/gcp";
 
 ensureEvalEnvLoaded();
 
@@ -421,17 +421,15 @@ const TEMPLATE_ROOT_DOC = "templates";
 const TEMPLATE_SESSIONS_COLLECTION = "sessions";
 
 function getTemplateDocRef(sessionId: string) {
-  const firestore = getFirebaseAdminFirestore();
-  return firestore
-    .collection(TEMPLATE_ROOT_COLLECTION)
-    .doc(TEMPLATE_ROOT_DOC)
-    .collection(TEMPLATE_SESSIONS_COLLECTION)
-    .doc(sessionId);
+  return `${TEMPLATE_ROOT_COLLECTION}/${TEMPLATE_ROOT_DOC}/${TEMPLATE_SESSIONS_COLLECTION}/${sessionId}`;
 }
 
 function stripUndefined<T>(value: T): T;
 function stripUndefined(value: unknown): unknown {
-  if (value instanceof FieldValue || value instanceof Timestamp) {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
     return value;
   }
   if (Array.isArray(value)) {
@@ -544,19 +542,26 @@ async function publishToWelcomeTemplate(options: {
   quizzes: readonly QuizDefinition[];
   problems: readonly CodeProblem[];
 }): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
+  const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(options.sessionId);
-  const { FieldValue } = getFirebaseAdminFirestoreModule();
 
   if (options.quizzes.length > 0) {
-    const quizBatch = firestore.batch();
-    for (const quiz of options.quizzes) {
-      const target = templateDoc.collection("quiz").doc(quiz.id);
+    const quizWrites = options.quizzes.map((quiz) => {
       const { id, ...rest } = quiz;
       void id;
-      quizBatch.set(target, stripUndefined(rest));
+      return {
+        type: "set" as const,
+        documentPath: `${templateDoc}/quiz/${quiz.id}`,
+        data: stripUndefined(rest) as Record<string, unknown>,
+      };
+    });
+    const MAX_WRITES_PER_BATCH = 450;
+    for (let i = 0; i < quizWrites.length; i += MAX_WRITES_PER_BATCH) {
+      await commitFirestoreWrites({
+        serviceAccountJson,
+        writes: quizWrites.slice(i, i + MAX_WRITES_PER_BATCH),
+      });
     }
-    await quizBatch.commit();
     console.log(
       `[welcome/${options.sessionId}] published ${String(options.quizzes.length)} quizzes to template`,
     );
@@ -565,14 +570,22 @@ async function publishToWelcomeTemplate(options: {
   }
 
   if (options.problems.length > 0) {
-    const problemBatch = firestore.batch();
-    for (const problem of options.problems) {
-      const target = templateDoc.collection("code").doc(problem.slug);
+    const problemWrites = options.problems.map((problem) => {
       const { slug, ...rest } = problem;
       void slug;
-      problemBatch.set(target, stripUndefined(rest));
+      return {
+        type: "set" as const,
+        documentPath: `${templateDoc}/code/${problem.slug}`,
+        data: stripUndefined(rest) as Record<string, unknown>,
+      };
+    });
+    const MAX_WRITES_PER_BATCH = 450;
+    for (let i = 0; i < problemWrites.length; i += MAX_WRITES_PER_BATCH) {
+      await commitFirestoreWrites({
+        serviceAccountJson,
+        writes: problemWrites.slice(i, i + MAX_WRITES_PER_BATCH),
+      });
     }
-    await problemBatch.commit();
     console.log(
       `[welcome/${options.sessionId}] published ${String(options.problems.length)} problems to template`,
     );
@@ -584,7 +597,7 @@ async function publishToWelcomeTemplate(options: {
   const payload: Record<string, unknown> = {
     id: options.sessionId,
     topic: options.topic,
-    updatedAt: Timestamp.now(),
+    updatedAt: new Date(),
   };
 
   if (session.plan) {
@@ -614,11 +627,12 @@ async function publishToWelcomeTemplate(options: {
     "problemsGrade",
     "storyTitle",
   ];
-  for (const field of draftFieldsToDelete) {
-    payload[field] = FieldValue.delete();
-  }
-
-  await templateDoc.set(stripUndefined(payload), { merge: true });
+  await patchFirestoreDocument({
+    serviceAccountJson,
+    documentPath: templateDoc,
+    updates: stripUndefined(payload) as Record<string, unknown>,
+    deletes: draftFieldsToDelete,
+  });
   console.log(`[welcome/${options.sessionId}] published session doc`);
 }
 

@@ -1,9 +1,15 @@
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
-import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import { getFirebaseAdminFirestore } from "@spark/llm";
+import {
+  commitFirestoreWrites,
+  deleteFirestoreDocument,
+  getFirestoreDocument,
+  listFirestoreDocuments,
+  patchFirestoreDocument,
+  setFirestoreDocument,
+} from "@spark/llm/utils/gcp/firestoreRest";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -19,6 +25,7 @@ import type {
 } from "@spark/schemas";
 
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
+import { requireServiceAccountJson } from "../utils/gcp";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
@@ -3098,24 +3105,14 @@ function selectBlueprints(
 }
 
 function getTemplateDocRef(sessionId: string) {
-  const firestore = getFirebaseAdminFirestore();
-  return firestore
-    .collection(TEMPLATE_ROOT_COLLECTION)
-    .doc(TEMPLATE_ROOT_DOC)
-    .collection(TEMPLATE_SESSIONS_COLLECTION)
-    .doc(sessionId);
+  return `${TEMPLATE_ROOT_COLLECTION}/${TEMPLATE_ROOT_DOC}/${TEMPLATE_SESSIONS_COLLECTION}/${sessionId}`;
 }
 
 async function seedSessionState(
   userId: string,
   session: Session,
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const stateRef = firestore
-    .collection("spark")
-    .doc(userId)
-    .collection("state")
-    .doc(session.id);
+  const serviceAccountJson = requireServiceAccountJson();
 
   const baseState: SessionState = SessionStateSchema.parse({
     sessionId: session.id,
@@ -3126,46 +3123,38 @@ async function seedSessionState(
       },
       {},
     ),
-    lastUpdatedAt: Timestamp.now(),
+    lastUpdatedAt: new Date(),
   });
 
-  await stateRef.set(baseState);
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: `spark/${userId}/state/${session.id}`,
+    data: baseState as unknown as Record<string, unknown>,
+  });
 }
 
 async function copyMediaDocToTemplate(
   sessionId: string,
   planItemId: string,
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const sourceDoc = firestore
-    .collection("spark")
-    .doc(TEMPLATE_USER_ID)
-    .collection("sessions")
-    .doc(sessionId)
-    .collection("media")
-    .doc(planItemId);
-
-  const snapshot = await sourceDoc.get();
-  if (!snapshot.exists) {
+  const serviceAccountJson = requireServiceAccountJson();
+  const sourceDocPath = `spark/${TEMPLATE_USER_ID}/sessions/${sessionId}/media/${planItemId}`;
+  const snapshot = await getFirestoreDocument({
+    serviceAccountJson,
+    documentPath: sourceDocPath,
+  });
+  if (!snapshot.exists || !snapshot.data) {
     console.warn(
       `[welcome/${sessionId}] media doc ${planItemId} not found under template user; story stage likely missing`,
     );
     return;
   }
 
-  const targetDoc = getTemplateDocRef(sessionId)
-    .collection("media")
-    .doc(planItemId);
-
-  const data = snapshot.data();
-  if (!data) {
-    console.warn(
-      `[welcome/${sessionId}] media doc ${planItemId} is empty under template user; skipping copy`,
-    );
-    return;
-  }
-
-  await targetDoc.set(data);
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: `${getTemplateDocRef(sessionId)}/media/${planItemId}`,
+    data: snapshot.data,
+  });
 }
 
 async function ensureStoryResult(
@@ -3256,7 +3245,7 @@ function buildSessionData(
   const sessionData = {
     id: blueprint.sessionId,
     title: blueprint.title,
-    createdAt: Timestamp.now(),
+    createdAt: new Date(),
     plan,
     tagline: blueprint.tagline,
     emoji: blueprint.emoji,
@@ -3277,92 +3266,122 @@ async function seedTemplateContent(
   blueprint: WelcomeSessionBlueprint,
   seedData: SessionSeedData,
 ): Promise<void> {
+  const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(blueprint.sessionId);
 
-  await templateDoc.set({
-    id: seedData.session.id,
-    title: seedData.session.title,
-    createdAt: seedData.session.createdAt,
-    plan: seedData.session.plan,
-    tagline: seedData.sessionData.tagline,
-    emoji: seedData.sessionData.emoji,
-    topic: seedData.sessionData.topic,
-    key: seedData.sessionData.key,
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: templateDoc,
+    data: {
+      id: seedData.session.id,
+      title: seedData.session.title,
+      createdAt: seedData.session.createdAt,
+      plan: seedData.session.plan,
+      tagline: seedData.sessionData.tagline,
+      emoji: seedData.sessionData.emoji,
+      topic: seedData.sessionData.topic,
+      key: seedData.sessionData.key,
+    },
   });
 
-  const quizCollection = templateDoc.collection("quiz");
-  const quizDocs = await quizCollection.listDocuments();
   const nextQuizIds = new Set(blueprint.quizzes.map((quiz) => quiz.id));
+  const existingQuizDocs = await listFirestoreDocuments({
+    serviceAccountJson,
+    collectionPath: `${templateDoc}/quiz`,
+    limit: 500,
+  });
   await Promise.all(
-    quizDocs
-      .filter((doc) => !nextQuizIds.has(doc.id))
+    existingQuizDocs
+      .filter((doc) => !nextQuizIds.has(doc.documentPath.split("/").pop() ?? ""))
       .map(async (doc) => {
-        await doc.delete();
+        await deleteFirestoreDocument({ serviceAccountJson, documentPath: doc.documentPath });
       }),
   );
-  await Promise.all(
-    blueprint.quizzes.map(async (quiz) => {
-      const parsed = QuizDefinitionSchema.parse(quiz);
-      await quizCollection.doc(parsed.id).set(parsed);
-    }),
-  );
+  const quizWrites = blueprint.quizzes.map((quiz) => {
+    const parsed = QuizDefinitionSchema.parse(quiz);
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/quiz/${parsed.id}`,
+      data: parsed as unknown as Record<string, unknown>,
+    };
+  });
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < quizWrites.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: quizWrites.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
 
-  const codeCollection = templateDoc.collection("code");
-  const codeDocs = await codeCollection.listDocuments();
   const nextProblemIds = new Set(
     blueprint.problems.map((problem) => problem.slug),
   );
+  const existingProblemDocs = await listFirestoreDocuments({
+    serviceAccountJson,
+    collectionPath: `${templateDoc}/code`,
+    limit: 500,
+  });
   await Promise.all(
-    codeDocs
-      .filter((doc) => !nextProblemIds.has(doc.id))
+    existingProblemDocs
+      .filter((doc) => !nextProblemIds.has(doc.documentPath.split("/").pop() ?? ""))
       .map(async (doc) => {
-        await doc.delete();
+        await deleteFirestoreDocument({ serviceAccountJson, documentPath: doc.documentPath });
       }),
   );
-  await Promise.all(
-    blueprint.problems.map(async (problem) => {
-      const parsed = CodeProblemSchema.parse(problem);
-      await codeCollection.doc(parsed.slug).set(parsed);
-    }),
-  );
+  const problemWrites = blueprint.problems.map((problem) => {
+    const parsed = CodeProblemSchema.parse(problem);
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/code/${parsed.slug}`,
+      data: parsed as unknown as Record<string, unknown>,
+    };
+  });
+  for (let i = 0; i < problemWrites.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: problemWrites.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
 }
 
 async function seedUserPreview(
   blueprint: WelcomeSessionBlueprint,
   seedData: SessionSeedData,
 ): Promise<void> {
-  const userRef = getFirebaseAdminFirestore()
-    .collection("spark")
-    .doc(TEMPLATE_USER_ID);
+  const serviceAccountJson = requireServiceAccountJson();
+  const sessionDocPath = `spark/${TEMPLATE_USER_ID}/sessions/${seedData.session.id}`;
 
-  await userRef
-    .collection("sessions")
-    .doc(seedData.session.id)
-    .set(seedData.session);
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: sessionDocPath,
+    data: seedData.session as unknown as Record<string, unknown>,
+  });
 
-  await Promise.all(
-    blueprint.quizzes.map(async (quiz) => {
+  const writes = [
+    ...blueprint.quizzes.map((quiz) => {
       const parsed = QuizDefinitionSchema.parse(quiz);
-      await userRef
-        .collection("sessions")
-        .doc(seedData.session.id)
-        .collection("quiz")
-        .doc(parsed.id)
-        .set(parsed);
+      return {
+        type: "set" as const,
+        documentPath: `${sessionDocPath}/quiz/${parsed.id}`,
+        data: parsed as unknown as Record<string, unknown>,
+      };
     }),
-  );
-
-  await Promise.all(
-    blueprint.problems.map(async (problem) => {
+    ...blueprint.problems.map((problem) => {
       const parsed = CodeProblemSchema.parse(problem);
-      await userRef
-        .collection("sessions")
-        .doc(seedData.session.id)
-        .collection("code")
-        .doc(parsed.slug)
-        .set(parsed);
+      return {
+        type: "set" as const,
+        documentPath: `${sessionDocPath}/code/${parsed.slug}`,
+        data: parsed as unknown as Record<string, unknown>,
+      };
     }),
-  );
+  ];
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
 
   await seedSessionState(TEMPLATE_USER_ID, seedData.session);
 }

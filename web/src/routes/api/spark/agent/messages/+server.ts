@@ -1,6 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import { generateText, loadEnvFromFile, loadLocalEnv } from '@spark/llm';
+import { generateText } from '@spark/llm';
 import type { LlmContent, LlmContentPart, LlmTextDelta } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -11,11 +11,12 @@ import {
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { z } from 'zod';
-import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { getFirestoreDocument, patchFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
+import { encodeBytesToBase64 } from '$lib/server/gcp/base64';
+import { env } from '$env/dynamic/private';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -102,20 +103,6 @@ const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
 	system: 'system',
 	tool: 'tool'
 };
-
-let webEnvLoaded = false;
-
-function loadWebEnv(): void {
-	if (webEnvLoaded) {
-		return;
-	}
-	const cwd = process.cwd();
-	const envPath = cwd.endsWith(`${path.sep}web`)
-		? path.join(cwd, '.env.local')
-		: path.join(cwd, 'web', '.env.local');
-	loadEnvFromFile(envPath);
-	webEnvLoaded = true;
-}
 
 function resolveConversationId(value: string | undefined): string {
 	if (value && value.trim().length > 0) {
@@ -328,27 +315,28 @@ async function downloadAttachmentParts(
 			throw new Error(`Attachment ${attachment.id} storagePath is invalid`);
 		}
 
-		const buffer = await downloadStorageObject({
+		const result = await downloadStorageObject({
 			serviceAccountJson: options.serviceAccountJson,
 			bucketName: options.bucketName,
 			objectName: attachment.storagePath,
 			timeoutMs: ATTACHMENT_DOWNLOAD_TIMEOUT_MS
 		});
-		if (buffer.length === 0) {
+		const bytes = result.bytes;
+		if (bytes.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
 		}
-		if (buffer.length > MAX_ATTACHMENT_BYTES) {
+		if (bytes.length > MAX_ATTACHMENT_BYTES) {
 			throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
 		}
 		return {
-			data: buffer,
+			data: bytes,
 			mimeType: attachment.contentType
 		};
 	});
 	const buffers = await Promise.all(downloadTasks);
 	return buffers.map((entry) => ({
 		type: 'inlineData',
-		data: entry.data.toString('base64'),
+		data: encodeBytesToBase64(entry.data),
 		mimeType: entry.mimeType
 	}));
 }
@@ -423,9 +411,7 @@ async function generateAssistantResponse(
 }
 
 function hasGeminiCredentials(): boolean {
-	loadWebEnv();
-	loadLocalEnv();
-	return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
+	return Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
 }
 
 async function streamFallbackText(
@@ -448,9 +434,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return authResult.response;
 	}
 	const userId = authResult.user.uid;
-	loadWebEnv();
-	loadLocalEnv();
-	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
 	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 		return json(
 			{
@@ -636,10 +620,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				updateAssistantMessage(conversation, assistantMessageId, assistantText);
 				conversation.updatedAt = nowTimestampValue;
 				conversation.lastMessageAt = nowTimestampValue;
-				await setFirestoreDocument({
+				await patchFirestoreDocument({
 					serviceAccountJson,
 					documentPath: conversationDocPath,
-					data: {
+					updates: {
 						updatedAt: nowTimestampValue,
 						lastMessageAt: nowTimestampValue,
 						messages: conversation.messages

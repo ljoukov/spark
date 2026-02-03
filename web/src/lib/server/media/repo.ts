@@ -1,41 +1,33 @@
 import {
-	getFirebaseAdminFirestore,
-	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName
-} from '@spark/llm';
-import {
 	SessionMediaDocSchema,
 	type SessionMediaDoc,
 	type SessionMediaSupplementaryImage
 } from '@spark/schemas';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
 const planItemIdSchema = z.string().trim().min(1, 'planItemId is required');
 
-function getFirestore() {
-	return getFirebaseAdminFirestore();
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
 }
 
-function getStorageBucket() {
-	const storage = getFirebaseAdminStorage();
-	return storage.bucket(getFirebaseStorageBucketName());
-}
-
-function normaliseStoragePath(input: string): string {
-	return input.replace(/^\/+/, '');
-}
-
-async function createSignedUrl(storagePath: string): Promise<{ url: string; expiresAt: Date }> {
-	const bucket = getStorageBucket();
-	const file = bucket.file(normaliseStoragePath(storagePath));
-	const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-	const [url] = await file.getSignedUrl({
-		action: 'read',
-		expires: expiresAt
-	});
-	return { url, expiresAt };
+function buildMediaUrl(params: { sessionId: string; planItemId: string; kind: string; index?: number }): string {
+	const url = new URL('/api/media', 'https://placeholder.invalid');
+	url.searchParams.set('sessionId', params.sessionId);
+	url.searchParams.set('planItemId', params.planItemId);
+	url.searchParams.set('kind', params.kind);
+	if (typeof params.index === 'number') {
+		url.searchParams.set('index', String(params.index));
+	}
+	return `${url.pathname}?${url.searchParams.toString()}`;
 }
 
 export type SessionMediaImageWithUrl = SessionMediaDoc['images'][number] & {
@@ -66,57 +58,28 @@ export async function getSessionMedia(
 	sessionId: string,
 	planItemId: string
 ): Promise<SessionMediaWithUrl | null> {
-	const firestore = getFirestore();
 	const uid = userIdSchema.parse(userId);
 	const sid = sessionIdSchema.parse(sessionId);
 	const pid = planItemIdSchema.parse(planItemId);
-
-	const docRef = firestore
-		.collection('spark')
-		.doc(uid)
-		.collection('sessions')
-		.doc(sid)
-		.collection('media')
-		.doc(pid);
-
-	const snapshot = await docRef.get();
-	if (!snapshot.exists) {
-		return null;
-	}
-
-	const data = snapshot.data();
-	if (!data) {
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: `spark/${uid}/sessions/${sid}/media/${pid}`
+	});
+	if (!snapshot.exists || !snapshot.data) {
 		return null;
 	}
 
 	let parsed: SessionMediaDoc;
 	try {
 		parsed = SessionMediaDocSchema.parse({
-			id: snapshot.id,
-			...data
+			id: pid,
+			...snapshot.data
 		});
 	} catch (error) {
-		console.error('Failed to parse session media document', snapshot.id, error);
+		console.error('Failed to parse session media document', pid, error);
 		throw error;
 	}
-
-	let audioSignedUrl: string | null = null;
-	let audioSignedUrlExpiresAt: Date | null = null;
-
-	if (parsed.audio.storagePath) {
-		try {
-			const { url, expiresAt } = await createSignedUrl(parsed.audio.storagePath);
-			audioSignedUrl = url;
-			audioSignedUrlExpiresAt = expiresAt;
-		} catch (error) {
-			console.warn(
-				`Unable to create signed URL for session media ${parsed.id} at ${parsed.audio.storagePath}`,
-				error
-			);
-		}
-	}
-
-	const audioUrl = audioSignedUrl;
+	const audioUrl = buildMediaUrl({ sessionId: sid, planItemId: pid, kind: 'audio' });
 
 	async function buildSupplementaryImage(
 		image: SessionMediaSupplementaryImage | undefined,
@@ -125,56 +88,24 @@ export async function getSessionMedia(
 		if (!image) {
 			return null;
 		}
-		let signedUrl: string | null = null;
-		let signedUrlExpiresAt: Date | null = null;
-
-		if (image.storagePath) {
-			try {
-				const { url, expiresAt } = await createSignedUrl(image.storagePath);
-				signedUrl = url;
-				signedUrlExpiresAt = expiresAt;
-			} catch (error) {
-				console.warn(
-					`Unable to create signed URL for session media ${parsed.id} ${kind} image at ${image.storagePath}`,
-					error
-				);
-			}
-		}
-
-		const url = signedUrl;
+		const url = buildMediaUrl({ sessionId: sid, planItemId: pid, kind });
 
 		return {
 			...image,
-			signedUrl,
-			signedUrlExpiresAt,
+			signedUrl: null,
+			signedUrlExpiresAt: null,
 			url
 		};
 	}
 
 	const images: SessionMediaImageWithUrl[] = await Promise.all(
 		parsed.images.map(async (image) => {
-			let signedUrl: string | null = null;
-			let signedUrlExpiresAt: Date | null = null;
-
-			if (image.storagePath) {
-				try {
-					const { url, expiresAt } = await createSignedUrl(image.storagePath);
-					signedUrl = url;
-					signedUrlExpiresAt = expiresAt;
-				} catch (error) {
-					console.warn(
-						`Unable to create signed URL for session media image ${parsed.id} at ${image.storagePath}`,
-						error
-					);
-				}
-			}
-
-			const url = signedUrl;
+			const url = buildMediaUrl({ sessionId: sid, planItemId: pid, kind: 'image', index: image.index });
 
 			return {
 				...image,
-				signedUrl,
-				signedUrlExpiresAt,
+				signedUrl: null,
+				signedUrlExpiresAt: null,
 				url
 			};
 		})
@@ -189,8 +120,8 @@ export async function getSessionMedia(
 		...parsed,
 		audio: {
 			...parsed.audio,
-			signedUrl: audioSignedUrl,
-			signedUrlExpiresAt: audioSignedUrlExpiresAt,
+			signedUrl: null,
+			signedUrlExpiresAt: null,
 			url: audioUrl
 		},
 		images,

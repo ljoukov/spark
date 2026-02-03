@@ -25,7 +25,6 @@
     "@alcyone-labs/zod-to-json-schema": "^4.0.10",
     "@google/genai": "^1.37.0",
     "@spark/schemas": "file:../schemas",
-    "firebase-admin": "^13.6.0",
     "google-auth-library": "^10.5.0",
     "openai": "^6.16.0",
     "sharp": "^0.34.5",

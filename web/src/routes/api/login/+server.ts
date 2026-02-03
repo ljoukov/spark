@@ -1,8 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { loadLocalEnv } from '@spark/llm';
-import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { env } from '$env/dynamic/private';
 
 const bodySchema = z
 	.object({
@@ -24,8 +24,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		return authResult.response;
 	}
 	const { user } = authResult;
-
-	loadLocalEnv();
 
 	let parsedBody;
 	try {
@@ -64,7 +62,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			lastLoginAt: nowIso
 		};
 
-		const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+		const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
 		if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 			throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
 		}
@@ -78,10 +76,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				? existing.data.createdAt
 				: null;
 
-		await setFirestoreDocument({
+		await patchFirestoreDocument({
 			serviceAccountJson,
 			documentPath: `spark/${user.uid}`,
-			data: { ...data, createdAt: existingCreatedAt ?? nowIso }
+			updates: { ...data, createdAt: existingCreatedAt ?? nowIso }
 		});
 	} catch (error) {
 		console.warn('Login user doc upsert failed (continuing)', {

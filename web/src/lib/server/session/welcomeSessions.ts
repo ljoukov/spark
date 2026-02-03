@@ -14,16 +14,11 @@ import {
 	type SessionState,
 	FirestoreTimestampSchema
 } from '@spark/schemas';
-
-import {
-	getFirebaseAdminFirestore,
-	getFirebaseAdminFirestoreModule,
-	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName
-} from '@spark/llm';
 import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
 import { saveUserProblem } from '../code/problemRepo';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument, listFirestoreDocuments, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 export type WelcomeSessionKey = string;
 
@@ -50,15 +45,12 @@ type LoadedTemplate = {
 const TEMPLATE_ROOT_COLLECTION = 'spark-admin';
 const TEMPLATE_DOC_ID = 'templates';
 const TEMPLATE_SESSIONS_COLLECTION = 'sessions';
-const { Timestamp } = getFirebaseAdminFirestoreModule();
-
-function getFirestore() {
-	return getFirebaseAdminFirestore();
-}
-
-function getStorageBucket() {
-	const storage = getFirebaseAdminStorage();
-	return storage.bucket(getFirebaseStorageBucketName());
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
 }
 
 const TemplateDocSchema = z.object({
@@ -75,44 +67,39 @@ const TemplateDocSchema = z.object({
 
 type TemplateDoc = z.infer<typeof TemplateDocSchema>;
 
-function resolveTemplateCollection() {
-	const firestore = getFirestore();
-	return firestore
-		.collection(TEMPLATE_ROOT_COLLECTION)
-		.doc(TEMPLATE_DOC_ID)
-		.collection(TEMPLATE_SESSIONS_COLLECTION);
+function templateCollectionPath(): string {
+	return `${TEMPLATE_ROOT_COLLECTION}/${TEMPLATE_DOC_ID}/${TEMPLATE_SESSIONS_COLLECTION}`;
 }
 
-function resolveTemplateDocRef(sessionId: string) {
-	return resolveTemplateCollection().doc(sessionId);
+function templateDocPath(templateId: string): string {
+	return `${templateCollectionPath()}/${templateId}`;
 }
 
-async function fetchTemplateSnapshot(sessionId: string) {
-	const primaryRef = resolveTemplateDocRef(sessionId);
-	const primarySnapshot = await primaryRef.get();
+function docIdFromPath(documentPath: string): string {
+	const parts = documentPath.split('/').filter(Boolean);
+	return parts[parts.length - 1] ?? documentPath;
+}
 
-	let snapshot = primarySnapshot;
-	let docRef = primaryRef;
+async function fetchTemplateSnapshot(keyOrSessionId: string): Promise<{ templateId: string; parsed: TemplateDoc }> {
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: templateCollectionPath()
+	});
 
-	if (!primarySnapshot.exists) {
-		const fallbackQuery = await resolveTemplateCollection()
-			.where('key', '==', sessionId)
-			.limit(1)
-			.get();
-		const [match] = fallbackQuery.docs;
-		if (!match) {
-			throw new Error(`Welcome session template not found for key '${sessionId}'`);
-		}
-		snapshot = match;
-		docRef = match.ref;
+	const direct = docs.find((doc) => docIdFromPath(doc.documentPath) === keyOrSessionId) ?? null;
+	const matchByKey =
+		direct ??
+		docs.find((doc) => typeof doc.data.key === 'string' && doc.data.key === keyOrSessionId) ??
+		null;
+
+	if (!matchByKey) {
+		throw new Error(`Welcome session template not found for key '${keyOrSessionId}'`);
 	}
 
-	const raw = snapshot.data();
-	if (!raw) {
-		throw new Error(`Template data missing for key '${sessionId}'`);
-	}
+	const raw = matchByKey.data;
+	const templateId = docIdFromPath(matchByKey.documentPath);
 	const parsed = TemplateDocSchema.parse({
-		id: (raw.id ?? snapshot.id) as TemplateDoc['id'],
+		id: (raw.id ?? templateId) as TemplateDoc['id'],
 		title: raw.title,
 		createdAt: raw.createdAt,
 		plan: raw.plan,
@@ -122,42 +109,37 @@ async function fetchTemplateSnapshot(sessionId: string) {
 		summary: raw.summary,
 		key: raw.key
 	});
-	return { docRef, parsed };
+
+	return { templateId, parsed };
 }
 
-async function fetchTemplateQuizzes(
-	docRef: FirebaseFirestore.DocumentReference
-): Promise<QuizDefinition[]> {
-	const snapshot = await docRef.collection('quiz').get();
+async function fetchTemplateQuizzes(templateId: string): Promise<QuizDefinition[]> {
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: `${templateDocPath(templateId)}/quiz`
+	});
 	const quizzes: QuizDefinition[] = [];
-	for (const doc of snapshot.docs) {
-		const data = doc.data();
-		if (!data) {
-			continue;
-		}
+	for (const doc of docs) {
 		try {
-			quizzes.push(QuizDefinitionSchema.parse({ id: doc.id, ...data }));
+			quizzes.push(QuizDefinitionSchema.parse({ id: docIdFromPath(doc.documentPath), ...doc.data }));
 		} catch (error) {
-			console.error('Unable to parse welcome quiz template', doc.id, error);
+			console.error('Unable to parse welcome quiz template', doc.documentPath, error);
 		}
 	}
 	return quizzes;
 }
 
-async function fetchTemplateProblems(
-	docRef: FirebaseFirestore.DocumentReference
-): Promise<CodeProblem[]> {
-	const snapshot = await docRef.collection('code').get();
+async function fetchTemplateProblems(templateId: string): Promise<CodeProblem[]> {
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: `${templateDocPath(templateId)}/code`
+	});
 	const problems: CodeProblem[] = [];
-	for (const doc of snapshot.docs) {
-		const data = doc.data();
-		if (!data) {
-			continue;
-		}
+	for (const doc of docs) {
 		try {
-			problems.push(CodeProblemSchema.parse({ slug: doc.id, ...data }));
+			problems.push(CodeProblemSchema.parse({ slug: docIdFromPath(doc.documentPath), ...doc.data }));
 		} catch (error) {
-			console.error('Unable to parse welcome problem template', doc.id, error);
+			console.error('Unable to parse welcome problem template', doc.documentPath, error);
 		}
 	}
 	return problems;
@@ -172,108 +154,43 @@ function findStoryPlanItem(plan: readonly PlanItem[]): PlanItem | null {
 	return null;
 }
 
-const POSTER_SIGNED_URL_TTL_MS = 60 * 60 * 1000;
-
-function normaliseStoragePath(input: string): string {
-	return input.replace(/^\/+/, '');
-}
-
-async function createSignedUrl(storagePath: string): Promise<string | null> {
-	try {
-		const bucket = getStorageBucket();
-		const file = bucket.file(normaliseStoragePath(storagePath));
-		const expiresAt = new Date(Date.now() + POSTER_SIGNED_URL_TTL_MS);
-		const [url] = await file.getSignedUrl({
-			action: 'read',
-			expires: expiresAt
-		});
-		return url;
-	} catch (error) {
-		console.warn('[welcome] Unable to create signed URL for poster image', storagePath, error);
-		return null;
-	}
-}
-
-async function resolveTemplatePosterUrl(
-	docRef: FirebaseFirestore.DocumentReference,
-	plan: readonly PlanItem[]
-): Promise<string | null> {
-	const storyPlanItem = findStoryPlanItem(plan);
-	if (!storyPlanItem) {
-		return null;
-	}
-
-	const mediaSnapshot = await docRef.collection('media').doc(storyPlanItem.id).get();
-	if (!mediaSnapshot.exists) {
-		return null;
-	}
-	const mediaData = mediaSnapshot.data();
-	if (!mediaData) {
-		return null;
-	}
-
-	try {
-		const parsed = SessionMediaDocSchema.parse({ id: mediaSnapshot.id, ...mediaData });
-		const storagePath = parsed.posterImage?.storagePath;
-		if (!storagePath) {
-			return null;
-		}
-		return await createSignedUrl(storagePath);
-	} catch (error) {
-		console.error(
-			'Unable to parse template media document for poster image',
-			mediaSnapshot.id,
-			error
-		);
-		return null;
-	}
-}
-
-async function fetchTemplateMedia(
-	docRef: FirebaseFirestore.DocumentReference,
-	plan: readonly PlanItem[]
-): Promise<SessionMediaDoc | null> {
+async function fetchTemplateMedia(templateId: string, plan: readonly PlanItem[]): Promise<SessionMediaDoc | null> {
 	const storyPlanItem = findStoryPlanItem(plan);
 	if (!storyPlanItem) {
 		console.warn('[welcome] Template plan missing a media item; skipping media copy');
 		return null;
 	}
-
-	const mediaSnapshot = await docRef.collection('media').doc(storyPlanItem.id).get();
-	if (!mediaSnapshot.exists) {
+	const docPath = `${templateDocPath(templateId)}/media/${storyPlanItem.id}`;
+	const snapshot = await getFirestoreDocument({ serviceAccountJson: requireServiceAccountJson(), documentPath: docPath });
+	if (!snapshot.exists || !snapshot.data) {
 		console.warn('[welcome] Template media document not found for plan item', storyPlanItem.id);
 		return null;
 	}
 
-	const data = mediaSnapshot.data();
-	if (!data) {
-		return null;
-	}
-
 	try {
-		return SessionMediaDocSchema.parse({ id: mediaSnapshot.id, ...data });
+		return SessionMediaDocSchema.parse({ id: storyPlanItem.id, ...snapshot.data });
 	} catch (error) {
-		console.error('Unable to parse template media document', mediaSnapshot.id, error);
+		console.error('Unable to parse template media document', storyPlanItem.id, error);
 		return null;
 	}
 }
 
 async function loadTemplate(sessionId: string): Promise<LoadedTemplate> {
-	const { docRef, parsed } = await fetchTemplateSnapshot(sessionId);
+	const { templateId, parsed } = await fetchTemplateSnapshot(sessionId);
 	const session = SessionSchema.parse({
 		id: parsed.id,
 		title: parsed.title,
 		summary: parsed.summary,
 		tagline: parsed.tagline,
 		emoji: parsed.emoji,
-		createdAt: parsed.createdAt ?? Timestamp.now(),
+		createdAt: parsed.createdAt ?? new Date(),
 		plan: parsed.plan
 	});
 
 	const [quizzes, problems, media] = await Promise.all([
-		fetchTemplateQuizzes(docRef),
-		fetchTemplateProblems(docRef),
-		fetchTemplateMedia(docRef, session.plan)
+		fetchTemplateQuizzes(templateId),
+		fetchTemplateProblems(templateId),
+		fetchTemplateMedia(templateId, session.plan)
 	]);
 
 	return {
@@ -293,50 +210,48 @@ async function copyMediaToUser(
 	sessionId: string,
 	media: SessionMediaDoc
 ): Promise<void> {
-	const firestore = getFirestore();
-	const now = Timestamp.now();
-	await firestore
-		.collection('spark')
-		.doc(userId)
-		.collection('sessions')
-		.doc(sessionId)
-		.collection('media')
-		.doc(media.planItemId)
-		.set({
+	const now = new Date();
+	await setFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: `spark/${userId}/sessions/${sessionId}/media/${media.planItemId}`,
+		data: {
 			...media,
 			createdAt: now,
 			updatedAt: now
-		});
+		} as unknown as Record<string, unknown>
+	});
 }
 
 async function seedSessionState(userId: string, session: Session): Promise<void> {
-	const firestore = getFirestore();
-	const stateRef = firestore.collection('spark').doc(userId).collection('state').doc(session.id);
-
 	const baseState: SessionState = SessionStateSchema.parse({
 		sessionId: session.id,
 		items: session.plan.reduce<Record<string, SessionState['items'][string]>>((acc, item) => {
 			acc[item.id] = { status: 'not_started' };
 			return acc;
 		}, {}),
-		lastUpdatedAt: Timestamp.now()
+		lastUpdatedAt: new Date()
 	});
 
-	await stateRef.set(baseState);
+	await setFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: `spark/${userId}/state/${session.id}`,
+		data: baseState as unknown as Record<string, unknown>
+	});
 }
 
 export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[]> {
-	const snapshot = await resolveTemplateCollection().get();
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: templateCollectionPath()
+	});
 	const options: WelcomeSessionOption[] = [];
 
-	for (const doc of snapshot.docs) {
-		const raw = doc.data();
-		if (!raw) {
-			continue;
-		}
+	for (const doc of docs) {
+		const docId = docIdFromPath(doc.documentPath);
+		const raw = doc.data;
 		try {
 			const parsed = TemplateDocSchema.safeParse({
-				id: (raw.id ?? doc.id) as TemplateDoc['id'],
+				id: (raw.id ?? docId) as TemplateDoc['id'],
 				title: raw.title,
 				createdAt: raw.createdAt,
 				plan: raw.plan,
@@ -351,7 +266,7 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 					(field) => raw[field] === undefined || raw[field] === null
 				);
 				console.warn('[welcome/templates] template parse failed', {
-					id: doc.id,
+					id: docId,
 					missing,
 					issues: parsed.error.issues.map((issue) => issue.message)
 				});
@@ -361,11 +276,9 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 			const session = SessionSchema.parse({
 				id: parsed.data.id,
 				title: parsed.data.title,
-				createdAt: parsed.data.createdAt ?? Timestamp.now(),
+				createdAt: parsed.data.createdAt ?? new Date(),
 				plan: parsed.data.plan
 			});
-
-			const posterImageUrl = await resolveTemplatePosterUrl(doc.ref, session.plan);
 
 			options.push({
 				key: parsed.data.key ?? parsed.data.id,
@@ -373,10 +286,10 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				title: session.title,
 				tagline: parsed.data.tagline,
 				emoji: parsed.data.emoji,
-				posterImageUrl
+				posterImageUrl: null
 			});
 		} catch (error) {
-			console.error('Unable to parse welcome session option', doc.id, error);
+			console.error('Unable to parse welcome session option', doc.documentPath, error);
 		}
 	}
 
@@ -401,7 +314,7 @@ export async function provisionWelcomeSession(
 		summary: template.session.summary,
 		tagline: template.session.tagline,
 		emoji: template.session.emoji,
-		createdAt: Timestamp.now(),
+		createdAt: new Date(),
 		plan: template.session.plan
 	});
 

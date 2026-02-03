@@ -9,9 +9,14 @@ import {
 	type PlanItemState,
 	type UserStats
 } from '@spark/schemas';
-import { getFirebaseAdminFirestore, getFirebaseAdminFirestoreModule } from '@spark/llm';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
+import {
+	commitFirestoreWrites,
+	getFirestoreDocument,
+	patchFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
 
 const paramsSchema = z.object({
 	sessionId: z.string().trim().min(1, 'sessionId is required')
@@ -56,7 +61,13 @@ const CODE_PROBLEM_XP: Record<string, number> = Object.freeze({
 });
 
 const DEFAULT_CODE_XP = 40;
-const { FieldValue } = getFirebaseAdminFirestoreModule();
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
 
 function computeQuizXp(quiz: Awaited<ReturnType<typeof getUserQuiz>>): number {
 	if (!quiz) {
@@ -186,81 +197,126 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 	}
 
-	const firestore = getFirebaseAdminFirestore();
-	const userDocRef = firestore.collection('spark').doc(userId);
-	const sessionStateDocRef = userDocRef.collection('state').doc(sessionId);
+	const serviceAccountJson = requireServiceAccountJson();
+	const userDocPath = `spark/${userId}`;
+	const sessionStateDocPath = `${userDocPath}/state/${sessionId}`;
 
-	const result = await firestore.runTransaction(async (tx) => {
-		// Reads must occur before all writes in a transaction.
-		let xpAwarded = 0;
-		let nextStats: UserStats | null = null;
-		let alreadyCompleted = false;
-
-		// Pre-read for XP awarding if applicable
-		let parsedStats: UserStats | null = null;
-		let progressDocRef: FirebaseFirestore.DocumentReference | null = null;
-		if (awardingContext && awardingContext.xpAvailable > 0) {
-			progressDocRef = userDocRef.collection('progress').doc(awardingContext.progressDocId);
-			const progressSnapshot = await tx.get(progressDocRef);
-			alreadyCompleted = progressSnapshot.exists;
-			if (!alreadyCompleted) {
-				const userSnapshot = await tx.get(userDocRef);
-				const rawStats = userSnapshot.exists ? (userSnapshot.data()?.stats ?? {}) : {};
-				parsedStats = UserStatsSchema.parse(rawStats ?? {});
-			}
-		}
-
-		// Writes after reads
-		// Ensure document exists, then update nested field path without clobbering the entire items map
-		tx.set(sessionStateDocRef, { sessionId }, { merge: true });
-		tx.update(sessionStateDocRef, {
-			lastUpdatedAt: FieldValue.serverTimestamp(),
-			[`items.${parsedBody.planItemId}`]: incomingState
-		});
-
-		if (awardingContext && awardingContext.xpAvailable > 0 && progressDocRef && !alreadyCompleted) {
-			xpAwarded = awardingContext.xpAvailable;
-			const baseProgressPayload = {
+	try {
+		await patchFirestoreDocument({
+			serviceAccountJson,
+			documentPath: sessionStateDocPath,
+			updates: {
 				sessionId,
-				planItemId: parsedBody.planItemId,
-				xpAwarded,
-				createdAt: FieldValue.serverTimestamp()
-			};
-
-			if (awardingContext.kind === 'quiz') {
-				tx.set(progressDocRef, {
-					...baseProgressPayload,
-					quizId: awardingContext.quizId
-				});
-			} else {
-				const problemDifficulty =
-					planItem.kind === 'problem' ? (planItem.difficulty ?? null) : null;
-				tx.set(progressDocRef, {
-					...baseProgressPayload,
-					problemId: planItem.id,
-					difficulty: problemDifficulty,
-					language: incomingState.code?.language ?? null
-				});
+				lastUpdatedAt: new Date(),
+				[`items.${parsedBody.planItemId}`]: incomingState
 			}
+		});
+	} catch (error) {
+		console.error('Failed to persist session state update', { error, userId, sessionId });
+		return json(
+			{ error: 'session_state_write_failed', message: 'Unable to persist your progress.' },
+			{ status: 500 }
+		);
+	}
 
-			if (parsedStats) {
-				nextStats = {
-					xp: parsedStats.xp + xpAwarded,
-					level: parsedStats.level,
-					streakDays: parsedStats.streakDays,
-					solvedCount: parsedStats.solvedCount + 1
-				};
-				tx.set(userDocRef, { stats: nextStats }, { merge: true });
-			}
+	let xpAwarded = 0;
+	let alreadyCompleted = false;
+	let nextStats: UserStats | null = null;
+
+	if (awardingContext && awardingContext.xpAvailable > 0) {
+		const now = new Date();
+		const progressDocPath = `${userDocPath}/progress/${awardingContext.progressDocId}`;
+
+		let currentStats: UserStats = DEFAULT_USER_STATS;
+		try {
+			const userSnapshot = await getFirestoreDocument({
+				serviceAccountJson,
+				documentPath: userDocPath
+			});
+			const rawStats =
+				userSnapshot.exists && userSnapshot.data && typeof userSnapshot.data === 'object'
+					? (userSnapshot.data.stats as unknown)
+					: {};
+			currentStats = UserStatsSchema.parse(rawStats ?? {});
+		} catch (error) {
+			console.warn('Failed to read user stats before awarding XP (continuing with defaults)', {
+				error,
+				userId
+			});
+			currentStats = DEFAULT_USER_STATS;
 		}
 
-		return { xpAwarded, alreadyCompleted, stats: nextStats };
-	});
+		xpAwarded = awardingContext.xpAvailable;
+		nextStats = {
+			xp: currentStats.xp + xpAwarded,
+			level: currentStats.level,
+			streakDays: currentStats.streakDays,
+			solvedCount: currentStats.solvedCount + 1
+		};
 
-	return json({
-		status: 'ok',
-		stats: result.stats ?? DEFAULT_USER_STATS,
-		xpAwarded: result.xpAwarded,
-		alreadyCompleted: result.alreadyCompleted
-	});
+		const baseProgressPayload: Record<string, unknown> = {
+			sessionId,
+			planItemId: parsedBody.planItemId,
+			xpAwarded,
+			createdAt: now
+		};
+
+		let progressPayload: Record<string, unknown> = baseProgressPayload;
+		if (awardingContext.kind === 'quiz') {
+			progressPayload = {
+				...baseProgressPayload,
+				quizId: awardingContext.quizId
+			};
+		} else {
+			const problemDifficulty = planItem.kind === 'problem' ? (planItem.difficulty ?? null) : null;
+			progressPayload = {
+				...baseProgressPayload,
+				problemId: planItem.id,
+				difficulty: problemDifficulty,
+				language: incomingState.code?.language ?? null
+			};
+		}
+
+		try {
+			await commitFirestoreWrites({
+				serviceAccountJson,
+				writes: [
+					{
+						type: 'set',
+						documentPath: progressDocPath,
+						data: progressPayload,
+						precondition: { exists: false }
+					},
+					{
+						type: 'patch',
+						documentPath: userDocPath,
+						updates: { stats: nextStats }
+					}
+				]
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.includes('ALREADY_EXISTS') || message.includes('FAILED_PRECONDITION')) {
+				alreadyCompleted = true;
+				xpAwarded = 0;
+				nextStats = null;
+			} else {
+				console.error('Failed to award XP', { error, userId, sessionId, planItemId: parsedBody.planItemId });
+				return json(
+					{ error: 'xp_award_failed', message: 'Unable to award XP.' },
+					{ status: 500 }
+				);
+			}
+		}
+	}
+
+	return json(
+		{
+			status: 'ok',
+			...(nextStats ? { stats: nextStats } : {}),
+			xpAwarded,
+			alreadyCompleted
+		},
+		{ status: 200 }
+	);
 };

@@ -10,7 +10,6 @@ export * from "./code/welcomeTemplates";
 export * from "./agent/sparkAgentRunner";
 export * from "./utils/env";
 export * from "./utils/testUser";
-export * from "./utils/firebaseAdmin";
 export * from "./utils/googleAuth";
 export * from "./utils/googleTTS";
 export * from "./utils/openai";

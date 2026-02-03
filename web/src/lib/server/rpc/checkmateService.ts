@@ -17,8 +17,6 @@ import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '$proto/gen/google/protobuf/timestamp_pb';
 import {
 	generateText,
-	getFirebaseAdminFirestore,
-	loadEnvFromFile,
 	type LlmContent,
 	type LlmTextDelta,
 	type LlmTextModelId
@@ -26,8 +24,13 @@ import {
 import type { ConnectRouter, HandlerContext } from '@connectrpc/connect';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
+import {
+	getFirestoreDocument,
+	listFirestoreDocuments,
+	patchFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
 
 const STREAM_MODEL_ID: LlmTextModelId = 'gemini-flash-latest';
 const CONVERSATION_UPDATE_INTERVAL_MS = 10_000;
@@ -61,7 +64,13 @@ const ListChatsRequestSchema = z
 		limit: limit && limit > 0 ? limit : CHAT_LIST_DEFAULT_LIMIT
 	}));
 
-let checkMateEnvLoaded = false;
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
 
 async function requireAuth(context: HandlerContext): Promise<string> {
 	const authHeader = context.requestHeader.get('authorization');
@@ -91,16 +100,13 @@ async function requireAuth(context: HandlerContext): Promise<string> {
 	}
 }
 
-function loadCheckMateEnv(): void {
-	if (checkMateEnvLoaded) {
-		return;
-	}
-	const cwd = process.cwd();
-	const envPath = cwd.endsWith(`${path.sep}web`)
-		? path.join(cwd, '.env.local')
-		: path.join(cwd, 'web', '.env.local');
-	loadEnvFromFile(envPath, { override: false });
-	checkMateEnvLoaded = true;
+function resolveConversationCollectionPath(userId: string): string {
+	// Stored under /{userId}/client/checkmate_conversations/{conversationId}
+	return `${userId}/client/checkmate_conversations`;
+}
+
+function resolveConversationDocPath(userId: string, conversationId: string): string {
+	return `${resolveConversationCollectionPath(userId)}/${conversationId}`;
 }
 
 function toLlmContents(messages: z.infer<typeof ChatMessageSchema>[]): LlmContent[] {
@@ -375,7 +381,6 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			return response;
 		},
 		async listChats(request, context) {
-			loadCheckMateEnv();
 			logServerEvent({
 				message: 'CheckMate ListChats request received.',
 				context: {
@@ -394,17 +399,15 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 				});
 				throw new ConnectError('Invalid request payload.', Code.InvalidArgument);
 			}
-			const firestore = getFirebaseAdminFirestore();
 			const limit = parsed.data.limit;
-			let snapshot;
+			let docs;
 			try {
-				snapshot = await firestore
-					.collection(userId)
-					.doc('client')
-					.collection('checkmate_conversations')
-					.orderBy('lastMessageAt', 'desc')
-					.limit(limit)
-					.get();
+				docs = await listFirestoreDocuments({
+					serviceAccountJson: requireServiceAccountJson(),
+					collectionPath: resolveConversationCollectionPath(userId),
+					limit,
+					orderBy: 'lastMessageAt desc'
+				});
 			} catch (error) {
 				logServerEvent({
 					level: 'error',
@@ -417,15 +420,16 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			}
 
 			const chats: CheckMateChatSummaryProto[] = [];
-			for (const doc of snapshot.docs) {
-				const data = doc.data();
+			for (const doc of docs) {
+				const data = doc.data;
 				const messages = parseConversationMessages(data?.messages);
 				const status = parseConversationStatus(data?.status);
 				const lastMessageAt = resolveTimestamp(
 					data?.lastMessageAt ?? data?.updatedAt ?? data?.createdAt,
 					new Date()
 				);
-				chats.push(toConversationSummaryProto(doc.id, messages, lastMessageAt, status));
+				const conversationId = doc.documentPath.split('/').filter(Boolean).pop() ?? doc.documentPath;
+				chats.push(toConversationSummaryProto(conversationId, messages, lastMessageAt, status));
 			}
 			logServerEvent({
 				message: 'CheckMate ListChats response sent.',
@@ -436,7 +440,6 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			return { chats };
 		},
 		async *streamChat(request, context) {
-			loadCheckMateEnv();
 			logServerEvent({
 				message: 'CheckMate StreamChat request received.',
 				context: {
@@ -458,19 +461,17 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 
 			const contents = toLlmContents(parsed.data.messages);
 			const conversationId = resolveConversationId(parsed.data.conversationId);
-			const firestore = getFirebaseAdminFirestore();
 			const now = new Date();
-			const conversationRef = firestore
-				.collection(userId)
-				.doc('client')
-				.collection('checkmate_conversations')
-				.doc(conversationId);
+			const conversationDocPath = resolveConversationDocPath(userId, conversationId);
 			let createdAt = now;
 			let participantIds: string[] = [userId];
 			try {
-				const snapshot = await conversationRef.get();
+				const snapshot = await getFirestoreDocument({
+					serviceAccountJson: requireServiceAccountJson(),
+					documentPath: conversationDocPath
+				});
 				if (snapshot.exists) {
-					const data = snapshot.data();
+					const data = snapshot.data;
 					createdAt = resolveTimestamp(data?.createdAt, now);
 					const rawParticipants = Array.isArray(data?.participantIds) ? data?.participantIds : null;
 					if (rawParticipants && rawParticipants.length > 0) {
@@ -509,7 +510,11 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 				status: initialStatus
 			};
 
-			await conversationRef.set(conversation, { merge: true });
+			await patchFirestoreDocument({
+				serviceAccountJson: requireServiceAccountJson(),
+				documentPath: conversationDocPath,
+				updates: conversation as unknown as Record<string, unknown>
+			});
 
 			try {
 				const queue: StreamChatResponseProto[] = [];
@@ -548,17 +553,18 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 					conversation.status = status;
 					conversation.updatedAt = status.updatedAt;
 					try {
-						await conversationRef.set(
-							{
+						await patchFirestoreDocument({
+							serviceAccountJson: requireServiceAccountJson(),
+							documentPath: conversationDocPath,
+							updates: {
 								status: {
 									state: status.state,
 									updatedAt: status.updatedAt,
 									errorMessage: status.errorMessage ?? ''
 								},
 								updatedAt: status.updatedAt
-							},
-							{ merge: true }
-						);
+							}
+						});
 					} catch (error) {
 						logServerEvent({
 							level: 'warn',
@@ -639,14 +645,15 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 							updateAssistantMessage(conversationMessages, assistantIndex, assistantText);
 							conversation.updatedAt = nowTimestampValue;
 							conversation.lastMessageAt = nowTimestampValue;
-							await conversationRef.set(
-								{
+							await patchFirestoreDocument({
+								serviceAccountJson: requireServiceAccountJson(),
+								documentPath: conversationDocPath,
+								updates: {
 									updatedAt: nowTimestampValue,
 									lastMessageAt: nowTimestampValue,
 									messages: conversationMessages
-								},
-								{ merge: true }
-							);
+								}
+							});
 							lastPersistedText = assistantText;
 							hasPendingUpdate = false;
 							lastUpdate = Date.now();

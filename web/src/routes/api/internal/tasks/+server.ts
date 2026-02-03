@@ -5,11 +5,6 @@ import {
 	generateCodeProblems,
 	generateSessionMetadata,
 	convertSessionPlanToItems,
-	getFirebaseAdminFirestore,
-	getFirebaseAdminFirestoreModule,
-	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName,
-	runSparkAgentTask,
 	generateSession,
 	generateQuizDefinitions,
 	generateWelcomeSessionTemplate
@@ -22,6 +17,14 @@ import {
 import { saveUserProblem } from '$lib/server/code/problemRepo';
 import { saveUserQuiz } from '$lib/server/quiz/repo';
 import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
+import { env } from '$env/dynamic/private';
+import {
+	commitFirestoreWrites,
+	getFirestoreDocument,
+	patchFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
+import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
+import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 
 type FailureContext = {
 	reason: string;
@@ -31,6 +34,18 @@ type FailureContext = {
 	quizId?: string;
 	sessionId?: string;
 };
+
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
+
+function normalizeObjectName(storagePath: string): string {
+	return storagePath.replace(/^\/+/, '');
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	const bodyText = await request.text();
@@ -84,7 +99,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		console.log(
 			`[internal task] generateLesson userId=${userId} sessionId=${sessionId} proposalId=${proposalId}`
 		);
-		getFirebaseAdminFirestore();
 
 		const fail = async ({ reason, error }: FailureContext) => {
 			console.error('[internal task] lesson generation failed', {
@@ -179,15 +193,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			`[internal task] generateQuiz userId=${userId} uploadId=${uploadId} quizId=${quizId}`
 		);
 
-		const firestore = getFirebaseAdminFirestore();
-		const storage = getFirebaseAdminStorage();
-		const { FieldValue } = getFirebaseAdminFirestoreModule();
-		const uploadDocRef = firestore
-			.collection('spark')
-			.doc(userId)
-			.collection('uploads')
-			.doc(uploadId);
-		const quizDocRef = uploadDocRef.collection('quiz').doc(quizId);
+		const serviceAccountJson = requireServiceAccountJson();
+		const uploadDocPath = `spark/${userId}/uploads/${uploadId}`;
+		const quizDocPath = `${uploadDocPath}/quiz/${quizId}`;
 
 		const fail = async ({ reason, error }: FailureContext) => {
 			console.error('[internal task] quiz generation failed', {
@@ -197,28 +205,31 @@ export const POST: RequestHandler = async ({ request }) => {
 				uploadId,
 				quizId
 			});
-			const timestamp = FieldValue.serverTimestamp();
 			try {
-				await firestore.runTransaction(async (tx) => {
-					tx.set(
-						quizDocRef,
+				const timestamp = new Date();
+				await commitFirestoreWrites({
+					serviceAccountJson,
+					writes: [
 						{
-							status: 'failed',
-							failureReason: reason,
-							updatedAt: timestamp
+							type: 'patch',
+							documentPath: quizDocPath,
+							updates: {
+								status: 'failed',
+								failureReason: reason,
+								updatedAt: timestamp
+							}
 						},
-						{ merge: true }
-					);
-					tx.set(
-						uploadDocRef,
 						{
-							status: 'failed',
-							quizStatus: 'failed',
-							latestError: reason,
-							lastUpdatedAt: timestamp
-						},
-						{ merge: true }
-					);
+							type: 'patch',
+							documentPath: uploadDocPath,
+							updates: {
+								status: 'failed',
+								quizStatus: 'failed',
+								latestError: reason,
+								lastUpdatedAt: timestamp
+							}
+						}
+					]
 				});
 			} catch (updateError) {
 				console.error('[internal task] failed to persist failure state', {
@@ -231,14 +242,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ status: 'failed', reason }, { status: 500 });
 		};
 
-		const uploadSnap = await uploadDocRef.get();
-		if (!uploadSnap.exists) {
+		let uploadSnap;
+		try {
+			uploadSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: uploadDocPath });
+		} catch (error) {
+			return await fail({ reason: 'upload_fetch_failed', error, userId, uploadId, quizId });
+		}
+		if (!uploadSnap.exists || !uploadSnap.data) {
 			return await fail({ reason: 'upload_not_found', userId, uploadId, quizId });
 		}
 
 		let uploadDoc;
 		try {
-			uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data());
+			uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data);
 		} catch (error) {
 			return await fail({
 				reason: 'invalid_upload_document',
@@ -249,14 +265,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		const quizSnap = await quizDocRef.get();
-		if (!quizSnap.exists) {
+		let quizSnap;
+		try {
+			quizSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: quizDocPath });
+		} catch (error) {
+			return await fail({ reason: 'quiz_fetch_failed', error, userId, uploadId, quizId });
+		}
+		if (!quizSnap.exists || !quizSnap.data) {
 			return await fail({ reason: 'quiz_doc_not_found', userId, uploadId, quizId });
 		}
 
 		let quizDoc;
 		try {
-			quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data());
+			quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data);
 		} catch (error) {
 			return await fail({
 				reason: 'invalid_quiz_document',
@@ -267,22 +288,33 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		const generatingTimestamp = FieldValue.serverTimestamp();
 		try {
-			await firestore.runTransaction(async (tx) => {
-				tx.update(quizDocRef, {
-					status: 'generating',
-					updatedAt: generatingTimestamp,
-					failureReason: FieldValue.delete()
-				});
-				tx.update(uploadDocRef, {
-					status: 'processing',
-					quizStatus: 'generating',
-					lastUpdatedAt: generatingTimestamp,
-					activeQuizId: quizId,
-					quizQuestionCount: quizDoc.requestedQuestionCount,
-					latestError: FieldValue.delete()
-				});
+			const timestamp = new Date();
+			await commitFirestoreWrites({
+				serviceAccountJson,
+				writes: [
+					{
+						type: 'patch',
+						documentPath: quizDocPath,
+						updates: {
+							status: 'generating',
+							updatedAt: timestamp
+						},
+						deletes: ['failureReason']
+					},
+					{
+						type: 'patch',
+						documentPath: uploadDocPath,
+						updates: {
+							status: 'processing',
+							quizStatus: 'generating',
+							lastUpdatedAt: timestamp,
+							activeQuizId: quizId,
+							quizQuestionCount: quizDoc.requestedQuestionCount
+						},
+						deletes: ['latestError']
+					}
+				]
 			});
 		} catch (error) {
 			return await fail({
@@ -296,9 +328,18 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		let fileBuffer: Buffer;
 		try {
-			const bucket = storage.bucket(getFirebaseStorageBucketName());
-			const fileRef = bucket.file(uploadDoc.storagePath);
-			[fileBuffer] = await fileRef.download();
+			const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+			const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
+			const objectName = normalizeObjectName(uploadDoc.storagePath);
+			const result = await downloadStorageObject({
+				serviceAccountJson,
+				bucketName,
+				objectName
+			});
+			if (typeof Buffer === 'undefined') {
+				throw new Error('Buffer is unavailable in this runtime');
+			}
+			fileBuffer = Buffer.from(result.bytes);
 			if (!fileBuffer || fileBuffer.length === 0) {
 				throw new Error('downloaded file is empty');
 			}
@@ -325,22 +366,33 @@ export const POST: RequestHandler = async ({ request }) => {
 				questionCount: quizDoc.requestedQuestionCount
 			});
 
-			const completedTimestamp = FieldValue.serverTimestamp();
-			await firestore.runTransaction(async (tx) => {
-				tx.update(quizDocRef, {
-					status: 'ready',
-					definition,
-					updatedAt: completedTimestamp,
-					failureReason: FieldValue.delete()
-				});
-				tx.update(uploadDocRef, {
-					status: 'ready',
-					quizStatus: 'ready',
-					lastUpdatedAt: completedTimestamp,
-					activeQuizId: quizId,
-					quizQuestionCount: definition.questions.length,
-					latestError: FieldValue.delete()
-				});
+			const timestamp = new Date();
+			await commitFirestoreWrites({
+				serviceAccountJson,
+				writes: [
+					{
+						type: 'patch',
+						documentPath: quizDocPath,
+						updates: {
+							status: 'ready',
+							definition,
+							updatedAt: timestamp
+						},
+						deletes: ['failureReason']
+					},
+					{
+						type: 'patch',
+						documentPath: uploadDocPath,
+						updates: {
+							status: 'ready',
+							quizStatus: 'ready',
+							lastUpdatedAt: timestamp,
+							activeQuizId: quizId,
+							quizQuestionCount: definition.questions.length
+						},
+						deletes: ['latestError']
+					}
+				]
 			});
 		} catch (error) {
 			return await fail({

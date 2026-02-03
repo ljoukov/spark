@@ -45,6 +45,7 @@ export function ensureEvalEnvLoaded(): void {
   const envCandidates = [
     path.join(REPO_ROOT, ".env.local"),
     path.join(EVAL_ROOT, ".env.local"),
+    path.join(WEB_ROOT, ".env.local"),
   ];
 
   for (const candidate of envCandidates) {

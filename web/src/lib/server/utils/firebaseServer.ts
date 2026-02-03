@@ -1,7 +1,5 @@
 import { clientFirebaseConfig } from '$lib/config/firebase';
-import type { DecodedIdToken } from 'firebase-admin/auth';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { getFirebaseAdminAuth } from '@spark/llm';
 import { z } from 'zod';
 
 const PROJECT_ID = clientFirebaseConfig.projectId; // From firebase config
@@ -9,10 +7,6 @@ const ISSUER = `https://securetoken.google.com/${PROJECT_ID}`;
 const JWKS_URL = new URL(
 	'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 );
-
-function getAuth() {
-	return getFirebaseAdminAuth();
-}
 
 const jwks = createRemoteJWKSet(JWKS_URL);
 
@@ -42,11 +36,4 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseId
 		throw new Error('Invalid Firebase token: missing sub');
 	}
 	return p;
-}
-
-export async function verifyFirebaseSessionCookie(sessionCookie: string): Promise<DecodedIdToken> {
-	const auth = getAuth();
-	// By default, do not check for revocation here; call sites can decide policy.
-	const decoded = await auth.verifySessionCookie(sessionCookie, false);
-	return decoded;
 }

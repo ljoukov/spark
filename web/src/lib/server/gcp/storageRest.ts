@@ -26,7 +26,7 @@ export async function downloadStorageObject(options: {
 	bucketName: string;
 	objectName: string;
 	timeoutMs?: number;
-}): Promise<Buffer> {
+}): Promise<{ bytes: Uint8Array; contentType: string | null }> {
 	const { accessToken } = await getGoogleAccessToken({
 		serviceAccountJson: options.serviceAccountJson,
 		scopes: [STORAGE_READ_SCOPE]
@@ -45,7 +45,8 @@ export async function downloadStorageObject(options: {
 			const text = await resp.text().catch(() => '');
 			throw new Error(`Storage download failed (${resp.status}): ${text.slice(0, 500)}`);
 		}
-		return Buffer.from(await resp.arrayBuffer());
+		const contentType = resp.headers.get('content-type');
+		return { bytes: new Uint8Array(await resp.arrayBuffer()), contentType };
 	} finally {
 		cleanup();
 	}
@@ -57,6 +58,7 @@ export async function uploadStorageObject(options: {
 	objectName: string;
 	contentType: string;
 	data: Uint8Array;
+	onlyIfMissing?: boolean;
 	timeoutMs?: number;
 }): Promise<void> {
 	const { accessToken } = await getGoogleAccessToken({
@@ -73,9 +75,10 @@ export async function uploadStorageObject(options: {
 		);
 		url.searchParams.set('uploadType', 'media');
 		url.searchParams.set('name', options.objectName);
-		// Only create if missing. If it already exists, we treat it as success for our
-		// content-addressed storagePath scheme.
-		url.searchParams.set('ifGenerationMatch', '0');
+		// For content-addressed keys, callers can request "create only if missing".
+		if (options.onlyIfMissing) {
+			url.searchParams.set('ifGenerationMatch', '0');
+		}
 
 		const resp = await fetch(url.toString(), {
 			method: 'POST',
@@ -87,7 +90,7 @@ export async function uploadStorageObject(options: {
 			signal
 		});
 
-		if (resp.status === 412) {
+		if (resp.status === 412 && options.onlyIfMissing) {
 			// Already exists.
 			return;
 		}

@@ -2,13 +2,12 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
 import { generateJson, generateText, type LlmDebugOptions } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
-import { getFirebaseAdminFirestore } from "../utils/firebaseAdmin";
+import { commitFirestoreWrites } from "../utils/gcp/firestoreRest";
 import {
   MAX_PROBLEM_ATTEMPTS,
   MAX_PROBLEM_GRADE_RETRIES,
@@ -2631,29 +2630,35 @@ async function persistProblemSolutionsToFirestore(options: {
 }): Promise<void> {
   const { userId, sessionId, problems, logger } = options;
   try {
-    const firestore = getFirebaseAdminFirestore();
-    const batch = firestore.batch();
-    const sessionDoc = firestore
-      .collection("spark")
-      .doc(userId)
-      .collection("sessions")
-      .doc(sessionId);
-
-    for (const problem of problems) {
-      const docRef = sessionDoc.collection("solutions").doc(problem.id);
-      const publicCount = problem.tests.public.length;
-      const privateCount = problem.tests.private?.length ?? 0;
-      batch.set(docRef, {
-        problemId: problem.id,
-        language: "python",
-        solution_py: problem.reference_solution_py,
-        tests_checked: publicCount + privateCount,
-        source: "independent_solver",
-        updatedAt: Timestamp.now(),
-      });
+    const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+    if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+      throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
     }
 
-    await batch.commit();
+    const now = new Date();
+    const writes = problems.map((problem) => {
+      const publicCount = problem.tests.public.length;
+      const privateCount = problem.tests.private?.length ?? 0;
+      return {
+        type: "set" as const,
+        documentPath: `spark/${userId}/sessions/${sessionId}/solutions/${problem.id}`,
+        data: {
+          problemId: problem.id,
+          language: "python",
+          solution_py: problem.reference_solution_py,
+          tests_checked: publicCount + privateCount,
+          source: "independent_solver",
+          updatedAt: now,
+        },
+      };
+    });
+
+    // Firestore commit supports up to 500 writes; chunk defensively.
+    const chunkSize = 450;
+    for (let i = 0; i < writes.length; i += chunkSize) {
+      const chunk = writes.slice(i, i + chunkSize);
+      await commitFirestoreWrites({ serviceAccountJson, writes: chunk });
+    }
     logger.log(
       `[session/problem-solution] stored ${problems.length} solutions for session '${sessionId}'`,
     );

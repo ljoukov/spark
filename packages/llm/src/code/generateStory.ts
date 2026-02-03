@@ -17,11 +17,9 @@ import {
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { isGeminiModelId } from "../utils/gemini";
-import {
-  getFirebaseAdminStorage,
-  getFirebaseAdminFirestore,
-  getFirebaseStorageBucketName,
-} from "../utils/firebaseAdmin";
+import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
+import { getFirestoreDocument } from "../utils/gcp/firestoreRest";
+import { uploadStorageObject } from "../utils/gcp/storageRest";
 import type { MediaSegment } from "./schemas";
 import { getSharp } from "../utils/sharp";
 import { isOpenAiModelVariantId } from "../utils/openai-llm";
@@ -4644,7 +4642,12 @@ export class StoryGenerationPipeline {
       const userId = this.requireContext("userId");
       const sessionId = this.requireContext("sessionId");
       const planItemId = this.requireContext("planItemId");
-      const storageBucket = getFirebaseStorageBucketName();
+      const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+      if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+        throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
+      }
+      const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+      const storageBucket = `${serviceAccount.projectId}.firebasestorage.app`;
 
       const totalSegments = segmentation.segments.length;
       const interiorImages = images.images
@@ -4676,9 +4679,6 @@ export class StoryGenerationPipeline {
           `Expected poster image at index ${posterImageIndex}, but none was provided`,
         );
       }
-
-      const storage = getFirebaseAdminStorage();
-      const bucket = storage.bucket(storageBucket);
 
       const sharpModule = getSharp();
       const totalImages = interiorImages.length;
@@ -4712,13 +4712,12 @@ export class StoryGenerationPipeline {
             "jpg",
             this.options.storagePrefix,
           );
-          const file = bucket.file(storagePath);
-          await file.save(jpegBuffer, {
-            resumable: false,
-            metadata: {
-              contentType: "image/jpeg",
-              cacheControl: "public, max-age=0",
-            },
+          await uploadStorageObject({
+            serviceAccountJson,
+            bucketName: storageBucket,
+            objectName: storagePath,
+            contentType: "image/jpeg",
+            data: jpegBuffer,
           });
           storagePaths[currentIndex] = normaliseStoragePath(storagePath);
           this.logger.log(
@@ -4751,13 +4750,12 @@ export class StoryGenerationPipeline {
           kind,
           this.options.storagePrefix,
         );
-        const file = bucket.file(storagePath);
-        await file.save(jpegBuffer, {
-          resumable: false,
-          metadata: {
-            contentType: "image/jpeg",
-            cacheControl: "public, max-age=0",
-          },
+        await uploadStorageObject({
+          serviceAccountJson,
+          bucketName: storageBucket,
+          objectName: storagePath,
+          contentType: "image/jpeg",
+          data: jpegBuffer,
         });
         this.logger.log(
           `[story/images] saved ${kind} image to /${storagePath}`,
@@ -4778,9 +4776,11 @@ export class StoryGenerationPipeline {
       const cachedPublishResult = checkpoint?.value.publishResult;
 
       if (cachedPublishResult) {
-        const firestore = getFirebaseAdminFirestore();
-        const docRef = firestore.doc(cachedPublishResult.documentPath);
-        const docSnapshot = await docRef.get();
+        const documentPath = cachedPublishResult.documentPath.replace(/^\/+/u, "");
+        const docSnapshot = await getFirestoreDocument({
+          serviceAccountJson,
+          documentPath,
+        });
         if (docSnapshot.exists) {
           this.logger.log(
             `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,
