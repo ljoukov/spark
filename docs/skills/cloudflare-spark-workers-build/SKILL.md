@@ -118,6 +118,7 @@ curl -sS -X PATCH \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_AC
 
 Notes:
 - `is_secret=true` hides the value; the API will echo `null` for the value afterward, which is expected.
+- If your token is missing the **Workers Builds** permission group, Workers Builds API calls often fail with `code=12006` / `"Invalid token"` even if the same token works for Workers Scripts endpoints.
 
 ## Common Failure Class C: Deploy step fails during `wrangler deploy`
 
@@ -200,3 +201,37 @@ After a successful build/deploy, check the latest Worker version:
 curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/spark/versions\" \\
   -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\"
 ```
+
+## Alternative: Verify Git Deploys Via Wrangler (No Builds API Needed)
+
+If you don't have a token that can access the Workers Builds API, you can still confirm that Git deploys are succeeding by inspecting Worker **Versions** and their annotations.
+
+List recent versions (newest at the bottom unless you sort):
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID=\"<account_id>\"
+export CLOUDFLARE_API_TOKEN=\"<token>\"
+npx wrangler versions list --name spark --json
+```
+
+Useful fields (per version object):
+- `metadata.created_on` — upload time
+- `annotations.workers/triggered_by` — e.g. `version_upload` or `secret`
+- `annotations.workers/alias` — present for non-production Git builds (typically the branch name)
+
+View a specific version:
+
+```bash
+npx wrangler versions view <version_id> --name spark --json
+```
+
+Workers.dev preview URL for an alias:
+- First find your Workers.dev subdomain:
+
+```bash
+curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain\" \\
+  -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\"
+```
+
+- Preview URL pattern:
+  - `https://<alias>-spark.<subdomain>.workers.dev/`
