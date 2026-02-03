@@ -5,8 +5,10 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { getFirebaseAdminFirestore } from '@spark/llm';
 import {
 	SparkAgentStateSchema,
+	SparkAgentRunLogSchema,
 	SparkAgentWorkspaceFileSchema,
 	type SparkAgentState,
+	type SparkAgentRunLog,
 	type SparkAgentWorkspaceFile
 } from '@spark/schemas';
 
@@ -20,6 +22,18 @@ function decodeFileId(value: string): string {
 	} catch {
 		return value;
 	}
+}
+
+function parseLogTimestamp(key: string): Date | null {
+	const match = /^t(\d{13})_\d{3}$/.exec(key);
+	if (!match) {
+		return null;
+	}
+	const ms = Number.parseInt(match[1] ?? '', 10);
+	if (!Number.isFinite(ms)) {
+		return null;
+	}
+	return new Date(ms);
 }
 
 export const GET: RequestHandler = async ({ request, params }) => {
@@ -84,5 +98,40 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		files.push(parsed.data);
 	}
 
-	return json({ agent, files }, { status: 200 });
+	let log: SparkAgentRunLog | null = null;
+	const logSnap = await agentRef.collection('logs').doc('log').get();
+	if (logSnap.exists) {
+		const data = logSnap.data() ?? {};
+		const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
+		const entries: Array<{ key: string; timestamp: Date; line: string }> = [];
+		if (rawLines && !Array.isArray(rawLines)) {
+			for (const [key, value] of Object.entries(rawLines as Record<string, unknown>)) {
+				if (typeof value !== 'string') {
+					continue;
+				}
+				const timestamp = parseLogTimestamp(key) ?? null;
+				if (!timestamp) {
+					continue;
+				}
+				entries.push({ key, timestamp, line: value });
+			}
+		}
+		entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+		const limitedEntries = entries.slice(-2000);
+		const payload: Record<string, unknown> = {
+			lines: limitedEntries
+		};
+		if (data.updatedAt !== undefined) {
+			payload.updatedAt = data.updatedAt;
+		}
+		if (data.stats && typeof data.stats === 'object') {
+			payload.stats = data.stats;
+		}
+		const parsed = SparkAgentRunLogSchema.safeParse(payload);
+		if (parsed.success) {
+			log = parsed.data;
+		}
+	}
+
+	return json({ agent, files, log }, { status: 200 });
 };

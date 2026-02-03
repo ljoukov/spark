@@ -238,6 +238,14 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
 
+- Agent run logs live under `users/{userId}/agents/{agentId}/logs/log` (single doc).
+  - Log lines are stored in a map field `lines`, keyed by an epoch-ms timestamp key (`t<ms>_<seq>`), with values as the printed log line text.
+  - Updates use partial/merge semantics so individual lines can be appended without rewriting the entire doc.
+  - Log updates are throttled to ≤ 1 write per 10 seconds per agent log doc.
+  - The log doc also stores `stats` snapshots including:
+    - LLM token totals and estimated cost (USD)
+    - Tool call counts (total + per-tool)
+
 ## 4) Backend (SvelteKit)
 
 - Uses SvelteKit

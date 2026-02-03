@@ -57,3 +57,40 @@ export const SparkAgentWorkspaceFileSchema = z.object({
 export type SparkAgentWorkspaceFile = z.infer<
   typeof SparkAgentWorkspaceFileSchema
 >;
+
+export const SparkAgentRunStatsSchema = z.object({
+  modelCalls: z.number().int().min(0),
+  modelsUsed: z.array(trimmedString),
+  tokens: z.object({
+    promptTokens: z.number().int().min(0),
+    cachedTokens: z.number().int().min(0),
+    responseTokens: z.number().int().min(0),
+    responseImageTokens: z.number().int().min(0),
+    thinkingTokens: z.number().int().min(0),
+    totalTokens: z.number().int().min(0),
+    toolUsePromptTokens: z.number().int().min(0),
+  }),
+  modelCostUsd: z.number().min(0),
+  toolCalls: z.number().int().min(0),
+  toolCallsByName: z.record(trimmedString, z.number().int().min(0)),
+  toolCostUsd: z.number().min(0),
+  totalCostUsd: z.number().min(0),
+});
+
+export type SparkAgentRunStats = z.infer<typeof SparkAgentRunStatsSchema>;
+
+export const SparkAgentLogLineSchema = z.object({
+  key: trimmedString,
+  timestamp: FirestoreTimestampSchema,
+  line: z.string(),
+});
+
+export type SparkAgentLogLine = z.infer<typeof SparkAgentLogLineSchema>;
+
+export const SparkAgentRunLogSchema = z.object({
+  updatedAt: FirestoreTimestampSchema.optional(),
+  lines: z.array(SparkAgentLogLineSchema),
+  stats: SparkAgentRunStatsSchema.optional(),
+});
+
+export type SparkAgentRunLog = z.infer<typeof SparkAgentRunLogSchema>;

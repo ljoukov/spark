@@ -6,8 +6,11 @@
 	import { renderMarkdown } from '$lib/markdown';
 	import { z } from 'zod';
 	import {
+		SparkAgentRunLogSchema,
 		SparkAgentStateSchema,
 		SparkAgentWorkspaceFileSchema,
+		type SparkAgentRunLog,
+		type SparkAgentRunStats,
 		type SparkAgentState,
 		type SparkAgentWorkspaceFile
 	} from '@spark/schemas';
@@ -23,6 +26,7 @@
 	let selectedAgentId = $state<string | null>(null);
 	let selectedAgentDetail = $state<SparkAgentState | null>(null);
 	let files = $state<SparkAgentWorkspaceFile[]>([]);
+	let runLog = $state<SparkAgentRunLog | null>(null);
 	let selectedFilePath = $state<string | null>(null);
 	let createPrompt = $state('');
 	let createWorkspaceId = $state('');
@@ -42,7 +46,8 @@
 
 	const detailResponseSchema = z.object({
 		agent: SparkAgentStateSchema,
-		files: z.array(SparkAgentWorkspaceFileSchema)
+		files: z.array(SparkAgentWorkspaceFileSchema),
+		log: SparkAgentRunLogSchema.nullable()
 	});
 
 	const selectedAgent = $derived.by(() => {
@@ -64,6 +69,22 @@
 	const selectedFileHtml = $derived(
 		selectedFileIsMarkdown && selectedFile?.content ? renderMarkdown(selectedFile.content) : ''
 	);
+	const logLines = $derived(runLog?.lines ?? []);
+	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
+
+	function formatUsd(value: number | undefined): string {
+		if (typeof value !== 'number' || Number.isNaN(value)) {
+			return '—';
+		}
+		return `$${value.toFixed(4)}`;
+	}
+
+	function formatInt(value: number | undefined): string {
+		if (typeof value !== 'number' || Number.isNaN(value)) {
+			return '—';
+		}
+		return Intl.NumberFormat('en-US').format(Math.floor(value));
+	}
 
 	function formatTimestamp(value: Date | undefined): string {
 		if (!value) {
@@ -212,6 +233,7 @@
 			}
 			selectedAgentDetail = payload.agent;
 			files = payload.files;
+			runLog = payload.log;
 			loadError = null;
 		} catch (error) {
 			if (selectedAgentId === agentId) {
@@ -257,10 +279,12 @@
 		if (!selectedAgentId) {
 			selectedAgentDetail = null;
 			files = [];
+			runLog = null;
 			return;
 		}
 		selectedAgentDetail = null;
 		files = [];
+		runLog = null;
 		void refreshAgentDetail(selectedAgentId);
 	});
 
@@ -449,18 +473,88 @@
 						{/if}
 					</div>
 				</div>
+
+				<section class="agents-run">
+					<h3>Run stats</h3>
+					{#if runStats}
+						<div class="agents-run__stats">
+							<div>
+								<span class="agents-run__label">LLM cost</span>
+								<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Tools cost</span>
+								<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Total cost</span>
+								<p class="agents-run__value">{formatUsd(runStats.totalCostUsd)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Model calls</span>
+								<p class="agents-run__value">{formatInt(runStats.modelCalls)}</p>
+							</div>
+							<div class="agents-run__wide">
+								<span class="agents-run__label">Models</span>
+								<p class="agents-run__value">{runStats.modelsUsed.join(', ')}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Tool calls</span>
+								<p class="agents-run__value">{formatInt(runStats.toolCalls)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Total tokens</span>
+								<p class="agents-run__value">{formatInt(runStats.tokens.totalTokens)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Prompt tokens</span>
+								<p class="agents-run__value">{formatInt(runStats.tokens.promptTokens)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Thinking tokens</span>
+								<p class="agents-run__value">{formatInt(runStats.tokens.thinkingTokens)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Output tokens</span>
+								<p class="agents-run__value">{formatInt(runStats.tokens.responseTokens)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Cached tokens</span>
+								<p class="agents-run__value">{formatInt(runStats.tokens.cachedTokens)}</p>
+							</div>
+						</div>
+					{:else}
+						<p class="agents-empty">Stats will appear once the agent starts running.</p>
+					{/if}
+
+					<h3>Run log</h3>
+					{#if runLog && logLines.length > 0}
+						<div class="agents-run__log" aria-label="Agent run log">
+							{#each logLines as entry (entry.key)}
+								<div class="agents-run__log-line">
+									<span class="agents-run__log-ts">{formatTimestamp(entry.timestamp)}</span>
+									<span class="agents-run__log-msg">{entry.line}</span>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="agents-empty">No logs yet.</p>
+					{/if}
+				</section>
 			{/if}
 		</section>
 	</div>
 </section>
 
 {#if fileDialogOpen && selectedFile}
-	<div
+	<button
 		class="file-dialog__backdrop"
+		type="button"
+		aria-label="Close file dialog"
 		onclick={() => {
 			fileDialogOpen = false;
 		}}
-	></div>
+	></button>
 	<div class="file-dialog" role="dialog" aria-modal="true">
 		<header class="file-dialog__header">
 			<div>
@@ -914,11 +1008,89 @@
 		text-align: center;
 	}
 
+	.agents-run {
+		margin-top: 1.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+	}
+
+	.agents-run h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.agents-run__stats {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 0.8rem;
+		padding: 0.85rem;
+		border-radius: 1rem;
+		background: rgba(148, 163, 184, 0.08);
+		border: 1px solid rgba(148, 163, 184, 0.18);
+	}
+
+	.agents-run__label {
+		display: block;
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: rgba(100, 116, 139, 0.7);
+	}
+
+	.agents-run__value {
+		margin: 0.3rem 0 0;
+		font-weight: 650;
+	}
+
+	.agents-run__wide {
+		grid-column: 1 / -1;
+	}
+
+	.agents-run__log {
+		padding: 0.85rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(148, 163, 184, 0.18);
+		background: rgba(15, 23, 42, 0.04);
+		max-height: 22rem;
+		overflow: auto;
+		font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+			'Liberation Mono', 'Courier New', monospace;
+		font-size: 0.82rem;
+		line-height: 1.4;
+	}
+
+	:global([data-theme='dark'] .agents-run__log),
+	:global(:root:not([data-theme='light']) .agents-run__log) {
+		background: rgba(15, 23, 42, 0.6);
+		border-color: rgba(148, 163, 184, 0.3);
+	}
+
+	.agents-run__log-line {
+		display: grid;
+		grid-template-columns: 10.5rem 1fr;
+		gap: 0.75rem;
+		padding: 0.15rem 0;
+	}
+
+	.agents-run__log-ts {
+		color: rgba(100, 116, 139, 0.7);
+		font-size: 0.72rem;
+	}
+
+	.agents-run__log-msg {
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
 	.file-dialog__backdrop {
 		position: fixed;
 		inset: 0;
 		background: rgba(15, 23, 42, 0.6);
 		z-index: 50;
+		border: none;
+		padding: 0;
+		cursor: pointer;
 	}
 
 	.file-dialog {
@@ -974,6 +1146,11 @@
 
 		.agents-grid {
 			grid-template-columns: 1fr;
+		}
+
+		.agents-run__log-line {
+			grid-template-columns: 1fr;
+			gap: 0.15rem;
 		}
 	}
 </style>
