@@ -7,6 +7,7 @@ export * from "./code/sessionGenerationAgent";
 export * from "./code/sessionArtifacts";
 export * from "./code/problemValidation";
 export * from "./code/welcomeTemplates";
+export * from "./agent/sparkAgentRunner";
 export * from "./utils/env";
 export * from "./utils/testUser";
 export * from "./utils/firebaseAdmin";
