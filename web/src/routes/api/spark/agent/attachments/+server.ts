@@ -1,13 +1,12 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { loadEnvFromFile, loadLocalEnv } from '@spark/llm';
-import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
 import { SparkAgentAttachmentSchema, type SparkAgentAttachment } from '@spark/schemas';
 import { createHash } from 'node:crypto';
-import path from 'node:path';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
@@ -24,21 +23,6 @@ const downloadQuerySchema = z.object({
 	fileId: z.string().trim().min(1, 'fileId is required')
 });
 
-let webEnvLoaded = false;
-
-function loadWebEnv(): void {
-	if (webEnvLoaded) {
-		return;
-	}
-	const cwd = process.cwd();
-	const envPath = cwd.endsWith(`${path.sep}web`)
-		? path.join(cwd, '.env.local')
-		: path.join(cwd, 'web', '.env.local');
-	loadEnvFromFile(envPath);
-	loadLocalEnv();
-	webEnvLoaded = true;
-}
-
 function isFileLike(value: FormDataEntryValue | null): value is File {
 	if (!value) {
 		return false;
@@ -49,7 +33,7 @@ function isFileLike(value: FormDataEntryValue | null): value is File {
 	return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
 }
 
-function detectContentType(buffer: Buffer): string | null {
+function detectContentType(buffer: Uint8Array): string | null {
 	if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
 		return 'image/jpeg';
 	}
@@ -148,9 +132,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	if (!authResult.ok) {
 		return authResult.response;
 	}
-	loadWebEnv();
 	const userId = authResult.user.uid;
-	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
 	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 		return json(
 			{
@@ -201,13 +184,16 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
 	const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
 
-	let buffer: Buffer;
+	let bytes: Uint8Array;
+	let contentType: string | null = null;
 	try {
-		buffer = await downloadStorageObject({
+		const result = await downloadStorageObject({
 			serviceAccountJson,
 			bucketName,
 			objectName: attachment.storagePath
 		});
+		bytes = result.bytes;
+		contentType = result.contentType;
 	} catch (error) {
 		console.error('Failed to download attachment', { error, userId, conversationId, fileId });
 		return json(
@@ -216,10 +202,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		);
 	}
 
-	if (buffer.length === 0) {
+	if (bytes.length === 0) {
 		return json({ error: 'download_failed', message: 'Attachment is empty.' }, { status: 502 });
 	}
-	if (buffer.length > MAX_FILE_SIZE_BYTES) {
+	if (bytes.length > MAX_FILE_SIZE_BYTES) {
 		return json(
 			{ error: 'file_too_large', message: 'Attachment exceeds 25 MB limit.' },
 			{ status: 413 }
@@ -227,12 +213,16 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	}
 
 	const headers = new Headers();
-	headers.set('content-type', attachment.contentType);
+	headers.set('content-type', attachment.contentType || contentType || 'application/octet-stream');
 	headers.set('cache-control', 'private, max-age=60');
 	const filename = (attachment.filename ?? fileId).replace(/"/g, '');
 	headers.set('content-disposition', `inline; filename="${filename}"`);
 
-	return new Response(Uint8Array.from(buffer), { status: 200, headers });
+	const body =
+		bytes.buffer instanceof ArrayBuffer
+			? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+			: Uint8Array.from(bytes).buffer;
+	return new Response(body, { status: 200, headers });
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -240,9 +230,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!authResult.ok) {
 		return authResult.response;
 	}
-	loadWebEnv();
 	const userId = authResult.user.uid;
-	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
 	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 		return json(
 			{
@@ -280,9 +269,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
-	let buffer: Buffer;
+	let buffer: Uint8Array;
 	try {
-		buffer = Buffer.from(await fileEntry.arrayBuffer());
+		buffer = new Uint8Array(await fileEntry.arrayBuffer());
 	} catch (error) {
 		console.error('Failed to read attachment bytes', { error, userId });
 		return json({ error: 'invalid_file', message: 'Unable to read file bytes' }, { status: 400 });
@@ -363,10 +352,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			payload.messages = [];
 		}
 
-		await setFirestoreDocument({
+		await patchFirestoreDocument({
 			serviceAccountJson,
 			documentPath: conversationDocPath,
-			data: payload
+			updates: payload
 		});
 
 		uploadStatus = nextAttachment;
@@ -396,7 +385,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			bucketName,
 			objectName: storagePath,
 			contentType,
-			data: buffer
+			data: buffer,
+			onlyIfMissing: true
 		});
 
 		const snapshot = await getFirestoreDocument({
@@ -416,10 +406,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			updatedAt: now
 		};
 		const nextAttachments = upsertAttachment(attachments, nextAttachment);
-		await setFirestoreDocument({
+		await patchFirestoreDocument({
 			serviceAccountJson,
 			documentPath: conversationDocPath,
-			data: {
+			updates: {
 				attachments: nextAttachments,
 				updatedAt: now
 			}
@@ -446,10 +436,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				updatedAt: now
 			};
 			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			await setFirestoreDocument({
+			await patchFirestoreDocument({
 				serviceAccountJson,
 				documentPath: conversationDocPath,
-				data: {
+				updates: {
 					attachments: nextAttachments,
 					updatedAt: now
 				}
@@ -479,9 +469,8 @@ export const DELETE: RequestHandler = async ({ request }) => {
 	if (!authResult.ok) {
 		return authResult.response;
 	}
-	loadWebEnv();
 	const userId = authResult.user.uid;
-	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	const serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
 	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 		return json(
 			{
@@ -523,10 +512,10 @@ export const DELETE: RequestHandler = async ({ request }) => {
 				updatedAt: now
 			};
 			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			await setFirestoreDocument({
+			await patchFirestoreDocument({
 				serviceAccountJson,
 				documentPath: conversationDocPath,
-				data: {
+				updates: {
 					attachments: nextAttachments,
 					updatedAt: now
 				}

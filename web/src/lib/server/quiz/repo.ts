@@ -1,23 +1,25 @@
 import { QuizDefinitionSchema, type QuizDefinition } from '@spark/schemas';
-import { getFirebaseAdminFirestore } from '@spark/llm';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const quizIdSchema = z.string().trim().min(1, 'quizId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
 
-function resolveQuizDoc(userId: string, sessionId: string, quizId: string) {
-	const firestore = getFirebaseAdminFirestore();
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
+
+function resolveQuizDocPath(userId: string, sessionId: string, quizId: string): string {
 	const uid = userIdSchema.parse(userId);
 	const sid = sessionIdSchema.parse(sessionId);
 	const qid = quizIdSchema.parse(quizId);
-	return firestore
-		.collection('spark')
-		.doc(uid)
-		.collection('sessions')
-		.doc(sid)
-		.collection('quiz')
-		.doc(qid);
+	return `spark/${uid}/sessions/${sid}/quiz/${qid}`;
 }
 
 export async function getUserQuiz(
@@ -25,15 +27,15 @@ export async function getUserQuiz(
 	sessionId: string,
 	quizId: string
 ): Promise<QuizDefinition | null> {
-	const snapshot = await resolveQuizDoc(userId, sessionId, quizId).get();
-	if (!snapshot.exists) {
+	const documentPath = resolveQuizDocPath(userId, sessionId, quizId);
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath
+	});
+	if (!snapshot.exists || !snapshot.data) {
 		return null;
 	}
-	const raw = snapshot.data();
-	if (!raw) {
-		return null;
-	}
-	return QuizDefinitionSchema.parse({ id: snapshot.id, ...raw });
+	return QuizDefinitionSchema.parse({ id: quizIdSchema.parse(quizId), ...snapshot.data });
 }
 
 export async function saveUserQuiz(
@@ -42,5 +44,10 @@ export async function saveUserQuiz(
 	quiz: QuizDefinition
 ): Promise<void> {
 	const parsed = QuizDefinitionSchema.parse(quiz);
-	await resolveQuizDoc(userId, sessionId, parsed.id).set(parsed);
+	const documentPath = resolveQuizDocPath(userId, sessionId, parsed.id);
+	await setFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath,
+		data: parsed as unknown as Record<string, unknown>
+	});
 }

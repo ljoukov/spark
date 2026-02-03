@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
-import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 
 import type {
@@ -13,12 +12,15 @@ import type {
 } from "@spark/llm/code/sessionArtifacts";
 import type { GenerateStoryResult } from "@spark/llm/code/generateStory";
 import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-} from "@spark/llm/utils/firebaseAdmin";
+  commitFirestoreWrites,
+  getFirestoreDocument,
+  patchFirestoreDocument,
+  setFirestoreDocument,
+} from "@spark/llm/utils/gcp/firestoreRest";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
+import { requireServiceAccountJson } from "../utils/gcp";
 
 type SessionMetadata = Awaited<ReturnType<typeof generateSessionMetadata>>;
 type QuizDefinitions = Awaited<ReturnType<typeof generateQuizDefinitions>>;
@@ -170,16 +172,17 @@ async function readLessonBriefFile(filePath: string): Promise<string> {
 }
 
 function getTemplateDocRef(sessionId: string) {
-  const firestore = getFirebaseAdminFirestore();
-  return firestore
-    .collection(TEMPLATE_ROOT_COLLECTION)
-    .doc(TEMPLATE_ROOT_DOC)
-    .collection(TEMPLATE_SESSIONS_COLLECTION)
-    .doc(sessionId);
+  return `${TEMPLATE_ROOT_COLLECTION}/${TEMPLATE_ROOT_DOC}/${TEMPLATE_SESSIONS_COLLECTION}/${sessionId}`;
 }
 
 function stripUndefined<T>(value: T): T;
 function stripUndefined(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
+    return value;
+  }
   if (Array.isArray(value)) {
     const next: unknown[] = [];
     for (const item of value) {
@@ -226,29 +229,26 @@ async function copyStoryToTemplate(
   planItemId: string,
   storyResult: GenerateStoryResult,
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const sourceDoc = firestore.doc(storyResult.narration.documentPath);
-  const snapshot = await sourceDoc.get();
-  if (!snapshot.exists) {
+  const serviceAccountJson = requireServiceAccountJson();
+  const snapshot = await getFirestoreDocument({
+    serviceAccountJson,
+    documentPath: storyResult.narration.documentPath,
+  });
+  if (!snapshot.exists || !snapshot.data) {
     console.warn(
       `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing; skipping copy`,
     );
     return;
   }
 
-  const targetDoc = getTemplateDocRef(sessionId)
-    .collection("media")
-    .doc(planItemId);
-  const payload = snapshot.data();
-  if (!payload) {
-    console.warn(
-      `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing data; skipping copy`,
-    );
-    return;
-  }
-  await targetDoc.set(payload);
+  const targetDocPath = `${getTemplateDocRef(sessionId)}/media/${planItemId}`;
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: targetDocPath,
+    data: snapshot.data,
+  });
   console.log(
-    `[welcome/${sessionId}] published story media to ${targetDoc.path}`,
+    `[welcome/${sessionId}] published story media to ${targetDocPath}`,
   );
 }
 
@@ -256,18 +256,25 @@ async function writeQuizzesToTemplate(
   sessionId: string,
   quizzes: readonly (typeof QuizDefinitionSchema)["_output"][],
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const batch = firestore.batch();
+  const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(sessionId);
-
-  for (const quiz of quizzes) {
-    const target = templateDoc.collection("quiz").doc(quiz.id);
+  const writes = quizzes.map((quiz) => {
     const { id, ...rest } = quiz;
     void id;
-    batch.set(target, stripUndefined(rest));
-  }
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/quiz/${quiz.id}`,
+      data: stripUndefined(rest) as Record<string, unknown>,
+    };
+  });
 
-  await batch.commit();
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
   console.log(
     `[welcome/${sessionId}] published ${String(quizzes.length)} quizzes to template`,
   );
@@ -277,18 +284,25 @@ async function writeProblemsToTemplate(
   sessionId: string,
   problems: readonly (typeof CodeProblemSchema)["_output"][],
 ): Promise<void> {
-  const firestore = getFirebaseAdminFirestore();
-  const batch = firestore.batch();
+  const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(sessionId);
-
-  for (const problem of problems) {
-    const target = templateDoc.collection("code").doc(problem.slug);
+  const writes = problems.map((problem) => {
     const { slug, ...rest } = problem;
     void slug;
-    batch.set(target, stripUndefined(rest));
-  }
+    return {
+      type: "set" as const,
+      documentPath: `${templateDoc}/code/${problem.slug}`,
+      data: stripUndefined(rest) as Record<string, unknown>,
+    };
+  });
 
-  await batch.commit();
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
   console.log(
     `[welcome/${sessionId}] published ${String(problems.length)} problems to template`,
   );
@@ -305,12 +319,12 @@ async function writeTemplateDoc(
     title?: string;
   },
 ): Promise<void> {
-  const { FieldValue } = getFirebaseAdminFirestoreModule();
+  const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(sessionId);
   const payload: Record<string, unknown> = {
     id: sessionId,
     topic,
-    updatedAt: Timestamp.now(),
+    updatedAt: new Date(),
   };
 
   payload.plan = finalData.plan;
@@ -332,11 +346,12 @@ async function writeTemplateDoc(
     "problemsGrade",
     "storyTitle",
   ];
-  for (const field of draftFieldsToDelete) {
-    payload[field] = FieldValue.delete();
-  }
-
-  await templateDoc.set(stripUndefined(payload), { merge: true });
+  await patchFirestoreDocument({
+    serviceAccountJson,
+    documentPath: templateDoc,
+    updates: stripUndefined(payload) as Record<string, unknown>,
+    deletes: draftFieldsToDelete,
+  });
 }
 
 async function main(): Promise<void> {

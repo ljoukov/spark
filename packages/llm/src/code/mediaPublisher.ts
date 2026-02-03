@@ -1,13 +1,15 @@
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 
-import type { Timestamp as FirestoreTimestamp } from "firebase-admin/firestore";
 import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-  getFirebaseAdminStorage,
-  getFirebaseStorageBucketName,
-} from "../utils/firebaseAdmin";
+  getFirestoreDocument,
+  setFirestoreDocument,
+} from "../utils/gcp/firestoreRest";
+import {
+  parseGoogleServiceAccountJson,
+} from "../utils/gcp/googleAccessToken";
+import { uploadStorageObject } from "../utils/gcp/storageRest";
 import {
   SessionMediaDocSchema,
   type SessionMediaDoc,
@@ -17,8 +19,6 @@ import {
 } from "@spark/schemas";
 import type { SessionAudioResult } from "./audio";
 import type { MediaSegment } from "./schemas";
-
-const { Timestamp } = getFirebaseAdminFirestoreModule();
 
 const idSchema = z.string().trim().min(1);
 
@@ -129,41 +129,44 @@ export async function publishSessionMediaClip(
     throw new Error("At least one media segment is required to publish audio");
   }
 
-  const firestore = getFirebaseAdminFirestore();
-  const storageBucket = getFirebaseStorageBucketName();
-  const storage = getFirebaseAdminStorage();
-  const bucket = storage.bucket(storageBucket);
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+  if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
+  }
+  const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+  const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
 
   const storagePath = buildStoragePath(userId, sessionId, planItemId);
 
-  await bucket.upload(input.audio.outputFilePath, {
-    destination: storagePath,
-    metadata: {
-      contentType: input.audio.outputMimeType,
-      cacheControl: "public, max-age=0",
-    },
-    resumable: false,
+  const audioBytes = await readFile(input.audio.outputFilePath);
+  await uploadStorageObject({
+    serviceAccountJson,
+    bucketName,
+    objectName: storagePath,
+    contentType: input.audio.outputMimeType,
+    data: audioBytes,
   });
-
-  const docRef = firestore
-    .collection("spark")
-    .doc(userId)
-    .collection("sessions")
-    .doc(sessionId)
-    .collection("media")
-    .doc(planItemId);
 
   const images = buildImages(input.segments, input.audio);
   const narration = buildNarration(input.segments, input.audio);
   const posterImage = normaliseSupplementaryImage(input.posterImage);
   const endingImage = normaliseSupplementaryImage(input.endingImage);
-  const now = Timestamp.now();
+  const now = new Date();
 
-  const existing = await docRef.get();
-  const createdAt =
-    existing.exists && existing.get("createdAt") instanceof Timestamp
-      ? (existing.get("createdAt") as FirestoreTimestamp)
-      : now;
+  const documentPath = `spark/${userId}/sessions/${sessionId}/media/${planItemId}`;
+  const existing = await getFirestoreDocument({ serviceAccountJson, documentPath });
+  let createdAt = now;
+  if (existing.exists) {
+    const rawCreatedAt = existing.data?.createdAt;
+    if (rawCreatedAt instanceof Date) {
+      createdAt = rawCreatedAt;
+    } else if (typeof rawCreatedAt === "string" || typeof rawCreatedAt === "number") {
+      const parsed = new Date(rawCreatedAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        createdAt = parsed;
+      }
+    }
+  }
 
   const docData = {
     id: planItemId,
@@ -183,18 +186,18 @@ export async function publishSessionMediaClip(
     metadataVersion: 3,
   };
 
-  // Validate shape before writing (convert timestamps to Date for schema parsing).
-  SessionMediaDocSchema.parse({
-    ...docData,
-    createdAt: createdAt.toDate(),
-    updatedAt: now.toDate(),
-  } satisfies SessionMediaDoc);
+  // Validate shape before writing.
+  SessionMediaDocSchema.parse(docData satisfies SessionMediaDoc);
 
-  await docRef.set(docData);
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath,
+    data: docData as unknown as Record<string, unknown>,
+  });
 
   return {
     storagePath: `/${storagePath}`,
-    documentPath: docRef.path,
+    documentPath,
     durationSec: roundTime(input.audio.totalDurationSec),
     totalBytes: input.audio.totalBytes,
   };

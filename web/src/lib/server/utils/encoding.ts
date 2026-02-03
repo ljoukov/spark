@@ -1,5 +1,5 @@
-import { COOKIE_SECRET_KEY } from '$env/static/private';
 import { base64decode, base64encode } from '$lib/utils/base64';
+import { env } from '$env/dynamic/private';
 
 const ivLen = 16;
 const algorithm = 'AES-GCM';
@@ -8,7 +8,11 @@ const encodingVersion = 0xa1;
 let pkCache: CryptoKey | undefined;
 async function getPrivateKey(): Promise<CryptoKey> {
 	if (!pkCache) {
-		const rawKey = base64decode(COOKIE_SECRET_KEY);
+		const secret = env.COOKIE_SECRET_KEY ?? '';
+		if (!secret || secret.trim().length === 0) {
+			throw Error('getPrivateKey: COOKIE_SECRET_KEY is missing');
+		}
+		const rawKey = base64decode(secret);
 		if (rawKey.length !== 32) {
 			throw Error(`getPrivateKey: invalid COOKIE_SECRET_KEY length: ${rawKey.length}`);
 		}
