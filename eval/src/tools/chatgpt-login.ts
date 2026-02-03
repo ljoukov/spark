@@ -3,10 +3,10 @@ import readline from "node:readline";
 import {
   buildChatGptAuthorizeUrl,
   createChatGptPkce,
+  encodeChatGptAuthJsonB64,
   exchangeChatGptOauthCode,
   parseChatGptOauthRedirect,
   startChatGptOauthCallbackServer,
-  writeChatGptAuthProfile,
 } from "@spark/llm/utils/chatgpt-auth";
 
 import { ensureEvalEnvLoaded } from "../utils/paths";
@@ -40,8 +40,12 @@ async function main(): Promise<void> {
   }
 
   const profile = await exchangeChatGptOauthCode({ code, verifier });
-  await writeChatGptAuthProfile(profile);
-  process.stdout.write("ChatGPT OAuth credentials stored.\n");
+  const encoded = encodeChatGptAuthJsonB64(profile);
+  process.stdout.write("\nSet this environment variable on your server:\n\n");
+  process.stdout.write(`CHATGPT_AUTH_JSON_B64=${encoded}\n\n`);
+  process.stdout.write(
+    "The token payload is base64url-encoded JSON (access/refresh/expires/accountId).\n",
+  );
 }
 
 void main().catch((error: unknown) => {

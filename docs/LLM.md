@@ -137,12 +137,12 @@ Notes:
 When `modelId` starts with `chatgpt-`, OpenAI model calls are routed through the ChatGPT Codex backend using OAuth credentials stored as:
 
 ```
-~/.spark/chatgpt-auth.json
+CHATGPT_AUTH_JSON_B64 (base64url JSON)
 ```
 
-The stored payload includes `{ access, refresh, expires, accountId }` and may also include `id_token` when available from the OAuth exchange.
+The decoded payload includes `{ access, refresh, expires, accountId }` and may also include `id_token` when available from the OAuth exchange.
 
-Run the helper to complete the browser-based OAuth flow and write the auth file:
+Run the helper to complete the browser-based OAuth flow and print a `CHATGPT_AUTH_JSON_B64=...` line you can paste into your server environment:
 
 ```
 npm --prefix eval run auth:chatgpt
