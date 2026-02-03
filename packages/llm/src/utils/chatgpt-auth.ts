@@ -1,20 +1,19 @@
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { URL } from "node:url";
-import lockfile from "proper-lockfile";
 import { z } from "zod";
 
 import { loadLocalEnv } from "./env";
 
-const CHATGPT_AUTH_STORE_ENV = "CHATGPT_AUTH_STORE_PATH";
-const CHATGPT_AUTH_SOURCE_ENV = "CHATGPT_AUTH_SOURCE";
+const CHATGPT_AUTH_JSON_ENV = "CHATGPT_AUTH_JSON";
+const CHATGPT_AUTH_JSON_B64_ENV = "CHATGPT_AUTH_JSON_B64";
+
 const CHATGPT_ACCESS_ENV = "CHATGPT_ACCESS";
 const CHATGPT_REFRESH_ENV = "CHATGPT_REFRESH";
 const CHATGPT_EXPIRES_ENV = "CHATGPT_EXPIRES";
+
 const CHATGPT_ACCOUNT_ID_ENV = "CHATGPT_ACCOUNT_ID";
+const CHATGPT_ID_TOKEN_ENV = "CHATGPT_ID_TOKEN";
 const CHATGPT_ACCESS_TOKEN_ENV = "CHATGPT_ACCESS_TOKEN";
 const CHATGPT_REFRESH_TOKEN_ENV = "CHATGPT_REFRESH_TOKEN";
 const CHATGPT_EXPIRES_AT_ENV = "CHATGPT_EXPIRES_AT";
@@ -25,15 +24,6 @@ const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CHATGPT_OAUTH_REDIRECT_URI = "http://localhost:1455/auth/callback";
 
 const TOKEN_EXPIRY_BUFFER_MS = 30_000;
-const LOCK_RETRY_OPTIONS = {
-  retries: {
-    retries: 24,
-    minTimeout: 200,
-    maxTimeout: 200,
-  },
-  stale: 12_000,
-  realpath: false,
-} as const;
 
 export type ChatGptAuthProfile = {
   readonly access: string;
@@ -43,29 +33,23 @@ export type ChatGptAuthProfile = {
   readonly idToken?: string;
 };
 
-export type ChatGptAuthSource = "env" | "store" | "pkce";
-
-const ChatGptAuthSourceSchema = z.enum(["env", "store", "pkce"]);
-
-const StoredAuthSchema = z
+const AuthInputSchema = z
   .object({
-    access: z.string().min(1),
-    refresh: z.string().min(1),
-    expires: z.number(),
-    accountId: z.string().min(1),
+    access: z.string().min(1).optional(),
+    access_token: z.string().min(1).optional(),
+    accessToken: z.string().min(1).optional(),
+    refresh: z.string().min(1).optional(),
+    refresh_token: z.string().min(1).optional(),
+    refreshToken: z.string().min(1).optional(),
+    expires: z.union([z.number(), z.string()]).optional(),
+    expires_at: z.union([z.number(), z.string()]).optional(),
+    expiresAt: z.union([z.number(), z.string()]).optional(),
+    accountId: z.string().min(1).optional(),
+    account_id: z.string().min(1).optional(),
     id_token: z.string().optional(),
     idToken: z.string().optional(),
   })
   .loose();
-
-const EnvAuthSchema = z.object({
-  access: z.string().min(1),
-  refresh: z.string().min(1),
-  expires: z.union([z.number(), z.string()]).optional(),
-  accountId: z.string().optional(),
-  idToken: z.string().optional(),
-  id_token: z.string().optional(),
-});
 
 const RefreshResponseSchema = z.object({
   access_token: z.string().min(1),
@@ -82,6 +66,21 @@ const ExchangeResponseSchema = z.object({
 
 let cachedProfile: ChatGptAuthProfile | null = null;
 let refreshPromise: Promise<ChatGptAuthProfile> | null = null;
+
+export function encodeChatGptAuthJson(profile: ChatGptAuthProfile): string {
+  const payload = {
+    access: profile.access,
+    refresh: profile.refresh,
+    expires: profile.expires,
+    accountId: profile.accountId,
+    ...(profile.idToken ? { id_token: profile.idToken } : {}),
+  };
+  return JSON.stringify(payload);
+}
+
+export function encodeChatGptAuthJsonB64(profile: ChatGptAuthProfile): string {
+  return Buffer.from(encodeChatGptAuthJson(profile)).toString("base64url");
+}
 
 export function createChatGptPkce(): {
   verifier: string;
@@ -278,222 +277,18 @@ export async function getChatGptAuthProfile(): Promise<ChatGptAuthProfile> {
     return refreshPromise;
   }
   refreshPromise = (async () => {
-    const resolved = await resolveAuthProfile();
-    const profile =
-      resolved.source === "store"
-        ? await refreshStoredProfile(resolved.profile)
-        : await refreshEnvProfile(resolved.profile);
-    cachedProfile = profile;
-    refreshPromise = null;
-    return profile;
+    try {
+      const baseProfile = cachedProfile ?? loadAuthProfileFromEnv();
+      const profile = isExpired(baseProfile)
+        ? await refreshChatGptOauthToken(baseProfile.refresh)
+        : baseProfile;
+      cachedProfile = profile;
+      return profile;
+    } finally {
+      refreshPromise = null;
+    }
   })();
   return refreshPromise;
-}
-
-export async function writeChatGptAuthProfile(
-  profile: ChatGptAuthProfile,
-): Promise<void> {
-  const storePath = resolveAuthStorePath();
-  await ensureStoreFile(storePath);
-  const payload = {
-    access: profile.access,
-    refresh: profile.refresh,
-    expires: profile.expires,
-    accountId: profile.accountId,
-    ...(profile.idToken ? { id_token: profile.idToken } : {}),
-  };
-  await writeFile(storePath, JSON.stringify(payload, null, 2));
-}
-
-async function resolveAuthProfile(): Promise<{
-  profile: ChatGptAuthProfile;
-  source: ChatGptAuthSource;
-}> {
-  loadLocalEnv();
-  const sources = resolveAuthSourceOrder();
-  const errors: string[] = [];
-  for (const source of sources) {
-    try {
-      const profile = await loadAuthProfileFromSource(source);
-      if (profile) {
-        return { profile, source };
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : error && typeof error === "object"
-              ? JSON.stringify(error)
-              : "Unknown error";
-      errors.push(message);
-    }
-  }
-  const details = errors.length > 0 ? `\n${errors.join("\n")}` : "";
-  throw new Error(`Unable to resolve ChatGPT OAuth credentials.${details}`);
-}
-
-function resolveAuthSourceOrder(): ChatGptAuthSource[] {
-  const raw = process.env[CHATGPT_AUTH_SOURCE_ENV];
-  if (!raw) {
-    return ["env", "store"];
-  }
-  const entries = raw
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter((entry) => entry.length > 0);
-  if (entries.length === 0) {
-    return ["env", "store"];
-  }
-  const parsed = z.array(ChatGptAuthSourceSchema).safeParse(entries);
-  if (!parsed.success) {
-    const message = parsed.error.issues
-      .map((issue) => issue.message)
-      .join("\n");
-    throw new Error(`Invalid ${CHATGPT_AUTH_SOURCE_ENV}: ${message}`);
-  }
-  return parsed.data;
-}
-
-async function loadAuthProfileFromSource(
-  source: ChatGptAuthSource,
-): Promise<ChatGptAuthProfile | null> {
-  switch (source) {
-    case "env":
-      return loadAuthProfileFromEnv();
-    case "store":
-      return loadAuthProfileFromStore();
-    case "pkce":
-      throw new Error(
-        "CHATGPT_AUTH_SOURCE=pkce requires running the OAuth login flow.",
-      );
-  }
-}
-
-function loadAuthProfileFromEnv(): ChatGptAuthProfile | null {
-  const access =
-    process.env[CHATGPT_ACCESS_ENV]?.trim() ??
-    process.env[CHATGPT_ACCESS_TOKEN_ENV]?.trim();
-  const refresh =
-    process.env[CHATGPT_REFRESH_ENV]?.trim() ??
-    process.env[CHATGPT_REFRESH_TOKEN_ENV]?.trim();
-  const expiresRaw =
-    process.env[CHATGPT_EXPIRES_ENV]?.trim() ??
-    process.env[CHATGPT_EXPIRES_AT_ENV]?.trim();
-  const accountId = process.env[CHATGPT_ACCOUNT_ID_ENV]?.trim();
-  if (!access && !refresh && !expiresRaw && !accountId) {
-    return null;
-  }
-  const parsed = EnvAuthSchema.safeParse({
-    access,
-    refresh,
-    expires: expiresRaw,
-    accountId: accountId || undefined,
-    idToken: process.env.CHATGPT_ID_TOKEN?.trim() || undefined,
-  });
-  if (!parsed.success) {
-    const message = parsed.error.issues
-      .map((issue) => issue.message)
-      .join("\n");
-    throw new Error(`Invalid ChatGPT env credentials: ${message}`);
-  }
-  return normalizeAuthProfile(parsed.data);
-}
-
-async function loadAuthProfileFromStore(): Promise<ChatGptAuthProfile | null> {
-  const storePath = resolveAuthStorePath();
-  let content: string;
-  try {
-    content = await readFile(storePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-  const raw = JSON.parse(content) as Record<string, unknown>;
-  const hasAny =
-    typeof raw.access === "string" ||
-    typeof raw.refresh === "string" ||
-    typeof raw.expires === "number" ||
-    typeof raw.accountId === "string";
-  if (!hasAny) {
-    return null;
-  }
-  const parsed = StoredAuthSchema.safeParse(raw);
-  if (!parsed.success) {
-    const message = parsed.error.issues
-      .map((issue) => issue.message)
-      .join("\n");
-    throw new Error(`Invalid ChatGPT auth store payload: ${message}`);
-  }
-  return normalizeAuthProfile(parsed.data);
-}
-
-async function refreshEnvProfile(
-  profile: ChatGptAuthProfile,
-): Promise<ChatGptAuthProfile> {
-  if (!isExpired(profile)) {
-    return profile;
-  }
-  return refreshChatGptOauthToken(profile.refresh);
-}
-
-async function refreshStoredProfile(
-  profile: ChatGptAuthProfile,
-): Promise<ChatGptAuthProfile> {
-  if (!isExpired(profile)) {
-    return profile;
-  }
-  const storePath = resolveAuthStorePath();
-  await ensureStoreFile(storePath);
-  return withAuthStoreLock(storePath, async () => {
-    const latest = await loadAuthProfileFromStore();
-    if (latest && !isExpired(latest)) {
-      return latest;
-    }
-    if (!latest) {
-      return profile;
-    }
-    try {
-      const refreshed = await refreshChatGptOauthToken(latest.refresh);
-      await writeChatGptAuthProfile(refreshed);
-      return refreshed;
-    } catch (error) {
-      const fallback = await loadAuthProfileFromStore();
-      if (fallback && !isExpired(fallback)) {
-        return fallback;
-      }
-      throw error;
-    }
-  });
-}
-
-async function withAuthStoreLock<T>(
-  storePath: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  await ensureStoreFile(storePath);
-  const release = await lockfile.lock(storePath, LOCK_RETRY_OPTIONS);
-  try {
-    return await fn();
-  } finally {
-    await release();
-  }
-}
-
-async function ensureStoreFile(storePath: string): Promise<void> {
-  await mkdir(path.dirname(storePath), { recursive: true });
-  try {
-    await readFile(storePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
-      await writeFile(storePath, JSON.stringify({}, null, 2));
-      return;
-    }
-    throw error;
-  }
 }
 
 function profileFromTokenResponse(payload: {
@@ -519,32 +314,28 @@ function profileFromTokenResponse(payload: {
 }
 
 function normalizeAuthProfile(
-  data: z.infer<typeof StoredAuthSchema> | z.infer<typeof EnvAuthSchema>,
+  data: z.infer<typeof AuthInputSchema>,
 ): ChatGptAuthProfile {
   const access =
-    "access" in data ? data.access : (data as { access?: string }).access;
+    data.access ?? data.access_token ?? data.accessToken ?? undefined;
   const refresh =
-    "refresh" in data ? data.refresh : (data as { refresh?: string }).refresh;
+    data.refresh ?? data.refresh_token ?? data.refreshToken ?? undefined;
   if (!access || !refresh) {
     throw new Error("ChatGPT credentials must include access and refresh.");
   }
   const expiresRaw =
-    "expires" in data ? data.expires : (data as { expires?: unknown }).expires;
+    data.expires ?? data.expires_at ?? data.expiresAt;
   const idToken =
-    "id_token" in data
-      ? data.id_token
-      : ((data as { idToken?: string }).idToken ??
-        (data as { id_token?: string }).id_token);
+    data.idToken ?? data.id_token ?? undefined;
   const expires =
     normalizeEpochMillis(expiresRaw) ??
     extractJwtExpiry(idToken ?? access) ??
     Date.now() + 5 * 60_000;
   const accountId =
-    "accountId" in data
-      ? data.accountId
-      : ((data as { accountId?: string }).accountId ??
-        extractChatGptAccountId(idToken ?? "") ??
-        extractChatGptAccountId(access));
+    data.accountId ??
+    data.account_id ??
+    extractChatGptAccountId(idToken ?? "") ??
+    extractChatGptAccountId(access);
   if (!accountId) {
     throw new Error("ChatGPT credentials missing chatgpt_account_id.");
   }
@@ -613,19 +404,59 @@ function decodeJwtPayload(
   }
 }
 
-function resolveAuthStorePath(): string {
-  const raw = process.env[CHATGPT_AUTH_STORE_ENV];
-  if (raw && raw.trim().length > 0) {
-    return expandHome(raw.trim());
-  }
-  return path.join(os.homedir(), ".spark", "chatgpt-auth.json");
-}
+function loadAuthProfileFromEnv(): ChatGptAuthProfile {
+  loadLocalEnv();
 
-function expandHome(value: string): string {
-  if (value.startsWith("~/")) {
-    return path.join(os.homedir(), value.slice(2));
+  const rawJsonB64 = process.env[CHATGPT_AUTH_JSON_B64_ENV]?.trim();
+  if (rawJsonB64) {
+    let decoded: string;
+    try {
+      decoded = Buffer.from(rawJsonB64, "base64url").toString("utf8");
+    } catch (error) {
+      throw new Error(
+        `Invalid ${CHATGPT_AUTH_JSON_B64_ENV}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return parseAuthJson(decoded, CHATGPT_AUTH_JSON_B64_ENV);
   }
-  return value;
+
+  const rawJson = process.env[CHATGPT_AUTH_JSON_ENV]?.trim();
+  if (rawJson) {
+    return parseAuthJson(rawJson, CHATGPT_AUTH_JSON_ENV);
+  }
+
+  const access =
+    process.env[CHATGPT_ACCESS_TOKEN_ENV]?.trim() ??
+    process.env[CHATGPT_ACCESS_ENV]?.trim();
+  const refresh =
+    process.env[CHATGPT_REFRESH_TOKEN_ENV]?.trim() ??
+    process.env[CHATGPT_REFRESH_ENV]?.trim();
+  const expiresRaw =
+    process.env[CHATGPT_EXPIRES_AT_ENV]?.trim() ??
+    process.env[CHATGPT_EXPIRES_ENV]?.trim();
+  const accountId = process.env[CHATGPT_ACCOUNT_ID_ENV]?.trim();
+  const idToken =
+    process.env[CHATGPT_ID_TOKEN_ENV]?.trim() ??
+    process.env.CHATGPT_ID_TOKEN?.trim();
+
+  if (!access && !refresh && !expiresRaw && !accountId && !idToken) {
+    throw new Error(
+      `Missing ChatGPT OAuth credentials. Set ${CHATGPT_AUTH_JSON_B64_ENV} (recommended) or ${CHATGPT_AUTH_JSON_ENV}.`,
+    );
+  }
+
+  const parsed = AuthInputSchema.safeParse({
+    access,
+    refresh,
+    expires: expiresRaw,
+    accountId: accountId || undefined,
+    idToken: idToken || undefined,
+  });
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    throw new Error(`Invalid ChatGPT env credentials: ${message}`);
+  }
+  return normalizeAuthProfile(parsed.data);
 }
 
 function isExpired(profile: ChatGptAuthProfile): boolean {
@@ -638,4 +469,21 @@ function toBase64Url(buffer: Buffer): string {
     .replace(/\+/gu, "-")
     .replace(/\//gu, "_")
     .replace(/=+$/gu, "");
+}
+
+function parseAuthJson(raw: string, label: string): ChatGptAuthProfile {
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(raw) as unknown;
+  } catch (error) {
+    throw new Error(
+      `Invalid ${label}: expected JSON (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+  const parsed = AuthInputSchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    throw new Error(`Invalid ${label}: ${message}`);
+  }
+  return normalizeAuthProfile(parsed.data);
 }
