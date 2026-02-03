@@ -86,7 +86,7 @@ export async function getGoogleAccessToken(options: {
 
 	const signingInput = `${base64UrlEncodeJson(header)}.${base64UrlEncodeJson(payload)}`;
 	const keyBytes = pemToPkcs8DerBytes(sa.privateKey);
-	const keyData = keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength);
+	const keyData = Uint8Array.from(keyBytes).buffer;
 	const cryptoApi = globalThis.crypto?.subtle;
 	if (!cryptoApi) {
 		throw new Error('WebCrypto is not available; cannot mint Google access tokens.');
