@@ -1,0 +1,59 @@
+import { z } from "zod";
+
+import { FirestoreTimestampSchema } from "./firestore";
+
+const trimmedString = z.string().trim().min(1);
+
+export const SparkAgentStatusSchema = z.enum([
+  "created",
+  "executing",
+  "failed",
+  "done",
+]);
+
+export type SparkAgentStatus = z.infer<typeof SparkAgentStatusSchema>;
+
+export const SparkAgentStateTimelineSchema = z.object({
+  state: SparkAgentStatusSchema,
+  timestamp: FirestoreTimestampSchema,
+});
+
+export type SparkAgentStateTimeline = z.infer<
+  typeof SparkAgentStateTimelineSchema
+>;
+
+export const SparkAgentStateSchema = z.object({
+  id: trimmedString,
+  prompt: trimmedString,
+  status: SparkAgentStatusSchema,
+  workspaceId: trimmedString,
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
+  statesTimeline: z.array(SparkAgentStateTimelineSchema).min(1),
+  resultSummary: z.string().trim().optional(),
+  error: z.string().trim().optional(),
+});
+
+export type SparkAgentState = z.infer<typeof SparkAgentStateSchema>;
+
+export const SparkAgentWorkspaceSchema = z.object({
+  id: trimmedString,
+  agentId: trimmedString.optional(),
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
+});
+
+export type SparkAgentWorkspace = z.infer<typeof SparkAgentWorkspaceSchema>;
+
+export const SparkAgentWorkspaceFileSchema = z.object({
+  path: trimmedString,
+  content: z.string(),
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
+  sizeBytes: z.number().int().min(0).optional(),
+  contentType: trimmedString.optional(),
+});
+
+export type SparkAgentWorkspaceFile = z.infer<
+  typeof SparkAgentWorkspaceFileSchema
+>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Agent, fetch as undiciFetch } from "undici";
 import { loadLocalEnv } from "./env";
 import { getGoogleAccessToken, getGoogleServiceAccount } from "./googleAuth";
 
@@ -43,10 +44,22 @@ const GenerateWelcomeSessionTaskEnvelope = z.object({
   generateWelcomeSession: GenerateWelcomeSessionTaskSchema,
 });
 
+export const RunAgentTaskSchema = z.object({
+  userId: z.string().min(1),
+  agentId: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
+
+const RunAgentTaskEnvelope = z.object({
+  type: z.literal("runAgent"),
+  runAgent: RunAgentTaskSchema,
+});
+
 export const TaskSchema = z.discriminatedUnion("type", [
   GenerateQuizTaskEnvelope,
   GenerateLessonTaskEnvelope,
   GenerateWelcomeSessionTaskEnvelope,
+  RunAgentTaskEnvelope,
   HelloWorldTaskEnvelope,
 ]);
 
@@ -55,6 +68,7 @@ export type GenerateLessonTask = z.infer<typeof GenerateLessonTaskSchema>;
 export type GenerateWelcomeSessionTask = z.infer<
   typeof GenerateWelcomeSessionTaskSchema
 >;
+export type RunAgentTask = z.infer<typeof RunAgentTaskSchema>;
 export type HelloWorldTask = z.infer<typeof HelloWorldTaskEnvelope>;
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -124,6 +138,21 @@ export async function createTask(task: Task): Promise<void> {
     let postUrl = serviceUrl;
     try {
       const u = new URL(serviceUrl);
+      if (u.hostname === "127.0.0.1" || u.hostname === "0.0.0.0") {
+        u.hostname = "localhost";
+      }
+      // Allow local dev callers to omit the port and reuse the Vite HTTPS port.
+      if (!u.port) {
+        const vitePort = process.env.VITE_DEV_PORT?.trim();
+        const envPort = process.env.PORT?.trim();
+        if (vitePort && /^[0-9]+$/.test(vitePort)) {
+          u.port = vitePort;
+        } else if (envPort && /^[0-9]+$/.test(envPort)) {
+          u.port = envPort;
+        } else {
+          u.port = "8081";
+        }
+      }
       if (u.pathname === "/") {
         u.pathname = "/api/internal/tasks";
       }
@@ -135,10 +164,14 @@ export async function createTask(task: Task): Promise<void> {
     }
     try {
       console.warn(`Starting a local task: ${postUrl}`);
-      const resp = await fetch(postUrl, {
+      const dispatcher = new Agent({
+        connect: { rejectUnauthorized: false },
+      });
+      const resp = await undiciFetch(postUrl, {
         method: "POST",
         headers,
         body,
+        dispatcher,
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
@@ -171,7 +204,7 @@ export async function createTask(task: Task): Promise<void> {
   const createUrl = `https://cloudtasks.googleapis.com/v2/projects/${projectId}/locations/${location}/queues/${queue}/tasks`;
 
   console.warn(`Starting remote task via TasksAPI: ${handlerUrl}`);
-  const resp = await fetch(createUrl, {
+  const resp = await undiciFetch(createUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
