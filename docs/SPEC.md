@@ -185,6 +185,7 @@ name of the oneof in `SparkApiRequestProto.request`.
 Payload shape is validated server-side with Zod (in `@spark/llm`) using a discriminated union over `type`:
 
 - `type = "generateQuiz"` with `generateQuiz: { userId: string; uploadId: string; quizId: string }`.
+- `type = "runAgent"` with `runAgent: { userId: string; agentId: string; workspaceId: string }`.
 - `type = "helloWorld"` with no additional payload. The handler logs `Hello World` for smoke testing and pipeline diagnostics.
 
 During development, the server schedules work by POSTing directly to `TASKS_SERVICE_URL` (typically the same app’s `/api/internal/tasks`). In production the same binary schedules via Google Cloud Tasks:
@@ -227,6 +228,16 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Conversation documents include `attachments[]` entries with `{ id, storagePath, contentType, filename?, downloadUrl?, sizeBytes, status, createdAt, updatedAt, messageId? }`, where status ∈ `uploading | attaching | attached | failed`.
 - Streaming writes to Firestore are throttled to at most one update every 500 ms; the SSE stream is used for immediate UI updates.
 
+### 3.5 Spark AI Agent Runs (Phase 2)
+
+- Agent runs are stored under `users/{userId}/agents/{agentId}`.
+  - Fields: `{ id, prompt, status, workspaceId, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
+  - `status` ∈ `created | executing | failed | done`.
+  - `statesTimeline[]` entries contain `{ state, timestamp }`.
+- Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
+  - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
+  - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
+
 ## 4) Backend (SvelteKit)
 
 - Uses SvelteKit
@@ -244,6 +255,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - `SparkApiRequest.request = SummarizeRequest`
   - `SparkApiRequest.request = SyncRequest` (optional to bootstrap client caches)
 - Web app uses JSON endpoints under `/api/*`; non-proto marketing endpoints remain separate (`/api/health`, `/api/newsletter`).
+- `POST /api/spark/agents` creates a new Spark Agent run, persists the agent doc, assigns a workspace, and schedules the `runAgent` task.
 - Logging & tracing: console logs captured via Vercel logging/observability; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
 
 ## 5) iOS App (SwiftUI)
@@ -280,6 +292,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
 - `/spark` is the signed-in home with cards linking to `/spark/code` and `/spark/code/lessons`.
+- `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected agent status plus workspace files (Markdown files render with the markdown renderer).
 - `/spark/code` hosts the Spark Code experience (quizzes, problems, media steps).
 - `/logout` signs out and returns to `/`.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Vercel KV or third-party API.

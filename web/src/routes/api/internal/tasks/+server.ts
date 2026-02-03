@@ -9,6 +9,7 @@ import {
 	getFirebaseAdminFirestoreModule,
 	getFirebaseAdminStorage,
 	getFirebaseStorageBucketName,
+	runSparkAgentTask,
 	generateSession,
 	generateQuizDefinitions,
 	generateWelcomeSessionTemplate
@@ -60,6 +61,20 @@ export const POST: RequestHandler = async ({ request }) => {
 		} catch (error) {
 			console.error('Failed to generate welcome session', { error, topic });
 			return json({ status: 'failed', reason: 'welcome_generation_failed' }, { status: 500 });
+		}
+	}
+
+	if (task.type === 'runAgent') {
+		const { userId, agentId, workspaceId } = task.runAgent;
+		console.log(
+			`[internal task] runAgent userId=${userId} agentId=${agentId} workspaceId=${workspaceId}`
+		);
+		try {
+			await runSparkAgentTask({ userId, agentId, workspaceId });
+			return json({ status: 'completed' }, { status: 200 });
+		} catch (error) {
+			console.error('[internal task] runAgent failed', { error, userId, agentId });
+			return json({ status: 'failed', reason: 'agent_failed' }, { status: 500 });
 		}
 	}
 

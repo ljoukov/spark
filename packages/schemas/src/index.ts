@@ -8,3 +8,4 @@ export * from "./codeProblem";
 export * from "./sessionMedia";
 export * from "./spark";
 export * from "./sparkAgent";
+export * from "./sparkAgentTask";

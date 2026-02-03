@@ -12,6 +12,17 @@ service cloud.firestore {
       allow read: if isOwner(userId);
     }
 
+    // Spark AI Agent runs + workspaces (client read-only)
+    match /users/{userId}/agents/{docId=**} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    match /users/{userId}/workspace/{docId=**} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
     // Your existing spark paths
     match /spark/{userId}/{docId=*} {
       allow read: if isOwner(userId);
