@@ -1,12 +1,12 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import {
-	getFirebaseAdminFirestore,
 	getFirebaseAdminStorage,
 	getFirebaseStorageBucketName,
 	loadEnvFromFile,
 	loadLocalEnv
 } from '@spark/llm';
+import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment
@@ -184,6 +184,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	loadWebEnv();
 	const userId = authResult.user.uid;
+	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+		return json(
+			{
+				error: 'misconfigured',
+				message: 'GOOGLE_SERVICE_ACCOUNT_JSON is missing on the server.'
+			},
+			{ status: 500 }
+		);
+	}
 
 	let formData: FormData;
 	try {
@@ -246,67 +256,68 @@ export const POST: RequestHandler = async ({ request }) => {
 	const storagePath = `spark/uploads/${userId}/${fileId}`;
 	const filename = fileEntry.name ?? 'upload';
 
-	const firestore = getFirebaseAdminFirestore();
-	const conversationRef = firestore
-		.collection(userId)
-		.doc('client')
-		.collection('conversations')
-		.doc(conversationId);
+	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
 
 	let uploadStatus: SparkAgentAttachment | null = null;
 
 	try {
-		await firestore.runTransaction(async (tx) => {
-			const snapshot = await tx.get(conversationRef);
-			const now = new Date();
-			const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
-			const activeAttachments = attachments.filter((entry) => entry.status !== 'failed');
-			const existing = activeAttachments.find((entry) => entry.id === fileId);
-
-			if (!existing) {
-				if (activeAttachments.length >= MAX_FILES_PER_CONVERSATION) {
-					throw new AttachmentLimitError(
-						'too_many_files',
-						'You can attach up to 10 files per conversation.'
-					);
-				}
-				const totalSize = activeAttachments.reduce((sum, entry) => sum + entry.sizeBytes, 0);
-				if (totalSize + sizeBytes > MAX_TOTAL_SIZE_BYTES) {
-					throw new AttachmentLimitError(
-						'total_size_exceeded',
-						'Attachments are limited to 50 MB per conversation.',
-						413
-					);
-				}
-			}
-
-			const nextAttachment: SparkAgentAttachment = {
-				id: fileId,
-				storagePath,
-				contentType,
-				filename,
-				sizeBytes,
-				status: existing?.status ?? 'uploading',
-				createdAt: existing?.createdAt ?? now,
-				updatedAt: now
-			};
-			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-
-			const payload: Record<string, unknown> = {
-				attachments: nextAttachments,
-				updatedAt: now
-			};
-			if (!snapshot.exists) {
-				payload.id = conversationId;
-				payload.participantIds = [userId];
-				payload.createdAt = now;
-				payload.lastMessageAt = now;
-				payload.messages = [];
-			}
-
-			tx.set(conversationRef, payload, { merge: true });
-			uploadStatus = nextAttachment;
+		const snapshot = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath
 		});
+		const now = new Date();
+		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const activeAttachments = attachments.filter((entry) => entry.status !== 'failed');
+		const existing = activeAttachments.find((entry) => entry.id === fileId);
+
+		if (!existing) {
+			if (activeAttachments.length >= MAX_FILES_PER_CONVERSATION) {
+				throw new AttachmentLimitError(
+					'too_many_files',
+					'You can attach up to 10 files per conversation.'
+				);
+			}
+			const totalSize = activeAttachments.reduce((sum, entry) => sum + entry.sizeBytes, 0);
+			if (totalSize + sizeBytes > MAX_TOTAL_SIZE_BYTES) {
+				throw new AttachmentLimitError(
+					'total_size_exceeded',
+					'Attachments are limited to 50 MB per conversation.',
+					413
+				);
+			}
+		}
+
+		const nextAttachment: SparkAgentAttachment = {
+			id: fileId,
+			storagePath,
+			contentType,
+			filename,
+			sizeBytes,
+			status: existing?.status ?? 'uploading',
+			createdAt: existing?.createdAt ?? now,
+			updatedAt: now
+		};
+		const nextAttachments = upsertAttachment(attachments, nextAttachment);
+
+		const payload: Record<string, unknown> = {
+			attachments: nextAttachments,
+			updatedAt: now
+		};
+		if (!snapshot.exists) {
+			payload.id = conversationId;
+			payload.participantIds = [userId];
+			payload.createdAt = now;
+			payload.lastMessageAt = now;
+			payload.messages = [];
+		}
+
+		await setFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath,
+			data: payload
+		});
+
+		uploadStatus = nextAttachment;
 	} catch (error) {
 		if (error instanceof AttachmentLimitError) {
 			return json({ error: error.code, message: error.message }, { status: error.status });
@@ -359,38 +370,42 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		downloadUrl = buildDownloadUrl(bucketName, storagePath, downloadToken);
 
-		await firestore.runTransaction(async (tx) => {
-			const snapshot = await tx.get(conversationRef);
-			const now = new Date();
-			const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
-			const nextAttachment: SparkAgentAttachment = {
-				id: fileId,
-				storagePath,
-				contentType,
-				filename,
-				downloadUrl: downloadUrl ?? undefined,
-				sizeBytes,
-				status: 'attaching',
-				createdAt: attachments.find((entry) => entry.id === fileId)?.createdAt ?? now,
-				updatedAt: now
-			};
-			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			tx.set(
-				conversationRef,
-				{
-					attachments: nextAttachments,
-					updatedAt: now
-				},
-				{ merge: true }
-			);
-			finalAttachment = nextAttachment;
+		const snapshot = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath
 		});
+		const now = new Date();
+		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		const nextAttachment: SparkAgentAttachment = {
+			id: fileId,
+			storagePath,
+			contentType,
+			filename,
+			downloadUrl: downloadUrl ?? undefined,
+			sizeBytes,
+			status: 'attaching',
+			createdAt: attachments.find((entry) => entry.id === fileId)?.createdAt ?? now,
+			updatedAt: now
+		};
+		const nextAttachments = upsertAttachment(attachments, nextAttachment);
+		await setFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath,
+			data: {
+				attachments: nextAttachments,
+				updatedAt: now
+			}
+		});
+		finalAttachment = nextAttachment;
 	} catch (error) {
 		console.error('Failed to upload attachment', { error, userId, conversationId });
-		await firestore.runTransaction(async (tx) => {
-			const snapshot = await tx.get(conversationRef);
+		try {
+			const snapshot = await getFirestoreDocument({
+				serviceAccountJson,
+				documentPath: conversationDocPath
+			});
 			const now = new Date();
-			const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
+			const attachments = normalizeAttachments(snapshot.data?.attachments, now);
 			const nextAttachment: SparkAgentAttachment = {
 				id: fileId,
 				storagePath,
@@ -403,15 +418,21 @@ export const POST: RequestHandler = async ({ request }) => {
 				updatedAt: now
 			};
 			const nextAttachments = upsertAttachment(attachments, nextAttachment);
-			tx.set(
-				conversationRef,
-				{
+			await setFirestoreDocument({
+				serviceAccountJson,
+				documentPath: conversationDocPath,
+				data: {
 					attachments: nextAttachments,
 					updatedAt: now
-				},
-				{ merge: true }
-			);
-		});
+				}
+			});
+		} catch (innerError) {
+			console.error('Failed to mark attachment as failed', {
+				error: innerError instanceof Error ? innerError.message : String(innerError),
+				userId,
+				conversationId
+			});
+		}
 		return json(
 			{ error: 'upload_failed', message: 'Upload failed. Please try again.' },
 			{ status: 500 }
@@ -432,6 +453,16 @@ export const DELETE: RequestHandler = async ({ request }) => {
 	}
 	loadWebEnv();
 	const userId = authResult.user.uid;
+	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+		return json(
+			{
+				error: 'misconfigured',
+				message: 'GOOGLE_SERVICE_ACCOUNT_JSON is missing on the server.'
+			},
+			{ status: 500 }
+		);
+	}
 
 	let parsed: z.infer<typeof removeSchema>;
 	try {
@@ -444,40 +475,43 @@ export const DELETE: RequestHandler = async ({ request }) => {
 	}
 
 	const { conversationId, fileId } = parsed;
-	const firestore = getFirebaseAdminFirestore();
-	const conversationRef = firestore
-		.collection(userId)
-		.doc('client')
-		.collection('conversations')
-		.doc(conversationId);
+	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
 
 	let updated: SparkAgentAttachment | null = null;
 
-	await firestore.runTransaction(async (tx) => {
-		const snapshot = await tx.get(conversationRef);
+	try {
+		const snapshot = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath
+		});
 		const now = new Date();
-		const attachments = normalizeAttachments(snapshot.data()?.attachments, now);
+		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
 		const existing = attachments.find((entry) => entry.id === fileId);
-		if (!existing) {
-			return;
-		}
-		const nextAttachment: SparkAgentAttachment = {
-			...existing,
-			status: 'failed',
-			error: 'removed',
-			updatedAt: now
-		};
-		const nextAttachments = upsertAttachment(attachments, nextAttachment);
-		tx.set(
-			conversationRef,
-			{
-				attachments: nextAttachments,
+		if (existing) {
+			const nextAttachment: SparkAgentAttachment = {
+				...existing,
+				status: 'failed',
+				error: 'removed',
 				updatedAt: now
-			},
-			{ merge: true }
+			};
+			const nextAttachments = upsertAttachment(attachments, nextAttachment);
+			await setFirestoreDocument({
+				serviceAccountJson,
+				documentPath: conversationDocPath,
+				data: {
+					attachments: nextAttachments,
+					updatedAt: now
+				}
+			});
+			updated = nextAttachment;
+		}
+	} catch (error) {
+		console.error('Failed to update attachment state (remove)', { error, userId, conversationId });
+		return json(
+			{ error: 'attachment_state_failed', message: 'Unable to update attachment state.' },
+			{ status: 500 }
 		);
-		updated = nextAttachment;
-	});
+	}
 
 	return json({ attachment: updated });
 };
