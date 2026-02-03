@@ -2,8 +2,6 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
 	getFirebaseAdminFirestore,
-	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName,
 	generateText,
 	loadEnvFromFile,
 	loadLocalEnv
@@ -25,6 +23,7 @@ const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
 const MODEL_ID = 'gemini-flash-latest' as const;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
 	'image/jpeg',
 	'image/png',
@@ -319,27 +318,6 @@ function isSupportedAttachmentMime(value: string): boolean {
 	return SUPPORTED_ATTACHMENT_MIME_TYPES.has(value);
 }
 
-function isAttachmentStoragePathForUser(userId: string, storagePath: string): boolean {
-	const prefix = `spark/uploads/${userId}/`;
-	return storagePath.startsWith(prefix);
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-	let timeoutHandle: NodeJS.Timeout | null = null;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutHandle = setTimeout(() => {
-			reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-		}, timeoutMs);
-	});
-	try {
-		return await Promise.race([promise, timeoutPromise]);
-	} finally {
-		if (timeoutHandle) {
-			clearTimeout(timeoutHandle);
-		}
-	}
-}
-
 async function downloadAttachmentParts(
 	userId: string,
 	attachments: z.infer<typeof attachmentSchema>[]
@@ -347,25 +325,39 @@ async function downloadAttachmentParts(
 	if (attachments.length === 0) {
 		return [];
 	}
-	const storage = getFirebaseAdminStorage();
-	const bucket = storage.bucket(getFirebaseStorageBucketName());
 	const downloadTasks = attachments.map(async (attachment) => {
 		if (!isSupportedAttachmentMime(attachment.contentType)) {
 			throw new Error(`Unsupported attachment type ${attachment.contentType}`);
 		}
-		if (!isAttachmentStoragePathForUser(userId, attachment.storagePath)) {
-			throw new Error(`Attachment storage path mismatch: ${attachment.storagePath}`);
+		if (!attachment.downloadUrl || attachment.downloadUrl.trim().length === 0) {
+			throw new Error(`Attachment ${attachment.id} is missing a downloadUrl`);
 		}
-		const fileRef = bucket.file(attachment.storagePath);
-		const downloadPromise = fileRef.download();
-		downloadPromise.catch(() => {});
-		const [buffer] = await withTimeout(
-			downloadPromise,
-			ATTACHMENT_DOWNLOAD_TIMEOUT_MS,
-			`Attachment ${attachment.id}`
-		);
-		if (!buffer || buffer.length === 0) {
+
+		// Cloudflare Workers does not reliably support Firebase Admin Storage (Node + gRPC/protobuf).
+		// Fetch the Firebase Storage download URL provided by the client instead.
+		const controller = new AbortController();
+		const timeoutHandle = setTimeout(() => {
+			controller.abort();
+		}, ATTACHMENT_DOWNLOAD_TIMEOUT_MS);
+
+		let resp: Response;
+		try {
+			resp = await fetch(attachment.downloadUrl, { signal: controller.signal });
+		} finally {
+			clearTimeout(timeoutHandle);
+		}
+
+		if (!resp.ok) {
+			throw new Error(`Attachment ${attachment.id} download failed: ${resp.status}`);
+		}
+
+		const arrayBuffer = await resp.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+		if (buffer.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
+		}
+		if (buffer.length > MAX_ATTACHMENT_BYTES) {
+			throw new Error(`Attachment ${attachment.id} exceeds 25 MB limit`);
 		}
 		return {
 			data: buffer,
@@ -484,17 +476,19 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const conversationId = resolveConversationId(parsedBody.conversationId);
-	const firestore = getFirebaseAdminFirestore();
 	const now = new Date();
-	const conversationRef = firestore
-		.collection(userId)
-		.doc('client')
-		.collection('conversations')
-		.doc(conversationId);
-	let conversation: ConversationDoc;
+	let conversationRef: FirebaseFirestore.DocumentReference | null = null;
+	let conversation: ConversationDoc = resolveConversationDoc(undefined, userId, conversationId, now)
+		.conversation;
 	let conversationAttachments: SparkAgentAttachment[] = [];
 
 	try {
+		const firestore = getFirebaseAdminFirestore();
+		conversationRef = firestore
+			.collection(userId)
+			.doc('client')
+			.collection('conversations')
+			.doc(conversationId);
 		const snapshot = await conversationRef.get();
 		conversationAttachments = normalizeAttachments(snapshot.data()?.attachments, now);
 		conversation = resolveConversationDoc(
@@ -504,11 +498,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			now
 		).conversation;
 	} catch (error) {
-		console.error('Spark AI Agent Firestore access failed', { error, userId });
-		return json(
-			{ error: 'server_misconfigured', message: 'Firestore unavailable' },
-			{ status: 500 }
-		);
+		// Cloudflare Workers can reject dynamic codegen used by some Node libs (Firestore via gRPC/protobuf).
+		// Fall back to a stateless conversation so the user can still chat.
+		console.warn('Spark AI Agent Firestore unavailable; continuing without persistence', {
+			error: error instanceof Error ? error.message : String(error),
+			userId
+		});
+		conversationRef = null;
 	}
 
 	const messageId = randomUUID();
@@ -519,21 +515,27 @@ export const POST: RequestHandler = async ({ request }) => {
 	const attachmentForMessage: z.infer<typeof attachmentSchema>[] = [];
 	for (const attachment of attachments) {
 		const existing = attachmentById.get(attachment.id);
-		if (!existing) {
+		if (existing) {
+			if (existing.status === 'failed' || existing.status === 'uploading') {
+				continue;
+			}
+			attachmentForMessage.push({
+				id: existing.id,
+				storagePath: existing.storagePath,
+				contentType: existing.contentType,
+				filename: existing.filename,
+				downloadUrl: existing.downloadUrl,
+				sizeBytes: existing.sizeBytes,
+				pageCount: existing.pageCount
+			});
 			continue;
 		}
-		if (existing.status === 'failed' || existing.status === 'uploading') {
-			continue;
+
+		// If Firestore isn't available (or attachment isn't recorded yet), accept the attachment directly
+		// as long as the client supplied a download URL.
+		if (attachment.downloadUrl && attachment.downloadUrl.trim().length > 0) {
+			attachmentForMessage.push(attachment);
 		}
-		attachmentForMessage.push({
-			id: existing.id,
-			storagePath: existing.storagePath,
-			contentType: existing.contentType,
-			filename: existing.filename,
-			downloadUrl: existing.downloadUrl,
-			sizeBytes: existing.sizeBytes,
-			pageCount: existing.pageCount
-		});
 	}
 	if (!trimmedText && attachmentForMessage.length === 0) {
 		return json(
@@ -573,16 +575,27 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	}
 
-	await conversationRef.set(
-		toConversationPayload({
-			...conversation,
-			updatedAt: now,
-			lastMessageAt: now,
-			messages: conversation.messages,
-			attachments: conversationAttachments
-		}),
-		{ merge: true }
-	);
+	if (conversationRef) {
+		try {
+			await conversationRef.set(
+				toConversationPayload({
+					...conversation,
+					updatedAt: now,
+					lastMessageAt: now,
+					messages: conversation.messages,
+					attachments: conversationAttachments
+				}),
+				{ merge: true }
+			);
+		} catch (error) {
+			console.warn('Spark AI Agent conversation write failed (continuing)', {
+				error: error instanceof Error ? error.message : String(error),
+				userId,
+				conversationId
+			});
+			conversationRef = null;
+		}
+	}
 
 	const acceptsSse = request.headers.get('accept')?.includes('text/event-stream') ?? false;
 	const canUseGemini = hasGeminiCredentials();
@@ -617,14 +630,16 @@ export const POST: RequestHandler = async ({ request }) => {
 				updateAssistantMessage(conversation, assistantMessageId, assistantText);
 				conversation.updatedAt = nowTimestampValue;
 				conversation.lastMessageAt = nowTimestampValue;
-				await conversationRef.set(
-					{
-						updatedAt: nowTimestampValue,
-						lastMessageAt: nowTimestampValue,
-						messages: conversation.messages
-					},
-					{ merge: true }
-				);
+				if (conversationRef) {
+					await conversationRef.set(
+						{
+							updatedAt: nowTimestampValue,
+							lastMessageAt: nowTimestampValue,
+							messages: conversation.messages
+						},
+						{ merge: true }
+					);
+				}
 				lastUpdate = Date.now();
 			} finally {
 				flushInFlight = false;
