@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import {
@@ -15,6 +16,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { renderMarkdown } from '$lib/markdown';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import {
 		SparkAgentRunLogSchema,
 		SparkAgentStateSchema,
@@ -46,6 +48,7 @@
 	let loadError = $state<string | null>(null);
 	let copySuccess = $state(false);
 	let fileDialogOpen = $state(false);
+	let authReady = $state(false);
 
 	const selectedAgent = $derived.by(() => {
 		if (selectedAgentDetail && selectedAgentDetail.id === selectedAgentId) {
@@ -243,11 +246,33 @@
 		}
 	}
 
+	onMount(() => {
+		if (!browser) {
+			return;
+		}
+		try {
+			const auth = getAuth(getFirebaseApp());
+			if (auth.currentUser) {
+				authReady = true;
+				return;
+			}
+			const stopAuth = onIdTokenChanged(auth, (firebaseUser) => {
+				if (!firebaseUser) {
+					return;
+				}
+				authReady = true;
+				stopAuth();
+			});
+		} catch (error) {
+			console.warn('Failed to initialize Spark Agents auth guard', error);
+		}
+	});
+
 	$effect(() => {
 		if (!browser) {
 			return;
 		}
-		if (!userId) {
+		if (!userId || !authReady) {
 			agents = [];
 			loadError = null;
 			return;
@@ -284,7 +309,7 @@
 		if (!browser) {
 			return;
 		}
-		if (!userId || !selectedAgentId) {
+		if (!userId || !selectedAgentId || !authReady) {
 			selectedAgentDetail = null;
 			return;
 		}
@@ -321,7 +346,7 @@
 			return;
 		}
 		const workspaceId = selectedAgent?.workspaceId ?? null;
-		if (!userId || !workspaceId) {
+		if (!userId || !workspaceId || !authReady) {
 			files = [];
 			return;
 		}
@@ -365,7 +390,7 @@
 		if (!browser) {
 			return;
 		}
-		if (!userId || !selectedAgentId) {
+		if (!userId || !selectedAgentId || !authReady) {
 			runLog = null;
 			return;
 		}
