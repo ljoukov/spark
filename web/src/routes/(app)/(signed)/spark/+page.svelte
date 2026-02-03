@@ -36,7 +36,6 @@
 		fingerprint: string;
 		previewUrl?: string | null;
 		storagePath?: string;
-		downloadUrl?: string;
 		error?: string;
 	};
 	type MessageAttachment = {
@@ -289,17 +288,17 @@
 				cleanupPreviewUrl(entry.previewUrl);
 				continue;
 			}
-			if (entry.id) {
-				if (seenIds.has(entry.id)) {
-					cleanupPreviewUrl(entry.previewUrl);
-					continue;
+				if (entry.id) {
+					if (seenIds.has(entry.id)) {
+						cleanupPreviewUrl(entry.previewUrl);
+						continue;
+					}
+					if (ignoredIds.has(entry.id)) {
+						cleanupPreviewUrl(entry.previewUrl);
+						continue;
+					}
+					seenIds.add(entry.id);
 				}
-				if (ignoredAttachmentIds.has(entry.id)) {
-					cleanupPreviewUrl(entry.previewUrl);
-					continue;
-				}
-				seenIds.add(entry.id);
-			}
 			let matchedServer: SparkAgentAttachment | null = null;
 			if (!entry.id) {
 				const candidateFingerprint = fingerprintLocal(entry);
@@ -307,15 +306,15 @@
 					if (usedServerIds.has(serverEntry.id)) {
 						continue;
 					}
-					if (serverEntry.status === 'failed') {
-						continue;
-					}
-					if (ignoredAttachmentIds.has(serverEntry.id)) {
-						continue;
-					}
-					if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
-						continue;
-					}
+						if (serverEntry.status === 'failed') {
+							continue;
+						}
+						if (ignoredIds.has(serverEntry.id)) {
+							continue;
+						}
+						if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
+							continue;
+						}
 					if (fingerprintServer(serverEntry) !== candidateFingerprint) {
 						continue;
 					}
@@ -337,7 +336,6 @@
 						contentType: matchedServer.contentType,
 						sizeBytes: matchedServer.sizeBytes,
 						storagePath: matchedServer.storagePath,
-						downloadUrl: matchedServer.downloadUrl,
 						error: matchedServer.error
 					});
 					continue;
@@ -348,7 +346,7 @@
 				if (!serverEntry) {
 					continue;
 				}
-				if (ignoredAttachmentIds.has(serverEntry.id)) {
+				if (ignoredIds.has(serverEntry.id)) {
 					cleanupPreviewUrl(entry.previewUrl);
 					continue;
 				}
@@ -368,7 +366,6 @@
 					contentType: serverEntry.contentType,
 					sizeBytes: serverEntry.sizeBytes,
 					storagePath: serverEntry.storagePath,
-					downloadUrl: serverEntry.downloadUrl,
 					error: serverEntry.error
 				});
 				continue;
@@ -387,7 +384,7 @@
 			if (usedServerIds.has(serverEntry.id)) {
 				continue;
 			}
-			if (ignoredAttachmentIds.has(serverEntry.id)) {
+			if (ignoredIds.has(serverEntry.id)) {
 				continue;
 			}
 			if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
@@ -401,10 +398,8 @@
 				sizeBytes: serverEntry.sizeBytes,
 				status: serverEntry.status,
 				storagePath: serverEntry.storagePath,
-				downloadUrl: serverEntry.downloadUrl,
 				error: serverEntry.error,
-				fingerprint: fingerprintServer(serverEntry),
-				previewUrl: serverEntry.downloadUrl ?? null
+				fingerprint: fingerprintServer(serverEntry)
 			});
 		}
 
@@ -428,9 +423,6 @@
 				return false;
 			}
 			if (left.status !== right.status) {
-				return false;
-			}
-			if (left.downloadUrl !== right.downloadUrl) {
 				return false;
 			}
 			if (left.error !== right.error) {
@@ -473,6 +465,19 @@
 		}
 		const fallback = file.storagePath.split('/').pop();
 		return fallback && fallback.length > 0 ? fallback : 'Attachment';
+	}
+
+	function resolveAttachmentDownloadUrl(
+		activeConversationId: string | null,
+		fileId: string | undefined
+	): string | null {
+		if (!activeConversationId || !fileId) {
+			return null;
+		}
+		const params = new URLSearchParams();
+		params.set('conversationId', activeConversationId);
+		params.set('fileId', fileId);
+		return `/api/spark/agent/attachments?${params.toString()}`;
 	}
 
 	function resolveMessageText(message: SparkAgentMessage): string {
@@ -804,17 +809,16 @@
 				return;
 			}
 			resolveIgnoredAttachmentIds(activeConversationId).delete(attachment.id);
-			updateLocalAttachment(localId, {
-				id: attachment.id,
-				status: attachment.status,
-				filename: attachment.filename ?? file.name,
-				contentType: attachment.contentType,
-				sizeBytes: attachment.sizeBytes,
-				storagePath: attachment.storagePath,
-				downloadUrl: attachment.downloadUrl,
-				error: attachment.error
-			});
-		} catch (uploadError) {
+				updateLocalAttachment(localId, {
+					id: attachment.id,
+					status: attachment.status,
+					filename: attachment.filename ?? file.name,
+					contentType: attachment.contentType,
+					sizeBytes: attachment.sizeBytes,
+					storagePath: attachment.storagePath,
+					error: attachment.error
+				});
+			} catch (uploadError) {
 			if (pendingRemovalByLocalId.has(localId)) {
 				pendingRemovalByLocalId.delete(localId);
 				return;
@@ -979,19 +983,18 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					signal: abortController.signal,
-					body: JSON.stringify({
-						conversationId: nextConversationId,
-						text: trimmed || undefined,
-						attachments: attachmentsToSend.map((entry) => ({
-							id: entry.id,
-							storagePath: entry.storagePath,
-							contentType: entry.contentType,
-							filename: entry.filename,
-							downloadUrl: entry.downloadUrl,
-							sizeBytes: entry.sizeBytes
-						}))
-					})
-				},
+						body: JSON.stringify({
+							conversationId: nextConversationId,
+							text: trimmed || undefined,
+							attachments: attachmentsToSend.map((entry) => ({
+								id: entry.id,
+								storagePath: entry.storagePath,
+								contentType: entry.contentType,
+								filename: entry.filename,
+								sizeBytes: entry.sizeBytes
+							}))
+						})
+					},
 				{
 					onEvent: (event) => {
 						if (event.event === 'meta') {
@@ -1348,7 +1351,7 @@
 											{@const name = resolveAttachmentName(file)}
 											{@const isImage = isImageType(file.contentType, name)}
 											{@const isPdf = isPdfType(file.contentType, name)}
-											{@const fileUrl = file.downloadUrl ?? null}
+											{@const fileUrl = resolveAttachmentDownloadUrl(conversationId, file.id)}
 											{@const sizeLabel = formatBytes(file.sizeBytes)}
 											{@const tooltip = `${name} • ${sizeLabel}`}
 											<div
@@ -1430,7 +1433,9 @@
 								{#each attachments as attachment (attachment.localId)}
 									{@const isImage = isImageType(attachment.contentType, attachment.filename)}
 									{@const isPdf = isPdfType(attachment.contentType, attachment.filename)}
-									{@const previewUrl = attachment.previewUrl ?? attachment.downloadUrl ?? null}
+									{@const previewUrl =
+										attachment.previewUrl ??
+										resolveAttachmentDownloadUrl(conversationId, attachment.id)}
 									{@const sizeLabel = formatBytes(attachment.sizeBytes)}
 									{@const tooltip = `${attachment.filename} • ${sizeLabel}`}
 									<div class="attachment-card-wrap" use:tooltipAction={tooltip}>

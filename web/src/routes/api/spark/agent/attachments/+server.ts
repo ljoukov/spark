@@ -1,17 +1,14 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import {
-	getFirebaseAdminStorage,
-	getFirebaseStorageBucketName,
-	loadEnvFromFile,
-	loadLocalEnv
-} from '@spark/llm';
+import { loadEnvFromFile, loadLocalEnv } from '@spark/llm';
 import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
+import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment
 } from '@spark/schemas';
-import { randomUUID, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
 
@@ -25,7 +22,10 @@ const removeSchema = z.object({
 	fileId: z.string().trim().min(1, 'fileId is required')
 });
 
-const chatIdsSchema = z.array(z.string().trim().min(1));
+const downloadQuerySchema = z.object({
+	conversationId: conversationIdSchema,
+	fileId: z.string().trim().min(1, 'fileId is required')
+});
 
 let webEnvLoaded = false;
 
@@ -95,37 +95,6 @@ function detectContentType(buffer: Buffer): string | null {
 	return null;
 }
 
-function parseChatIds(value: unknown): string[] {
-	if (typeof value !== 'string' || value.trim().length === 0) {
-		return [];
-	}
-	try {
-		const parsed = JSON.parse(value);
-		const result = chatIdsSchema.safeParse(parsed);
-		if (result.success) {
-			return result.data;
-		}
-	} catch {
-		// ignore
-	}
-	return [];
-}
-
-function parseDownloadTokens(value: unknown): string[] {
-	if (typeof value !== 'string' || value.trim().length === 0) {
-		return [];
-	}
-	return value
-		.split(',')
-		.map((entry) => entry.trim())
-		.filter((entry) => entry.length > 0);
-}
-
-function buildDownloadUrl(bucket: string, storagePath: string, token: string): string {
-	const encoded = encodeURIComponent(storagePath);
-	return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=${token}`;
-}
-
 function normalizeAttachments(raw: unknown, fallback: Date): SparkAgentAttachment[] {
 	if (!Array.isArray(raw)) {
 		return [];
@@ -176,6 +145,95 @@ class AttachmentLimitError extends Error {
 		this.status = status;
 	}
 }
+
+export const GET: RequestHandler = async ({ request, url }) => {
+	const authResult = await authenticateApiRequest(request);
+	if (!authResult.ok) {
+		return authResult.response;
+	}
+	loadWebEnv();
+	const userId = authResult.user.uid;
+	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+		return json(
+			{
+				error: 'misconfigured',
+				message: 'GOOGLE_SERVICE_ACCOUNT_JSON is missing on the server.'
+			},
+			{ status: 500 }
+		);
+	}
+
+	let parsed: z.infer<typeof downloadQuerySchema>;
+	try {
+		parsed = downloadQuerySchema.parse({
+			conversationId: url.searchParams.get('conversationId'),
+			fileId: url.searchParams.get('fileId')
+		});
+	} catch (error) {
+		if (error instanceof z.ZodError) {
+			return json({ error: 'invalid_query', issues: error.issues }, { status: 400 });
+		}
+		return json({ error: 'invalid_query' }, { status: 400 });
+	}
+
+	const { conversationId, fileId } = parsed;
+	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
+
+	let attachment: SparkAgentAttachment | null = null;
+	try {
+		const snapshot = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath
+		});
+		const now = new Date();
+		const attachments = normalizeAttachments(snapshot.data?.attachments, now);
+		attachment = attachments.find((entry) => entry.id === fileId) ?? null;
+	} catch (error) {
+		console.error('Failed to load attachment metadata', { error, userId, conversationId, fileId });
+		return json({ error: 'attachment_not_found' }, { status: 404 });
+	}
+
+	if (!attachment || attachment.status === 'failed') {
+		return json({ error: 'attachment_not_found' }, { status: 404 });
+	}
+	if (!attachment.storagePath.startsWith(`spark/uploads/${userId}/`)) {
+		return json({ error: 'attachment_not_found' }, { status: 404 });
+	}
+
+	const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+	const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
+
+	let buffer: Buffer;
+	try {
+		buffer = await downloadStorageObject({
+			serviceAccountJson,
+			bucketName,
+			objectName: attachment.storagePath
+		});
+	} catch (error) {
+		console.error('Failed to download attachment', { error, userId, conversationId, fileId });
+		return json(
+			{ error: 'download_failed', message: 'Unable to download attachment.' },
+			{ status: 502 }
+		);
+	}
+
+	if (buffer.length === 0) {
+		return json({ error: 'download_failed', message: 'Attachment is empty.' }, { status: 502 });
+	}
+	if (buffer.length > MAX_FILE_SIZE_BYTES) {
+		return json({ error: 'file_too_large', message: 'Attachment exceeds 25 MB limit.' }, { status: 413 });
+	}
+
+	const headers = new Headers();
+	headers.set('content-type', attachment.contentType);
+	headers.set('cache-control', 'private, max-age=60');
+	const filename = (attachment.filename ?? fileId).replace(/\"/g, '');
+	headers.set('content-disposition', `inline; filename=\"${filename}\"`);
+
+	return new Response(Uint8Array.from(buffer), { status: 200, headers });
+};
 
 export const POST: RequestHandler = async ({ request }) => {
 	const authResult = await authenticateApiRequest(request);
@@ -333,42 +391,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'attachment_state_failed' }, { status: 500 });
 	}
 
-	const storage = getFirebaseAdminStorage();
-	const bucketName = getFirebaseStorageBucketName();
-	const bucket = storage.bucket(bucketName);
-	const fileRef = bucket.file(storagePath);
-
-	let downloadUrl: string | null = null;
 	let finalAttachment: SparkAgentAttachment | null = null;
 
 	try {
-		const [exists] = await fileRef.exists();
-		let metadata = exists ? (await fileRef.getMetadata())[0] : null;
-		let chatIds = metadata ? parseChatIds(metadata.metadata?.chatIds) : [];
-		if (!chatIds.includes(conversationId)) {
-			chatIds = [...chatIds, conversationId];
-		}
-		const tokenCandidates = metadata ? parseDownloadTokens(metadata.metadata?.firebaseStorageDownloadTokens) : [];
-		const downloadToken = tokenCandidates[0] ?? randomUUID();
-		const metadataUpdate = {
-			contentType,
-			metadata: {
-				...(metadata?.metadata ?? {}),
-				chatIds: JSON.stringify(chatIds),
-				originalFilename: metadata?.metadata?.originalFilename ?? filename,
-				firebaseStorageDownloadTokens: downloadToken
-			}
-		};
-		if (!exists) {
-			await fileRef.save(buffer, {
-				resumable: false,
-				metadata: metadataUpdate
-			});
-		} else {
-			await fileRef.setMetadata(metadataUpdate);
-		}
+		const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+		const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
 
-		downloadUrl = buildDownloadUrl(bucketName, storagePath, downloadToken);
+		await uploadStorageObject({
+			serviceAccountJson,
+			bucketName,
+			objectName: storagePath,
+			contentType,
+			data: buffer
+		});
 
 		const snapshot = await getFirestoreDocument({
 			serviceAccountJson,
@@ -381,7 +416,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			storagePath,
 			contentType,
 			filename,
-			downloadUrl: downloadUrl ?? undefined,
 			sizeBytes,
 			status: 'attaching',
 			createdAt: attachments.find((entry) => entry.id === fileId)?.createdAt ?? now,

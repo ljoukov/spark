@@ -15,6 +15,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
+import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -50,7 +51,6 @@ const attachmentSchema = z.object({
 	storagePath: z.string().trim().min(1, 'storagePath is required'),
 	contentType: z.string().trim().min(1, 'contentType is required'),
 	filename: z.string().trim().min(1).optional(),
-	downloadUrl: z.string().trim().min(1).optional(),
 	sizeBytes: z.number().int().min(1, 'sizeBytes must be positive'),
 	pageCount: z.number().int().min(1).optional()
 });
@@ -203,7 +203,6 @@ function resolveContentParts(
 			contentType: string;
 			sizeBytes: number;
 			filename?: string;
-			downloadUrl?: string;
 			pageCount?: number;
 		} = {
 			id: attachment.id,
@@ -213,9 +212,6 @@ function resolveContentParts(
 		};
 		if (attachment.filename) {
 			filePart.filename = attachment.filename;
-		}
-		if (attachment.downloadUrl) {
-			filePart.downloadUrl = attachment.downloadUrl;
 		}
 		if (typeof attachment.pageCount === 'number' && attachment.pageCount > 0) {
 			filePart.pageCount = attachment.pageCount;
@@ -316,57 +312,28 @@ function isSupportedAttachmentMime(value: string): boolean {
 }
 
 async function downloadAttachmentParts(
-	options: { userId: string; bucketName: string },
+	options: { userId: string; bucketName: string; serviceAccountJson: string },
 	attachments: z.infer<typeof attachmentSchema>[]
 ): Promise<LlmContentPart[]> {
 	if (attachments.length === 0) {
 		return [];
 	}
-	const expectedBucket = options.bucketName;
 	const downloadTasks = attachments.map(async (attachment) => {
 		if (!isSupportedAttachmentMime(attachment.contentType)) {
 			throw new Error(`Unsupported attachment type ${attachment.contentType}`);
 		}
-		if (!attachment.downloadUrl || attachment.downloadUrl.trim().length === 0) {
-			throw new Error(`Attachment ${attachment.id} is missing a downloadUrl`);
-		}
-		let parsedUrl: URL;
-		try {
-			parsedUrl = new URL(attachment.downloadUrl);
-		} catch {
-			throw new Error(`Attachment ${attachment.id} has an invalid downloadUrl`);
-		}
-		if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'firebasestorage.googleapis.com') {
-			throw new Error(`Attachment ${attachment.id} downloadUrl is not a Firebase Storage URL`);
-		}
-		const expectedPath = `/v0/b/${expectedBucket}/o/${encodeURIComponent(attachment.storagePath)}`;
-		if (parsedUrl.pathname !== expectedPath) {
-			throw new Error(`Attachment ${attachment.id} downloadUrl does not match storagePath`);
-		}
-		if (parsedUrl.searchParams.get('alt') !== 'media') {
-			throw new Error(`Attachment ${attachment.id} downloadUrl must use alt=media`);
+
+		const expectedPrefix = `spark/uploads/${options.userId}/`;
+		if (!attachment.storagePath.startsWith(expectedPrefix)) {
+			throw new Error(`Attachment ${attachment.id} storagePath is invalid`);
 		}
 
-		// Cloudflare Workers does not reliably support Firebase Admin Storage (Node + gRPC/protobuf).
-		// Fetch the Firebase Storage download URL provided by the client instead.
-		const controller = new AbortController();
-		const timeoutHandle = setTimeout(() => {
-			controller.abort();
-		}, ATTACHMENT_DOWNLOAD_TIMEOUT_MS);
-
-		let resp: Response;
-		try {
-			resp = await fetch(attachment.downloadUrl, { signal: controller.signal });
-		} finally {
-			clearTimeout(timeoutHandle);
-		}
-
-		if (!resp.ok) {
-			throw new Error(`Attachment ${attachment.id} download failed: ${resp.status}`);
-		}
-
-		const arrayBuffer = await resp.arrayBuffer();
-		const buffer = Buffer.from(arrayBuffer);
+		const buffer = await downloadStorageObject({
+			serviceAccountJson: options.serviceAccountJson,
+			bucketName: options.bucketName,
+			objectName: attachment.storagePath,
+			timeoutMs: ATTACHMENT_DOWNLOAD_TIMEOUT_MS
+		});
 		if (buffer.length === 0) {
 			throw new Error(`Attachment ${attachment.id} is empty`);
 		}
@@ -430,13 +397,18 @@ async function generateAssistantResponse(
 	options: {
 		userId: string;
 		bucketName: string;
+		serviceAccountJson: string;
 		messageId: string;
 		attachments: z.infer<typeof attachmentSchema>[];
 	},
 	handlers: StreamHandlers
 ): Promise<string> {
 	const attachmentParts = await downloadAttachmentParts(
-		{ userId: options.userId, bucketName: options.bucketName },
+		{
+			userId: options.userId,
+			bucketName: options.bucketName,
+			serviceAccountJson: options.serviceAccountJson
+		},
 		options.attachments
 	);
 	const contents = buildLlmContents(conversation.messages, {
@@ -556,15 +528,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				storagePath: existing.storagePath,
 				contentType: existing.contentType,
 				filename: existing.filename,
-				downloadUrl: existing.downloadUrl,
 				sizeBytes: existing.sizeBytes,
 				pageCount: existing.pageCount
 			});
 			continue;
-		}
-
-		if (attachment.downloadUrl && attachment.downloadUrl.trim().length > 0) {
-			attachmentForMessage.push(attachment);
 		}
 	}
 	if (!trimmedText && attachmentForMessage.length === 0) {
@@ -704,6 +671,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					{
 						userId,
 						bucketName,
+						serviceAccountJson,
 						messageId,
 						attachments: attachmentForMessage
 					},
