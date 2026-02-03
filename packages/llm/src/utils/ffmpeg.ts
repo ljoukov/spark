@@ -1,5 +1,46 @@
-import { execa } from "execa";
+import { spawn } from "node:child_process";
 import { z } from "zod";
+
+type RunProcessResult = {
+  stdout: string;
+  stderr: string;
+};
+
+async function runProcess(
+  command: string,
+  args: string[],
+): Promise<RunProcessResult> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const suffix = stderr ? `\n${stderr.trim()}` : "";
+      reject(
+        new Error(
+          `Command failed (${command} ${args.join(" ")}): exit ${code}${suffix}`,
+        ),
+      );
+    });
+  });
+}
 
 export async function createSilentAudio({
   durationSec,
@@ -20,7 +61,7 @@ export async function createSilentAudio({
         return "stereo";
     }
   })();
-  await execa("ffmpeg", [
+  await runProcess("ffmpeg", [
     "-f",
     "lavfi",
     "-i",
@@ -62,7 +103,7 @@ export const streamMetadataSchema = z.object({
 });
 
 async function getStreamMetadata(filePath: string) {
-  const { stdout } = await execa("ffprobe", [
+  const { stdout } = await runProcess("ffprobe", [
     "-v",
     "error",
     "-select_streams",
@@ -90,7 +131,7 @@ async function getStreamMetadata(filePath: string) {
 }
 
 async function getTotalSamples(filePath: string): Promise<number> {
-  const { stdout } = await execa("ffprobe", [
+  const { stdout } = await runProcess("ffprobe", [
     "-v",
     "error",
     "-select_streams",
@@ -125,7 +166,7 @@ export async function concatAudio({
   channels: 1 | 2;
   outputFileName: string;
 }) {
-  await execa("ffmpeg", [
+  await runProcess("ffmpeg", [
     "-f",
     "concat",
     "-safe",
