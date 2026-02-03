@@ -2,6 +2,7 @@ import { createTask } from '@spark/llm';
 import { fail } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { Actions } from './$types';
+import { env } from '$env/dynamic/private';
 
 const startWelcomeSessionSchema = z.object({
 	topic: z.string().trim().min(1, 'Topic is required')
@@ -12,6 +13,10 @@ export const actions: Actions = {
 		try {
 			await createTask({
 				type: 'helloWorld'
+			}, {
+				serviceUrl: env.TASKS_SERVICE_URL ?? '',
+				apiKey: env.TASKS_API_KEY ?? '',
+				serviceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON ?? ''
 			});
 			return { success: { message: 'Started Hello World task.' } as const };
 		} catch (error) {
@@ -35,6 +40,10 @@ export const actions: Actions = {
 			await createTask({
 				type: 'generateWelcomeSession',
 				generateWelcomeSession: { topic }
+			}, {
+				serviceUrl: env.TASKS_SERVICE_URL ?? '',
+				apiKey: env.TASKS_API_KEY ?? '',
+				serviceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON ?? ''
 			});
 			return {
 				success: { message: `Started welcome session generation for "${topic}".` } as const

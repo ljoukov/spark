@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { Agent, fetch as undiciFetch } from "undici";
-import { loadLocalEnv } from "./env";
-import { getGoogleAccessToken, getGoogleServiceAccount } from "./googleAuth";
+import { encodeBytesToBase64 } from "./gcp/base64";
+import { getGoogleAccessToken as getGoogleServiceAccountAccessToken } from "./gcp/googleAccessToken";
 
 // Server-side task schema
 export const GenerateQuizTaskSchema = z.object({
@@ -82,10 +81,7 @@ const DEFAULT_QUEUE = "spark-tasks";
 
 function base64EncodeUrlSafe(bytes: Uint8Array): string {
   // URL-safe base64 encoding: '+' -> '-', '/' -> '_', keep '=' padding
-  return Buffer.from(bytes)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  return encodeBytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function isLocalUrl(url: string): boolean {
@@ -102,31 +98,39 @@ function isLocalUrl(url: string): boolean {
   }
 }
 
-async function getTasksAccessToken(): Promise<string> {
-  return await getGoogleAccessToken(CLOUD_TASKS_SCOPE);
+function readEnvVar(name: string): string {
+  const env = (globalThis as unknown as { process?: { env?: unknown } }).process
+    ?.env as Record<string, unknown> | undefined;
+  const value = env?.[name];
+  return typeof value === "string" ? value : "";
 }
 
-function getProjectId(): string {
-  const sa = getGoogleServiceAccount();
-  return sa.projectId;
-}
-
-export async function createTask(task: Task): Promise<void> {
-  loadLocalEnv();
-  const serviceUrl = process.env.TASKS_SERVICE_URL ?? "";
+export async function createTask(
+  task: Task,
+  options: {
+    serviceUrl?: string;
+    apiKey?: string;
+    serviceAccountJson?: string;
+    location?: string;
+    queue?: string;
+  } = {},
+): Promise<void> {
+  const serviceUrl = options.serviceUrl ?? readEnvVar("TASKS_SERVICE_URL");
   if (!serviceUrl) {
     throw new Error(
       "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl.",
     );
   }
 
-  const apiKey = process.env.TASKS_API_KEY ?? "";
+  const apiKey = options.apiKey ?? readEnvVar("TASKS_API_KEY");
   if (!apiKey) {
     throw new Error("TASKS_API_KEY is not configured. Set env or pass apiKey.");
   }
 
-  const location = DEFAULT_LOCATION;
-  const queue = DEFAULT_QUEUE;
+  const location = options.location ?? DEFAULT_LOCATION;
+  const envQueue = readEnvVar("TASKS_QUEUE");
+  const queue =
+    options.queue ?? (envQueue.trim().length > 0 ? envQueue : DEFAULT_QUEUE);
 
   if (isLocalUrl(serviceUrl)) {
     // Local development: emulate Cloud Tasks by fire-and-forget scheduling.
@@ -143,8 +147,8 @@ export async function createTask(task: Task): Promise<void> {
       }
       // Allow local dev callers to omit the port and reuse the Vite HTTPS port.
       if (!u.port) {
-        const vitePort = process.env.VITE_DEV_PORT?.trim();
-        const envPort = process.env.PORT?.trim();
+        const vitePort = readEnvVar("VITE_DEV_PORT").trim();
+        const envPort = readEnvVar("PORT").trim();
         if (vitePort && /^[0-9]+$/.test(vitePort)) {
           u.port = vitePort;
         } else if (envPort && /^[0-9]+$/.test(envPort)) {
@@ -168,14 +172,10 @@ export async function createTask(task: Task): Promise<void> {
       );
     }
     console.warn(`Starting a local task: ${postUrl}`);
-    const dispatcher = new Agent({
-      connect: { rejectUnauthorized: false },
-    });
-    void undiciFetch(postUrl, {
+    void fetch(postUrl, {
       method: "POST",
       headers,
       body,
-      dispatcher,
     })
       .then(async (resp) => {
         const text = await resp.text().catch(() => "");
@@ -192,8 +192,17 @@ export async function createTask(task: Task): Promise<void> {
   }
 
   // Otherwise schedule via Google Cloud Tasks
-  const projectId = getProjectId();
-  const accessToken = await getTasksAccessToken();
+  const serviceAccountJson =
+    options.serviceAccountJson ?? readEnvVar("GOOGLE_SERVICE_ACCOUNT_JSON");
+  if (!serviceAccountJson) {
+    throw new Error(
+      "GOOGLE_SERVICE_ACCOUNT_JSON is not configured. Set env or pass serviceAccountJson.",
+    );
+  }
+  const { accessToken, projectId } = await getGoogleServiceAccountAccessToken({
+    serviceAccountJson,
+    scopes: CLOUD_TASKS_SCOPE,
+  });
 
   const handlerUrl = new URL(serviceUrl);
   // If only origin (no path), default to internal tasks handler path
@@ -214,7 +223,7 @@ export async function createTask(task: Task): Promise<void> {
   const createUrl = `https://cloudtasks.googleapis.com/v2/projects/${projectId}/locations/${location}/queues/${queue}/tasks`;
 
   console.warn(`Starting remote task via TasksAPI: ${handlerUrl}`);
-  const resp = await undiciFetch(createUrl, {
+  const resp = await fetch(createUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
