@@ -17,6 +17,7 @@ import { createTask } from '@spark/llm';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
 
 const paramsSchema = z.object({
 	sessionId: z.string().trim().min(1, 'sessionId is required')
@@ -221,6 +222,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					emoji: selected.emoji,
 					sourceSessionId: sessionId
 				}
+			}, {
+				serviceUrl: env.TASKS_SERVICE_URL ?? '',
+				apiKey: env.TASKS_API_KEY ?? '',
+				serviceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON ?? ''
 			});
 		} catch (error) {
 			console.error('Failed to enqueue lesson generation', {
