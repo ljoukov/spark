@@ -43,9 +43,7 @@ export async function downloadStorageObject(options: {
 		});
 		if (!resp.ok) {
 			const text = await resp.text().catch(() => '');
-			throw new Error(
-				`Storage download failed (${resp.status}): ${text.slice(0, 500)}`
-			);
+			throw new Error(`Storage download failed (${resp.status}): ${text.slice(0, 500)}`);
 		}
 		return Buffer.from(await resp.arrayBuffer());
 	} finally {

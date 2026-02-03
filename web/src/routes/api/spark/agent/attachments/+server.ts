@@ -4,10 +4,7 @@ import { loadEnvFromFile, loadLocalEnv } from '@spark/llm';
 import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject, uploadStorageObject } from '$lib/server/gcp/storageRest';
-import {
-	SparkAgentAttachmentSchema,
-	type SparkAgentAttachment
-} from '@spark/schemas';
+import { SparkAgentAttachmentSchema, type SparkAgentAttachment } from '@spark/schemas';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
@@ -223,14 +220,17 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		return json({ error: 'download_failed', message: 'Attachment is empty.' }, { status: 502 });
 	}
 	if (buffer.length > MAX_FILE_SIZE_BYTES) {
-		return json({ error: 'file_too_large', message: 'Attachment exceeds 25 MB limit.' }, { status: 413 });
+		return json(
+			{ error: 'file_too_large', message: 'Attachment exceeds 25 MB limit.' },
+			{ status: 413 }
+		);
 	}
 
 	const headers = new Headers();
 	headers.set('content-type', attachment.contentType);
 	headers.set('cache-control', 'private, max-age=60');
-	const filename = (attachment.filename ?? fileId).replace(/\"/g, '');
-	headers.set('content-disposition', `inline; filename=\"${filename}\"`);
+	const filename = (attachment.filename ?? fileId).replace(/"/g, '');
+	headers.set('content-disposition', `inline; filename="${filename}"`);
 
 	return new Response(Uint8Array.from(buffer), { status: 200, headers });
 };
@@ -277,10 +277,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'missing_file', message: 'No file provided' }, { status: 400 });
 	}
 	if (typeof fileEntry.size === 'number' && fileEntry.size > MAX_FILE_SIZE_BYTES) {
-		return json(
-			{ error: 'file_too_large', message: 'File exceeds 25 MB limit' },
-			{ status: 413 }
-		);
+		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
 	let buffer: Buffer;
@@ -296,10 +293,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'empty_file', message: 'File is empty' }, { status: 400 });
 	}
 	if (sizeBytes > MAX_FILE_SIZE_BYTES) {
-		return json(
-			{ error: 'file_too_large', message: 'File exceeds 25 MB limit' },
-			{ status: 413 }
-		);
+		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
 	const contentType = detectContentType(buffer);

@@ -67,7 +67,7 @@ const requestSchema = z
 		const hasAttachments = Boolean(value.attachments && value.attachments.length > 0);
 		if (!hasText && !hasAttachments) {
 			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				message: 'text or attachments are required'
 			});
 		}
@@ -480,8 +480,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	const conversationId = resolveConversationId(parsedBody.conversationId);
 	const now = new Date();
 	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
-	let conversation: ConversationDoc = resolveConversationDoc(undefined, userId, conversationId, now)
-		.conversation;
+	let conversation: ConversationDoc = resolveConversationDoc(
+		undefined,
+		userId,
+		conversationId,
+		now
+	).conversation;
 	let conversationAttachments: SparkAgentAttachment[] = [];
 
 	try {
@@ -491,7 +495,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		conversationAttachments = normalizeAttachments(snapshot.data?.attachments, now);
 		conversation = resolveConversationDoc(
-			snapshot.exists ? snapshot.data ?? undefined : undefined,
+			snapshot.exists ? (snapshot.data ?? undefined) : undefined,
 			userId,
 			conversationId,
 			now
