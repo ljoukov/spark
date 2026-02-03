@@ -129,7 +129,7 @@ export async function createTask(task: Task): Promise<void> {
   const queue = DEFAULT_QUEUE;
 
   if (isLocalUrl(serviceUrl)) {
-    // Call handler directly during local development
+    // Local development: emulate Cloud Tasks by fire-and-forget scheduling.
     const headers: Record<string, string> = {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -162,26 +162,27 @@ export async function createTask(task: Task): Promise<void> {
         `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
       );
     }
-    try {
-      console.warn(`Starting a local task: ${postUrl}`);
-      const dispatcher = new Agent({
-        connect: { rejectUnauthorized: false },
-      });
-      const resp = await undiciFetch(postUrl, {
-        method: "POST",
-        headers,
-        body,
-        dispatcher,
-      });
-      if (!resp.ok) {
+    console.warn(`Starting a local task: ${postUrl}`);
+    const dispatcher = new Agent({
+      connect: { rejectUnauthorized: false },
+    });
+    void undiciFetch(postUrl, {
+      method: "POST",
+      headers,
+      body,
+      dispatcher,
+    })
+      .then(async (resp) => {
         const text = await resp.text().catch(() => "");
-        console.warn(
-          `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`,
-        );
-      }
-    } catch (err) {
-      console.warn(`Local task POST error: ${(err as Error).message}`);
-    }
+        if (!resp.ok) {
+          console.warn(
+            `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`,
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`Local task POST error: ${(err as Error).message}`);
+      });
     return;
   }
 
