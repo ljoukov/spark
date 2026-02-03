@@ -117,12 +117,8 @@
 	const activeConversationAttachments = $derived(
 		conversationAttachments.filter((entry) => entry.status !== 'failed')
 	);
-	const hasPendingUploads = $derived(
-		attachments.some((entry) => entry.status === 'uploading')
-	);
-	const readyAttachments = $derived(
-		attachments.filter((entry) => entry.status === 'attaching')
-	);
+	const hasPendingUploads = $derived(attachments.some((entry) => entry.status === 'uploading'));
+	const readyAttachments = $derived(attachments.filter((entry) => entry.status === 'attaching'));
 	const canSend = $derived(
 		!sending && !hasPendingUploads && (draft.trim().length > 0 || readyAttachments.length > 0)
 	);
@@ -288,17 +284,17 @@
 				cleanupPreviewUrl(entry.previewUrl);
 				continue;
 			}
-				if (entry.id) {
-					if (seenIds.has(entry.id)) {
-						cleanupPreviewUrl(entry.previewUrl);
-						continue;
-					}
-					if (ignoredIds.has(entry.id)) {
-						cleanupPreviewUrl(entry.previewUrl);
-						continue;
-					}
-					seenIds.add(entry.id);
+			if (entry.id) {
+				if (seenIds.has(entry.id)) {
+					cleanupPreviewUrl(entry.previewUrl);
+					continue;
 				}
+				if (ignoredIds.has(entry.id)) {
+					cleanupPreviewUrl(entry.previewUrl);
+					continue;
+				}
+				seenIds.add(entry.id);
+			}
 			let matchedServer: SparkAgentAttachment | null = null;
 			if (!entry.id) {
 				const candidateFingerprint = fingerprintLocal(entry);
@@ -306,15 +302,15 @@
 					if (usedServerIds.has(serverEntry.id)) {
 						continue;
 					}
-						if (serverEntry.status === 'failed') {
-							continue;
-						}
-						if (ignoredIds.has(serverEntry.id)) {
-							continue;
-						}
-						if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
-							continue;
-						}
+					if (serverEntry.status === 'failed') {
+						continue;
+					}
+					if (ignoredIds.has(serverEntry.id)) {
+						continue;
+					}
+					if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
+						continue;
+					}
 					if (fingerprintServer(serverEntry) !== candidateFingerprint) {
 						continue;
 					}
@@ -809,16 +805,16 @@
 				return;
 			}
 			resolveIgnoredAttachmentIds(activeConversationId).delete(attachment.id);
-				updateLocalAttachment(localId, {
-					id: attachment.id,
-					status: attachment.status,
-					filename: attachment.filename ?? file.name,
-					contentType: attachment.contentType,
-					sizeBytes: attachment.sizeBytes,
-					storagePath: attachment.storagePath,
-					error: attachment.error
-				});
-			} catch (uploadError) {
+			updateLocalAttachment(localId, {
+				id: attachment.id,
+				status: attachment.status,
+				filename: attachment.filename ?? file.name,
+				contentType: attachment.contentType,
+				sizeBytes: attachment.sizeBytes,
+				storagePath: attachment.storagePath,
+				error: attachment.error
+			});
+		} catch (uploadError) {
 			if (pendingRemovalByLocalId.has(localId)) {
 				pendingRemovalByLocalId.delete(localId);
 				return;
@@ -983,18 +979,18 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					signal: abortController.signal,
-						body: JSON.stringify({
-							conversationId: nextConversationId,
-							text: trimmed || undefined,
-							attachments: attachmentsToSend.map((entry) => ({
-								id: entry.id,
-								storagePath: entry.storagePath,
-								contentType: entry.contentType,
-								filename: entry.filename,
-								sizeBytes: entry.sizeBytes
-							}))
-						})
-					},
+					body: JSON.stringify({
+						conversationId: nextConversationId,
+						text: trimmed || undefined,
+						attachments: attachmentsToSend.map((entry) => ({
+							id: entry.id,
+							storagePath: entry.storagePath,
+							contentType: entry.contentType,
+							filename: entry.filename,
+							sizeBytes: entry.sizeBytes
+						}))
+					})
+				},
 				{
 					onEvent: (event) => {
 						if (event.event === 'meta') {
@@ -1355,10 +1351,7 @@
 											{@const fileUrl = resolveAttachmentDownloadUrl(conversationId, file.id)}
 											{@const sizeLabel = formatBytes(file.sizeBytes)}
 											{@const tooltip = `${name} • ${sizeLabel}`}
-											<div
-												class="message-attachment-wrap"
-												use:tooltipAction={tooltip}
-											>
+											<div class="message-attachment-wrap" use:tooltipAction={tooltip}>
 												<div class={`message-attachment ${isImage ? 'is-image' : 'is-file'}`}>
 													{#if isImage && fileUrl}
 														<a href={fileUrl} target="_blank" rel="noreferrer">
@@ -1992,7 +1985,10 @@
 		border: 1px solid transparent;
 		color: var(--code-muted);
 		cursor: pointer;
-		transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+		transition:
+			color 0.15s ease,
+			background 0.15s ease,
+			border-color 0.15s ease;
 	}
 
 	:global(.message-markdown .code-block__copy:hover) {

@@ -148,7 +148,9 @@ async function startChatGptOauthCallbackServer(options: {
   const redirectUri = options.redirectUri ?? CHATGPT_OAUTH_REDIRECT_URI;
   const url = new URL(redirectUri);
   if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
-    throw new Error("OAuth redirect URI must be localhost for callback server.");
+    throw new Error(
+      "OAuth redirect URI must be localhost for callback server.",
+    );
   }
   const port = Number.parseInt(url.port || "1455", 10);
   const pathName = url.pathname || "/auth/callback";
@@ -159,7 +161,10 @@ async function startChatGptOauthCallbackServer(options: {
         res.end("Missing URL.");
         return;
       }
-      const requestUrl = new URL(req.url, `http://${url.hostname}:${port}`);
+      const requestUrl = new URL(
+        req.url,
+        `http://${url.hostname}:${String(port)}`,
+      );
       if (requestUrl.pathname !== pathName) {
         res.statusCode = 404;
         res.end("Not found.");

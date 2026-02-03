@@ -188,10 +188,8 @@ function normalizeAuthProfile(
   if (!access || !refresh) {
     throw new Error("ChatGPT credentials must include access and refresh.");
   }
-  const expiresRaw =
-    data.expires ?? data.expires_at ?? data.expiresAt;
-  const idToken =
-    data.idToken ?? data.id_token ?? undefined;
+  const expiresRaw = data.expires ?? data.expires_at ?? data.expiresAt;
+  const idToken = data.idToken ?? data.id_token ?? undefined;
   const expires =
     normalizeEpochMillis(expiresRaw) ??
     extractJwtExpiry(idToken ?? access) ??
@@ -318,7 +316,9 @@ function loadAuthProfileFromEnv(): ChatGptAuthProfile {
     idToken: idToken || undefined,
   });
   if (!parsed.success) {
-    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("\n");
     throw new Error(`Invalid ChatGPT env credentials: ${message}`);
   }
   return normalizeAuthProfile(parsed.data);
@@ -339,7 +339,9 @@ function parseAuthJson(raw: string, label: string): ChatGptAuthProfile {
   }
   const parsed = AuthInputSchema.safeParse(parsedJson);
   if (!parsed.success) {
-    const message = parsed.error.issues.map((issue) => issue.message).join("\n");
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("\n");
     throw new Error(`Invalid ${label}: ${message}`);
   }
   return normalizeAuthProfile(parsed.data);

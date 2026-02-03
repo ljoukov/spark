@@ -1,10 +1,20 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { getContext, onMount } from 'svelte';
+	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
+	import {
+		collection,
+		doc,
+		getFirestore,
+		limit,
+		onSnapshot,
+		orderBy,
+		query,
+		type Unsubscribe
+	} from 'firebase/firestore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { renderMarkdown } from '$lib/markdown';
-	import { z } from 'zod';
+	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import {
 		SparkAgentRunLogSchema,
 		SparkAgentStateSchema,
@@ -37,19 +47,6 @@
 	let copySuccess = $state(false);
 	let fileDialogOpen = $state(false);
 
-	let listLoading = false;
-	let detailLoading = false;
-
-	const listResponseSchema = z.object({
-		agents: z.array(SparkAgentStateSchema)
-	});
-
-	const detailResponseSchema = z.object({
-		agent: SparkAgentStateSchema,
-		files: z.array(SparkAgentWorkspaceFileSchema),
-		log: SparkAgentRunLogSchema.nullable()
-	});
-
 	const selectedAgent = $derived.by(() => {
 		if (selectedAgentDetail && selectedAgentDetail.id === selectedAgentId) {
 			return selectedAgentDetail;
@@ -60,7 +57,7 @@
 		return null;
 	});
 	const selectedFile = $derived(
-		selectedFilePath ? files.find((file) => file.path === selectedFilePath) ?? null : null
+		selectedFilePath ? (files.find((file) => file.path === selectedFilePath) ?? null) : null
 	);
 	const selectedFileIsMarkdown = $derived.by(() => {
 		const path = selectedFile?.path?.toLowerCase() ?? '';
@@ -139,6 +136,59 @@
 		return `${mb.toFixed(1)} MB`;
 	}
 
+	function decodeFileId(value: string): string {
+		try {
+			return decodeURIComponent(value);
+		} catch {
+			return value;
+		}
+	}
+
+	function parseLogTimestamp(key: string): Date | null {
+		const match = /^t(\d{13})_\d{3}$/.exec(key);
+		if (!match) {
+			return null;
+		}
+		const ms = Number.parseInt(match[1] ?? '', 10);
+		if (!Number.isFinite(ms)) {
+			return null;
+		}
+		return new Date(ms);
+	}
+
+	function parseRunLogDoc(data: Record<string, unknown>): SparkAgentRunLog | null {
+		const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
+		const entries: Array<{ key: string; timestamp: Date; line: string }> = [];
+		if (rawLines && !Array.isArray(rawLines)) {
+			for (const [key, value] of Object.entries(rawLines as Record<string, unknown>)) {
+				if (typeof value !== 'string') {
+					continue;
+				}
+				const timestamp = parseLogTimestamp(key) ?? null;
+				if (!timestamp) {
+					continue;
+				}
+				entries.push({ key, timestamp, line: value });
+			}
+		}
+		entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+		const limitedEntries = entries.slice(-2000);
+		const payload: Record<string, unknown> = {
+			lines: limitedEntries
+		};
+		if (data.updatedAt !== undefined) {
+			payload.updatedAt = data.updatedAt;
+		}
+		if (data.stats && typeof data.stats === 'object') {
+			payload.stats = data.stats;
+		}
+		const parsed = SparkAgentRunLogSchema.safeParse(payload);
+		if (!parsed.success) {
+			return null;
+		}
+		return parsed.data;
+	}
+
 	async function copyPrompt(text: string): Promise<void> {
 		if (!browser) {
 			return;
@@ -184,82 +234,162 @@
 				createPrompt = '';
 				createWorkspaceId = '';
 				createSuccess = 'Agent created and queued.';
-				await refreshAgents();
+				loadError = null;
 			}
 		} catch (error) {
-			createError =
-				error instanceof Error ? error.message : 'Unable to create agent right now.';
+			createError = error instanceof Error ? error.message : 'Unable to create agent right now.';
 		} finally {
 			creating = false;
 		}
 	}
 
-	async function refreshAgents(): Promise<void> {
-		if (!browser || listLoading) {
-			return;
-		}
-		listLoading = true;
-		try {
-			const response = await fetch('/api/spark/agents');
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? 'list_failed');
-			}
-			const payload = listResponseSchema.parse(await response.json());
-			agents = payload.agents;
-			loadError = null;
-		} catch (error) {
-			loadError =
-				error instanceof Error ? error.message : 'Unable to load Spark Agents right now.';
-		} finally {
-			listLoading = false;
-		}
-	}
-
-	async function refreshAgentDetail(agentId: string): Promise<void> {
-		if (!browser || detailLoading) {
-			return;
-		}
-		detailLoading = true;
-		try {
-			const response = await fetch(`/api/spark/agents/${agentId}`);
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? 'detail_failed');
-			}
-			const payload = detailResponseSchema.parse(await response.json());
-			if (selectedAgentId !== agentId) {
-				return;
-			}
-			selectedAgentDetail = payload.agent;
-			files = payload.files;
-			runLog = payload.log;
-			loadError = null;
-		} catch (error) {
-			if (selectedAgentId === agentId) {
-				loadError =
-					error instanceof Error
-						? error.message
-						: 'Unable to load Spark Agent details right now.';
-			}
-		} finally {
-			detailLoading = false;
-		}
-	}
-
-	onMount(() => {
+	$effect(() => {
 		if (!browser) {
 			return;
 		}
-		void refreshAgents();
-		const timer = window.setInterval(() => {
-			void refreshAgents();
-			if (selectedAgentId) {
-				void refreshAgentDetail(selectedAgentId);
+		if (!userId) {
+			agents = [];
+			loadError = null;
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const agentsRef = collection(db, 'users', userId, 'agents');
+		const agentsQuery = query(agentsRef, orderBy('createdAt', 'desc'), limit(50));
+		let stop: Unsubscribe | null = null;
+		stop = onSnapshot(
+			agentsQuery,
+			(snap) => {
+				const next: SparkAgentState[] = [];
+				for (const docSnap of snap.docs) {
+					const parsed = SparkAgentStateSchema.safeParse({ id: docSnap.id, ...docSnap.data() });
+					if (!parsed.success) {
+						continue;
+					}
+					next.push(parsed.data);
+				}
+				agents = next;
+				loadError = null;
+			},
+			(error) => {
+				console.warn('Firestore subscription failed', error);
+				loadError = 'Unable to load Spark Agents right now.';
 			}
-		}, 2500);
+		);
 		return () => {
-			window.clearInterval(timer);
+			stop?.();
+		};
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		if (!userId || !selectedAgentId) {
+			selectedAgentDetail = null;
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const agentRef = doc(db, 'users', userId, 'agents', selectedAgentId);
+		let stop: Unsubscribe | null = null;
+		stop = onSnapshot(
+			agentRef,
+			(snap) => {
+				if (!snap.exists()) {
+					selectedAgentDetail = null;
+					return;
+				}
+				const parsed = SparkAgentStateSchema.safeParse({ id: snap.id, ...snap.data() });
+				if (!parsed.success) {
+					console.warn('Invalid Spark Agent payload', parsed.error.flatten());
+					return;
+				}
+				selectedAgentDetail = parsed.data;
+				loadError = null;
+			},
+			(error) => {
+				console.warn('Firestore subscription failed', error);
+				loadError = 'Unable to load Spark Agent details right now.';
+			}
+		);
+		return () => {
+			stop?.();
+		};
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		const workspaceId = selectedAgent?.workspaceId ?? null;
+		if (!userId || !workspaceId) {
+			files = [];
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
+		const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
+		let stop: Unsubscribe | null = null;
+		stop = onSnapshot(
+			filesQuery,
+			(snap) => {
+				const next: SparkAgentWorkspaceFile[] = [];
+				for (const docSnap of snap.docs) {
+					const data = docSnap.data();
+					const payload = {
+						...data,
+						path:
+							typeof data.path === 'string' && data.path.trim().length > 0
+								? data.path.trim()
+								: decodeFileId(docSnap.id)
+					};
+					const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
+					if (!parsed.success) {
+						continue;
+					}
+					next.push(parsed.data);
+				}
+				files = next;
+				loadError = null;
+			},
+			(error) => {
+				console.warn('Firestore subscription failed', error);
+				loadError = 'Unable to load Spark Agent workspace right now.';
+			}
+		);
+		return () => {
+			stop?.();
+		};
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		if (!userId || !selectedAgentId) {
+			runLog = null;
+			return;
+		}
+		const db = getFirestore(getFirebaseApp());
+		const ref = doc(db, 'users', userId, 'agents', selectedAgentId, 'logs', 'log');
+		let stop: Unsubscribe | null = null;
+		stop = onSnapshot(
+			ref,
+			(snap) => {
+				if (!snap.exists()) {
+					runLog = null;
+					return;
+				}
+				const data = (snap.data() ?? {}) as Record<string, unknown>;
+				runLog = parseRunLogDoc(data);
+				loadError = null;
+			},
+			(error) => {
+				console.warn('Firestore subscription failed', error);
+				loadError = 'Unable to load Spark Agent logs right now.';
+			}
+		);
+		return () => {
+			stop?.();
 		};
 	});
 
@@ -285,7 +415,6 @@
 		selectedAgentDetail = null;
 		files = [];
 		runLog = null;
-		void refreshAgentDetail(selectedAgentId);
 	});
 
 	$effect(() => {
@@ -309,8 +438,8 @@
 			<p class="agents-hero__eyebrow">Spark AI Agent</p>
 			<h1>Track every autonomous run</h1>
 			<p>
-				Launch a new Spark Agent, watch its status update live, and inspect the workspace
-				files it produces.
+				Launch a new Spark Agent, watch its status update live, and inspect the workspace files it
+				produces.
 			</p>
 		</div>
 		<div class="agents-hero__card">
@@ -322,9 +451,7 @@
 				placeholder="Describe the task you want the agent to complete..."
 				bind:value={createPrompt}
 			></textarea>
-			<label class="agents-hero__label" for="agent-workspace">
-				Workspace ID (optional)
-			</label>
+			<label class="agents-hero__label" for="agent-workspace"> Workspace ID (optional) </label>
 			<input
 				id="agent-workspace"
 				class="agents-hero__input"
@@ -344,13 +471,13 @@
 				{/if}
 			</div>
 		</div>
-		</header>
+	</header>
 
-		{#if loadError}
-			<div class="agents-load-error" role="alert">{loadError}</div>
-		{/if}
+	{#if loadError}
+		<div class="agents-load-error" role="alert">{loadError}</div>
+	{/if}
 
-		<div class="agents-grid">
+	<div class="agents-grid">
 		<section class="agents-list">
 			<h2>Runs</h2>
 			{#if agents.length === 0}
@@ -598,7 +725,8 @@
 		align-items: stretch;
 		padding: clamp(1.5rem, 2.6vw, 2.4rem);
 		border-radius: clamp(1.4rem, 2vw, 2.1rem);
-		background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 55%),
+		background:
+			radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 55%),
 			linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.85));
 		color: #f8fafc;
 		border: 1px solid rgba(148, 163, 184, 0.2);
@@ -753,7 +881,9 @@
 		padding: 0.8rem 0.9rem;
 		border-radius: 0.9rem;
 		cursor: pointer;
-		transition: border-color 0.2s ease, transform 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			transform 0.2s ease;
 	}
 
 	.agents-list__item:hover {
@@ -988,8 +1118,9 @@
 
 	.file-preview {
 		white-space: pre-wrap;
-		font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-			'Liberation Mono', 'Courier New', monospace;
+		font-family:
+			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
 		font-size: 0.85rem;
 	}
 
@@ -1054,8 +1185,9 @@
 		background: rgba(15, 23, 42, 0.04);
 		max-height: 22rem;
 		overflow: auto;
-		font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-			'Liberation Mono', 'Courier New', monospace;
+		font-family:
+			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
 		font-size: 0.82rem;
 		line-height: 1.4;
 	}

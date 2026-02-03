@@ -36,7 +36,7 @@ All calls accept:
   - `responseMimeType?`, `responseJsonSchema?` (text/JSON)
   - `responseModalities?` (e.g. `["IMAGE","TEXT"]`); images default to `["IMAGE","TEXT"]`
   - `imageAspectRatio?`
-  - `tools?`: `{ type: 'web-search' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
+  - `tools?`: `{ type: 'web-search', mode?: 'cached' | 'live' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
 
 OpenAI model routing:
 - `gpt-5.2`, `gpt-5.2-codex` → OpenAI API.
@@ -65,8 +65,11 @@ When you need to explain the expected shape inside a prompt, describe it in clea
 Defaults:
 - `maxSteps`: 8 (override if a longer chain is expected)
 
+Optional hosted tools:
+- `modelTools?: [{ type: "web-search", mode?: "cached" | "live" }, { type: "code-execution" }]` to enable built-in web search / code interpreter within the same loop.
+
 OpenAI function tools are sent with `strict: true` and a normalized JSON schema. Gemini uses `FunctionCallingConfigMode.VALIDATED` with JSON schema + `propertyOrdering`.
-ChatGPT Codex routing (`chatgpt-` model IDs) supports the same function tools, but built-in `tools: [{ type: "web-search" | "code-execution" }]` are only supported via the OpenAI API provider.
+ChatGPT Codex routing (`chatgpt-` model IDs) supports the same function tools, and also supports built-in `tools: [{ type: "web-search" | "code-execution" }]` via the Responses API hosted tools (use `mode: "live"` for external web access).
 
 Example:
 
