@@ -19,17 +19,25 @@ import {
 } from "../utils/firebaseAdmin";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
 import {
+  estimateCallCostUsd,
   runToolLoop,
   tool,
   type LlmTextModelId,
   type LlmToolSet,
 } from "../utils/llm";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
-import type { JobProgressReporter } from "../utils/concurrency";
+import type {
+  JobProgressReporter,
+  LlmUsageChunk,
+  LlmUsageTokenUpdate,
+  ModelCallHandle,
+  StageHandle,
+} from "../utils/concurrency";
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.2-codex";
 const DEFAULT_MAX_STEPS = 200;
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
+const AGENT_LOG_THROTTLE_MS = 10_000;
 
 const AgentStatusSchema = z.enum(["created", "executing", "failed", "done"]);
 type AgentStatus = z.infer<typeof AgentStatusSchema>;
@@ -49,6 +57,25 @@ type WorkspaceSyncOptions = {
   userId: string;
   workspaceId: string;
   rootDir: string;
+};
+
+type AgentRunStatsSnapshot = {
+  readonly modelCalls: number;
+  readonly modelsUsed: readonly string[];
+  readonly tokens: {
+    readonly promptTokens: number;
+    readonly cachedTokens: number;
+    readonly responseTokens: number;
+    readonly responseImageTokens: number;
+    readonly thinkingTokens: number;
+    readonly totalTokens: number;
+    readonly toolUsePromptTokens: number;
+  };
+  readonly modelCostUsd: number;
+  readonly toolCalls: number;
+  readonly toolCallsByName: Record<string, number>;
+  readonly toolCostUsd: number;
+  readonly totalCostUsd: number;
 };
 
 type AgentRunOptions = {
@@ -410,6 +437,412 @@ class WorkspaceSync {
       payload.contentType = contentType;
     }
     await this.fileDoc(filePath).set(payload, { merge: true });
+  }
+}
+
+function resolveUsageNumber(value: number | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, value);
+  }
+  return 0;
+}
+
+type CallTokenState = {
+  promptTokens: number;
+  cachedTokens: number;
+  responseTokens: number;
+  responseImageTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+  toolUsePromptTokens: number;
+};
+
+function createEmptyCallTokenState(): CallTokenState {
+  return {
+    promptTokens: 0,
+    cachedTokens: 0,
+    responseTokens: 0,
+    responseImageTokens: 0,
+    thinkingTokens: 0,
+    totalTokens: 0,
+    toolUsePromptTokens: 0,
+  };
+}
+
+class AgentRunStatsTracker {
+  private modelCalls = 0;
+  private readonly modelsUsed = new Set<string>();
+  private readonly tokens: CallTokenState = createEmptyCallTokenState();
+  private modelCostUsd = 0;
+  private toolCalls = 0;
+  private readonly toolCallsByName = new Map<string, number>();
+  private toolCostUsd = 0;
+  private readonly callInfo = new Map<
+    ModelCallHandle,
+    {
+      modelId: string;
+      modelVersion?: string;
+      tokens: CallTokenState;
+      appliedCostUsd: number;
+    }
+  >();
+
+  startModelCall(details: { modelId: string }): ModelCallHandle {
+    const handle: ModelCallHandle = Symbol("agent-model-call");
+    this.modelCalls += 1;
+    this.modelsUsed.add(details.modelId);
+    this.callInfo.set(handle, {
+      modelId: details.modelId,
+      tokens: createEmptyCallTokenState(),
+      appliedCostUsd: 0,
+    });
+    return handle;
+  }
+
+  recordModelUsage(handle: ModelCallHandle, chunk: LlmUsageChunk): void {
+    const state = this.callInfo.get(handle);
+    if (!state) {
+      return;
+    }
+    if (chunk.modelVersion) {
+      state.modelVersion = chunk.modelVersion;
+      this.modelsUsed.add(chunk.modelVersion);
+    }
+    if (!chunk.tokens) {
+      return;
+    }
+    this.applyTokenUpdate(state, chunk.tokens);
+  }
+
+  finishModelCall(handle: ModelCallHandle): void {
+    this.callInfo.delete(handle);
+  }
+
+  recordToolCall(toolName: string): void {
+    this.toolCalls += 1;
+    const next = (this.toolCallsByName.get(toolName) ?? 0) + 1;
+    this.toolCallsByName.set(toolName, next);
+  }
+
+  parseLogLine(message: string): void {
+    const prefix = "tool:";
+    if (!message.startsWith(prefix)) {
+      return;
+    }
+    const rest = message.slice(prefix.length).trim();
+    if (!rest) {
+      return;
+    }
+    const toolName = rest.split(/\s+/)[0]?.trim();
+    if (!toolName) {
+      return;
+    }
+    this.recordToolCall(toolName);
+  }
+
+  snapshot(): AgentRunStatsSnapshot {
+    const toolsByName: Record<string, number> = {};
+    for (const [name, count] of this.toolCallsByName.entries()) {
+      toolsByName[name] = count;
+    }
+    const modelCostUsd =
+      typeof this.modelCostUsd === "number" && Number.isFinite(this.modelCostUsd)
+        ? this.modelCostUsd
+        : 0;
+    const toolCostUsd =
+      typeof this.toolCostUsd === "number" && Number.isFinite(this.toolCostUsd)
+        ? this.toolCostUsd
+        : 0;
+    return {
+      modelCalls: this.modelCalls,
+      modelsUsed: Array.from(this.modelsUsed).sort(),
+      tokens: { ...this.tokens },
+      modelCostUsd,
+      toolCalls: this.toolCalls,
+      toolCallsByName: toolsByName,
+      toolCostUsd,
+      totalCostUsd: modelCostUsd + toolCostUsd,
+    };
+  }
+
+  private applyTokenUpdate(
+    state: {
+      modelId: string;
+      modelVersion?: string;
+      tokens: CallTokenState;
+      appliedCostUsd: number;
+    },
+    tokens: LlmUsageTokenUpdate,
+  ): void {
+    const previous = state.tokens;
+    const next: CallTokenState = {
+      promptTokens: resolveUsageNumber(tokens.promptTokens),
+      cachedTokens: resolveUsageNumber(tokens.cachedTokens),
+      responseTokens: resolveUsageNumber(tokens.responseTokens),
+      responseImageTokens: resolveUsageNumber(tokens.responseImageTokens),
+      thinkingTokens: resolveUsageNumber(tokens.thinkingTokens),
+      totalTokens: resolveUsageNumber(
+        tokens.totalTokens ??
+          resolveUsageNumber(tokens.promptTokens) +
+            resolveUsageNumber(tokens.responseTokens) +
+            resolveUsageNumber(tokens.thinkingTokens) +
+            resolveUsageNumber(tokens.toolUsePromptTokens),
+      ),
+      toolUsePromptTokens: resolveUsageNumber(tokens.toolUsePromptTokens),
+    };
+
+    const promptDelta = Math.max(0, next.promptTokens - previous.promptTokens);
+    const cachedDelta = Math.max(0, next.cachedTokens - previous.cachedTokens);
+    const responseDelta = Math.max(
+      0,
+      next.responseTokens - previous.responseTokens,
+    );
+    const responseImageDelta = Math.max(
+      0,
+      next.responseImageTokens - previous.responseImageTokens,
+    );
+    const thinkingDelta = Math.max(
+      0,
+      next.thinkingTokens - previous.thinkingTokens,
+    );
+    const totalDelta = Math.max(0, next.totalTokens - previous.totalTokens);
+    const toolUseDelta = Math.max(
+      0,
+      next.toolUsePromptTokens - previous.toolUsePromptTokens,
+    );
+
+    this.tokens.promptTokens += promptDelta;
+    this.tokens.cachedTokens += cachedDelta;
+    this.tokens.responseTokens += responseDelta;
+    this.tokens.responseImageTokens += responseImageDelta;
+    this.tokens.thinkingTokens += thinkingDelta;
+    this.tokens.totalTokens += totalDelta;
+    this.tokens.toolUsePromptTokens += toolUseDelta;
+
+    state.tokens = next;
+    const callCostUsd = estimateCallCostUsd({
+      modelId: state.modelVersion ?? state.modelId,
+      tokens,
+      responseImages: 0,
+    });
+    const costDelta = Math.max(0, callCostUsd - state.appliedCostUsd);
+    if (costDelta > 0) {
+      this.modelCostUsd += costDelta;
+      state.appliedCostUsd = callCostUsd;
+    }
+  }
+}
+
+type AgentLogSyncOptions = {
+  firestore: FirebaseFirestore.Firestore;
+  userId: string;
+  agentId: string;
+  throttleMs: number;
+  initialStats: AgentRunStatsSnapshot;
+};
+
+class AgentLogSync {
+  private firestore: FirebaseFirestore.Firestore;
+  private userId: string;
+  private agentId: string;
+  private throttleMs: number;
+  private createdAt: Date;
+  private createdAtWritten = false;
+  private lastWriteAt = 0;
+  private pendingLines = new Map<string, string>();
+  private pendingStats: AgentRunStatsSnapshot | null = null;
+  private timer: NodeJS.Timeout | undefined;
+  private inFlight: Promise<void> | undefined;
+  private disposed = false;
+  private lastKeyMs = 0;
+  private seq = 0;
+
+  constructor(options: AgentLogSyncOptions) {
+    this.firestore = options.firestore;
+    this.userId = options.userId;
+    this.agentId = options.agentId;
+    this.throttleMs = options.throttleMs;
+    this.createdAt = new Date();
+    this.pendingStats = options.initialStats;
+  }
+
+  private docRef(): FirebaseFirestore.DocumentReference {
+    return this.firestore
+      .collection("users")
+      .doc(this.userId)
+      .collection("agents")
+      .doc(this.agentId)
+      .collection("logs")
+      .doc("log");
+  }
+
+  append(line: string): void {
+    if (this.disposed) {
+      return;
+    }
+    const key = this.nextLineKey();
+    this.pendingLines.set(key, line);
+    this.scheduleUpdate();
+  }
+
+  setStats(stats: AgentRunStatsSnapshot): void {
+    if (this.disposed) {
+      return;
+    }
+    this.pendingStats = stats;
+    this.scheduleUpdate();
+  }
+
+  async flushAll(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+    if (this.inFlight) {
+      await this.inFlight.catch(() => undefined);
+    }
+    if (this.pendingLines.size === 0 && !this.pendingStats) {
+      return;
+    }
+    const now = Date.now();
+    const elapsed = now - this.lastWriteAt;
+    const delay = Math.max(0, this.throttleMs - elapsed);
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    await this.startFlush({ force: true });
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+  }
+
+  private nextLineKey(): string {
+    const nowMs = Date.now();
+    if (nowMs === this.lastKeyMs) {
+      this.seq += 1;
+    } else {
+      this.lastKeyMs = nowMs;
+      this.seq = 0;
+    }
+    return `t${nowMs}_${String(this.seq).padStart(3, "0")}`;
+  }
+
+  private scheduleUpdate(): void {
+    if (this.disposed) {
+      return;
+    }
+    if (this.inFlight) {
+      return;
+    }
+    if (this.timer) {
+      return;
+    }
+    const now = Date.now();
+    const elapsed = now - this.lastWriteAt;
+    if (elapsed >= this.throttleMs) {
+      void this.startFlush({ force: false }).catch((error) => {
+        console.warn(
+          `Failed to flush agent logs "${this.agentId}": ${errorAsString(error)}`,
+        );
+      });
+      return;
+    }
+    const delay = Math.max(0, this.throttleMs - elapsed);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.startFlush({ force: false }).catch((error) => {
+        console.warn(
+          `Failed to flush agent logs "${this.agentId}": ${errorAsString(error)}`,
+        );
+      });
+    }, delay);
+  }
+
+  private async startFlush({ force }: { force: boolean }): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    if (!force && this.pendingLines.size === 0 && !this.pendingStats) {
+      return;
+    }
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+    if (this.inFlight) {
+      await this.inFlight;
+      return;
+    }
+
+    this.lastWriteAt = Date.now();
+    const promise = this.flush()
+      .catch((error) => {
+        throw error;
+      })
+      .finally(() => {
+        this.inFlight = undefined;
+        if (
+          !this.disposed &&
+          (this.pendingLines.size > 0 || this.pendingStats)
+        ) {
+          this.scheduleUpdate();
+        }
+      });
+    this.inFlight = promise;
+    await promise;
+  }
+
+  private async flush(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    const linesEntries = Array.from(this.pendingLines.entries());
+    const stats = this.pendingStats;
+    this.pendingLines.clear();
+    this.pendingStats = null;
+
+    if (linesEntries.length === 0 && !stats) {
+      return;
+    }
+
+    const now = new Date();
+    const linesPayload: Record<string, string> = {};
+    for (const [key, value] of linesEntries) {
+      linesPayload[key] = value;
+    }
+
+    const payload: Record<string, unknown> = {
+      updatedAt: now,
+    };
+    if (!this.createdAtWritten) {
+      payload.createdAt = this.createdAt;
+    }
+    if (linesEntries.length > 0) {
+      payload.lines = linesPayload;
+    }
+    if (stats) {
+      payload.stats = stats;
+    }
+
+    try {
+      await this.docRef().set(payload, { merge: true });
+      this.createdAtWritten = true;
+    } catch (error) {
+      for (const [key, value] of linesEntries) {
+        if (!this.pendingLines.has(key)) {
+          this.pendingLines.set(key, value);
+        }
+      }
+      if (!this.pendingStats && stats) {
+        this.pendingStats = stats;
+      }
+      throw error;
+    }
   }
 }
 
@@ -830,6 +1263,15 @@ export async function runSparkAgentTask(
 
   await updateAgentStatus({ agentRef, status: "executing" });
 
+  const statsTracker = new AgentRunStatsTracker();
+  const logSync = new AgentLogSync({
+    firestore,
+    userId: options.userId,
+    agentId: options.agentId,
+    throttleMs: AGENT_LOG_THROTTLE_MS,
+    initialStats: statsTracker.snapshot(),
+  });
+
   const workspaceRoot = path.join(
     os.tmpdir(),
     "spark-agent-workspaces",
@@ -860,7 +1302,12 @@ export async function runSparkAgentTask(
       execute: async ({ summary }) => {
         doneCalled = true;
         doneSummary = summary;
+        logSync.append(
+          summary ? `done: ${summary}` : "done: completed without summary",
+        );
+        logSync.setStats(statsTracker.snapshot());
         await workspaceSync.flushAll();
+        await logSync.flushAll();
         await updateAgentStatus({
           agentRef,
           status: "done",
@@ -877,12 +1324,25 @@ export async function runSparkAgentTask(
   const progress: JobProgressReporter = {
     log: (message) => {
       console.log(`[spark-agent:${options.agentId}] ${message}`);
+      logSync.append(message);
+      statsTracker.parseLogLine(message);
+      logSync.setStats(statsTracker.snapshot());
     },
-    startModelCall: () => Symbol("agent-model-call"),
-    recordModelUsage: () => {},
-    finishModelCall: () => {},
-    startStage: () => Symbol("agent-stage"),
-    finishStage: () => {},
+    startModelCall: (details) => {
+      const handle = statsTracker.startModelCall({ modelId: details.modelId });
+      logSync.setStats(statsTracker.snapshot());
+      return handle;
+    },
+    recordModelUsage: (handle, chunk) => {
+      statsTracker.recordModelUsage(handle, chunk);
+      logSync.setStats(statsTracker.snapshot());
+    },
+    finishModelCall: (handle) => {
+      statsTracker.finishModelCall(handle);
+      logSync.setStats(statsTracker.snapshot());
+    },
+    startStage: (_stageName: string): StageHandle => Symbol("agent-stage"),
+    finishStage: (_handle: StageHandle) => {},
     setActiveStages: () => {},
   };
   try {
@@ -895,12 +1355,16 @@ export async function runSparkAgentTask(
       progress,
       openAiReasoningEffort,
     });
+    await logSync.flushAll().catch(() => undefined);
   } catch (error) {
     const message = errorAsString(error);
+    logSync.append(`error: ${message}`);
     await workspaceSync.flushAll().catch(() => undefined);
+    await logSync.flushAll().catch(() => undefined);
     await updateAgentStatus({ agentRef, status: "failed", error: message });
     throw error;
   } finally {
+    logSync.dispose();
     await rm(workspaceRoot, { recursive: true, force: true }).catch(
       () => undefined,
     );
@@ -908,6 +1372,8 @@ export async function runSparkAgentTask(
 
   if (!doneCalled) {
     const message = "Agent completed without calling done.";
+    logSync.append(`error: ${message}`);
+    await logSync.flushAll().catch(() => undefined);
     await updateAgentStatus({ agentRef, status: "failed", error: message });
     throw new Error(message);
   }
