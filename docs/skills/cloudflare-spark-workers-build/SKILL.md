@@ -16,6 +16,13 @@ This workflow assumes Spark’s SvelteKit app (`web/`) is deployed to the Cloudf
 - `CLOUDFLARE_ACCOUNT_ID` (Spark account)
 - Worker name: `spark`
 
+Sanity-check the token first:
+
+```bash
+curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify\" \\
+  -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\"
+```
+
 ## Identify The Build Configuration
 
 Workers Builds are attached to a **script_tag** (not always the same as the worker name).
@@ -152,6 +159,19 @@ Verify names:
 npx wrangler secret list --name spark
 ```
 
+## Common Runtime Failure: Firestore Admin SDK In Workers
+
+Symptom:
+- 500s on API routes that touch Firestore with:
+  - `EvalError: Code generation from strings disallowed for this context`
+
+Cause:
+- Firebase Admin Firestore uses gRPC/protobuf codegen that can be blocked in the Workers runtime.
+
+Fix approach:
+- Replace Firestore Admin usage in Worker-executed routes with Firestore REST calls (OAuth JWT flow via WebCrypto).
+- Treat persistence as mandatory: fail with a clear error message if writes cannot be persisted.
+
 ## Trigger A Manual Build
 
 To validate fixes without waiting for Git:
@@ -180,4 +200,3 @@ After a successful build/deploy, check the latest Worker version:
 curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/spark/versions\" \\
   -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\"
 ```
-

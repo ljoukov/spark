@@ -1,11 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import {
-	getFirebaseAdminFirestore,
-	generateText,
-	loadEnvFromFile,
-	loadLocalEnv
-} from '@spark/llm';
+import { generateText, loadEnvFromFile, loadLocalEnv } from '@spark/llm';
 import type { LlmContent, LlmContentPart, LlmTextDelta } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -18,6 +13,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
+import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -128,7 +125,7 @@ function resolveConversationId(value: string | undefined): string {
 }
 
 function resolveConversationDoc(
-	raw: FirebaseFirestore.DocumentData | undefined,
+	raw: Record<string, unknown> | undefined,
 	userId: string,
 	conversationId: string,
 	now: Date
@@ -319,18 +316,35 @@ function isSupportedAttachmentMime(value: string): boolean {
 }
 
 async function downloadAttachmentParts(
-	userId: string,
+	options: { userId: string; bucketName: string },
 	attachments: z.infer<typeof attachmentSchema>[]
 ): Promise<LlmContentPart[]> {
 	if (attachments.length === 0) {
 		return [];
 	}
+	const expectedBucket = options.bucketName;
 	const downloadTasks = attachments.map(async (attachment) => {
 		if (!isSupportedAttachmentMime(attachment.contentType)) {
 			throw new Error(`Unsupported attachment type ${attachment.contentType}`);
 		}
 		if (!attachment.downloadUrl || attachment.downloadUrl.trim().length === 0) {
 			throw new Error(`Attachment ${attachment.id} is missing a downloadUrl`);
+		}
+		let parsedUrl: URL;
+		try {
+			parsedUrl = new URL(attachment.downloadUrl);
+		} catch {
+			throw new Error(`Attachment ${attachment.id} has an invalid downloadUrl`);
+		}
+		if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'firebasestorage.googleapis.com') {
+			throw new Error(`Attachment ${attachment.id} downloadUrl is not a Firebase Storage URL`);
+		}
+		const expectedPath = `/v0/b/${expectedBucket}/o/${encodeURIComponent(attachment.storagePath)}`;
+		if (parsedUrl.pathname !== expectedPath) {
+			throw new Error(`Attachment ${attachment.id} downloadUrl does not match storagePath`);
+		}
+		if (parsedUrl.searchParams.get('alt') !== 'media') {
+			throw new Error(`Attachment ${attachment.id} downloadUrl must use alt=media`);
 		}
 
 		// Cloudflare Workers does not reliably support Firebase Admin Storage (Node + gRPC/protobuf).
@@ -415,12 +429,16 @@ async function generateAssistantResponse(
 	conversation: ConversationDoc,
 	options: {
 		userId: string;
+		bucketName: string;
 		messageId: string;
 		attachments: z.infer<typeof attachmentSchema>[];
 	},
 	handlers: StreamHandlers
 ): Promise<string> {
-	const attachmentParts = await downloadAttachmentParts(options.userId, options.attachments);
+	const attachmentParts = await downloadAttachmentParts(
+		{ userId: options.userId, bucketName: options.bucketName },
+		options.attachments
+	);
 	const contents = buildLlmContents(conversation.messages, {
 		attachmentMessageId: options.messageId,
 		attachmentParts
@@ -460,6 +478,18 @@ export const POST: RequestHandler = async ({ request }) => {
 	const userId = authResult.user.uid;
 	loadWebEnv();
 	loadLocalEnv();
+	const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+	if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+		return json(
+			{
+				error: 'misconfigured',
+				message: 'GOOGLE_SERVICE_ACCOUNT_JSON is missing on the server.'
+			},
+			{ status: 500 }
+		);
+	}
+	const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+	const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
 
 	let parsedBody: z.infer<typeof requestSchema>;
 	try {
@@ -477,34 +507,36 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const conversationId = resolveConversationId(parsedBody.conversationId);
 	const now = new Date();
-	let conversationRef: FirebaseFirestore.DocumentReference | null = null;
+	const conversationDocPath = `${userId}/client/conversations/${conversationId}`;
 	let conversation: ConversationDoc = resolveConversationDoc(undefined, userId, conversationId, now)
 		.conversation;
 	let conversationAttachments: SparkAgentAttachment[] = [];
 
 	try {
-		const firestore = getFirebaseAdminFirestore();
-		conversationRef = firestore
-			.collection(userId)
-			.doc('client')
-			.collection('conversations')
-			.doc(conversationId);
-		const snapshot = await conversationRef.get();
-		conversationAttachments = normalizeAttachments(snapshot.data()?.attachments, now);
+		const snapshot = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath
+		});
+		conversationAttachments = normalizeAttachments(snapshot.data?.attachments, now);
 		conversation = resolveConversationDoc(
-			snapshot.exists ? snapshot.data() : undefined,
+			snapshot.exists ? snapshot.data ?? undefined : undefined,
 			userId,
 			conversationId,
 			now
 		).conversation;
 	} catch (error) {
-		// Cloudflare Workers can reject dynamic codegen used by some Node libs (Firestore via gRPC/protobuf).
-		// Fall back to a stateless conversation so the user can still chat.
-		console.warn('Spark AI Agent Firestore unavailable; continuing without persistence', {
+		console.error('Spark AI Agent Firestore unavailable', {
 			error: error instanceof Error ? error.message : String(error),
-			userId
+			userId,
+			conversationId
 		});
-		conversationRef = null;
+		return json(
+			{
+				error: 'conversation_store_unavailable',
+				message: 'Conversation persistence is unavailable right now. Please try again in a moment.'
+			},
+			{ status: 503 }
+		);
 	}
 
 	const messageId = randomUUID();
@@ -531,8 +563,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			continue;
 		}
 
-		// If Firestore isn't available (or attachment isn't recorded yet), accept the attachment directly
-		// as long as the client supplied a download URL.
 		if (attachment.downloadUrl && attachment.downloadUrl.trim().length > 0) {
 			attachmentForMessage.push(attachment);
 		}
@@ -575,26 +605,31 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	}
 
-	if (conversationRef) {
-		try {
-			await conversationRef.set(
-				toConversationPayload({
-					...conversation,
-					updatedAt: now,
-					lastMessageAt: now,
-					messages: conversation.messages,
-					attachments: conversationAttachments
-				}),
-				{ merge: true }
-			);
-		} catch (error) {
-			console.warn('Spark AI Agent conversation write failed (continuing)', {
-				error: error instanceof Error ? error.message : String(error),
-				userId,
-				conversationId
-			});
-			conversationRef = null;
-		}
+	try {
+		await setFirestoreDocument({
+			serviceAccountJson,
+			documentPath: conversationDocPath,
+			data: toConversationPayload({
+				...conversation,
+				updatedAt: now,
+				lastMessageAt: now,
+				messages: conversation.messages,
+				attachments: conversationAttachments
+			})
+		});
+	} catch (error) {
+		console.error('Spark AI Agent conversation write failed', {
+			error: error instanceof Error ? error.message : String(error),
+			userId,
+			conversationId
+		});
+		return json(
+			{
+				error: 'conversation_write_failed',
+				message: 'Unable to persist your message. Please try again.'
+			},
+			{ status: 500 }
+		);
 	}
 
 	const acceptsSse = request.headers.get('accept')?.includes('text/event-stream') ?? false;
@@ -630,16 +665,15 @@ export const POST: RequestHandler = async ({ request }) => {
 				updateAssistantMessage(conversation, assistantMessageId, assistantText);
 				conversation.updatedAt = nowTimestampValue;
 				conversation.lastMessageAt = nowTimestampValue;
-				if (conversationRef) {
-					await conversationRef.set(
-						{
-							updatedAt: nowTimestampValue,
-							lastMessageAt: nowTimestampValue,
-							messages: conversation.messages
-						},
-						{ merge: true }
-					);
-				}
+				await setFirestoreDocument({
+					serviceAccountJson,
+					documentPath: conversationDocPath,
+					data: {
+						updatedAt: nowTimestampValue,
+						lastMessageAt: nowTimestampValue,
+						messages: conversation.messages
+					}
+				});
 				lastUpdate = Date.now();
 			} finally {
 				flushInFlight = false;
@@ -669,6 +703,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					conversation,
 					{
 						userId,
+						bucketName,
 						messageId,
 						attachments: attachmentForMessage
 					},

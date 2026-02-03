@@ -1,7 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirebaseAdminFirestore } from '@spark/llm';
+import { loadLocalEnv } from '@spark/llm';
+import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const bodySchema = z
 	.object({
@@ -24,6 +25,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	const { user } = authResult;
 
+	loadLocalEnv();
+
 	let parsedBody;
 	try {
 		const raw = await request.json();
@@ -41,14 +44,9 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { name, email, photoUrl, isAnonymous } = parsedBody;
 
 	// Best-effort user doc upsert.
-	// On Cloudflare Workers, Firebase Admin Firestore can fail at runtime due to
-	// dynamic codegen restrictions (EvalError: "Code generation from strings disallowed...").
-	// The app can still function without this write, so don't fail login.
+	// This must be Workers-compatible; Firebase Admin Firestore uses gRPC/protobuf codegen
+	// and can throw EvalError on Cloudflare Workers.
 	try {
-		const db = getFirebaseAdminFirestore();
-		const docRef = db.collection('spark').doc(user.uid);
-		const snapshot = await docRef.get();
-
 		const nowIso = new Date().toISOString();
 		type FirebaseSignInClaim = { sign_in_provider?: string };
 		const firebaseClaim =
@@ -66,11 +64,25 @@ export const POST: RequestHandler = async ({ request }) => {
 			lastLoginAt: nowIso
 		};
 
-		if (!snapshot.exists) {
-			data.createdAt = nowIso;
+		const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '';
+		if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+			throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
 		}
 
-		await docRef.set(data, { merge: true });
+		const existing = await getFirestoreDocument({
+			serviceAccountJson,
+			documentPath: `spark/${user.uid}`
+		});
+		const existingCreatedAt =
+			typeof existing.data?.createdAt === 'string' && existing.data.createdAt.trim().length > 0
+				? existing.data.createdAt
+				: null;
+
+		await setFirestoreDocument({
+			serviceAccountJson,
+			documentPath: `spark/${user.uid}`,
+			data: { ...data, createdAt: existingCreatedAt ?? nowIso }
+		});
 	} catch (error) {
 		console.warn('Login user doc upsert failed (continuing)', {
 			error: error instanceof Error ? error.message : String(error),
