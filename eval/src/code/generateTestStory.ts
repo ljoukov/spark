@@ -15,11 +15,8 @@ import {
   type StorySegmentation,
   StoryGenerationPipeline,
 } from "@spark/llm/code/generateStory";
-import {
-  generateSessionAudio,
-  getTestUserId,
-  type MediaSegment,
-} from "@spark/llm";
+import { getTestUserId, type MediaSegment } from "@spark/llm";
+import { generateSessionAudio } from "@spark/llm/code/audio";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
 import { formatByteSize, formatDurationSeconds } from "@spark/llm/utils/format";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";

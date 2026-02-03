@@ -90,10 +90,26 @@ export type ChatGptCodexToolCall = {
   arguments: string;
 };
 
+export type ChatGptCodexWebSearchAction = {
+  type: string;
+  query?: string;
+  queries?: string[];
+  url?: string;
+  pattern?: string;
+  sources?: Array<{ url: string }>;
+};
+
+export type ChatGptCodexWebSearchCall = {
+  id: string;
+  status?: string;
+  action?: ChatGptCodexWebSearchAction;
+};
+
 export type ChatGptCodexCollectedResponse = {
   text: string;
   reasoningText: string;
   toolCalls: ChatGptCodexToolCall[];
+  webSearchCalls: ChatGptCodexWebSearchCall[];
   usage?: ChatGptCodexUsage;
   model?: string;
   status?: string;
@@ -145,6 +161,8 @@ export async function collectChatGptCodexResponse(options: {
   const stream = await streamChatGptCodexResponse(options);
   const toolCalls = new Map<string, ChatGptCodexToolCall>();
   const toolCallOrder: string[] = [];
+  const webSearchCalls = new Map<string, ChatGptCodexWebSearchCall>();
+  const webSearchCallOrder: string[] = [];
   let text = "";
   let reasoningText = "";
   let sawOutputTextDelta = false;
@@ -225,6 +243,99 @@ export async function collectChatGptCodexResponse(options: {
               }
             }
           }
+        } else if (item.type === "web_search_call") {
+          const id = typeof item.id === "string" ? item.id : "";
+          if (!id) {
+            continue;
+          }
+          const status =
+            typeof item.status === "string" && item.status.length > 0
+              ? item.status
+              : undefined;
+          const actionRaw = item.action;
+          const actionRecord =
+            actionRaw && typeof actionRaw === "object"
+              ? (actionRaw as Record<string, unknown>)
+              : null;
+          const actionType =
+            actionRecord && typeof actionRecord.type === "string"
+              ? actionRecord.type
+              : null;
+          const action: ChatGptCodexWebSearchAction | undefined =
+            actionType && actionType.length > 0
+              ? (() => {
+                  const next: ChatGptCodexWebSearchAction = {
+                    type: actionType,
+                  };
+                  if (
+                    typeof actionRecord?.query === "string" &&
+                    actionRecord.query.trim().length > 0
+                  ) {
+                    next.query = actionRecord.query.trim();
+                  }
+                  if (Array.isArray(actionRecord?.queries)) {
+                    const queries = actionRecord.queries
+                      .filter(
+                        (entry): entry is string =>
+                          typeof entry === "string" && entry.trim().length > 0,
+                      )
+                      .map((entry) => entry.trim());
+                    if (queries.length > 0) {
+                      next.queries = queries;
+                    }
+                  }
+                  if (
+                    typeof actionRecord?.url === "string" &&
+                    actionRecord.url.trim().length > 0
+                  ) {
+                    next.url = actionRecord.url.trim();
+                  }
+                  if (
+                    typeof actionRecord?.pattern === "string" &&
+                    actionRecord.pattern.trim().length > 0
+                  ) {
+                    next.pattern = actionRecord.pattern.trim();
+                  }
+                  if (Array.isArray(actionRecord?.sources)) {
+                    const sources = actionRecord.sources
+                      .map((entry) => {
+                        if (!entry || typeof entry !== "object") {
+                          return null;
+                        }
+                        const url = (entry as { url?: unknown }).url;
+                        if (
+                          typeof url !== "string" ||
+                          url.trim().length === 0
+                        ) {
+                          return null;
+                        }
+                        return { url: url.trim() };
+                      })
+                      .filter(
+                        (entry): entry is { url: string } => entry !== null,
+                      );
+                    if (sources.length > 0) {
+                      next.sources = sources;
+                    }
+                  }
+                  return next;
+                })()
+              : undefined;
+
+          const existing = webSearchCalls.get(id);
+          if (existing) {
+            if (!existing.status && status) {
+              existing.status = status;
+            }
+            if (action) {
+              existing.action = existing.action
+                ? { ...existing.action, ...action }
+                : action;
+            }
+          } else {
+            webSearchCalls.set(id, { id, status, action });
+            webSearchCallOrder.push(id);
+          }
         } else if (item.type === "reasoning" && !sawReasoningDelta) {
           const content = Array.isArray(item.content) ? item.content : [];
           for (const entry of content) {
@@ -297,10 +408,14 @@ export async function collectChatGptCodexResponse(options: {
   const orderedCalls = toolCallOrder
     .map((key) => toolCalls.get(key))
     .filter((call): call is ChatGptCodexToolCall => Boolean(call));
+  const orderedWebSearchCalls = webSearchCallOrder
+    .map((key) => webSearchCalls.get(key))
+    .filter((call): call is ChatGptCodexWebSearchCall => Boolean(call));
   return {
     text,
     reasoningText,
     toolCalls: orderedCalls,
+    webSearchCalls: orderedWebSearchCalls,
     usage,
     model,
     status,

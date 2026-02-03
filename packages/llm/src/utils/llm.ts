@@ -57,6 +57,7 @@ import type {
   ResponseOutputItem,
   ResponseFunctionToolCall,
   ResponseTextConfig,
+  Tool as OpenAiTool,
   ResponseUsage,
   ResponseIncludable,
 } from "openai/resources/responses/responses";
@@ -1196,9 +1197,11 @@ export type LlmDebugOptions = {
   readonly enabled?: boolean;
 };
 
-export type LlmToolConfig = {
-  readonly type: "web-search" | "code-execution";
-};
+export type LlmWebSearchMode = "cached" | "live";
+
+export type LlmToolConfig =
+  | { readonly type: "web-search"; readonly mode?: LlmWebSearchMode }
+  | { readonly type: "code-execution" };
 
 export type LlmExecutableTool<Schema extends z.ZodType, Output> = {
   readonly description?: string;
@@ -1248,6 +1251,7 @@ type LlmToolLoopContentsOptions = {
 export type LlmToolLoopOptions = {
   readonly modelId: LlmTextModelId;
   readonly tools: LlmToolSet;
+  readonly modelTools?: readonly LlmToolConfig[];
   readonly maxSteps?: number;
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
@@ -1492,25 +1496,30 @@ function toGeminiTools(
   });
 }
 
-type OpenAiToolConfig =
-  | { type: "web_search_preview" }
-  | { type: "code_interpreter"; container: { type: "auto" } };
-
 function toOpenAiTools(
   tools: readonly LlmToolConfig[] | undefined,
-): OpenAiToolConfig[] | undefined {
+): OpenAiTool[] | undefined {
   if (!tools || tools.length === 0) {
     return undefined;
   }
   return tools.map((tool) => {
-    switch (tool.type) {
-      case "web-search":
-        return { type: "web_search_preview" };
-      case "code-execution":
-        return { type: "code_interpreter", container: { type: "auto" } };
-      default:
-        throw new Error("Unsupported tool configuration");
-    }
+    const openAiTool: OpenAiTool = (() => {
+      switch (tool.type) {
+        case "web-search": {
+          // ChatGPT / Responses API accepts `external_web_access` to control whether
+          // the search uses live internet access (true) or cached-only (false).
+          const external_web_access = tool.mode !== "cached";
+          return {
+            type: "web_search",
+            external_web_access,
+          } as unknown as OpenAiTool;
+        }
+        case "code-execution": {
+          return { type: "code_interpreter", container: { type: "auto" } };
+        }
+      }
+    })();
+    return openAiTool;
   });
 }
 
@@ -2625,11 +2634,7 @@ async function llmStream({
     const openAiInput = isOpenAi ? toOpenAiInput(promptContents) : undefined;
     const openAiTools = isOpenAi ? toOpenAiTools(options.tools) : undefined;
     const chatGptInput = isChatGpt ? toChatGptInput(promptContents) : undefined;
-    if (isChatGpt && options.tools && options.tools.length > 0) {
-      throw new Error(
-        "ChatGPT Codex provider does not support web-search/code-execution tools.",
-      );
-    }
+    const chatGptTools = isChatGpt ? toOpenAiTools(options.tools) : undefined;
     const openAiReasoningEffort = openAiTextModelId
       ? resolveOpenAiReasoningEffortForModel(
           openAiTextModelId,
@@ -2674,6 +2679,7 @@ async function llmStream({
       ? {
           reasoning: chatGptReasoningPayload,
           ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
+          ...(chatGptTools ? { tools: chatGptTools } : {}),
           include: ["reasoning.encrypted_content"],
           stream: true,
           store: false,
@@ -3926,7 +3932,11 @@ export async function runToolLoop(
     if (openAiModelInfo.provider === "chatgpt") {
       const chatGptModelId = openAiModelInfo.modelId;
       const textModelId = options.modelId;
-      const openAiTools = buildOpenAiFunctionTools(options.tools);
+      const openAiFunctionTools = buildOpenAiFunctionTools(options.tools);
+      const openAiNativeTools = toOpenAiTools(options.modelTools);
+      const openAiTools: OpenAiTool[] = openAiNativeTools
+        ? [...openAiNativeTools, ...openAiFunctionTools]
+        : [...openAiFunctionTools];
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
         textModelId,
         options.openAiReasoningEffort,
@@ -3979,6 +3989,36 @@ export async function runToolLoop(
             response.status !== "in_progress"
           ) {
             throw new Error(`ChatGPT response status ${response.status}`);
+          }
+          for (const call of response.webSearchCalls) {
+            const action = call.action;
+            const pieces: string[] = [];
+            if (action?.type) {
+              pieces.push(`action=${action.type}`);
+            }
+            if (action?.query) {
+              pieces.push(`query=${truncateForLog(action.query, 160)}`);
+            }
+            if (action?.queries && action.queries.length > 0) {
+              pieces.push(`queries=${action.queries.length}`);
+            }
+            if (action?.url) {
+              pieces.push(`url=${truncateForLog(action.url, 160)}`);
+            }
+            if (action?.pattern) {
+              pieces.push(`pattern=${truncateForLog(action.pattern, 160)}`);
+            }
+            if (action?.sources && action.sources.length > 0) {
+              pieces.push(`sources=${action.sources.length}`);
+            }
+            if (call.status) {
+              pieces.push(`status=${call.status}`);
+            }
+            reporter.log(
+              pieces.length > 0
+                ? `tool: web_search ${pieces.join(" ")}`
+                : "tool: web_search",
+            );
           }
           const usageTokens = extractChatGptUsageTokens(
             response.usage as { [key: string]: unknown } | undefined,
@@ -4102,7 +4142,11 @@ export async function runToolLoop(
       }
     } else {
       const openAiModelId = openAiModelInfo.modelId;
-      const openAiTools = buildOpenAiFunctionTools(options.tools);
+      const openAiFunctionTools = buildOpenAiFunctionTools(options.tools);
+      const openAiNativeTools = toOpenAiTools(options.modelTools);
+      const openAiTools: OpenAiTool[] = openAiNativeTools
+        ? [...openAiNativeTools, ...openAiFunctionTools]
+        : [...openAiFunctionTools];
       const openAiReasoningEffort = resolveOpenAiReasoningEffortForModel(
         openAiModelId,
         options.openAiReasoningEffort,
@@ -4186,6 +4230,63 @@ export async function runToolLoop(
           const reasoningSummary = extractOpenAiReasoningSummary(response);
           if (reasoningSummary) {
             reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
+          }
+          const outputItems = response.output;
+          if (Array.isArray(outputItems)) {
+            for (const item of outputItems) {
+              if (!item || item.type !== "web_search_call") {
+                continue;
+              }
+              const record = item as unknown as {
+                status?: unknown;
+                action?: unknown;
+              };
+              const statusValue =
+                typeof record.status === "string" ? record.status : undefined;
+              const actionRaw =
+                record.action && typeof record.action === "object"
+                  ? (record.action as Record<string, unknown>)
+                  : null;
+              const pieces: string[] = [];
+              const actionType =
+                actionRaw && typeof actionRaw.type === "string"
+                  ? actionRaw.type
+                  : null;
+              if (actionType) {
+                pieces.push(`action=${actionType}`);
+              }
+              const queryValue =
+                actionRaw && typeof actionRaw.query === "string"
+                  ? actionRaw.query
+                  : null;
+              if (queryValue && queryValue.trim().length > 0) {
+                pieces.push(`query=${truncateForLog(queryValue.trim(), 160)}`);
+              }
+              const urlValue =
+                actionRaw && typeof actionRaw.url === "string"
+                  ? actionRaw.url
+                  : null;
+              if (urlValue && urlValue.trim().length > 0) {
+                pieces.push(`url=${truncateForLog(urlValue.trim(), 160)}`);
+              }
+              const patternValue =
+                actionRaw && typeof actionRaw.pattern === "string"
+                  ? actionRaw.pattern
+                  : null;
+              if (patternValue && patternValue.trim().length > 0) {
+                pieces.push(
+                  `pattern=${truncateForLog(patternValue.trim(), 160)}`,
+                );
+              }
+              if (statusValue) {
+                pieces.push(`status=${statusValue}`);
+              }
+              reporter.log(
+                pieces.length > 0
+                  ? `tool: web_search ${pieces.join(" ")}`
+                  : "tool: web_search",
+              );
+            }
           }
           const usageTokens = extractOpenAiUsageTokens(response.usage);
           const resolvedModelId = response.model ?? openAiModelId;
@@ -4285,7 +4386,11 @@ export async function runToolLoop(
       }
     }
   } else {
-    const geminiTools = buildGeminiFunctionDeclarations(options.tools);
+    const geminiFunctionTools = buildGeminiFunctionDeclarations(options.tools);
+    const geminiNativeTools = toGeminiTools(options.modelTools);
+    const geminiTools = geminiNativeTools
+      ? geminiNativeTools.concat(geminiFunctionTools)
+      : geminiFunctionTools;
     const geminiContents = contents.map(convertLlmContentToGoogleContent);
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       reporter.log(`Gemini step ${stepIndex + 1}`);

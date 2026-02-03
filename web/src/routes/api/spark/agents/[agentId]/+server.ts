@@ -89,7 +89,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		const data = fileDoc.data();
 		const payload = {
 			...data,
-			path: typeof data.path === 'string' && data.path.trim().length > 0 ? data.path.trim() : decodeFileId(fileDoc.id)
+			path:
+				typeof data.path === 'string' && data.path.trim().length > 0
+					? data.path.trim()
+					: decodeFileId(fileDoc.id)
 		};
 		const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
 		if (!parsed.success) {

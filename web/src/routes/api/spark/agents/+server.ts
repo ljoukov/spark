@@ -61,11 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const now = new Date();
 
 	const firestore = getFirebaseAdminFirestore();
-	const agentRef = firestore
-		.collection('users')
-		.doc(userId)
-		.collection('agents')
-		.doc(agentId);
+	const agentRef = firestore.collection('users').doc(userId).collection('agents').doc(agentId);
 
 	await agentRef.set({
 		id: agentId,
@@ -77,20 +73,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		statesTimeline: [{ state: 'created', timestamp: now }]
 	});
 
-	await firestore
-		.collection('users')
-		.doc(userId)
-		.collection('workspace')
-		.doc(workspaceId)
-		.set(
-			{
-				id: workspaceId,
-				agentId,
-				createdAt: now,
-				updatedAt: now
-			},
-			{ merge: true }
-		);
+	await firestore.collection('users').doc(userId).collection('workspace').doc(workspaceId).set(
+		{
+			id: workspaceId,
+			agentId,
+			createdAt: now,
+			updatedAt: now
+		},
+		{ merge: true }
+	);
 
 	await createTask({
 		type: 'runAgent',

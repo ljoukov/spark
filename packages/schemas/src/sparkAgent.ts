@@ -59,9 +59,7 @@ export const SparkAgentAttachmentSchema = z.object({
   error: trimmedString.optional(),
 });
 
-export type SparkAgentAttachment = z.infer<
-  typeof SparkAgentAttachmentSchema
->;
+export type SparkAgentAttachment = z.infer<typeof SparkAgentAttachmentSchema>;
 
 export const SparkAgentToolCallSchema = z.object({
   id: trimmedString,

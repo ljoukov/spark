@@ -51,7 +51,9 @@ function toFirestoreValue(value: unknown): FirestoreValue {
 		return { bytesValue: Buffer.from(value).toString('base64') };
 	}
 	if (Array.isArray(value)) {
-		return { arrayValue: { values: value.filter((v) => v !== undefined).map((v) => toFirestoreValue(v)) } };
+		return {
+			arrayValue: { values: value.filter((v) => v !== undefined).map((v) => toFirestoreValue(v)) }
+		};
 	}
 	if (typeof value === 'object' && value !== null) {
 		const fields: Record<string, FirestoreValue> = {};
@@ -119,7 +121,9 @@ const FirestoreDocumentPathSchema = z
 	.string()
 	.trim()
 	.min(1)
-	.refine((value) => !value.startsWith('/'), { message: 'Firestore document path must be relative.' })
+	.refine((value) => !value.startsWith('/'), {
+		message: 'Firestore document path must be relative.'
+	})
 	.refine((value) => value.split('/').filter(Boolean).length % 2 === 0, {
 		message: 'Firestore document path must have an even number of segments.'
 	});
@@ -190,4 +194,3 @@ export async function setFirestoreDocument(options: {
 		throw new Error(`Firestore PATCH failed (${resp.status}): ${text.slice(0, 500)}`);
 	}
 }
-

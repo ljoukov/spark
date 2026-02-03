@@ -39,8 +39,7 @@ const DEFAULT_MAX_STEPS = 200;
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 10_000;
 
-const AgentStatusSchema = z.enum(["created", "executing", "failed", "done"]);
-type AgentStatus = z.infer<typeof AgentStatusSchema>;
+type AgentStatus = "created" | "executing" | "failed" | "done";
 
 type WorkspaceFileMeta = {
   createdAt?: Date;
@@ -101,7 +100,10 @@ function resolveOpenAiReasoningEffort(
   return undefined;
 }
 
-function resolveWorkspacePath(workspaceDir: string, targetPath: string): string {
+function resolveWorkspacePath(
+  workspaceDir: string,
+  targetPath: string,
+): string {
   if (path.isAbsolute(targetPath)) {
     throw new Error(`Absolute paths are not allowed: "${targetPath}".`);
   }
@@ -127,6 +129,24 @@ function resolveWorkspacePath(workspaceDir: string, targetPath: string): string 
     throw new Error(`Path "${targetPath}" is outside workspace.`);
   }
   return resolved;
+}
+
+function resolveFirestoreDate(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const toDate = (value as { toDate?: unknown }).toDate;
+  if (typeof toDate !== "function") {
+    return undefined;
+  }
+  const resolved = (toDate as () => unknown)();
+  if (resolved instanceof Date) {
+    return resolved;
+  }
+  return undefined;
 }
 
 function encodeFileId(filePath: string): string {
@@ -235,7 +255,7 @@ class WorkspaceSync {
       return;
     }
     for (const doc of snapshot.docs) {
-      const data = doc.data() ?? {};
+      const data = (doc.data() ?? {}) as Record<string, unknown>;
       const rawPath =
         typeof data.path === "string" && data.path.trim().length > 0
           ? data.path.trim()
@@ -244,14 +264,8 @@ class WorkspaceSync {
         continue;
       }
       const content = typeof data.content === "string" ? data.content : "";
-      const createdAt =
-        data.createdAt instanceof Date
-          ? data.createdAt
-          : data.createdAt?.toDate?.() ?? undefined;
-      const updatedAt =
-        data.updatedAt instanceof Date
-          ? data.updatedAt
-          : data.updatedAt?.toDate?.() ?? undefined;
+      const createdAt = resolveFirestoreDate(data.createdAt);
+      const updatedAt = resolveFirestoreDate(data.updatedAt);
       const resolved = resolveWorkspacePath(this.rootDir, rawPath);
       await ensureDir(path.dirname(resolved));
       await writeFile(resolved, content, { encoding: "utf8" });
@@ -308,7 +322,9 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(filePath);
-    await this.fileDoc(filePath).delete().catch(() => undefined);
+    await this.fileDoc(filePath)
+      .delete()
+      .catch(() => undefined);
   }
 
   async moveFile(fromPath: string, toPath: string): Promise<void> {
@@ -324,7 +340,9 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(fromPath);
-    await this.fileDoc(fromPath).delete().catch(() => undefined);
+    await this.fileDoc(fromPath)
+      .delete()
+      .catch(() => undefined);
     const toMeta = this.ensureMeta(toPath);
     if (fromCreatedAt && !toMeta.createdAt) {
       toMeta.createdAt = fromCreatedAt;
@@ -546,7 +564,8 @@ class AgentRunStatsTracker {
       toolsByName[name] = count;
     }
     const modelCostUsd =
-      typeof this.modelCostUsd === "number" && Number.isFinite(this.modelCostUsd)
+      typeof this.modelCostUsd === "number" &&
+      Number.isFinite(this.modelCostUsd)
         ? this.modelCostUsd
         : 0;
     const toolCostUsd =
@@ -1028,9 +1047,7 @@ function parseHunkHeader(line: string): {
   newStart: number;
   newLines: number;
 } {
-  const match = line.match(
-    /^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/,
-  );
+  const match = line.match(/^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/);
   if (!match) {
     throw new Error(`Invalid hunk header: ${line}`);
   }
@@ -1287,7 +1304,6 @@ export async function runSparkAgentTask(
   await workspaceSync.load();
 
   let doneCalled = false;
-  let doneSummary: string | undefined;
 
   const tools: LlmToolSet = {
     ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
@@ -1301,7 +1317,6 @@ export async function runSparkAgentTask(
         .strict(),
       execute: async ({ summary }) => {
         doneCalled = true;
-        doneSummary = summary;
         logSync.append(
           summary ? `done: ${summary}` : "done: completed without summary",
         );
@@ -1341,9 +1356,16 @@ export async function runSparkAgentTask(
       statsTracker.finishModelCall(handle);
       logSync.setStats(statsTracker.snapshot());
     },
-    startStage: (_stageName: string): StageHandle => Symbol("agent-stage"),
-    finishStage: (_handle: StageHandle) => {},
-    setActiveStages: () => {},
+    startStage: (stageName: string): StageHandle => {
+      void stageName;
+      return Symbol("agent-stage");
+    },
+    finishStage: (handle: StageHandle) => {
+      void handle;
+    },
+    setActiveStages: (stages) => {
+      void stages;
+    },
   };
   try {
     await runToolLoop({
