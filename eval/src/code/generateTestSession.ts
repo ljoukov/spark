@@ -1,9 +1,13 @@
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
-import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { z } from "zod";
-import { getTestUserId, getFirebaseAdminFirestore } from "@spark/llm";
+import { getTestUserId } from "@spark/llm";
+import {
+  commitFirestoreWrites,
+  patchFirestoreDocument,
+  setFirestoreDocument,
+} from "@spark/llm/utils/gcp/firestoreRest";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -26,6 +30,7 @@ import {
   STORY_TOPIC,
 } from "./constants";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
+import { requireServiceAccountJson } from "../utils/gcp";
 import {
   createConsoleProgress,
   synthesizeAndPublishNarration,
@@ -960,11 +965,10 @@ async function seedContent(
   userId: string,
   session: Session,
   problems: readonly CodeProblem[],
-): Promise<DocumentReference> {
-  const firestore = getFirebaseAdminFirestore();
-  const userRef = firestore.collection("spark").doc(userId);
-  const stateRef = userRef.collection("state").doc(session.id);
-  const sessionRef = userRef.collection("sessions").doc(session.id);
+): Promise<void> {
+  const serviceAccountJson = requireServiceAccountJson();
+  const userDocPath = `spark/${userId}`;
+  const sessionDocPath = `${userDocPath}/sessions/${session.id}`;
 
   const initialItems: Record<string, SessionState["items"][string]> = {};
   for (const item of session.plan) {
@@ -974,26 +978,41 @@ async function seedContent(
   const initialState: SessionState = SessionStateSchema.parse({
     sessionId: session.id,
     items: initialItems,
-    lastUpdatedAt: Timestamp.now(),
+    lastUpdatedAt: new Date(),
   });
 
-  await stateRef.set(initialState);
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: `${userDocPath}/state/${session.id}`,
+    data: initialState as unknown as Record<string, unknown>,
+  });
 
-  await Promise.all(
-    QUIZZES.map(async (quiz) => {
+  const writes = [
+    ...QUIZZES.map((quiz) => {
       const parsed = QuizDefinitionSchema.parse(quiz);
-      await sessionRef.collection("quiz").doc(parsed.id).set(parsed);
+      return {
+        type: "set" as const,
+        documentPath: `${sessionDocPath}/quiz/${parsed.id}`,
+        data: parsed as unknown as Record<string, unknown>,
+      };
     }),
-  );
-
-  await Promise.all(
-    problems.map(async (problem) => {
+    ...problems.map((problem) => {
       const parsed = CodeProblemSchema.parse(problem);
-      await sessionRef.collection("code").doc(parsed.slug).set(parsed);
+      return {
+        type: "set" as const,
+        documentPath: `${sessionDocPath}/code/${parsed.slug}`,
+        data: parsed as unknown as Record<string, unknown>,
+      };
     }),
-  );
+  ];
 
-  return userRef;
+  const MAX_WRITES_PER_BATCH = 450;
+  for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
+    await commitFirestoreWrites({
+      serviceAccountJson,
+      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
+    });
+  }
 }
 
 const StageEnum = z.enum(["validate", "story", "seed", "publish"]);
@@ -1023,7 +1042,6 @@ type StageContext = {
   problems?: CodeProblem[];
   session?: Session;
   sessionData?: z.input<typeof SessionSchema>;
-  userRef?: DocumentReference;
 };
 
 function resolveStageSequence(options: CliOptions): StageName[] {
@@ -1101,26 +1119,34 @@ async function runSeedStage(
   context: StageContext,
   runtime: RuntimeConfig,
 ): Promise<void> {
+  const serviceAccountJson = requireServiceAccountJson();
   const storyResult = await ensureStoryResult(context, runtime);
   const problems = await ensureProblems(context);
 
   const sessionData = {
     id: runtime.sessionId,
     title: TEST_SESSION_TITLE,
-    createdAt: Timestamp.now(),
+    createdAt: new Date(),
     plan: buildPlan(storyResult.title),
   } satisfies z.input<typeof SessionSchema>;
 
   const session = SessionSchema.parse(sessionData);
 
-  const userRef = await seedContent(runtime.userId, session, problems);
+  await seedContent(runtime.userId, session, problems);
 
-  await userRef.collection("sessions").doc(session.id).set(sessionData);
-  await userRef.set({ currentSessionId: session.id }, { merge: true });
+  await setFirestoreDocument({
+    serviceAccountJson,
+    documentPath: `spark/${runtime.userId}/sessions/${session.id}`,
+    data: sessionData as unknown as Record<string, unknown>,
+  });
+  await patchFirestoreDocument({
+    serviceAccountJson,
+    documentPath: `spark/${runtime.userId}`,
+    updates: { currentSessionId: session.id },
+  });
 
   context.session = session;
   context.sessionData = sessionData;
-  context.userRef = userRef;
 
   console.log(
     `[test-session] Seeded session '${session.id}' for user '${runtime.userId}'`,
