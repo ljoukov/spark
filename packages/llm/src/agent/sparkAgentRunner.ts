@@ -13,11 +13,13 @@ import {
 import { z } from "zod";
 
 import { errorAsString } from "../utils/error";
-import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-} from "../utils/firebaseAdmin";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
+import {
+  deleteFirestoreDocument,
+  getFirestoreDocument,
+  listFirestoreDocuments,
+  patchFirestoreDocument,
+} from "../utils/gcp/firestoreRest";
 import {
   estimateCallCostUsd,
   runToolLoop,
@@ -60,7 +62,7 @@ type WorkspaceFileMeta = {
 };
 
 type WorkspaceSyncOptions = {
-  firestore: FirebaseFirestore.Firestore;
+  serviceAccountJson: string;
   userId: string;
   workspaceId: string;
   rootDir: string;
@@ -143,6 +145,12 @@ function resolveFirestoreDate(value: unknown): Date | undefined {
   if (value instanceof Date) {
     return value;
   }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
   if (!value || typeof value !== "object") {
     return undefined;
   }
@@ -150,7 +158,7 @@ function resolveFirestoreDate(value: unknown): Date | undefined {
   if (typeof toDate !== "function") {
     return undefined;
   }
-  const resolved = (toDate as (this: unknown) => unknown).call(value);
+  const resolved = (toDate as () => unknown)();
   if (resolved instanceof Date) {
     return resolved;
   }
@@ -217,30 +225,25 @@ async function listFilesRecursive(options: {
 }
 
 class WorkspaceSync {
-  private firestore: FirebaseFirestore.Firestore;
+  private serviceAccountJson: string;
   private userId: string;
   private workspaceId: string;
   private rootDir: string;
   private fileMeta = new Map<string, WorkspaceFileMeta>();
 
   constructor(options: WorkspaceSyncOptions) {
-    this.firestore = options.firestore;
+    this.serviceAccountJson = options.serviceAccountJson;
     this.userId = options.userId;
     this.workspaceId = options.workspaceId;
     this.rootDir = options.rootDir;
   }
 
-  private filesCollection(): FirebaseFirestore.CollectionReference {
-    return this.firestore
-      .collection("users")
-      .doc(this.userId)
-      .collection("workspace")
-      .doc(this.workspaceId)
-      .collection("files");
+  private filesCollectionPath(): string {
+    return `users/${this.userId}/workspace/${this.workspaceId}/files`;
   }
 
-  private fileDoc(filePath: string): FirebaseFirestore.DocumentReference {
-    return this.filesCollection().doc(encodeFileId(filePath));
+  private fileDocPath(filePath: string): string {
+    return `${this.filesCollectionPath()}/${encodeFileId(filePath)}`;
   }
 
   private ensureMeta(filePath: string): WorkspaceFileMeta {
@@ -258,16 +261,21 @@ class WorkspaceSync {
   }
 
   async load(): Promise<void> {
-    const snapshot = await this.filesCollection().get();
-    if (snapshot.empty) {
+    const docs = await listFirestoreDocuments({
+      serviceAccountJson: this.serviceAccountJson,
+      collectionPath: this.filesCollectionPath(),
+      limit: 1000,
+      orderBy: "path asc",
+    });
+    if (docs.length === 0) {
       return;
     }
-    for (const doc of snapshot.docs) {
-      const data = (doc.data() ?? {}) as Record<string, unknown>;
+    for (const doc of docs) {
+      const data = (doc.data ?? {}) as Record<string, unknown>;
       const rawPath =
         typeof data.path === "string" && data.path.trim().length > 0
           ? data.path.trim()
-          : decodeFileId(doc.id);
+          : decodeFileId(doc.documentPath.split("/").filter(Boolean).at(-1) ?? "");
       if (!rawPath) {
         continue;
       }
@@ -330,9 +338,10 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(filePath);
-    await this.fileDoc(filePath)
-      .delete()
-      .catch(() => undefined);
+    await deleteFirestoreDocument({
+      serviceAccountJson: this.serviceAccountJson,
+      documentPath: this.fileDocPath(filePath),
+    }).catch(() => undefined);
   }
 
   async moveFile(fromPath: string, toPath: string): Promise<void> {
@@ -348,9 +357,10 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(fromPath);
-    await this.fileDoc(fromPath)
-      .delete()
-      .catch(() => undefined);
+    await deleteFirestoreDocument({
+      serviceAccountJson: this.serviceAccountJson,
+      documentPath: this.fileDocPath(fromPath),
+    }).catch(() => undefined);
     const toMeta = this.ensureMeta(toPath);
     if (fromCreatedAt && !toMeta.createdAt) {
       toMeta.createdAt = fromCreatedAt;
@@ -462,7 +472,11 @@ class WorkspaceSync {
     if (contentType) {
       payload.contentType = contentType;
     }
-    await this.fileDoc(filePath).set(payload, { merge: true });
+    await patchFirestoreDocument({
+      serviceAccountJson: this.serviceAccountJson,
+      documentPath: this.fileDocPath(filePath),
+      updates: payload,
+    });
   }
 }
 
@@ -661,7 +675,7 @@ class AgentRunStatsTracker {
 }
 
 type AgentLogSyncOptions = {
-  firestore: FirebaseFirestore.Firestore;
+  serviceAccountJson: string;
   userId: string;
   agentId: string;
   throttleMs: number;
@@ -669,7 +683,7 @@ type AgentLogSyncOptions = {
 };
 
 class AgentLogSync {
-  private firestore: FirebaseFirestore.Firestore;
+  private serviceAccountJson: string;
   private userId: string;
   private agentId: string;
   private throttleMs: number;
@@ -685,7 +699,7 @@ class AgentLogSync {
   private seq = 0;
 
   constructor(options: AgentLogSyncOptions) {
-    this.firestore = options.firestore;
+    this.serviceAccountJson = options.serviceAccountJson;
     this.userId = options.userId;
     this.agentId = options.agentId;
     this.throttleMs = options.throttleMs;
@@ -693,14 +707,8 @@ class AgentLogSync {
     this.pendingStats = options.initialStats;
   }
 
-  private docRef(): FirebaseFirestore.DocumentReference {
-    return this.firestore
-      .collection("users")
-      .doc(this.userId)
-      .collection("agents")
-      .doc(this.agentId)
-      .collection("logs")
-      .doc("log");
+  private documentPath(): string {
+    return `users/${this.userId}/agents/${this.agentId}/logs/log`;
   }
 
   append(line: string): void {
@@ -850,14 +858,20 @@ class AgentLogSync {
       payload.createdAt = this.createdAt;
     }
     if (linesEntries.length > 0) {
-      payload.lines = linesPayload;
+      for (const [key, value] of Object.entries(linesPayload)) {
+        payload[`lines.${key}`] = value;
+      }
     }
     if (stats) {
       payload.stats = stats;
     }
 
     try {
-      await this.docRef().set(payload, { merge: true });
+      await patchFirestoreDocument({
+        serviceAccountJson: this.serviceAccountJson,
+        documentPath: this.documentPath(),
+        updates: payload,
+      });
       this.createdAtWritten = true;
     } catch (error) {
       for (const [key, value] of linesEntries) {
@@ -878,8 +892,6 @@ function buildAgentSystemPrompt(): string {
     "You are Spark Agent, a tool-using assistant.",
     "Use the provided tools to read and write files in the workspace.",
     "Use the web_search tool when you need to look up information on the internet.",
-    "When you use web_search, include user-visible citations as Markdown links (include full https:// URLs), either inline or under a 'Sources' heading.",
-    "Do not use internal citation marker glyphs or turn-based ids; always cite with real URLs.",
     "When the task is complete, you MUST call the done tool with a short summary.",
     "Do not end the run with a plain text response unless you have already called done.",
     "After calling done, respond with a brief confirmation and stop.",
@@ -1242,20 +1254,25 @@ function applyDiff(original: string, diff: string): string {
 }
 
 async function updateAgentStatus(options: {
-  agentRef: FirebaseFirestore.DocumentReference;
+  serviceAccountJson: string;
+  agentDocPath: string;
   status: AgentStatus;
   resultSummary?: string;
   error?: string;
 }): Promise<void> {
-  const { FieldValue } = getFirebaseAdminFirestoreModule();
   const now = new Date();
+  const snapshot = await getFirestoreDocument({
+    serviceAccountJson: options.serviceAccountJson,
+    documentPath: options.agentDocPath,
+  });
+  const existingTimeline = Array.isArray(snapshot.data?.statesTimeline)
+    ? snapshot.data?.statesTimeline
+    : [];
+  const nextTimeline = [...existingTimeline, { state: options.status, timestamp: now }];
   const payload: Record<string, unknown> = {
     status: options.status,
     updatedAt: now,
-    statesTimeline: FieldValue.arrayUnion({
-      state: options.status,
-      timestamp: now,
-    }),
+    statesTimeline: nextTimeline,
   };
   if (typeof options.resultSummary === "string") {
     payload.resultSummary = options.resultSummary;
@@ -1263,37 +1280,124 @@ async function updateAgentStatus(options: {
   if (typeof options.error === "string") {
     payload.error = options.error;
   }
-  await options.agentRef.set(payload, { merge: true });
+  await patchFirestoreDocument({
+    serviceAccountJson: options.serviceAccountJson,
+    documentPath: options.agentDocPath,
+    updates: payload,
+  });
 }
 
 export async function runSparkAgentTask(
   options: AgentRunOptions,
 ): Promise<void> {
   loadAgentEnv();
-  const firestore = getFirebaseAdminFirestore();
-  const agentRef = firestore
-    .collection("users")
-    .doc(options.userId)
-    .collection("agents")
-    .doc(options.agentId);
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+  if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
+  }
+  const agentDocPath = `users/${options.userId}/agents/${options.agentId}`;
+
+  const agentSnap = await getFirestoreDocument({
+    serviceAccountJson,
+    documentPath: agentDocPath,
+  });
+  if (!agentSnap.exists || !agentSnap.data) {
+    throw new Error(`Agent not found: ${options.agentId}`);
+  }
+  const agentData = agentSnap.data ?? {};
+  const currentStatus =
+    typeof agentData.status === "string" ? agentData.status.trim() : "";
+  if (
+    currentStatus === "done" ||
+    currentStatus === "failed" ||
+    currentStatus === "stopped"
+  ) {
+    console.log(
+      `[spark-agent:${options.agentId}] skip run; status=${currentStatus}`,
+    );
+    return;
+  }
+  if (agentData.stop_requested === true) {
+    console.log(`[spark-agent:${options.agentId}] stop_requested pre-run`);
+    await updateAgentStatus({
+      serviceAccountJson,
+      agentDocPath,
+      status: "stopped",
+      resultSummary: "Stopped by user.",
+    });
+    return;
+  }
+  const prompt =
+    typeof agentData.prompt === "string" && agentData.prompt.trim().length > 0
+      ? agentData.prompt.trim()
+      : "";
+  if (!prompt) {
+    throw new Error("Agent prompt is missing.");
+  }
+
+  await updateAgentStatus({
+    serviceAccountJson,
+    agentDocPath,
+    status: "executing",
+  });
 
   const statsTracker = new AgentRunStatsTracker();
-  const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
-  const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
-  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const logSync = new AgentLogSync({
+    serviceAccountJson,
+    userId: options.userId,
+    agentId: options.agentId,
+    throttleMs: AGENT_LOG_THROTTLE_MS,
+    initialStats: statsTracker.snapshot(),
+  });
 
-  let prompt = "";
-  let logSync: AgentLogSync | undefined;
-  let workspaceRoot: string | undefined;
-  let workspaceSync: WorkspaceSync | undefined;
+  const workspaceRoot = path.join(
+    os.tmpdir(),
+    "spark-agent-workspaces",
+    options.workspaceId,
+  );
+  await ensureDir(workspaceRoot);
+  const workspaceSync = new WorkspaceSync({
+    serviceAccountJson,
+    userId: options.userId,
+    workspaceId: options.workspaceId,
+    rootDir: workspaceRoot,
+  });
+  await workspaceSync.load();
 
   let stopRequested = false;
   let stopPollTimer: NodeJS.Timeout | undefined;
   let stopPollInFlight: Promise<void> | undefined;
-
-  let doneCalled = false;
-  let tools: LlmToolSet | undefined;
-
+  const pollStopRequested = async (): Promise<void> => {
+    if (stopRequested || stopPollInFlight) {
+      return;
+    }
+    stopPollInFlight = (async () => {
+      const snap = await getFirestoreDocument({
+        serviceAccountJson,
+        documentPath: agentDocPath,
+      });
+      const data = snap.data ?? {};
+      if (data.stop_requested === true) {
+        stopRequested = true;
+        logSync.append("warn: stop_requested detected");
+      }
+    })();
+    try {
+      await stopPollInFlight;
+    } catch (error) {
+      logSync.append(`warn: stop poll failed: ${errorAsString(error)}`);
+    } finally {
+      stopPollInFlight = undefined;
+    }
+  };
+  const startStopPolling = (): void => {
+    if (stopPollTimer) {
+      return;
+    }
+    stopPollTimer = setInterval(() => {
+      void pollStopRequested();
+    }, STOP_POLL_INTERVAL_MS);
+  };
   const stopStopPolling = async (): Promise<void> => {
     if (stopPollTimer) {
       clearInterval(stopPollTimer);
@@ -1301,178 +1405,85 @@ export async function runSparkAgentTask(
     }
     await stopPollInFlight?.catch(() => undefined);
   };
+  const throwIfStopRequested = (): void => {
+    if (stopRequested) {
+      throw new StopRequestedError();
+    }
+  };
 
+  let doneCalled = false;
+
+  const tools: LlmToolSet = {
+    ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
+    done: tool({
+      description:
+        "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+      inputSchema: z
+        .object({
+          summary: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({ summary }) => {
+        doneCalled = true;
+        logSync.append(
+          summary ? `done: ${summary}` : "done: completed without summary",
+        );
+        logSync.setStats(statsTracker.snapshot());
+        await workspaceSync.flushAll();
+        await logSync.flushAll();
+        await updateAgentStatus({
+          serviceAccountJson,
+          agentDocPath,
+          status: "done",
+          resultSummary: summary,
+        });
+        return { status: "done", summary };
+      },
+    }),
+  };
+
+  const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+  const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const progress: JobProgressReporter = {
+    log: (message) => {
+      throwIfStopRequested();
+      console.log(`[spark-agent:${options.agentId}] ${message}`);
+      logSync.append(message);
+      statsTracker.parseLogLine(message);
+      logSync.setStats(statsTracker.snapshot());
+    },
+    startModelCall: (details) => {
+      throwIfStopRequested();
+      const handle = statsTracker.startModelCall({ modelId: details.modelId });
+      logSync.setStats(statsTracker.snapshot());
+      return handle;
+    },
+    recordModelUsage: (handle, chunk) => {
+      throwIfStopRequested();
+      statsTracker.recordModelUsage(handle, chunk);
+      logSync.setStats(statsTracker.snapshot());
+    },
+    finishModelCall: (handle) => {
+      throwIfStopRequested();
+      statsTracker.finishModelCall(handle);
+      logSync.setStats(statsTracker.snapshot());
+    },
+    startStage: (stageName: string): StageHandle => {
+      throwIfStopRequested();
+      void stageName;
+      return Symbol("agent-stage");
+    },
+    finishStage: (handle: StageHandle) => {
+      throwIfStopRequested();
+      void handle;
+    },
+    setActiveStages: (stages) => {
+      throwIfStopRequested();
+      void stages;
+    },
+  };
   try {
-    const agentSnap = await agentRef.get();
-    if (!agentSnap.exists) {
-      console.warn(`[spark-agent:${options.agentId}] Agent not found`);
-      return;
-    }
-    const agentData = agentSnap.data() ?? {};
-
-    const currentStatus =
-      typeof agentData.status === "string" ? agentData.status.trim() : "";
-    if (
-      currentStatus === "done" ||
-      currentStatus === "failed" ||
-      currentStatus === "stopped"
-    ) {
-      console.log(
-        `[spark-agent:${options.agentId}] skip run; status=${currentStatus}`,
-      );
-      return;
-    }
-
-    if (agentData.stop_requested === true) {
-      console.log(`[spark-agent:${options.agentId}] stop_requested pre-run`);
-      await updateAgentStatus({
-        agentRef,
-        status: "stopped",
-        resultSummary: "Stopped by user.",
-      });
-      return;
-    }
-
-    prompt =
-      typeof agentData.prompt === "string" && agentData.prompt.trim().length > 0
-        ? agentData.prompt.trim()
-        : "";
-    if (!prompt) {
-      await updateAgentStatus({
-        agentRef,
-        status: "failed",
-        error: "Agent prompt is missing.",
-      });
-      return;
-    }
-
-    await updateAgentStatus({ agentRef, status: "executing" });
-
-    logSync = new AgentLogSync({
-      firestore,
-      userId: options.userId,
-      agentId: options.agentId,
-      throttleMs: AGENT_LOG_THROTTLE_MS,
-      initialStats: statsTracker.snapshot(),
-    });
-
-    workspaceRoot = path.join(
-      os.tmpdir(),
-      "spark-agent-workspaces",
-      options.workspaceId,
-    );
-    await ensureDir(workspaceRoot);
-    workspaceSync = new WorkspaceSync({
-      firestore,
-      userId: options.userId,
-      workspaceId: options.workspaceId,
-      rootDir: workspaceRoot,
-    });
-    await workspaceSync.load();
-
-    const pollStopRequested = async (): Promise<void> => {
-      if (stopRequested || stopPollInFlight) {
-        return;
-      }
-      stopPollInFlight = (async () => {
-        const snap = await agentRef.get();
-        const data = snap.data() ?? {};
-        if (data.stop_requested === true) {
-          stopRequested = true;
-          logSync?.append("warn: stop_requested detected");
-        }
-      })();
-      try {
-        await stopPollInFlight;
-      } catch (error) {
-        logSync?.append(`warn: stop poll failed: ${errorAsString(error)}`);
-      } finally {
-        stopPollInFlight = undefined;
-      }
-    };
-
-    const startStopPolling = (): void => {
-      if (stopPollTimer) {
-        return;
-      }
-      stopPollTimer = setInterval(() => {
-        void pollStopRequested();
-      }, STOP_POLL_INTERVAL_MS);
-    };
-
-    const throwIfStopRequested = (): void => {
-      if (stopRequested) {
-        throw new StopRequestedError();
-      }
-    };
-
-    tools = {
-      ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
-      done: tool({
-        description:
-          "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
-        inputSchema: z
-          .object({
-            summary: z.string().trim().min(1).optional(),
-          })
-          .strict(),
-        execute: async ({ summary }) => {
-          doneCalled = true;
-          logSync?.append(
-            summary ? `done: ${summary}` : "done: completed without summary",
-          );
-          logSync?.setStats(statsTracker.snapshot());
-          await workspaceSync?.flushAll();
-          await logSync?.flushAll();
-          await updateAgentStatus({
-            agentRef,
-            status: "done",
-            resultSummary: summary,
-          });
-          return { status: "done", summary };
-        },
-      }),
-    };
-
-    const progress: JobProgressReporter = {
-      log: (message) => {
-        throwIfStopRequested();
-        console.log(`[spark-agent:${options.agentId}] ${message}`);
-        logSync?.append(message);
-        statsTracker.parseLogLine(message);
-        logSync?.setStats(statsTracker.snapshot());
-      },
-      startModelCall: (details) => {
-        throwIfStopRequested();
-        const handle = statsTracker.startModelCall({ modelId: details.modelId });
-        logSync?.setStats(statsTracker.snapshot());
-        return handle;
-      },
-      recordModelUsage: (handle, chunk) => {
-        throwIfStopRequested();
-        statsTracker.recordModelUsage(handle, chunk);
-        logSync?.setStats(statsTracker.snapshot());
-      },
-      finishModelCall: (handle) => {
-        throwIfStopRequested();
-        statsTracker.finishModelCall(handle);
-        logSync?.setStats(statsTracker.snapshot());
-      },
-      startStage: (stageName: string): StageHandle => {
-        throwIfStopRequested();
-        void stageName;
-        return Symbol("agent-stage");
-      },
-      finishStage: (handle: StageHandle) => {
-        throwIfStopRequested();
-        void handle;
-      },
-      setActiveStages: (stages) => {
-        throwIfStopRequested();
-        void stages;
-      },
-    };
-
     await pollStopRequested();
     if (stopRequested) {
       throw new StopRequestedError();
@@ -1497,19 +1508,19 @@ export async function runSparkAgentTask(
           ? `${responseText.slice(0, 1000).trim()}…`
           : responseText;
 
-      logSync?.append(
+      logSync.append(
         "warn: model returned a final response without calling done; auto-completing run",
       );
 
-      if (responseText.length > 0 && workspaceRoot) {
+      if (responseText.length > 0) {
         const outputPath = "agent-output.md";
         try {
           await writeFile(path.join(workspaceRoot, outputPath), responseText, {
             encoding: "utf8",
           });
-          workspaceSync?.scheduleUpdate(outputPath);
+          workspaceSync.scheduleUpdate(outputPath);
         } catch (error) {
-          logSync?.append(
+          logSync.append(
             `warn: failed to persist final response: ${errorAsString(error)}`,
           );
         }
@@ -1520,35 +1531,36 @@ export async function runSparkAgentTask(
       });
     }
 
-    await logSync?.flushAll().catch(() => undefined);
+    await logSync.flushAll().catch(() => undefined);
   } catch (error) {
     if (error instanceof StopRequestedError) {
-      logSync?.append("warn: agent stopped by user request");
-      await workspaceSync?.flushAll().catch(() => undefined);
-      await logSync?.flushAll().catch(() => undefined);
+      logSync.append("warn: agent stopped by user request");
+      await workspaceSync.flushAll().catch(() => undefined);
+      await logSync.flushAll().catch(() => undefined);
       await updateAgentStatus({
-        agentRef,
+        serviceAccountJson,
+        agentDocPath,
         status: "stopped",
         resultSummary: "Stopped by user.",
-      }).catch(() => undefined);
+      });
       return;
     }
-
     const message = errorAsString(error);
-    logSync?.append(`error: ${message}`);
-    await workspaceSync?.flushAll().catch(() => undefined);
-    await logSync?.flushAll().catch(() => undefined);
-    await updateAgentStatus({ agentRef, status: "failed", error: message }).catch(
-      () => undefined,
-    );
-    return;
+    logSync.append(`error: ${message}`);
+    await workspaceSync.flushAll().catch(() => undefined);
+    await logSync.flushAll().catch(() => undefined);
+    await updateAgentStatus({
+      serviceAccountJson,
+      agentDocPath,
+      status: "failed",
+      error: message,
+    });
+    throw error;
   } finally {
     await stopStopPolling();
-    logSync?.dispose();
-    if (workspaceRoot) {
-      await rm(workspaceRoot, { recursive: true, force: true }).catch(
-        () => undefined,
-      );
-    }
+    logSync.dispose();
+    await rm(workspaceRoot, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
   }
 }

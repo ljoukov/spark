@@ -7,7 +7,8 @@ import {
 	convertSessionPlanToItems,
 	generateSession,
 	generateQuizDefinitions,
-	generateWelcomeSessionTemplate
+	generateWelcomeSessionTemplate,
+	runSparkAgentTask
 } from '@spark/llm';
 import {
 	SparkUploadDocumentSchema,
