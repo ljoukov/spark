@@ -40,32 +40,43 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const { name, email, photoUrl, isAnonymous } = parsedBody;
 
-	const db = getFirebaseAdminFirestore();
-	const docRef = db.collection('spark').doc(user.uid);
-	const snapshot = await docRef.get();
+	// Best-effort user doc upsert.
+	// On Cloudflare Workers, Firebase Admin Firestore can fail at runtime due to
+	// dynamic codegen restrictions (EvalError: "Code generation from strings disallowed...").
+	// The app can still function without this write, so don't fail login.
+	try {
+		const db = getFirebaseAdminFirestore();
+		const docRef = db.collection('spark').doc(user.uid);
+		const snapshot = await docRef.get();
 
-	const nowIso = new Date().toISOString();
-	type FirebaseSignInClaim = { sign_in_provider?: string };
-	const firebaseClaim =
-		(user.decodedToken as { firebase?: FirebaseSignInClaim } | null)?.firebase ?? null;
-	const signInProvider = firebaseClaim?.sign_in_provider ?? null;
+		const nowIso = new Date().toISOString();
+		type FirebaseSignInClaim = { sign_in_provider?: string };
+		const firebaseClaim =
+			(user.decodedToken as { firebase?: FirebaseSignInClaim } | null)?.firebase ?? null;
+		const signInProvider = firebaseClaim?.sign_in_provider ?? null;
 
-	const data: Record<string, unknown> = {
-		uid: user.uid,
-		name,
-		email,
-		photoUrl,
-		isAnonymous,
-		signInProvider,
-		updatedAt: nowIso,
-		lastLoginAt: nowIso
-	};
+		const data: Record<string, unknown> = {
+			uid: user.uid,
+			name,
+			email,
+			photoUrl,
+			isAnonymous,
+			signInProvider,
+			updatedAt: nowIso,
+			lastLoginAt: nowIso
+		};
 
-	if (!snapshot.exists) {
-		data.createdAt = nowIso;
+		if (!snapshot.exists) {
+			data.createdAt = nowIso;
+		}
+
+		await docRef.set(data, { merge: true });
+	} catch (error) {
+		console.warn('Login user doc upsert failed (continuing)', {
+			error: error instanceof Error ? error.message : String(error),
+			userId: user.uid
+		});
 	}
-
-	await docRef.set(data, { merge: true });
 
 	return json({ status: 'ok' });
 };
