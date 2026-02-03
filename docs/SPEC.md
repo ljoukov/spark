@@ -234,6 +234,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Fields: `{ id, prompt, status, workspaceId, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
   - `status` ∈ `created | executing | failed | done`.
   - `statesTimeline[]` entries contain `{ state, timestamp }`.
+- Agent runs use a hosted web search tool during the LLM tool loop when available (e.g. OpenAI Responses `web_search` with external web access enabled).
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
