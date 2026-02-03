@@ -2,7 +2,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { getFirebaseAdminFirestore } from '@spark/llm';
+import { env } from '$env/dynamic/private';
+import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
 import {
 	SparkAgentStateSchema,
 	SparkAgentRunLogSchema,
@@ -15,6 +16,14 @@ import {
 const paramsSchema = z.object({
 	agentId: z.string().trim().min(1)
 });
+
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
 
 function decodeFileId(value: string): string {
 	try {
@@ -36,12 +45,18 @@ function parseLogTimestamp(key: string): Date | null {
 	return new Date(ms);
 }
 
+function docIdFromPath(documentPath: string): string {
+	const parts = documentPath.split('/').filter(Boolean);
+	return parts[parts.length - 1] ?? documentPath;
+}
+
 export const GET: RequestHandler = async ({ request, params }) => {
 	const authResult = await authenticateApiRequest(request);
 	if (!authResult.ok) {
 		return authResult.response;
 	}
 	const userId = authResult.user.uid;
+	const serviceAccountJson = requireServiceAccountJson();
 
 	let parsedParams: z.infer<typeof paramsSchema>;
 	try {
@@ -53,46 +68,40 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		return json({ error: 'invalid_params' }, { status: 400 });
 	}
 
-	const firestore = getFirebaseAdminFirestore();
-	const agentRef = firestore
-		.collection('users')
-		.doc(userId)
-		.collection('agents')
-		.doc(parsedParams.agentId);
-
-	const agentSnap = await agentRef.get();
-	if (!agentSnap.exists) {
+	const agentDocPath = `users/${userId}/agents/${parsedParams.agentId}`;
+	const agentSnap = await getFirestoreDocument({
+		serviceAccountJson,
+		documentPath: agentDocPath
+	});
+	if (!agentSnap.exists || !agentSnap.data) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
 	const agentParsed = SparkAgentStateSchema.safeParse({
-		id: agentSnap.id,
-		...agentSnap.data()
+		id: parsedParams.agentId,
+		...agentSnap.data
 	});
 	if (!agentParsed.success) {
 		return json({ error: 'invalid_agent' }, { status: 500 });
 	}
 
 	const agent: SparkAgentState = agentParsed.data;
-	const filesSnap = await firestore
-		.collection('users')
-		.doc(userId)
-		.collection('workspace')
-		.doc(agent.workspaceId)
-		.collection('files')
-		.orderBy('path', 'asc')
-		.limit(200)
-		.get();
+	const filesDocs = await listFirestoreDocuments({
+		serviceAccountJson,
+		collectionPath: `users/${userId}/workspace/${agent.workspaceId}/files`,
+		limit: 200,
+		orderBy: 'path asc'
+	});
 
 	const files: SparkAgentWorkspaceFile[] = [];
-	for (const fileDoc of filesSnap.docs) {
-		const data = fileDoc.data();
+	for (const fileDoc of filesDocs) {
+		const data = fileDoc.data;
 		const payload = {
 			...data,
 			path:
 				typeof data.path === 'string' && data.path.trim().length > 0
 					? data.path.trim()
-					: decodeFileId(fileDoc.id)
+					: decodeFileId(docIdFromPath(fileDoc.documentPath))
 		};
 		const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
 		if (!parsed.success) {
@@ -102,9 +111,12 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	}
 
 	let log: SparkAgentRunLog | null = null;
-	const logSnap = await agentRef.collection('logs').doc('log').get();
-	if (logSnap.exists) {
-		const data = logSnap.data() ?? {};
+	const logSnap = await getFirestoreDocument({
+		serviceAccountJson,
+		documentPath: `${agentDocPath}/logs/log`
+	});
+	if (logSnap.exists && logSnap.data) {
+		const data = logSnap.data ?? {};
 		const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
 		const entries: Array<{ key: string; timestamp: Date; line: string }> = [];
 		if (rawLines && !Array.isArray(rawLines)) {

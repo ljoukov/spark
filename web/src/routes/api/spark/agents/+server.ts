@@ -3,13 +3,44 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
-import { createTask, getFirebaseAdminFirestore } from '@spark/llm';
+import { createTask } from '@spark/llm';
 import { SparkAgentStateSchema, type SparkAgentState } from '@spark/schemas';
+import { env } from '$env/dynamic/private';
+import {
+	listFirestoreDocuments,
+	patchFirestoreDocument,
+	setFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
 
 const requestSchema = z.object({
 	prompt: z.string().trim().min(1),
 	workspaceId: z.string().trim().min(1).optional()
 });
+
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
+
+function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
+	const serviceUrl = env.TASKS_SERVICE_URL;
+	if (!serviceUrl || serviceUrl.trim().length === 0) {
+		throw new Error('TASKS_SERVICE_URL is missing');
+	}
+	const apiKey = env.TASKS_API_KEY;
+	if (!apiKey || apiKey.trim().length === 0) {
+		throw new Error('TASKS_API_KEY is missing');
+	}
+	return { serviceUrl, apiKey };
+}
+
+function docIdFromPath(documentPath: string): string {
+	const parts = documentPath.split('/').filter(Boolean);
+	return parts[parts.length - 1] ?? documentPath;
+}
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authResult = await authenticateApiRequest(request);
@@ -18,18 +49,20 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 	const userId = authResult.user.uid;
 
-	const firestore = getFirebaseAdminFirestore();
-	const snapshot = await firestore
-		.collection('users')
-		.doc(userId)
-		.collection('agents')
-		.orderBy('createdAt', 'desc')
-		.limit(50)
-		.get();
+	const serviceAccountJson = requireServiceAccountJson();
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson,
+		collectionPath: `users/${userId}/agents`,
+		limit: 50,
+		orderBy: 'createdAt desc'
+	});
 
 	const agents: SparkAgentState[] = [];
-	for (const docSnap of snapshot.docs) {
-		const parsed = SparkAgentStateSchema.safeParse({ id: docSnap.id, ...docSnap.data() });
+	for (const doc of docs) {
+		const parsed = SparkAgentStateSchema.safeParse({
+			id: docIdFromPath(doc.documentPath),
+			...doc.data
+		});
 		if (!parsed.success) {
 			continue;
 		}
@@ -45,6 +78,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return authResult.response;
 	}
 	const userId = authResult.user.uid;
+	const serviceAccountJson = requireServiceAccountJson();
+	const tasksEnv = requireTasksEnv();
 
 	let parsed: z.infer<typeof requestSchema>;
 	try {
@@ -60,10 +95,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	const workspaceId = parsed.workspaceId ?? randomUUID();
 	const now = new Date();
 
-	const firestore = getFirebaseAdminFirestore();
-	const agentRef = firestore.collection('users').doc(userId).collection('agents').doc(agentId);
-
-	await agentRef.set({
+	await setFirestoreDocument({
+		serviceAccountJson,
+		documentPath: `users/${userId}/agents/${agentId}`,
+		data: {
 		id: agentId,
 		prompt: parsed.prompt,
 		status: 'created',
@@ -71,21 +106,27 @@ export const POST: RequestHandler = async ({ request }) => {
 		createdAt: now,
 		updatedAt: now,
 		statesTimeline: [{ state: 'created', timestamp: now }]
+		}
 	});
 
-	await firestore.collection('users').doc(userId).collection('workspace').doc(workspaceId).set(
-		{
+	await patchFirestoreDocument({
+		serviceAccountJson,
+		documentPath: `users/${userId}/workspace/${workspaceId}`,
+		updates: {
 			id: workspaceId,
 			agentId,
 			createdAt: now,
 			updatedAt: now
-		},
-		{ merge: true }
-	);
+		}
+	});
 
 	await createTask({
 		type: 'runAgent',
 		runAgent: { userId, agentId, workspaceId }
+	}, {
+		serviceUrl: tasksEnv.serviceUrl,
+		apiKey: tasksEnv.apiKey,
+		serviceAccountJson
 	});
 
 	return json({ agentId, workspaceId }, { status: 201 });
