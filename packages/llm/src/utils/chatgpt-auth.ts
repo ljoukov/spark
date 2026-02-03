@@ -1,6 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
-import http from "node:http";
-import { URL } from "node:url";
 import { z } from "zod";
 
 import { loadLocalEnv } from "./env";
@@ -19,7 +16,6 @@ const CHATGPT_REFRESH_TOKEN_ENV = "CHATGPT_REFRESH_TOKEN";
 const CHATGPT_EXPIRES_AT_ENV = "CHATGPT_EXPIRES_AT";
 
 const CHATGPT_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
-const CHATGPT_OAUTH_AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CHATGPT_OAUTH_REDIRECT_URI = "http://localhost:1455/auth/callback";
 
@@ -82,40 +78,6 @@ export function encodeChatGptAuthJsonB64(profile: ChatGptAuthProfile): string {
   return Buffer.from(encodeChatGptAuthJson(profile)).toString("base64url");
 }
 
-export function createChatGptPkce(): {
-  verifier: string;
-  challenge: string;
-  state: string;
-} {
-  const verifier = toBase64Url(randomBytes(64));
-  const challenge = toBase64Url(createHash("sha256").update(verifier).digest());
-  const state = toBase64Url(randomBytes(32));
-  return { verifier, challenge, state };
-}
-
-export function buildChatGptAuthorizeUrl({
-  challenge,
-  state,
-  redirectUri = CHATGPT_OAUTH_REDIRECT_URI,
-}: {
-  challenge: string;
-  state: string;
-  redirectUri?: string;
-}): string {
-  const url = new URL(CHATGPT_OAUTH_AUTHORIZE_URL);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", CHATGPT_OAUTH_CLIENT_ID);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", "openid profile email offline_access");
-  url.searchParams.set("code_challenge", challenge);
-  url.searchParams.set("code_challenge_method", "S256");
-  url.searchParams.set("state", state);
-  url.searchParams.set("id_token_add_organizations", "true");
-  url.searchParams.set("codex_cli_simplified_flow", "true");
-  url.searchParams.set("originator", "spark");
-  return url.toString();
-}
-
 export async function exchangeChatGptOauthCode({
   code,
   verifier,
@@ -170,103 +132,6 @@ export async function refreshChatGptOauthToken(
   }
   const payload = RefreshResponseSchema.parse(await response.json());
   return profileFromTokenResponse(payload);
-}
-
-export function parseChatGptOauthRedirect(
-  input: string,
-  expectedState?: string,
-): { code: string; state?: string } {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    throw new Error("Empty OAuth redirect input.");
-  }
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    const url = new URL(trimmed);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state") ?? undefined;
-    if (!code) {
-      throw new Error("OAuth redirect URL missing code parameter.");
-    }
-    if (expectedState && state && state !== expectedState) {
-      throw new Error("OAuth redirect state did not match expected value.");
-    }
-    return { code, state };
-  }
-  if (trimmed.includes("code=")) {
-    const params = new URLSearchParams(trimmed);
-    const code = params.get("code");
-    const state = params.get("state") ?? undefined;
-    if (!code) {
-      throw new Error("OAuth redirect input missing code parameter.");
-    }
-    if (expectedState && state && state !== expectedState) {
-      throw new Error("OAuth redirect state did not match expected value.");
-    }
-    return { code, state };
-  }
-  return { code: trimmed };
-}
-
-export async function startChatGptOauthCallbackServer(options: {
-  expectedState: string;
-  redirectUri?: string;
-  timeoutMs?: number;
-}): Promise<{ code: string; state?: string }> {
-  const redirectUri = options.redirectUri ?? CHATGPT_OAUTH_REDIRECT_URI;
-  const url = new URL(redirectUri);
-  if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
-    throw new Error(
-      "OAuth redirect URI must be localhost for callback server.",
-    );
-  }
-  const port = Number.parseInt(url.port || "1455", 10);
-  const pathName = url.pathname || "/auth/callback";
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      if (!req.url) {
-        res.statusCode = 400;
-        res.end("Missing URL.");
-        return;
-      }
-      const requestUrl = new URL(req.url, `http://${url.hostname}:${port}`);
-      if (requestUrl.pathname !== pathName) {
-        res.statusCode = 404;
-        res.end("Not found.");
-        return;
-      }
-      const code = requestUrl.searchParams.get("code");
-      const state = requestUrl.searchParams.get("state") ?? undefined;
-      if (!code) {
-        res.statusCode = 400;
-        res.end("Missing code.");
-        return;
-      }
-      if (state && state !== options.expectedState) {
-        res.statusCode = 400;
-        res.end("State mismatch.");
-        return;
-      }
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.end("Auth received. You can close this tab.");
-      server.close(() => {
-        resolve({ code, state });
-      });
-    });
-    server.on("error", (error) => {
-      reject(error);
-    });
-    server.listen(port, "127.0.0.1");
-    const timeoutMs = options.timeoutMs ?? 120_000;
-    const timeout = setTimeout(() => {
-      server.close(() => {
-        reject(new Error("OAuth callback timed out."));
-      });
-    }, timeoutMs);
-    server.on("close", () => {
-      clearTimeout(timeout);
-    });
-  });
 }
 
 export async function getChatGptAuthProfile(): Promise<ChatGptAuthProfile> {
@@ -461,14 +326,6 @@ function loadAuthProfileFromEnv(): ChatGptAuthProfile {
 
 function isExpired(profile: ChatGptAuthProfile): boolean {
   return profile.expires - TOKEN_EXPIRY_BUFFER_MS <= Date.now();
-}
-
-function toBase64Url(buffer: Buffer): string {
-  return buffer
-    .toString("base64")
-    .replace(/\+/gu, "-")
-    .replace(/\//gu, "_")
-    .replace(/=+$/gu, "");
 }
 
 function parseAuthJson(raw: string, label: string): ChatGptAuthProfile {
