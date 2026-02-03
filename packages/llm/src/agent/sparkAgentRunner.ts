@@ -869,6 +869,7 @@ function buildAgentSystemPrompt(): string {
   return [
     "You are Spark Agent, a tool-using assistant.",
     "Use the provided tools to read and write files in the workspace.",
+    "Use the web_search tool when you need to look up information on the internet.",
     "When the task is complete, call the done tool with a short summary.",
     "After calling done, respond with a brief confirmation and stop.",
   ].join("\n");
@@ -1373,6 +1374,7 @@ export async function runSparkAgentTask(
       systemPrompt: buildAgentSystemPrompt(),
       prompt,
       tools,
+      modelTools: [{ type: "web-search", mode: "live" }],
       maxSteps,
       progress,
       openAiReasoningEffort,
