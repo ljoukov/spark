@@ -156,6 +156,11 @@ export async function createTask(task: Task): Promise<void> {
       if (u.pathname === "/") {
         u.pathname = "/api/internal/tasks";
       }
+      u.searchParams.set("type", task.type);
+      if (task.type === "runAgent") {
+        u.searchParams.set("userId", task.runAgent.userId);
+        u.searchParams.set("agentId", task.runAgent.agentId);
+      }
       postUrl = u.toString();
     } catch (error) {
       throw new Error(
@@ -196,6 +201,10 @@ export async function createTask(task: Task): Promise<void> {
     handlerUrl.pathname = "/api/internal/tasks";
   }
   handlerUrl.searchParams.set("type", task.type);
+  if (task.type === "runAgent") {
+    handlerUrl.searchParams.set("userId", task.runAgent.userId);
+    handlerUrl.searchParams.set("agentId", task.runAgent.agentId);
+  }
 
   const taskPayload = JSON.stringify(task);
   const encodedBody = base64EncodeUrlSafe(
