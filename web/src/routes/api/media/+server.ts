@@ -17,7 +17,7 @@ const querySchema = z
 	.superRefine((value, ctx) => {
 		if (value.kind === 'image' && value.index === undefined) {
 			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
+				code: 'custom',
 				path: ['index'],
 				message: 'index is required for image assets'
 			});
@@ -169,7 +169,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 	headers.set('cache-control', 'private, max-age=60');
 	headers.set(
 		'content-disposition',
-		`inline; filename=\"${resolved.filename.replace(/\"/g, '')}\"`
+		`inline; filename="${resolved.filename.replace(/"/g, '')}"`
 	);
 
 	const body =

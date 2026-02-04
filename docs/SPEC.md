@@ -260,7 +260,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   3. Persist initial Firestore documents and enqueue background workflow by scheduling async functions with the runtime `waitUntil()` hook (Cloudflare Workers execution context).
   4. (Proto) Return minimal proto response (`AckResponse` with `job_id`, `received_at`, optimistic status).
 - Long-running operations (LLM generations, PDF parsing, summarization) run inside the runtime `waitUntil` hook. The handler writes updates back to Firestore as discrete steps (`started`, `ingesting`, `generating`, `ready`...). If rate limits require, delegate to Cloud Tasks or other queueing primitives in later iterations.
-- Firestore access uses REST RPC with a service account JWT stored in Cloudflare Worker secrets; ensure connection pooling via `fetch`. All writes batched to stay within limit.
+- Firestore/Storage access uses a dual-path client:
+  - Cloudflare Workers runtime uses Firestore + GCS REST APIs with service-account JWTs minted via WebCrypto.
+  - Node runtimes can use Firebase Admin SDK (gRPC) when available (enables Firestore listeners); wrappers fall back to REST on Workers.
+  - All writes are batched where possible to stay within Firestore limits.
 - API surface (proto-based, future/mobile-only):
   - `SparkApiRequest.request = GenerateFromUploadRequest`
   - `SparkApiRequest.request = CheckAnswerRequest`

@@ -23,10 +23,10 @@ This is a SvelteKit app, it usees latest version of Svelte and SvelteKit, docs a
 
 - Admin and App Area (`/admin` and `/app`)
   - Uses Firebase Auth in the browser (both redirect and popup options are available) so the client can use Firestore real-time listeners freely. Example UI: `web/src/routes/app/+page.svelte`.
-  - All app → server API calls must include a Firebase ID token (e.g., `Authorization: Bearer <idToken>`). The server validates tokens using the Firebase Admin SDK via the shared `@spark/llm/utils/firebaseAdmin` helpers and token verification utilities in `web/src/lib/server/utils/firebaseServer.ts:23`.
+  - All app → server API calls must include a Firebase ID token (e.g., `Authorization: Bearer <idToken>`). The server validates tokens by verifying the signature against Google's JWKS (`jose`) in `web/src/lib/server/utils/firebaseServer.ts:23` (Workers-safe).
 
   - We keep Firebase Hosting deployed only to make the Firebase Auth helper endpoints available at `__/auth/*` and to test client sign-in. See the lightweight demo page at `web/public/index.html`.
-  - The SvelteKit app itself is deployed to Vercel; Hosting is not used for app routing.
+  - The SvelteKit app itself is deployed to Cloudflare Workers; Hosting is not used for app routing.
 
 - Notes
   - Follow `docs/SPEC.md` for auth and validation requirements. All external inputs must be validated with `zod` and normalized before use.

@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 
 import { z } from "zod";
+import { SparkAgentStateTimelineSchema, type SparkAgentStateTimeline } from "@spark/schemas";
 
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
@@ -271,7 +272,7 @@ class WorkspaceSync {
       return;
     }
     for (const doc of docs) {
-      const data = (doc.data ?? {}) as Record<string, unknown>;
+      const data = doc.data ?? {};
       const rawPath =
         typeof data.path === "string" && data.path.trim().length > 0
           ? data.path.trim()
@@ -1265,10 +1266,14 @@ async function updateAgentStatus(options: {
     serviceAccountJson: options.serviceAccountJson,
     documentPath: options.agentDocPath,
   });
-  const existingTimeline = Array.isArray(snapshot.data?.statesTimeline)
-    ? snapshot.data?.statesTimeline
-    : [];
-  const nextTimeline = [...existingTimeline, { state: options.status, timestamp: now }];
+  const existingTimeline = z
+    .array(SparkAgentStateTimelineSchema)
+    .catch([])
+    .parse(snapshot.data?.statesTimeline ?? []);
+  const nextTimeline: SparkAgentStateTimeline[] = [
+    ...existingTimeline,
+    { state: options.status, timestamp: now },
+  ];
   const payload: Record<string, unknown> = {
     status: options.status,
     updatedAt: now,
