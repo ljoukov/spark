@@ -4036,7 +4036,7 @@ export async function runToolLoop(
       const loopStartedAt = Date.now();
       const webSearchUrls = new Set<string>();
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-        reporter.log(`ChatGPT step ${stepIndex + 1}`);
+        reporter.log(`${options.modelId} step ${stepIndex + 1}`);
         const promptContents = chatGptInputToDebugContents(input);
         const callHandle = reporter.startModelCall({
           modelId: options.modelId,
@@ -4260,7 +4260,7 @@ export async function runToolLoop(
       let input: ResponseInput = toOpenAiInput(contents);
       let debugPromptContents: LlmContent[] = [...contents];
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-        reporter.log(`OpenAI step ${stepIndex + 1}`);
+        reporter.log(`${options.modelId} step ${stepIndex + 1}`);
         const promptContents = openAiInputToDebugContents(input);
         const callHandle = reporter.startModelCall({
           modelId: options.modelId,
@@ -4526,7 +4526,7 @@ export async function runToolLoop(
       : geminiFunctionTools;
     const geminiContents = contents.map(convertLlmContentToGoogleContent);
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-      reporter.log(`Gemini step ${stepIndex + 1}`);
+      reporter.log(`${options.modelId} step ${stepIndex + 1}`);
       let promptContents: LlmContent[] = contents;
       try {
         promptContents = geminiContents.map(convertGoogleContentToLlmContent);
