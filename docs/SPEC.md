@@ -193,7 +193,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Env: `TASKS_SERVICE_URL` (full handler URL), `TASKS_API_KEY` (Bearer), optional `TASKS_QUEUE` (default `spark-tasks`).
 - Location: `us-central1`.
 - The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
-- For debugging, `runAgent` tasks also include `userId` and `agentId` as query params on the target URL (in addition to `type=runAgent`).
+- For debugging, `runAgent` tasks also include `userId`, `agentId`, and `workspaceId` as query params on the target URL (in addition to `type=runAgent`).
 
 ### Admin UI
 
@@ -245,7 +245,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Agent run logs live under `users/{userId}/agents/{agentId}/logs/log` (single doc).
   - Log lines are stored in a map field `lines`, keyed by an epoch-ms timestamp key (`t<ms>_<seq>`), with values as the printed log line text.
   - Updates use partial/merge semantics so individual lines can be appended without rewriting the entire doc.
-  - Log updates are throttled to ≤ 1 write per 10 seconds per agent log doc.
+  - Log updates are throttled to ≤ 1 write per 2 seconds per agent log doc.
+  - Streaming model output is written under `stream`:
+    - `stream.assistant`: the latest assistant output buffer (tail-capped to avoid Firestore doc growth).
+    - `stream.thoughts`: the latest reasoning/thoughts buffer (tail-capped to avoid Firestore doc growth).
   - The log doc also stores `stats` snapshots including:
     - LLM token totals and estimated cost (USD)
     - Tool call counts (total + per-tool)
@@ -307,7 +310,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu showing display name + email/guest label and a copy button that copies `Name`/`Email`/`UserID` lines to the clipboard (omitting missing fields), theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
 - `/spark` is the signed-in home with cards linking to `/spark/code` and `/spark/code/lessons`.
-- `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected agent status plus workspace files (Markdown files render with the markdown renderer).
+- `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected run details:
+  - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing`).
+  - Live output/thoughts streamed from `agents/{agentId}/logs/log.stream`.
+  - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
 - `/spark/code` hosts the Spark Code experience (quizzes, problems, media steps).
 - `/logout` signs out and returns to `/`.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Cloudflare KV (or a third-party API).

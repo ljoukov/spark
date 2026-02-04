@@ -1256,6 +1256,7 @@ export type LlmToolLoopOptions = {
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
+  readonly onDelta?: (delta: LlmTextDelta) => void;
 } & (LlmToolLoopPromptOptions | LlmToolLoopContentsOptions);
 
 function createFallbackProgress(label: string): JobProgressReporter {
@@ -4062,7 +4063,10 @@ export async function runToolLoop(
             reasoning: chatGptReasoningPayload,
           };
           const startedAt = Date.now();
-          const response = await collectChatGptCodexResponse({ request });
+          const response = await collectChatGptCodexResponse({
+            request,
+            onDelta: options.onDelta,
+          });
           const elapsedMs = Date.now() - startedAt;
           if (
             response.status &&

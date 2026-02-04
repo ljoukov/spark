@@ -89,10 +89,19 @@ export const SparkAgentLogLineSchema = z.object({
 
 export type SparkAgentLogLine = z.infer<typeof SparkAgentLogLineSchema>;
 
+export const SparkAgentRunStreamSchema = z.object({
+  updatedAt: FirestoreTimestampSchema.optional(),
+  assistant: z.string().optional(),
+  thoughts: z.string().optional(),
+});
+
+export type SparkAgentRunStream = z.infer<typeof SparkAgentRunStreamSchema>;
+
 export const SparkAgentRunLogSchema = z.object({
   updatedAt: FirestoreTimestampSchema.optional(),
   lines: z.array(SparkAgentLogLineSchema),
   stats: SparkAgentRunStatsSchema.optional(),
+  stream: SparkAgentRunStreamSchema.optional(),
 });
 
 export type SparkAgentRunLog = z.infer<typeof SparkAgentRunLogSchema>;
