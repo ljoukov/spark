@@ -78,7 +78,7 @@ npm --prefix web run dev:https
 3) Open the email login page and sign in using the credentials from `.env.local`:
 
 ```
-https://localhost:8081/login-with-email
+https://localhost:8082/login-with-email
 ```
 
 Useful entry points after sign-in:
@@ -301,7 +301,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
-- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
+- Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu showing display name + email/guest label and a copy button that copies `email/userId` to clipboard, falling back to `guest/userId` or `no-email/userId` when email is missing, theme picker, Firebase auth sync) reused by `/spark` and `/spark/code`.
 - `/spark` is the signed-in home with cards linking to `/spark/code` and `/spark/code/lessons`.
 - `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected agent status plus workspace files (Markdown files render with the markdown renderer).
 - `/spark/code` hosts the Spark Code experience (quizzes, problems, media steps).
