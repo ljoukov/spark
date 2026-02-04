@@ -878,6 +878,8 @@ function buildAgentSystemPrompt(): string {
     "You are Spark Agent, a tool-using assistant.",
     "Use the provided tools to read and write files in the workspace.",
     "Use the web_search tool when you need to look up information on the internet.",
+    "When citing web sources, include user-visible citations (Markdown links or footnotes) and do not omit citations.",
+    "Avoid internal citation markers like \\uE200cite\\uE202...\\uE201 or turn-based ids; they are not user-facing.",
     "When the task is complete, you MUST call the done tool with a short summary.",
     "Do not end the run with a plain text response unless you have already called done.",
     "After calling done, respond with a brief confirmation and stop.",
