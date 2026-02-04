@@ -59,6 +59,14 @@ declare module '@spark/llm/utils/gcp/firestoreRest' {
 		orderBy?: string;
 	}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>>;
 
+	export function queryFirestoreDocuments(options: {
+		serviceAccountJson: string;
+		collectionPath: string;
+		where?: { fieldPath: string; op: 'EQUAL'; value: unknown };
+		limit?: number;
+		orderBy?: string;
+	}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>>;
+
 	type CommitWrite =
 		| {
 				type: 'patch';
