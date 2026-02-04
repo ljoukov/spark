@@ -150,7 +150,7 @@ function resolveFirestoreDate(value: unknown): Date | undefined {
   if (typeof toDate !== "function") {
     return undefined;
   }
-  const resolved = (toDate as () => unknown)();
+  const resolved = (toDate as (this: unknown) => unknown).call(value);
   if (resolved instanceof Date) {
     return resolved;
   }
