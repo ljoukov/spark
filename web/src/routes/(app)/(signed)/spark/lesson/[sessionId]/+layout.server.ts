@@ -19,7 +19,7 @@ export const load: LayoutServerLoad = async ({ locals, params }) => {
 	if (!session) {
 		const fallback = await getOrSelectCurrentSession(user.uid).catch(() => null);
 		if (fallback && fallback.id !== sessionId) {
-			throw redirect(302, `/spark/code/${fallback.id}`);
+			throw redirect(302, `/spark/lesson/${fallback.id}`);
 		}
 		throw error(404, { message: 'Session not found' });
 	}

@@ -29,7 +29,7 @@
 	const navigatingTo = $derived(navigationStore?.current?.to?.url?.pathname ?? null);
 	let pendingLessonHref = $state<string | null>(null);
 	let pendingLessonSubmit = $state(false);
-	const lessonRoutePattern = /^\/spark\/code\/(?!lessons$)[^/]+$/;
+	const lessonRoutePattern = /^\/spark\/lesson\/[^/]+$/;
 	const isLessonNavigation = $derived.by(() => {
 		if (pendingLessonSubmit) {
 			return true;
@@ -89,7 +89,7 @@
 </script>
 
 <svelte:head>
-	<title>Spark Code · Lessons</title>
+	<title>Spark · Lessons</title>
 </svelte:head>
 
 <section class="lessons-page">
@@ -110,7 +110,7 @@
 			<h1>All sessions</h1>
 			<p class="subtitle">Reverse chronological view of everything you've started or finished.</p>
 		</div>
-		<a class="back-button" href="/spark/code">Back to today</a>
+		<a class="back-button" href="/spark/lesson">Back to current lesson</a>
 	</header>
 
 	<div class="lessons-panel">
@@ -125,7 +125,7 @@
 		{:else}
 			<div class="lessons-grid">
 				{#each data.lessons as lesson}
-					{@const lessonHref = `/spark/code/${lesson.id}`}
+					{@const lessonHref = `/spark/lesson/${lesson.id}`}
 					<a
 						class="lesson-card"
 						href={lessonHref}

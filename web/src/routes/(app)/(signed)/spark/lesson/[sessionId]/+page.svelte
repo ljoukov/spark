@@ -114,10 +114,10 @@
 					const description = item.summary ?? '';
 					const href =
 						item.kind === 'quiz'
-							? `/spark/code/${sessionId}/quiz/${item.id}`
+							? `/spark/lesson/${sessionId}/quiz/${item.id}`
 							: item.kind === 'problem'
-								? `/spark/code/${sessionId}/p/${item.id}`
-								: `/spark/code/${sessionId}/m/${item.id}`;
+								? `/spark/lesson/${sessionId}/p/${item.id}`
+								: `/spark/lesson/${sessionId}/m/${item.id}`;
 					return {
 						key: item.id,
 						title: item.title,
@@ -142,7 +142,7 @@
 			? (timeline.find((step) => step.status !== 'completed') ?? timeline[timeline.length - 1]!)
 			: null
 	);
-	const startHref = $derived(firstIncomplete?.href ?? `/spark/code/${sessionId}`);
+	const startHref = $derived(firstIncomplete?.href ?? `/spark/lesson/${sessionId}`);
 	const startLabel = $derived(firstIncomplete?.title ?? 'Session');
 	const timelineStatuses = $derived(timeline.map((step) => step.status));
 	const allCompleted = $derived(
@@ -274,7 +274,7 @@
 			}
 			const payload = selectResponseSchema.parse(await response.json());
 			proposalDialogOpen = false;
-			await goto(`/spark/code/${payload.nextSessionId}`);
+			await goto(`/spark/lesson/${payload.nextSessionId}`);
 		} catch (error) {
 			console.error('Failed to start next lesson', error);
 			selectionError = 'Could not start that lesson. Please try again.';
@@ -285,7 +285,7 @@
 </script>
 
 <svelte:head>
-	<title>Spark Code · Your session plan</title>
+	<title>Spark · Lesson plan</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link
@@ -301,7 +301,7 @@
 			<div class="generating-copy">
 				<h1>Generating your next lesson…</h1>
 				<p>We&rsquo;re assembling a fresh plan. This usually takes under a minute.</p>
-				<a class="secondary-link" href="/spark/code/lessons">See other lessons</a>
+				<a class="secondary-link" href="/spark/lessons">See other lessons</a>
 			</div>
 		</div>
 	</section>
@@ -311,7 +311,7 @@
 			<div class="generating-copy">
 				<h1>We hit a snag</h1>
 				<p>We could not finish this lesson. Check your other lessons or try again later.</p>
-				<a class="secondary-link" href="/spark/code/lessons">See other lessons</a>
+				<a class="secondary-link" href="/spark/lessons">See other lessons</a>
 			</div>
 		</div>
 	</section>

@@ -465,7 +465,7 @@
 		if (typeof window === 'undefined') {
 			return;
 		}
-		await goto(`/spark/code/${data.sessionId}`, {
+		await goto(`/spark/lesson/${data.sessionId}`, {
 			replaceState: true,
 			invalidateAll: true
 		});
@@ -512,7 +512,7 @@
 </script>
 
 <svelte:head>
-	<title>Spark Code · {data.planItem.title}</title>
+	<title>Spark · {data.planItem.title}</title>
 </svelte:head>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
