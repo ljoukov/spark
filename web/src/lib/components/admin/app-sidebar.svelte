@@ -1,5 +1,6 @@
 <script lang="ts">
 	import HomeIcon from '@lucide/svelte/icons/home';
+	import UsersIcon from '@lucide/svelte/icons/users';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -30,6 +31,12 @@
 			href: '/admin',
 			icon: HomeIcon,
 			highlight: (path) => path === '/admin' || path === '/admin/'
+		},
+		{
+			title: 'Users',
+			href: '/admin/users',
+			icon: UsersIcon,
+			highlight: (path) => path.startsWith('/admin/users')
 		},
 		{
 			title: 'Firestore',
