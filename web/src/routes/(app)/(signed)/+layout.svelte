@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import CopyIcon from '@lucide/svelte/icons/copy';
 	import { onMount, setContext } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { fromStore, writable } from 'svelte/store';
@@ -68,12 +69,60 @@
 	const brandCopy = $derived(resolveBrandCopy(experience));
 	const logoutLabel = $derived(user?.isAnonymous ? 'Delete guest account' : 'Log out');
 	let theme = $state<ThemePreference>('auto');
+	let copiedIdentity = $state(false);
+
+	const canCopyIdentity = $derived(Boolean(user?.uid && user.uid.trim().length > 0));
+	const hasEmailIdentity = $derived(Boolean(user?.email && user.email.trim().length > 0));
 
 	const themeOptions: readonly { label: string; value: ThemePreference }[] = [
 		{ label: 'Automatic', value: 'auto' },
 		{ label: 'Light', value: 'light' },
 		{ label: 'Dark', value: 'dark' }
 	];
+
+	function getIdentityCopyValue(): string | null {
+		if (!user?.uid || user.uid.trim().length === 0) {
+			return null;
+		}
+		const uid = user.uid.trim();
+		const email = user.email?.trim() ?? '';
+		if (email.length > 0) {
+			return `${email}/${uid}`;
+		}
+		return user.isAnonymous ? `guest/${uid}` : `no-email/${uid}`;
+	}
+
+	async function copyIdentityToClipboard(): Promise<void> {
+		const value = getIdentityCopyValue();
+		if (!value) {
+			return;
+		}
+		try {
+			if (navigator?.clipboard?.writeText) {
+				await navigator.clipboard.writeText(value);
+			} else {
+				const textarea = document.createElement('textarea');
+				textarea.value = value;
+				textarea.style.position = 'fixed';
+				textarea.style.top = '0';
+				textarea.style.left = '0';
+				textarea.style.opacity = '0';
+				document.body.appendChild(textarea);
+				textarea.focus();
+				textarea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textarea);
+			}
+		} catch (error) {
+			console.warn('Failed to copy user identity to clipboard', error);
+			return;
+		}
+
+		copiedIdentity = true;
+		window.setTimeout(() => {
+			copiedIdentity = false;
+		}, 1200);
+	}
 
 	function patchUser(partial: Partial<ClientUser>): void {
 		userStore.update((current) => {
@@ -273,8 +322,50 @@
 					<DropdownMenu.Content class="app-user-menu" align="end" sideOffset={12}>
 						<DropdownMenu.Label class="app-user-menu__label">Signed in</DropdownMenu.Label>
 						<div class="app-user-menu__identity">
-							<span class="app-user-menu__name">{getDisplayName()}</span>
-							<span class="app-user-menu__email">{getEmailLabel()}</span>
+							<div class="app-user-menu__row">
+								<span class="app-user-menu__name">{getDisplayName()}</span>
+								{#if canCopyIdentity && !hasEmailIdentity}
+									<button
+										type="button"
+										class="app-user-menu__copy"
+										aria-label="Copy email/user ID"
+										title="Copy email/user ID"
+										onclick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											void copyIdentityToClipboard();
+										}}
+									>
+										{#if copiedIdentity}
+											<CheckIcon class="app-user-menu__copy-icon" />
+										{:else}
+											<CopyIcon class="app-user-menu__copy-icon" />
+										{/if}
+									</button>
+								{/if}
+							</div>
+							<div class="app-user-menu__row app-user-menu__row--secondary">
+								<span class="app-user-menu__email">{getEmailLabel()}</span>
+								{#if canCopyIdentity && hasEmailIdentity}
+									<button
+										type="button"
+										class="app-user-menu__copy"
+										aria-label="Copy email/user ID"
+										title="Copy email/user ID"
+										onclick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											void copyIdentityToClipboard();
+										}}
+									>
+										{#if copiedIdentity}
+											<CheckIcon class="app-user-menu__copy-icon" />
+										{:else}
+											<CopyIcon class="app-user-menu__copy-icon" />
+										{/if}
+									</button>
+								{/if}
+							</div>
 						</div>
 						<DropdownMenu.Separator />
 						<DropdownMenu.Item
@@ -508,11 +599,24 @@
 		padding: 0.6rem 0 0.75rem;
 	}
 
-	.app-user-menu__name {
-		display: block;
-		font-weight: 600;
-		font-size: 0.95rem;
+	.app-user-menu__row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
+
+	.app-user-menu__row--secondary {
+		align-items: flex-start;
+	}
+
+		.app-user-menu__name {
+			display: block;
+			font-weight: 600;
+			font-size: 0.95rem;
+			min-width: 0;
+			word-break: break-word;
+			flex: 1;
+		}
 
 	.app-user-menu__email {
 		display: block;
@@ -520,6 +624,38 @@
 		color: var(--muted-foreground);
 		white-space: normal;
 		word-break: break-word;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.app-user-menu__copy {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: 9999px;
+		background: transparent;
+		color: var(--muted-foreground);
+		cursor: pointer;
+	}
+
+	.app-user-menu__copy:hover {
+		background: var(--muted);
+		color: var(--foreground);
+	}
+
+	.app-user-menu__copy:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+
+	:global(.app-user-menu__copy-icon) {
+		width: 1rem;
+		height: 1rem;
 	}
 
 	:global(.app-appearance-menu) {
