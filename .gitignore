@@ -1,4 +1,5 @@
 .DS_Store
+.codex/
 /data
 .env*
 node_modules/
