@@ -870,7 +870,8 @@ function buildAgentSystemPrompt(): string {
     "You are Spark Agent, a tool-using assistant.",
     "Use the provided tools to read and write files in the workspace.",
     "Use the web_search tool when you need to look up information on the internet.",
-    "When the task is complete, call the done tool with a short summary.",
+    "When the task is complete, you MUST call the done tool with a short summary.",
+    "Do not end the run with a plain text response unless you have already called done.",
     "After calling done, respond with a brief confirmation and stop.",
   ].join("\n");
 }
@@ -1369,7 +1370,7 @@ export async function runSparkAgentTask(
     },
   };
   try {
-    await runToolLoop({
+    const toolLoopResult = await runToolLoop({
       modelId,
       systemPrompt: buildAgentSystemPrompt(),
       prompt,
@@ -1379,6 +1380,37 @@ export async function runSparkAgentTask(
       progress,
       openAiReasoningEffort,
     });
+
+    if (!doneCalled) {
+      const responseText = toolLoopResult.text.trim();
+      const summary =
+        responseText.length > 1000
+          ? `${responseText.slice(0, 1000).trim()}…`
+          : responseText;
+
+      logSync.append(
+        "warn: model returned a final response without calling done; auto-completing run",
+      );
+
+      if (responseText.length > 0) {
+        const outputPath = "agent-output.md";
+        try {
+          await writeFile(path.join(workspaceRoot, outputPath), responseText, {
+            encoding: "utf8",
+          });
+          workspaceSync.scheduleUpdate(outputPath);
+        } catch (error) {
+          logSync.append(
+            `warn: failed to persist final response: ${errorAsString(error)}`,
+          );
+        }
+      }
+
+      await tools.done.execute({
+        summary: summary.length > 0 ? summary : undefined,
+      });
+    }
+
     await logSync.flushAll().catch(() => undefined);
   } catch (error) {
     const message = errorAsString(error);
@@ -1392,13 +1424,5 @@ export async function runSparkAgentTask(
     await rm(workspaceRoot, { recursive: true, force: true }).catch(
       () => undefined,
     );
-  }
-
-  if (!doneCalled) {
-    const message = "Agent completed without calling done.";
-    logSync.append(`error: ${message}`);
-    await logSync.flushAll().catch(() => undefined);
-    await updateAgentStatus({ agentRef, status: "failed", error: message });
-    throw new Error(message);
   }
 }
