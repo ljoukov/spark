@@ -99,7 +99,15 @@ export function isGoogleVoice(voice: string): voice is GoogleVoice {
 }
 
 export class GoogleTextToSpeechClient {
-  private readonly auth = getGoogleAuth(CLOUD_PLATFORM_SCOPE);
+  private auth: ReturnType<typeof getGoogleAuth> | null = null;
+
+  private getAuth(): ReturnType<typeof getGoogleAuth> {
+    if (this.auth) {
+      return this.auth;
+    }
+    this.auth = getGoogleAuth(CLOUD_PLATFORM_SCOPE);
+    return this.auth;
+  }
 
   async listVoices(
     options: ListVoicesOptions = {},
@@ -208,7 +216,7 @@ export class GoogleTextToSpeechClient {
   }
 
   private async getAccessToken(): Promise<string> {
-    const token = await this.auth.getAccessToken();
+    const token = await this.getAuth().getAccessToken();
     if (!token) {
       throw new Error(
         "Failed to obtain Google access token for Text-to-Speech.",
@@ -218,7 +226,15 @@ export class GoogleTextToSpeechClient {
   }
 }
 
-const defaultGoogleTtsClient = new GoogleTextToSpeechClient();
+let defaultGoogleTtsClient: GoogleTextToSpeechClient | null = null;
+
+function getDefaultGoogleTtsClient(): GoogleTextToSpeechClient {
+  if (defaultGoogleTtsClient) {
+    return defaultGoogleTtsClient;
+  }
+  defaultGoogleTtsClient = new GoogleTextToSpeechClient();
+  return defaultGoogleTtsClient;
+}
 
 function deriveLanguageCode(voice: GoogleVoice): string {
   const parts = voice.split("-");
@@ -244,7 +260,7 @@ export async function googleTts({
   voice: GoogleVoice;
   input: string;
 }): Promise<ReadableStream<Uint8Array>> {
-  const { audio } = await defaultGoogleTtsClient.synthesize({
+  const { audio } = await getDefaultGoogleTtsClient().synthesize({
     text: input,
     voice: {
       languageCode: deriveLanguageCode(voice),
