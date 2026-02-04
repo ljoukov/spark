@@ -80,17 +80,22 @@
 		{ label: 'Dark', value: 'dark' }
 	];
 
-	function getIdentityCopyValue(): string | null {
-		if (!user?.uid || user.uid.trim().length === 0) {
-			return null;
+		function getIdentityCopyValue(): string | null {
+			if (!user?.uid || user.uid.trim().length === 0) {
+				return null;
+			}
+			const lines: string[] = [];
+			const name = user.name?.trim() ?? '';
+			if (name.length > 0) {
+				lines.push(`Name: ${name}`);
+			}
+			const email = user.email?.trim() ?? '';
+			if (email.length > 0) {
+				lines.push(`Email: ${email}`);
+			}
+			lines.push(`UserID: ${user.uid.trim()}`);
+			return lines.join('\n');
 		}
-		const uid = user.uid.trim();
-		const email = user.email?.trim() ?? '';
-		if (email.length > 0) {
-			return `${email}/${uid}`;
-		}
-		return user.isAnonymous ? `guest/${uid}` : `no-email/${uid}`;
-	}
 
 	async function copyIdentityToClipboard(): Promise<void> {
 		const value = getIdentityCopyValue();
@@ -325,16 +330,16 @@
 							<div class="app-user-menu__row">
 								<span class="app-user-menu__name">{getDisplayName()}</span>
 								{#if canCopyIdentity && !hasEmailIdentity}
-									<button
-										type="button"
-										class="app-user-menu__copy"
-										aria-label="Copy email/user ID"
-										title="Copy email/user ID"
-										onclick={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-											void copyIdentityToClipboard();
-										}}
+										<button
+											type="button"
+											class="app-user-menu__copy"
+											aria-label="Copy user info"
+											title="Copy user info"
+											onclick={(event) => {
+												event.preventDefault();
+												event.stopPropagation();
+												void copyIdentityToClipboard();
+											}}
 									>
 										{#if copiedIdentity}
 											<CheckIcon class="app-user-menu__copy-icon" />
@@ -347,16 +352,16 @@
 							<div class="app-user-menu__row app-user-menu__row--secondary">
 								<span class="app-user-menu__email">{getEmailLabel()}</span>
 								{#if canCopyIdentity && hasEmailIdentity}
-									<button
-										type="button"
-										class="app-user-menu__copy"
-										aria-label="Copy email/user ID"
-										title="Copy email/user ID"
-										onclick={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-											void copyIdentityToClipboard();
-										}}
+										<button
+											type="button"
+											class="app-user-menu__copy"
+											aria-label="Copy user info"
+											title="Copy user info"
+											onclick={(event) => {
+												event.preventDefault();
+												event.stopPropagation();
+												void copyIdentityToClipboard();
+											}}
 									>
 										{#if copiedIdentity}
 											<CheckIcon class="app-user-menu__copy-icon" />
@@ -628,20 +633,20 @@
 		flex: 1;
 	}
 
-	.app-user-menu__copy {
-		flex: 0 0 auto;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.75rem;
-		height: 1.75rem;
-		padding: 0;
-		border: 1px solid transparent;
-		border-radius: 9999px;
-		background: transparent;
-		color: var(--muted-foreground);
-		cursor: pointer;
-	}
+		.app-user-menu__copy {
+			flex: 0 0 auto;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 18px;
+			height: 18px;
+			padding: 0;
+			border: 0;
+			border-radius: 9999px;
+			background: transparent;
+			color: var(--muted-foreground);
+			cursor: pointer;
+		}
 
 	.app-user-menu__copy:hover {
 		background: var(--muted);
