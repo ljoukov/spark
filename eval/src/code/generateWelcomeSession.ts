@@ -349,7 +349,7 @@ async function writeTemplateDoc(
   await patchFirestoreDocument({
     serviceAccountJson,
     documentPath: templateDoc,
-    updates: stripUndefined(payload) as Record<string, unknown>,
+    updates: stripUndefined(payload),
     deletes: draftFieldsToDelete,
   });
 }

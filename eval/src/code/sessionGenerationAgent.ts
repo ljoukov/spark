@@ -630,7 +630,7 @@ async function publishToWelcomeTemplate(options: {
   await patchFirestoreDocument({
     serviceAccountJson,
     documentPath: templateDoc,
-    updates: stripUndefined(payload) as Record<string, unknown>,
+    updates: stripUndefined(payload),
     deletes: draftFieldsToDelete,
   });
   console.log(`[welcome/${options.sessionId}] published session doc`);

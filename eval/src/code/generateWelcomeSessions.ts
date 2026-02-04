@@ -7,7 +7,6 @@ import {
   deleteFirestoreDocument,
   getFirestoreDocument,
   listFirestoreDocuments,
-  patchFirestoreDocument,
   setFirestoreDocument,
 } from "@spark/llm/utils/gcp/firestoreRest";
 import {
@@ -3292,9 +3291,14 @@ async function seedTemplateContent(
   });
   await Promise.all(
     existingQuizDocs
-      .filter((doc) => !nextQuizIds.has(doc.documentPath.split("/").pop() ?? ""))
+      .filter(
+        (doc) => !nextQuizIds.has(doc.documentPath.split("/").pop() ?? ""),
+      )
       .map(async (doc) => {
-        await deleteFirestoreDocument({ serviceAccountJson, documentPath: doc.documentPath });
+        await deleteFirestoreDocument({
+          serviceAccountJson,
+          documentPath: doc.documentPath,
+        });
       }),
   );
   const quizWrites = blueprint.quizzes.map((quiz) => {
@@ -3323,9 +3327,14 @@ async function seedTemplateContent(
   });
   await Promise.all(
     existingProblemDocs
-      .filter((doc) => !nextProblemIds.has(doc.documentPath.split("/").pop() ?? ""))
+      .filter(
+        (doc) => !nextProblemIds.has(doc.documentPath.split("/").pop() ?? ""),
+      )
       .map(async (doc) => {
-        await deleteFirestoreDocument({ serviceAccountJson, documentPath: doc.documentPath });
+        await deleteFirestoreDocument({
+          serviceAccountJson,
+          documentPath: doc.documentPath,
+        });
       }),
   );
   const problemWrites = blueprint.problems.map((problem) => {
