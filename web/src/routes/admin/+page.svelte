@@ -5,6 +5,11 @@
 
 	const quickLinks = [
 		{
+			title: 'Users',
+			description: 'Find users and manage lessons/sessions.',
+			href: '/admin/users'
+		},
+		{
 			title: 'Firestore',
 			description: 'Verify Admin SDK connectivity and diagnostics.',
 			href: '/admin/firestore'
