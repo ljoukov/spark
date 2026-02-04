@@ -193,6 +193,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Env: `TASKS_SERVICE_URL` (full handler URL), `TASKS_API_KEY` (Bearer), optional `TASKS_QUEUE` (default `spark-tasks`).
 - Location: `us-central1`.
 - The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
+- For debugging, `runAgent` tasks also include `userId` and `agentId` as query params on the target URL (in addition to `type=runAgent`).
 
 ### Admin UI
 
