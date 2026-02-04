@@ -28,7 +28,7 @@
 </script>
 
 <svelte:head>
-	<title>Spark Code · Choose your starter session</title>
+	<title>Spark · Choose your starter lesson</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link
@@ -56,7 +56,7 @@
 			</picture>
 		</h1>
 		<p class="welcome-subtitle">
-			Ignite your coding journey with a session tailored for curious first-timers.
+			Ignite your learning journey with a lesson tailored for curious first-timers.
 		</p>
 
 		{#if form?.error}

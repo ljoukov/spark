@@ -1149,7 +1149,7 @@
 		}
 		celebrationClosingViaHandler = true;
 		celebrationOpen = false;
-		void goto(`/spark/code/${data.sessionId}`, {
+		void goto(`/spark/lesson/${data.sessionId}`, {
 			replaceState: true,
 			invalidateAll: true
 		}).finally(() => {
@@ -1160,7 +1160,7 @@
 	function handleCelebrationOpenChange(open: boolean) {
 		celebrationOpen = open;
 		if (!open && !celebrationClosingViaHandler) {
-			void goto(`/spark/code/${data.sessionId}`, {
+			void goto(`/spark/lesson/${data.sessionId}`, {
 				replaceState: true,
 				invalidateAll: true
 			});

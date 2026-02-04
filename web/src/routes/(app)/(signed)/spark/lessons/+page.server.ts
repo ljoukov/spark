@@ -79,7 +79,7 @@ export const actions: Actions = {
 			}
 
 			const session = await provisionWelcomeSession(user.uid, topic);
-			throw redirect(303, `/spark/code/${session.id}`);
+			throw redirect(303, `/spark/lesson/${session.id}`);
 		} catch (error) {
 			if (isRedirect(error)) {
 				throw error;
