@@ -422,8 +422,11 @@ export async function patchFirestoreDocument(options: {
       if (!looksNotFound) {
         throw error;
       }
-      await firestore.doc(options.documentPath).set({}, { merge: true });
-      await firestore.doc(options.documentPath).update(updates);
+      const nested = buildNestedObjectFromFieldPaths(
+        Object.entries(updates).map(([path, value]) => ({ path, value })),
+      );
+      await firestore.doc(options.documentPath).set(nested, { merge: true });
+      return;
     }
     return;
   }

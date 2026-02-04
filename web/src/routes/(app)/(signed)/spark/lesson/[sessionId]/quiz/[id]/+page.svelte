@@ -1011,7 +1011,7 @@
 			await persistLastQuestionIndex(currentIndex, { sync: true });
 			const synced = await finalizeCompletion('manual');
 			if (synced && typeof window !== 'undefined') {
-				await goto(`/spark/code/${sessionId}`, { replaceState: true, invalidateAll: true });
+				await goto(`/spark/lesson/${sessionId}`, { replaceState: true, invalidateAll: true });
 				return true;
 			}
 		} catch (error) {
@@ -1028,7 +1028,7 @@
 		completionSyncError = null;
 		const synced = await finalizeCompletion('manual');
 		if (synced && typeof window !== 'undefined') {
-			await goto(`/spark/code/${sessionId}`, { replaceState: true, invalidateAll: true });
+			await goto(`/spark/lesson/${sessionId}`, { replaceState: true, invalidateAll: true });
 		} else {
 			completionSyncError = SYNC_ERROR_MESSAGE;
 		}
@@ -1084,7 +1084,7 @@
 			return;
 		}
 		try {
-			await goto(`/spark/code/${sessionId}`, {
+			await goto(`/spark/lesson/${sessionId}`, {
 				replaceState: true,
 				invalidateAll: true
 			});

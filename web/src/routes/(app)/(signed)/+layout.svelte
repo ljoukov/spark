@@ -20,14 +20,14 @@
 	type ClientUser = NonNullable<LayoutData['user']>;
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-	type ExperienceKey = 'code' | 'spark' | null;
+	type ExperienceKey = 'lesson' | 'spark' | null;
 
 	function resolveExperience(routeId: string | null | undefined): ExperienceKey {
 		if (!routeId) {
 			return null;
 		}
-		if (routeId.includes('/spark/code')) {
-			return 'code';
+		if (routeId.includes('/spark/lesson')) {
+			return 'lesson';
 		}
 		if (routeId.includes('/spark')) {
 			return 'spark';
@@ -36,8 +36,8 @@
 	}
 
 	function resolveSessionHomeHref(experience: ExperienceKey, sessionId: string | null): string {
-		if (experience === 'code') {
-			return sessionId ? `/spark/code/${sessionId}` : '/spark/code';
+		if (experience === 'lesson') {
+			return sessionId ? `/spark/lesson/${sessionId}` : '/spark/lesson';
 		}
 		if (experience === 'spark') {
 			return '/spark';
@@ -46,8 +46,8 @@
 	}
 
 	function resolveBrandCopy(experience: ExperienceKey): { title: string; tagline: string | null } {
-		if (experience === 'code') {
-			return { title: 'Spark Code', tagline: 'Think. Hack. Spark.' };
+		if (experience === 'lesson') {
+			return { title: 'Spark Lessons', tagline: 'Think. Hack. Spark.' };
 		}
 		if (experience === 'spark') {
 			return { title: 'Spark', tagline: 'Think. Hack. Spark.' };
@@ -376,7 +376,7 @@
 						<DropdownMenu.Item
 							class="app-user-menu__link"
 							onSelect={() => {
-								void goto('/spark/code/lessons');
+								void goto('/spark/lessons');
 							}}
 						>
 							Lessons

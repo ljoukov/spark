@@ -1,7 +1,7 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import { generateText } from '@spark/llm';
-import type { LlmContent, LlmContentPart, LlmTextDelta } from '@spark/llm';
+import { createTask, runToolLoop, tool } from '@spark/llm';
+import type { LlmContent, LlmContentPart, LlmTextDelta, LlmToolSet } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
@@ -17,10 +17,13 @@ import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { encodeBytesToBase64 } from '$lib/server/gcp/base64';
 import { env } from '$env/dynamic/private';
+import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
+import { listSessions, getSession, saveSession, setCurrentSessionId } from '$lib/server/session/repo';
+import { getSessionState } from '$lib/server/sessionState/repo';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
-const MODEL_ID = 'gemini-flash-latest' as const;
+const MODEL_ID = 'gemini-2.5-pro' as const;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
@@ -94,7 +97,17 @@ const SYSTEM_PROMPT = [
 	'You are Spark AI Agent, an always-on study companion for Spark learners.',
 	'Write in UK English.',
 	'Be direct, warm, and practical. Offer concrete next steps and ask clarifying questions when needed.',
-	'Use short headings and bullets to keep responses skimmable.'
+	'Use short headings and bullets to keep responses skimmable.',
+	'',
+	'Lessons (tool use):',
+	'- If the user asks to create/start/make a lesson and you have a clear topic, call create_lesson immediately.',
+	'- If details are missing, ask concise follow-up questions (topic, goal, level, duration, materials/links).',
+	'- Do not claim a lesson has started unless create_lesson returned status="started".',
+	'- After create_lesson, include the lesson link (href) and the Lessons list link (lessonsHref).',
+	'',
+	'Lesson status and recommendations:',
+	'- Use list_lessons to see what exists and recommend what to do next based on progress.',
+	'- Use get_lesson_status for a specific lesson.'
 ].join('\n');
 
 const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
@@ -380,6 +393,326 @@ type StreamHandlers = {
 	onDelta?: (delta: LlmTextDelta) => void;
 };
 
+function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
+	const serviceUrl = env.TASKS_SERVICE_URL;
+	if (!serviceUrl || serviceUrl.trim().length === 0) {
+		throw new Error('TASKS_SERVICE_URL is missing');
+	}
+	const apiKey = env.TASKS_API_KEY;
+	if (!apiKey || apiKey.trim().length === 0) {
+		throw new Error('TASKS_API_KEY is missing');
+	}
+	return { serviceUrl, apiKey };
+}
+
+function encodeWorkspaceFileId(filePath: string): string {
+	return encodeURIComponent(filePath);
+}
+
+async function writeWorkspaceTextFile(options: {
+	serviceAccountJson: string;
+	userId: string;
+	workspaceId: string;
+	path: string;
+	content: string;
+	now: Date;
+}): Promise<void> {
+	const lowerPath = options.path.toLowerCase();
+	const contentType = lowerPath.endsWith('.md')
+		? 'text/markdown'
+		: lowerPath.endsWith('.json')
+			? 'application/json'
+			: 'text/plain';
+	const sizeBytes = new TextEncoder().encode(options.content).byteLength;
+	await setFirestoreDocument({
+		serviceAccountJson: options.serviceAccountJson,
+		documentPath: `users/${options.userId}/workspace/${options.workspaceId}/files/${encodeWorkspaceFileId(
+			options.path
+		)}`,
+		data: {
+			path: options.path,
+			content: options.content,
+			contentType,
+			sizeBytes,
+			createdAt: options.now,
+			updatedAt: options.now
+		}
+	});
+}
+
+const durationMinutesSchema = z.preprocess(
+	(value) => {
+		if (value === undefined || value === null) {
+			return undefined;
+		}
+		if (typeof value === 'string') {
+			const match = value.match(/\d+/u);
+			if (!match) {
+				return value;
+			}
+			return Number(match[0]);
+		}
+		return value;
+	},
+	z.number().int().min(5).max(240).optional()
+);
+
+const materialsSchema = z.preprocess(
+	(value) => {
+		if (value === undefined || value === null) {
+			return undefined;
+		}
+		if (typeof value === 'string') {
+			const entries = value
+				.split(/[\n,;]+/u)
+				.map((entry) => entry.trim())
+				.filter((entry) => entry.length > 0);
+			return entries.length > 0 ? entries : undefined;
+		}
+		return value;
+	},
+	z.array(z.string().trim().min(1)).optional()
+);
+
+const lessonCreateSchema = z.object({
+	topic: z.string().trim().min(1),
+	title: z.string().trim().min(1).optional(),
+	level: z.string().trim().min(1).optional(),
+	goal: z.string().trim().min(1).optional(),
+	durationMinutes: durationMinutesSchema,
+	materials: materialsSchema
+});
+
+function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>): string {
+	const lines: string[] = ['# Lesson request', '', `## Topic`, input.topic.trim()];
+	if (input.title) {
+		lines.push('', '## Title', input.title.trim());
+	}
+	if (input.level) {
+		lines.push('', '## Level', input.level.trim());
+	}
+	if (input.goal) {
+		lines.push('', '## Goal', input.goal.trim());
+	}
+	if (typeof input.durationMinutes === 'number') {
+		lines.push('', '## Duration', `${input.durationMinutes} minutes`);
+	}
+	if (input.materials && input.materials.length > 0) {
+		lines.push('', '## Materials');
+		for (const item of input.materials) {
+			lines.push(`- ${item}`);
+		}
+	}
+	lines.push('', '## Notes', '- Publish this lesson into the user’s sessions (not welcome templates).');
+	return lines.join('\n').trim() + '\n';
+}
+
+function buildSparkChatTools(options: {
+	userId: string;
+	serviceAccountJson: string;
+}): LlmToolSet {
+	const { userId, serviceAccountJson } = options;
+	return {
+		list_lessons: tool({
+			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
+			inputSchema: z
+				.object({
+					limit: z.number().int().min(1).max(50).optional()
+				})
+				.strict(),
+			execute: async ({ limit }) => {
+				const sessions = await listSessions(userId, limit ?? 20);
+				const states = await Promise.all(sessions.map((session) => getSessionState(userId, session.id)));
+				const lessons = sessions.map((session, index) => {
+					const state = states[index];
+					const { completed, total } = countCompletedSteps(session, state);
+					const status = deriveLessonStatus(session, state);
+					return {
+						id: session.id,
+						title: session.title,
+						tagline: session.tagline ?? session.summary ?? null,
+						emoji: session.emoji ?? '📘',
+						status,
+						createdAt: session.createdAt.toISOString(),
+						completed,
+						total,
+						href: `/spark/lesson/${session.id}`
+					};
+				});
+				return { lessons };
+			}
+		}),
+		get_lesson_status: tool({
+			description: 'Get a lesson’s status, title, and step progress.',
+			inputSchema: z
+				.object({
+					sessionId: z.string().trim().min(1)
+				})
+				.strict(),
+			execute: async ({ sessionId }) => {
+				const session = await getSession(userId, sessionId);
+				if (!session) {
+					return { found: false, sessionId };
+				}
+				const state = await getSessionState(userId, sessionId);
+				const status = deriveLessonStatus(session, state);
+				const { completed, total } = countCompletedSteps(session, state);
+				return {
+					found: true,
+					sessionId,
+					title: session.title,
+					status,
+					createdAt: session.createdAt.toISOString(),
+					completed,
+					total,
+					href: `/spark/lesson/${session.id}`
+				};
+			}
+		}),
+		create_lesson: tool({
+			description:
+				'Start creating a new lesson. Creates a workspace with brief.md and launches a background agent to generate and publish the lesson into the user’s sessions.',
+			inputSchema: lessonCreateSchema,
+			execute: async (input) => {
+				let sessionId: string | null = null;
+				let sessionSaved = false;
+				try {
+					const tasksEnv = requireTasksEnv();
+
+					sessionId = randomUUID();
+					const workspaceId = randomUUID();
+					const agentId = randomUUID();
+					const now = new Date();
+
+					await saveSession(userId, {
+						id: sessionId,
+						title: input.title ?? input.topic,
+						createdAt: now,
+						status: 'generating',
+						plan: [],
+						nextLessonProposals: [],
+						topics: [input.topic]
+					});
+					sessionSaved = true;
+					await setCurrentSessionId(userId, sessionId).catch((error) => {
+						console.warn('Unable to set current lesson', error);
+					});
+
+					const brief = buildLessonBrief(input);
+
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/workspace/${workspaceId}`,
+						data: {
+							id: workspaceId,
+							agentId,
+							createdAt: now,
+							updatedAt: now
+						}
+					});
+
+					await writeWorkspaceTextFile({
+						serviceAccountJson,
+						userId,
+						workspaceId,
+						path: 'brief.md',
+						content: brief,
+						now
+					});
+					await writeWorkspaceTextFile({
+						serviceAccountJson,
+						userId,
+						workspaceId,
+						path: 'request.json',
+						content: JSON.stringify(
+							{
+								sessionId,
+								createdAt: now.toISOString(),
+								input
+							},
+							null,
+							2
+						),
+						now
+					});
+
+					const prompt = [
+						'Create a Spark lesson from the workspace brief and publish it to the user sessions.',
+						'',
+						`sessionId: ${sessionId}`,
+						`workspaceId: ${workspaceId}`,
+						'',
+						'Instructions:',
+						'1) Read brief.md.',
+						'2) Call publish_lesson with:',
+						`   - sessionId: ${sessionId}`,
+						"   - briefPath: 'brief.md'",
+						'   - includeCoding: true if this is programming/coding practice; otherwise false.',
+						'   - includeStory: true only if the user explicitly wants a story/audio clip.',
+						'3) Ensure the lesson ends in status=ready (or status=error on failure).',
+						'4) Call done with a short summary including the sessionId.',
+						'',
+						'Do not publish into welcome templates.'
+					].join('\n');
+
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/agents/${agentId}`,
+						data: {
+							id: agentId,
+							prompt,
+							status: 'created',
+							workspaceId,
+							lessonSessionId: sessionId,
+							createdAt: now,
+							updatedAt: now,
+							statesTimeline: [{ state: 'created', timestamp: now }]
+						}
+					});
+
+					await createTask(
+						{
+							type: 'runAgent',
+							runAgent: { userId, agentId, workspaceId }
+						},
+						{
+							serviceUrl: tasksEnv.serviceUrl,
+							apiKey: tasksEnv.apiKey,
+							serviceAccountJson
+						}
+					);
+
+					return {
+						status: 'started',
+						sessionId,
+						agentId,
+						workspaceId,
+						href: `/spark/lesson/${sessionId}`,
+						lessonsHref: '/spark/lessons'
+					};
+				} catch (error) {
+					console.error('Spark lesson creation tool failed', {
+						userId,
+						topic: input.topic,
+						error: error instanceof Error ? error.message : String(error)
+					});
+					if (sessionSaved && sessionId) {
+						await patchFirestoreDocument({
+							serviceAccountJson,
+							documentPath: `spark/${userId}/sessions/${sessionId}`,
+							updates: {
+								status: 'error',
+								tagline: 'Lesson creation failed. Please try again.'
+							}
+						}).catch(() => undefined);
+					}
+					throw error;
+				}
+			}
+		})
+	};
+}
+
 async function generateAssistantResponse(
 	conversation: ConversationDoc,
 	options: {
@@ -403,11 +736,15 @@ async function generateAssistantResponse(
 		attachmentMessageId: options.messageId,
 		attachmentParts
 	});
-	return await generateText({
+	const tools = buildSparkChatTools({ userId: options.userId, serviceAccountJson: options.serviceAccountJson });
+	const result = await runToolLoop({
 		modelId: MODEL_ID,
 		contents,
+		tools,
+		maxSteps: 12,
 		onDelta: handlers.onDelta
 	});
+	return result.text;
 }
 
 function hasGeminiCredentials(): boolean {
@@ -654,7 +991,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				await streamFallbackText(FALLBACK_RESPONSE, handleDelta);
 				assistantText = FALLBACK_RESPONSE;
 			} else {
-				await generateAssistantResponse(
+				assistantText = await generateAssistantResponse(
 					conversation,
 					{
 						userId,

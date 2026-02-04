@@ -6,11 +6,7 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createTask } from '@spark/llm';
 import { SparkAgentStateSchema, type SparkAgentState } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
-import {
-	listFirestoreDocuments,
-	patchFirestoreDocument,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+import { listFirestoreDocuments, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const requestSchema = z.object({
 	prompt: z.string().trim().min(1),
@@ -109,10 +105,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 	});
 
-	await patchFirestoreDocument({
+	await setFirestoreDocument({
 		serviceAccountJson,
 		documentPath: `users/${userId}/workspace/${workspaceId}`,
-		updates: {
+		data: {
 			id: workspaceId,
 			agentId,
 			createdAt: now,

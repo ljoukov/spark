@@ -1301,6 +1301,7 @@
 			<Button variant="outline" size="sm" onclick={resetConversation} disabled={sending}>
 				New chat
 			</Button>
+			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 

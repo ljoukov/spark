@@ -11,7 +11,15 @@ import {
 } from "node:fs/promises";
 
 import { z } from "zod";
-import { SparkAgentStateTimelineSchema, type SparkAgentStateTimeline } from "@spark/schemas";
+import {
+  CodeProblemSchema,
+  QuizDefinitionSchema,
+  SessionSchema,
+  SparkAgentStateTimelineSchema,
+  type CodeProblem,
+  type Session,
+  type SparkAgentStateTimeline,
+} from "@spark/schemas";
 
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
@@ -20,7 +28,15 @@ import {
   getFirestoreDocument,
   listFirestoreDocuments,
   patchFirestoreDocument,
+  setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
+import {
+  convertSessionPlanToItems,
+  generateCodeProblems,
+  generateQuizDefinitions,
+  generateSessionMetadata,
+} from "../code/sessionArtifacts";
+import { generateSession } from "../code/generateSession";
 import {
   estimateCallCostUsd,
   runToolLoop,
@@ -960,9 +976,178 @@ function buildAgentSystemPrompt(): string {
 function buildAgentTools(options: {
   workspace: WorkspaceSync;
   rootDir: string;
+  userId: string;
+  serviceAccountJson: string;
 }): LlmToolSet {
-  const { workspace, rootDir } = options;
+  const { workspace, rootDir, userId, serviceAccountJson } = options;
   return {
+    publish_lesson: tool({
+      description:
+        "Generate and publish a Spark lesson into the user's sessions (not welcome templates). Reads a brief from the workspace and writes session + quiz/problem documents to Firestore.",
+      inputSchema: z
+        .object({
+          sessionId: z.string().trim().min(1),
+          briefPath: z.string().trim().min(1).optional(),
+          includeStory: z.boolean().optional(),
+          includeCoding: z.boolean().optional(),
+        })
+        .strict(),
+      execute: async ({
+        sessionId,
+        briefPath,
+        includeStory,
+        includeCoding,
+      }) => {
+        const resolvedBriefPath = briefPath ?? "brief.md";
+        const resolvedBrief = resolveWorkspacePath(rootDir, resolvedBriefPath);
+        const lessonBrief = await readFile(resolvedBrief, {
+          encoding: "utf8",
+        });
+
+        const deriveTopic = (brief: string): string => {
+          const lines = brief.replace(/\r\n/g, "\n").split("\n");
+          for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i]?.trim() ?? "";
+            if (/^##\s*topic\s*$/iu.test(line)) {
+              for (let j = i + 1; j < lines.length; j += 1) {
+                const next = lines[j]?.trim() ?? "";
+                if (next.length === 0) {
+                  continue;
+                }
+                return next.replace(/^#+\s*/u, "").trim();
+              }
+            }
+            const match = line.match(
+              /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
+            );
+            if (match?.[1]) {
+              return match[1].trim();
+            }
+          }
+          const firstNonEmpty = lines.find((entry) => entry.trim().length > 0);
+          return firstNonEmpty ? firstNonEmpty.replace(/^#+\s*/u, "").trim() : "";
+        };
+
+        const topic = deriveTopic(lessonBrief);
+        if (!topic) {
+          throw new Error("Unable to derive topic from brief.md");
+        }
+
+        const resolvedIncludeStory = includeStory ?? false;
+        const resolvedIncludeCoding = includeCoding ?? false;
+
+        const docPath = `spark/${userId}/sessions/${sessionId}`;
+        const existing = await getFirestoreDocument({
+          serviceAccountJson,
+          documentPath: docPath,
+        }).catch(() => ({ exists: false, data: null as null }));
+        const existingSession = existing.exists && existing.data
+          ? SessionSchema.safeParse({
+              id: sessionId,
+              ...existing.data,
+            })
+          : null;
+        const createdAt =
+          existingSession && existingSession.success
+            ? existingSession.data.createdAt
+            : new Date();
+        const titleOverride =
+          existingSession && existingSession.success
+            ? existingSession.data.title
+            : undefined;
+
+        try {
+          const result = await generateSession({
+            topic,
+            lessonBrief,
+            userId,
+            sessionId,
+            storyPlanItemId: "story",
+            includeStory: resolvedIncludeStory,
+            includeCoding: resolvedIncludeCoding,
+          });
+
+          const metadata = await generateSessionMetadata({
+            topic: result.plan.topic,
+            plan: result.plan,
+            storyTitle: result.story?.title,
+            includeCoding: resolvedIncludeCoding,
+          });
+
+          const quizDefinitions = await generateQuizDefinitions(
+            result.plan,
+            result.quizzes,
+            lessonBrief,
+          );
+
+          const codeProblems: readonly CodeProblem[] = resolvedIncludeCoding
+            ? await generateCodeProblems(result.plan, result.problems, lessonBrief)
+            : [];
+
+          const { plan: planItems } = convertSessionPlanToItems(result, "story");
+
+          const sessionDoc: Session = {
+            id: sessionId,
+            title: titleOverride ?? result.plan.topic,
+            summary: metadata.summary,
+            tagline: metadata.tagline,
+            emoji: metadata.emoji,
+            topics: [topic],
+            status: "ready",
+            createdAt,
+            plan: planItems,
+            nextLessonProposals: [],
+          };
+
+          const validatedSession = SessionSchema.parse(sessionDoc);
+          await setFirestoreDocument({
+            serviceAccountJson,
+            documentPath: docPath,
+            data: validatedSession as unknown as Record<string, unknown>,
+          });
+
+          await Promise.all(
+            quizDefinitions.map(async (quiz) => {
+              const validated = QuizDefinitionSchema.parse(quiz);
+              await setFirestoreDocument({
+                serviceAccountJson,
+                documentPath: `${docPath}/quiz/${validated.id}`,
+                data: validated as unknown as Record<string, unknown>,
+              });
+            }),
+          );
+
+          await Promise.all(
+            codeProblems.map(async (problem) => {
+              const validated = CodeProblemSchema.parse(problem);
+              await setFirestoreDocument({
+                serviceAccountJson,
+                documentPath: `${docPath}/code/${validated.slug}`,
+                data: validated as unknown as Record<string, unknown>,
+              });
+            }),
+          );
+
+          return {
+            status: "published",
+            sessionId,
+            topic,
+            includeStory: resolvedIncludeStory,
+            includeCoding: resolvedIncludeCoding,
+            quizCount: quizDefinitions.length,
+            problemCount: codeProblems.length,
+            href: `/spark/lesson/${sessionId}`,
+          };
+        } catch (error) {
+          await patchFirestoreDocument({
+            serviceAccountJson,
+            documentPath: docPath,
+            updates: { status: "error" },
+          }).catch(() => undefined);
+          throw error;
+        }
+      },
+    }),
     list_files: tool({
       description: "Recursively list files under a workspace path.",
       inputSchema: z.object({
@@ -1501,13 +1686,18 @@ export async function runSparkAgentTask(
       }
     };
 
-    const tools: LlmToolSet = {
-      ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
-      done: tool({
-        description:
-          "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
-        inputSchema: z
-          .object({
+  const tools: LlmToolSet = {
+    ...buildAgentTools({
+      workspace: workspaceSync,
+      rootDir: workspaceRoot,
+      userId: options.userId,
+      serviceAccountJson,
+    }),
+    done: tool({
+      description:
+        "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+      inputSchema: z
+        .object({
             summary: z.string().trim().min(1).optional(),
           })
           .strict(),
