@@ -116,6 +116,11 @@ export type ChatGptCodexCollectedResponse = {
   blocked: boolean;
 };
 
+export type ChatGptCodexDelta = {
+  textDelta?: string;
+  thoughtDelta?: string;
+};
+
 export async function streamChatGptCodexResponse(options: {
   request: ChatGptCodexRequest;
   sessionId?: string;
@@ -157,6 +162,7 @@ export async function collectChatGptCodexResponse(options: {
   request: ChatGptCodexRequest;
   sessionId?: string;
   signal?: AbortSignal;
+  onDelta?: (delta: ChatGptCodexDelta) => void;
 }): Promise<ChatGptCodexCollectedResponse> {
   const stream = await streamChatGptCodexResponse(options);
   const toolCalls = new Map<string, ChatGptCodexToolCall>();
@@ -178,6 +184,7 @@ export async function collectChatGptCodexResponse(options: {
       if (delta.length > 0) {
         sawOutputTextDelta = true;
         text += delta;
+        options.onDelta?.({ textDelta: delta });
       }
       continue;
     }
@@ -189,6 +196,7 @@ export async function collectChatGptCodexResponse(options: {
       if (delta.length > 0) {
         sawReasoningDelta = true;
         reasoningText += delta;
+        options.onDelta?.({ thoughtDelta: delta });
       }
       continue;
     }
@@ -240,6 +248,7 @@ export async function collectChatGptCodexResponse(options: {
               const entryText = (entry as { text?: unknown }).text;
               if (typeof entryText === "string" && entryText.length > 0) {
                 text += entryText;
+                options.onDelta?.({ textDelta: entryText });
               }
             }
           }
@@ -350,6 +359,7 @@ export async function collectChatGptCodexResponse(options: {
               const entryText = (entry as { text?: unknown }).text;
               if (typeof entryText === "string" && entryText.length > 0) {
                 reasoningText += entryText;
+                options.onDelta?.({ thoughtDelta: entryText });
               }
             }
           }

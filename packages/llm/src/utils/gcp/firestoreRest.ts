@@ -409,7 +409,22 @@ export async function patchFirestoreDocument(options: {
       return;
     }
 
-    await firestore.doc(options.documentPath).update(updates);
+    try {
+      await firestore.doc(options.documentPath).update(updates);
+    } catch (error) {
+      const code = (error as { code?: unknown } | undefined)?.code;
+      const message = error instanceof Error ? error.message : String(error);
+      const looksNotFound =
+        code === 5 ||
+        code === "not-found" ||
+        message.includes("No document to update") ||
+        message.includes("NOT_FOUND");
+      if (!looksNotFound) {
+        throw error;
+      }
+      await firestore.doc(options.documentPath).set({}, { merge: true });
+      await firestore.doc(options.documentPath).update(updates);
+    }
     return;
   }
 
