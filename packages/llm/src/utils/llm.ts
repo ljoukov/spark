@@ -3806,7 +3806,7 @@ function rewriteWriteFileInputForUserFacingCitations(options: {
   }
   const record = options.rawInput as Record<string, unknown>;
   const content =
-    typeof record.content === "string" ? (record.content as string) : null;
+    typeof record.content === "string" ? record.content : null;
   if (!content) {
     return options.rawInput;
   }
