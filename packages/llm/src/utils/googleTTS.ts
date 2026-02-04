@@ -235,7 +235,6 @@ function getDefaultGoogleTtsClient(): GoogleTextToSpeechClient {
   defaultGoogleTtsClient = new GoogleTextToSpeechClient();
   return defaultGoogleTtsClient;
 }
-}
 
 function deriveLanguageCode(voice: GoogleVoice): string {
   const parts = voice.split("-");
