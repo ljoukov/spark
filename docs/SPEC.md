@@ -231,10 +231,11 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 ### 3.5 Spark AI Agent Runs (Phase 2)
 
 - Agent runs are stored under `users/{userId}/agents/{agentId}`.
-  - Fields: `{ id, prompt, status, workspaceId, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
-  - `status` ∈ `created | executing | failed | done`.
+  - Fields: `{ id, prompt, status, workspaceId, stop_requested?, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
+  - `status` ∈ `created | executing | stopped | failed | done`.
   - `statesTimeline[]` entries contain `{ state, timestamp }`.
 - Agent runs use a hosted web search tool during the LLM tool loop when available (e.g. OpenAI Responses `web_search` with external web access enabled).
+- Stop: the `/spark/agents` UI can set `stop_requested = true`. While running, the server polls `stop_requested` every 10 seconds and stops the run by setting `status = "stopped"` (and returns success to Cloud Tasks so it won’t retry).
 - Completion: the agent is expected to call the `done` tool once. If the tool loop ends with a final text response without calling `done`, the server writes the response to `agent-output.md` in the workspace, stores a truncated (≤ 1000 chars) version in `resultSummary`, and marks the run as `done`.
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.

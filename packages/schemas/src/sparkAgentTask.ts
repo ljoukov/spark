@@ -7,6 +7,7 @@ const trimmedString = z.string().trim().min(1);
 export const SparkAgentStatusSchema = z.enum([
   "created",
   "executing",
+  "stopped",
   "failed",
   "done",
 ]);
@@ -27,6 +28,7 @@ export const SparkAgentStateSchema = z.object({
   prompt: trimmedString,
   status: SparkAgentStatusSchema,
   workspaceId: trimmedString,
+  stop_requested: z.boolean().optional(),
   createdAt: FirestoreTimestampSchema,
   updatedAt: FirestoreTimestampSchema,
   statesTimeline: z.array(SparkAgentStateTimelineSchema).min(1),

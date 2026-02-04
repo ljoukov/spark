@@ -47,6 +47,9 @@
 	let createSuccess = $state<string | null>(null);
 	let loadError = $state<string | null>(null);
 	let copySuccess = $state(false);
+	let stopSubmitting = $state(false);
+	let stopError = $state<string | null>(null);
+	let stopSuccess = $state<string | null>(null);
 	let fileDialogOpen = $state(false);
 	let authReady = $state(false);
 
@@ -246,6 +249,49 @@
 		}
 	}
 
+	const canRequestStop = $derived.by(() => {
+		if (!selectedAgentId || !selectedAgent || stopSubmitting) {
+			return false;
+		}
+		if (selectedAgent.stop_requested) {
+			return false;
+		}
+		if (
+			selectedAgent.status === 'done' ||
+			selectedAgent.status === 'failed' ||
+			selectedAgent.status === 'stopped'
+		) {
+			return false;
+		}
+		return true;
+	});
+
+	async function requestStop(): Promise<void> {
+		if (!selectedAgentId || stopSubmitting) {
+			return;
+		}
+		stopError = null;
+		stopSuccess = null;
+		stopSubmitting = true;
+		try {
+			const response = await fetch(`/api/spark/agents/${selectedAgentId}/stop`, {
+				method: 'POST'
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				throw new Error(payload?.error ?? payload?.message ?? 'stop_failed');
+			}
+			stopSuccess = 'Stop requested.';
+			window.setTimeout(() => {
+				stopSuccess = null;
+			}, 2500);
+		} catch (error) {
+			stopError = error instanceof Error ? error.message : 'Unable to stop this agent right now.';
+		} finally {
+			stopSubmitting = false;
+		}
+	}
+
 	onMount(() => {
 		if (!browser) {
 			return;
@@ -435,11 +481,15 @@
 			selectedAgentDetail = null;
 			files = [];
 			runLog = null;
+			stopError = null;
+			stopSuccess = null;
 			return;
 		}
 		selectedAgentDetail = null;
 		files = [];
 		runLog = null;
+		stopError = null;
+		stopSuccess = null;
 	});
 
 	$effect(() => {
@@ -552,6 +602,20 @@
 							>
 								{copySuccess ? 'Copied' : 'Copy prompt'}
 							</Button>
+							<Button
+								variant="destructive"
+								size="sm"
+								disabled={!canRequestStop}
+								onclick={() => {
+									void requestStop();
+								}}
+							>
+								{stopSubmitting
+									? 'Stopping…'
+									: selectedAgent.stop_requested
+										? 'Stop requested'
+										: 'Stop'}
+							</Button>
 							<span class={`status-pill status-pill--${selectedAgent.status}`}>
 								{selectedAgent.status}
 							</span>
@@ -581,6 +645,18 @@
 						<div class="agents-detail__error">
 							<p class="agents-detail__eyebrow">Error</p>
 							<p>{selectedAgent.error}</p>
+						</div>
+					{/if}
+					{#if stopError}
+						<div class="agents-detail__error">
+							<p class="agents-detail__eyebrow">Stop request</p>
+							<p>{stopError}</p>
+						</div>
+					{/if}
+					{#if stopSuccess}
+						<div class="agents-detail__summary">
+							<p class="agents-detail__eyebrow">Stop request</p>
+							<p>{stopSuccess}</p>
 						</div>
 					{/if}
 					<div class="agents-detail__timeline">
@@ -1062,6 +1138,11 @@
 		color: rgba(21, 128, 61, 0.9);
 	}
 
+	.status-pill--stopped {
+		background: rgba(245, 158, 11, 0.2);
+		color: rgba(180, 83, 9, 0.95);
+	}
+
 	.status-pill--failed {
 		background: rgba(248, 113, 113, 0.2);
 		color: rgba(185, 28, 28, 0.9);
@@ -1080,6 +1161,10 @@
 
 	.status-dot--done {
 		background: rgba(34, 197, 94, 0.9);
+	}
+
+	.status-dot--stopped {
+		background: rgba(245, 158, 11, 0.9);
 	}
 
 	.status-dot--failed {
