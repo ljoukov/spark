@@ -20,6 +20,11 @@
 			href: '/admin/tasks'
 		},
 		{
+			title: 'Text-to-Speech',
+			description: 'Synthesize audio via OpenAI + Google TTS.',
+			href: '/admin/tts'
+		},
+		{
 			title: 'UI previews',
 			description: 'Full-screen previews for UI smoke checks.',
 			href: '/admin/ui'
