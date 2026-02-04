@@ -211,6 +211,23 @@
 		}
 	}
 
+	async function openFileRaw(file: SparkAgentWorkspaceFile): Promise<void> {
+		if (!browser) {
+			return;
+		}
+		const content = typeof file.content === 'string' ? file.content : '';
+		const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+		const url = URL.createObjectURL(blob);
+		const opened = window.open(url, '_blank', 'noopener,noreferrer');
+		if (!opened) {
+			URL.revokeObjectURL(url);
+			throw new Error('Popup blocked');
+		}
+		window.setTimeout(() => {
+			URL.revokeObjectURL(url);
+		}, 60_000);
+	}
+
 	async function createAgent(): Promise<void> {
 		if (createPrompt.trim().length === 0 || creating) {
 			return;
@@ -785,22 +802,33 @@
 			fileDialogOpen = false;
 		}}
 	></button>
-	<div class="file-dialog" role="dialog" aria-modal="true">
-		<header class="file-dialog__header">
-			<div>
-				<p class="file-dialog__label">Workspace file</p>
-				<h3>{selectedFile.path}</h3>
-			</div>
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={() => {
-					fileDialogOpen = false;
-				}}
-			>
-				×
-			</Button>
-		</header>
+		<div class="file-dialog" role="dialog" aria-modal="true">
+			<header class="file-dialog__header">
+				<div>
+					<p class="file-dialog__label">Workspace file</p>
+					<h3>{selectedFile.path}</h3>
+				</div>
+				<div class="file-dialog__actions">
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => {
+							void openFileRaw(selectedFile);
+						}}
+					>
+						Raw
+					</Button>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => {
+							fileDialogOpen = false;
+						}}
+					>
+						×
+					</Button>
+				</div>
+			</header>
 		<div class="file-dialog__body">
 			{#if selectedFileIsMarkdown}
 				<div class="markdown-preview">{@html selectedFileHtml}</div>
@@ -1381,6 +1409,12 @@
 	.file-dialog__body {
 		padding: 1.2rem;
 		overflow: auto;
+	}
+
+	.file-dialog__actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 
 	@media (max-width: 900px) {
