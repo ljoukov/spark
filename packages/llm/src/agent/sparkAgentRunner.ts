@@ -38,8 +38,16 @@ const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.2-codex";
 const DEFAULT_MAX_STEPS = 200;
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 10_000;
+const STOP_POLL_INTERVAL_MS = 10_000;
 
-type AgentStatus = "created" | "executing" | "failed" | "done";
+type AgentStatus = "created" | "executing" | "stopped" | "failed" | "done";
+
+class StopRequestedError extends Error {
+  constructor() {
+    super("Agent stop requested.");
+    this.name = "StopRequestedError";
+  }
+}
 
 type WorkspaceFileMeta = {
   createdAt?: Date;
@@ -1272,6 +1280,27 @@ export async function runSparkAgentTask(
     throw new Error(`Agent not found: ${options.agentId}`);
   }
   const agentData = agentSnap.data() ?? {};
+  const currentStatus =
+    typeof agentData.status === "string" ? agentData.status.trim() : "";
+  if (
+    currentStatus === "done" ||
+    currentStatus === "failed" ||
+    currentStatus === "stopped"
+  ) {
+    console.log(
+      `[spark-agent:${options.agentId}] skip run; status=${currentStatus}`,
+    );
+    return;
+  }
+  if (agentData.stop_requested === true) {
+    console.log(`[spark-agent:${options.agentId}] stop_requested pre-run`);
+    await updateAgentStatus({
+      agentRef,
+      status: "stopped",
+      resultSummary: "Stopped by user.",
+    });
+    return;
+  }
   const prompt =
     typeof agentData.prompt === "string" && agentData.prompt.trim().length > 0
       ? agentData.prompt.trim()
@@ -1304,6 +1333,50 @@ export async function runSparkAgentTask(
     rootDir: workspaceRoot,
   });
   await workspaceSync.load();
+
+  let stopRequested = false;
+  let stopPollTimer: NodeJS.Timeout | undefined;
+  let stopPollInFlight: Promise<void> | undefined;
+  const pollStopRequested = async (): Promise<void> => {
+    if (stopRequested || stopPollInFlight) {
+      return;
+    }
+    stopPollInFlight = (async () => {
+      const snap = await agentRef.get();
+      const data = snap.data() ?? {};
+      if (data.stop_requested === true) {
+        stopRequested = true;
+        logSync.append("warn: stop_requested detected");
+      }
+    })();
+    try {
+      await stopPollInFlight;
+    } catch (error) {
+      logSync.append(`warn: stop poll failed: ${errorAsString(error)}`);
+    } finally {
+      stopPollInFlight = undefined;
+    }
+  };
+  const startStopPolling = (): void => {
+    if (stopPollTimer) {
+      return;
+    }
+    stopPollTimer = setInterval(() => {
+      void pollStopRequested();
+    }, STOP_POLL_INTERVAL_MS);
+  };
+  const stopStopPolling = async (): Promise<void> => {
+    if (stopPollTimer) {
+      clearInterval(stopPollTimer);
+      stopPollTimer = undefined;
+    }
+    await stopPollInFlight?.catch(() => undefined);
+  };
+  const throwIfStopRequested = (): void => {
+    if (stopRequested) {
+      throw new StopRequestedError();
+    }
+  };
 
   let doneCalled = false;
 
@@ -1340,36 +1413,49 @@ export async function runSparkAgentTask(
   const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
   const progress: JobProgressReporter = {
     log: (message) => {
+      throwIfStopRequested();
       console.log(`[spark-agent:${options.agentId}] ${message}`);
       logSync.append(message);
       statsTracker.parseLogLine(message);
       logSync.setStats(statsTracker.snapshot());
     },
     startModelCall: (details) => {
+      throwIfStopRequested();
       const handle = statsTracker.startModelCall({ modelId: details.modelId });
       logSync.setStats(statsTracker.snapshot());
       return handle;
     },
     recordModelUsage: (handle, chunk) => {
+      throwIfStopRequested();
       statsTracker.recordModelUsage(handle, chunk);
       logSync.setStats(statsTracker.snapshot());
     },
     finishModelCall: (handle) => {
+      throwIfStopRequested();
       statsTracker.finishModelCall(handle);
       logSync.setStats(statsTracker.snapshot());
     },
     startStage: (stageName: string): StageHandle => {
+      throwIfStopRequested();
       void stageName;
       return Symbol("agent-stage");
     },
     finishStage: (handle: StageHandle) => {
+      throwIfStopRequested();
       void handle;
     },
     setActiveStages: (stages) => {
+      throwIfStopRequested();
       void stages;
     },
   };
   try {
+    await pollStopRequested();
+    if (stopRequested) {
+      throw new StopRequestedError();
+    }
+    startStopPolling();
+
     const toolLoopResult = await runToolLoop({
       modelId,
       systemPrompt: buildAgentSystemPrompt(),
@@ -1413,6 +1499,17 @@ export async function runSparkAgentTask(
 
     await logSync.flushAll().catch(() => undefined);
   } catch (error) {
+    if (error instanceof StopRequestedError) {
+      logSync.append("warn: agent stopped by user request");
+      await workspaceSync.flushAll().catch(() => undefined);
+      await logSync.flushAll().catch(() => undefined);
+      await updateAgentStatus({
+        agentRef,
+        status: "stopped",
+        resultSummary: "Stopped by user.",
+      });
+      return;
+    }
     const message = errorAsString(error);
     logSync.append(`error: ${message}`);
     await workspaceSync.flushAll().catch(() => undefined);
@@ -1420,6 +1517,7 @@ export async function runSparkAgentTask(
     await updateAgentStatus({ agentRef, status: "failed", error: message });
     throw error;
   } finally {
+    await stopStopPolling();
     logSync.dispose();
     await rm(workspaceRoot, { recursive: true, force: true }).catch(
       () => undefined,
