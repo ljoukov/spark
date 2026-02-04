@@ -1,11 +1,25 @@
-import type { Firestore } from "firebase-admin/firestore";
-
 import { assertNodeRuntime } from "./runtime";
 
 export type FirestoreListenUnsubscribe = () => void;
 
+export type FirestoreListenDocSnapshot = {
+  exists: boolean;
+  data: () => unknown;
+};
+
+export type FirestoreListenFirestore = {
+  doc: (
+    docPath: string,
+  ) => {
+    onSnapshot: (
+      onNext: (snapshot: FirestoreListenDocSnapshot) => void,
+      onError?: (error: unknown) => void,
+    ) => FirestoreListenUnsubscribe;
+  };
+};
+
 export function listenFirestoreDoc<TDoc>(options: {
-  firestore: Firestore;
+  firestore: FirestoreListenFirestore;
   docPath: string;
   onNext: (doc: TDoc | null) => void;
   onError?: (error: unknown) => void;
