@@ -1277,96 +1277,23 @@ export async function runSparkAgentTask(
     .collection("agents")
     .doc(options.agentId);
 
-  const agentSnap = await agentRef.get();
-  if (!agentSnap.exists) {
-    throw new Error(`Agent not found: ${options.agentId}`);
-  }
-  const agentData = agentSnap.data() ?? {};
-  const currentStatus =
-    typeof agentData.status === "string" ? agentData.status.trim() : "";
-  if (
-    currentStatus === "done" ||
-    currentStatus === "failed" ||
-    currentStatus === "stopped"
-  ) {
-    console.log(
-      `[spark-agent:${options.agentId}] skip run; status=${currentStatus}`,
-    );
-    return;
-  }
-  if (agentData.stop_requested === true) {
-    console.log(`[spark-agent:${options.agentId}] stop_requested pre-run`);
-    await updateAgentStatus({
-      agentRef,
-      status: "stopped",
-      resultSummary: "Stopped by user.",
-    });
-    return;
-  }
-  const prompt =
-    typeof agentData.prompt === "string" && agentData.prompt.trim().length > 0
-      ? agentData.prompt.trim()
-      : "";
-  if (!prompt) {
-    throw new Error("Agent prompt is missing.");
-  }
-
-  await updateAgentStatus({ agentRef, status: "executing" });
-
   const statsTracker = new AgentRunStatsTracker();
-  const logSync = new AgentLogSync({
-    firestore,
-    userId: options.userId,
-    agentId: options.agentId,
-    throttleMs: AGENT_LOG_THROTTLE_MS,
-    initialStats: statsTracker.snapshot(),
-  });
+  const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+  const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
 
-  const workspaceRoot = path.join(
-    os.tmpdir(),
-    "spark-agent-workspaces",
-    options.workspaceId,
-  );
-  await ensureDir(workspaceRoot);
-  const workspaceSync = new WorkspaceSync({
-    firestore,
-    userId: options.userId,
-    workspaceId: options.workspaceId,
-    rootDir: workspaceRoot,
-  });
-  await workspaceSync.load();
+  let prompt = "";
+  let logSync: AgentLogSync | undefined;
+  let workspaceRoot: string | undefined;
+  let workspaceSync: WorkspaceSync | undefined;
 
   let stopRequested = false;
   let stopPollTimer: NodeJS.Timeout | undefined;
   let stopPollInFlight: Promise<void> | undefined;
-  const pollStopRequested = async (): Promise<void> => {
-    if (stopRequested || stopPollInFlight) {
-      return;
-    }
-    stopPollInFlight = (async () => {
-      const snap = await agentRef.get();
-      const data = snap.data() ?? {};
-      if (data.stop_requested === true) {
-        stopRequested = true;
-        logSync.append("warn: stop_requested detected");
-      }
-    })();
-    try {
-      await stopPollInFlight;
-    } catch (error) {
-      logSync.append(`warn: stop poll failed: ${errorAsString(error)}`);
-    } finally {
-      stopPollInFlight = undefined;
-    }
-  };
-  const startStopPolling = (): void => {
-    if (stopPollTimer) {
-      return;
-    }
-    stopPollTimer = setInterval(() => {
-      void pollStopRequested();
-    }, STOP_POLL_INTERVAL_MS);
-  };
+
+  let doneCalled = false;
+  let tools: LlmToolSet | undefined;
+
   const stopStopPolling = async (): Promise<void> => {
     if (stopPollTimer) {
       clearInterval(stopPollTimer);
@@ -1374,84 +1301,178 @@ export async function runSparkAgentTask(
     }
     await stopPollInFlight?.catch(() => undefined);
   };
-  const throwIfStopRequested = (): void => {
-    if (stopRequested) {
-      throw new StopRequestedError();
-    }
-  };
 
-  let doneCalled = false;
-
-  const tools: LlmToolSet = {
-    ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
-    done: tool({
-      description:
-        "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
-      inputSchema: z
-        .object({
-          summary: z.string().trim().min(1).optional(),
-        })
-        .strict(),
-      execute: async ({ summary }) => {
-        doneCalled = true;
-        logSync.append(
-          summary ? `done: ${summary}` : "done: completed without summary",
-        );
-        logSync.setStats(statsTracker.snapshot());
-        await workspaceSync.flushAll();
-        await logSync.flushAll();
-        await updateAgentStatus({
-          agentRef,
-          status: "done",
-          resultSummary: summary,
-        });
-        return { status: "done", summary };
-      },
-    }),
-  };
-
-  const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
-  const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
-  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
-  const progress: JobProgressReporter = {
-    log: (message) => {
-      throwIfStopRequested();
-      console.log(`[spark-agent:${options.agentId}] ${message}`);
-      logSync.append(message);
-      statsTracker.parseLogLine(message);
-      logSync.setStats(statsTracker.snapshot());
-    },
-    startModelCall: (details) => {
-      throwIfStopRequested();
-      const handle = statsTracker.startModelCall({ modelId: details.modelId });
-      logSync.setStats(statsTracker.snapshot());
-      return handle;
-    },
-    recordModelUsage: (handle, chunk) => {
-      throwIfStopRequested();
-      statsTracker.recordModelUsage(handle, chunk);
-      logSync.setStats(statsTracker.snapshot());
-    },
-    finishModelCall: (handle) => {
-      throwIfStopRequested();
-      statsTracker.finishModelCall(handle);
-      logSync.setStats(statsTracker.snapshot());
-    },
-    startStage: (stageName: string): StageHandle => {
-      throwIfStopRequested();
-      void stageName;
-      return Symbol("agent-stage");
-    },
-    finishStage: (handle: StageHandle) => {
-      throwIfStopRequested();
-      void handle;
-    },
-    setActiveStages: (stages) => {
-      throwIfStopRequested();
-      void stages;
-    },
-  };
   try {
+    const agentSnap = await agentRef.get();
+    if (!agentSnap.exists) {
+      console.warn(`[spark-agent:${options.agentId}] Agent not found`);
+      return;
+    }
+    const agentData = agentSnap.data() ?? {};
+
+    const currentStatus =
+      typeof agentData.status === "string" ? agentData.status.trim() : "";
+    if (
+      currentStatus === "done" ||
+      currentStatus === "failed" ||
+      currentStatus === "stopped"
+    ) {
+      console.log(
+        `[spark-agent:${options.agentId}] skip run; status=${currentStatus}`,
+      );
+      return;
+    }
+
+    if (agentData.stop_requested === true) {
+      console.log(`[spark-agent:${options.agentId}] stop_requested pre-run`);
+      await updateAgentStatus({
+        agentRef,
+        status: "stopped",
+        resultSummary: "Stopped by user.",
+      });
+      return;
+    }
+
+    prompt =
+      typeof agentData.prompt === "string" && agentData.prompt.trim().length > 0
+        ? agentData.prompt.trim()
+        : "";
+    if (!prompt) {
+      await updateAgentStatus({
+        agentRef,
+        status: "failed",
+        error: "Agent prompt is missing.",
+      });
+      return;
+    }
+
+    await updateAgentStatus({ agentRef, status: "executing" });
+
+    logSync = new AgentLogSync({
+      firestore,
+      userId: options.userId,
+      agentId: options.agentId,
+      throttleMs: AGENT_LOG_THROTTLE_MS,
+      initialStats: statsTracker.snapshot(),
+    });
+
+    workspaceRoot = path.join(
+      os.tmpdir(),
+      "spark-agent-workspaces",
+      options.workspaceId,
+    );
+    await ensureDir(workspaceRoot);
+    workspaceSync = new WorkspaceSync({
+      firestore,
+      userId: options.userId,
+      workspaceId: options.workspaceId,
+      rootDir: workspaceRoot,
+    });
+    await workspaceSync.load();
+
+    const pollStopRequested = async (): Promise<void> => {
+      if (stopRequested || stopPollInFlight) {
+        return;
+      }
+      stopPollInFlight = (async () => {
+        const snap = await agentRef.get();
+        const data = snap.data() ?? {};
+        if (data.stop_requested === true) {
+          stopRequested = true;
+          logSync?.append("warn: stop_requested detected");
+        }
+      })();
+      try {
+        await stopPollInFlight;
+      } catch (error) {
+        logSync?.append(`warn: stop poll failed: ${errorAsString(error)}`);
+      } finally {
+        stopPollInFlight = undefined;
+      }
+    };
+
+    const startStopPolling = (): void => {
+      if (stopPollTimer) {
+        return;
+      }
+      stopPollTimer = setInterval(() => {
+        void pollStopRequested();
+      }, STOP_POLL_INTERVAL_MS);
+    };
+
+    const throwIfStopRequested = (): void => {
+      if (stopRequested) {
+        throw new StopRequestedError();
+      }
+    };
+
+    tools = {
+      ...buildAgentTools({ workspace: workspaceSync, rootDir: workspaceRoot }),
+      done: tool({
+        description:
+          "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+        inputSchema: z
+          .object({
+            summary: z.string().trim().min(1).optional(),
+          })
+          .strict(),
+        execute: async ({ summary }) => {
+          doneCalled = true;
+          logSync?.append(
+            summary ? `done: ${summary}` : "done: completed without summary",
+          );
+          logSync?.setStats(statsTracker.snapshot());
+          await workspaceSync?.flushAll();
+          await logSync?.flushAll();
+          await updateAgentStatus({
+            agentRef,
+            status: "done",
+            resultSummary: summary,
+          });
+          return { status: "done", summary };
+        },
+      }),
+    };
+
+    const progress: JobProgressReporter = {
+      log: (message) => {
+        throwIfStopRequested();
+        console.log(`[spark-agent:${options.agentId}] ${message}`);
+        logSync?.append(message);
+        statsTracker.parseLogLine(message);
+        logSync?.setStats(statsTracker.snapshot());
+      },
+      startModelCall: (details) => {
+        throwIfStopRequested();
+        const handle = statsTracker.startModelCall({ modelId: details.modelId });
+        logSync?.setStats(statsTracker.snapshot());
+        return handle;
+      },
+      recordModelUsage: (handle, chunk) => {
+        throwIfStopRequested();
+        statsTracker.recordModelUsage(handle, chunk);
+        logSync?.setStats(statsTracker.snapshot());
+      },
+      finishModelCall: (handle) => {
+        throwIfStopRequested();
+        statsTracker.finishModelCall(handle);
+        logSync?.setStats(statsTracker.snapshot());
+      },
+      startStage: (stageName: string): StageHandle => {
+        throwIfStopRequested();
+        void stageName;
+        return Symbol("agent-stage");
+      },
+      finishStage: (handle: StageHandle) => {
+        throwIfStopRequested();
+        void handle;
+      },
+      setActiveStages: (stages) => {
+        throwIfStopRequested();
+        void stages;
+      },
+    };
+
     await pollStopRequested();
     if (stopRequested) {
       throw new StopRequestedError();
@@ -1476,19 +1497,19 @@ export async function runSparkAgentTask(
           ? `${responseText.slice(0, 1000).trim()}…`
           : responseText;
 
-      logSync.append(
+      logSync?.append(
         "warn: model returned a final response without calling done; auto-completing run",
       );
 
-      if (responseText.length > 0) {
+      if (responseText.length > 0 && workspaceRoot) {
         const outputPath = "agent-output.md";
         try {
           await writeFile(path.join(workspaceRoot, outputPath), responseText, {
             encoding: "utf8",
           });
-          workspaceSync.scheduleUpdate(outputPath);
+          workspaceSync?.scheduleUpdate(outputPath);
         } catch (error) {
-          logSync.append(
+          logSync?.append(
             `warn: failed to persist final response: ${errorAsString(error)}`,
           );
         }
@@ -1499,30 +1520,35 @@ export async function runSparkAgentTask(
       });
     }
 
-    await logSync.flushAll().catch(() => undefined);
+    await logSync?.flushAll().catch(() => undefined);
   } catch (error) {
     if (error instanceof StopRequestedError) {
-      logSync.append("warn: agent stopped by user request");
-      await workspaceSync.flushAll().catch(() => undefined);
-      await logSync.flushAll().catch(() => undefined);
+      logSync?.append("warn: agent stopped by user request");
+      await workspaceSync?.flushAll().catch(() => undefined);
+      await logSync?.flushAll().catch(() => undefined);
       await updateAgentStatus({
         agentRef,
         status: "stopped",
         resultSummary: "Stopped by user.",
-      });
+      }).catch(() => undefined);
       return;
     }
+
     const message = errorAsString(error);
-    logSync.append(`error: ${message}`);
-    await workspaceSync.flushAll().catch(() => undefined);
-    await logSync.flushAll().catch(() => undefined);
-    await updateAgentStatus({ agentRef, status: "failed", error: message });
-    throw error;
-  } finally {
-    await stopStopPolling();
-    logSync.dispose();
-    await rm(workspaceRoot, { recursive: true, force: true }).catch(
+    logSync?.append(`error: ${message}`);
+    await workspaceSync?.flushAll().catch(() => undefined);
+    await logSync?.flushAll().catch(() => undefined);
+    await updateAgentStatus({ agentRef, status: "failed", error: message }).catch(
       () => undefined,
     );
+    return;
+  } finally {
+    await stopStopPolling();
+    logSync?.dispose();
+    if (workspaceRoot) {
+      await rm(workspaceRoot, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+    }
   }
 }
