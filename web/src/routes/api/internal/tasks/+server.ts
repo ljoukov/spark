@@ -21,8 +21,7 @@ import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
 import { env } from '$env/dynamic/private';
 import {
 	commitFirestoreWrites,
-	getFirestoreDocument,
-	patchFirestoreDocument
+	getFirestoreDocument
 } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
