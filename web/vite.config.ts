@@ -18,7 +18,8 @@ const httpsOption: HttpsServerOptions | undefined = hasCustomCert
 			cert: fs.readFileSync(customCertPath, 'utf8')
 		}
 	: undefined;
-const isHttpsDev = process.env.npm_lifecycle_event === 'dev:https';
+const lifecycleEvent = process.env.npm_lifecycle_event ?? '';
+const isHttpsDev = lifecycleEvent.startsWith('dev:https');
 // Fail loudly if dev:https is requested but local certs are missing
 if (isHttpsDev && !hasCustomCert) {
 	const msg = [

@@ -4,6 +4,7 @@
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import PlayIcon from '@lucide/svelte/icons/play';
+	import Volume2Icon from '@lucide/svelte/icons/volume-2';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -47,6 +48,12 @@
 			href: '/admin/tasks',
 			icon: PlayIcon,
 			highlight: (path) => path.startsWith('/admin/tasks')
+		},
+		{
+			title: 'TTS',
+			href: '/admin/tts',
+			icon: Volume2Icon,
+			highlight: (path) => path.startsWith('/admin/tts')
 		},
 		{
 			title: 'UI',
