@@ -62,9 +62,17 @@ Message
 ContentPart
   - type: "text" | "image" | "file" | "tool_call" | "tool_result"
   - text?: string
+  - annotations?: UrlCitation[]  // used to render clickable citations for web_search-backed answers
   - file?: { storagePath: string; contentType: string; sizeBytes: number; pageCount?: number }
   - toolCall?: { id: string; name: string; argsJson: string }
   - toolResult?: { toolCallId: string; outputJson: string; status: "ok" | "error" }
+
+UrlCitation
+  - type: "url_citation"
+  - startIndex: number
+  - endIndex: number
+  - url: string
+  - title?: string
 ```
 
 Notes:

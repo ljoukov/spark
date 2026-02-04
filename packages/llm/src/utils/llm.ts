@@ -3744,6 +3744,83 @@ function truncateForLog(value: string, maxChars: number = 400): string {
   return `${value.slice(0, maxChars)}…(${value.length} chars)`;
 }
 
+export function stripCodexCitationMarkers(value: string): {
+  text: string;
+  stripped: boolean;
+} {
+  const citationBlockPattern = /\uE200cite\uE202[^\uE201]*\uE201/gu;
+  const leftoverMarkersPattern = /[\uE200\uE201\uE202]/gu;
+
+  const withoutBlocks = value.replace(citationBlockPattern, "");
+  const withoutMarkers = withoutBlocks.replace(leftoverMarkersPattern, "");
+  const stripped = withoutMarkers !== value;
+  return { text: withoutMarkers, stripped };
+}
+
+function hasMarkdownSourcesSection(value: string): boolean {
+  return /^##\s+Sources\s*$/gmu.test(value);
+}
+
+export function appendMarkdownSourcesSection(
+  value: string,
+  sources: readonly string[],
+): string {
+  const trimmed = value.trimEnd();
+  if (sources.length === 0) {
+    return trimmed;
+  }
+  if (hasMarkdownSourcesSection(trimmed)) {
+    return trimmed;
+  }
+  const lines = sources.map((url) => `- <${url}>`).join("\n");
+  return `${trimmed}\n\n## Sources\n${lines}\n`;
+}
+
+function normalizeWebSearchUrls(urls: Iterable<string>): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const url of urls) {
+    const trimmed = url.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    if (seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+function rewriteWriteFileInputForUserFacingCitations(options: {
+  toolName: string;
+  rawInput: unknown;
+  webSearchUrls: Set<string>;
+}): unknown {
+  if (options.toolName !== "write_file") {
+    return options.rawInput;
+  }
+  if (!options.rawInput || typeof options.rawInput !== "object") {
+    return options.rawInput;
+  }
+  const record = options.rawInput as Record<string, unknown>;
+  const content =
+    typeof record.content === "string" ? (record.content as string) : null;
+  if (!content) {
+    return options.rawInput;
+  }
+
+  const stripped = stripCodexCitationMarkers(content);
+  if (!stripped.stripped) {
+    return options.rawInput;
+  }
+
+  const sources = normalizeWebSearchUrls(options.webSearchUrls);
+  const nextContent = appendMarkdownSourcesSection(stripped.text, sources);
+  return { ...record, content: nextContent };
+}
+
 function formatToolValue(value: unknown): string | undefined {
   if (value === null || value === undefined) {
     return undefined;
@@ -3957,6 +4034,7 @@ export async function runToolLoop(
       let input: ChatGptInputItem[] = [...toolLoopInput.input];
       let totalCostUsd = 0;
       const loopStartedAt = Date.now();
+      const webSearchUrls = new Set<string>();
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
         reporter.log(`ChatGPT step ${stepIndex + 1}`);
         const promptContents = chatGptInputToDebugContents(input);
@@ -3974,7 +4052,10 @@ export async function runToolLoop(
               toolLoopInput.instructions ?? DEFAULT_CHATGPT_INSTRUCTIONS,
             input,
             ...(chatGptTextConfig ? { text: chatGptTextConfig } : {}),
-            include: ["reasoning.encrypted_content"],
+            include: [
+              "reasoning.encrypted_content",
+              "web_search_call.action.sources",
+            ],
             tools: openAiTools,
             tool_choice: "auto" as const,
             parallel_tool_calls: true,
@@ -4019,6 +4100,14 @@ export async function runToolLoop(
                 ? `tool: web_search ${pieces.join(" ")}`
                 : "tool: web_search",
             );
+            if (action?.url) {
+              webSearchUrls.add(action.url);
+            }
+            if (action?.sources && action.sources.length > 0) {
+              for (const source of action.sources) {
+                webSearchUrls.add(source.url);
+              }
+            }
           }
           const usageTokens = extractChatGptUsageTokens(
             response.usage as { [key: string]: unknown } | undefined,
@@ -4093,10 +4182,15 @@ export async function runToolLoop(
           });
           const callResults = await Promise.all(
             callInputs.map(async (entry) => {
+              const rawInput = rewriteWriteFileInputForUserFacingCitations({
+                toolName: entry.toolName,
+                rawInput: entry.value,
+                webSearchUrls,
+              });
               const { result, outputPayload } = await executeToolCall({
                 toolName: entry.toolName,
                 tool: options.tools[entry.toolName],
-                rawInput: entry.value,
+                rawInput,
                 parseError: entry.parseError,
               });
               return { entry, result, outputPayload };
@@ -4162,6 +4256,7 @@ export async function runToolLoop(
       let previousResponseId: string | undefined;
       let totalCostUsd = 0;
       const loopStartedAt = Date.now();
+      const webSearchUrls = new Set<string>();
       let input: ResponseInput = toOpenAiInput(contents);
       let debugPromptContents: LlmContent[] = [...contents];
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
@@ -4179,6 +4274,18 @@ export async function runToolLoop(
               : {}),
             ...(openAiTools.length > 0 ? { tools: openAiTools } : {}),
             ...(openAiTools.length > 0 ? { parallel_tool_calls: true } : {}),
+            ...(openAiTools.some(
+              (tool) =>
+                tool &&
+                typeof tool === "object" &&
+                (tool as { type?: unknown }).type === "web_search",
+            )
+              ? {
+                  include: [
+                    "web_search_call.action.sources" as ResponseIncludable,
+                  ],
+                }
+              : {}),
             reasoning: openAiReasoningPayload,
             text: openAiTextConfig,
           };
@@ -4267,7 +4374,9 @@ export async function runToolLoop(
                   ? actionRaw.url
                   : null;
               if (urlValue && urlValue.trim().length > 0) {
-                pieces.push(`url=${truncateForLog(urlValue.trim(), 160)}`);
+                const trimmed = urlValue.trim();
+                pieces.push(`url=${truncateForLog(trimmed, 160)}`);
+                webSearchUrls.add(trimmed);
               }
               const patternValue =
                 actionRaw && typeof actionRaw.pattern === "string"
@@ -4281,6 +4390,25 @@ export async function runToolLoop(
               if (statusValue) {
                 pieces.push(`status=${statusValue}`);
               }
+
+              const sourcesRaw = actionRaw ? actionRaw["sources"] : null;
+              if (Array.isArray(sourcesRaw)) {
+                for (const entry of sourcesRaw) {
+                  if (!entry || typeof entry !== "object") {
+                    continue;
+                  }
+                  const url = (entry as { url?: unknown }).url;
+                  if (typeof url !== "string") {
+                    continue;
+                  }
+                  const trimmed = url.trim();
+                  if (trimmed.length === 0) {
+                    continue;
+                  }
+                  webSearchUrls.add(trimmed);
+                }
+              }
+
               reporter.log(
                 pieces.length > 0
                   ? `tool: web_search ${pieces.join(" ")}`
@@ -4348,10 +4476,15 @@ export async function runToolLoop(
           });
           const callResults = await Promise.all(
             callInputs.map(async (entry) => {
+              const rawInput = rewriteWriteFileInputForUserFacingCitations({
+                toolName: entry.toolName,
+                rawInput: entry.value,
+                webSearchUrls,
+              });
               const { result, outputPayload } = await executeToolCall({
                 toolName: entry.toolName,
                 tool: options.tools[entry.toolName],
-                rawInput: entry.value,
+                rawInput,
                 parseError: entry.parseError,
               });
               return { entry, result, outputPayload };
