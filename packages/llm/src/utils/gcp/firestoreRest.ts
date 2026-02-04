@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { encodeBytesToBase64 } from "./base64";
 import { getGoogleAccessToken } from "./googleAccessToken";
-import { getFirebaseAdminFirestore, getFirebaseAdminFirestoreModule } from "../firebaseAdmin";
+import {
+  getFirebaseAdminFirestore,
+  getFirebaseAdminFirestoreModule,
+} from "../firebaseAdmin";
 import { isNodeRuntime } from "../runtime";
 import type { DocumentData, Query } from "firebase-admin/firestore";
 
@@ -345,7 +348,11 @@ function buildNestedObjectFromFieldPaths(
         continue;
       }
       const existing = cursor[segment];
-      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+      if (
+        existing &&
+        typeof existing === "object" &&
+        !Array.isArray(existing)
+      ) {
         cursor = existing as Record<string, unknown>;
         continue;
       }
@@ -479,7 +486,9 @@ export async function listFirestoreDocuments(options: {
     const firestore = await getFirebaseAdminFirestore({
       serviceAccountJson: options.serviceAccountJson,
     });
-    let query: Query<DocumentData> = firestore.collection(options.collectionPath);
+    let query: Query<DocumentData> = firestore.collection(
+      options.collectionPath,
+    );
 
     if (options.orderBy) {
       const parts = options.orderBy.trim().split(/\s+/u).filter(Boolean);
@@ -494,9 +503,13 @@ export async function listFirestoreDocuments(options: {
     }
 
     const snap = await query.get();
-    const out: Array<{ documentPath: string; data: Record<string, unknown> }> = [];
+    const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
+      [];
     for (const doc of snap.docs) {
-      out.push({ documentPath: doc.ref.path, data: doc.data() as Record<string, unknown> });
+      out.push({
+        documentPath: doc.ref.path,
+        data: doc.data() as Record<string, unknown>,
+      });
     }
     return out;
   }
@@ -506,7 +519,9 @@ export async function listFirestoreDocuments(options: {
     scopes: [FIRESTORE_SCOPE],
   });
 
-  const normalizedPath = FirestoreCollectionPathSchema.parse(options.collectionPath);
+  const normalizedPath = FirestoreCollectionPathSchema.parse(
+    options.collectionPath,
+  );
   const encoded = normalizedPath
     .split("/")
     .map((segment) => encodeURIComponent(segment))
@@ -534,8 +549,152 @@ export async function listFirestoreDocuments(options: {
 
   const json = (await resp.json()) as { documents?: FirestoreDocument[] };
   const docs = json.documents ?? [];
-  const out: Array<{ documentPath: string; data: Record<string, unknown> }> = [];
+  const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
+    [];
   for (const doc of docs) {
+    const fields = doc.fields ?? {};
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      data[k] = fromFirestoreValue(v);
+    }
+    out.push({ documentPath: decodeDocumentName(doc.name), data });
+  }
+  return out;
+}
+
+export async function queryFirestoreDocuments(options: {
+  serviceAccountJson: string;
+  collectionPath: string;
+  where?: { fieldPath: string; op: "EQUAL"; value: unknown };
+  limit?: number;
+  orderBy?: string;
+}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>> {
+  if (isNodeRuntime()) {
+    const firestore = await getFirebaseAdminFirestore({
+      serviceAccountJson: options.serviceAccountJson,
+    });
+    let query: Query<DocumentData> = firestore.collection(
+      options.collectionPath,
+    );
+
+    if (options.where) {
+      const fieldPath = options.where.fieldPath.trim();
+      if (fieldPath) {
+        query = query.where(fieldPath, "==", options.where.value);
+      }
+    }
+
+    if (options.orderBy) {
+      const parts = options.orderBy.trim().split(/\s+/u).filter(Boolean);
+      const field = parts[0];
+      const direction = parts[1]?.toLowerCase() === "desc" ? "desc" : "asc";
+      if (field) {
+        query = query.orderBy(field, direction);
+      }
+    }
+    if (options.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+
+    const snap = await query.get();
+    const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
+      [];
+    for (const doc of snap.docs) {
+      out.push({
+        documentPath: doc.ref.path,
+        data: doc.data() as Record<string, unknown>,
+      });
+    }
+    return out;
+  }
+
+  const { accessToken, projectId } = await getGoogleAccessToken({
+    serviceAccountJson: options.serviceAccountJson,
+    scopes: [FIRESTORE_SCOPE],
+  });
+
+  const normalizedPath = FirestoreCollectionPathSchema.parse(
+    options.collectionPath,
+  );
+  const segments = normalizedPath.split("/").filter(Boolean);
+  const collectionId = segments[segments.length - 1];
+  const parentSegments = segments.slice(0, -1);
+
+  const parentEncoded = parentSegments
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents`;
+  const url = `${baseUrl}${parentEncoded ? `/${parentEncoded}` : ""}:runQuery`;
+
+  const structuredQuery: {
+    from: Array<{ collectionId: string }>;
+    where?: {
+      fieldFilter: {
+        field: { fieldPath: string };
+        op: "EQUAL";
+        value: FirestoreValue;
+      };
+    };
+    orderBy?: Array<{
+      field: { fieldPath: string };
+      direction?: "ASCENDING" | "DESCENDING";
+    }>;
+    limit?: number;
+  } = {
+    from: [{ collectionId: collectionId ?? "" }],
+  };
+
+  if (options.where) {
+    const fieldPath = options.where.fieldPath.trim();
+    if (fieldPath) {
+      structuredQuery.where = {
+        fieldFilter: {
+          field: { fieldPath },
+          op: options.where.op,
+          value: toFirestoreValue(options.where.value),
+        },
+      };
+    }
+  }
+
+  if (options.orderBy) {
+    const parts = options.orderBy.trim().split(/\s+/u).filter(Boolean);
+    const field = parts[0]?.trim();
+    const direction =
+      parts[1]?.toLowerCase() === "desc" ? "DESCENDING" : "ASCENDING";
+    if (field) {
+      structuredQuery.orderBy = [{ field: { fieldPath: field }, direction }];
+    }
+  }
+
+  if (options.limit !== undefined) {
+    structuredQuery.limit = options.limit;
+  }
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ structuredQuery }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(
+      `Firestore runQuery failed (${resp.status}): ${text.slice(0, 500)}`,
+    );
+  }
+
+  const json = (await resp.json()) as Array<{ document?: FirestoreDocument }>;
+  const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
+    [];
+  for (const row of json) {
+    const doc = row.document;
+    if (!doc) {
+      continue;
+    }
     const fields = doc.fields ?? {};
     const data: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields)) {
