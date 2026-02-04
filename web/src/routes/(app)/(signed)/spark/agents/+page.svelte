@@ -602,20 +602,22 @@
 							>
 								{copySuccess ? 'Copied' : 'Copy prompt'}
 							</Button>
-							<Button
-								variant="destructive"
-								size="sm"
-								disabled={!canRequestStop}
-								onclick={() => {
-									void requestStop();
-								}}
-							>
-								{stopSubmitting
-									? 'Stopping…'
-									: selectedAgent.stop_requested
-										? 'Stop requested'
-										: 'Stop'}
-							</Button>
+							{#if selectedAgent.status === 'created' || selectedAgent.status === 'executing'}
+								<Button
+									variant="destructive"
+									size="sm"
+									disabled={!canRequestStop}
+									onclick={() => {
+										void requestStop();
+									}}
+								>
+									{stopSubmitting
+										? 'Stopping…'
+										: selectedAgent.stop_requested
+											? 'Stop requested'
+											: 'Stop'}
+								</Button>
+							{/if}
 							<span class={`status-pill status-pill--${selectedAgent.status}`}>
 								{selectedAgent.status}
 							</span>
