@@ -164,6 +164,7 @@ export async function createTask(
       if (task.type === "runAgent") {
         u.searchParams.set("userId", task.runAgent.userId);
         u.searchParams.set("agentId", task.runAgent.agentId);
+        u.searchParams.set("workspaceId", task.runAgent.workspaceId);
       }
       postUrl = u.toString();
     } catch (error) {
@@ -213,6 +214,7 @@ export async function createTask(
   if (task.type === "runAgent") {
     handlerUrl.searchParams.set("userId", task.runAgent.userId);
     handlerUrl.searchParams.set("agentId", task.runAgent.agentId);
+    handlerUrl.searchParams.set("workspaceId", task.runAgent.workspaceId);
   }
 
   const taskPayload = JSON.stringify(task);

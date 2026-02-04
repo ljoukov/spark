@@ -185,14 +185,17 @@
 		if (data.updatedAt !== undefined) {
 			payload.updatedAt = data.updatedAt;
 		}
-		if (data.stats && typeof data.stats === 'object') {
-			payload.stats = data.stats;
-		}
-		const parsed = SparkAgentRunLogSchema.safeParse(payload);
-		if (!parsed.success) {
-			return null;
-		}
-		return parsed.data;
+			if (data.stats && typeof data.stats === 'object') {
+				payload.stats = data.stats;
+			}
+			if (data.stream && typeof data.stream === 'object') {
+				payload.stream = data.stream;
+			}
+			const parsed = SparkAgentRunLogSchema.safeParse(payload);
+			if (!parsed.success) {
+				return null;
+			}
+			return parsed.data;
 	}
 
 	async function copyPrompt(text: string): Promise<void> {
@@ -640,12 +643,16 @@
 							</span>
 						</div>
 					</div>
-					<div class="agents-detail__meta">
-						<div>
-							<span>Workspace</span>
-							<p>{selectedAgent.workspaceId}</p>
-						</div>
-						<div>
+						<div class="agents-detail__meta">
+							<div>
+								<span>Agent ID</span>
+								<p>{selectedAgent.id}</p>
+							</div>
+							<div>
+								<span>Workspace</span>
+								<p>{selectedAgent.workspaceId}</p>
+							</div>
+							<div>
 							<span>Created</span>
 							<p>{formatTimestamp(selectedAgent.createdAt)}</p>
 						</div>
@@ -770,15 +777,27 @@
 								<p class="agents-run__value">{formatInt(runStats.tokens.cachedTokens)}</p>
 							</div>
 						</div>
-					{:else}
-						<p class="agents-empty">Stats will appear once the agent starts running.</p>
-					{/if}
+						{:else}
+							<p class="agents-empty">Stats will appear once the agent starts running.</p>
+						{/if}
 
-					<h3>Run log</h3>
-					{#if runLog && logLines.length > 0}
-						<div class="agents-run__log" aria-label="Agent run log">
-							{#each logLines as entry (entry.key)}
-								<div class="agents-run__log-line">
+						{#if runLog?.stream?.assistant}
+							<h3>Live output</h3>
+							<div class="agents-run__stream markdown-preview">
+								{@html renderMarkdown(runLog.stream.assistant)}
+							</div>
+						{/if}
+
+						{#if runLog?.stream?.thoughts}
+							<h3>Live thoughts</h3>
+							<pre class="agents-run__stream-thoughts"><code>{runLog.stream.thoughts}</code></pre>
+						{/if}
+
+						<h3>Run log</h3>
+						{#if runLog && logLines.length > 0}
+							<div class="agents-run__log" aria-label="Agent run log">
+								{#each logLines as entry (entry.key)}
+									<div class="agents-run__log-line">
 									<span class="agents-run__log-ts">{formatTimestamp(entry.timestamp)}</span>
 									<span class="agents-run__log-msg">{entry.line}</span>
 								</div>
@@ -1314,14 +1333,51 @@
 		font-weight: 650;
 	}
 
-	.agents-run__wide {
-		grid-column: 1 / -1;
-	}
+		.agents-run__wide {
+			grid-column: 1 / -1;
+		}
 
-	.agents-run__log {
-		padding: 0.85rem;
-		border-radius: 1rem;
-		border: 1px solid rgba(148, 163, 184, 0.18);
+		.agents-run__stream {
+			padding: 0.85rem;
+			border-radius: 1rem;
+			border: 1px solid rgba(148, 163, 184, 0.18);
+			background: rgba(15, 23, 42, 0.03);
+			max-height: 18rem;
+			overflow: auto;
+		}
+
+		:global([data-theme='dark'] .agents-run__stream),
+		:global(:root:not([data-theme='light']) .agents-run__stream) {
+			background: rgba(15, 23, 42, 0.6);
+			border-color: rgba(148, 163, 184, 0.3);
+		}
+
+		.agents-run__stream-thoughts {
+			padding: 0.85rem;
+			border-radius: 1rem;
+			border: 1px solid rgba(148, 163, 184, 0.18);
+			background: rgba(15, 23, 42, 0.04);
+			max-height: 18rem;
+			overflow: auto;
+			white-space: pre-wrap;
+			word-break: break-word;
+			font-family:
+				'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+				'Courier New', monospace;
+			font-size: 0.82rem;
+			line-height: 1.4;
+		}
+
+		:global([data-theme='dark'] .agents-run__stream-thoughts),
+		:global(:root:not([data-theme='light']) .agents-run__stream-thoughts) {
+			background: rgba(15, 23, 42, 0.6);
+			border-color: rgba(148, 163, 184, 0.3);
+		}
+
+		.agents-run__log {
+			padding: 0.85rem;
+			border-radius: 1rem;
+			border: 1px solid rgba(148, 163, 184, 0.18);
 		background: rgba(15, 23, 42, 0.04);
 		max-height: 22rem;
 		overflow: auto;

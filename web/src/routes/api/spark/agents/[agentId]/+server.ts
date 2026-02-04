@@ -142,6 +142,9 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		if (data.stats && typeof data.stats === 'object') {
 			payload.stats = data.stats;
 		}
+		if (data.stream && typeof data.stream === 'object') {
+			payload.stream = data.stream;
+		}
 		const parsed = SparkAgentRunLogSchema.safeParse(payload);
 		if (parsed.success) {
 			log = parsed.data;
