@@ -1103,6 +1103,7 @@ function buildAgentSystemPrompt(): string {
     "   - Example (draft session): generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
     "   - Example (grade session): generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })",
     "   - Example (grade a quiz): generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
+    "   - IMPORTANT: When using responseSchemaPath (JSON outputs), do NOT set tools=[...]. If you need web-search or code execution, do that separately via web_search/python_exec.",
     "   - Prompt templates may include {{path/to/file}} placeholders to inline workspace files.",
     "   - You can also pass inputPaths to generate_text to append additional workspace files without editing the template.",
     "   - When generating JSON, pass responseSchemaPath pointing at lesson/schema/*.schema.json.",
