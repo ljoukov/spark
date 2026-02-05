@@ -31,8 +31,9 @@ describe("web search citation rendering", () => {
 
   it("does not duplicate Sources section", () => {
     const input = "Some report.\n\n## Sources\n- <https://example.com/a>";
-    const output = appendMarkdownSourcesSection(input, ["https://example.com/b"]);
+    const output = appendMarkdownSourcesSection(input, [
+      "https://example.com/b",
+    ]);
     expect(output.match(/^##\s+Sources\s*$/gmu)?.length ?? 0).toBe(1);
   });
 });
-

@@ -19,7 +19,9 @@ const ServiceAccountSchema = z
 
 export type GoogleServiceAccount = z.infer<typeof ServiceAccountSchema>;
 
-export function parseGoogleServiceAccountJson(raw: string): GoogleServiceAccount {
+export function parseGoogleServiceAccountJson(
+  raw: string,
+): GoogleServiceAccount {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -32,7 +34,9 @@ export function parseGoogleServiceAccountJson(raw: string): GoogleServiceAccount
 }
 
 function base64UrlEncodeJson(value: unknown): string {
-  return encodeBytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
+  return encodeBytesToBase64Url(
+    new TextEncoder().encode(JSON.stringify(value)),
+  );
 }
 
 function pemToPkcs8DerBytes(pem: string): Uint8Array {
@@ -60,7 +64,11 @@ export async function getGoogleAccessToken(options: {
   const scopeKey = options.scopes.slice().sort().join(" ");
 
   // Refresh 60s early to avoid edge timing issues.
-  if (cached && cached.scopeKey === scopeKey && Date.now() < cached.expiresAtMs - 60_000) {
+  if (
+    cached &&
+    cached.scopeKey === scopeKey &&
+    Date.now() < cached.expiresAtMs - 60_000
+  ) {
     return { accessToken: cached.accessToken, projectId: sa.projectId };
   }
 
@@ -81,7 +89,9 @@ export async function getGoogleAccessToken(options: {
   const keyData = Uint8Array.from(keyBytes).buffer;
   const cryptoApi = globalThis.crypto?.subtle;
   if (!cryptoApi) {
-    throw new Error("WebCrypto is not available; cannot mint Google access tokens.");
+    throw new Error(
+      "WebCrypto is not available; cannot mint Google access tokens.",
+    );
   }
 
   const privateKey = await cryptoApi.importKey(
@@ -115,11 +125,20 @@ export async function getGoogleAccessToken(options: {
     );
   }
 
-  const json = (await resp.json()) as { access_token?: unknown; expires_in?: unknown };
-  if (typeof json.access_token !== "string" || json.access_token.trim().length === 0) {
-    throw new Error("Google OAuth token exchange returned an empty access_token.");
+  const json = (await resp.json()) as {
+    access_token?: unknown;
+    expires_in?: unknown;
+  };
+  if (
+    typeof json.access_token !== "string" ||
+    json.access_token.trim().length === 0
+  ) {
+    throw new Error(
+      "Google OAuth token exchange returned an empty access_token.",
+    );
   }
-  const expiresIn = typeof json.expires_in === "number" ? json.expires_in : 3600;
+  const expiresIn =
+    typeof json.expires_in === "number" ? json.expires_in : 3600;
   const expiresAtMs = Date.now() + expiresIn * 1000;
 
   cached = {
@@ -130,4 +149,3 @@ export async function getGoogleAccessToken(options: {
 
   return { accessToken: json.access_token, projectId: sa.projectId };
 }
-

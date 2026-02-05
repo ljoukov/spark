@@ -206,7 +206,9 @@ export async function createTask(
           });
         }
       } catch (error) {
-        console.warn(`Local task dispatcher setup failed: ${formatFetchError(error)}`);
+        console.warn(
+          `Local task dispatcher setup failed: ${formatFetchError(error)}`,
+        );
       }
 
       try {

@@ -14,7 +14,7 @@ export default tseslint.config(
 				tsconfigRootDir: new URL('.', import.meta.url).pathname
 			}
 		},
-		files: ['src/**/*.ts', 'tests/**/*.ts'],
+		files: ['src/**/*.ts', 'tests/**/*.ts', 'llm-integration/**/*.ts'],
 		rules: {
 			'@typescript-eslint/no-deprecated': 'error'
 		}

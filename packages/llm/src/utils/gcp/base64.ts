@@ -2,7 +2,9 @@ const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function hasNodeBuffer(): boolean {
-  return typeof (globalThis as unknown as { Buffer?: unknown }).Buffer === "function";
+  return (
+    typeof (globalThis as unknown as { Buffer?: unknown }).Buffer === "function"
+  );
 }
 
 function getNodeBuffer(): typeof Buffer | null {
@@ -91,4 +93,3 @@ export function encodeBytesToBase64Url(bytes: Uint8Array): string {
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
 }
-
