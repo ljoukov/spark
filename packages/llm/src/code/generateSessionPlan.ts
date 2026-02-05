@@ -246,7 +246,8 @@ function createSessionPlanSchema(
       if (problemParts.length > 0) {
         ctx.addIssue({
           code: "custom",
-          message: "parts must not include problem segments when includeCoding=false",
+          message:
+            "parts must not include problem segments when includeCoding=false",
         });
       }
       if (data.coding_blueprints.length > 0) {

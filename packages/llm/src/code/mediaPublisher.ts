@@ -6,9 +6,7 @@ import {
   getFirestoreDocument,
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
-import {
-  parseGoogleServiceAccountJson,
-} from "../utils/gcp/googleAccessToken";
+import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import { uploadStorageObject } from "../utils/gcp/storageRest";
 import {
   SessionMediaDocSchema,
@@ -154,13 +152,19 @@ export async function publishSessionMediaClip(
   const now = new Date();
 
   const documentPath = `spark/${userId}/sessions/${sessionId}/media/${planItemId}`;
-  const existing = await getFirestoreDocument({ serviceAccountJson, documentPath });
+  const existing = await getFirestoreDocument({
+    serviceAccountJson,
+    documentPath,
+  });
   let createdAt = now;
   if (existing.exists) {
     const rawCreatedAt = existing.data?.createdAt;
     if (rawCreatedAt instanceof Date) {
       createdAt = rawCreatedAt;
-    } else if (typeof rawCreatedAt === "string" || typeof rawCreatedAt === "number") {
+    } else if (
+      typeof rawCreatedAt === "string" ||
+      typeof rawCreatedAt === "number"
+    ) {
       const parsed = new Date(rawCreatedAt);
       if (!Number.isNaN(parsed.getTime())) {
         createdAt = parsed;

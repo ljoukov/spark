@@ -4776,7 +4776,10 @@ export class StoryGenerationPipeline {
       const cachedPublishResult = checkpoint?.value.publishResult;
 
       if (cachedPublishResult) {
-        const documentPath = cachedPublishResult.documentPath.replace(/^\/+/u, "");
+        const documentPath = cachedPublishResult.documentPath.replace(
+          /^\/+/u,
+          "",
+        );
         const docSnapshot = await getFirestoreDocument({
           serviceAccountJson,
           documentPath,

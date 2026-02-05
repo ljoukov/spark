@@ -13,10 +13,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
+    "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"llm-integration/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",
-    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
-    "test": "vitest --run"
+    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\" \"llm-integration/**/*.{ts,js,json}\"",
+    "test": "vitest --run",
+    "test:llm-integration": "RUN_LLM_INTEGRATION_TESTS=1 vitest --run -c vitest.llm-integration.config.ts"
   },
   "files": [
     "dist"

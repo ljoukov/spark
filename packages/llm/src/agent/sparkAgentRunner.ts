@@ -106,7 +106,9 @@ function ensurePyodideEnvironment(indexURL: string): void {
 
 let pythonRuntimePromise: Promise<PyodideInterface> | null = null;
 
-async function ensurePythonRuntime(indexURL?: string): Promise<PyodideInterface> {
+async function ensurePythonRuntime(
+  indexURL?: string,
+): Promise<PyodideInterface> {
   if (!pythonRuntimePromise) {
     pythonRuntimePromise = (async (): Promise<PyodideInterface> => {
       const pyodideModule = (await import(
@@ -408,7 +410,9 @@ class WorkspaceSync {
       const rawPath =
         typeof data.path === "string" && data.path.trim().length > 0
           ? data.path.trim()
-          : decodeFileId(doc.documentPath.split("/").filter(Boolean).at(-1) ?? "");
+          : decodeFileId(
+              doc.documentPath.split("/").filter(Boolean).at(-1) ?? "",
+            );
       if (!rawPath) {
         continue;
       }
@@ -905,7 +909,11 @@ class AgentLogSync {
     if (this.inFlight) {
       await this.inFlight.catch(() => undefined);
     }
-    if (this.pendingLines.size === 0 && !this.pendingStats && !this.streamDirty) {
+    if (
+      this.pendingLines.size === 0 &&
+      !this.pendingStats &&
+      !this.streamDirty
+    ) {
       return;
     }
     const now = Date.now();
@@ -1123,6 +1131,318 @@ function buildAgentSystemPrompt(): string {
   ].join("\n");
 }
 
+type ValidatedLessonPublishBundle = {
+  readonly session: Session;
+  readonly quizzes: QuizDefinition[];
+  readonly problems: CodeProblem[];
+  readonly media: SessionMediaDoc[];
+};
+
+async function validateLessonWorkspaceForPublish(options: {
+  rootDir: string;
+  sessionId: string;
+  sessionPath: string;
+  briefPath: string;
+  createdAt: Date;
+  titleFallback?: string;
+  topicsFallback?: string[];
+  includeStory?: boolean;
+  includeCoding?: boolean;
+  enforceLessonPipeline: boolean;
+}): Promise<ValidatedLessonPublishBundle> {
+  const {
+    rootDir,
+    sessionId,
+    sessionPath,
+    briefPath,
+    createdAt,
+    titleFallback,
+    topicsFallback,
+    includeStory,
+    includeCoding,
+    enforceLessonPipeline,
+  } = options;
+
+  const readWorkspaceJson = async (inputPath: string): Promise<unknown> => {
+    const resolved = resolveWorkspacePath(rootDir, inputPath);
+    let text = "";
+    try {
+      text = await readFile(resolved, { encoding: "utf8" });
+    } catch (error) {
+      throw new Error(
+        `Unable to read workspace file "${inputPath}": ${errorAsString(error)}`,
+      );
+    }
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error(
+        `Invalid JSON in "${inputPath}": ${errorAsString(error)}`,
+      );
+    }
+  };
+
+  const ensurePlainRecord = (
+    value: unknown,
+    label: string,
+  ): Record<string, unknown> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`"${label}" must contain a JSON object.`);
+    }
+    return value as Record<string, unknown>;
+  };
+
+  const readWorkspaceTextOptional = async (
+    inputPath: string,
+  ): Promise<string | null> => {
+    try {
+      const resolved = resolveWorkspacePath(rootDir, inputPath);
+      return await readFile(resolved, { encoding: "utf8" });
+    } catch {
+      return null;
+    }
+  };
+
+  if (enforceLessonPipeline) {
+    const sessionGradePath = "lesson/feedback/session-grade.json";
+    let rawGrade: unknown;
+    try {
+      rawGrade = await readWorkspaceJson(sessionGradePath);
+    } catch {
+      throw new Error(
+        `Missing required session grading report (${sessionGradePath}). Run generate_text with promptPath='lesson/prompts/session-grade.md' and outputPath='${sessionGradePath}', then revise until pass=true.`,
+      );
+    }
+    const gradeRecord = ensurePlainRecord(rawGrade, sessionGradePath);
+    if (gradeRecord.pass !== true) {
+      throw new Error(
+        `Session grading report (${sessionGradePath}) has pass=false. Revise lesson/output/session.json and re-grade before publishing.`,
+      );
+    }
+  }
+
+  const lessonBrief = await readWorkspaceTextOptional(briefPath);
+
+  const rawSessionJson = await readWorkspaceJson(sessionPath);
+  const rawSessionRecord = ensurePlainRecord(rawSessionJson, sessionPath);
+
+  const titleFromFile =
+    typeof rawSessionRecord.title === "string"
+      ? rawSessionRecord.title.trim()
+      : "";
+  const resolvedTitle =
+    titleFromFile.length > 0 ? titleFromFile : titleFallback;
+
+  const topicsFromFile = Array.isArray(rawSessionRecord.topics)
+    ? rawSessionRecord.topics
+        .map((topic) => (typeof topic === "string" ? topic.trim() : ""))
+        .filter((topic) => topic.length > 0)
+    : [];
+  const resolvedTopics =
+    topicsFromFile.length > 0
+      ? topicsFromFile
+      : topicsFallback && topicsFallback.length > 0
+        ? topicsFallback
+        : [];
+
+  const sessionCandidate: Record<string, unknown> = {
+    ...rawSessionRecord,
+    id: sessionId,
+    createdAt,
+    status: "ready",
+    nextLessonProposals: [],
+  };
+  if (resolvedTitle) {
+    sessionCandidate.title = resolvedTitle;
+  }
+  if (resolvedTopics.length > 0) {
+    sessionCandidate.topics = resolvedTopics;
+  } else if (lessonBrief) {
+    const deriveTopic = (brief: string): string => {
+      const lines = brief.replace(/\r\n/g, "\n").split("\n");
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i]?.trim() ?? "";
+        if (/^##\s*topic\s*$/iu.test(line)) {
+          for (let j = i + 1; j < lines.length; j += 1) {
+            const next = lines[j]?.trim() ?? "";
+            if (next.length === 0) {
+              continue;
+            }
+            return next.replace(/^#+\s*/u, "").trim();
+          }
+        }
+        const match = line.match(
+          /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
+        );
+        if (match?.[1]) {
+          return match[1].trim();
+        }
+      }
+      const firstNonEmpty = lines.find((entry) => entry.trim().length > 0);
+      return firstNonEmpty ? firstNonEmpty.replace(/^#+\s*/u, "").trim() : "";
+    };
+    const derivedTopic = deriveTopic(lessonBrief);
+    if (derivedTopic) {
+      sessionCandidate.topics = [derivedTopic];
+    }
+  }
+
+  let sessionDoc: Session;
+  try {
+    sessionDoc = SessionSchema.parse(sessionCandidate);
+  } catch (error) {
+    throw new Error(
+      `Invalid session JSON (${sessionPath}): ${errorAsString(error)}`,
+    );
+  }
+
+  if (includeCoding === false) {
+    const problemCount = sessionDoc.plan.filter(
+      (item) => item.kind === "problem",
+    ).length;
+    if (problemCount > 0) {
+      throw new Error(
+        "includeCoding=false but session.plan includes problem items.",
+      );
+    }
+  }
+
+  if (includeStory === false) {
+    const mediaCount = sessionDoc.plan.filter(
+      (item) => item.kind === "media",
+    ).length;
+    if (mediaCount > 0) {
+      throw new Error(
+        "includeStory=false but session.plan includes media items.",
+      );
+    }
+  }
+
+  const seenPlanIds = new Set<string>();
+  for (const item of sessionDoc.plan) {
+    if (seenPlanIds.has(item.id)) {
+      throw new Error(`Duplicate plan item id "${item.id}" in session.`);
+    }
+    seenPlanIds.add(item.id);
+  }
+
+  const baseDir = path.posix.dirname(sessionPath);
+  const basePrefix = baseDir === "." ? "" : baseDir;
+  const resolveBundlePath = (suffix: string): string => {
+    if (!basePrefix) {
+      return suffix;
+    }
+    return `${basePrefix}/${suffix}`;
+  };
+
+  const quizPlanItems = sessionDoc.plan.filter((item) => item.kind === "quiz");
+  const problemPlanItems = sessionDoc.plan.filter(
+    (item) => item.kind === "problem",
+  );
+  const mediaPlanItems = sessionDoc.plan.filter(
+    (item) => item.kind === "media",
+  );
+
+  const quizzes: QuizDefinition[] = await Promise.all(
+    quizPlanItems.map(async (item) => {
+      const quizPath = resolveBundlePath(`quiz/${item.id}.json`);
+      const rawQuizJson = await readWorkspaceJson(quizPath);
+      const rawQuizRecord = ensurePlainRecord(rawQuizJson, quizPath);
+      const progressKeyRaw =
+        typeof rawQuizRecord.progressKey === "string"
+          ? rawQuizRecord.progressKey.trim()
+          : "";
+      const progressKey =
+        progressKeyRaw.length > 0
+          ? progressKeyRaw
+          : `lesson:${sessionId}:${item.id}`;
+      const quizCandidate: Record<string, unknown> = {
+        ...rawQuizRecord,
+        id: item.id,
+        progressKey,
+      };
+      try {
+        return QuizDefinitionSchema.parse(quizCandidate);
+      } catch (error) {
+        throw new Error(
+          `Invalid quiz JSON (${quizPath}): ${errorAsString(error)}`,
+        );
+      }
+    }),
+  );
+
+  const quizzesById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
+
+  const problems: CodeProblem[] = await Promise.all(
+    problemPlanItems.map(async (item) => {
+      const problemPath = resolveBundlePath(`code/${item.id}.json`);
+      const rawProblemJson = await readWorkspaceJson(problemPath);
+      const rawProblemRecord = ensurePlainRecord(rawProblemJson, problemPath);
+      const problemCandidate: Record<string, unknown> = {
+        ...rawProblemRecord,
+        slug: item.id,
+      };
+      try {
+        return CodeProblemSchema.parse(problemCandidate);
+      } catch (error) {
+        throw new Error(
+          `Invalid code problem JSON (${problemPath}): ${errorAsString(error)}`,
+        );
+      }
+    }),
+  );
+
+  const media: SessionMediaDoc[] = await Promise.all(
+    mediaPlanItems.map(async (item) => {
+      const mediaPath = resolveBundlePath(`media/${item.id}.json`);
+      const rawMediaJson = await readWorkspaceJson(mediaPath);
+      const rawMediaRecord = ensurePlainRecord(rawMediaJson, mediaPath);
+      const mediaCandidate: Record<string, unknown> = {
+        ...rawMediaRecord,
+        id: item.id,
+        planItemId: item.id,
+        sessionId,
+      };
+      try {
+        return SessionMediaDocSchema.parse(mediaCandidate);
+      } catch (error) {
+        throw new Error(
+          `Invalid media JSON (${mediaPath}): ${errorAsString(error)}`,
+        );
+      }
+    }),
+  );
+
+  const planWithProgress = sessionDoc.plan.map((item) => {
+    if (item.kind !== "quiz") {
+      return item;
+    }
+    const quiz = quizzesById.get(item.id);
+    if (!quiz) {
+      return item;
+    }
+    if (item.progressKey && item.progressKey.trim().length > 0) {
+      return item;
+    }
+    return { ...item, progressKey: quiz.progressKey };
+  });
+
+  const validatedSession = SessionSchema.parse({
+    ...sessionDoc,
+    plan: planWithProgress,
+    status: "ready",
+    createdAt,
+    nextLessonProposals: [],
+  });
+
+  return {
+    session: validatedSession,
+    quizzes,
+    problems,
+    media,
+  };
+}
+
 function buildAgentTools(options: {
   workspace: SparkAgentWorkspace;
   rootDir: string;
@@ -1183,12 +1503,13 @@ function buildAgentTools(options: {
           serviceAccountJson,
           documentPath: docPath,
         }).catch(() => ({ exists: false, data: null }));
-        const existingSession = existing.exists && existing.data
-          ? SessionSchema.safeParse({
-              id: sessionId,
-              ...existing.data,
-            })
-          : null;
+        const existingSession =
+          existing.exists && existing.data
+            ? SessionSchema.safeParse({
+                id: sessionId,
+                ...existing.data,
+              })
+            : null;
         const createdAt =
           existingSession && existingSession.success
             ? existingSession.data.createdAt
@@ -1203,299 +1524,26 @@ function buildAgentTools(options: {
             : undefined;
 
         try {
-          const readWorkspaceJson = async (
-            inputPath: string,
-          ): Promise<unknown> => {
-            const resolved = resolveWorkspacePath(rootDir, inputPath);
-            let text = "";
-            try {
-              text = await readFile(resolved, { encoding: "utf8" });
-            } catch (error) {
-              throw new Error(
-                `Unable to read workspace file "${inputPath}": ${errorAsString(error)}`,
-              );
-            }
-            try {
-              return JSON.parse(text);
-            } catch (error) {
-              throw new Error(
-                `Invalid JSON in "${inputPath}": ${errorAsString(error)}`,
-              );
-            }
-          };
-
-          const ensurePlainRecord = (
-            value: unknown,
-            label: string,
-          ): Record<string, unknown> => {
-            if (!value || typeof value !== "object" || Array.isArray(value)) {
-              throw new Error(`"${label}" must contain a JSON object.`);
-            }
-            return value as Record<string, unknown>;
-          };
-
-          const readWorkspaceTextOptional = async (
-            inputPath: string,
-          ): Promise<string | null> => {
-            try {
-              const resolved = resolveWorkspacePath(rootDir, inputPath);
-              return await readFile(resolved, { encoding: "utf8" });
-            } catch {
-              return null;
-            }
-          };
-
-          if (shouldEnforceLessonPipeline) {
-            const sessionGradePath = "lesson/feedback/session-grade.json";
-            let rawGrade: unknown;
-            try {
-              rawGrade = await readWorkspaceJson(sessionGradePath);
-            } catch (error) {
-              throw new Error(
-                `Missing required session grading report (${sessionGradePath}). Run generate_text with promptPath='lesson/prompts/session-grade.md' and outputPath='${sessionGradePath}', then revise until pass=true.`,
-              );
-            }
-            const gradeRecord = ensurePlainRecord(rawGrade, sessionGradePath);
-            if (gradeRecord.pass !== true) {
-              throw new Error(
-                `Session grading report (${sessionGradePath}) has pass=false. Revise lesson/output/session.json and re-grade before publishing.`,
-              );
-            }
-          }
-
-          const lessonBrief = await readWorkspaceTextOptional(resolvedBriefPath);
-
-          const rawSessionJson = await readWorkspaceJson(resolvedSessionPath);
-          const rawSessionRecord = ensurePlainRecord(
-            rawSessionJson,
-            resolvedSessionPath,
-          );
-
-          const titleFromFile =
-            typeof rawSessionRecord.title === "string"
-              ? rawSessionRecord.title.trim()
-              : "";
-          const resolvedTitle =
-            titleFromFile.length > 0 ? titleFromFile : titleFallback;
-
-          const topicsFromFile = Array.isArray(rawSessionRecord.topics)
-            ? rawSessionRecord.topics
-                .map((topic) => (typeof topic === "string" ? topic.trim() : ""))
-                .filter((topic) => topic.length > 0)
-            : [];
-          const resolvedTopics =
-            topicsFromFile.length > 0
-              ? topicsFromFile
-              : topicsFallback && topicsFallback.length > 0
-                ? topicsFallback
-                : [];
-
-          const sessionCandidate: Record<string, unknown> = {
-            ...rawSessionRecord,
-            id: sessionId,
+          const bundle = await validateLessonWorkspaceForPublish({
+            rootDir,
+            sessionId,
+            sessionPath: resolvedSessionPath,
+            briefPath: resolvedBriefPath,
             createdAt,
-            status: "ready",
-            nextLessonProposals: [],
-          };
-          if (resolvedTitle) {
-            sessionCandidate.title = resolvedTitle;
-          }
-          if (resolvedTopics.length > 0) {
-            sessionCandidate.topics = resolvedTopics;
-          } else if (lessonBrief) {
-            const deriveTopic = (brief: string): string => {
-              const lines = brief.replace(/\r\n/g, "\n").split("\n");
-              for (let i = 0; i < lines.length; i += 1) {
-                const line = lines[i]?.trim() ?? "";
-                if (/^##\s*topic\s*$/iu.test(line)) {
-                  for (let j = i + 1; j < lines.length; j += 1) {
-                    const next = lines[j]?.trim() ?? "";
-                    if (next.length === 0) {
-                      continue;
-                    }
-                    return next.replace(/^#+\s*/u, "").trim();
-                  }
-                }
-                const match = line.match(
-                  /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
-                );
-                if (match?.[1]) {
-                  return match[1].trim();
-                }
-              }
-              const firstNonEmpty = lines.find(
-                (entry) => entry.trim().length > 0,
-              );
-              return firstNonEmpty
-                ? firstNonEmpty.replace(/^#+\s*/u, "").trim()
-                : "";
-            };
-            const derivedTopic = deriveTopic(lessonBrief);
-            if (derivedTopic) {
-              sessionCandidate.topics = [derivedTopic];
-            }
-          }
-
-          let sessionDoc: Session;
-          try {
-            sessionDoc = SessionSchema.parse(sessionCandidate);
-          } catch (error) {
-            throw new Error(
-              `Invalid session JSON (${resolvedSessionPath}): ${errorAsString(error)}`,
-            );
-          }
-
-          if (includeCoding === false) {
-            const problemCount = sessionDoc.plan.filter(
-              (item) => item.kind === "problem",
-            ).length;
-            if (problemCount > 0) {
-              throw new Error(
-                "includeCoding=false but session.plan includes problem items.",
-              );
-            }
-          }
-
-          if (includeStory === false) {
-            const mediaCount = sessionDoc.plan.filter(
-              (item) => item.kind === "media",
-            ).length;
-            if (mediaCount > 0) {
-              throw new Error(
-                "includeStory=false but session.plan includes media items.",
-              );
-            }
-          }
-
-          const seenPlanIds = new Set<string>();
-          for (const item of sessionDoc.plan) {
-            if (seenPlanIds.has(item.id)) {
-              throw new Error(`Duplicate plan item id "${item.id}" in session.`);
-            }
-            seenPlanIds.add(item.id);
-          }
-
-          const baseDir = path.posix.dirname(resolvedSessionPath);
-          const basePrefix = baseDir === "." ? "" : baseDir;
-          const resolveBundlePath = (suffix: string): string => {
-            if (!basePrefix) {
-              return suffix;
-            }
-            return `${basePrefix}/${suffix}`;
-          };
-
-          const quizPlanItems = sessionDoc.plan.filter(
-            (item) => item.kind === "quiz",
-          );
-          const problemPlanItems = sessionDoc.plan.filter(
-            (item) => item.kind === "problem",
-          );
-          const mediaPlanItems = sessionDoc.plan.filter(
-            (item) => item.kind === "media",
-          );
-
-          const quizzes: QuizDefinition[] = await Promise.all(
-            quizPlanItems.map(async (item) => {
-              const quizPath = resolveBundlePath(`quiz/${item.id}.json`);
-              const rawQuizJson = await readWorkspaceJson(quizPath);
-              const rawQuizRecord = ensurePlainRecord(rawQuizJson, quizPath);
-              const progressKeyRaw =
-                typeof rawQuizRecord.progressKey === "string"
-                  ? rawQuizRecord.progressKey.trim()
-                  : "";
-              const progressKey =
-                progressKeyRaw.length > 0
-                  ? progressKeyRaw
-                  : `lesson:${sessionId}:${item.id}`;
-              const quizCandidate: Record<string, unknown> = {
-                ...rawQuizRecord,
-                id: item.id,
-                progressKey,
-              };
-              try {
-                return QuizDefinitionSchema.parse(quizCandidate);
-              } catch (error) {
-                throw new Error(
-                  `Invalid quiz JSON (${quizPath}): ${errorAsString(error)}`,
-                );
-              }
-            }),
-          );
-
-          const quizzesById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
-
-          const problems: CodeProblem[] = await Promise.all(
-            problemPlanItems.map(async (item) => {
-              const problemPath = resolveBundlePath(`code/${item.id}.json`);
-              const rawProblemJson = await readWorkspaceJson(problemPath);
-              const rawProblemRecord = ensurePlainRecord(
-                rawProblemJson,
-                problemPath,
-              );
-              const problemCandidate: Record<string, unknown> = {
-                ...rawProblemRecord,
-                slug: item.id,
-              };
-              try {
-                return CodeProblemSchema.parse(problemCandidate);
-              } catch (error) {
-                throw new Error(
-                  `Invalid code problem JSON (${problemPath}): ${errorAsString(error)}`,
-                );
-              }
-            }),
-          );
-
-          const media: SessionMediaDoc[] = await Promise.all(
-            mediaPlanItems.map(async (item) => {
-              const mediaPath = resolveBundlePath(`media/${item.id}.json`);
-              const rawMediaJson = await readWorkspaceJson(mediaPath);
-              const rawMediaRecord = ensurePlainRecord(rawMediaJson, mediaPath);
-              const mediaCandidate: Record<string, unknown> = {
-                ...rawMediaRecord,
-                id: item.id,
-                planItemId: item.id,
-                sessionId,
-              };
-              try {
-                return SessionMediaDocSchema.parse(mediaCandidate);
-              } catch (error) {
-                throw new Error(
-                  `Invalid media JSON (${mediaPath}): ${errorAsString(error)}`,
-                );
-              }
-            }),
-          );
-
-          const planWithProgress = sessionDoc.plan.map((item) => {
-            if (item.kind !== "quiz") {
-              return item;
-            }
-            const quiz = quizzesById.get(item.id);
-            if (!quiz) {
-              return item;
-            }
-            if (item.progressKey && item.progressKey.trim().length > 0) {
-              return item;
-            }
-            return { ...item, progressKey: quiz.progressKey };
-          });
-
-          const validatedSession = SessionSchema.parse({
-            ...sessionDoc,
-            plan: planWithProgress,
-            status: "ready",
-            createdAt,
-            nextLessonProposals: [],
+            titleFallback,
+            topicsFallback,
+            includeStory,
+            includeCoding,
+            enforceLessonPipeline: shouldEnforceLessonPipeline,
           });
           await setFirestoreDocument({
             serviceAccountJson,
             documentPath: docPath,
-            data: validatedSession as unknown as Record<string, unknown>,
+            data: bundle.session as unknown as Record<string, unknown>,
           });
 
           await Promise.all(
-            quizzes.map(async (quiz) => {
+            bundle.quizzes.map(async (quiz) => {
               const validated = QuizDefinitionSchema.parse(quiz);
               await setFirestoreDocument({
                 serviceAccountJson,
@@ -1506,7 +1554,7 @@ function buildAgentTools(options: {
           );
 
           await Promise.all(
-            problems.map(async (problem) => {
+            bundle.problems.map(async (problem) => {
               const validated = CodeProblemSchema.parse(problem);
               await setFirestoreDocument({
                 serviceAccountJson,
@@ -1517,7 +1565,7 @@ function buildAgentTools(options: {
           );
 
           await Promise.all(
-            media.map(async (item) => {
+            bundle.media.map(async (item) => {
               const validated = SessionMediaDocSchema.parse(item);
               await setFirestoreDocument({
                 serviceAccountJson,
@@ -1532,9 +1580,9 @@ function buildAgentTools(options: {
             sessionId,
             includeStory: includeStory ?? null,
             includeCoding: includeCoding ?? null,
-            quizCount: quizzes.length,
-            problemCount: problems.length,
-            mediaCount: media.length,
+            quizCount: bundle.quizzes.length,
+            problemCount: bundle.problems.length,
+            mediaCount: bundle.media.length,
             href: `/spark/lesson/${sessionId}`,
           };
         } catch (error) {
@@ -1671,12 +1719,75 @@ function buildAgentTools(options: {
       inputSchema: z
         .object({
           promptPath: z.string().trim().min(1),
-          inputPaths: z.array(z.string().trim().min(1)).optional(),
-          modelId: z.string().trim().min(1).optional(),
-          tools: z.array(z.enum(["web-search", "code-execution"])).optional(),
-          responseSchemaPath: z.string().trim().min(1).optional(),
-          outputPath: z.string().trim().min(1).optional(),
-          outputMode: z.enum(["overwrite", "append"]).optional(),
+          inputPaths: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              if (typeof value === "string") {
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? [trimmed] : undefined;
+              }
+              return value;
+            },
+            z.array(z.string().trim().min(1)).optional(),
+          ),
+          modelId: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            if (typeof value === "string") {
+              const trimmed = value.trim();
+              return trimmed.length > 0 ? trimmed : undefined;
+            }
+            return value;
+          }, z.string().trim().min(1).optional()),
+          tools: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              if (typeof value === "string") {
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? [trimmed] : undefined;
+              }
+              return value;
+            },
+            z.array(z.enum(["web-search", "code-execution"])).optional(),
+          ),
+          responseSchemaPath: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            if (typeof value === "string") {
+              const trimmed = value.trim();
+              return trimmed.length > 0 ? trimmed : undefined;
+            }
+            return value;
+          }, z.string().trim().min(1).optional()),
+          outputPath: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            if (typeof value === "string") {
+              const trimmed = value.trim();
+              return trimmed.length > 0 ? trimmed : undefined;
+            }
+            return value;
+          }, z.string().trim().min(1).optional()),
+          outputMode: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              if (typeof value === "string") {
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+              }
+              return value;
+            },
+            z.enum(["overwrite", "append"]).optional(),
+          ),
         })
         .strict(),
       execute: async ({
@@ -1726,9 +1837,12 @@ function buildAgentTools(options: {
 
         const responseSchemaText =
           responseSchemaPath && responseSchemaPath.trim().length > 0
-            ? await readFile(resolveWorkspacePath(rootDir, responseSchemaPath), {
-                encoding: "utf8",
-              })
+            ? await readFile(
+                resolveWorkspacePath(rootDir, responseSchemaPath),
+                {
+                  encoding: "utf8",
+                },
+              )
             : null;
         const responseJsonSchema = responseSchemaText
           ? (() => {
@@ -1780,30 +1894,31 @@ function buildAgentTools(options: {
         const shouldFormatJson =
           Boolean(responseJsonSchema) ||
           Boolean(outputPath && outputPath.trim().endsWith(".json"));
-        const formatted =
-          shouldFormatJson
-            ? (() => {
-                let parsed: unknown;
-                try {
-                  parsed = JSON.parse(text);
-                } catch (error) {
-                  throw new Error(
-                    `generate_text returned invalid JSON: ${errorAsString(error)}`,
-                  );
-                }
-                return JSON.stringify(parsed, null, 2) + "\n";
-              })()
-            : text;
+        const formatted = shouldFormatJson
+          ? (() => {
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(text);
+              } catch (error) {
+                throw new Error(
+                  `generate_text returned invalid JSON: ${errorAsString(error)}`,
+                );
+              }
+              return JSON.stringify(parsed, null, 2) + "\n";
+            })()
+          : text;
 
         const mode = outputMode ?? "overwrite";
         if (outputPath) {
           const resolved = resolveWorkspacePath(rootDir, outputPath);
           await ensureDir(path.dirname(resolved));
           if (mode === "append") {
-            const existing = await readFile(resolved, { encoding: "utf8" }).catch(
-              () => "",
-            );
-            await writeFile(resolved, existing + formatted, { encoding: "utf8" });
+            const existing = await readFile(resolved, {
+              encoding: "utf8",
+            }).catch(() => "");
+            await writeFile(resolved, existing + formatted, {
+              encoding: "utf8",
+            });
           } else {
             await writeFile(resolved, formatted, { encoding: "utf8" });
           }
@@ -1903,7 +2018,10 @@ function buildAgentTools(options: {
         content: z.string(),
       }),
       execute: async ({ path: inputPath, content }) => {
-        if (shouldEnforceLessonPipeline && isLessonGeneratedJsonPath(inputPath)) {
+        if (
+          shouldEnforceLessonPipeline &&
+          isLessonGeneratedJsonPath(inputPath)
+        ) {
           throw new Error(
             `Direct writes to "${inputPath}" are not allowed for lesson runs. Use generate_text with outputPath="${inputPath}" instead.`,
           );
@@ -2011,6 +2129,155 @@ export function buildSparkAgentToolsForTest(options: {
   enforceLessonPipeline?: boolean;
 }): LlmToolSet {
   return buildAgentTools(options);
+}
+
+export async function runSparkLessonAgentLocal(options: {
+  rootDir: string;
+  userId: string;
+  prompt: string;
+  modelId?: LlmTextModelId;
+  maxSteps?: number;
+  progress?: JobProgressReporter;
+}): Promise<{
+  readonly toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>;
+  readonly publishResult: {
+    status: "published";
+    sessionId: string;
+    includeStory: boolean | null;
+    includeCoding: boolean | null;
+    quizCount: number;
+    problemCount: number;
+    mediaCount: number;
+    href: string;
+    mode: "mock";
+  } | null;
+  readonly doneSummary: string | null;
+}> {
+  const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+  const maxSteps = options.maxSteps ?? DEFAULT_LESSON_MAX_STEPS;
+  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const progress = options.progress;
+
+  const workspace: SparkAgentWorkspace = {
+    scheduleUpdate: () => {},
+    deleteFile: async (inputPath) => {
+      const resolved = resolveWorkspacePath(options.rootDir, inputPath);
+      await rm(resolved, { recursive: true, force: true });
+    },
+    moveFile: async (from, to) => {
+      const resolvedFrom = resolveWorkspacePath(options.rootDir, from);
+      const resolvedTo = resolveWorkspacePath(options.rootDir, to);
+      await ensureDir(path.dirname(resolvedTo));
+      await rename(resolvedFrom, resolvedTo);
+    },
+  };
+
+  const baseTools = buildAgentTools({
+    workspace,
+    rootDir: options.rootDir,
+    userId: options.userId,
+    serviceAccountJson: "{}",
+    progress,
+    enforceLessonPipeline: true,
+  });
+
+  type PublishLessonToolInput = {
+    sessionId: string;
+    sessionPath?: string;
+    briefPath?: string;
+    includeStory?: boolean;
+    includeCoding?: boolean;
+  };
+
+  type LocalPublishLessonResult = {
+    status: "published";
+    sessionId: string;
+    includeStory: boolean | null;
+    includeCoding: boolean | null;
+    quizCount: number;
+    problemCount: number;
+    mediaCount: number;
+    href: string;
+    mode: "mock";
+  };
+
+  let publishResult: LocalPublishLessonResult | null = null;
+  const publish_lesson = tool({
+    description:
+      "Mock publish_lesson for local runs. Validates workspace JSON and returns counts but does not write Firestore.",
+    inputSchema: baseTools.publish_lesson
+      .inputSchema as z.ZodType<PublishLessonToolInput>,
+    execute: async (input: PublishLessonToolInput) => {
+      const resolvedSessionPath =
+        input.sessionPath ?? "lesson/output/session.json";
+      const resolvedBriefPath = input.briefPath ?? "brief.md";
+      const bundle = await validateLessonWorkspaceForPublish({
+        rootDir: options.rootDir,
+        sessionId: input.sessionId,
+        sessionPath: resolvedSessionPath,
+        briefPath: resolvedBriefPath,
+        createdAt: new Date(),
+        includeStory: input.includeStory,
+        includeCoding: input.includeCoding,
+        enforceLessonPipeline: true,
+      });
+      const result: LocalPublishLessonResult = {
+        status: "published",
+        sessionId: input.sessionId,
+        includeStory: input.includeStory ?? null,
+        includeCoding: input.includeCoding ?? null,
+        quizCount: bundle.quizzes.length,
+        problemCount: bundle.problems.length,
+        mediaCount: bundle.media.length,
+        href: `/spark/lesson/${input.sessionId}`,
+        mode: "mock",
+      };
+      publishResult = result;
+      return result;
+    },
+  });
+
+  let doneSummary: string | null = null;
+  let doneCalled = false;
+  const done = tool({
+    description:
+      "Mark the local agent run as complete. Stores a short summary for the caller.",
+    inputSchema: z
+      .object({
+        summary: z.string().trim().min(1).optional(),
+      })
+      .strict(),
+    execute: ({ summary }) => {
+      doneCalled = true;
+      doneSummary = summary ?? null;
+      return { status: "done", summary: summary ?? null };
+    },
+  });
+
+  const toolLoopResult = await runToolLoop({
+    modelId,
+    systemPrompt: buildAgentSystemPrompt(),
+    prompt: options.prompt,
+    tools: {
+      ...baseTools,
+      publish_lesson,
+      done,
+    },
+    modelTools: [{ type: "web-search", mode: "live" }],
+    maxSteps,
+    ...(progress ? { progress } : {}),
+    ...(openAiReasoningEffort ? { openAiReasoningEffort } : {}),
+  });
+
+  if (!doneCalled) {
+    throw new Error("Lesson agent completed without calling done().");
+  }
+
+  return {
+    toolLoopResult,
+    publishResult,
+    doneSummary,
+  };
 }
 
 function splitLines(text: string): string[] {
@@ -2397,7 +2664,7 @@ export async function runSparkAgentTask(
     const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
     const isLessonRun = Boolean(
       typeof agentData.lessonSessionId === "string" &&
-        agentData.lessonSessionId.trim().length > 0,
+      agentData.lessonSessionId.trim().length > 0,
     );
     const maxSteps =
       options.maxSteps ??
@@ -2413,7 +2680,9 @@ export async function runSparkAgentTask(
       },
       startModelCall: (details) => {
         throwIfStopRequested();
-        const handle = statsTracker.startModelCall({ modelId: details.modelId });
+        const handle = statsTracker.startModelCall({
+          modelId: details.modelId,
+        });
         logSync?.setStats(statsTracker.snapshot());
         return handle;
       },

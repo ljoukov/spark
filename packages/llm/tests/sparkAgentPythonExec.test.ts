@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("pyodide", () => {
   return {
-    loadPyodide: async () => {
+    loadPyodide: () => {
       return {
-        runPythonAsync: async () => {
+        runPythonAsync: () => {
           return JSON.stringify({
             ok: true,
             stdout: "STDOUT\n",
@@ -32,9 +32,8 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent tool: python_exec", () => {
   it("writes stdout/stderr files and reports ok", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       await writeFile(path.join(rootDir, "script.py"), "print('hi')\n", "utf8");
       await writeFile(path.join(rootDir, "in.txt"), "input\n", "utf8");
@@ -45,8 +44,8 @@ describe("Spark agent tool: python_exec", () => {
           scheduleUpdate: (p) => {
             scheduled.push(p);
           },
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",

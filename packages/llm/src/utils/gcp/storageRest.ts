@@ -2,7 +2,8 @@ import { getGoogleAccessToken } from "./googleAccessToken";
 import { getFirebaseAdminStorage } from "../firebaseAdmin";
 import { isNodeRuntime } from "../runtime";
 
-const STORAGE_READ_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
+const STORAGE_READ_SCOPE =
+  "https://www.googleapis.com/auth/devstorage.read_only";
 const STORAGE_WRITE_SCOPE =
   "https://www.googleapis.com/auth/devstorage.read_write";
 

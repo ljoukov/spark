@@ -402,7 +402,10 @@ function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
     }
     const inclusiveValue = output[options.inclusiveKey];
     if (exclusiveValue === true) {
-      if (typeof inclusiveValue === "number" && Number.isFinite(inclusiveValue)) {
+      if (
+        typeof inclusiveValue === "number" &&
+        Number.isFinite(inclusiveValue)
+      ) {
         output[options.exclusiveKey] = inclusiveValue;
         delete output[options.inclusiveKey];
       } else {
@@ -3836,8 +3839,7 @@ function rewriteWriteFileInputForUserFacingCitations(options: {
     return options.rawInput;
   }
   const record = options.rawInput as Record<string, unknown>;
-  const content =
-    typeof record.content === "string" ? record.content : null;
+  const content = typeof record.content === "string" ? record.content : null;
   if (!content) {
     return options.rawInput;
   }
