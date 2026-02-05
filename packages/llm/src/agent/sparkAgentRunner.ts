@@ -37,6 +37,7 @@ import {
 import {
   estimateCallCostUsd,
   generateText,
+  parseJsonFromLlmText,
   runToolLoop,
   tool,
   type LlmTextModelId,
@@ -1719,80 +1720,175 @@ function buildAgentTools(options: {
     generate_text: tool({
       description:
         "Generate text (Markdown/JSON) using a sub-model. Reads promptPath from the workspace and expands {{relative/path}} placeholders by inlining referenced workspace files.",
-      inputSchema: z
-        .object({
-          promptPath: z.string().trim().min(1),
-          inputPaths: z.preprocess(
+      inputSchema: (() => {
+        const normalizeOptionalString = (value: unknown): string | undefined => {
+          if (value === null || value === undefined) {
+            return undefined;
+          }
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+          }
+          return undefined;
+        };
+
+        const normalizeOptionalStringArray = (
+          value: unknown,
+        ): string[] | undefined => {
+          if (value === null || value === undefined) {
+            return undefined;
+          }
+
+          const rawItems = Array.isArray(value) ? value : [value];
+          const items: string[] = [];
+          for (const raw of rawItems) {
+            if (typeof raw !== "string") {
+              continue;
+            }
+            const trimmed = raw.trim();
+            if (trimmed.length === 0) {
+              continue;
+            }
+            items.push(trimmed);
+          }
+
+          return items.length > 0 ? items : undefined;
+        };
+
+        const toolTypes = ["web-search", "code-execution"] as const;
+        type ToolType = (typeof toolTypes)[number];
+
+        const normalizeToolTypes = (value: unknown): ToolType[] | undefined => {
+          const entries = normalizeOptionalStringArray(value);
+          if (!entries) {
+            return undefined;
+          }
+
+          const filtered: ToolType[] = [];
+          for (const entry of entries) {
+            if (entry === "web-search" || entry === "code-execution") {
+              filtered.push(entry);
+            }
+          }
+
+          return filtered.length > 0 ? filtered : undefined;
+        };
+
+        const outputPathSchema = z.preprocess(
+          (value) => normalizeOptionalString(value),
+          z.string().trim().min(1).optional(),
+        );
+
+        const schema = z
+          .preprocess(
             (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
+              if (!shouldEnforceLessonPipeline) {
+                return value;
               }
-              if (typeof value === "string") {
-                const trimmed = value.trim();
-                return trimmed.length > 0 ? [trimmed] : undefined;
+              if (!value || typeof value !== "object" || Array.isArray(value)) {
+                return value;
               }
-              return value;
+              const record = value as Record<string, unknown>;
+              const promptPath = normalizeOptionalString(record.promptPath) ?? "";
+              const outputPath = normalizeOptionalString(record.outputPath);
+              const responseSchemaPath = normalizeOptionalString(
+                record.responseSchemaPath,
+              );
+
+              const inferred = (() => {
+                if (
+                  promptPath.endsWith("lesson/prompts/session-draft.md") ||
+                  promptPath.endsWith("lesson/prompts/session-revise.md")
+                ) {
+                  return {
+                    outputPath: "lesson/output/session.json",
+                    responseSchemaPath: "lesson/schema/session.schema.json",
+                  };
+                }
+                if (promptPath.endsWith("lesson/prompts/session-grade.md")) {
+                  return {
+                    outputPath: "lesson/feedback/session-grade.json",
+                  };
+                }
+                if (promptPath.endsWith("lesson/prompts/quiz-grade.md")) {
+                  return {
+                    outputPath: "lesson/feedback/quiz-grade.json",
+                  };
+                }
+                if (promptPath.endsWith("lesson/prompts/code-grade.md")) {
+                  return {
+                    outputPath: "lesson/feedback/code-grade.json",
+                  };
+                }
+                return null;
+              })();
+
+              const next: Record<string, unknown> = { ...record };
+              if (!outputPath && inferred?.outputPath) {
+                next.outputPath = inferred.outputPath;
+              }
+              if (!responseSchemaPath && inferred?.responseSchemaPath) {
+                next.responseSchemaPath = inferred.responseSchemaPath;
+              }
+              return next;
             },
-            z.array(z.string().trim().min(1)).optional(),
-          ),
-          modelId: z.preprocess((value) => {
-            if (value === null || value === undefined) {
-              return undefined;
+            z
+              .object({
+                promptPath: z.string().trim().min(1),
+                inputPaths: z.preprocess(
+                  (value) => normalizeOptionalStringArray(value),
+                  z.array(z.string().trim().min(1)).optional(),
+                ),
+                modelId: z.preprocess(
+                  (value) => normalizeOptionalString(value),
+                  z.string().trim().min(1).optional(),
+                ),
+                tools: z.preprocess(
+                  (value) => normalizeToolTypes(value),
+                  z.array(z.enum(toolTypes)).optional(),
+                ),
+                responseSchemaPath: z.preprocess(
+                  (value) => normalizeOptionalString(value),
+                  z.string().trim().min(1).optional(),
+                ),
+                outputPath: outputPathSchema,
+                outputMode: z.preprocess(
+                  (value) => normalizeOptionalString(value),
+                  z.enum(["overwrite", "append"]).optional(),
+                ),
+              })
+              .strict(),
+          )
+          .superRefine((value, ctx) => {
+            if (!shouldEnforceLessonPipeline) {
+              return;
             }
-            if (typeof value === "string") {
-              const trimmed = value.trim();
-              return trimmed.length > 0 ? trimmed : undefined;
+            if (value.outputPath && value.outputPath.trim().length > 0) {
+              return;
             }
-            return value;
-          }, z.string().trim().min(1).optional()),
-          tools: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              if (typeof value === "string") {
-                const trimmed = value.trim();
-                return trimmed.length > 0 ? [trimmed] : undefined;
-              }
-              return value;
-            },
-            z.array(z.enum(["web-search", "code-execution"])).optional(),
-          ),
-          responseSchemaPath: z.preprocess((value) => {
-            if (value === null || value === undefined) {
-              return undefined;
+            const promptPath = value.promptPath.trim();
+            const canInferOutputPath =
+              promptPath.endsWith("lesson/prompts/session-draft.md") ||
+              promptPath.endsWith("lesson/prompts/session-revise.md") ||
+              promptPath.endsWith("lesson/prompts/session-grade.md") ||
+              promptPath.endsWith("lesson/prompts/quiz-grade.md") ||
+              promptPath.endsWith("lesson/prompts/code-grade.md") ||
+              promptPath.endsWith("lesson/prompts/quiz-draft.md") ||
+              promptPath.endsWith("lesson/prompts/quiz-revise.md") ||
+              promptPath.endsWith("lesson/prompts/code-draft.md") ||
+              promptPath.endsWith("lesson/prompts/code-revise.md");
+            if (canInferOutputPath) {
+              return;
             }
-            if (typeof value === "string") {
-              const trimmed = value.trim();
-              return trimmed.length > 0 ? trimmed : undefined;
-            }
-            return value;
-          }, z.string().trim().min(1).optional()),
-          outputPath: z.preprocess((value) => {
-            if (value === null || value === undefined) {
-              return undefined;
-            }
-            if (typeof value === "string") {
-              const trimmed = value.trim();
-              return trimmed.length > 0 ? trimmed : undefined;
-            }
-            return value;
-          }, z.string().trim().min(1).optional()),
-          outputMode: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              if (typeof value === "string") {
-                const trimmed = value.trim();
-                return trimmed.length > 0 ? trimmed : undefined;
-              }
-              return value;
-            },
-            z.enum(["overwrite", "append"]).optional(),
-          ),
-        })
-        .strict(),
+            ctx.addIssue({
+              code: "custom",
+              path: ["outputPath"],
+              message: "outputPath is required for lesson runs.",
+            });
+          });
+
+        return schema;
+      })(),
       execute: async ({
         promptPath,
         inputPaths,
@@ -1806,8 +1902,133 @@ function buildAgentTools(options: {
           ? (modelId as GeminiModelId)
           : DEFAULT_GENERATE_TEXT_MODEL_ID;
 
+        const resolvedPromptPath = promptPath.trim();
+        let resolvedOutputPath = outputPath;
+        let resolvedResponseSchemaPath = responseSchemaPath;
+
+        const resolveOutputPathFromInputs = (prefix: string): string | undefined => {
+          for (const entry of inputPaths ?? []) {
+            const trimmed = entry.trim();
+            if (!trimmed) {
+              continue;
+            }
+            if (trimmed.startsWith(prefix) && trimmed.endsWith(".json")) {
+              return trimmed;
+            }
+          }
+          return undefined;
+        };
+
+        const inferNextPlanItemOutputPath = async (options: {
+          targetKind: "quiz" | "problem";
+          outputSubdir: "quiz" | "code";
+        }): Promise<string> => {
+          const sessionPath = resolveWorkspacePath(
+            rootDir,
+            "lesson/output/session.json",
+          );
+          const rawText = await readFile(sessionPath, { encoding: "utf8" }).catch(
+            () => null,
+          );
+          if (!rawText) {
+            throw new Error(
+              `Cannot infer outputPath: missing lesson/output/session.json (needed for ${options.outputSubdir} generation).`,
+            );
+          }
+          let rawJson: unknown;
+          try {
+            rawJson = JSON.parse(rawText);
+          } catch (error) {
+            throw new Error(
+              `Cannot infer outputPath: invalid lesson/output/session.json: ${errorAsString(error)}`,
+            );
+          }
+
+          const planItemSchema = z
+            .object({
+              id: z.string().trim().min(1),
+              kind: z.string().trim().min(1),
+            })
+            .loose();
+          const sessionPlanSchema = z
+            .object({
+              plan: z.array(planItemSchema),
+            })
+            .loose();
+          const session = sessionPlanSchema.parse(rawJson);
+
+          const planItemIds = session.plan
+            .filter((item) => item.kind === options.targetKind)
+            .map((item) => item.id);
+          if (planItemIds.length === 0) {
+            throw new Error(
+              `Cannot infer outputPath: session.plan has no kind="${options.targetKind}" items.`,
+            );
+          }
+
+          for (const planItemId of planItemIds) {
+            const candidate = `lesson/output/${options.outputSubdir}/${planItemId}.json`;
+            const exists = await stat(resolveWorkspacePath(rootDir, candidate))
+              .then(() => true)
+              .catch(() => false);
+            if (!exists) {
+              return candidate;
+            }
+          }
+
+          return `lesson/output/${options.outputSubdir}/${planItemIds[0]}.json`;
+        };
+
+        if (shouldEnforceLessonPipeline) {
+          if (
+            resolvedPromptPath.endsWith("lesson/prompts/session-draft.md") ||
+            resolvedPromptPath.endsWith("lesson/prompts/session-revise.md")
+          ) {
+            resolvedOutputPath ??= "lesson/output/session.json";
+            resolvedResponseSchemaPath ??=
+              "lesson/schema/session.schema.json";
+          }
+          if (resolvedPromptPath.endsWith("lesson/prompts/session-grade.md")) {
+            resolvedOutputPath ??= "lesson/feedback/session-grade.json";
+          }
+          if (resolvedPromptPath.endsWith("lesson/prompts/quiz-grade.md")) {
+            resolvedOutputPath ??= "lesson/feedback/quiz-grade.json";
+          }
+          if (resolvedPromptPath.endsWith("lesson/prompts/code-grade.md")) {
+            resolvedOutputPath ??= "lesson/feedback/code-grade.json";
+          }
+
+          const isQuizDraft =
+            resolvedPromptPath.endsWith("lesson/prompts/quiz-draft.md");
+          const isQuizRevise =
+            resolvedPromptPath.endsWith("lesson/prompts/quiz-revise.md");
+          if (isQuizDraft || isQuizRevise) {
+            resolvedResponseSchemaPath ??= "lesson/schema/quiz.schema.json";
+            resolvedOutputPath ??=
+              resolveOutputPathFromInputs("lesson/output/quiz/") ??
+              (await inferNextPlanItemOutputPath({
+                targetKind: "quiz",
+                outputSubdir: "quiz",
+              }));
+          }
+
+          const isCodeDraft =
+            resolvedPromptPath.endsWith("lesson/prompts/code-draft.md");
+          const isCodeRevise =
+            resolvedPromptPath.endsWith("lesson/prompts/code-revise.md");
+          if (isCodeDraft || isCodeRevise) {
+            resolvedResponseSchemaPath ??= "lesson/schema/code.schema.json";
+            resolvedOutputPath ??=
+              resolveOutputPathFromInputs("lesson/output/code/") ??
+              (await inferNextPlanItemOutputPath({
+                targetKind: "problem",
+                outputSubdir: "code",
+              }));
+          }
+        }
+
         const promptTemplate = await readFile(
-          resolveWorkspacePath(rootDir, promptPath),
+          resolveWorkspacePath(rootDir, resolvedPromptPath),
           { encoding: "utf8" },
         );
         const expanded = await expandPromptTemplate({
@@ -1839,9 +2060,10 @@ function buildAgentTools(options: {
         }
 
         const responseSchemaText =
-          responseSchemaPath && responseSchemaPath.trim().length > 0
+          resolvedResponseSchemaPath &&
+          resolvedResponseSchemaPath.trim().length > 0
             ? await readFile(
-                resolveWorkspacePath(rootDir, responseSchemaPath),
+                resolveWorkspacePath(rootDir, resolvedResponseSchemaPath),
                 {
                   encoding: "utf8",
                 },
@@ -1854,7 +2076,7 @@ function buildAgentTools(options: {
                 parsed = JSON.parse(responseSchemaText);
               } catch (error) {
                 throw new Error(
-                  `Invalid JSON schema in "${responseSchemaPath}": ${errorAsString(error)}`,
+                  `Invalid JSON schema in "${resolvedResponseSchemaPath}": ${errorAsString(error)}`,
                 );
               }
               if (
@@ -1863,7 +2085,7 @@ function buildAgentTools(options: {
                 Array.isArray(parsed)
               ) {
                 throw new Error(
-                  `Schema "${responseSchemaPath}" must be a JSON object schema.`,
+                  `Schema "${resolvedResponseSchemaPath}" must be a JSON object schema.`,
                 );
               }
               return parsed as Record<string, unknown>;
@@ -1875,6 +2097,10 @@ function buildAgentTools(options: {
             "generate_text cannot combine responseSchemaPath with tools; run web_search/python_exec separately or drop responseSchemaPath.",
           );
         }
+
+        const shouldFormatJson =
+          Boolean(responseJsonSchema) ||
+          Boolean(resolvedOutputPath && resolvedOutputPath.trim().endsWith(".json"));
 
         const text = await generateText({
           modelId: resolvedModelId,
@@ -1897,21 +2123,18 @@ function buildAgentTools(options: {
           ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
           ...(responseJsonSchema
             ? {
-                responseMimeType: "application/json",
                 responseJsonSchema: responseJsonSchema,
               }
             : {}),
+          ...(shouldFormatJson ? { responseMimeType: "application/json" } : {}),
           ...(progress ? { progress } : {}),
         });
 
-        const shouldFormatJson =
-          Boolean(responseJsonSchema) ||
-          Boolean(outputPath && outputPath.trim().endsWith(".json"));
         const formatted = shouldFormatJson
           ? (() => {
               let parsed: unknown;
               try {
-                parsed = JSON.parse(text);
+                parsed = parseJsonFromLlmText(text);
               } catch (error) {
                 throw new Error(
                   `generate_text returned invalid JSON: ${errorAsString(error)}`,
@@ -1922,8 +2145,8 @@ function buildAgentTools(options: {
           : text;
 
         const mode = outputMode ?? "overwrite";
-        if (outputPath) {
-          const resolved = resolveWorkspacePath(rootDir, outputPath);
+        if (resolvedOutputPath) {
+          const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
           await ensureDir(path.dirname(resolved));
           if (mode === "append") {
             const existing = await readFile(resolved, {
@@ -1935,13 +2158,13 @@ function buildAgentTools(options: {
           } else {
             await writeFile(resolved, formatted, { encoding: "utf8" });
           }
-          workspace.scheduleUpdate(outputPath);
+          workspace.scheduleUpdate(resolvedOutputPath);
           return {
             status: "written",
             modelId: resolvedModelId,
-            promptPath,
+            promptPath: resolvedPromptPath,
             inputPaths: inputPaths ?? [],
-            outputPath,
+            outputPath: resolvedOutputPath,
             outputMode: mode,
             promptTemplateReplacements: expanded.replacements,
             textChars: formatted.length,
@@ -1951,7 +2174,7 @@ function buildAgentTools(options: {
         return {
           status: "generated",
           modelId: resolvedModelId,
-          promptPath,
+          promptPath: resolvedPromptPath,
           inputPaths: inputPaths ?? [],
           promptTemplateReplacements: expanded.replacements,
           text: formatted,

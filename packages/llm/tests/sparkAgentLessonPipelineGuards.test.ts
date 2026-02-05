@@ -149,4 +149,65 @@ describe("Spark agent lesson pipeline guards", () => {
       expect(parsed.modelId).toBeUndefined();
     });
   });
+
+  it("infers outputPath + responseSchemaPath for session drafts during lesson runs", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentToolsForTest({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        enforceLessonPipeline: true,
+      });
+
+      const parsed = tools.generate_text.inputSchema.parse({
+        promptPath: "lesson/prompts/session-draft.md",
+      }) as { outputPath?: string; responseSchemaPath?: string };
+
+      expect(parsed.outputPath).toBe("lesson/output/session.json");
+      expect(parsed.responseSchemaPath).toBe("lesson/schema/session.schema.json");
+    });
+  });
+
+  it("allows quiz drafts without outputPath during lesson runs (resolved at execution time)", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentToolsForTest({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        enforceLessonPipeline: true,
+      });
+
+      const result = tools.generate_text.inputSchema.safeParse({
+        promptPath: "lesson/prompts/quiz-draft.md",
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        throw new Error("Expected schema validation to succeed");
+      }
+
+      const parsed = result.data as {
+        outputPath?: string;
+        responseSchemaPath?: string;
+      };
+      expect(parsed.outputPath).toBeUndefined();
+      expect(parsed.responseSchemaPath).toBeUndefined();
+    });
+  });
 });

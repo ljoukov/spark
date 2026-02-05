@@ -1111,6 +1111,12 @@ function escapeNewlinesInStrings(jsonText: string): string {
   return output;
 }
 
+export function parseJsonFromLlmText(rawText: string): unknown {
+  const cleanedText = normalizeJsonText(rawText);
+  const repairedText = escapeNewlinesInStrings(cleanedText);
+  return JSON.parse(repairedText);
+}
+
 function extractImages(content: LlmContent | undefined): LlmImageData[] {
   if (!content) {
     return [];
