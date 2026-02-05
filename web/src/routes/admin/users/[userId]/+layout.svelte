@@ -20,11 +20,13 @@
 	const baseHref = $derived(`/admin/users/${user.uid}`);
 	const lessonsHref = $derived(baseHref);
 	const chatsHref = $derived(`${baseHref}/chats`);
+	const agentsHref = $derived(`${baseHref}/agents`);
 
 	const isLessonsActive = $derived(
 		pathname === lessonsHref || pathname.startsWith(`${baseHref}/lessons/`)
 	);
 	const isChatsActive = $derived(pathname.startsWith(`${baseHref}/chats`));
+	const isAgentsActive = $derived(pathname.startsWith(`${baseHref}/agents`));
 
 	function formatInstant(value: string | null): string {
 		if (!value) {
@@ -123,8 +125,13 @@
 		>
 			Chats
 		</a>
+		<a
+			href={agentsHref}
+			class={cn(buttonVariants({ variant: isAgentsActive ? 'default' : 'secondary', size: 'sm' }))}
+		>
+			Agent runs
+		</a>
 	</div>
 
 	{@render children?.()}
 </div>
-
