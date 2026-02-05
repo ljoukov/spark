@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { encodeBytesToBase64 } from "./base64";
 import { getGoogleAccessToken } from "./googleAccessToken";
-import {
-  getFirebaseAdminFirestore,
-  getFirebaseAdminFirestoreModule,
-} from "../firebaseAdmin";
-import { isNodeRuntime } from "../runtime";
-import type { DocumentData, Query } from "firebase-admin/firestore";
 
 const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
 
@@ -197,20 +191,6 @@ export async function getFirestoreDocument(options: {
   updateTime?: string;
   createTime?: string;
 }> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    const snapshot = await firestore.doc(options.documentPath).get();
-    if (!snapshot.exists) {
-      return { exists: false, data: null };
-    }
-    return {
-      exists: true,
-      data: (snapshot.data() ?? null) as Record<string, unknown> | null,
-    };
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -249,14 +229,6 @@ export async function setFirestoreDocument(options: {
   documentPath: string;
   data: Record<string, unknown>;
 }): Promise<void> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    await firestore.doc(options.documentPath).set(options.data);
-    return;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -387,57 +359,6 @@ export async function patchFirestoreDocument(options: {
   updates: Record<string, unknown>;
   deletes?: string[];
 }): Promise<void> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    const { FieldValue } = await getFirebaseAdminFirestoreModule();
-
-    const updates: Record<string, unknown> = {};
-    for (const [path, value] of Object.entries(options.updates)) {
-      if (value === undefined) {
-        continue;
-      }
-      const trimmed = path.trim();
-      if (!trimmed) {
-        continue;
-      }
-      updates[trimmed] = value;
-    }
-    for (const path of options.deletes ?? []) {
-      const trimmed = path.trim();
-      if (!trimmed) {
-        continue;
-      }
-      updates[trimmed] = FieldValue.delete();
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return;
-    }
-
-    try {
-      await firestore.doc(options.documentPath).update(updates);
-    } catch (error) {
-      const code = (error as { code?: unknown } | undefined)?.code;
-      const message = error instanceof Error ? error.message : String(error);
-      const looksNotFound =
-        code === 5 ||
-        code === "not-found" ||
-        message.includes("No document to update") ||
-        message.includes("NOT_FOUND");
-      if (!looksNotFound) {
-        throw error;
-      }
-      const nested = buildNestedObjectFromFieldPaths(
-        Object.entries(updates).map(([path, value]) => ({ path, value })),
-      );
-      await firestore.doc(options.documentPath).set(nested, { merge: true });
-      return;
-    }
-    return;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -482,38 +403,6 @@ export async function listFirestoreDocuments(options: {
   limit?: number;
   orderBy?: string;
 }): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    let query: Query<DocumentData> = firestore.collection(
-      options.collectionPath,
-    );
-
-    if (options.orderBy) {
-      const parts = options.orderBy.trim().split(/\s+/u).filter(Boolean);
-      const field = parts[0];
-      const direction = parts[1]?.toLowerCase() === "desc" ? "desc" : "asc";
-      if (field) {
-        query = query.orderBy(field, direction);
-      }
-    }
-    if (options.limit !== undefined) {
-      query = query.limit(options.limit);
-    }
-
-    const snap = await query.get();
-    const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
-      [];
-    for (const doc of snap.docs) {
-      out.push({
-        documentPath: doc.ref.path,
-        data: doc.data() as Record<string, unknown>,
-      });
-    }
-    return out;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -569,45 +458,6 @@ export async function queryFirestoreDocuments(options: {
   limit?: number;
   orderBy?: string;
 }): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    let query: Query<DocumentData> = firestore.collection(
-      options.collectionPath,
-    );
-
-    if (options.where) {
-      const fieldPath = options.where.fieldPath.trim();
-      if (fieldPath) {
-        query = query.where(fieldPath, "==", options.where.value);
-      }
-    }
-
-    if (options.orderBy) {
-      const parts = options.orderBy.trim().split(/\s+/u).filter(Boolean);
-      const field = parts[0];
-      const direction = parts[1]?.toLowerCase() === "desc" ? "desc" : "asc";
-      if (field) {
-        query = query.orderBy(field, direction);
-      }
-    }
-    if (options.limit !== undefined) {
-      query = query.limit(options.limit);
-    }
-
-    const snap = await query.get();
-    const out: Array<{ documentPath: string; data: Record<string, unknown> }> =
-      [];
-    for (const doc of snap.docs) {
-      out.push({
-        documentPath: doc.ref.path,
-        data: doc.data() as Record<string, unknown>,
-      });
-    }
-    return out;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -724,64 +574,6 @@ export async function commitFirestoreWrites(options: {
   serviceAccountJson: string;
   writes: CommitWrite[];
 }): Promise<void> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    const { FieldValue } = await getFirebaseAdminFirestoreModule();
-
-    const batch = firestore.batch();
-
-    for (const write of options.writes) {
-      const docRef = firestore.doc(write.documentPath);
-
-      if (write.type === "set") {
-        if (write.precondition?.exists === false) {
-          batch.create(docRef, write.data);
-          continue;
-        }
-
-        if (write.precondition?.exists === true) {
-          // Firestore doesn't expose an "exists: true" precondition for set().
-          // update() fails if missing, so approximate by updating all provided fields.
-          batch.update(docRef, write.data);
-          continue;
-        }
-
-        batch.set(docRef, write.data);
-        continue;
-      }
-
-      const updates: Record<string, unknown> = {};
-      for (const [path, value] of Object.entries(write.updates)) {
-        if (value === undefined) {
-          continue;
-        }
-        const trimmed = path.trim();
-        if (!trimmed) {
-          continue;
-        }
-        updates[trimmed] = value;
-      }
-      for (const path of write.deletes ?? []) {
-        const trimmed = path.trim();
-        if (!trimmed) {
-          continue;
-        }
-        updates[trimmed] = FieldValue.delete();
-      }
-
-      if (Object.keys(updates).length === 0) {
-        continue;
-      }
-
-      batch.update(docRef, updates);
-    }
-
-    await batch.commit();
-    return;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
@@ -851,14 +643,6 @@ export async function deleteFirestoreDocument(options: {
   serviceAccountJson: string;
   documentPath: string;
 }): Promise<void> {
-  if (isNodeRuntime()) {
-    const firestore = await getFirebaseAdminFirestore({
-      serviceAccountJson: options.serviceAccountJson,
-    });
-    await firestore.doc(options.documentPath).delete();
-    return;
-  }
-
   const { accessToken, projectId } = await getGoogleAccessToken({
     serviceAccountJson: options.serviceAccountJson,
     scopes: [FIRESTORE_SCOPE],
