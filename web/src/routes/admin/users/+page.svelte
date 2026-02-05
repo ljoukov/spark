@@ -10,6 +10,7 @@
 	const users = $derived(data.users);
 	const query = $derived(data.query);
 	const notice = $derived(data.notice);
+	const login = $derived(data.login);
 
 	function formatInstant(value: string | null): string {
 		if (!value) {
@@ -20,6 +21,19 @@
 			return value;
 		}
 		return date.toLocaleString();
+	}
+
+	function loginLabel(value: string): string {
+		if (value === 'guest') {
+			return 'Guest';
+		}
+		if (value === 'google') {
+			return 'Google';
+		}
+		if (value === 'apple') {
+			return 'Apple';
+		}
+		return 'Other';
 	}
 </script>
 
@@ -44,6 +58,17 @@
 					autocomplete="off"
 					class="md:w-96"
 				/>
+				<label class="sr-only" for="login-filter">Login type</label>
+				<select
+					id="login-filter"
+					name="login"
+					class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs ring-offset-background transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:w-44 dark:bg-input/30"
+				>
+					<option value="all" selected={login === 'all'}>All logins</option>
+					<option value="guest" selected={login === 'guest'}>Guest</option>
+					<option value="google" selected={login === 'google'}>Google</option>
+					<option value="apple" selected={login === 'apple'}>Apple</option>
+				</select>
 				<div class="flex gap-2">
 					<Button type="submit">Search</Button>
 					<a
@@ -78,12 +103,13 @@
 							<p class="text-sm font-semibold text-foreground">
 								{user.email ?? 'No email'}
 							</p>
-							{#if user.isAnonymous}
-								<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-									Anonymous
-								</span>
-							{/if}
+							<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+								{loginLabel(user.loginType)}
+							</span>
 						</div>
+						{#if user.name}
+							<p class="text-xs text-muted-foreground">{user.name}</p>
+						{/if}
 						<p class="text-xs text-muted-foreground">
 							<span class="font-mono">{user.uid}</span>
 						</p>
@@ -105,6 +131,12 @@
 							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
 						>
 							Lessons
+						</a>
+						<a
+							href={`/admin/users/${user.uid}/chats`}
+							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+						>
+							Chats
 						</a>
 					</div>
 				</div>

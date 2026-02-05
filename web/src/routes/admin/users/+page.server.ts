@@ -6,11 +6,17 @@ import {
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 
+const loginFilterSchema = z.enum(['all', 'guest', 'google', 'apple']);
+
 const querySchema = z
 	.object({
-		q: z.string().trim().max(320).optional()
+		q: z.string().trim().max(320).optional(),
+		login: loginFilterSchema.optional()
 	})
-	.transform(({ q }) => ({ q: q && q.length > 0 ? q : '' }));
+	.transform(({ q, login }) => ({
+		q: q && q.length > 0 ? q : '',
+		login: login ?? 'all'
+	}));
 
 function toIso(value: Date | null): string | null {
 	if (!value) {
@@ -19,20 +25,62 @@ function toIso(value: Date | null): string | null {
 	return value.toISOString();
 }
 
+type LoginType = 'guest' | 'google' | 'apple' | 'other';
+
+function deriveLoginType(user: { isAnonymous: boolean; signInProvider: string | null }): LoginType {
+	if (user.isAnonymous || user.signInProvider === 'anonymous') {
+		return 'guest';
+	}
+	if (user.signInProvider === 'google.com' || user.signInProvider === 'google') {
+		return 'google';
+	}
+	if (user.signInProvider === 'apple.com' || user.signInProvider === 'apple') {
+		return 'apple';
+	}
+	return 'other';
+}
+
+function matchesLoginFilter(user: { loginType: LoginType }, login: z.infer<typeof loginFilterSchema>): boolean {
+	const matchers: Record<z.infer<typeof loginFilterSchema>, (loginType: LoginType) => boolean> = {
+		all: () => true,
+		guest: (loginType) => loginType === 'guest',
+		google: (loginType) => loginType === 'google',
+		apple: (loginType) => loginType === 'apple'
+	};
+
+	return matchers[login](user.loginType);
+}
+
 export const load: PageServerLoad = async ({ url }) => {
-	const parsed = querySchema.parse({ q: url.searchParams.get('q') ?? undefined });
+	const parsed = querySchema.parse({
+		q: url.searchParams.get('q') ?? undefined,
+		login: url.searchParams.get('login') ?? undefined
+	});
 	const q = parsed.q;
+	const login = parsed.login;
 
 	if (!q) {
-		const users = await listAdminUserProfiles({ limit: 50, orderBy: 'lastLoginAt desc' });
+		const rawUsers = await listAdminUserProfiles({
+			limit: login === 'all' ? 50 : 200,
+			orderBy: 'lastLoginAt desc'
+		});
+		const users = rawUsers
+			.map((user) => ({
+				...user,
+				loginType: deriveLoginType(user)
+			}))
+			.filter((user) => matchesLoginFilter(user, login))
+			.slice(0, 50);
 		return {
 			query: q,
+			login,
 			notice: '',
 			users: users.map((user) => ({
 				uid: user.uid,
 				email: user.email,
 				name: user.name,
 				isAnonymous: user.isAnonymous,
+				loginType: user.loginType,
 				createdAt: toIso(user.createdAt),
 				updatedAt: toIso(user.updatedAt),
 				lastLoginAt: toIso(user.lastLoginAt),
@@ -42,19 +90,29 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 
 	if (q.includes('@')) {
-		const users = await findAdminUsersByEmail(q).catch((error) => {
+		const rawUsers = await findAdminUsersByEmail(q).catch((error) => {
 			console.error('Failed to search users by email', { q, error });
 			return [];
 		});
-		const notice = users.length === 0 ? 'No users found for that email.' : '';
+
+		const users = rawUsers
+			.map((user) => ({
+				...user,
+				loginType: deriveLoginType(user)
+			}))
+			.filter((user) => matchesLoginFilter(user, login));
+
+		const notice = users.length === 0 ? 'No users found for that query.' : '';
 		return {
 			query: q,
+			login,
 			notice,
 			users: users.map((user) => ({
 				uid: user.uid,
 				email: user.email,
 				name: user.name,
 				isAnonymous: user.isAnonymous,
+				loginType: user.loginType,
 				createdAt: toIso(user.createdAt),
 				updatedAt: toIso(user.updatedAt),
 				lastLoginAt: toIso(user.lastLoginAt),
@@ -68,16 +126,18 @@ export const load: PageServerLoad = async ({ url }) => {
 		return null;
 	});
 
-	if (!user) {
+	if (!user || !matchesLoginFilter({ loginType: deriveLoginType(user) }, login)) {
 		return {
 			query: q,
-			notice: 'No user found for that ID.',
+			login,
+			notice: 'No users found for that query.',
 			users: []
 		};
 	}
 
 	return {
 		query: q,
+		login,
 		notice: '',
 		users: [
 			{
@@ -85,6 +145,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				email: user.email,
 				name: user.name,
 				isAnonymous: user.isAnonymous,
+				loginType: deriveLoginType(user),
 				createdAt: toIso(user.createdAt),
 				updatedAt: toIso(user.updatedAt),
 				lastLoginAt: toIso(user.lastLoginAt),
