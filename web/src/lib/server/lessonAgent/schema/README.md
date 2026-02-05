@@ -1,11 +1,11 @@
 # Lesson publishing schemas
 
-`firestore-schema.json` contains JSON schemas for the documents that `publish_lesson` validates and writes to Firestore:
+These JSON schema files describe the workspace outputs that `publish_lesson` reads, validates, and writes to Firestore:
 
-- `session` → `spark/{userId}/sessions/{sessionId}`
-- `quiz` → `spark/{userId}/sessions/{sessionId}/quiz/{planItemId}`
-- `code` → `spark/{userId}/sessions/{sessionId}/code/{planItemId}`
-- `media` → `spark/{userId}/sessions/{sessionId}/media/{planItemId}`
+- `session.schema.json` → `lesson/output/session.json` (session doc)
+- `quiz.schema.json` → `lesson/output/quiz/<planItemId>.json` (QuizDefinition doc, per quiz plan item)
+- `code.schema.json` → `lesson/output/code/<planItemId>.json` (CodeProblem doc, per problem plan item)
+- `media.schema.json` → `lesson/output/media/<planItemId>.json` (SessionMediaDoc doc, per media plan item)
 
 Notes:
 

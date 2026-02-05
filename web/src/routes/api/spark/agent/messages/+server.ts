@@ -22,7 +22,19 @@ import { listSessions, getSession, saveSession, setCurrentSessionId } from '$lib
 import { getSessionState } from '$lib/server/sessionState/repo';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
-import lessonFirestoreSchemaJson from '$lib/server/lessonAgent/schema/firestore-schema.json?raw';
+import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
+import lessonQuizSchemaJson from '$lib/server/lessonAgent/schema/quiz.schema.json?raw';
+import lessonCodeSchemaJson from '$lib/server/lessonAgent/schema/code.schema.json?raw';
+import lessonMediaSchemaJson from '$lib/server/lessonAgent/schema/media.schema.json?raw';
+import lessonPromptSessionDraft from '$lib/server/lessonAgent/prompts/session-draft.md?raw';
+import lessonPromptSessionGrade from '$lib/server/lessonAgent/prompts/session-grade.md?raw';
+import lessonPromptSessionRevise from '$lib/server/lessonAgent/prompts/session-revise.md?raw';
+import lessonPromptQuizDraft from '$lib/server/lessonAgent/prompts/quiz-draft.md?raw';
+import lessonPromptQuizGrade from '$lib/server/lessonAgent/prompts/quiz-grade.md?raw';
+import lessonPromptQuizRevise from '$lib/server/lessonAgent/prompts/quiz-revise.md?raw';
+import lessonPromptCodeDraft from '$lib/server/lessonAgent/prompts/code-draft.md?raw';
+import lessonPromptCodeGrade from '$lib/server/lessonAgent/prompts/code-grade.md?raw';
+import lessonPromptCodeRevise from '$lib/server/lessonAgent/prompts/code-revise.md?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -676,14 +688,29 @@ function buildSparkChatTools(options: {
 						workspaceId,
 						input
 					});
+					const requirements = [
+						'# Requirements and decisions',
+						'',
+						'Fill this file with:',
+						'- Hard requirements from brief.md (topic, level, goal, duration, materials).',
+						'- Decisions: includeCoding (true/false), includeStory (true/false).',
+						'- Any assumptions you are making.',
+						'',
+						`Session ID: ${sessionId}`,
+						`Workspace ID: ${workspaceId}`,
+						''
+					].join('\n');
 					const plan = [
 						'# Plan',
 						'',
-						'- [running] Read brief.md and lesson/task.md.',
-						'- [pending] Draft lesson structure (optional: lesson/drafts/*).',
-						'- [pending] Write lesson/output/session.json.',
-						'- [pending] Write lesson/output/quiz/*.json.',
-						'- [pending] Write lesson/output/code/*.json (if coding).',
+						'- [running] Read brief.md, request.json, and lesson/task.md.',
+						'- [pending] Write lesson/requirements.md (hard requirements + decisions).',
+						'- [pending] Generate session draft (generate_text → lesson/output/session.json).',
+						'- [pending] Grade + revise session until pass (lesson/feedback/session-grade.json).',
+						'- [pending] Generate quizzes (generate_text → lesson/output/quiz/*.json).',
+						'- [pending] Grade + revise quizzes (lesson/feedback/*).',
+						'- [pending] Generate code problems if needed (lesson/output/code/*.json).',
+						'- [pending] Verify code problems with python_exec (if coding).',
 						'- [pending] Call publish_lesson (fix errors until published).',
 						'- [pending] Call done.'
 					].join('\n');
@@ -709,6 +736,14 @@ function buildSparkChatTools(options: {
 							serviceAccountJson,
 							userId,
 							workspaceId,
+							path: 'lesson/requirements.md',
+							content: requirements,
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
 							path: 'lesson/schema/README.md',
 							content: lessonSchemaReadme.trim() + '\n',
 							now
@@ -717,8 +752,104 @@ function buildSparkChatTools(options: {
 							serviceAccountJson,
 							userId,
 							workspaceId,
-							path: 'lesson/schema/firestore-schema.json',
-							content: lessonFirestoreSchemaJson.trim() + '\n',
+							path: 'lesson/schema/session.schema.json',
+							content: lessonSessionSchemaJson.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/quiz.schema.json',
+							content: lessonQuizSchemaJson.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/code.schema.json',
+							content: lessonCodeSchemaJson.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/media.schema.json',
+							content: lessonMediaSchemaJson.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/session-draft.md',
+							content: lessonPromptSessionDraft.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/session-grade.md',
+							content: lessonPromptSessionGrade.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/session-revise.md',
+							content: lessonPromptSessionRevise.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/quiz-draft.md',
+							content: lessonPromptQuizDraft.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/quiz-grade.md',
+							content: lessonPromptQuizGrade.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/quiz-revise.md',
+							content: lessonPromptQuizRevise.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/code-draft.md',
+							content: lessonPromptCodeDraft.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/code-grade.md',
+							content: lessonPromptCodeGrade.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/prompts/code-revise.md',
+							content: lessonPromptCodeRevise.trim() + '\n',
 							now
 						})
 					]);
@@ -730,16 +861,25 @@ function buildSparkChatTools(options: {
 						`workspaceId: ${workspaceId}`,
 						'',
 						'Instructions:',
-						'1) Read brief.md and lesson/task.md.',
-						'2) Follow the pipeline in lesson/task.md and write Firestore-ready JSON under lesson/output/.',
-						'3) Call publish_lesson with:',
+						'1) Read brief.md, request.json, and lesson/task.md.',
+						'2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).',
+						'3) Use generate_text + the templates in lesson/prompts/ to do a generate → grade → revise loop for session/quizzes/problems.',
+						'   - For JSON outputs, pass responseSchemaPath pointing at lesson/schema/*.schema.json.',
+						'4) Write final JSON under lesson/output/.',
+						'',
+						'Examples:',
+						" - generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
+						" - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })  (must pass=true before publishing)",
+						" - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
+						'',
+						'5) Call publish_lesson with:',
 						`   - sessionId: ${sessionId}`,
 						"   - sessionPath: 'lesson/output/session.json'",
 						"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
 						'   - includeCoding: true if you included any plan items with kind="problem"; otherwise false.',
 						'   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
-						'4) If publish_lesson fails, fix the files and retry.',
-						'5) Call done with a short summary including the sessionId.',
+						'6) If publish_lesson fails, fix the files and retry.',
+						'7) Call done with a short summary including the sessionId.',
 						'',
 						'Do not publish into welcome templates.'
 					].join('\n');
@@ -833,11 +973,23 @@ async function generateAssistantResponse(
 		maxSteps: 12,
 		onDelta: handlers.onDelta
 	});
-	return result.text;
+	return normalizeSparkLinks(result.text);
 }
 
 function hasGeminiCredentials(): boolean {
 	return Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
+}
+
+function normalizeSparkLinks(text: string): string {
+	return text
+		.replace(
+			/https?:\/\/[^\s)]+(\/spark\/lesson\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/giu,
+			'$1'
+		)
+		.replace(
+			/https?:\/\/[^\s)]+(\/spark\/lessons)(?=[\s)\].,!?]|$)/giu,
+			'$1'
+		);
 }
 
 async function streamFallbackText(

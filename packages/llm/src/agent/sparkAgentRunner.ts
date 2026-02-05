@@ -36,11 +36,14 @@ import {
 } from "../utils/gcp/firestoreRest";
 import {
   estimateCallCostUsd,
+  generateText,
   runToolLoop,
   tool,
   type LlmTextModelId,
+  type LlmToolConfig,
   type LlmToolSet,
 } from "../utils/llm";
+import { isGeminiModelId, type GeminiModelId } from "../utils/gemini";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import type {
   JobProgressReporter,
@@ -52,6 +55,8 @@ import type {
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.2-codex";
 const DEFAULT_MAX_STEPS = 200;
+const DEFAULT_LESSON_MAX_STEPS = 1000;
+const DEFAULT_GENERATE_TEXT_MODEL_ID: GeminiModelId = "gemini-2.5-pro";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_STREAM_MAX_CHARS = 20_000;
@@ -117,6 +122,51 @@ async function ensurePythonRuntime(indexURL?: string): Promise<PyodideInterface>
     })();
   }
   return pythonRuntimePromise;
+}
+
+async function expandPromptTemplate(options: {
+  template: string;
+  rootDir: string;
+}): Promise<{
+  text: string;
+  replacements: Array<{ path: string; chars: number }>;
+}> {
+  const { template, rootDir } = options;
+  const regex = /{{\s*([^}]+?)\s*}}/g;
+  let result = "";
+  let lastIndex = 0;
+  const replacements: Array<{ path: string; chars: number }> = [];
+  const cache = new Map<string, string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(template)) !== null) {
+    const token = match[1]?.trim() ?? "";
+    result += template.slice(lastIndex, match.index);
+    lastIndex = regex.lastIndex;
+    if (!token) {
+      result += match[0];
+      continue;
+    }
+
+    let content = cache.get(token);
+    if (content === undefined) {
+      try {
+        const resolved = resolveWorkspacePath(rootDir, token);
+        content = await readFile(resolved, { encoding: "utf8" });
+      } catch (error) {
+        throw new Error(
+          `Failed to expand {{${token}}}: ${errorAsString(error)}`,
+        );
+      }
+      cache.set(token, content);
+    }
+
+    replacements.push({ path: token, chars: content.length });
+    result += content;
+  }
+
+  result += template.slice(lastIndex);
+  return { text: result, replacements };
 }
 
 type AgentStatus = "created" | "executing" | "stopped" | "failed" | "done";
@@ -1035,18 +1085,30 @@ function buildAgentSystemPrompt(): string {
     "- When the task is complete, you MUST call done({summary}).",
     "",
     "Lesson creation pipeline (CRITICAL):",
-    "When you are asked to create a Spark lesson, follow this strategy:",
-    "1) Read brief.md and lesson/task.md first. Treat them as authoritative requirements.",
-    "2) Draft the lesson content (optionally under lesson/drafts/).",
-    "3) Produce Firestore-ready JSON outputs under lesson/output/:",
-    "   - lesson/output/session.json",
-    "   - lesson/output/quiz/<planItemId>.json for every session.plan item with kind='quiz'",
-    "   - lesson/output/code/<planItemId>.json for every session.plan item with kind='problem'",
-    "   - lesson/output/media/<planItemId>.json only when explicitly requested and the plan includes kind='media'",
-    "4) Validate + publish by calling publish_lesson with sessionId and sessionPath='lesson/output/session.json'.",
-    "   - If publish_lesson fails, fix the files and retry until it succeeds.",
-    "5) Only claim the lesson is published if publish_lesson returned status='published'. Then call done with a short summary.",
+    "When you are asked to create a Spark lesson, follow the pipeline described in lesson/task.md.",
+    "Key strategy (mirrors the old fixed pipeline, but prompt-driven):",
+    "1) Read brief.md + request.json + lesson/task.md first; write hard requirements + decisions into lesson/requirements.md.",
+    "2) Generate -> grade -> revise loop for each artifact (do not skip grading):",
+    "   - session plan (lesson/output/session.json)",
+    "   - quizzes (lesson/output/quiz/<planItemId>.json)",
+    "   - code problems (lesson/output/code/<planItemId>.json) when coding is included",
+    "3) If coding is included, draft/verify code problems first, then build the plan/quizzes from the verified problems.",
+    "4) You MUST use generate_text for drafting and grading; do not write lesson/output/*.json or lesson/feedback/*.json directly with write_file/apply_patch.",
+    "   - Example (draft session): generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
+    "   - Example (grade session): generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })",
+    "   - Example (grade a quiz): generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
+    "   - Prompt templates may include {{path/to/file}} placeholders to inline workspace files.",
+    "   - You can also pass inputPaths to generate_text to append additional workspace files without editing the template.",
+    "   - When generating JSON, pass responseSchemaPath pointing at lesson/schema/*.schema.json.",
+    "   - Do not publish until lesson/feedback/session-grade.json exists and pass=true.",
+    "5) Publish only after outputs exist and look consistent: call publish_lesson and fix errors until status='published'.",
     "Publish lessons into the user's sessions (not welcome templates).",
+    "",
+    "Schema / files:",
+    "- lesson/schema/session.schema.json defines lesson/output/session.json.",
+    "- lesson/schema/quiz.schema.json defines lesson/output/quiz/*.json.",
+    "- lesson/schema/code.schema.json defines lesson/output/code/*.json.",
+    "- lesson/schema/media.schema.json defines lesson/output/media/*.json (only if explicitly requested).",
     "",
     "Python execution:",
     "- Use python_exec for calculations or verification (e.g. validate that a reference solution matches tests).",
@@ -1059,8 +1121,33 @@ function buildAgentTools(options: {
   rootDir: string;
   userId: string;
   serviceAccountJson: string;
+  progress?: JobProgressReporter;
+  enforceLessonPipeline?: boolean;
 }): LlmToolSet {
-  const { workspace, rootDir, userId, serviceAccountJson } = options;
+  const {
+    workspace,
+    rootDir,
+    userId,
+    serviceAccountJson,
+    progress,
+    enforceLessonPipeline,
+  } = options;
+
+  const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
+  const isLessonGeneratedJsonPath = (inputPath: string): boolean => {
+    const normalized = inputPath.replace(/\\/g, "/");
+    if (!normalized.endsWith(".json")) {
+      return false;
+    }
+    if (normalized.startsWith("lesson/output/")) {
+      return true;
+    }
+    if (normalized.startsWith("lesson/feedback/")) {
+      return true;
+    }
+    return false;
+  };
+
   return {
     publish_lesson: tool({
       description:
@@ -1150,6 +1237,24 @@ function buildAgentTools(options: {
               return null;
             }
           };
+
+          if (shouldEnforceLessonPipeline) {
+            const sessionGradePath = "lesson/feedback/session-grade.json";
+            let rawGrade: unknown;
+            try {
+              rawGrade = await readWorkspaceJson(sessionGradePath);
+            } catch (error) {
+              throw new Error(
+                `Missing required session grading report (${sessionGradePath}). Run generate_text with promptPath='lesson/prompts/session-grade.md' and outputPath='${sessionGradePath}', then revise until pass=true.`,
+              );
+            }
+            const gradeRecord = ensurePlainRecord(rawGrade, sessionGradePath);
+            if (gradeRecord.pass !== true) {
+              throw new Error(
+                `Session grading report (${sessionGradePath}) has pass=false. Revise lesson/output/session.json and re-grade before publishing.`,
+              );
+            }
+          }
 
           const lessonBrief = await readWorkspaceTextOptional(resolvedBriefPath);
 
@@ -1553,6 +1658,172 @@ function buildAgentTools(options: {
         };
       },
     }),
+    generate_text: tool({
+      description:
+        "Generate text (Markdown/JSON) using a sub-model. Reads promptPath from the workspace and expands {{relative/path}} placeholders by inlining referenced workspace files.",
+      inputSchema: z
+        .object({
+          promptPath: z.string().trim().min(1),
+          inputPaths: z.array(z.string().trim().min(1)).optional(),
+          modelId: z.string().trim().min(1).optional(),
+          tools: z.array(z.enum(["web-search", "code-execution"])).optional(),
+          responseSchemaPath: z.string().trim().min(1).optional(),
+          outputPath: z.string().trim().min(1).optional(),
+          outputMode: z.enum(["overwrite", "append"]).optional(),
+        })
+        .strict(),
+      execute: async ({
+        promptPath,
+        inputPaths,
+        modelId,
+        tools,
+        responseSchemaPath,
+        outputPath,
+        outputMode,
+      }) => {
+        const resolvedModelId: GeminiModelId = isGeminiModelId(modelId ?? "")
+          ? (modelId as GeminiModelId)
+          : DEFAULT_GENERATE_TEXT_MODEL_ID;
+
+        const promptTemplate = await readFile(
+          resolveWorkspacePath(rootDir, promptPath),
+          { encoding: "utf8" },
+        );
+        const expanded = await expandPromptTemplate({
+          template: promptTemplate,
+          rootDir,
+        });
+        let promptText = expanded.text;
+        if (inputPaths && inputPaths.length > 0) {
+          const attachments = await Promise.all(
+            inputPaths.map(async (inputPath) => {
+              const resolved = resolveWorkspacePath(rootDir, inputPath);
+              const content = await readFile(resolved, { encoding: "utf8" });
+              return { path: inputPath, content };
+            }),
+          );
+          promptText += "\n\n---\n\n# Attached files\n";
+          for (const file of attachments) {
+            promptText += `\n\n## ${file.path}\n\n${file.content.trimEnd()}\n`;
+          }
+        }
+
+        const toolConfigs: LlmToolConfig[] = [];
+        for (const toolType of tools ?? []) {
+          if (toolType === "web-search") {
+            toolConfigs.push({ type: "web-search", mode: "live" });
+            continue;
+          }
+          toolConfigs.push({ type: toolType });
+        }
+
+        const responseSchemaText =
+          responseSchemaPath && responseSchemaPath.trim().length > 0
+            ? await readFile(resolveWorkspacePath(rootDir, responseSchemaPath), {
+                encoding: "utf8",
+              })
+            : null;
+        const responseJsonSchema = responseSchemaText
+          ? (() => {
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(responseSchemaText);
+              } catch (error) {
+                throw new Error(
+                  `Invalid JSON schema in "${responseSchemaPath}": ${errorAsString(error)}`,
+                );
+              }
+              if (
+                !parsed ||
+                typeof parsed !== "object" ||
+                Array.isArray(parsed)
+              ) {
+                throw new Error(
+                  `Schema "${responseSchemaPath}" must be a JSON object schema.`,
+                );
+              }
+              return parsed as Record<string, unknown>;
+            })()
+          : undefined;
+
+        if (responseJsonSchema && toolConfigs.length > 0) {
+          throw new Error(
+            "generate_text cannot combine responseSchemaPath with tools; run web_search/python_exec separately or drop responseSchemaPath.",
+          );
+        }
+
+        const text = await generateText({
+          modelId: resolvedModelId,
+          contents: [
+            {
+              role: "user",
+              parts: [{ type: "text", text: promptText }],
+            },
+          ],
+          ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
+          ...(responseJsonSchema
+            ? {
+                responseMimeType: "application/json",
+                responseJsonSchema: responseJsonSchema,
+              }
+            : {}),
+          ...(progress ? { progress } : {}),
+        });
+
+        const shouldFormatJson =
+          Boolean(responseJsonSchema) ||
+          Boolean(outputPath && outputPath.trim().endsWith(".json"));
+        const formatted =
+          shouldFormatJson
+            ? (() => {
+                let parsed: unknown;
+                try {
+                  parsed = JSON.parse(text);
+                } catch (error) {
+                  throw new Error(
+                    `generate_text returned invalid JSON: ${errorAsString(error)}`,
+                  );
+                }
+                return JSON.stringify(parsed, null, 2) + "\n";
+              })()
+            : text;
+
+        const mode = outputMode ?? "overwrite";
+        if (outputPath) {
+          const resolved = resolveWorkspacePath(rootDir, outputPath);
+          await ensureDir(path.dirname(resolved));
+          if (mode === "append") {
+            const existing = await readFile(resolved, { encoding: "utf8" }).catch(
+              () => "",
+            );
+            await writeFile(resolved, existing + formatted, { encoding: "utf8" });
+          } else {
+            await writeFile(resolved, formatted, { encoding: "utf8" });
+          }
+          workspace.scheduleUpdate(outputPath);
+          return {
+            status: "written",
+            modelId: resolvedModelId,
+            promptPath,
+            inputPaths: inputPaths ?? [],
+            outputPath,
+            outputMode: mode,
+            promptTemplateReplacements: expanded.replacements,
+            textChars: formatted.length,
+          };
+        }
+
+        return {
+          status: "generated",
+          modelId: resolvedModelId,
+          promptPath,
+          inputPaths: inputPaths ?? [],
+          promptTemplateReplacements: expanded.replacements,
+          text: formatted,
+          textChars: formatted.length,
+        };
+      },
+    }),
     list_files: tool({
       description: "Recursively list files under a workspace path.",
       inputSchema: z.object({
@@ -1625,6 +1896,11 @@ function buildAgentTools(options: {
         content: z.string(),
       }),
       execute: async ({ path: inputPath, content }) => {
+        if (shouldEnforceLessonPipeline && isLessonGeneratedJsonPath(inputPath)) {
+          throw new Error(
+            `Direct writes to "${inputPath}" are not allowed for lesson runs. Use generate_text with outputPath="${inputPath}" instead.`,
+          );
+        }
         const resolved = resolveWorkspacePath(rootDir, inputPath);
         await ensureDir(path.dirname(resolved));
         await writeFile(resolved, content, { encoding: "utf8" });
@@ -1674,6 +1950,15 @@ function buildAgentTools(options: {
           .min(1),
       }),
       execute: async ({ operations }) => {
+        if (shouldEnforceLessonPipeline) {
+          for (const op of operations) {
+            if (isLessonGeneratedJsonPath(op.path)) {
+              throw new Error(
+                `Direct patch writes to "${op.path}" are not allowed for lesson runs. Use generate_text with outputPath="${op.path}" instead.`,
+              );
+            }
+          }
+        }
         const results: Array<{
           path: string;
           status: "completed" | "failed";
@@ -2091,42 +2376,14 @@ export async function runSparkAgentTask(
       }
     };
 
-  const tools: LlmToolSet = {
-    ...buildAgentTools({
-      workspace: workspaceSync,
-      rootDir: workspaceRoot,
-      userId: options.userId,
-      serviceAccountJson,
-    }),
-    done: tool({
-      description:
-        "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
-      inputSchema: z
-        .object({
-            summary: z.string().trim().min(1).optional(),
-          })
-          .strict(),
-        execute: async ({ summary }) => {
-          doneCalled = true;
-          logSync?.append(
-            summary ? `done: ${summary}` : "done: completed without summary",
-          );
-          logSync?.setStats(statsTracker.snapshot());
-          await workspaceSync?.flushAll();
-          await logSync?.flushAll();
-          await updateAgentStatus({
-            serviceAccountJson,
-            agentDocPath,
-            status: "done",
-            resultSummary: summary,
-          });
-          return { status: "done", summary };
-        },
-      }),
-    };
-
     const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
-    const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+    const isLessonRun = Boolean(
+      typeof agentData.lessonSessionId === "string" &&
+        agentData.lessonSessionId.trim().length > 0,
+    );
+    const maxSteps =
+      options.maxSteps ??
+      (isLessonRun ? DEFAULT_LESSON_MAX_STEPS : DEFAULT_MAX_STEPS);
     const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
     const progress: JobProgressReporter = {
       log: (message) => {
@@ -2165,6 +2422,42 @@ export async function runSparkAgentTask(
         throwIfStopRequested();
         void stages;
       },
+    };
+
+    const tools: LlmToolSet = {
+      ...buildAgentTools({
+        workspace: workspaceSync,
+        rootDir: workspaceRoot,
+        userId: options.userId,
+        serviceAccountJson,
+        progress,
+        enforceLessonPipeline: isLessonRun,
+      }),
+      done: tool({
+        description:
+          "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+        inputSchema: z
+          .object({
+            summary: z.string().trim().min(1).optional(),
+          })
+          .strict(),
+        execute: async ({ summary }) => {
+          doneCalled = true;
+          logSync?.append(
+            summary ? `done: ${summary}` : "done: completed without summary",
+          );
+          logSync?.setStats(statsTracker.snapshot());
+          await workspaceSync?.flushAll();
+          await logSync?.flushAll();
+          await updateAgentStatus({
+            serviceAccountJson,
+            agentDocPath,
+            status: "done",
+            resultSummary: summary,
+          });
+          return { status: "done", summary };
+        },
+      }),
     };
 
     await pollStopRequested();
