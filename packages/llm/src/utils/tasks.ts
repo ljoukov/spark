@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { encodeBytesToBase64 } from "./gcp/base64";
 import { getGoogleAccessToken as getGoogleServiceAccountAccessToken } from "./gcp/googleAccessToken";
+import { isNodeRuntime } from "./runtime";
 
 // Server-side task schema
 export const GenerateQuizTaskSchema = z.object({
@@ -105,6 +106,20 @@ function readEnvVar(name: string): string {
   return typeof value === "string" ? value : "";
 }
 
+function formatFetchError(error: unknown): string {
+  if (error instanceof Error) {
+    const pieces: string[] = [error.message];
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause instanceof Error) {
+      pieces.push(`cause=${cause.message}`);
+    } else if (cause) {
+      pieces.push(`cause=${String(cause)}`);
+    }
+    return pieces.join(" ");
+  }
+  return String(error);
+}
+
 export async function createTask(
   task: Task,
   options: {
@@ -173,22 +188,38 @@ export async function createTask(
       );
     }
     console.warn(`Starting a local task: ${postUrl}`);
-    void fetch(postUrl, {
-      method: "POST",
-      headers,
-      body,
-    })
-      .then(async (resp) => {
+    void (async () => {
+      type NodeFetchInit = RequestInit & { dispatcher?: unknown };
+      const init: NodeFetchInit = {
+        method: "POST",
+        headers,
+        body,
+      };
+
+      try {
+        const u = new URL(postUrl);
+        if (isNodeRuntime() && u.protocol === "https:") {
+          const undici = await import("undici");
+          init.dispatcher = new undici.Agent({
+            connect: { rejectUnauthorized: false },
+          });
+        }
+      } catch (error) {
+        console.warn(`Local task dispatcher setup failed: ${formatFetchError(error)}`);
+      }
+
+      try {
+        const resp = await fetch(postUrl, init);
         const text = await resp.text().catch(() => "");
         if (!resp.ok) {
           console.warn(
             `Local task POST failed: ${resp.status} ${resp.statusText} ${text}`,
           );
         }
-      })
-      .catch((err) => {
-        console.warn(`Local task POST error: ${(err as Error).message}`);
-      });
+      } catch (error) {
+        console.warn(`Local task POST error: ${formatFetchError(error)}`);
+      }
+    })();
     return;
   }
 
