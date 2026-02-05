@@ -17,7 +17,6 @@ import { inspect } from "node:util";
 import {
   FinishReason,
   FunctionCallingConfigMode,
-  ThinkingLevel,
   type Content,
   type GenerateContentConfig,
   type GroundingMetadata,
@@ -2734,13 +2733,11 @@ async function llmStream({
           case "gemini-3-pro-preview":
             return {
               includeThoughts: true,
-              thinkingLevel: ThinkingLevel.HIGH,
             } as const;
           case "gemini-2.5-pro":
             return {
               includeThoughts: true,
               thinkingBudget: 32_768,
-              thinkingLevel: ThinkingLevel.HIGH,
             } as const;
           case "gemini-flash-latest":
           case "gemini-flash-lite-latest":
