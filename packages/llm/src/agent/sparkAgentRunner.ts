@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -11,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 
-import { loadPyodide } from "pyodide";
+import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
 import {
   CodeProblemSchema,
@@ -63,36 +62,29 @@ type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
   self?: typeof globalThis;
 };
 
-const require = createRequire(import.meta.url);
-const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
-const PYODIDE_BASE_DIR = path.dirname(PYODIDE_PACKAGE_JSON_PATH);
-const LOCAL_PYODIDE_INDEX_URL = path.join(PYODIDE_BASE_DIR, path.sep);
-
-function resolvePyodideIndexUrl(explicit?: string): string {
+function resolvePyodideIndexUrl(explicit?: string): string | undefined {
   const fromEnv =
     process.env.PYODIDE_INDEX_URL ??
     process.env.PYODIDE_BASE_URL ??
     process.env.PYTHON_RUNTIME_INDEX_URL;
-  const candidates = [explicit, fromEnv, LOCAL_PYODIDE_INDEX_URL].filter(
-    (value): value is string => Boolean(value && value.trim().length > 0),
-  );
-
-  for (const candidate of candidates) {
-    const trimmed = candidate.trim();
-    if (
-      trimmed.startsWith("http://") ||
-      trimmed.startsWith("https://") ||
-      trimmed.startsWith("file://")
-    ) {
-      return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
-    }
-    if (trimmed.endsWith(path.sep)) {
-      return trimmed;
-    }
-    return `${trimmed}${path.sep}`;
+  const raw = explicit?.trim() ?? fromEnv?.trim() ?? "";
+  if (!raw) {
+    return undefined;
   }
-
-  return LOCAL_PYODIDE_INDEX_URL;
+  if (raw.endsWith("/")) {
+    return raw;
+  }
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("file://")
+  ) {
+    return `${raw}/`;
+  }
+  if (raw.endsWith(path.sep)) {
+    return raw;
+  }
+  return `${raw}${path.sep}`;
 }
 
 function ensurePyodideEnvironment(indexURL: string): void {
@@ -107,13 +99,22 @@ function ensurePyodideEnvironment(indexURL: string): void {
   }
 }
 
-let pythonRuntimePromise: ReturnType<typeof loadPyodide> | null = null;
+let pythonRuntimePromise: Promise<PyodideInterface> | null = null;
 
-async function ensurePythonRuntime(indexURL?: string) {
+async function ensurePythonRuntime(indexURL?: string): Promise<PyodideInterface> {
   if (!pythonRuntimePromise) {
-    const resolvedIndex = resolvePyodideIndexUrl(indexURL);
-    ensurePyodideEnvironment(resolvedIndex);
-    pythonRuntimePromise = loadPyodide({ indexURL: resolvedIndex });
+    pythonRuntimePromise = (async (): Promise<PyodideInterface> => {
+      const pyodideModule = (await import(
+        /* @vite-ignore */ "pyodide"
+      )) as typeof import("pyodide");
+      const resolvedIndex = resolvePyodideIndexUrl(indexURL);
+      const options: { indexURL?: string } = {};
+      if (resolvedIndex) {
+        ensurePyodideEnvironment(resolvedIndex);
+        options.indexURL = resolvedIndex;
+      }
+      return await pyodideModule.loadPyodide(options);
+    })();
   }
   return pythonRuntimePromise;
 }
