@@ -14,7 +14,7 @@ Fail if any are violated:
 - `gradingPrompt` must be present and helpful for marking type-answer questions.
 - Question ids must be unique within the quiz.
 - Answers and mark schemes must be unambiguous and match the question prompt.
-- The quiz must align with the target plan item and the requested level/duration.
+- The quiz must align with the target plan item, the requested level, and any plan preferences in `lesson/requirements.md` (question counts/types).
 
 Schema:
 {{lesson/schema/quiz.schema.json}}
