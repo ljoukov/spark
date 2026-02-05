@@ -269,25 +269,30 @@
 		}
 	}
 
-	const canRequestStop = $derived.by(() => {
-		if (!selectedAgentId || !selectedAgent || stopSubmitting) {
+	const showStopButton = $derived.by(() => {
+		if (!selectedAgentId || !selectedAgent) {
 			return false;
 		}
 		if (selectedAgent.stop_requested) {
 			return false;
 		}
-		if (
-			selectedAgent.status === 'done' ||
-			selectedAgent.status === 'failed' ||
-			selectedAgent.status === 'stopped'
-		) {
-			return false;
-		}
-		return true;
+		return selectedAgent.status === 'created' || selectedAgent.status === 'executing';
 	});
 
+	const showStopRequestedBadge = $derived.by(() => {
+		if (!selectedAgentId || !selectedAgent) {
+			return false;
+		}
+		if (selectedAgent.status !== 'created' && selectedAgent.status !== 'executing') {
+			return false;
+		}
+		return selectedAgent.stop_requested === true;
+	});
+
+	const canRequestStop = $derived.by(() => showStopButton && !stopSubmitting);
+
 	async function requestStop(): Promise<void> {
-		if (!selectedAgentId || stopSubmitting) {
+		if (!selectedAgentId || !canRequestStop) {
 			return;
 		}
 		stopError = null;
@@ -622,21 +627,20 @@
 							>
 								{copySuccess ? 'Copied' : 'Copy prompt'}
 							</Button>
-							{#if selectedAgent.status === 'created' || selectedAgent.status === 'executing'}
+							{#if showStopButton}
 								<Button
 									variant="destructive"
 									size="sm"
-									disabled={!canRequestStop}
+									disabled={stopSubmitting}
 									onclick={() => {
 										void requestStop();
 									}}
 								>
-									{stopSubmitting
-										? 'Stopping…'
-										: selectedAgent.stop_requested
-											? 'Stop requested'
-											: 'Stop'}
+									{stopSubmitting ? 'Stopping…' : 'Stop'}
 								</Button>
+							{/if}
+							{#if showStopRequestedBadge}
+								<span class="status-pill status-pill--stopped">stop requested</span>
 							{/if}
 							<span class={`status-pill status-pill--${selectedAgent.status}`}>
 								{selectedAgent.status}
