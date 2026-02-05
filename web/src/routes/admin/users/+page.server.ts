@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 
 const loginFilterSchema = z.enum(['all', 'guest', 'email', 'google', 'apple']);
-const hasFilterSchema = z.enum(['all', 'lessons', 'chats']);
+const hasFilterSchema = z.enum(['all', 'lessons', 'chats', 'agents']);
 
 const querySchema = z
 	.object({
@@ -103,6 +103,20 @@ async function userHasChats(userId: string, serviceAccountJson: string): Promise
 	}
 }
 
+async function userHasAgentRuns(userId: string, serviceAccountJson: string): Promise<boolean> {
+	try {
+		const docs = await listFirestoreDocuments({
+			serviceAccountJson,
+			collectionPath: `users/${userId}/agents`,
+			limit: 1
+		});
+		return docs.length > 0;
+	} catch (error) {
+		console.error('Failed to check user agent runs', { userId, error });
+		return false;
+	}
+}
+
 async function filterUsersByHas<T extends { uid: string }>(
 	users: T[],
 	has: z.infer<typeof hasFilterSchema>,
@@ -127,7 +141,10 @@ async function filterUsersByHas<T extends { uid: string }>(
 				if (has === 'lessons') {
 					return await userHasLessons(user.uid, serviceAccountJson);
 				}
-				return await userHasChats(user.uid, serviceAccountJson);
+				if (has === 'chats') {
+					return await userHasChats(user.uid, serviceAccountJson);
+				}
+				return await userHasAgentRuns(user.uid, serviceAccountJson);
 			})
 		);
 

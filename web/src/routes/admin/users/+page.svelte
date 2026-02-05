@@ -49,7 +49,12 @@
 		</Card.Header>
 		<Card.Content>
 			<div class="space-y-3">
-				<form method="GET" class="flex flex-col gap-2 md:flex-row md:items-center" aria-label="Find user">
+				<form
+					method="GET"
+					action="/admin/users"
+					class="flex flex-col gap-2 md:flex-row md:items-center"
+					aria-label="Find user"
+				>
 					<label class="sr-only" for="user-search">Email or user ID</label>
 					<Input
 						id="user-search"
@@ -62,7 +67,12 @@
 					<Button type="submit">Find user</Button>
 				</form>
 
-				<form method="GET" class="flex flex-col gap-2 md:flex-row md:items-center" aria-label="User filters">
+				<form
+					method="GET"
+					action="/admin/users"
+					class="flex flex-col gap-2 md:flex-row md:items-center"
+					aria-label="User filters"
+				>
 					<label class="sr-only" for="login-filter">Login type</label>
 					<select
 						id="login-filter"
@@ -97,6 +107,7 @@
 						<option value="all" selected={has === 'all'}>Any artifacts</option>
 						<option value="lessons" selected={has === 'lessons'}>Has lessons</option>
 						<option value="chats" selected={has === 'chats'}>Has chats</option>
+						<option value="agents" selected={has === 'agents'}>Has agent runs</option>
 					</select>
 				</form>
 			</div>
@@ -158,6 +169,12 @@
 							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
 						>
 							Chats
+						</a>
+						<a
+							href={`/admin/users/${user.uid}/agents`}
+							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+						>
+							Agent runs
 						</a>
 					</div>
 				</div>
