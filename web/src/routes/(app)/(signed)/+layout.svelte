@@ -198,17 +198,17 @@
 						isAnonymous: firebaseUser.isAnonymous
 					})
 				});
-				if (!response.ok) {
-					const details = await response.json().catch(() => null);
-					console.warn('Failed to sync profile for Spark Code user', details);
-					return;
-				}
+					if (!response.ok) {
+						const details = await response.json().catch(() => null);
+						console.warn('Failed to sync profile for Spark user', details);
+						return;
+					}
 				lastSyncedSignature = signature;
-			} catch (error) {
-				console.error('Unexpected error while syncing Spark Code profile', error);
-			} finally {
-				syncingProfile = false;
-			}
+				} catch (error) {
+					console.error('Unexpected error while syncing Spark profile', error);
+				} finally {
+					syncingProfile = false;
+				}
 		}
 
 		function updateUserFromAuth(firebaseUser: User): void {
@@ -235,9 +235,9 @@
 				updateUserFromAuth(firebaseUser);
 				void syncProfileFrom(firebaseUser);
 			});
-		} catch (error) {
-			console.error('Failed to initialize Spark Code auth listeners', error);
-		}
+			} catch (error) {
+				console.error('Failed to initialize Spark auth listeners', error);
+			}
 
 		return () => {
 			unsubscribeTheme();

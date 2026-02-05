@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -10,14 +11,18 @@ import {
   writeFile,
 } from "node:fs/promises";
 
+import { loadPyodide } from "pyodide";
 import { z } from "zod";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
   SessionSchema,
+  SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
   type CodeProblem,
+  type QuizDefinition,
   type Session,
+  type SessionMediaDoc,
   type SparkAgentStateTimeline,
 } from "@spark/schemas";
 
@@ -30,13 +35,6 @@ import {
   patchFirestoreDocument,
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
-import {
-  convertSessionPlanToItems,
-  generateCodeProblems,
-  generateQuizDefinitions,
-  generateSessionMetadata,
-} from "../code/sessionArtifacts";
-import { generateSession } from "../code/generateSession";
 import {
   estimateCallCostUsd,
   runToolLoop,
@@ -59,6 +57,66 @@ const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_STREAM_MAX_CHARS = 20_000;
 const STOP_POLL_INTERVAL_MS = 10_000;
+
+type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
+  location?: { href: string };
+  self?: typeof globalThis;
+};
+
+const require = createRequire(import.meta.url);
+const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
+const PYODIDE_BASE_DIR = path.dirname(PYODIDE_PACKAGE_JSON_PATH);
+const LOCAL_PYODIDE_INDEX_URL = path.join(PYODIDE_BASE_DIR, path.sep);
+
+function resolvePyodideIndexUrl(explicit?: string): string {
+  const fromEnv =
+    process.env.PYODIDE_INDEX_URL ??
+    process.env.PYODIDE_BASE_URL ??
+    process.env.PYTHON_RUNTIME_INDEX_URL;
+  const candidates = [explicit, fromEnv, LOCAL_PYODIDE_INDEX_URL].filter(
+    (value): value is string => Boolean(value && value.trim().length > 0),
+  );
+
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    if (
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://") ||
+      trimmed.startsWith("file://")
+    ) {
+      return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+    }
+    if (trimmed.endsWith(path.sep)) {
+      return trimmed;
+    }
+    return `${trimmed}${path.sep}`;
+  }
+
+  return LOCAL_PYODIDE_INDEX_URL;
+}
+
+function ensurePyodideEnvironment(indexURL: string): void {
+  const globalObject = globalThis as MutableGlobal;
+  if (!globalObject.location) {
+    globalObject.location = { href: indexURL };
+  } else if (!globalObject.location.href) {
+    globalObject.location.href = indexURL;
+  }
+  if (!globalObject.self) {
+    globalObject.self = globalThis;
+  }
+}
+
+let pythonRuntimePromise: ReturnType<typeof loadPyodide> | null = null;
+
+async function ensurePythonRuntime(indexURL?: string) {
+  if (!pythonRuntimePromise) {
+    const resolvedIndex = resolvePyodideIndexUrl(indexURL);
+    ensurePyodideEnvironment(resolvedIndex);
+    pythonRuntimePromise = loadPyodide({ indexURL: resolvedIndex });
+  }
+  return pythonRuntimePromise;
+}
 
 type AgentStatus = "created" | "executing" | "stopped" | "failed" | "done";
 
@@ -965,11 +1023,33 @@ class AgentLogSync {
 function buildAgentSystemPrompt(): string {
   return [
     "You are Spark Agent, a tool-using assistant.",
-    "Use the provided tools to read and write files in the workspace.",
-    "Use the web_search tool when you need to look up information on the internet.",
-    "When the task is complete, you MUST call the done tool with a short summary.",
-    "Do not end the run with a plain text response unless you have already called done.",
-    "After calling done, respond with a brief confirmation and stop.",
+    "",
+    "General rules:",
+    "- Work with workspace-relative paths only (no absolute paths, no .. segments).",
+    "- Use list_files/read_file/read_files to inspect the workspace before editing.",
+    "- Use write_file to create/overwrite files; use apply_patch for small edits to existing files.",
+    "- Use move_file for renames and delete_file for deletions.",
+    "- Prefer fewer, larger writes over many tiny edits.",
+    "- Use web_search when you need to look up facts or check details.",
+    "- When the task is complete, you MUST call done({summary}).",
+    "",
+    "Lesson creation pipeline (CRITICAL):",
+    "When you are asked to create a Spark lesson, follow this strategy:",
+    "1) Read brief.md and lesson/task.md first. Treat them as authoritative requirements.",
+    "2) Draft the lesson content (optionally under lesson/drafts/).",
+    "3) Produce Firestore-ready JSON outputs under lesson/output/:",
+    "   - lesson/output/session.json",
+    "   - lesson/output/quiz/<planItemId>.json for every session.plan item with kind='quiz'",
+    "   - lesson/output/code/<planItemId>.json for every session.plan item with kind='problem'",
+    "   - lesson/output/media/<planItemId>.json only when explicitly requested and the plan includes kind='media'",
+    "4) Validate + publish by calling publish_lesson with sessionId and sessionPath='lesson/output/session.json'.",
+    "   - If publish_lesson fails, fix the files and retry until it succeeds.",
+    "5) Only claim the lesson is published if publish_lesson returned status='published'. Then call done with a short summary.",
+    "Publish lessons into the user's sessions (not welcome templates).",
+    "",
+    "Python execution:",
+    "- Use python_exec for calculations or verification (e.g. validate that a reference solution matches tests).",
+    "- Provide stdinPath and capture stdout/stderr to workspace files so results are persisted.",
   ].join("\n");
 }
 
@@ -983,10 +1063,11 @@ function buildAgentTools(options: {
   return {
     publish_lesson: tool({
       description:
-        "Generate and publish a Spark lesson into the user's sessions (not welcome templates). Reads a brief from the workspace and writes session + quiz/problem documents to Firestore.",
+        "Publish a Spark lesson into the user's sessions (not welcome templates). Reads Firestore-ready JSON from the workspace and writes session + quiz/problem documents to Firestore.",
       inputSchema: z
         .object({
           sessionId: z.string().trim().min(1),
+          sessionPath: z.string().trim().min(1).optional(),
           briefPath: z.string().trim().min(1).optional(),
           includeStory: z.boolean().optional(),
           includeCoding: z.boolean().optional(),
@@ -994,53 +1075,19 @@ function buildAgentTools(options: {
         .strict(),
       execute: async ({
         sessionId,
+        sessionPath,
         briefPath,
         includeStory,
         includeCoding,
       }) => {
+        const resolvedSessionPath = sessionPath ?? "lesson/output/session.json";
         const resolvedBriefPath = briefPath ?? "brief.md";
-        const resolvedBrief = resolveWorkspacePath(rootDir, resolvedBriefPath);
-        const lessonBrief = await readFile(resolvedBrief, {
-          encoding: "utf8",
-        });
-
-        const deriveTopic = (brief: string): string => {
-          const lines = brief.replace(/\r\n/g, "\n").split("\n");
-          for (let i = 0; i < lines.length; i += 1) {
-            const line = lines[i]?.trim() ?? "";
-            if (/^##\s*topic\s*$/iu.test(line)) {
-              for (let j = i + 1; j < lines.length; j += 1) {
-                const next = lines[j]?.trim() ?? "";
-                if (next.length === 0) {
-                  continue;
-                }
-                return next.replace(/^#+\s*/u, "").trim();
-              }
-            }
-            const match = line.match(
-              /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
-            );
-            if (match?.[1]) {
-              return match[1].trim();
-            }
-          }
-          const firstNonEmpty = lines.find((entry) => entry.trim().length > 0);
-          return firstNonEmpty ? firstNonEmpty.replace(/^#+\s*/u, "").trim() : "";
-        };
-
-        const topic = deriveTopic(lessonBrief);
-        if (!topic) {
-          throw new Error("Unable to derive topic from brief.md");
-        }
-
-        const resolvedIncludeStory = includeStory ?? false;
-        const resolvedIncludeCoding = includeCoding ?? false;
 
         const docPath = `spark/${userId}/sessions/${sessionId}`;
         const existing = await getFirestoreDocument({
           serviceAccountJson,
           documentPath: docPath,
-        }).catch(() => ({ exists: false, data: null as null }));
+        }).catch(() => ({ exists: false, data: null }));
         const existingSession = existing.exists && existing.data
           ? SessionSchema.safeParse({
               id: sessionId,
@@ -1051,55 +1098,283 @@ function buildAgentTools(options: {
           existingSession && existingSession.success
             ? existingSession.data.createdAt
             : new Date();
-        const titleOverride =
+        const titleFallback =
           existingSession && existingSession.success
             ? existingSession.data.title
             : undefined;
+        const topicsFallback =
+          existingSession && existingSession.success
+            ? existingSession.data.topics
+            : undefined;
 
         try {
-          const result = await generateSession({
-            topic,
-            lessonBrief,
-            userId,
-            sessionId,
-            storyPlanItemId: "story",
-            includeStory: resolvedIncludeStory,
-            includeCoding: resolvedIncludeCoding,
-          });
-
-          const metadata = await generateSessionMetadata({
-            topic: result.plan.topic,
-            plan: result.plan,
-            storyTitle: result.story?.title,
-            includeCoding: resolvedIncludeCoding,
-          });
-
-          const quizDefinitions = await generateQuizDefinitions(
-            result.plan,
-            result.quizzes,
-            lessonBrief,
-          );
-
-          const codeProblems: readonly CodeProblem[] = resolvedIncludeCoding
-            ? await generateCodeProblems(result.plan, result.problems, lessonBrief)
-            : [];
-
-          const { plan: planItems } = convertSessionPlanToItems(result, "story");
-
-          const sessionDoc: Session = {
-            id: sessionId,
-            title: titleOverride ?? result.plan.topic,
-            summary: metadata.summary,
-            tagline: metadata.tagline,
-            emoji: metadata.emoji,
-            topics: [topic],
-            status: "ready",
-            createdAt,
-            plan: planItems,
-            nextLessonProposals: [],
+          const readWorkspaceJson = async (
+            inputPath: string,
+          ): Promise<unknown> => {
+            const resolved = resolveWorkspacePath(rootDir, inputPath);
+            let text = "";
+            try {
+              text = await readFile(resolved, { encoding: "utf8" });
+            } catch (error) {
+              throw new Error(
+                `Unable to read workspace file "${inputPath}": ${errorAsString(error)}`,
+              );
+            }
+            try {
+              return JSON.parse(text);
+            } catch (error) {
+              throw new Error(
+                `Invalid JSON in "${inputPath}": ${errorAsString(error)}`,
+              );
+            }
           };
 
-          const validatedSession = SessionSchema.parse(sessionDoc);
+          const ensurePlainRecord = (
+            value: unknown,
+            label: string,
+          ): Record<string, unknown> => {
+            if (!value || typeof value !== "object" || Array.isArray(value)) {
+              throw new Error(`"${label}" must contain a JSON object.`);
+            }
+            return value as Record<string, unknown>;
+          };
+
+          const readWorkspaceTextOptional = async (
+            inputPath: string,
+          ): Promise<string | null> => {
+            try {
+              const resolved = resolveWorkspacePath(rootDir, inputPath);
+              return await readFile(resolved, { encoding: "utf8" });
+            } catch {
+              return null;
+            }
+          };
+
+          const lessonBrief = await readWorkspaceTextOptional(resolvedBriefPath);
+
+          const rawSessionJson = await readWorkspaceJson(resolvedSessionPath);
+          const rawSessionRecord = ensurePlainRecord(
+            rawSessionJson,
+            resolvedSessionPath,
+          );
+
+          const titleFromFile =
+            typeof rawSessionRecord.title === "string"
+              ? rawSessionRecord.title.trim()
+              : "";
+          const resolvedTitle =
+            titleFromFile.length > 0 ? titleFromFile : titleFallback;
+
+          const topicsFromFile = Array.isArray(rawSessionRecord.topics)
+            ? rawSessionRecord.topics
+                .map((topic) => (typeof topic === "string" ? topic.trim() : ""))
+                .filter((topic) => topic.length > 0)
+            : [];
+          const resolvedTopics =
+            topicsFromFile.length > 0
+              ? topicsFromFile
+              : topicsFallback && topicsFallback.length > 0
+                ? topicsFallback
+                : [];
+
+          const sessionCandidate: Record<string, unknown> = {
+            ...rawSessionRecord,
+            id: sessionId,
+            createdAt,
+            status: "ready",
+            nextLessonProposals: [],
+          };
+          if (resolvedTitle) {
+            sessionCandidate.title = resolvedTitle;
+          }
+          if (resolvedTopics.length > 0) {
+            sessionCandidate.topics = resolvedTopics;
+          } else if (lessonBrief) {
+            const deriveTopic = (brief: string): string => {
+              const lines = brief.replace(/\r\n/g, "\n").split("\n");
+              for (let i = 0; i < lines.length; i += 1) {
+                const line = lines[i]?.trim() ?? "";
+                if (/^##\s*topic\s*$/iu.test(line)) {
+                  for (let j = i + 1; j < lines.length; j += 1) {
+                    const next = lines[j]?.trim() ?? "";
+                    if (next.length === 0) {
+                      continue;
+                    }
+                    return next.replace(/^#+\s*/u, "").trim();
+                  }
+                }
+                const match = line.match(
+                  /^\s*(?:topic|lesson topic|session topic|title)\s*:\s*(.+?)\s*$/iu,
+                );
+                if (match?.[1]) {
+                  return match[1].trim();
+                }
+              }
+              const firstNonEmpty = lines.find(
+                (entry) => entry.trim().length > 0,
+              );
+              return firstNonEmpty
+                ? firstNonEmpty.replace(/^#+\s*/u, "").trim()
+                : "";
+            };
+            const derivedTopic = deriveTopic(lessonBrief);
+            if (derivedTopic) {
+              sessionCandidate.topics = [derivedTopic];
+            }
+          }
+
+          let sessionDoc: Session;
+          try {
+            sessionDoc = SessionSchema.parse(sessionCandidate);
+          } catch (error) {
+            throw new Error(
+              `Invalid session JSON (${resolvedSessionPath}): ${errorAsString(error)}`,
+            );
+          }
+
+          if (includeCoding === false) {
+            const problemCount = sessionDoc.plan.filter(
+              (item) => item.kind === "problem",
+            ).length;
+            if (problemCount > 0) {
+              throw new Error(
+                "includeCoding=false but session.plan includes problem items.",
+              );
+            }
+          }
+
+          if (includeStory === false) {
+            const mediaCount = sessionDoc.plan.filter(
+              (item) => item.kind === "media",
+            ).length;
+            if (mediaCount > 0) {
+              throw new Error(
+                "includeStory=false but session.plan includes media items.",
+              );
+            }
+          }
+
+          const seenPlanIds = new Set<string>();
+          for (const item of sessionDoc.plan) {
+            if (seenPlanIds.has(item.id)) {
+              throw new Error(`Duplicate plan item id "${item.id}" in session.`);
+            }
+            seenPlanIds.add(item.id);
+          }
+
+          const baseDir = path.posix.dirname(resolvedSessionPath);
+          const basePrefix = baseDir === "." ? "" : baseDir;
+          const resolveBundlePath = (suffix: string): string => {
+            if (!basePrefix) {
+              return suffix;
+            }
+            return `${basePrefix}/${suffix}`;
+          };
+
+          const quizPlanItems = sessionDoc.plan.filter(
+            (item) => item.kind === "quiz",
+          );
+          const problemPlanItems = sessionDoc.plan.filter(
+            (item) => item.kind === "problem",
+          );
+          const mediaPlanItems = sessionDoc.plan.filter(
+            (item) => item.kind === "media",
+          );
+
+          const quizzes: QuizDefinition[] = await Promise.all(
+            quizPlanItems.map(async (item) => {
+              const quizPath = resolveBundlePath(`quiz/${item.id}.json`);
+              const rawQuizJson = await readWorkspaceJson(quizPath);
+              const rawQuizRecord = ensurePlainRecord(rawQuizJson, quizPath);
+              const progressKeyRaw =
+                typeof rawQuizRecord.progressKey === "string"
+                  ? rawQuizRecord.progressKey.trim()
+                  : "";
+              const progressKey =
+                progressKeyRaw.length > 0
+                  ? progressKeyRaw
+                  : `lesson:${sessionId}:${item.id}`;
+              const quizCandidate: Record<string, unknown> = {
+                ...rawQuizRecord,
+                id: item.id,
+                progressKey,
+              };
+              try {
+                return QuizDefinitionSchema.parse(quizCandidate);
+              } catch (error) {
+                throw new Error(
+                  `Invalid quiz JSON (${quizPath}): ${errorAsString(error)}`,
+                );
+              }
+            }),
+          );
+
+          const quizzesById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
+
+          const problems: CodeProblem[] = await Promise.all(
+            problemPlanItems.map(async (item) => {
+              const problemPath = resolveBundlePath(`code/${item.id}.json`);
+              const rawProblemJson = await readWorkspaceJson(problemPath);
+              const rawProblemRecord = ensurePlainRecord(
+                rawProblemJson,
+                problemPath,
+              );
+              const problemCandidate: Record<string, unknown> = {
+                ...rawProblemRecord,
+                slug: item.id,
+              };
+              try {
+                return CodeProblemSchema.parse(problemCandidate);
+              } catch (error) {
+                throw new Error(
+                  `Invalid code problem JSON (${problemPath}): ${errorAsString(error)}`,
+                );
+              }
+            }),
+          );
+
+          const media: SessionMediaDoc[] = await Promise.all(
+            mediaPlanItems.map(async (item) => {
+              const mediaPath = resolveBundlePath(`media/${item.id}.json`);
+              const rawMediaJson = await readWorkspaceJson(mediaPath);
+              const rawMediaRecord = ensurePlainRecord(rawMediaJson, mediaPath);
+              const mediaCandidate: Record<string, unknown> = {
+                ...rawMediaRecord,
+                id: item.id,
+                planItemId: item.id,
+                sessionId,
+              };
+              try {
+                return SessionMediaDocSchema.parse(mediaCandidate);
+              } catch (error) {
+                throw new Error(
+                  `Invalid media JSON (${mediaPath}): ${errorAsString(error)}`,
+                );
+              }
+            }),
+          );
+
+          const planWithProgress = sessionDoc.plan.map((item) => {
+            if (item.kind !== "quiz") {
+              return item;
+            }
+            const quiz = quizzesById.get(item.id);
+            if (!quiz) {
+              return item;
+            }
+            if (item.progressKey && item.progressKey.trim().length > 0) {
+              return item;
+            }
+            return { ...item, progressKey: quiz.progressKey };
+          });
+
+          const validatedSession = SessionSchema.parse({
+            ...sessionDoc,
+            plan: planWithProgress,
+            status: "ready",
+            createdAt,
+            nextLessonProposals: [],
+          });
           await setFirestoreDocument({
             serviceAccountJson,
             documentPath: docPath,
@@ -1107,7 +1382,7 @@ function buildAgentTools(options: {
           });
 
           await Promise.all(
-            quizDefinitions.map(async (quiz) => {
+            quizzes.map(async (quiz) => {
               const validated = QuizDefinitionSchema.parse(quiz);
               await setFirestoreDocument({
                 serviceAccountJson,
@@ -1118,7 +1393,7 @@ function buildAgentTools(options: {
           );
 
           await Promise.all(
-            codeProblems.map(async (problem) => {
+            problems.map(async (problem) => {
               const validated = CodeProblemSchema.parse(problem);
               await setFirestoreDocument({
                 serviceAccountJson,
@@ -1128,14 +1403,25 @@ function buildAgentTools(options: {
             }),
           );
 
+          await Promise.all(
+            media.map(async (item) => {
+              const validated = SessionMediaDocSchema.parse(item);
+              await setFirestoreDocument({
+                serviceAccountJson,
+                documentPath: `${docPath}/media/${validated.id}`,
+                data: validated as unknown as Record<string, unknown>,
+              });
+            }),
+          );
+
           return {
             status: "published",
             sessionId,
-            topic,
-            includeStory: resolvedIncludeStory,
-            includeCoding: resolvedIncludeCoding,
-            quizCount: quizDefinitions.length,
-            problemCount: codeProblems.length,
+            includeStory: includeStory ?? null,
+            includeCoding: includeCoding ?? null,
+            quizCount: quizzes.length,
+            problemCount: problems.length,
+            mediaCount: media.length,
             href: `/spark/lesson/${sessionId}`,
           };
         } catch (error) {
@@ -1146,6 +1432,124 @@ function buildAgentTools(options: {
           }).catch(() => undefined);
           throw error;
         }
+      },
+    }),
+    python_exec: tool({
+      description:
+        "Run a Python script via Pyodide. Reads scriptPath (required) from the workspace, optionally feeds stdin from stdinPath, and optionally writes stdout/stderr to stdoutPath/stderrPath (workspace paths).",
+      inputSchema: z
+        .object({
+          scriptPath: z.string().trim().min(1),
+          stdinPath: z.string().trim().min(1).optional(),
+          stdoutPath: z.string().trim().min(1).optional(),
+          stderrPath: z.string().trim().min(1).optional(),
+          indexURL: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({
+        scriptPath,
+        stdinPath,
+        stdoutPath,
+        stderrPath,
+        indexURL,
+      }) => {
+        const python = await ensurePythonRuntime(indexURL);
+        const resolvedScriptPath = resolveWorkspacePath(rootDir, scriptPath);
+        const scriptSource = await readFile(resolvedScriptPath, {
+          encoding: "utf8",
+        });
+        const stdinText =
+          stdinPath && stdinPath.trim().length > 0
+            ? await readFile(resolveWorkspacePath(rootDir, stdinPath), {
+                encoding: "utf8",
+              })
+            : "";
+
+        const wrapper = [
+          "import io",
+          "import json",
+          "import sys",
+          "import traceback",
+          `script_source = ${JSON.stringify(scriptSource)}`,
+          `stdin_text = ${JSON.stringify(stdinText)}`,
+          "stdout_buffer = io.StringIO()",
+          "stderr_buffer = io.StringIO()",
+          "original_stdin = sys.stdin",
+          "original_stdout = sys.stdout",
+          "original_stderr = sys.stderr",
+          "ok = True",
+          "try:",
+          "    sys.stdin = io.StringIO(stdin_text)",
+          "    sys.stdout = stdout_buffer",
+          "    sys.stderr = stderr_buffer",
+          "    env = {'__name__': '__main__'}",
+          "    exec(script_source, env)",
+          "except Exception:",
+          "    ok = False",
+          "    traceback.print_exc(file=stderr_buffer)",
+          "finally:",
+          "    sys.stdin = original_stdin",
+          "    sys.stdout = original_stdout",
+          "    sys.stderr = original_stderr",
+          "json.dumps({'ok': ok, 'stdout': stdout_buffer.getvalue(), 'stderr': stderr_buffer.getvalue()})",
+        ].join("\n");
+
+        let raw: unknown;
+        try {
+          raw = await python.runPythonAsync(wrapper);
+        } catch (error) {
+          raw = JSON.stringify({
+            ok: false,
+            stdout: "",
+            stderr: errorAsString(error),
+          });
+        }
+
+        let parsed: { ok?: unknown; stdout?: unknown; stderr?: unknown } = {};
+        if (typeof raw === "string") {
+          try {
+            parsed = JSON.parse(raw) as typeof parsed;
+          } catch {
+            parsed = { ok: false, stdout: "", stderr: String(raw) };
+          }
+        } else {
+          parsed = { ok: false, stdout: "", stderr: String(raw) };
+        }
+
+        const ok = parsed.ok === true;
+        const stdout = typeof parsed.stdout === "string" ? parsed.stdout : "";
+        const stderr = typeof parsed.stderr === "string" ? parsed.stderr : "";
+
+        const written: string[] = [];
+        if (stdoutPath) {
+          const resolved = resolveWorkspacePath(rootDir, stdoutPath);
+          await writeFile(resolved, stdout, { encoding: "utf8" });
+          workspace.scheduleUpdate(stdoutPath);
+          written.push(stdoutPath);
+        }
+        if (stderrPath) {
+          const resolved = resolveWorkspacePath(rootDir, stderrPath);
+          await writeFile(resolved, stderr, { encoding: "utf8" });
+          workspace.scheduleUpdate(stderrPath);
+          written.push(stderrPath);
+        }
+
+        const truncate = (value: string): string => {
+          const max = 8_000;
+          if (value.length <= max) {
+            return value;
+          }
+          return `${value.slice(0, max)}…`;
+        };
+
+        return {
+          ok,
+          stdout: stdoutPath ? undefined : truncate(stdout),
+          stderr: stderrPath ? undefined : truncate(stderr),
+          stdoutBytes: Buffer.byteLength(stdout, "utf8"),
+          stderrBytes: Buffer.byteLength(stderr, "utf8"),
+          written,
+        };
       },
     }),
     list_files: tool({
