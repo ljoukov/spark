@@ -1,5 +1,4 @@
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
-import { getAdminUserProfile } from '$lib/server/admin/usersRepo';
 import { listSessions } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
 import {
@@ -29,13 +28,6 @@ function requireServiceAccountJson(): string {
 	return value;
 }
 
-function toIso(value: Date | null): string | null {
-	if (!value) {
-		return null;
-	}
-	return value.toISOString();
-}
-
 function stateInstantOrNull(value: Date): Date | null {
 	if (value.getTime() <= 0) {
 		return null;
@@ -48,13 +40,7 @@ const LESSON_LIST_LIMIT = 50;
 export const load: PageServerLoad = async ({ params }) => {
 	const { userId } = paramsSchema.parse(params);
 
-	const [profile, sessions] = await Promise.all([
-		getAdminUserProfile(userId).catch((error) => {
-			console.error('Failed to load user profile', { userId, error });
-			return null;
-		}),
-		listSessions(userId, LESSON_LIST_LIMIT)
-	]);
+	const sessions = await listSessions(userId, LESSON_LIST_LIMIT);
 
 	const states = await Promise.all(sessions.map((session) => getSessionState(userId, session.id)));
 
@@ -75,35 +61,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	});
 
-	const user = profile ?? {
-		uid: userId,
-		email: null,
-		name: null,
-		photoUrl: null,
-		isAnonymous: false,
-		signInProvider: null,
-		currentSessionId: null,
-		createdAt: null,
-		updatedAt: null,
-		lastLoginAt: null,
-		lastActivityAt: null
-	};
-
 	return {
-		userDocFound: Boolean(profile),
-		user: {
-			uid: user.uid,
-			email: user.email,
-			name: user.name,
-			photoUrl: user.photoUrl,
-			isAnonymous: user.isAnonymous,
-			signInProvider: user.signInProvider,
-			currentSessionId: user.currentSessionId,
-			createdAt: toIso(user.createdAt),
-			updatedAt: toIso(user.updatedAt),
-			lastLoginAt: toIso(user.lastLoginAt),
-			lastActivityAt: toIso(user.lastActivityAt)
-		},
 		lessons
 	};
 };

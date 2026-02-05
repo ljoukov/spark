@@ -1,14 +1,12 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData | null } = $props();
 
-	const user = $derived(data.user);
 	const lessons = $derived(data.lessons);
-	const userDocFound = $derived(data.userDocFound);
 	const successMessage = $derived(form?.success?.message ?? '');
 	const errorMessage = $derived(form?.error ?? '');
 
@@ -43,173 +41,119 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-6">
-	<div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-		<div class="space-y-1">
-			<h1 class="text-2xl font-semibold tracking-tight text-foreground">User</h1>
-			<p class="text-sm text-muted-foreground">Manage lessons (sessions) and reset progress.</p>
-		</div>
-		<a
-			href="/admin/users"
-			class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'self-start md:self-auto')}
-		>
-			Back to users
-		</a>
-	</div>
+{#if successMessage}
+	<p
+		class="rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+	>
+		{successMessage}
+	</p>
+{:else if errorMessage}
+	<p
+		class="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+	>
+		{errorMessage}
+	</p>
+{/if}
 
-	{#if successMessage}
-		<p
-			class="rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
-		>
-			{successMessage}
-		</p>
-	{:else if errorMessage}
-		<p
-			class="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-		>
-			{errorMessage}
-		</p>
-	{/if}
-
-	<Card.Root class="border-border/70 bg-card/95 shadow-sm">
-		<Card.Header>
-			<Card.Title>User details</Card.Title>
-			<Card.Description>
-				{#if userDocFound}
-					Loaded from Firestore user doc.
-				{:else}
-					User doc not found. Showing lessons for this ID anyway.
-				{/if}
-			</Card.Description>
-		</Card.Header>
-		<Card.Content class="space-y-3">
-			<div class="grid gap-3 md:grid-cols-2">
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">User ID</p>
-					<p class="mt-1 font-mono text-xs break-all">{user.uid}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Email</p>
-					<p class="mt-1 text-sm">{user.email ?? '—'}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Created</p>
-					<p class="mt-1 text-sm">{formatInstant(user.createdAt)}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Last activity</p>
-					<p class="mt-1 text-sm">{formatInstant(user.lastActivityAt)}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Current session</p>
-					<p class="mt-1 font-mono text-xs break-all">{user.currentSessionId ?? '—'}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Sign-in</p>
-					<p class="mt-1 text-sm">
-						{#if user.isAnonymous}
-							Anonymous
-						{:else}
-							{user.signInProvider ?? '—'}
-						{/if}
-					</p>
-				</div>
-			</div>
-		</Card.Content>
-	</Card.Root>
-
-	<Card.Root class="border-border/70 bg-card/95 shadow-sm">
-		<Card.Header>
-			<Card.Title>Lessons</Card.Title>
-			<Card.Description>
-				{#if lessons.length === 0}
-					No lessons found.
-				{:else}
-					Showing {lessons.length} lesson{lessons.length === 1 ? '' : 's'}.
-				{/if}
-			</Card.Description>
-		</Card.Header>
-		<Card.Content class="space-y-3">
-			{#each lessons as lesson (lesson.id)}
-				<div class="rounded-xl border border-border/70 p-4">
-					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-						<div class="space-y-1">
-							<div class="flex flex-wrap items-center gap-2">
-								<p class="text-base font-semibold text-foreground">
-									<span class="mr-1">{lesson.emoji}</span>{lesson.title}
-								</p>
-								<span
-									class={cn(
-										'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-										statusBadgeClass(lesson.status)
-									)}
-								>
-									{lesson.status}
-								</span>
-							</div>
-							<p class="text-xs text-muted-foreground">
-								<span class="font-mono">{lesson.id}</span>
-							</p>
-							<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
-								<p>
-									<span class="text-foreground/70">Created</span>
-									<span class="ml-1">{formatInstant(lesson.createdAt)}</span>
-								</p>
-								<p>
-									<span class="text-foreground/70">Last progress</span>
-									<span class="ml-1">{formatInstant(lesson.lastProgressAt)}</span>
-								</p>
-								<p class="md:col-span-2">
-									<span class="text-foreground/70">Completion</span>
-									<span class="ml-1">{lesson.completed}/{lesson.total} steps</span>
-								</p>
-							</div>
-						</div>
-
+<Card.Root class="border-border/70 bg-card/95 shadow-sm">
+	<Card.Header>
+		<Card.Title>Lessons</Card.Title>
+		<Card.Description>
+			{#if lessons.length === 0}
+				No lessons found.
+			{:else}
+				Showing {lessons.length} lesson{lessons.length === 1 ? '' : 's'}.
+			{/if}
+		</Card.Description>
+	</Card.Header>
+	<Card.Content class="space-y-3">
+		{#each lessons as lesson (lesson.id)}
+			<div class="rounded-xl border border-border/70 p-4">
+				<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+					<div class="space-y-1">
 						<div class="flex flex-wrap items-center gap-2">
-							<form method="POST" action="?/resetLesson">
-								<input type="hidden" name="sessionId" value={lesson.id} />
-								<Button
-									type="submit"
-									variant="secondary"
-									size="sm"
-									onclick={(event) => {
-										if (
-											!confirm(
-												'Reset progress for this lesson? This clears completion state but keeps lesson content.'
-											)
-										) {
-											event.preventDefault();
-										}
-									}}
-								>
-									Reset progress
-								</Button>
-							</form>
-
-							<form method="POST" action="?/deleteLesson">
-								<input type="hidden" name="sessionId" value={lesson.id} />
-								<Button
-									type="submit"
-									variant="destructive"
-									size="sm"
-									onclick={(event) => {
-										if (
-											!confirm(
-												'Delete this lesson and all of its saved data (quiz/code/media/state)? This cannot be undone.'
-											)
-										) {
-											event.preventDefault();
-										}
-									}}
-								>
-									Delete
-								</Button>
-							</form>
+							<a
+								href={`/admin/users/${data.user.uid}/lessons/${lesson.id}`}
+								class="text-base font-semibold text-foreground hover:underline"
+							>
+								<span class="mr-1">{lesson.emoji}</span>{lesson.title}
+							</a>
+							<span
+								class={cn(
+									'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+									statusBadgeClass(lesson.status)
+								)}
+							>
+								{lesson.status}
+							</span>
+						</div>
+						<p class="text-xs text-muted-foreground">
+							<span class="font-mono">{lesson.id}</span>
+						</p>
+						<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
+							<p>
+								<span class="text-foreground/70">Created</span>
+								<span class="ml-1">{formatInstant(lesson.createdAt)}</span>
+							</p>
+							<p>
+								<span class="text-foreground/70">Last progress</span>
+								<span class="ml-1">{formatInstant(lesson.lastProgressAt)}</span>
+							</p>
+							<p class="md:col-span-2">
+								<span class="text-foreground/70">Completion</span>
+								<span class="ml-1">{lesson.completed}/{lesson.total} steps</span>
+							</p>
 						</div>
 					</div>
+
+					<div class="flex flex-wrap items-center gap-2">
+						<Button href={`/admin/users/${data.user.uid}/lessons/${lesson.id}`} variant="secondary" size="sm">
+							View
+						</Button>
+
+						<form method="POST" action="?/resetLesson">
+							<input type="hidden" name="sessionId" value={lesson.id} />
+							<Button
+								type="submit"
+								variant="secondary"
+								size="sm"
+								onclick={(event) => {
+									if (
+										!confirm(
+											'Reset progress for this lesson? This clears completion state but keeps lesson content.'
+										)
+									) {
+										event.preventDefault();
+									}
+								}}
+							>
+								Reset progress
+							</Button>
+						</form>
+
+						<form method="POST" action="?/deleteLesson">
+							<input type="hidden" name="sessionId" value={lesson.id} />
+							<Button
+								type="submit"
+								variant="destructive"
+								size="sm"
+								onclick={(event) => {
+									if (
+										!confirm(
+											'Delete this lesson and all of its saved data (quiz/code/media/state)? This cannot be undone.'
+										)
+									) {
+										event.preventDefault();
+									}
+								}}
+							>
+								Delete
+							</Button>
+						</form>
+					</div>
 				</div>
-			{/each}
-		</Card.Content>
-	</Card.Root>
-</div>
+			</div>
+		{/each}
+	</Card.Content>
+</Card.Root>
+
