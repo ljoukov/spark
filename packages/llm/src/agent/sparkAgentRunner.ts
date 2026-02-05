@@ -2242,12 +2242,22 @@ export async function runSparkAgentTask(
     logSync?.append(`error: ${message}`);
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
-    await updateAgentStatus({
+    const statusUpdated = await updateAgentStatus({
       serviceAccountJson,
       agentDocPath,
       status: "failed",
       error: message,
-    }).catch(() => undefined);
+    })
+      .then(() => true)
+      .catch((statusError) => {
+        console.error(
+          `[spark-agent:${options.agentId}] failed to update status: ${errorAsString(statusError)}`,
+        );
+        return false;
+      });
+    if (!statusUpdated) {
+      throw error;
+    }
     return;
   } finally {
     await stopStopPolling();
