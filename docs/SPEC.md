@@ -315,7 +315,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu showing display name + email/guest label and a copy button that copies `Name`/`Email`/`UserID` lines to the clipboard (omitting missing fields), theme picker, Firebase auth sync) reused by `/spark` and `/spark/lesson`.
 - `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`) and Agents (`/spark/agents`).
 - `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected run details:
-  - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing`).
+  - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
   - Live output/thoughts streamed from `agents/{agentId}/logs/log.stream`.
   - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, problems, media steps).
