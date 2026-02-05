@@ -4230,6 +4230,49 @@ export async function runToolLoop(
               return { entry, result, outputPayload };
             }),
           );
+          const truncateToolError = (value: string): string => {
+            const max = 800;
+            if (value.length <= max) {
+              return value;
+            }
+            return `${value.slice(0, max)}…`;
+          };
+          for (const { entry, result, outputPayload } of callResults) {
+            if (result.error) {
+              reporter.log(
+                `tool_error: ${entry.toolName} ${truncateToolError(result.error)}`,
+              );
+              continue;
+            }
+            if (entry.toolName !== "generate_text") {
+              continue;
+            }
+            if (
+              outputPayload &&
+              typeof outputPayload === "object" &&
+              !Array.isArray(outputPayload)
+            ) {
+              const record = outputPayload as Record<string, unknown>;
+              const status =
+                typeof record.status === "string" ? record.status : "ok";
+              const outputPath =
+                typeof record.outputPath === "string" ? record.outputPath : "";
+              const textChars =
+                typeof record.textChars === "number" ? record.textChars : null;
+              reporter.log(
+                [
+                  "tool_result: generate_text",
+                  `status=${status}`,
+                  outputPath ? `outputPath=${outputPath}` : "",
+                  textChars !== null ? `chars=${textChars}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              );
+              continue;
+            }
+            reporter.log("tool_result: generate_text status=ok");
+          }
           if (responseText.length > 0) {
             input.push({
               type: "message",
@@ -4524,6 +4567,49 @@ export async function runToolLoop(
               return { entry, result, outputPayload };
             }),
           );
+          const truncateToolError = (value: string): string => {
+            const max = 800;
+            if (value.length <= max) {
+              return value;
+            }
+            return `${value.slice(0, max)}…`;
+          };
+          for (const { entry, result, outputPayload } of callResults) {
+            if (result.error) {
+              reporter.log(
+                `tool_error: ${entry.toolName} ${truncateToolError(result.error)}`,
+              );
+              continue;
+            }
+            if (entry.toolName !== "generate_text") {
+              continue;
+            }
+            if (
+              outputPayload &&
+              typeof outputPayload === "object" &&
+              !Array.isArray(outputPayload)
+            ) {
+              const record = outputPayload as Record<string, unknown>;
+              const status =
+                typeof record.status === "string" ? record.status : "ok";
+              const outputPath =
+                typeof record.outputPath === "string" ? record.outputPath : "";
+              const textChars =
+                typeof record.textChars === "number" ? record.textChars : null;
+              reporter.log(
+                [
+                  "tool_result: generate_text",
+                  `status=${status}`,
+                  outputPath ? `outputPath=${outputPath}` : "",
+                  textChars !== null ? `chars=${textChars}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              );
+              continue;
+            }
+            reporter.log("tool_result: generate_text status=ok");
+          }
           for (const { entry, result, outputPayload } of callResults) {
             toolCalls.push({
               ...result,
