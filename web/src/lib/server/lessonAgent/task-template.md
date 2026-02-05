@@ -28,7 +28,10 @@ The final output must be Firestore-ready JSON files under `lesson/output/` that 
 
 Read these files before writing outputs:
 
-- `lesson/schema/firestore-schema.json` — JSON schemas for session/quiz/code/media docs (field definitions + constraints)
+- `lesson/schema/session.schema.json` — JSON schema for `lesson/output/session.json`
+- `lesson/schema/quiz.schema.json` — JSON schema for `lesson/output/quiz/*.json`
+- `lesson/schema/code.schema.json` — JSON schema for `lesson/output/code/*.json`
+- `lesson/schema/media.schema.json` — JSON schema for `lesson/output/media/*.json` (only if media is requested)
 - `brief.md` — authoritative user requirements
 
 Notes:
@@ -38,27 +41,33 @@ Notes:
 
 ## Required pipeline (do not skip)
 
-1) Read `brief.md` and write hard requirements + assumptions to `lesson/plan.md`.
+1) Read `brief.md` + `request.json` + this file, then write hard requirements + key decisions to `lesson/requirements.md`.
 2) Decide lesson shape:
    - If this is programming practice, include `kind="problem"` steps; otherwise make it quiz-only (no `problem` steps).
    - Only include `kind="media"` if the user explicitly asked for a story/audio clip.
-3) Draft content:
-   - Optional: put working notes in `lesson/drafts/` (Markdown is fine).
-4) Create final Firestore JSON outputs under `lesson/output/`:
-   - Ensure every `plan[]` item has a matching JSON doc file (quiz/problem/media).
-   - Quiz docs must include a non-empty `progressKey` (if unsure, use `lesson:{{SESSION_ID}}:<quizId>`).
-5) Validate + publish:
+3) Generate -> grade -> revise loop (do not skip grading):
+   - Use `generate_text` for drafting and grading (store prompts under `lesson/prompts/` and feedback under `lesson/feedback/`).
+   - Prompt templates may include `{{path/to/file}}` placeholders to inline workspace files.
+4) Ordering:
+   - If coding is included: draft/verify problems first, then draft the session plan/quizzes from the verified problems.
+   - Otherwise: draft the session plan first, then draft quizzes.
+5) Write final JSON outputs under `lesson/output/` (use `generate_text` with `responseSchemaPath` pointing at `lesson/schema/*.schema.json`):
+   - `lesson/output/session.json` — Session document (includes `plan[]`)
+   - `lesson/output/quiz/<planItemId>.json` — for each `plan[]` item with `kind="quiz"`
+   - `lesson/output/code/<planItemId>.json` — for each `plan[]` item with `kind="problem"`
+   - `lesson/output/media/<planItemId>.json` — only if `kind="media"` exists (media is optional and should be rare)
+6) Validate + publish:
    - Call `publish_lesson` with:
      - `sessionId: {{SESSION_ID}}`
      - `sessionPath: "lesson/output/session.json"`
      - `includeCoding: true|false` (based on whether you included `problem` steps)
      - `includeStory: true|false` (based on whether you included `media` steps)
    - If it fails, fix the files and retry until it returns `status="published"`.
-6) Call `done` with a short summary: what you published + sessionId.
+7) Call `done` with a short summary: what you published + sessionId.
 
 ## Output quality bar
 
 - Write in UK English.
 - Keep plan item titles short and action-oriented (what the learner does).
 - Avoid references to "the brief", "the user uploaded", page numbers, or internal pipeline.
-- For code problems, ensure the reference solution passes all tests (use `python_exec` if needed).
+- For code problems, ensure the reference solution passes all tests (use `python_exec` to verify).
