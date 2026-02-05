@@ -20,6 +20,7 @@ import { env } from '$env/dynamic/private';
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import { listSessions, getSession, saveSession, setCurrentSessionId } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
+import sparkChatSystemPrompt from '$lib/server/agent/spark-chat-system-prompt.md?raw';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
 import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
@@ -108,24 +109,7 @@ type ConversationInit = {
 	isNew: boolean;
 };
 
-const SYSTEM_PROMPT = [
-	'You are Spark AI Agent, an always-on study companion for Spark learners.',
-	'Write in UK English.',
-	'Be direct, warm, and practical. Offer concrete next steps and ask clarifying questions when needed.',
-	'Use short headings and bullets to keep responses skimmable.',
-	'',
-	'Lessons (tool use):',
-	'- If the user asks to create/start/make a lesson and you have a clear topic, call create_lesson immediately.',
-	'- If details are missing, ask concise follow-up questions (topic, goal, level, duration, materials/links).',
-	'- Do not claim a lesson has started unless create_lesson returned status="started".',
-	'- After create_lesson, say the lesson is being created (do NOT claim it is ready yet).',
-	'- Do not claim a lesson is ready unless you checked with get_lesson_status and it returned status="ready".',
-	'- After create_lesson, include the lesson link (href) and the Lessons list link (lessonsHref). Use them as-is (do not swap in other domains).',
-	'',
-	'Lesson status and recommendations:',
-	'- Use list_lessons to see what exists and recommend what to do next based on progress.',
-	'- Use get_lesson_status for a specific lesson.'
-].join('\n');
+const SYSTEM_PROMPT = sparkChatSystemPrompt.trim();
 
 const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
 	user: 'user',
@@ -457,22 +441,98 @@ async function writeWorkspaceTextFile(options: {
 	});
 }
 
-const durationMinutesSchema = z.preprocess(
-	(value) => {
-		if (value === undefined || value === null) {
-			return undefined;
+const quizQuestionKindSchema = z
+	.enum(['multiple-choice', 'type-answer', 'info-card'])
+	.describe('Quiz question kind.');
+
+const quizQuestionKindCountSchema = z
+	.object({
+		kind: quizQuestionKindSchema.describe('Question kind.'),
+		count: z.number().int().min(1).max(50).describe('How many questions of this kind.')
+	})
+	.strict();
+
+const quizPreferencesSchema = z
+	.object({
+		questionCount: z
+			.number()
+			.int()
+			.min(1)
+			.max(50)
+			.describe('Total number of questions for this quiz plan item.')
+			.optional(),
+		questionKinds: z
+			.array(quizQuestionKindCountSchema)
+			.min(1)
+			.describe('Exact mix of question kinds for this quiz plan item.')
+			.optional()
+	})
+	.strict()
+	.superRefine((value, ctx) => {
+		if (!value.questionCount && !value.questionKinds) {
+			return;
 		}
-		if (typeof value === 'string') {
-			const match = value.match(/\d+/u);
-			if (!match) {
-				return value;
+		const kinds = value.questionKinds ?? [];
+		const seenKinds = new Set<string>();
+		let sum = 0;
+		for (const entry of kinds) {
+			if (seenKinds.has(entry.kind)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['questionKinds'],
+					message: `Duplicate question kind "${entry.kind}"`
+				});
 			}
-			return Number(match[0]);
+			seenKinds.add(entry.kind);
+			sum += entry.count;
 		}
-		return value;
-	},
-	z.number().int().min(5).max(240).optional()
-);
+		if (typeof value.questionCount === 'number' && kinds.length > 0 && sum !== value.questionCount) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['questionKinds'],
+				message: `questionKinds sum (${sum}) must equal questionCount (${value.questionCount})`
+			});
+		}
+	});
+
+const planItemPreferencesSchema = z
+	.object({
+		kind: z
+			.enum(['quiz', 'problem', 'media'])
+			.describe('Plan item kind: quiz, coding problem, or media/story.'),
+		title: z.string().trim().min(1).describe('Optional short title for the plan item.').optional(),
+		description: z
+			.string()
+			.trim()
+			.min(1)
+			.describe('Optional description for the plan item.')
+			.optional(),
+		quiz: quizPreferencesSchema.describe('Quiz constraints (only when kind="quiz").').optional()
+	})
+	.strict()
+	.superRefine((value, ctx) => {
+		if (value.kind !== 'quiz' && value.quiz) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['quiz'],
+				message: 'quiz preferences can only be set when kind="quiz"'
+			});
+		}
+	});
+
+const planPreferencesSchema = z
+	.object({
+		items: z
+			.array(planItemPreferencesSchema)
+			.min(1)
+			.max(20)
+			.describe('Preferred plan items. Array length controls number of plan items.')
+	})
+	.strict()
+	.describe(
+		'Optional plan shape preferences. Use this to control lesson length (instead of a duration in minutes).'
+	)
+	.optional();
 
 const materialsSchema = z.preprocess(
 	(value) => {
@@ -492,12 +552,12 @@ const materialsSchema = z.preprocess(
 );
 
 const lessonCreateSchema = z.object({
-	topic: z.string().trim().min(1),
-	title: z.string().trim().min(1).optional(),
-	level: z.string().trim().min(1).optional(),
-	goal: z.string().trim().min(1).optional(),
-	durationMinutes: durationMinutesSchema,
-	materials: materialsSchema
+	topic: z.string().trim().min(1).describe('Lesson topic.'),
+	title: z.string().trim().min(1).describe('Optional lesson title override.').optional(),
+	level: z.string().trim().min(1).describe('Optional learner level.').optional(),
+	goal: z.string().trim().min(1).describe('Optional learning goal.').optional(),
+	plan: planPreferencesSchema,
+	materials: materialsSchema.describe('Optional list of materials/links to incorporate.')
 });
 
 function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>): string {
@@ -511,8 +571,38 @@ function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>): string {
 	if (input.goal) {
 		lines.push('', '## Goal', input.goal.trim());
 	}
-	if (typeof input.durationMinutes === 'number') {
-		lines.push('', '## Duration', `${input.durationMinutes} minutes`);
+	if (input.plan?.items && input.plan.items.length > 0) {
+		lines.push('', '## Plan preferences');
+		lines.push(`- Total plan items: ${input.plan.items.length}`);
+		let index = 0;
+		for (const item of input.plan.items) {
+			index += 1;
+			const titleSuffix = item.title ? ` — ${item.title.trim()}` : '';
+			if (item.kind === 'quiz') {
+				const questionCount =
+					item.quiz?.questionCount ??
+					(item.quiz?.questionKinds
+						? item.quiz.questionKinds.reduce((sum, entry) => sum + entry.count, 0)
+						: null);
+				const kinds =
+					item.quiz?.questionKinds && item.quiz.questionKinds.length > 0
+						? item.quiz.questionKinds.map((entry) => `${entry.kind}: ${entry.count}`).join(', ')
+						: null;
+				const detailBits = [
+					questionCount ? `${questionCount} questions` : null,
+					kinds ? `mix: ${kinds}` : null
+				].filter((value): value is string => Boolean(value));
+				const details = detailBits.length > 0 ? ` (${detailBits.join('; ')})` : '';
+				lines.push(`- ${index}. quiz${titleSuffix}${details}`);
+				continue;
+			}
+			lines.push(`- ${index}. ${item.kind}${titleSuffix}`);
+		}
+		lines.push(
+			'',
+			'Notes:',
+			'- Lesson duration is inferred from plan items + question counts (no fixed minutes).'
+		);
 	}
 	if (input.materials && input.materials.length > 0) {
 		lines.push('', '## Materials');
@@ -533,8 +623,32 @@ function renderLessonTask(options: {
 	const title = options.input.title?.trim() ?? '—';
 	const level = options.input.level?.trim() ?? '—';
 	const goal = options.input.goal?.trim() ?? '—';
-	const duration =
-		typeof options.input.durationMinutes === 'number' ? `${options.input.durationMinutes} minutes` : '—';
+	const planItems =
+		options.input.plan?.items && options.input.plan.items.length > 0
+			? options.input.plan.items
+					.map((item, index) => {
+						const titleSuffix = item.title ? ` — ${item.title.trim()}` : '';
+						if (item.kind !== 'quiz') {
+							return `- ${index + 1}. ${item.kind}${titleSuffix}`;
+						}
+						const questionCount =
+							item.quiz?.questionCount ??
+							(item.quiz?.questionKinds
+								? item.quiz.questionKinds.reduce((sum, entry) => sum + entry.count, 0)
+								: null);
+						const kinds =
+							item.quiz?.questionKinds && item.quiz.questionKinds.length > 0
+								? item.quiz.questionKinds.map((entry) => `${entry.kind}: ${entry.count}`).join(', ')
+								: null;
+						const detailBits = [
+							questionCount ? `${questionCount} questions` : null,
+							kinds ? `mix: ${kinds}` : null
+						].filter((value): value is string => Boolean(value));
+						const details = detailBits.length > 0 ? ` (${detailBits.join('; ')})` : '';
+						return `- ${index + 1}. quiz${titleSuffix}${details}`;
+					})
+					.join('\n')
+			: '- —';
 	const materials =
 		options.input.materials && options.input.materials.length > 0
 			? options.input.materials.map((item) => `- ${item}`).join('\n')
@@ -547,7 +661,7 @@ function renderLessonTask(options: {
 		.replaceAll('{{TITLE}}', title)
 		.replaceAll('{{LEVEL}}', level)
 		.replaceAll('{{GOAL}}', goal)
-		.replaceAll('{{DURATION_MINUTES}}', duration)
+		.replaceAll('{{PLAN_ITEMS_BULLETS}}', planItems)
 		.replaceAll('{{MATERIALS_BULLETS}}', materials)
 		.trim()
 		.concat('\n');
@@ -616,8 +730,17 @@ function buildSparkChatTools(options: {
 			}
 		}),
 		create_lesson: tool({
-			description:
-				'Start creating a new lesson. Creates a workspace with brief.md and launches a background agent to generate and publish the lesson into the user’s sessions.',
+			description: [
+				'Start creating a new lesson (published into the user’s sessions, not welcome templates).',
+				'Creates a workspace with brief.md and launches a background agent to generate and publish the lesson.',
+				'Lesson length is controlled via plan shape (no fixed duration minutes).',
+				'',
+				'Plan shape:',
+				'- Provide plan.items; the array length sets the number of plan items.',
+				'- For quiz items, you can set quiz.questionCount and/or quiz.questionKinds (counts per kind).',
+				'',
+				'Returns href and lessonsHref for navigation.'
+			].join('\n'),
 			inputSchema: lessonCreateSchema,
 			execute: async (input) => {
 				let sessionId: string | null = null;
@@ -692,8 +815,9 @@ function buildSparkChatTools(options: {
 						'# Requirements and decisions',
 						'',
 						'Fill this file with:',
-						'- Hard requirements from brief.md (topic, level, goal, duration, materials).',
+						'- Hard requirements from brief.md (topic, level, goal, plan shape, materials).',
 						'- Decisions: includeCoding (true/false), includeStory (true/false).',
+						'- If plan preferences were provided, restate them here as constraints (plan items + question counts/types).',
 						'- Any assumptions you are making.',
 						'',
 						`Session ID: ${sessionId}`,
