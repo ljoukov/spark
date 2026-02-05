@@ -242,10 +242,24 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
 - Lesson creation (from `/spark` chat) is implemented as an Agent run:
+  - The chat collects a lesson topic plus optional constraints:
+    - Goal + level
+    - Plan shape (preferred number of plan items, and for each quiz item the number of questions + mix of `multiple-choice` / `type-answer` / `info-card`)
+    - Materials/links to incorporate
+    - Duration is not a primary input; the UI/agent can infer an approximate duration from the plan shape + question counts.
   - Server creates a new session stub under `spark/{userId}/sessions/{sessionId}` with `status = generating`.
   - Server writes `brief.md`, `request.json`, plus `lesson/task.md` + `lesson/schema/*` into the workspace and schedules a `runAgent` task.
   - The agent follows `lesson/task.md`, authors Firestore-ready JSON under `lesson/output/` (`session.json`, `quiz/*.json`, `code/*.json`, optional `media/*.json`), then calls `publish_lesson` with a `sessionPath`.
   - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
+
+- Prompting and tool-use strategy:
+  - Tool definitions (name + description + Zod schema) are the “API contract”. Put field-level semantics and constraints in the tool schema/description, not scattered across prompts.
+  - System prompts define global behaviour (tone, safety, and when/why to call tools). Keep them short and avoid duplicating tool parameter details.
+  - Prefer simple, direct instructions; keep long workflows in repo-authored `.md` prompt files and reference them, rather than embedding everything inline in a single prompt string.
+  - Prompt locations:
+    - Spark chat system prompt: `web/src/lib/server/agent/spark-chat-system-prompt.md` (loaded server-side via `?raw`).
+    - Lesson agent task template + prompts: `web/src/lib/server/lessonAgent/task-template.md`, `web/src/lib/server/lessonAgent/prompts/*.md`.
+    - Lesson JSON schemas: `web/src/lib/server/lessonAgent/schema/*.schema.json`.
 
 - Agent run logs live under `users/{userId}/agents/{agentId}/logs/log` (single doc).
   - Log lines are stored in a map field `lines`, keyed by an epoch-ms timestamp key (`t<ms>_<seq>`), with values as the printed log line text.

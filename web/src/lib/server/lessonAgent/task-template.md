@@ -9,7 +9,8 @@ Workspace ID: `{{WORKSPACE_ID}}`
 - Title (optional): {{TITLE}}
 - Level (optional): {{LEVEL}}
 - Goal (optional): {{GOAL}}
-- Duration (optional): {{DURATION_MINUTES}}
+- Plan preferences (optional):
+{{PLAN_ITEMS_BULLETS}}
 - Materials (optional):
 {{MATERIALS_BULLETS}}
 
@@ -45,6 +46,7 @@ Notes:
 2) Decide lesson shape:
    - If this is programming practice, include `kind="problem"` steps; otherwise make it quiz-only (no `problem` steps).
    - Only include `kind="media"` if the user explicitly asked for a story/audio clip.
+   - If plan preferences are provided in this file, you must follow them exactly (number of plan items, and per-quiz question counts/types).
 3) Generate -> grade -> revise loop (do not skip grading):
    - Use `generate_text` for drafting and grading (store prompts under `lesson/prompts/` and feedback under `lesson/feedback/`).
    - Prompt templates may include `{{path/to/file}}` placeholders to inline workspace files.

@@ -7,6 +7,7 @@ Return **JSON only** (start with `{` and end with `}`), matching the schema.
 Rules:
 - Keep question ids stable unless the grading report requires changes.
 - Fix every issue in the grading report.
+- Preserve the requested question count / kind mix if it was specified in `lesson/requirements.md`.
 
 Schema:
 {{lesson/schema/quiz.schema.json}}

@@ -10,6 +10,7 @@ Rules:
 - `topics` must be a non-empty array of short strings.
 - `plan` must be non-empty and every plan item must have a unique `id`.
 - Use short, stable ids like `q1`, `q2`, `p1`, `p2`, `m1`.
+- If `lesson/requirements.md` contains plan preferences (number of items, quiz question counts/types), follow them exactly and reflect quiz counts in `plan[].meta` (e.g. "8 questions").
 - `kind="media"` only if the learner explicitly requested a story/audio clip.
 - If the lesson is not programming practice, make it quiz-only (no `kind="problem"` items).
 
@@ -24,4 +25,3 @@ User request (authoritative):
 
 Request metadata:
 {{request.json}}
-
