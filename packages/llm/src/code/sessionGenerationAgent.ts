@@ -82,6 +82,8 @@ type WorkspacePaths = {
   debugDir: string;
 };
 
+export type SessionAgentWorkspacePaths = WorkspacePaths;
+
 export type SessionGenerationAgentOptions = {
   workingDirectory: string;
   briefFile?: string;
@@ -1945,7 +1947,7 @@ function buildSessionAgentTools(options: {
     }),
     generate_text: tool({
       description:
-        "Call a sub-LLM (gpt-5.2) to produce text/markdown; optionally enable web-search or code-execution tools. promptPath is required and must point to a file in the workspace. If outputPath is provided, the tool writes the text to that file (overwrite by default).",
+        "Call a sub-LLM (Gemini 2.5 Pro) to produce text/markdown; optionally enable web-search or code-execution tools. promptPath is required and must point to a file in the workspace. If outputPath is provided, the tool writes the text to that file (overwrite by default).",
       inputSchema: z
         .object({
           promptPath: z.string().trim().min(1),
@@ -2033,7 +2035,7 @@ function buildSessionAgentTools(options: {
           stage: "agent-tool",
           subStage: input.debugLabel ?? "call",
         };
-        const generationModelId: LlmTextModelId = "gemini-3-pro-preview";
+        const generationModelId: LlmTextModelId = "gemini-2.5-pro";
         const generationReasoning =
           resolveOpenAiReasoningEffort(generationModelId);
         const templateText = await readFile(
@@ -2149,6 +2151,25 @@ function buildSessionAgentTools(options: {
       },
     }),
   };
+}
+
+export function buildSessionAgentToolsForTest(options: {
+  workingDirectory: string;
+  includeStory: boolean;
+  includeCoding: boolean;
+  progress?: JobProgressReporter;
+}): {
+  paths: SessionAgentWorkspacePaths;
+  tools: ReturnType<typeof buildSessionAgentTools>;
+} {
+  const paths = resolveWorkspacePaths(options.workingDirectory);
+  const tools = buildSessionAgentTools({
+    paths,
+    progress: options.progress,
+    includeStory: options.includeStory,
+    includeCoding: options.includeCoding,
+  });
+  return { paths, tools };
 }
 
 export async function runSessionAgentSmokeTest(options: {
