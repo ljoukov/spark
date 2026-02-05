@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { runSparkLessonAgentLocal } from "../src/agent/sparkAgentRunner";
-import { loadEnvFromFile } from "../src/utils/env";
 import {
   runToolLoop,
   tool,
@@ -483,7 +482,6 @@ function assertQuizShape(quiz: QuizDefinition): void {
 testDescribe("LLM integration: lesson creation", () => {
   it("routes a chat request into create_lesson, runs the lesson agent, and produces valid outputs", async () => {
     const repoRoot = resolveRepoRoot();
-    loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
 
     const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
     if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
