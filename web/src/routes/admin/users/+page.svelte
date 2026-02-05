@@ -28,6 +28,9 @@
 		if (value === 'guest') {
 			return 'Guest';
 		}
+		if (value === 'email') {
+			return 'E-mail';
+		}
 		if (value === 'google') {
 			return 'Google';
 		}
@@ -74,6 +77,7 @@
 					>
 						<option value="all" selected={login === 'all'}>All logins</option>
 						<option value="guest" selected={login === 'guest'}>Guest</option>
+						<option value="email" selected={login === 'email'}>E-mail</option>
 						<option value="google" selected={login === 'google'}>Google</option>
 						<option value="apple" selected={login === 'apple'}>Apple</option>
 					</select>

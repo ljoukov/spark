@@ -8,7 +8,7 @@ import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 
-const loginFilterSchema = z.enum(['all', 'guest', 'google', 'apple']);
+const loginFilterSchema = z.enum(['all', 'guest', 'email', 'google', 'apple']);
 const hasFilterSchema = z.enum(['all', 'lessons', 'chats']);
 
 const querySchema = z
@@ -30,11 +30,18 @@ function toIso(value: Date | null): string | null {
 	return value.toISOString();
 }
 
-type LoginType = 'guest' | 'google' | 'apple' | 'other';
+type LoginType = 'guest' | 'email' | 'google' | 'apple' | 'other';
 
 function deriveLoginType(user: { isAnonymous: boolean; signInProvider: string | null }): LoginType {
 	if (user.isAnonymous || user.signInProvider === 'anonymous') {
 		return 'guest';
+	}
+	if (
+		user.signInProvider === 'password' ||
+		user.signInProvider === 'emailLink' ||
+		user.signInProvider === 'email'
+	) {
+		return 'email';
 	}
 	if (user.signInProvider === 'google.com' || user.signInProvider === 'google') {
 		return 'google';
@@ -52,6 +59,7 @@ function matchesLoginFilter(
 	const matchers: Record<z.infer<typeof loginFilterSchema>, (loginType: LoginType) => boolean> = {
 		all: () => true,
 		guest: (loginType) => loginType === 'guest',
+		email: (loginType) => loginType === 'email',
 		google: (loginType) => loginType === 'google',
 		apple: (loginType) => loginType === 'apple'
 	};
