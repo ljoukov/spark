@@ -195,6 +195,12 @@ type WorkspaceSyncOptions = {
   rootDir: string;
 };
 
+export type SparkAgentWorkspace = {
+  scheduleUpdate: (path: string) => void;
+  deleteFile: (path: string) => Promise<void>;
+  moveFile: (from: string, to: string) => Promise<void>;
+};
+
 type AgentRunStatsSnapshot = {
   readonly modelCalls: number;
   readonly modelsUsed: readonly string[];
@@ -1117,7 +1123,7 @@ function buildAgentSystemPrompt(): string {
 }
 
 function buildAgentTools(options: {
-  workspace: WorkspaceSync;
+  workspace: SparkAgentWorkspace;
   rootDir: string;
   userId: string;
   serviceAccountJson: string;
@@ -1995,6 +2001,17 @@ function buildAgentTools(options: {
   };
 }
 
+export function buildSparkAgentToolsForTest(options: {
+  workspace: SparkAgentWorkspace;
+  rootDir: string;
+  userId: string;
+  serviceAccountJson: string;
+  progress?: JobProgressReporter;
+  enforceLessonPipeline?: boolean;
+}): LlmToolSet {
+  return buildAgentTools(options);
+}
+
 function splitLines(text: string): string[] {
   return text.split("\n");
 }
@@ -2459,6 +2476,10 @@ export async function runSparkAgentTask(
         },
       }),
     };
+
+    progress.log(
+      `[spark-agent:${options.agentId}] exposed tools: ${Object.keys(tools).sort().join(", ")}`,
+    );
 
     await pollStopRequested();
     if (stopRequested) {
