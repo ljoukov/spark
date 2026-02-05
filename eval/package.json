@@ -11,6 +11,7 @@
     "tools:list-voices": "tsx src/tools/list-voices.ts",
     "tools:pdf-to-json": "tsx src/tools/pdf-to-json.ts",
     "tools:say": "tsx src/tools/say.ts",
+    "tools:lesson-agent-smoke": "tsx src/tools/lesson-agent-smoke.ts",
     "auth:chatgpt": "tsx src/tools/chatgpt-login.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
     "test:llm-web-search": "tsx src/tests/testLlmWebSearch.ts",

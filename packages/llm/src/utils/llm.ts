@@ -3973,6 +3973,86 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
         : "";
       return [promptPath, outputPath, tools].filter(Boolean).join(" ");
     }
+    case "create_lesson": {
+      const topicValue = formatToolValue(record.topic);
+      const topic = topicValue ? `topic=${truncateForLog(topicValue, 120)}` : "";
+      const title = (() => {
+        if (!Object.prototype.hasOwnProperty.call(record, "title")) {
+          return "";
+        }
+        if (record.title === null) {
+          return "title=null";
+        }
+        const value = formatToolValue(record.title);
+        return value ? `title=${truncateForLog(value, 80)}` : "";
+      })();
+      const level = (() => {
+        if (!Object.prototype.hasOwnProperty.call(record, "level")) {
+          return "";
+        }
+        if (record.level === null) {
+          return "level=null";
+        }
+        const value = formatToolValue(record.level);
+        return value ? `level=${truncateForLog(value, 80)}` : "";
+      })();
+      const goal = (() => {
+        if (!Object.prototype.hasOwnProperty.call(record, "goal")) {
+          return "";
+        }
+        if (record.goal === null) {
+          return "goal=null";
+        }
+        const value = formatToolValue(record.goal);
+        return value ? `goal=${truncateForLog(value, 120)}` : "";
+      })();
+
+      const planRaw =
+        record.plan && typeof record.plan === "object"
+          ? (record.plan as Record<string, unknown>)
+          : null;
+      const itemsRaw = planRaw && Array.isArray(planRaw.items) ? planRaw.items : [];
+      const itemSummaries = itemsRaw.slice(0, 3).map((item) => {
+        if (!item || typeof item !== "object") {
+          return "item";
+        }
+        const itemRec = item as Record<string, unknown>;
+        const kindValue = formatToolValue(itemRec.kind);
+        const kind = kindValue ? kindValue : "item";
+        const quizRaw =
+          itemRec.quiz && typeof itemRec.quiz === "object"
+            ? (itemRec.quiz as Record<string, unknown>)
+            : null;
+        const kindsRaw = quizRaw && Array.isArray(quizRaw.questionKinds)
+          ? quizRaw.questionKinds
+          : [];
+        const kinds = kindsRaw
+          .map((entry) => {
+            if (!entry || typeof entry !== "object") {
+              return "";
+            }
+            const entryRec = entry as Record<string, unknown>;
+            const kindName = formatToolValue(entryRec.kind);
+            const countValue = formatToolValue(entryRec.count);
+            if (!kindName || !countValue) {
+              return "";
+            }
+            return `${kindName}:${countValue}`;
+          })
+          .filter(Boolean)
+          .join(",");
+        return kinds ? `${kind}(${kinds})` : kind;
+      });
+      const extra = itemsRaw.length > 3 ? ` +${itemsRaw.length - 3} more` : "";
+      const planItems =
+        itemSummaries.length > 0
+          ? `items=${itemsRaw.length} ${itemSummaries.join(" | ")}${extra}`
+          : itemsRaw.length > 0
+            ? `items=${itemsRaw.length}`
+            : "";
+
+      return [topic, title, level, goal, planItems].filter(Boolean).join(" ");
+    }
     default:
       return "";
   }
