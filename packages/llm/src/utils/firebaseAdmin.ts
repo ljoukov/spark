@@ -17,11 +17,12 @@ let cachedStoragePromise: Promise<Storage> | null = null;
 let cachedAppModulePromise: Promise<FirebaseAdminAppModule> | null = null;
 let cachedFirestoreModulePromise: Promise<FirebaseAdminFirestoreModule> | null =
   null;
-let cachedStorageModulePromise: Promise<FirebaseAdminStorageModule> | null = null;
+let cachedStorageModulePromise: Promise<FirebaseAdminStorageModule> | null =
+  null;
 
-function parseServiceAccount(serviceAccountJson: string): ReturnType<
-  typeof parseGoogleServiceAccountJson
-> {
+function parseServiceAccount(
+  serviceAccountJson: string,
+): ReturnType<typeof parseGoogleServiceAccountJson> {
   return parseGoogleServiceAccountJson(serviceAccountJson);
 }
 
@@ -114,7 +115,9 @@ export async function getFirebaseAdminApp(options: {
 
       app = initializeApp(
         {
-          credential: cert(toFirebaseServiceAccount(options.serviceAccountJson)),
+          credential: cert(
+            toFirebaseServiceAccount(options.serviceAccountJson),
+          ),
           projectId: sa.projectId,
           storageBucket: bucketName,
         },

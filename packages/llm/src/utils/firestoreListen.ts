@@ -8,9 +8,7 @@ export type FirestoreListenDocSnapshot = {
 };
 
 export type FirestoreListenFirestore = {
-  doc: (
-    docPath: string,
-  ) => {
+  doc: (docPath: string) => {
     onSnapshot: (
       onNext: (snapshot: FirestoreListenDocSnapshot) => void,
       onError?: (error: unknown) => void,

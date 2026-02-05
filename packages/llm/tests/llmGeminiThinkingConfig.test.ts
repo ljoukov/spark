@@ -10,9 +10,8 @@ type GeminiStreamRequest = {
   config: Record<string, unknown>;
 };
 
-const generateContentStreamMock = vi.fn<
-  (req: GeminiStreamRequest) => AsyncIterable<unknown>
->();
+const generateContentStreamMock =
+  vi.fn<(req: GeminiStreamRequest) => AsyncIterable<unknown>>();
 
 vi.mock("../src/utils/gemini", async () => {
   const actual = await vi.importActual<typeof import("../src/utils/gemini")>(
@@ -31,8 +30,8 @@ vi.mock("../src/utils/gemini", async () => {
   };
 });
 
-async function* buildSingleChunkStream(text: string): AsyncIterable<unknown> {
-  yield {
+function buildSingleChunkStream(text: string): AsyncIterable<unknown> {
+  const chunk = {
     candidates: [
       {
         content: {
@@ -41,6 +40,20 @@ async function* buildSingleChunkStream(text: string): AsyncIterable<unknown> {
         },
       },
     ],
+  };
+  return {
+    [Symbol.asyncIterator]: () => {
+      let done = false;
+      return {
+        next: () => {
+          if (done) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          done = true;
+          return Promise.resolve({ done: false, value: chunk });
+        },
+      };
+    },
   };
 }
 
@@ -54,9 +67,7 @@ const silentProgress: JobProgressReporter = {
   setActiveStages: () => {},
 };
 
-async function withTempDir<T>(
-  fn: (dir: string) => Promise<T>,
-): Promise<T> {
+async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "spark-llm-test-"));
   try {
     return await fn(dir);
@@ -177,9 +188,8 @@ describe("Spark agent tool: generate_text", () => {
 
   it("writes JSON output via schema, expands templates, and attaches files", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       const promptPath = "prompt.md";
       const dataPath = "data.txt";
@@ -215,8 +225,8 @@ describe("Spark agent tool: generate_text", () => {
           scheduleUpdate: (p) => {
             scheduled.push(p);
           },
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",
@@ -227,7 +237,7 @@ describe("Spark agent tool: generate_text", () => {
       generateContentStreamMock.mockImplementation(({ config }) => {
         expect(config).toHaveProperty("responseMimeType", "application/json");
         expect(config).toHaveProperty("responseJsonSchema");
-        return buildSingleChunkStream("{\"x\":1}");
+        return buildSingleChunkStream('{"x":1}');
       });
 
       const result = await tools.generate_text.execute({
@@ -264,9 +274,8 @@ describe("Session agent tools: read_file_summary and generate_text", () => {
 
   it("read_file_summary calls gemini-flash-latest and includes question + file", async () => {
     await withTempDir(async (workingDirectory) => {
-      const { buildSessionAgentToolsForTest } = await import(
-        "../src/code/sessionGenerationAgent"
-      );
+      const { buildSessionAgentToolsForTest } =
+        await import("../src/code/sessionGenerationAgent");
 
       const { paths, tools } = buildSessionAgentToolsForTest({
         workingDirectory,
@@ -303,9 +312,8 @@ describe("Session agent tools: read_file_summary and generate_text", () => {
 
   it("session agent generate_text uses gemini-2.5-pro", async () => {
     await withTempDir(async (workingDirectory) => {
-      const { buildSessionAgentToolsForTest } = await import(
-        "../src/code/sessionGenerationAgent"
-      );
+      const { buildSessionAgentToolsForTest } =
+        await import("../src/code/sessionGenerationAgent");
 
       const { paths, tools } = buildSessionAgentToolsForTest({
         workingDirectory,

@@ -6,11 +6,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/utils/gcp/firestoreRest", () => {
   return {
-    getFirestoreDocument: vi.fn(async () => ({ exists: false, data: null })),
-    setFirestoreDocument: vi.fn(async () => ({})),
-    patchFirestoreDocument: vi.fn(async () => ({})),
-    listFirestoreDocuments: vi.fn(async () => []),
-    deleteFirestoreDocument: vi.fn(async () => ({})),
+    getFirestoreDocument: vi.fn(() =>
+      Promise.resolve({ exists: false, data: null }),
+    ),
+    setFirestoreDocument: vi.fn(() => Promise.resolve({})),
+    patchFirestoreDocument: vi.fn(() => Promise.resolve({})),
+    listFirestoreDocuments: vi.fn(() => Promise.resolve([])),
+    deleteFirestoreDocument: vi.fn(() => Promise.resolve({})),
   };
 });
 
@@ -26,15 +28,14 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent tool: publish_lesson guards", () => {
   it("requires session-grade report when enforceLessonPipeline=true", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       const tools = buildSparkAgentToolsForTest({
         workspace: {
           scheduleUpdate: () => {},
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",
@@ -50,9 +51,8 @@ describe("Spark agent tool: publish_lesson guards", () => {
 
   it("rejects publish when session-grade pass=false", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "lesson/feedback"), { recursive: true });
       await writeFile(
@@ -64,8 +64,8 @@ describe("Spark agent tool: publish_lesson guards", () => {
       const tools = buildSparkAgentToolsForTest({
         workspace: {
           scheduleUpdate: () => {},
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",

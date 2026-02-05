@@ -16,15 +16,14 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent lesson pipeline guards", () => {
   it("exposes the expected toolset", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       const tools = buildSparkAgentToolsForTest({
         workspace: {
           scheduleUpdate: () => {},
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",
@@ -54,15 +53,14 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("blocks direct writes to lesson/output and lesson/feedback JSON during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       const tools = buildSparkAgentToolsForTest({
         workspace: {
           scheduleUpdate: () => {},
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",
@@ -88,15 +86,14 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("blocks direct patch writes to lesson/output JSON during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } = await import(
-        "../src/agent/sparkAgentRunner"
-      );
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
 
       const tools = buildSparkAgentToolsForTest({
         workspace: {
           scheduleUpdate: () => {},
-          deleteFile: async () => {},
-          moveFile: async () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
         },
         rootDir,
         userId: "test-user",
@@ -115,6 +112,41 @@ describe("Spark agent lesson pipeline guards", () => {
           ],
         }),
       ).rejects.toThrow(/Direct patch writes.*Use generate_text/iu);
+    });
+  });
+
+  it("accepts common LLM argument shapes for generate_text (string/null coercions)", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentToolsForTest } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const tools = buildSparkAgentToolsForTest({
+        workspace: {
+          scheduleUpdate: () => {},
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        enforceLessonPipeline: true,
+      });
+
+      const parsed = tools.generate_text.inputSchema.parse({
+        promptPath: "lesson/prompts/session-draft.md",
+        outputPath: "lesson/output/session.json",
+        inputPaths: "lesson/requirements.md",
+        tools: "web-search",
+        modelId: null,
+      }) as {
+        inputPaths?: string[];
+        tools?: string[];
+        modelId?: string;
+      };
+
+      expect(parsed.inputPaths).toEqual(["lesson/requirements.md"]);
+      expect(parsed.tools).toEqual(["web-search"]);
+      expect(parsed.modelId).toBeUndefined();
     });
   });
 });
