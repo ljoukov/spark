@@ -41,6 +41,7 @@ import {
   tool,
   type LlmTextModelId,
   type LlmToolConfig,
+  type LlmDebugOptions,
   type LlmToolSet,
 } from "../utils/llm";
 import { isGeminiModelId, type GeminiModelId } from "../utils/gemini";
@@ -1450,6 +1451,7 @@ function buildAgentTools(options: {
   serviceAccountJson: string;
   progress?: JobProgressReporter;
   enforceLessonPipeline?: boolean;
+  debug?: LlmDebugOptions;
 }): LlmToolSet {
   const {
     workspace,
@@ -1458,6 +1460,7 @@ function buildAgentTools(options: {
     serviceAccountJson,
     progress,
     enforceLessonPipeline,
+    debug,
   } = options;
 
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
@@ -1881,6 +1884,16 @@ function buildAgentTools(options: {
               parts: [{ type: "text", text: promptText }],
             },
           ],
+          ...(debug
+            ? {
+                debug: {
+                  ...debug,
+                  subStage: debug.subStage
+                    ? `${debug.subStage}/generate_text`
+                    : "generate_text",
+                },
+              }
+            : {}),
           ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
           ...(responseJsonSchema
             ? {
@@ -2127,6 +2140,7 @@ export function buildSparkAgentToolsForTest(options: {
   serviceAccountJson: string;
   progress?: JobProgressReporter;
   enforceLessonPipeline?: boolean;
+  debug?: LlmDebugOptions;
 }): LlmToolSet {
   return buildAgentTools(options);
 }
@@ -2138,6 +2152,7 @@ export async function runSparkLessonAgentLocal(options: {
   modelId?: LlmTextModelId;
   maxSteps?: number;
   progress?: JobProgressReporter;
+  debug?: LlmDebugOptions;
 }): Promise<{
   readonly toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>;
   readonly publishResult: {
@@ -2179,6 +2194,7 @@ export async function runSparkLessonAgentLocal(options: {
     serviceAccountJson: "{}",
     progress,
     enforceLessonPipeline: true,
+    debug: options.debug,
   });
 
   type PublishLessonToolInput = {
@@ -2265,6 +2281,7 @@ export async function runSparkLessonAgentLocal(options: {
     },
     modelTools: [{ type: "web-search", mode: "live" }],
     maxSteps,
+    ...(options.debug ? { debug: options.debug } : {}),
     ...(progress ? { progress } : {}),
     ...(openAiReasoningEffort ? { openAiReasoningEffort } : {}),
   });
