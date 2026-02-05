@@ -242,14 +242,19 @@ function createSessionPlanSchema(
           message: `coding_blueprints length ${data.coding_blueprints.length} must match problem parts ${problemParts.length}`,
         });
       }
-    } else if (
-      problemParts.length > 0 &&
-      data.coding_blueprints.length !== problemParts.length
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: `coding_blueprints length ${data.coding_blueprints.length} must match problem parts ${problemParts.length}`,
-      });
+    } else {
+      if (problemParts.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "parts must not include problem segments when includeCoding=false",
+        });
+      }
+      if (data.coding_blueprints.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "coding_blueprints must be empty when includeCoding=false",
+        });
+      }
     }
 
     for (const [index, part] of data.parts.entries()) {
@@ -287,29 +292,117 @@ export function normalizeSessionPlanJson(value: unknown): unknown {
   if (!isPlainRecord(value)) {
     return value;
   }
+  let changed = false;
+  let next: Record<string, unknown> = value;
+
+  const story = value.story;
+  if (story === null) {
+    next = { ...next };
+    delete next.story;
+    changed = true;
+  } else if (isPlainRecord(story)) {
+    let storyChanged = false;
+    let nextStory: Record<string, unknown> = story;
+    for (const [key, entry] of Object.entries(story)) {
+      if (entry !== null) {
+        continue;
+      }
+      if (!storyChanged) {
+        nextStory = { ...nextStory };
+        storyChanged = true;
+      }
+      delete nextStory[key];
+    }
+    if (storyChanged) {
+      next = { ...next };
+      next.story = nextStory;
+      changed = true;
+    }
+  }
+
   const parts = Array.isArray(value.parts) ? value.parts : undefined;
   if (!parts) {
-    return value;
+    return changed ? next : value;
   }
-  let changed = false;
+
   const nextParts = parts.map((part): unknown => {
     if (!isPlainRecord(part)) {
       return part;
     }
     const kind = part.kind;
-    if (kind !== "quiz" && "question_count" in part) {
-      const rest = { ...part };
-      delete rest.question_count;
+    let partChanged = false;
+    let nextPart: Record<string, unknown> = part;
+
+    if (part.id === null) {
+      nextPart = { ...nextPart };
+      delete nextPart.id;
+      partChanged = true;
+    }
+    if (part.question_count === null) {
+      if (!partChanged) {
+        nextPart = { ...nextPart };
+        partChanged = true;
+      }
+      delete nextPart.question_count;
+    }
+    if (kind !== "quiz" && "question_count" in nextPart) {
+      if (!partChanged) {
+        nextPart = { ...nextPart };
+        partChanged = true;
+      }
+      delete nextPart.question_count;
+    }
+
+    if (partChanged) {
       changed = true;
-      return rest;
+      return nextPart;
     }
     return part;
   });
+
+  const blueprints = Array.isArray(value.coding_blueprints)
+    ? value.coding_blueprints
+    : undefined;
+  if (blueprints) {
+    const nextBlueprints = blueprints.map((blueprint): unknown => {
+      if (!isPlainRecord(blueprint)) {
+        return blueprint;
+      }
+      let blueprintChanged = false;
+      let nextBlueprint: Record<string, unknown> = blueprint;
+      if (blueprint.constraints === null) {
+        nextBlueprint = { ...nextBlueprint };
+        delete nextBlueprint.constraints;
+        blueprintChanged = true;
+      } else if (Array.isArray(blueprint.constraints)) {
+        const filtered = blueprint.constraints.filter(
+          (entry) => typeof entry === "string" && entry.trim().length > 0,
+        );
+        if (filtered.length !== blueprint.constraints.length) {
+          nextBlueprint = { ...nextBlueprint, constraints: filtered };
+          blueprintChanged = true;
+        }
+      }
+      if (blueprintChanged) {
+        changed = true;
+        return nextBlueprint;
+      }
+      return blueprint;
+    });
+    if (nextBlueprints.some((entry, index) => entry !== blueprints[index])) {
+      if (next === value) {
+        next = { ...next };
+      }
+      next.coding_blueprints = nextBlueprints;
+      changed = true;
+    }
+  }
+
   if (!changed) {
     return value;
   }
   return {
-    ...value,
+    ...next,
     parts: nextParts,
   };
 }
@@ -352,11 +445,23 @@ export function buildPlanIdeasUserPrompt(
           '  - Focal Object: "cipher wheel"',
           '  - Supporting Props: ["ledger", "ink blotter", "wax seal"]',
           "- Naming Note (optional): why the concept/name stuck, if relevant and safe to include.",
-          "- Part Progression with an ordered list of story/quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: story, quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+          ...(includeCoding
+            ? [
+                "- Part Progression with an ordered list of story/quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: story, quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+              ]
+            : [
+                "- Part Progression with an ordered list of story/quiz segments only; if the brief implies a structure or count (e.g., multiple quizzes), follow it, otherwise default to: story, quiz, quiz, quiz. Only annotate quiz parts with question counts.",
+              ]),
         ]
       : [
           "- Do NOT include story elements, historical hooks, analogies, or visual scenes.",
-          "- Part Progression with an ordered list of quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+          ...(includeCoding
+            ? [
+                "- Part Progression with an ordered list of quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+              ]
+            : [
+                "- Part Progression with an ordered list of quiz segments only; if the brief implies a structure or count (e.g., multiple quizzes), follow it, otherwise default to: quiz, quiz, quiz, quiz. Only annotate quiz parts with question counts.",
+              ]),
         ]),
     "- Promised Skills bullet list",
     "- Concepts To Teach list (may be empty)",
@@ -369,9 +474,8 @@ export function buildPlanIdeasUserPrompt(
           "- Promised Skills must cover every skill the coding blueprints need; avoid adding skills that are not used.",
         ]
       : [
-          "- If the brief includes target problems, capture them as Problem Blueprints in the coding_blueprints field (treat as math/problem blueprints, not programming).",
-          "- If the brief does NOT require separate problem parts, omit problem parts and set coding_blueprints to [].",
-          "- Only include concepts that appear in the parts summaries or problem blueprints; drop anything unused.",
+          "- Do NOT include problem parts or coding_blueprints; set coding_blueprints to []. Use quizzes for all practice.",
+          "- Only include concepts that appear in the parts summaries; drop anything unused.",
         ]),
     "- If the brief specifies quiz question counts, include them on quiz parts only (never non-quiz) in the progression notes so they can be parsed.",
     "",
@@ -379,7 +483,7 @@ export function buildPlanIdeasUserPrompt(
       ? "Use clear labels for each idea (e.g., Historical Hook, Analogy Seed, Modern Tie-in Domain, Visual Scene, Naming Note) so they can be parsed into the plan."
       : includeCoding
         ? "Use clear labels for each idea (e.g., Part Progression, Promised Skills, Concepts To Teach, Coding Blueprints) so they can be parsed into the plan."
-        : "Use clear labels for each idea (e.g., Part Progression, Promised Skills, Concepts To Teach, Problem Blueprints (coding_blueprints)) so they can be parsed into the plan.",
+        : "Use clear labels for each idea (e.g., Part Progression, Promised Skills, Concepts To Teach) so they can be parsed into the plan.",
   );
   return parts.join("\n");
 }
@@ -410,12 +514,26 @@ export function buildPlanParseUserPrompt(
           "visual_scene.props must be 1-3 short concrete items (<=40 chars each).",
           'Example visual_scene: {"setting":"1860s Prussian map room","focal_object":"cipher wheel","props":["ledger","ink blotter","wax seal"]}.',
           "Never quote or repeat any instruction text in visual_scene fields.",
-          'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
+          ...(includeCoding
+            ? [
+                'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
+              ]
+            : [
+                'Parts must be ordered sequentially starting at 1 and use kind values "story" or "quiz". Story must be part 1. Do not include problem parts.',
+              ]),
         ]
       : [
-          'Parts must be ordered sequentially starting at 1 and use kind values "quiz" or "problem". Do not include story parts.',
+          ...(includeCoding
+            ? [
+                'Parts must be ordered sequentially starting at 1 and use kind values "quiz" or "problem". Do not include story parts.',
+              ]
+            : [
+                'Parts must be ordered sequentially starting at 1 and use kind value "quiz" only. Do not include story parts or problem parts.',
+              ]),
         ]),
-    "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/problems and any wrap-up quiz.",
+    includeCoding
+      ? "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/problems and any wrap-up quiz."
+      : "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes and any wrap-up quiz.",
     "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
     ...(includeCoding
       ? [
@@ -424,10 +542,9 @@ export function buildPlanParseUserPrompt(
           "Concepts_to_teach must be actually used in the parts summaries or coding_blueprints (logic, constraints, or required_skills). Drop any concept from the Markdown that is not used; never invent new ones.",
         ]
       : [
-          "Do NOT include programming tasks. Treat any problem parts as math-only.",
-          "coding_blueprints may be empty; only populate it when the brief explicitly calls for separate problem parts.",
-          "If coding_blueprints is empty, omit problem parts from parts.",
-          "Concepts_to_teach must be used in parts summaries or problem blueprints when present; drop unused concepts.",
+          "Do NOT include programming tasks.",
+          "Create a quiz-only plan: omit problem parts and set coding_blueprints to [].",
+          "Concepts_to_teach must be used in parts summaries; drop unused concepts.",
         ]),
     ...(includeStory
       ? [
@@ -458,8 +575,8 @@ export function buildPlanEditUserPrompt(
           "Promised skills must cover every coding_blueprints.required_skills entry; add the missing skills rather than removing blueprint requirements.",
         ]
       : [
-          "Do NOT introduce programming tasks; keep problems math-only if they exist.",
-          "If coding_blueprints is empty, remove any problem parts; otherwise ensure counts match.",
+          "Do NOT introduce programming tasks.",
+          "Remove any problem parts and set coding_blueprints to [].",
         ]),
     "question_count is only allowed on quiz parts; remove it from non-quiz parts.",
     "Remove any concepts_to_teach entries that are not used in parts or coding_blueprints; do not invent new concepts.",
@@ -500,7 +617,7 @@ export function buildPlanGradeUserPrompt(
       : ["R5 no story parts are present;"]),
     ...(includeCoding
       ? ["R6 problem parts count matches coding_blueprints length;"]
-      : ["R6 if problem parts exist, count matches coding_blueprints length;"]),
+      : ["R6 no problem parts are present and coding_blueprints is empty;"]),
     "Output {pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]} JSON only.",
     "",
     "Plan JSON:",

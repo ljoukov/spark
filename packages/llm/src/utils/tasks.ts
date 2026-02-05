@@ -2,6 +2,7 @@ import { z } from "zod";
 import { encodeBytesToBase64 } from "./gcp/base64";
 import { getGoogleAccessToken as getGoogleServiceAccountAccessToken } from "./gcp/googleAccessToken";
 import { isNodeRuntime } from "./runtime";
+import { errorAsString } from "./error";
 
 // Server-side task schema
 export const GenerateQuizTaskSchema = z.object({
@@ -113,7 +114,7 @@ function formatFetchError(error: unknown): string {
     if (cause instanceof Error) {
       pieces.push(`cause=${cause.message}`);
     } else if (cause) {
-      pieces.push(`cause=${String(cause)}`);
+      pieces.push(`cause=${errorAsString(cause)}`);
     }
     return pieces.join(" ");
   }

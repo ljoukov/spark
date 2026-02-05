@@ -243,8 +243,9 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
 - Lesson creation (from `/spark` chat) is implemented as an Agent run:
   - Server creates a new session stub under `spark/{userId}/sessions/{sessionId}` with `status = generating`.
-  - Server writes `brief.md` + `request.json` into the workspace and schedules a `runAgent` task.
-  - The agent uses the `publish_lesson` tool to generate and publish the session plan plus any quiz/problem subcollection docs, then marks the session `status = ready` (or `status = error` on failure).
+  - Server writes `brief.md`, `request.json`, plus `lesson/task.md` + `lesson/schema/*` into the workspace and schedules a `runAgent` task.
+  - The agent follows `lesson/task.md`, authors Firestore-ready JSON under `lesson/output/` (`session.json`, `quiz/*.json`, `code/*.json`, optional `media/*.json`), then calls `publish_lesson` with a `sessionPath`.
+  - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
 
 - Agent run logs live under `users/{userId}/agents/{agentId}/logs/log` (single doc).
   - Log lines are stored in a map field `lines`, keyed by an epoch-ms timestamp key (`t<ms>_<seq>`), with values as the printed log line text.

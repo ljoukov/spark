@@ -392,6 +392,39 @@ function normalizeOpenAiSchema(schema: JsonSchema): JsonSchema {
     }
   }
 
+  const normalizeExclusiveBound = (options: {
+    exclusiveKey: "exclusiveMinimum" | "exclusiveMaximum";
+    inclusiveKey: "minimum" | "maximum";
+  }): void => {
+    const exclusiveValue = output[options.exclusiveKey];
+    if (exclusiveValue === false) {
+      delete output[options.exclusiveKey];
+      return;
+    }
+    const inclusiveValue = output[options.inclusiveKey];
+    if (exclusiveValue === true) {
+      if (typeof inclusiveValue === "number" && Number.isFinite(inclusiveValue)) {
+        output[options.exclusiveKey] = inclusiveValue;
+        delete output[options.inclusiveKey];
+      } else {
+        delete output[options.exclusiveKey];
+      }
+      return;
+    }
+    if (typeof exclusiveValue === "number" && Number.isFinite(exclusiveValue)) {
+      delete output[options.inclusiveKey];
+    }
+  };
+
+  normalizeExclusiveBound({
+    exclusiveKey: "exclusiveMinimum",
+    inclusiveKey: "minimum",
+  });
+  normalizeExclusiveBound({
+    exclusiveKey: "exclusiveMaximum",
+    inclusiveKey: "maximum",
+  });
+
   return output;
 }
 

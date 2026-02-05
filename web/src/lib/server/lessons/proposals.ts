@@ -76,7 +76,7 @@ function normalizeProposal(
 
 function buildProposalPrompt(session: Session): string {
 	const lines: string[] = [];
-	lines.push('You are Spark Code planning three follow-up lessons for a learner.');
+	lines.push('You are Spark planning three follow-up lessons for a learner.');
 	lines.push('Return concise proposals that build on the completed lesson.');
 	lines.push(
 		'Use JSON only: {"proposals":[{ "id": "...", "title": "...", "tagline": "...", "topics": ["..."], "emoji": "🎯" }]}'
