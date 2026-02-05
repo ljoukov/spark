@@ -20,6 +20,9 @@ import { env } from '$env/dynamic/private';
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import { listSessions, getSession, saveSession, setCurrentSessionId } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
+import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
+import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
+import lessonFirestoreSchemaJson from '$lib/server/lessonAgent/schema/firestore-schema.json?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -103,7 +106,9 @@ const SYSTEM_PROMPT = [
 	'- If the user asks to create/start/make a lesson and you have a clear topic, call create_lesson immediately.',
 	'- If details are missing, ask concise follow-up questions (topic, goal, level, duration, materials/links).',
 	'- Do not claim a lesson has started unless create_lesson returned status="started".',
-	'- After create_lesson, include the lesson link (href) and the Lessons list link (lessonsHref).',
+	'- After create_lesson, say the lesson is being created (do NOT claim it is ready yet).',
+	'- Do not claim a lesson is ready unless you checked with get_lesson_status and it returned status="ready".',
+	'- After create_lesson, include the lesson link (href) and the Lessons list link (lessonsHref). Use them as-is (do not swap in other domains).',
 	'',
 	'Lesson status and recommendations:',
 	'- Use list_lessons to see what exists and recommend what to do next based on progress.',
@@ -507,6 +512,35 @@ function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>): string {
 	return lines.join('\n').trim() + '\n';
 }
 
+function renderLessonTask(options: {
+	template: string;
+	sessionId: string;
+	workspaceId: string;
+	input: z.infer<typeof lessonCreateSchema>;
+}): string {
+	const title = options.input.title?.trim() ?? '—';
+	const level = options.input.level?.trim() ?? '—';
+	const goal = options.input.goal?.trim() ?? '—';
+	const duration =
+		typeof options.input.durationMinutes === 'number' ? `${options.input.durationMinutes} minutes` : '—';
+	const materials =
+		options.input.materials && options.input.materials.length > 0
+			? options.input.materials.map((item) => `- ${item}`).join('\n')
+			: '- —';
+
+	return options.template
+		.replaceAll('{{SESSION_ID}}', options.sessionId)
+		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
+		.replaceAll('{{TOPIC}}', options.input.topic.trim())
+		.replaceAll('{{TITLE}}', title)
+		.replaceAll('{{LEVEL}}', level)
+		.replaceAll('{{GOAL}}', goal)
+		.replaceAll('{{DURATION_MINUTES}}', duration)
+		.replaceAll('{{MATERIALS_BULLETS}}', materials)
+		.trim()
+		.concat('\n');
+}
+
 function buildSparkChatTools(options: {
 	userId: string;
 	serviceAccountJson: string;
@@ -636,21 +670,76 @@ function buildSparkChatTools(options: {
 						now
 					});
 
+					const lessonTask = renderLessonTask({
+						template: lessonTaskTemplate,
+						sessionId,
+						workspaceId,
+						input
+					});
+					const plan = [
+						'# Plan',
+						'',
+						'- [running] Read brief.md and lesson/task.md.',
+						'- [pending] Draft lesson structure (optional: lesson/drafts/*).',
+						'- [pending] Write lesson/output/session.json.',
+						'- [pending] Write lesson/output/quiz/*.json.',
+						'- [pending] Write lesson/output/code/*.json (if coding).',
+						'- [pending] Call publish_lesson (fix errors until published).',
+						'- [pending] Call done.'
+					].join('\n');
+
+					await Promise.all([
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/task.md',
+							content: lessonTask,
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/plan.md',
+							content: plan + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/README.md',
+							content: lessonSchemaReadme.trim() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/firestore-schema.json',
+							content: lessonFirestoreSchemaJson.trim() + '\n',
+							now
+						})
+					]);
+
 					const prompt = [
-						'Create a Spark lesson from the workspace brief and publish it to the user sessions.',
+						'Create and publish a Spark lesson using the workspace files (brief.md + lesson/*).',
 						'',
 						`sessionId: ${sessionId}`,
 						`workspaceId: ${workspaceId}`,
 						'',
 						'Instructions:',
-						'1) Read brief.md.',
-						'2) Call publish_lesson with:',
+						'1) Read brief.md and lesson/task.md.',
+						'2) Follow the pipeline in lesson/task.md and write Firestore-ready JSON under lesson/output/.',
+						'3) Call publish_lesson with:',
 						`   - sessionId: ${sessionId}`,
-						"   - briefPath: 'brief.md'",
-						'   - includeCoding: true if this is programming/coding practice; otherwise false.',
-						'   - includeStory: true only if the user explicitly wants a story/audio clip.',
-						'3) Ensure the lesson ends in status=ready (or status=error on failure).',
-						'4) Call done with a short summary including the sessionId.',
+						"   - sessionPath: 'lesson/output/session.json'",
+						"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
+						'   - includeCoding: true if you included any plan items with kind="problem"; otherwise false.',
+						'   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
+						'4) If publish_lesson fails, fix the files and retry.',
+						'5) Call done with a short summary including the sessionId.',
 						'',
 						'Do not publish into welcome templates.'
 					].join('\n');
