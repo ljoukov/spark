@@ -13,11 +13,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"llm-integration/**/*.{ts,tsx}\"",
+    "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
     "lint": "npm run typecheck && npm run eslint",
-    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\" \"llm-integration/**/*.{ts,js,json}\"",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
     "test": "vitest --run",
-    "test:llm-integration": "RUN_LLM_INTEGRATION_TESTS=1 vitest --run -c vitest.llm-integration.config.ts"
+    "smoke:lesson-agent": "npm --prefix ../../eval run tools:lesson-agent-smoke --",
+    "test:llm-integration": "npm run smoke:lesson-agent --"
   },
   "files": [
     "dist"
