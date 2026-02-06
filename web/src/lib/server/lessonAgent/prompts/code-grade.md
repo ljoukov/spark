@@ -23,6 +23,7 @@ Fail if any are violated:
 - The reference solution must be correct for all tests and must read stdin / write stdout with no prompts.
 - Problem must be appropriate for the requested level and the lesson plan.
 - Problem copy must meet the length guidance in the code problem draft prompt (keep it concise).
+- Any maths/science equations or formulas in Markdown fields must be written as LaTeX using `$...$` (inline) or `$$...$$` (display).
 
 Decisions + constraints:
 {{lesson/requirements.md}}

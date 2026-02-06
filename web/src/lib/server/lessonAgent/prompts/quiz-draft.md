@@ -54,6 +54,7 @@ For kind=type-answer:
 - Use LaTeX for maths/science formulas inside Markdown fields:
   - Inline: wrap in `$...$` (e.g. `$V = IR$`, `$I = \\frac{Q}{t}$`).
   - Display: wrap in `$$...$$` for standalone equations/derivations.
+  - Any time you write an equation (e.g. contains `=` or `∝`), it should be LaTeX.
   - Do NOT write bare formulas like `V=IR` when LaTeX is suitable.
 - Keep copy short:
   - Quiz `title`: 3-8 words, <= 55 chars.
