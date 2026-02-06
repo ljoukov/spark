@@ -1,22 +1,24 @@
-# Quiz revise (lesson/output/quiz/<planItemId>.json)
+# Quiz revise (lesson/drafts/quiz/<planItemId>.md)
 
-You are revising a quiz JSON draft to address a grading report.
+You are revising a quiz **Markdown** draft to address a grading report.
 
-Return **JSON only** (start with `{` and end with `}`), matching the schema.
+Return **Markdown only** (no JSON).
 
 Rules:
-- Keep question ids stable unless the grading report requires changes.
 - Fix every issue in the grading report.
+- Keep `planItemId` stable.
+- Keep question ids stable unless the grading report requires changes.
 - Preserve the requested question count / kind mix if it was specified in `lesson/requirements.md`.
+- Keep the required format from the quiz draft prompt (Quiz section + Questions).
 
-Schema:
-{{lesson/schema/quiz.schema.json}}
+Decisions + constraints:
+{{lesson/requirements.md}}
 
-Session context:
-{{lesson/output/session.json}}
+Session draft context:
+{{lesson/drafts/session.md}}
 
-Grading report:
-{{lesson/feedback/quiz-grade.json}}
+Inputs (in attached files):
+- Current quiz Markdown: `lesson/drafts/quiz/<planItemId>.md`
+- Grading report Markdown: `lesson/feedback/quiz/<planItemId>-grade.md`
 
-Current quiz JSON (provided via `generate_text` inputPaths):
-(Provide the target quiz JSON via `generate_text` by passing `inputPaths: ["lesson/output/quiz/<planItemId>.json"]`.)
+Revise the quiz to address every issue in the grading report.

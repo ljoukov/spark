@@ -1102,30 +1102,61 @@ function buildAgentSystemPrompt(): string {
     "",
     "Lesson creation pipeline (CRITICAL):",
     "When you are asked to create a Spark lesson, follow the pipeline described in lesson/task.md.",
-    "Key strategy (mirrors the old fixed pipeline, but prompt-driven):",
+    "Key strategy (prompt-driven):",
     "1) Read brief.md + request.json + lesson/task.md first; write hard requirements + decisions into lesson/requirements.md.",
-    "2) Generate -> grade -> revise loop for each artifact (do not skip grading):",
-    "   - session plan (lesson/output/session.json)",
-    "   - quizzes (lesson/output/quiz/<planItemId>.json)",
-    "   - code problems (lesson/output/code/<planItemId>.json) when coding is included",
-    "3) If coding is included, draft/verify code problems first, then build the plan/quizzes from the verified problems.",
-    "4) You MUST use generate_text for drafting and grading; do not write lesson/output/*.json or lesson/feedback/*.json directly with write_file/apply_patch.",
-    "   - Example (draft session): generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
-    "   - Example (grade session): generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })",
-    "   - Example (grade a quiz): generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
-    "   - IMPORTANT: When using responseSchemaPath (JSON outputs), do NOT set tools=[...]. If you need web-search or code execution, do that separately via web_search/python_exec.",
-    "   - Prompt templates may include {{path/to/file}} placeholders to inline workspace files.",
-    "   - You can also pass inputPaths to generate_text to append additional workspace files without editing the template.",
-    "   - When generating JSON, pass responseSchemaPath pointing at lesson/schema/*.schema.json.",
-    "   - Do not publish until lesson/feedback/session-grade.json exists and pass=true.",
+    "2) Draft content as Markdown (preferred):",
+    "   - Session draft: lesson/drafts/session.md",
+    "   - Quiz drafts: lesson/drafts/quiz/<planItemId>.md",
+    "   - Code drafts: lesson/drafts/code/<planItemId>.md (only if coding is included)",
+    "   - Use generate_text with the templates in lesson/prompts/ to draft/revise Markdown.",
+    "   - IMPORTANT dependency: the quiz/code draft prompt templates inline lesson/drafts/session.md, so you MUST generate the session draft before running quiz-draft/code-draft generate_text calls.",
+    "3) Grade drafts (do not skip):",
+    "   - Session grade: lesson/feedback/session-grade.md (must have pass: true before publishing)",
+    "   - Quiz grade: lesson/feedback/quiz/<planItemId>-grade.md (one per quiz plan item)",
+    "   - Code grade: lesson/feedback/code/<planItemId>-grade.md (one per problem plan item)",
+    "4) Generate Firestore-ready JSON outputs under lesson/output/ from the Markdown drafts:",
+    "   - Use generate_json({ sourcePath, schemaPath, outputPath }) for each JSON file.",
+    "   - Then run validate_json({ schemaPath, inputPath }) and fix until ok=true.",
+    "   - Fixes can be done by editing the source Markdown and re-running generate_json, or by patching the JSON directly.",
+    "   - Required outputs:",
+    "     - lesson/output/session.json (from lesson/drafts/session.md, schema lesson/schema/session.schema.json)",
+    "     - lesson/output/quiz/<planItemId>.json (from lesson/drafts/quiz/<planItemId>.md, schema lesson/schema/quiz.schema.json)",
+    "     - lesson/output/code/<planItemId>.json (from lesson/drafts/code/<planItemId>.md, schema lesson/schema/code.schema.json)",
+    "     - lesson/output/media/<planItemId>.json (rare; only if kind=\"media\" exists; schema lesson/schema/media.schema.json)",
     "5) Publish only after outputs exist and look consistent: call publish_lesson and fix errors until status='published'.",
     "Publish lessons into the user's sessions (not welcome templates).",
     "",
     "Schema / files:",
-    "- lesson/schema/session.schema.json defines lesson/output/session.json.",
-    "- lesson/schema/quiz.schema.json defines lesson/output/quiz/*.json.",
-    "- lesson/schema/code.schema.json defines lesson/output/code/*.json.",
-    "- lesson/schema/media.schema.json defines lesson/output/media/*.json (only if explicitly requested).",
+    "- lesson/schema/session.schema.json describes lesson/output/session.json.",
+    "- lesson/schema/quiz.schema.json describes lesson/output/quiz/*.json.",
+    "- lesson/schema/code.schema.json describes lesson/output/code/*.json.",
+    "- lesson/schema/media.schema.json describes lesson/output/media/*.json (only if explicitly requested).",
+    "",
+    "generate_text notes:",
+    "- Prompt templates may include {{path/to/file}} placeholders to inline workspace files.",
+    "- Some prompt templates REQUIRE inputPaths. In particular, quiz/code grade and revise prompts MUST be called with inputPaths so the sub-model can see the candidate draft (and the grading report for revise).",
+    "- outputPath is required for every generate_text call.",
+    "- Lesson grading templates output `pass: true|false`. generate_text will return `gradePass: true|false` when it detects this line. Use that instead of reading the grade file back unless you need details to fix a failure.",
+    "- Only revise drafts when pass=false. If pass=true, proceed even if the grader suggests optional improvements.",
+    "",
+    "Examples (multiple quizzes / problems):",
+    "- Grade quiz q1:",
+    "  generate_text({ promptPath: \"lesson/prompts/quiz-grade.md\", inputPaths: [\"lesson/drafts/quiz/q1.md\"], outputPath: \"lesson/feedback/quiz/q1-grade.md\" })",
+    "- Revise quiz q1 using its grade report:",
+    "  generate_text({ promptPath: \"lesson/prompts/quiz-revise.md\", inputPaths: [\"lesson/drafts/quiz/q1.md\", \"lesson/feedback/quiz/q1-grade.md\"], outputPath: \"lesson/drafts/quiz/q1.md\" })",
+    "- Grade code problem p1:",
+    "  generate_text({ promptPath: \"lesson/prompts/code-grade.md\", inputPaths: [\"lesson/drafts/code/p1.md\"], outputPath: \"lesson/feedback/code/p1-grade.md\" })",
+    "- Revise code problem p1 using its grade report:",
+    "  generate_text({ promptPath: \"lesson/prompts/code-revise.md\", inputPaths: [\"lesson/drafts/code/p1.md\", \"lesson/feedback/code/p1-grade.md\"], outputPath: \"lesson/drafts/code/p1.md\" })",
+    "",
+    "Step limit optimization (important for smoke tests):",
+    "- You MAY call multiple tools in a single step when they are independent (they run in parallel).",
+    "- In low-step-budget runs, you MUST batch JSON work: run generate_json for session + all quizzes/problems/media in one step, then validate_json for all outputs in one step.",
+    "- Similarly, once prerequisites exist (e.g. session draft), batch quiz/problem draft and grade calls per plan item in the same step (one outputPath per plan item).",
+    "- Good batching examples:",
+    "  - Grade q1 and q2 in the same step (distinct outputPath per quiz).",
+    "  - Generate JSON for session + all quizzes in one step, then validate them all in one step.",
+    "- Do NOT batch dependent operations in the same step (e.g. don't grade before drafting, don't validate before generating).",
     "",
     "Python execution:",
     "- Use python_exec for calculations or verification (e.g. validate that a reference solution matches tests).",
@@ -1206,19 +1237,28 @@ async function validateLessonWorkspaceForPublish(options: {
   };
 
   if (enforceLessonPipeline) {
-    const sessionGradePath = "lesson/feedback/session-grade.json";
-    let rawGrade: unknown;
-    try {
-      rawGrade = await readWorkspaceJson(sessionGradePath);
-    } catch {
+    const sessionGradePath = "lesson/feedback/session-grade.md";
+    const gradeText = await readWorkspaceTextOptional(sessionGradePath);
+    if (!gradeText) {
       throw new Error(
-        `Missing required session grading report (${sessionGradePath}). Run generate_text with promptPath='lesson/prompts/session-grade.md' and outputPath='${sessionGradePath}', then revise until pass=true.`,
+        `Missing required session grading report (${sessionGradePath}). Run generate_text with promptPath='lesson/prompts/session-grade.md' and outputPath='${sessionGradePath}', then revise until pass: true.`,
       );
     }
-    const gradeRecord = ensurePlainRecord(rawGrade, sessionGradePath);
-    if (gradeRecord.pass !== true) {
+    const passMatch = gradeText.match(/^\s*pass\s*:\s*(true|false)\s*$/gim);
+    const passValue = passMatch?.[0]
+      ? (() => {
+          const parts = passMatch[0].split(":");
+          const raw = parts[1] ? parts[1].trim().toLowerCase() : "";
+          return raw === "true" ? true : raw === "false" ? false : null;
+        })()
+      : null;
+    if (passValue !== true) {
+      const detail =
+        passValue === false
+          ? "pass=false"
+          : "missing required `pass: true|false` line";
       throw new Error(
-        `Session grading report (${sessionGradePath}) has pass=false. Revise lesson/output/session.json and re-grade before publishing.`,
+        `Session grading report (${sessionGradePath}) ${detail}. Revise lesson/drafts/session.md and re-grade before publishing.`,
       );
     }
   }
@@ -1465,19 +1505,331 @@ function buildAgentTools(options: {
   } = options;
 
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
-  const isLessonGeneratedJsonPath = (inputPath: string): boolean => {
-    const normalized = inputPath.replace(/\\/g, "/");
-    if (!normalized.endsWith(".json")) {
-      return false;
-    }
-    if (normalized.startsWith("lesson/output/")) {
-      return true;
-    }
-    if (normalized.startsWith("lesson/feedback/")) {
-      return true;
-    }
-    return false;
-  };
+
+  const validate_json = tool({
+    description: [
+      "Validate a workspace JSON file against Spark's Zod schemas (the same ones used by publish_lesson).",
+      "Provide schemaPath (for disambiguation) and inputPath (the JSON file to validate).",
+      "",
+      "This tool fills publisher-managed fields before validating:",
+      "- session: id, createdAt, status, nextLessonProposals",
+      "- quiz: id, progressKey",
+      "- code: slug",
+      "- media: id, planItemId, sessionId, createdAt, updatedAt",
+      "",
+      "Inputs:",
+      "- schemaPath (required): One of lesson/schema/session.schema.json|quiz.schema.json|code.schema.json|media.schema.json (or an equivalent hint).",
+      "- inputPath (required): JSON file to validate (usually under lesson/output/...).",
+      "- sessionId (optional): Override session id for session validation; otherwise inferred from request.json if present.",
+      "",
+      "Batching:",
+      "- If you need to validate multiple outputs, call validate_json once per file in the SAME step (they will run in parallel).",
+    ].join("\n"),
+    inputSchema: z
+      .object({
+        schemaPath: z.string().trim().min(1),
+        inputPath: z.string().trim().min(1),
+        sessionId: z.preprocess(
+          (value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            if (typeof value === "string") {
+              const trimmed = value.trim();
+              return trimmed.length > 0 ? trimmed : undefined;
+            }
+            return value;
+          },
+          z.string().trim().min(1).optional(),
+        ),
+      })
+      .strict(),
+    execute: async ({ schemaPath, inputPath, sessionId }) => {
+      const normalize = (value: string): string => value.replace(/\\/g, "/").trim();
+
+      const resolvedSchemaPath = normalize(schemaPath);
+      const resolvedInputPath = normalize(inputPath);
+
+      const resolveKind = (
+        value: string,
+      ): "session" | "quiz" | "code" | "media" | null => {
+        const lowered = value.toLowerCase();
+        if (lowered.endsWith("session.schema.json")) {
+          return "session";
+        }
+        if (lowered.endsWith("quiz.schema.json")) {
+          return "quiz";
+        }
+        if (lowered.endsWith("code.schema.json")) {
+          return "code";
+        }
+        if (lowered.endsWith("media.schema.json")) {
+          return "media";
+        }
+        return null;
+      };
+
+      const kind = resolveKind(resolvedSchemaPath) ?? resolveKind(resolvedInputPath);
+
+      const formatIssuePath = (segments: Array<string | number>): string => {
+        if (segments.length === 0) {
+          return "(root)";
+        }
+        let out = "";
+        for (const segment of segments) {
+          if (typeof segment === "number") {
+            out += `[${segment.toString()}]`;
+            continue;
+          }
+          const key = segment.trim();
+          if (key.length === 0) {
+            continue;
+          }
+          if (out.length === 0) {
+            out = key;
+          } else {
+            out += `.${key}`;
+          }
+        }
+        return out.length > 0 ? out : "(root)";
+      };
+
+      const buildZodIssues = (
+        error: z.ZodError,
+      ): Array<{ path: string; message: string }> =>
+        error.issues.slice(0, 50).map((issue) => ({
+          path: formatIssuePath(issue.path as Array<string | number>),
+          message: issue.message,
+        }));
+
+      const fail = (message: string, issues?: Array<{ path: string; message: string }>) => ({
+        ok: false as const,
+        schemaPath: resolvedSchemaPath,
+        inputPath: resolvedInputPath,
+        kind: kind ?? "unknown",
+        error: message,
+        issues:
+          issues && issues.length > 0 ? issues : [{ path: "(root)", message }],
+      });
+
+      const readJsonObject = async (): Promise<Record<string, unknown>> => {
+        const resolved = resolveWorkspacePath(rootDir, resolvedInputPath);
+        const text = await readFile(resolved, { encoding: "utf8" });
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch (error) {
+          throw new Error(
+            `Invalid JSON in "${resolvedInputPath}": ${errorAsString(error)}`,
+          );
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error(`"${resolvedInputPath}" must contain a JSON object.`);
+        }
+        return parsed as Record<string, unknown>;
+      };
+
+      const resolveSessionId = async (): Promise<string> => {
+        const provided = sessionId?.trim() ?? "";
+        if (provided.length > 0) {
+          return provided;
+        }
+        try {
+          const raw = await readFile(resolveWorkspacePath(rootDir, "request.json"), {
+            encoding: "utf8",
+          });
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const fromRequest =
+            typeof parsed.sessionId === "string" ? parsed.sessionId.trim() : "";
+          if (fromRequest.length > 0) {
+            return fromRequest;
+          }
+        } catch {
+          // ignore
+        }
+        return "session";
+      };
+
+      const inferPlanItemIdFromPath = (options: {
+        dir: string;
+        fallbackField: "id" | "slug" | "planItemId";
+        record: Record<string, unknown>;
+      }): string | null => {
+        const normalized = resolvedInputPath;
+        const prefix = `${options.dir.replace(/\\/g, "/").replace(/\/+$/g, "")}/`;
+        if (normalized.startsWith(prefix) && normalized.endsWith(".json")) {
+          const rest = normalized.slice(prefix.length, -".json".length);
+          const trimmed = rest.trim();
+          if (trimmed.length > 0 && !trimmed.includes("/")) {
+            return trimmed;
+          }
+        }
+        const fallbackValue = options.record[options.fallbackField];
+        if (typeof fallbackValue === "string") {
+          const trimmed = fallbackValue.trim();
+          return trimmed.length > 0 ? trimmed : null;
+        }
+        return null;
+      };
+
+      if (!kind) {
+        return fail(
+          'Unknown schema kind. schemaPath should end with "session.schema.json", "quiz.schema.json", "code.schema.json", or "media.schema.json".',
+        );
+      }
+
+      try {
+        const record = await readJsonObject();
+        const nowIso = new Date().toISOString();
+
+        switch (kind) {
+          case "session": {
+            const resolvedSessionId = await resolveSessionId();
+            const candidate: Record<string, unknown> = {
+              ...record,
+              id: resolvedSessionId,
+              createdAt: nowIso,
+              status: "ready",
+              nextLessonProposals: [],
+            };
+            const parsed = SessionSchema.safeParse(candidate);
+            if (!parsed.success) {
+              return fail("Session validation failed.", buildZodIssues(parsed.error));
+            }
+            return {
+              ok: true as const,
+              schemaPath: resolvedSchemaPath,
+              inputPath: resolvedInputPath,
+              kind,
+              sessionId: parsed.data.id,
+              planItems: parsed.data.plan.length,
+            };
+          }
+          case "quiz": {
+            const planItemId =
+              inferPlanItemIdFromPath({
+                dir: "lesson/output/quiz",
+                fallbackField: "id",
+                record,
+              }) ??
+              inferPlanItemIdFromPath({
+                dir: "quiz",
+                fallbackField: "id",
+                record,
+              });
+            if (!planItemId) {
+              return fail(
+                'Unable to infer quiz id. Use inputPath like "lesson/output/quiz/<planItemId>.json" or include an id field.',
+              );
+            }
+            const resolvedSessionId = await resolveSessionId();
+            const progressKeyRaw =
+              typeof record.progressKey === "string" ? record.progressKey.trim() : "";
+            const progressKey =
+              progressKeyRaw.length > 0
+                ? progressKeyRaw
+                : `lesson:${resolvedSessionId}:${planItemId}`;
+            const candidate: Record<string, unknown> = {
+              ...record,
+              id: planItemId,
+              progressKey,
+            };
+            const parsed = QuizDefinitionSchema.safeParse(candidate);
+            if (!parsed.success) {
+              return fail("Quiz validation failed.", buildZodIssues(parsed.error));
+            }
+            return {
+              ok: true as const,
+              schemaPath: resolvedSchemaPath,
+              inputPath: resolvedInputPath,
+              kind,
+              id: parsed.data.id,
+              questions: parsed.data.questions.length,
+            };
+          }
+          case "code": {
+            const planItemId =
+              inferPlanItemIdFromPath({
+                dir: "lesson/output/code",
+                fallbackField: "slug",
+                record,
+              }) ??
+              inferPlanItemIdFromPath({
+                dir: "code",
+                fallbackField: "slug",
+                record,
+              });
+            if (!planItemId) {
+              return fail(
+                'Unable to infer code problem slug. Use inputPath like "lesson/output/code/<planItemId>.json" or include a slug field.',
+              );
+            }
+            const candidate: Record<string, unknown> = {
+              ...record,
+              slug: planItemId,
+            };
+            const parsed = CodeProblemSchema.safeParse(candidate);
+            if (!parsed.success) {
+              return fail(
+                "Code problem validation failed.",
+                buildZodIssues(parsed.error),
+              );
+            }
+            return {
+              ok: true as const,
+              schemaPath: resolvedSchemaPath,
+              inputPath: resolvedInputPath,
+              kind,
+              slug: parsed.data.slug,
+              tests: parsed.data.tests.length,
+            };
+          }
+          case "media": {
+            const planItemId =
+              inferPlanItemIdFromPath({
+                dir: "lesson/output/media",
+                fallbackField: "planItemId",
+                record,
+              }) ??
+              inferPlanItemIdFromPath({
+                dir: "media",
+                fallbackField: "planItemId",
+                record,
+              });
+            if (!planItemId) {
+              return fail(
+                'Unable to infer media planItemId. Use inputPath like "lesson/output/media/<planItemId>.json" or include planItemId.',
+              );
+            }
+            const resolvedSessionId = await resolveSessionId();
+            const candidate: Record<string, unknown> = {
+              ...record,
+              id: planItemId,
+              planItemId,
+              sessionId: resolvedSessionId,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            const parsed = SessionMediaDocSchema.safeParse(candidate);
+            if (!parsed.success) {
+              return fail("Media validation failed.", buildZodIssues(parsed.error));
+            }
+            return {
+              ok: true as const,
+              schemaPath: resolvedSchemaPath,
+              inputPath: resolvedInputPath,
+              kind,
+              id: parsed.data.id,
+              narrationLines: parsed.data.narration.length,
+              images: parsed.data.images.length,
+            };
+          }
+        }
+      } catch (error) {
+        return fail(errorAsString(error));
+      }
+    },
+  });
 
   return {
     publish_lesson: tool({
@@ -1599,6 +1951,8 @@ function buildAgentTools(options: {
         }
       },
     }),
+    validate_json,
+    validate_schema: validate_json,
     python_exec: tool({
       description:
         "Run a Python script via Pyodide. Reads scriptPath (required) from the workspace, optionally feeds stdin from stdinPath, and optionally writes stdout/stderr to stdoutPath/stderrPath (workspace paths).",
@@ -1718,8 +2072,29 @@ function buildAgentTools(options: {
       },
     }),
     generate_text: tool({
-      description:
-        "Generate text (Markdown/JSON) using a sub-model. Reads promptPath from the workspace and expands {{relative/path}} placeholders by inlining referenced workspace files.",
+      description: [
+        "Generate text (Markdown) using a sub-model.",
+        "",
+        "Reads promptPath from the workspace and expands {{relative/path}} placeholders by inlining referenced workspace files.",
+        "",
+        "Important:",
+        "- This tool is NOT for JSON outputs. Use generate_json + validate_json for JSON files.",
+        "- outputPath must NOT end with .json (generate_text will reject it).",
+        "",
+        "If the generated text contains a line like `pass: true|false` (used by lesson grading prompts),",
+        "the tool will include `gradePass: true|false` in its return value so you can decide whether to revise",
+        "without reading the grading file back.",
+        "",
+        "Batching:",
+        "- If you need to draft/grade multiple independent items (e.g. quizzes q1 and q2), call generate_text multiple times in the SAME step with distinct outputPath values (they will run in parallel).",
+        "",
+        "Inputs:",
+        "- promptPath (required): Workspace path to a prompt template (usually under lesson/prompts/).",
+        "- outputPath (required): Where to write the generated Markdown.",
+        "- inputPaths (optional): Extra workspace files to attach under an 'Attached files' section.",
+        "- outputMode (optional): overwrite|append (default overwrite).",
+        "- tools (optional): web-search|code-execution.",
+      ].join("\n"),
       inputSchema: (() => {
         const normalizeOptionalString = (value: unknown): string | undefined => {
           if (value === null || value === undefined) {
@@ -1776,116 +2151,37 @@ function buildAgentTools(options: {
 
         const outputPathSchema = z.preprocess(
           (value) => normalizeOptionalString(value),
-          z.string().trim().min(1).optional(),
+          z
+            .string({ required_error: "outputPath is required" })
+            .trim()
+            .min(1, "outputPath is required"),
         );
 
         const schema = z
-          .preprocess(
-            (value) => {
-              if (!shouldEnforceLessonPipeline) {
-                return value;
-              }
-              if (!value || typeof value !== "object" || Array.isArray(value)) {
-                return value;
-              }
-              const record = value as Record<string, unknown>;
-              const promptPath = normalizeOptionalString(record.promptPath) ?? "";
-              const outputPath = normalizeOptionalString(record.outputPath);
-              const responseSchemaPath = normalizeOptionalString(
-                record.responseSchemaPath,
-              );
-
-              const inferred = (() => {
-                if (
-                  promptPath.endsWith("lesson/prompts/session-draft.md") ||
-                  promptPath.endsWith("lesson/prompts/session-revise.md")
-                ) {
-                  return {
-                    outputPath: "lesson/output/session.json",
-                    responseSchemaPath: "lesson/schema/session.schema.json",
-                  };
-                }
-                if (promptPath.endsWith("lesson/prompts/session-grade.md")) {
-                  return {
-                    outputPath: "lesson/feedback/session-grade.json",
-                  };
-                }
-                if (promptPath.endsWith("lesson/prompts/quiz-grade.md")) {
-                  return {
-                    outputPath: "lesson/feedback/quiz-grade.json",
-                  };
-                }
-                if (promptPath.endsWith("lesson/prompts/code-grade.md")) {
-                  return {
-                    outputPath: "lesson/feedback/code-grade.json",
-                  };
-                }
-                return null;
-              })();
-
-              const next: Record<string, unknown> = { ...record };
-              if (!outputPath && inferred?.outputPath) {
-                next.outputPath = inferred.outputPath;
-              }
-              if (!responseSchemaPath && inferred?.responseSchemaPath) {
-                next.responseSchemaPath = inferred.responseSchemaPath;
-              }
-              return next;
-            },
-            z
-              .object({
-                promptPath: z.string().trim().min(1),
-                inputPaths: z.preprocess(
-                  (value) => normalizeOptionalStringArray(value),
-                  z.array(z.string().trim().min(1)).optional(),
-                ),
-                modelId: z.preprocess(
-                  (value) => normalizeOptionalString(value),
-                  z.string().trim().min(1).optional(),
-                ),
-                tools: z.preprocess(
-                  (value) => normalizeToolTypes(value),
-                  z.array(z.enum(toolTypes)).optional(),
-                ),
-                responseSchemaPath: z.preprocess(
-                  (value) => normalizeOptionalString(value),
-                  z.string().trim().min(1).optional(),
-                ),
-                outputPath: outputPathSchema,
-                outputMode: z.preprocess(
-                  (value) => normalizeOptionalString(value),
-                  z.enum(["overwrite", "append"]).optional(),
-                ),
-              })
-              .strict(),
-          )
-          .superRefine((value, ctx) => {
-            if (!shouldEnforceLessonPipeline) {
-              return;
-            }
-            if (value.outputPath && value.outputPath.trim().length > 0) {
-              return;
-            }
-            const promptPath = value.promptPath.trim();
-            const canInferOutputPath =
-              promptPath.endsWith("lesson/prompts/session-draft.md") ||
-              promptPath.endsWith("lesson/prompts/session-revise.md") ||
-              promptPath.endsWith("lesson/prompts/session-grade.md") ||
-              promptPath.endsWith("lesson/prompts/quiz-grade.md") ||
-              promptPath.endsWith("lesson/prompts/code-grade.md") ||
-              promptPath.endsWith("lesson/prompts/quiz-draft.md") ||
-              promptPath.endsWith("lesson/prompts/quiz-revise.md") ||
-              promptPath.endsWith("lesson/prompts/code-draft.md") ||
-              promptPath.endsWith("lesson/prompts/code-revise.md");
-            if (canInferOutputPath) {
-              return;
-            }
-            ctx.addIssue({
-              code: "custom",
-              path: ["outputPath"],
-              message: "outputPath is required for lesson runs.",
-            });
-          });
+          .object({
+            promptPath: z
+              .string({ required_error: "promptPath is required" })
+              .trim()
+              .min(1, "promptPath is required"),
+            inputPaths: z.preprocess(
+              (value) => normalizeOptionalStringArray(value),
+              z.array(z.string().trim().min(1)).optional(),
+            ),
+            modelId: z.preprocess(
+              (value) => normalizeOptionalString(value),
+              z.string().trim().min(1).optional(),
+            ),
+            tools: z.preprocess(
+              (value) => normalizeToolTypes(value),
+              z.array(z.enum(toolTypes)).optional(),
+            ),
+            outputPath: outputPathSchema,
+            outputMode: z.preprocess(
+              (value) => normalizeOptionalString(value),
+              z.enum(["overwrite", "append"]).optional(),
+            ),
+          })
+          .strict();
 
         return schema;
       })(),
@@ -1894,7 +2190,6 @@ function buildAgentTools(options: {
         inputPaths,
         modelId,
         tools,
-        responseSchemaPath,
         outputPath,
         outputMode,
       }) => {
@@ -1903,127 +2198,135 @@ function buildAgentTools(options: {
           : DEFAULT_GENERATE_TEXT_MODEL_ID;
 
         const resolvedPromptPath = promptPath.trim();
-        let resolvedOutputPath = outputPath;
-        let resolvedResponseSchemaPath = responseSchemaPath;
+        const resolvedOutputPath = outputPath.trim();
 
-        const resolveOutputPathFromInputs = (prefix: string): string | undefined => {
-          for (const entry of inputPaths ?? []) {
+        if (resolvedOutputPath.endsWith(".json")) {
+          throw new Error(
+            `generate_text cannot write JSON ("${resolvedOutputPath}"). Use generate_json instead.`,
+          );
+        }
+
+        const normalizeSlashes = (value: string): string =>
+          value.replace(/\\/g, "/").trim();
+
+        const normalizedPromptPath = normalizeSlashes(resolvedPromptPath).toLowerCase();
+        const promptFileName = normalizedPromptPath.split("/").at(-1) ?? "";
+        const normalizedOutputPath = normalizeSlashes(resolvedOutputPath);
+        let effectiveInputPaths = (inputPaths ?? []).map((p) => normalizeSlashes(p));
+
+        const dedupePaths = (paths: string[]): string[] => {
+          const seen = new Set<string>();
+          const result: string[] = [];
+          for (const entry of paths) {
             const trimmed = entry.trim();
-            if (!trimmed) {
+            if (trimmed.length === 0 || seen.has(trimmed)) {
               continue;
             }
-            if (trimmed.startsWith(prefix) && trimmed.endsWith(".json")) {
-              return trimmed;
-            }
+            seen.add(trimmed);
+            result.push(trimmed);
           }
-          return undefined;
+          return result;
         };
 
-        const inferNextPlanItemOutputPath = async (options: {
-          targetKind: "quiz" | "problem";
-          outputSubdir: "quiz" | "code";
-        }): Promise<string> => {
-          const sessionPath = resolveWorkspacePath(
-            rootDir,
-            "lesson/output/session.json",
-          );
-          const rawText = await readFile(sessionPath, { encoding: "utf8" }).catch(
-            () => null,
-          );
-          if (!rawText) {
-            throw new Error(
-              `Cannot infer outputPath: missing lesson/output/session.json (needed for ${options.outputSubdir} generation).`,
-            );
-          }
-          let rawJson: unknown;
-          try {
-            rawJson = JSON.parse(rawText);
-          } catch (error) {
-            throw new Error(
-              `Cannot infer outputPath: invalid lesson/output/session.json: ${errorAsString(error)}`,
-            );
-          }
-
-          const planItemSchema = z
-            .object({
-              id: z.string().trim().min(1),
-              kind: z.string().trim().min(1),
-            })
-            .loose();
-          const sessionPlanSchema = z
-            .object({
-              plan: z.array(planItemSchema),
-            })
-            .loose();
-          const session = sessionPlanSchema.parse(rawJson);
-
-          const planItemIds = session.plan
-            .filter((item) => item.kind === options.targetKind)
-            .map((item) => item.id);
-          if (planItemIds.length === 0) {
-            throw new Error(
-              `Cannot infer outputPath: session.plan has no kind="${options.targetKind}" items.`,
-            );
-          }
-
-          for (const planItemId of planItemIds) {
-            const candidate = `lesson/output/${options.outputSubdir}/${planItemId}.json`;
-            const exists = await stat(resolveWorkspacePath(rootDir, candidate))
-              .then(() => true)
-              .catch(() => false);
-            if (!exists) {
-              return candidate;
-            }
-          }
-
-          return `lesson/output/${options.outputSubdir}/${planItemIds[0]}.json`;
+        const hasAttachedPathWithPrefix = (prefix: string): boolean => {
+          const normalizedPrefix = prefix.replace(/\\/g, "/");
+          return effectiveInputPaths.some((p) => p.startsWith(normalizedPrefix));
         };
 
-        if (shouldEnforceLessonPipeline) {
+        const isLessonPrompt = normalizedPromptPath.startsWith("lesson/prompts/");
+
+        if (isLessonPrompt) {
+          const requireQuizDraft = (
+            promptFileName === "quiz-grade.md" ||
+            promptFileName === "quiz-revise.md"
+          );
+          const requireCodeDraft = (
+            promptFileName === "code-grade.md" ||
+            promptFileName === "code-revise.md"
+          );
+          const requireQuizGradeReport = promptFileName === "quiz-revise.md";
+          const requireCodeGradeReport = promptFileName === "code-revise.md";
+
+          // Best-effort auto-attachment based on naming conventions to keep the agent from
+          // spinning when it forgets inputPaths.
           if (
-            resolvedPromptPath.endsWith("lesson/prompts/session-draft.md") ||
-            resolvedPromptPath.endsWith("lesson/prompts/session-revise.md")
+            (promptFileName === "quiz-grade.md" || promptFileName === "quiz-revise.md") &&
+            !hasAttachedPathWithPrefix("lesson/drafts/quiz/")
           ) {
-            resolvedOutputPath ??= "lesson/output/session.json";
-            resolvedResponseSchemaPath ??=
-              "lesson/schema/session.schema.json";
+            const match =
+              promptFileName === "quiz-grade.md"
+                ? normalizedOutputPath.match(/^lesson\/feedback\/quiz\/([^/]+)-grade\.md$/u)
+                : normalizedOutputPath.match(/^lesson\/drafts\/quiz\/([^/]+)\.md$/u);
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              effectiveInputPaths = dedupePaths([
+                ...effectiveInputPaths,
+                `lesson/drafts/quiz/${planItemId}.md`,
+              ]);
+            }
           }
-          if (resolvedPromptPath.endsWith("lesson/prompts/session-grade.md")) {
-            resolvedOutputPath ??= "lesson/feedback/session-grade.json";
+          if (
+            (promptFileName === "code-grade.md" || promptFileName === "code-revise.md") &&
+            !hasAttachedPathWithPrefix("lesson/drafts/code/")
+          ) {
+            const match =
+              promptFileName === "code-grade.md"
+                ? normalizedOutputPath.match(/^lesson\/feedback\/code\/([^/]+)-grade\.md$/u)
+                : normalizedOutputPath.match(/^lesson\/drafts\/code\/([^/]+)\.md$/u);
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              effectiveInputPaths = dedupePaths([
+                ...effectiveInputPaths,
+                `lesson/drafts/code/${planItemId}.md`,
+              ]);
+            }
           }
-          if (resolvedPromptPath.endsWith("lesson/prompts/quiz-grade.md")) {
-            resolvedOutputPath ??= "lesson/feedback/quiz-grade.json";
+          if (promptFileName === "quiz-revise.md" && !hasAttachedPathWithPrefix("lesson/feedback/quiz/")) {
+            const match = normalizedOutputPath.match(/^lesson\/drafts\/quiz\/([^/]+)\.md$/u);
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              effectiveInputPaths = dedupePaths([
+                ...effectiveInputPaths,
+                `lesson/feedback/quiz/${planItemId}-grade.md`,
+              ]);
+            }
           }
-          if (resolvedPromptPath.endsWith("lesson/prompts/code-grade.md")) {
-            resolvedOutputPath ??= "lesson/feedback/code-grade.json";
+          if (promptFileName === "code-revise.md" && !hasAttachedPathWithPrefix("lesson/feedback/code/")) {
+            const match = normalizedOutputPath.match(/^lesson\/drafts\/code\/([^/]+)\.md$/u);
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              effectiveInputPaths = dedupePaths([
+                ...effectiveInputPaths,
+                `lesson/feedback/code/${planItemId}-grade.md`,
+              ]);
+            }
           }
 
-          const isQuizDraft =
-            resolvedPromptPath.endsWith("lesson/prompts/quiz-draft.md");
-          const isQuizRevise =
-            resolvedPromptPath.endsWith("lesson/prompts/quiz-revise.md");
-          if (isQuizDraft || isQuizRevise) {
-            resolvedResponseSchemaPath ??= "lesson/schema/quiz.schema.json";
-            resolvedOutputPath ??=
-              resolveOutputPathFromInputs("lesson/output/quiz/") ??
-              (await inferNextPlanItemOutputPath({
-                targetKind: "quiz",
-                outputSubdir: "quiz",
-              }));
+          if (requireQuizDraft && !hasAttachedPathWithPrefix("lesson/drafts/quiz/")) {
+            throw new Error(
+              "lesson quiz grade/revise prompts require inputPaths that include the candidate quiz Markdown under lesson/drafts/quiz/ (e.g. lesson/drafts/quiz/q1.md).",
+            );
           }
-
-          const isCodeDraft =
-            resolvedPromptPath.endsWith("lesson/prompts/code-draft.md");
-          const isCodeRevise =
-            resolvedPromptPath.endsWith("lesson/prompts/code-revise.md");
-          if (isCodeDraft || isCodeRevise) {
-            resolvedResponseSchemaPath ??= "lesson/schema/code.schema.json";
-            resolvedOutputPath ??=
-              resolveOutputPathFromInputs("lesson/output/code/") ??
-              (await inferNextPlanItemOutputPath({
-                targetKind: "problem",
-                outputSubdir: "code",
-              }));
+          if (requireCodeDraft && !hasAttachedPathWithPrefix("lesson/drafts/code/")) {
+            throw new Error(
+              "lesson code grade/revise prompts require inputPaths that include the candidate problem Markdown under lesson/drafts/code/ (e.g. lesson/drafts/code/p1.md).",
+            );
+          }
+          if (
+            requireQuizGradeReport &&
+            !hasAttachedPathWithPrefix("lesson/feedback/quiz/")
+          ) {
+            throw new Error(
+              "lesson quiz revise prompts require inputPaths that include the grading report under lesson/feedback/quiz/ (e.g. lesson/feedback/quiz/q1-grade.md).",
+            );
+          }
+          if (
+            requireCodeGradeReport &&
+            !hasAttachedPathWithPrefix("lesson/feedback/code/")
+          ) {
+            throw new Error(
+              "lesson code revise prompts require inputPaths that include the grading report under lesson/feedback/code/ (e.g. lesson/feedback/code/p1-grade.md).",
+            );
           }
         }
 
@@ -2036,9 +2339,44 @@ function buildAgentTools(options: {
           rootDir,
         });
         let promptText = expanded.text;
-        if (inputPaths && inputPaths.length > 0) {
+
+        if (isLessonPrompt) {
+          if (promptFileName === "quiz-draft.md") {
+            const match = normalizedOutputPath.match(
+              /^lesson\/drafts\/quiz\/([^/]+)\.md$/u,
+            );
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              promptText = [
+                "# Tool instruction",
+                `Target plan item id: ${planItemId}`,
+                `You MUST draft the quiz for planItemId="${planItemId}" and set the Quiz planItemId field exactly to "${planItemId}".`,
+                "Match the content to the session plan section for this plan item id.",
+                "",
+                promptText,
+              ].join("\n");
+            }
+          }
+          if (promptFileName === "code-draft.md") {
+            const match = normalizedOutputPath.match(
+              /^lesson\/drafts\/code\/([^/]+)\.md$/u,
+            );
+            const planItemId = match?.[1]?.trim();
+            if (planItemId) {
+              promptText = [
+                "# Tool instruction",
+                `Target plan item id: ${planItemId}`,
+                `You MUST draft the code problem for planItemId="${planItemId}" (even if the Markdown format does not include planItemId, the content must match this plan item).`,
+                "Match the content to the session plan section for this plan item id.",
+                "",
+                promptText,
+              ].join("\n");
+            }
+          }
+        }
+        if (effectiveInputPaths.length > 0) {
           const attachments = await Promise.all(
-            inputPaths.map(async (inputPath) => {
+            effectiveInputPaths.map(async (inputPath) => {
               const resolved = resolveWorkspacePath(rootDir, inputPath);
               const content = await readFile(resolved, { encoding: "utf8" });
               return { path: inputPath, content };
@@ -2059,49 +2397,6 @@ function buildAgentTools(options: {
           toolConfigs.push({ type: toolType });
         }
 
-        const responseSchemaText =
-          resolvedResponseSchemaPath &&
-          resolvedResponseSchemaPath.trim().length > 0
-            ? await readFile(
-                resolveWorkspacePath(rootDir, resolvedResponseSchemaPath),
-                {
-                  encoding: "utf8",
-                },
-              )
-            : null;
-        const responseJsonSchema = responseSchemaText
-          ? (() => {
-              let parsed: unknown;
-              try {
-                parsed = JSON.parse(responseSchemaText);
-              } catch (error) {
-                throw new Error(
-                  `Invalid JSON schema in "${resolvedResponseSchemaPath}": ${errorAsString(error)}`,
-                );
-              }
-              if (
-                !parsed ||
-                typeof parsed !== "object" ||
-                Array.isArray(parsed)
-              ) {
-                throw new Error(
-                  `Schema "${resolvedResponseSchemaPath}" must be a JSON object schema.`,
-                );
-              }
-              return parsed as Record<string, unknown>;
-            })()
-          : undefined;
-
-        if (responseJsonSchema && toolConfigs.length > 0) {
-          throw new Error(
-            "generate_text cannot combine responseSchemaPath with tools; run web_search/python_exec separately or drop responseSchemaPath.",
-          );
-        }
-
-        const shouldFormatJson =
-          Boolean(responseJsonSchema) ||
-          Boolean(resolvedOutputPath && resolvedOutputPath.trim().endsWith(".json"));
-
         const text = await generateText({
           modelId: resolvedModelId,
           contents: [
@@ -2121,63 +2416,166 @@ function buildAgentTools(options: {
               }
             : {}),
           ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
-          ...(responseJsonSchema
-            ? {
-                responseJsonSchema: responseJsonSchema,
-              }
-            : {}),
-          ...(shouldFormatJson ? { responseMimeType: "application/json" } : {}),
           ...(progress ? { progress } : {}),
         });
 
-        const formatted = shouldFormatJson
-          ? (() => {
-              let parsed: unknown;
-              try {
-                parsed = parseJsonFromLlmText(text);
-              } catch (error) {
-                throw new Error(
-                  `generate_text returned invalid JSON: ${errorAsString(error)}`,
-                );
-              }
-              return JSON.stringify(parsed, null, 2) + "\n";
-            })()
-          : text;
+        const formatted = text;
+        const gradePass = (() => {
+          const match = formatted.match(
+            /(?:^|\n)\s*pass\s*:\s*(true|false)\s*(?:\n|$)/iu,
+          );
+          if (!match) {
+            return undefined;
+          }
+          return match[1]?.toLowerCase() === "true";
+        })();
 
         const mode = outputMode ?? "overwrite";
-        if (resolvedOutputPath) {
-          const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
-          await ensureDir(path.dirname(resolved));
-          if (mode === "append") {
-            const existing = await readFile(resolved, {
-              encoding: "utf8",
-            }).catch(() => "");
-            await writeFile(resolved, existing + formatted, {
-              encoding: "utf8",
-            });
-          } else {
-            await writeFile(resolved, formatted, { encoding: "utf8" });
-          }
-          workspace.scheduleUpdate(resolvedOutputPath);
-          return {
-            status: "written",
-            modelId: resolvedModelId,
-            promptPath: resolvedPromptPath,
-            inputPaths: inputPaths ?? [],
-            outputPath: resolvedOutputPath,
-            outputMode: mode,
-            promptTemplateReplacements: expanded.replacements,
-            textChars: formatted.length,
-          };
+        const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
+        await ensureDir(path.dirname(resolved));
+        if (mode === "append") {
+          const existing = await readFile(resolved, {
+            encoding: "utf8",
+          }).catch(() => "");
+          await writeFile(resolved, existing + formatted, {
+            encoding: "utf8",
+          });
+        } else {
+          await writeFile(resolved, formatted, { encoding: "utf8" });
         }
-
+        workspace.scheduleUpdate(resolvedOutputPath);
         return {
-          status: "generated",
+          status: "written",
           modelId: resolvedModelId,
           promptPath: resolvedPromptPath,
-          inputPaths: inputPaths ?? [],
+          inputPaths: effectiveInputPaths,
+          outputPath: resolvedOutputPath,
+          outputMode: mode,
           promptTemplateReplacements: expanded.replacements,
-          text: formatted,
+          textChars: formatted.length,
+          ...(gradePass === undefined ? {} : { gradePass }),
+        };
+
+      },
+    }),
+    generate_json: tool({
+      description: [
+        "Generate JSON from a source workspace file using a sub-model.",
+        "Reads sourcePath and schemaPath from the workspace and writes pretty-printed JSON to outputPath.",
+        "",
+        "Important:",
+        "- This tool does NOT validate the JSON against the schema. After generation, call validate_json({ schemaPath, inputPath: outputPath }).",
+        "- schemaPath is included as guidance only (no Structured Outputs enforcement).",
+        "- outputPath must end with .json.",
+        "",
+        "Batching:",
+        "- If you need to generate multiple JSON outputs (e.g. session + q1 + q2), call generate_json once per outputPath in the SAME step (they will run in parallel).",
+        "",
+        "Inputs:",
+        "- sourcePath (required): The Markdown/text source file to convert into JSON.",
+        "- schemaPath (required): JSON schema file to include as guidance for shape/fields.",
+        "- outputPath (required): Where to write the generated JSON.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          sourcePath: z.string().trim().min(1),
+          schemaPath: z.string().trim().min(1),
+          outputPath: z.string().trim().min(1),
+          modelId: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              if (typeof value === "string") {
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+              }
+              return value;
+            },
+            z.string().trim().min(1).optional(),
+          ),
+        })
+        .strict(),
+      execute: async ({ sourcePath, schemaPath, outputPath, modelId }) => {
+        const resolvedModelId: GeminiModelId = isGeminiModelId(modelId ?? "")
+          ? (modelId as GeminiModelId)
+          : DEFAULT_GENERATE_TEXT_MODEL_ID;
+
+        const resolvedSourcePath = sourcePath.trim();
+        const resolvedSchemaPath = schemaPath.trim();
+        const resolvedOutputPath = outputPath.trim();
+
+        if (!resolvedOutputPath.endsWith(".json")) {
+          throw new Error(
+            `generate_json outputPath must end with ".json" (got "${resolvedOutputPath}").`,
+          );
+        }
+
+        const schemaText = await readFile(
+          resolveWorkspacePath(rootDir, resolvedSchemaPath),
+          { encoding: "utf8" },
+        );
+        const sourceText = await readFile(
+          resolveWorkspacePath(rootDir, resolvedSourcePath),
+          { encoding: "utf8" },
+        );
+
+        const promptText = [
+          "You are converting a source document into Firestore-ready JSON.",
+          "",
+          "Return JSON only (start with `{` and end with `}`). Do not wrap in Markdown fences.",
+          "Use the schema as guidance, but do not invent facts that are not supported by the source.",
+          "",
+          `Schema (${resolvedSchemaPath}):`,
+          schemaText.trimEnd(),
+          "",
+          `Source (${resolvedSourcePath}):`,
+          sourceText.trimEnd(),
+        ].join("\n");
+
+        const text = await generateText({
+          modelId: resolvedModelId,
+          contents: [
+            {
+              role: "user",
+              parts: [{ type: "text", text: promptText }],
+            },
+          ],
+          ...(debug
+            ? {
+                debug: {
+                  ...debug,
+                  subStage: debug.subStage
+                    ? `${debug.subStage}/generate_json`
+                    : "generate_json",
+                },
+              }
+            : {}),
+          ...(progress ? { progress } : {}),
+          responseMimeType: "application/json",
+        });
+
+        let parsed: unknown;
+        try {
+          parsed = parseJsonFromLlmText(text);
+        } catch (error) {
+          throw new Error(
+            `generate_json returned invalid JSON: ${errorAsString(error)}`,
+          );
+        }
+
+        const formatted = JSON.stringify(parsed, null, 2) + "\n";
+        const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
+        await ensureDir(path.dirname(resolved));
+        await writeFile(resolved, formatted, { encoding: "utf8" });
+        workspace.scheduleUpdate(resolvedOutputPath);
+
+        return {
+          status: "written",
+          modelId: resolvedModelId,
+          schemaPath: resolvedSchemaPath,
+          sourcePath: resolvedSourcePath,
+          outputPath: resolvedOutputPath,
           textChars: formatted.length,
         };
       },
@@ -2254,14 +2652,6 @@ function buildAgentTools(options: {
         content: z.string(),
       }),
       execute: async ({ path: inputPath, content }) => {
-        if (
-          shouldEnforceLessonPipeline &&
-          isLessonGeneratedJsonPath(inputPath)
-        ) {
-          throw new Error(
-            `Direct writes to "${inputPath}" are not allowed for lesson runs. Use generate_text with outputPath="${inputPath}" instead.`,
-          );
-        }
         const resolved = resolveWorkspacePath(rootDir, inputPath);
         await ensureDir(path.dirname(resolved));
         await writeFile(resolved, content, { encoding: "utf8" });
@@ -2311,15 +2701,6 @@ function buildAgentTools(options: {
           .min(1),
       }),
       execute: async ({ operations }) => {
-        if (shouldEnforceLessonPipeline) {
-          for (const op of operations) {
-            if (isLessonGeneratedJsonPath(op.path)) {
-              throw new Error(
-                `Direct patch writes to "${op.path}" are not allowed for lesson runs. Use generate_text with outputPath="${op.path}" instead.`,
-              );
-            }
-          }
-        }
         const results: Array<{
           path: string;
           status: "completed" | "failed";

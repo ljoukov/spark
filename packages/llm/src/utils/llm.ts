@@ -129,6 +129,7 @@ const MODERATION_FINISH_REASONS = new Set<FinishReason>([
 ]);
 
 const debugDirUsageCounts = new Map<string, number>();
+const debugLogDirUsageCounts = new Map<string, number>();
 
 function isModerationFinish(reason: FinishReason | undefined): boolean {
   if (!reason) {
@@ -955,7 +956,6 @@ function extractOpenAiResponseParts(response: {
             }
             const entryType = (entry as { type?: unknown }).type;
             if (
-              entryType === "reasoning_text" ||
               entryType === "reasoning_summary_text" ||
               entryType === "reasoning_summary"
             ) {
@@ -1604,6 +1604,16 @@ function resolveDebugDir(
     return basePath;
   }
   return `${basePath}-run-${String(nextCount).padStart(2, "0")}`;
+}
+
+function resolveDebugLogDir(baseDir: string): string {
+  const usageCount = debugLogDirUsageCounts.get(baseDir) ?? 0;
+  const nextCount = usageCount + 1;
+  debugLogDirUsageCounts.set(baseDir, nextCount);
+  if (nextCount === 1) {
+    return baseDir;
+  }
+  return `${baseDir}-run-${String(nextCount).padStart(2, "0")}`;
 }
 
 function formatContentsForSnapshot(contents: readonly LlmContent[]): string {
@@ -2578,10 +2588,11 @@ async function llmStream({
     debugRootDir !== undefined
       ? normalisePathSegment(new Date().toISOString().replace(/[:]/g, "-"))
       : undefined;
-  const debugLogDir =
+  const debugLogDirBase =
     debugLogSegment !== undefined && debugRootDir !== undefined
       ? path.join(debugRootDir, "log", debugLogSegment)
       : undefined;
+  const debugLogDir = debugLogDirBase ? resolveDebugLogDir(debugLogDirBase) : undefined;
   const debugOutputDirs = Array.from(
     new Set(
       [stage.debugDir, debugLogDir].filter(
@@ -2702,7 +2713,7 @@ async function llmStream({
     const chatGptReasoningPayload = openAiReasoningEffort
       ? {
           effort: toOpenAiReasoningEffort(openAiReasoningEffort),
-          summary: "auto" as const,
+          summary: "detailed" as const,
         }
       : undefined;
     const openAiInclude: ResponseIncludable[] | undefined = isOpenAi
@@ -2956,9 +2967,9 @@ async function llmStream({
             ...(openAiTools ? { tools: openAiTools } : {}),
             ...(openAiInclude ? { include: openAiInclude } : {}),
           });
-          for await (const event of stream) {
-            switch (event.type) {
-              case "response.output_text.delta": {
+	          for await (const event of stream) {
+	            switch (event.type) {
+	              case "response.output_text.delta": {
                 const delta = event.delta ?? "";
                 if (delta.length > 0) {
                   appendTextPart(delta, false);
@@ -2968,24 +2979,16 @@ async function llmStream({
                   });
                   responseSnapshotWriter.flush();
                 }
-                break;
-              }
-              case "response.reasoning_text.delta": {
-                const delta = event.delta ?? "";
-                if (delta.length > 0) {
-                  appendTextPart(delta, true);
-                  thinkingTextChars += delta.length;
-                  reporter.recordModelUsage(callHandle, {
-                    thinking: { textCharsDelta: delta.length },
-                  });
-                  responseSnapshotWriter.flush();
-                }
-                break;
-              }
-              case "response.reasoning_summary_text.delta": {
-                const delta = event.delta ?? "";
-                if (delta.length > 0) {
-                  appendTextPart(delta, true);
+	                break;
+	              }
+	              case "response.reasoning_text.delta": {
+	                // Avoid collecting raw chain-of-thought; summaries are handled below.
+	                break;
+	              }
+	              case "response.reasoning_summary_text.delta": {
+	                const delta = event.delta ?? "";
+	                if (delta.length > 0) {
+	                  appendTextPart(delta, true);
                   thinkingTextChars += delta.length;
                   reporter.recordModelUsage(callHandle, {
                     thinking: { textCharsDelta: delta.length },
@@ -3061,7 +3064,7 @@ async function llmStream({
             ? { reasoning: chatGptReasoningPayload }
             : {}),
         };
-        const result = await collectChatGptCodexResponse({ request });
+	        const result = await collectChatGptCodexResponse({ request });
         if (result.model) {
           resolvedModelVersion = isChatGpt
             ? (`chatgpt-${result.model}` as LlmModelId)
@@ -3074,17 +3077,18 @@ async function llmStream({
         ) {
           throw new Error(`ChatGPT response status ${result.status}`);
         }
-        blocked = blocked || result.blocked;
-        const responseText = result.text ?? "";
-        const reasoningText = result.reasoningText ?? "";
-        if (reasoningText.length > 0) {
-          appendTextPart(reasoningText, true);
-          thinkingTextChars += reasoningText.length;
-          reporter.recordModelUsage(callHandle, {
-            thinking: { textCharsDelta: reasoningText.length },
-          });
-        }
-        if (responseText.length > 0) {
+	        blocked = blocked || result.blocked;
+	        const responseText = result.text ?? "";
+	        const reasoningSummaryText =
+	          result.reasoningSummaryText ?? result.reasoningText ?? "";
+	        if (reasoningSummaryText.length > 0) {
+	          appendTextPart(reasoningSummaryText, true);
+	          thinkingTextChars += reasoningSummaryText.length;
+	          reporter.recordModelUsage(callHandle, {
+	            thinking: { textCharsDelta: reasoningSummaryText.length },
+	          });
+	        }
+	        if (responseText.length > 0) {
           appendTextPart(responseText, false);
           responseTextChars += responseText.length;
           reporter.recordModelUsage(callHandle, {
@@ -3883,6 +3887,25 @@ function formatToolValue(value: unknown): string | undefined {
   }
 }
 
+function normalizePathList(value: unknown): string[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+  const rawEntries = Array.isArray(value) ? value : [value];
+  const paths: string[] = [];
+  for (const entry of rawEntries) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    paths.push(trimmed);
+  }
+  return paths;
+}
+
 function summarizeToolCallInput(toolName: string, input: unknown): string {
   if (!input || typeof input !== "object") {
     return "";
@@ -3890,17 +3913,21 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
   const record = input as Record<string, unknown>;
   switch (toolName) {
     case "read_file": {
-      const pathValue = formatToolValue(record.path);
-      return pathValue ? `path=${pathValue}` : "";
+      const paths = normalizePathList(record.path ?? record.paths);
+      if (paths.length === 0) {
+        return "";
+      }
+      if (paths.length === 1) {
+        return `path=${paths[0]}`;
+      }
+      return `paths=${paths.join(", ")}`;
     }
     case "read_files": {
-      const paths = Array.isArray(record.paths) ? record.paths : [];
-      const count = paths.length > 0 ? `count=${paths.length}` : "";
-      const sample =
-        paths.length > 0
-          ? `sample=${truncateForLog(String(paths[0]), 80)}`
-          : "";
-      return [count, sample].filter(Boolean).join(" ");
+      const paths = normalizePathList(record.paths);
+      if (paths.length === 0) {
+        return "";
+      }
+      return `paths=${paths.join(", ")}`;
     }
     case "read_file_summary": {
       const pathValue = formatToolValue(record.path);
@@ -3938,6 +3965,16 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
       const chars = content ? `chars=${content.length}` : "";
       return [pathLabel, chars].filter(Boolean).join(" ");
     }
+    case "write_file": {
+      const paths = normalizePathList(record.path ?? record.paths);
+      if (paths.length === 0) {
+        return "";
+      }
+      if (paths.length === 1) {
+        return `path=${paths[0]}`;
+      }
+      return `paths=${paths.join(", ")}`;
+    }
     case "delete_file": {
       const pathValue = formatToolValue(record.path);
       return pathValue ? `path=${pathValue}` : "";
@@ -3974,10 +4011,55 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
       const outputValue = formatToolValue(record.outputPath);
       const promptPath = promptValue ? `promptPath=${promptValue}` : "";
       const outputPath = outputValue ? `outputPath=${outputValue}` : "";
+      const inputPaths = normalizePathList(record.inputPaths);
+      const inputPathsLabel =
+        inputPaths.length > 0 ? `inputPaths=${inputPaths.join(", ")}` : "";
+      const responseSchemaValue = formatToolValue(record.responseSchemaPath);
+      const responseSchema = responseSchemaValue
+        ? `responseSchemaPath=${responseSchemaValue}`
+        : "";
+      const debugLabelValue = formatToolValue(record.debugLabel);
+      const debugLabel = debugLabelValue ? `debugLabel=${debugLabelValue}` : "";
+      const modelIdValue = formatToolValue(record.modelId);
+      const modelId = modelIdValue ? `modelId=${modelIdValue}` : "";
+      const outputModeValue = formatToolValue(record.outputMode);
+      const outputMode = outputModeValue ? `outputMode=${outputModeValue}` : "";
       const tools = Array.isArray(record.tools)
         ? `tools=${record.tools.join(",")}`
         : "";
-      return [promptPath, outputPath, tools].filter(Boolean).join(" ");
+      return [
+        promptPath,
+        outputPath,
+        inputPathsLabel,
+        responseSchema,
+        debugLabel,
+        modelId,
+        outputMode,
+        tools,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    case "generate_json": {
+      const sourceValue = formatToolValue(record.sourcePath);
+      const schemaValue = formatToolValue(record.schemaPath);
+      const outputValue = formatToolValue(record.outputPath);
+      const source = sourceValue ? `sourcePath=${sourceValue}` : "";
+      const schema = schemaValue ? `schemaPath=${schemaValue}` : "";
+      const output = outputValue ? `outputPath=${outputValue}` : "";
+      const modelIdValue = formatToolValue(record.modelId);
+      const modelId = modelIdValue ? `modelId=${modelIdValue}` : "";
+      return [source, schema, output, modelId].filter(Boolean).join(" ");
+    }
+    case "validate_json":
+    case "validate_schema": {
+      const schemaValue = formatToolValue(record.schemaPath);
+      const inputValue = formatToolValue(record.inputPath);
+      const sessionIdValue = formatToolValue(record.sessionId);
+      const schema = schemaValue ? `schemaPath=${schemaValue}` : "";
+      const inputPath = inputValue ? `inputPath=${inputValue}` : "";
+      const sessionId = sessionIdValue ? `sessionId=${sessionIdValue}` : "";
+      return [schema, inputPath, sessionId].filter(Boolean).join(" ");
     }
     case "create_lesson": {
       const topicValue = formatToolValue(record.topic);
@@ -4145,10 +4227,10 @@ export async function runToolLoop(
         openAiTextConfig.verbosity !== null && openAiTextConfig.verbosity
           ? { verbosity: openAiTextConfig.verbosity }
           : undefined;
-      const chatGptReasoningPayload = {
-        effort: toOpenAiReasoningEffort(openAiReasoningEffort),
-        summary: "auto" as const,
-      };
+	      const chatGptReasoningPayload = {
+	        effort: toOpenAiReasoningEffort(openAiReasoningEffort),
+	        summary: "detailed" as const,
+	      };
       const toolLoopInput = toChatGptInput(contents);
       let input: ChatGptInputItem[] = [...toolLoopInput.input];
       let totalCostUsd = 0;
@@ -4260,9 +4342,19 @@ export async function runToolLoop(
               `${formatCurrencyUsd(totalCostUsd)}`,
               `${formatMillis(Date.now() - loopStartedAt)}`,
             ].join(" "),
-          );
-          const responseText = response.text ?? "";
-          const functionCalls = response.toolCalls ?? [];
+	          );
+	          const responseText = response.text ?? "";
+	          const reasoningSummaryText =
+	            response.reasoningSummaryText ?? response.reasoningText ?? "";
+	          const functionCalls = response.toolCalls ?? [];
+	          if (reasoningSummaryText.trim().length > 0) {
+	            const flattened = reasoningSummaryText.replace(/\s+/gu, " ").trim();
+	            reporter.log(`thoughts: ${truncateForLog(flattened, 800)}`);
+	          }
+	          if (responseText.trim().length > 0) {
+	            const flattened = responseText.replace(/\s+/gu, " ").trim();
+	            reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
+	          }
           if (functionCalls.length === 0) {
             if (!responseText) {
               throw new Error(
@@ -4332,34 +4424,86 @@ export async function runToolLoop(
               );
               continue;
             }
-            if (entry.toolName !== "generate_text") {
-              continue;
-            }
             if (
-              outputPayload &&
-              typeof outputPayload === "object" &&
-              !Array.isArray(outputPayload)
+              entry.toolName === "generate_text" ||
+              entry.toolName === "generate_json"
             ) {
-              const record = outputPayload as Record<string, unknown>;
-              const status =
-                typeof record.status === "string" ? record.status : "ok";
-              const outputPath =
-                typeof record.outputPath === "string" ? record.outputPath : "";
-              const textChars =
-                typeof record.textChars === "number" ? record.textChars : null;
-              reporter.log(
-                [
-                  "tool_result: generate_text",
-                  `status=${status}`,
-                  outputPath ? `outputPath=${outputPath}` : "",
-                  textChars !== null ? `chars=${textChars}` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" "),
-              );
+              if (
+                outputPayload &&
+                typeof outputPayload === "object" &&
+                !Array.isArray(outputPayload)
+              ) {
+                const record = outputPayload as Record<string, unknown>;
+                const status =
+                  typeof record.status === "string" ? record.status : "ok";
+                const outputPath =
+                  typeof record.outputPath === "string"
+                    ? record.outputPath
+                    : "";
+                const textChars =
+                  typeof record.textChars === "number"
+                    ? record.textChars
+                    : null;
+                const gradePass =
+                  typeof record.gradePass === "boolean" ? record.gradePass : null;
+                reporter.log(
+                  [
+                    `tool_result: ${entry.toolName}`,
+                    `status=${status}`,
+                    gradePass !== null ? `pass=${gradePass.toString()}` : "",
+                    outputPath ? `outputPath=${outputPath}` : "",
+                    textChars !== null ? `chars=${textChars}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+                );
+                continue;
+              }
+              reporter.log(`tool_result: ${entry.toolName} status=ok`);
               continue;
             }
-            reporter.log("tool_result: generate_text status=ok");
+            if (entry.toolName === "validate_json" || entry.toolName === "validate_schema") {
+              if (
+                outputPayload &&
+                typeof outputPayload === "object" &&
+                !Array.isArray(outputPayload)
+              ) {
+                const record = outputPayload as Record<string, unknown>;
+                const ok = record.ok === true;
+                const kind =
+                  typeof record.kind === "string" ? record.kind : "unknown";
+                if (ok) {
+                  reporter.log(`tool_result: ${entry.toolName} ok=true kind=${kind}`);
+                  continue;
+                }
+                const errorValue =
+                  typeof record.error === "string" ? record.error : "validation failed";
+                const issuesRaw = record.issues;
+                const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
+                const firstIssue =
+                  Array.isArray(issuesRaw) && issuesRaw.length > 0 && issuesRaw[0] && typeof issuesRaw[0] === "object"
+                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+                    : null;
+                const issuePreview = firstIssue
+                  ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
+                  : "";
+                reporter.log(
+                  [
+                    `tool_result: ${entry.toolName}`,
+                    "ok=false",
+                    `kind=${kind}`,
+                    `issues=${issueCount.toString()}`,
+                    `error=${truncateToolError(errorValue)}`,
+                    issuePreview ? `first=${truncateForLog(issuePreview, 160)}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+                );
+                continue;
+              }
+              reporter.log(`tool_result: ${entry.toolName} ok=false`);
+              continue;
+            }
           }
           if (responseText.length > 0) {
             input.push({
