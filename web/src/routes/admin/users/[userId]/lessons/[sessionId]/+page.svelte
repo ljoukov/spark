@@ -5,10 +5,16 @@
 
 	let { data }: { data: PageData } = $props();
 
+	const userId = $derived(data.userId);
+	const sessionId = $derived(data.sessionId);
 	const session = $derived(data.session);
 	const planItems = $derived(data.planItems);
 	const completion = $derived(data.completion);
 	const sessionDocFound = $derived(data.sessionDocFound);
+
+	function quizHref(quizId: string): string {
+		return `/admin/users/${encodeURIComponent(userId)}/lessons/${encodeURIComponent(sessionId)}/quiz/${encodeURIComponent(quizId)}`;
+	}
 
 	function formatInstant(value: string | null): string {
 		if (!value) {
@@ -140,7 +146,7 @@
 		{#each planItems as item (item.id)}
 			{#if item.kind === 'quiz'}
 				<a
-					href={`quiz/${encodeURIComponent(item.id)}`}
+					href={quizHref(item.id)}
 					class="block rounded-xl border border-border/70 p-4 transition-colors hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
 				>
 					<div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
