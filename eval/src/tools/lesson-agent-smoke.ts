@@ -786,7 +786,9 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         maxSteps: options.agentMaxSteps,
         progress: {
           log: (message) => {
-            teeLogLine(logPath, `[agent] ${message}`);
+            for (const line of message.split("\n")) {
+              teeLogLine(logPath, `[agent] ${line}`);
+            }
           },
           startModelCall: () => Symbol("model-call"),
           recordModelUsage: () => {},
@@ -845,7 +847,9 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
     debug: chatDebug,
     progress: {
       log: (message) => {
-        teeLogLine(logPath, `[chat] ${message}`);
+        for (const line of message.split("\n")) {
+          teeLogLine(logPath, `[chat] ${line}`);
+        }
       },
       startModelCall: () => Symbol("model-call"),
       recordModelUsage: () => {},
