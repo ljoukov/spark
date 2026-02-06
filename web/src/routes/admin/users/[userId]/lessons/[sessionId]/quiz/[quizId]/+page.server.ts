@@ -1,7 +1,12 @@
 import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { renderMarkdownOptional } from '$lib/server/markdown';
 import { resolveGradingPrompt, resolveMarkScheme } from '$lib/server/quiz/grading';
-import { QuizDefinitionSchema } from '@spark/schemas';
+import {
+	QuizDefinitionSchema,
+	QuizInfoCardSchema,
+	QuizMultipleChoiceSchema,
+	QuizTypeAnswerSchema
+} from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
@@ -18,6 +23,23 @@ const paramsSchema = z.object({
 	userId: z.string().trim().min(1, 'userId is required'),
 	sessionId: z.string().trim().min(1, 'sessionId is required'),
 	quizId: z.string().trim().min(1, 'quizId is required')
+});
+
+// Admin should be able to inspect legacy/partial quiz docs.
+// Keep strict validation for the banner, but fall back to a lenient parser for rendering.
+const LenientQuizTypeAnswerSchema = QuizTypeAnswerSchema.extend({
+	marks: z.number().int().min(1).max(20).optional(),
+	markScheme: z.string().trim().min(1).optional()
+});
+
+const LenientQuizQuestionSchema = z.discriminatedUnion('kind', [
+	QuizMultipleChoiceSchema,
+	LenientQuizTypeAnswerSchema,
+	QuizInfoCardSchema
+]);
+
+const LenientQuizDefinitionSchema = QuizDefinitionSchema.extend({
+	questions: z.array(LenientQuizQuestionSchema).min(1)
 });
 
 function requireServiceAccountJson(): string {
@@ -136,16 +158,24 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
-	const parsed = QuizDefinitionSchema.safeParse({ id: quizId, ...(snapshot.data ?? {}) });
+	const payload = { id: quizId, ...(snapshot.data ?? {}) };
+	const strictParsed = QuizDefinitionSchema.safeParse(payload);
+	const quizParseOk = strictParsed.success;
+
+	const parseIssues = strictParsed.success
+		? []
+		: strictParsed.error.issues.map((issue) => ({
+				path: issue.path.join('.'),
+				message: issue.message
+			}));
+
+	const parsed = strictParsed.success ? strictParsed : LenientQuizDefinitionSchema.safeParse(payload);
 	if (!parsed.success) {
 		return {
 			quizDocFound: true,
-			quizParseOk: false,
+			quizParseOk,
 			quiz: null,
-			parseIssues: parsed.error.issues.map((issue) => ({
-				path: issue.path.join('.'),
-				message: issue.message
-			})),
+			parseIssues,
 			gradingPromptResolved: null,
 			gradingPromptWasDefault: false
 		};
@@ -156,11 +186,10 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	return {
 		quizDocFound: true,
-		quizParseOk: true,
+		quizParseOk,
 		quiz: withHtmlQuiz(quiz),
-		parseIssues: [],
+		parseIssues,
 		gradingPromptResolved: resolveGradingPrompt(quiz.gradingPrompt),
 		gradingPromptWasDefault: !storedPrompt
 	};
 };
-

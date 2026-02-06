@@ -63,6 +63,8 @@ export const load: PageServerLoad = async ({ params }) => {
 	});
 
 	return {
+		userId,
+		sessionId,
 		sessionDocFound: Boolean(session),
 		session: session
 			? {
@@ -90,4 +92,3 @@ export const load: PageServerLoad = async ({ params }) => {
 		planItems
 	};
 };
-

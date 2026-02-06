@@ -27,7 +27,11 @@
 	</p>
 {:else if !quizParseOk}
 	<p class="rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-		Quiz document exists but could not be parsed. ({parseIssues.length} issue{parseIssues.length === 1 ? '' : 's'})
+		{#if quiz}
+			Quiz document has schema issues. Showing best-effort view. ({parseIssues.length} issue{parseIssues.length === 1 ? '' : 's'})
+		{:else}
+			Quiz document exists but could not be parsed. ({parseIssues.length} issue{parseIssues.length === 1 ? '' : 's'})
+		{/if}
 	</p>
 {/if}
 
@@ -57,7 +61,7 @@
 				</p>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
-				<Button href="../.." variant="secondary" size="sm">Back to lesson</Button>
+				<Button href=".." variant="secondary" size="sm">Back to lesson</Button>
 			</div>
 		</div>
 
