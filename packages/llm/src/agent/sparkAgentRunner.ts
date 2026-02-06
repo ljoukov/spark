@@ -58,6 +58,128 @@ import type {
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.2-codex";
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
+
+type TrackedSubmodelCallSummary = {
+  readonly modelId: string;
+  readonly modelVersion: string;
+  readonly elapsedMs: number;
+  readonly usageTokens: LlmUsageTokenUpdate | null;
+  readonly costUsd: number | null;
+};
+
+function mergeUsageTokens(
+  current: LlmUsageTokenUpdate | undefined,
+  next: LlmUsageTokenUpdate | undefined,
+): LlmUsageTokenUpdate | undefined {
+  if (!next) {
+    return current;
+  }
+  if (!current) {
+    return next;
+  }
+  return {
+    promptTokens: next.promptTokens ?? current.promptTokens,
+    cachedTokens: next.cachedTokens ?? current.cachedTokens,
+    responseTokens: next.responseTokens ?? current.responseTokens,
+    responseImageTokens: next.responseImageTokens ?? current.responseImageTokens,
+    thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
+    totalTokens: next.totalTokens ?? current.totalTokens,
+    toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+  };
+}
+
+function createAgentSubmodelProgressTracker(options: {
+  progress?: JobProgressReporter;
+  suppressCompletionLogs?: boolean;
+}): {
+  progress?: JobProgressReporter;
+  getSummary: () => TrackedSubmodelCallSummary | null;
+} {
+  if (!options.progress) {
+    return { progress: undefined, getSummary: () => null };
+  }
+
+  const parent = options.progress;
+  const active = new Map<
+    ModelCallHandle,
+    {
+      startedAt: number;
+      modelId: string;
+      modelVersion: string | null;
+      usageTokens: LlmUsageTokenUpdate | undefined;
+      requestImageSize?: string;
+    }
+  >();
+  let lastSummary: TrackedSubmodelCallSummary | null = null;
+
+  const shouldSuppressCompletionLogs = options.suppressCompletionLogs === true;
+  const completionLogPattern = /^\[[^\]]+\]\s+completed model\s+/u;
+
+  const trackedProgress: JobProgressReporter = {
+    log: (message) => {
+      if (shouldSuppressCompletionLogs && completionLogPattern.test(message)) {
+        return;
+      }
+      parent.log(message);
+    },
+    startModelCall: (details) => {
+      const handle = parent.startModelCall(details);
+      active.set(handle, {
+        startedAt: Date.now(),
+        modelId: details.modelId,
+        modelVersion: null,
+        usageTokens: undefined,
+        requestImageSize: details.imageSize,
+      });
+      return handle;
+    },
+    recordModelUsage: (handle, chunk) => {
+      const state = active.get(handle);
+      if (state) {
+        if (typeof chunk.modelVersion === "string" && chunk.modelVersion.trim().length > 0) {
+          state.modelVersion = chunk.modelVersion.trim();
+        }
+        state.usageTokens = mergeUsageTokens(state.usageTokens, chunk.tokens);
+      }
+      parent.recordModelUsage(handle, chunk);
+    },
+    finishModelCall: (handle) => {
+      const state = active.get(handle);
+      active.delete(handle);
+      parent.finishModelCall(handle);
+      if (!state) {
+        return;
+      }
+      const elapsedMs = Date.now() - state.startedAt;
+      const modelVersion = state.modelVersion ?? state.modelId;
+      const usageTokens = state.usageTokens ?? null;
+      const costUsd =
+        usageTokens !== null
+          ? estimateCallCostUsd({
+              modelId: modelVersion,
+              tokens: usageTokens,
+              responseImages: 0,
+              imageSize: state.requestImageSize,
+            })
+          : null;
+      lastSummary = {
+        modelId: state.modelId,
+        modelVersion,
+        elapsedMs,
+        usageTokens,
+        costUsd,
+      };
+    },
+    startStage: (stageName) => parent.startStage(stageName),
+    finishStage: (handle) => parent.finishStage(handle),
+    setActiveStages: parent.setActiveStages,
+  };
+
+  return {
+    progress: trackedProgress,
+    getSummary: () => lastSummary,
+  };
+}
 const DEFAULT_GENERATE_TEXT_MODEL_ID: GeminiModelId = "gemini-2.5-pro";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
@@ -2152,7 +2274,7 @@ function buildAgentTools(options: {
         const outputPathSchema = z.preprocess(
           (value) => normalizeOptionalString(value),
           z
-            .string({ required_error: "outputPath is required" })
+            .string({ error: "outputPath is required" })
             .trim()
             .min(1, "outputPath is required"),
         );
@@ -2160,7 +2282,7 @@ function buildAgentTools(options: {
         const schema = z
           .object({
             promptPath: z
-              .string({ required_error: "promptPath is required" })
+              .string({ error: "promptPath is required" })
               .trim()
               .min(1, "promptPath is required"),
             inputPaths: z.preprocess(
@@ -2397,6 +2519,11 @@ function buildAgentTools(options: {
           toolConfigs.push({ type: toolType });
         }
 
+        const submodelTracker = createAgentSubmodelProgressTracker({
+          progress,
+          suppressCompletionLogs: true,
+        });
+
         const text = await generateText({
           modelId: resolvedModelId,
           contents: [
@@ -2416,8 +2543,9 @@ function buildAgentTools(options: {
               }
             : {}),
           ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
-          ...(progress ? { progress } : {}),
+          ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
         });
+        const submodelSummary = submodelTracker.getSummary();
 
         const formatted = text;
         const gradePass = (() => {
@@ -2433,26 +2561,41 @@ function buildAgentTools(options: {
         const mode = outputMode ?? "overwrite";
         const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
         await ensureDir(path.dirname(resolved));
+        let outputBytes = 0;
         if (mode === "append") {
           const existing = await readFile(resolved, {
             encoding: "utf8",
           }).catch(() => "");
-          await writeFile(resolved, existing + formatted, {
+          const combined = existing + formatted;
+          outputBytes = Buffer.byteLength(combined, "utf8");
+          await writeFile(resolved, combined, {
             encoding: "utf8",
           });
         } else {
+          outputBytes = Buffer.byteLength(formatted, "utf8");
           await writeFile(resolved, formatted, { encoding: "utf8" });
         }
         workspace.scheduleUpdate(resolvedOutputPath);
         return {
           status: "written",
           modelId: resolvedModelId,
+          ...(submodelSummary?.modelVersion
+            ? { modelVersion: submodelSummary.modelVersion }
+            : {}),
+          ...(submodelSummary?.elapsedMs !== undefined
+            ? { elapsedMs: submodelSummary.elapsedMs }
+            : {}),
+          ...(typeof submodelSummary?.costUsd === "number"
+            ? { costUsd: submodelSummary.costUsd }
+            : {}),
+          ...(submodelSummary?.usageTokens ? { usageTokens: submodelSummary.usageTokens } : {}),
           promptPath: resolvedPromptPath,
           inputPaths: effectiveInputPaths,
           outputPath: resolvedOutputPath,
           outputMode: mode,
           promptTemplateReplacements: expanded.replacements,
           textChars: formatted.length,
+          outputBytes,
           ...(gradePass === undefined ? {} : { gradePass }),
         };
 
@@ -2533,6 +2676,11 @@ function buildAgentTools(options: {
           sourceText.trimEnd(),
         ].join("\n");
 
+        const submodelTracker = createAgentSubmodelProgressTracker({
+          progress,
+          suppressCompletionLogs: true,
+        });
+
         const text = await generateText({
           modelId: resolvedModelId,
           contents: [
@@ -2551,9 +2699,10 @@ function buildAgentTools(options: {
                 },
               }
             : {}),
-          ...(progress ? { progress } : {}),
+          ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
           responseMimeType: "application/json",
         });
+        const submodelSummary = submodelTracker.getSummary();
 
         let parsed: unknown;
         try {
@@ -2569,14 +2718,26 @@ function buildAgentTools(options: {
         await ensureDir(path.dirname(resolved));
         await writeFile(resolved, formatted, { encoding: "utf8" });
         workspace.scheduleUpdate(resolvedOutputPath);
+        const outputBytes = Buffer.byteLength(formatted, "utf8");
 
         return {
           status: "written",
           modelId: resolvedModelId,
+          ...(submodelSummary?.modelVersion
+            ? { modelVersion: submodelSummary.modelVersion }
+            : {}),
+          ...(submodelSummary?.elapsedMs !== undefined
+            ? { elapsedMs: submodelSummary.elapsedMs }
+            : {}),
+          ...(typeof submodelSummary?.costUsd === "number"
+            ? { costUsd: submodelSummary.costUsd }
+            : {}),
+          ...(submodelSummary?.usageTokens ? { usageTokens: submodelSummary.usageTokens } : {}),
           schemaPath: resolvedSchemaPath,
           sourcePath: resolvedSourcePath,
           outputPath: resolvedOutputPath,
           textChars: formatted.length,
+          outputBytes,
         };
       },
     }),
