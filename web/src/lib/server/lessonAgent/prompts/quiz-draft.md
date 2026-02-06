@@ -42,14 +42,16 @@ For kind=type-answer:
 - answer: <required>
 - acceptableAnswers: <optional, comma-separated>
 - placeholder: <optional>
-- marks: <optional int> (required when the request asks for a 6-8 marker question; use 6 by default)
-- markScheme: <optional bullet list> (required when the request asks for a 6-8 marker question; prefer 1 bullet = 1 mark)
+- marks: <required int> (typically 3-6; use 6-8 when the request asks for a 6-8 marker question)
+- markScheme: <required bullet list> (prefer 1 bullet = 1 mark)
 - correctFeedback: <required> (message; optional tone; optional heading)
 
 ## Rules
 - If `lesson/requirements.md` specifies an exact question count or question-kind mix for this quiz plan item, follow it exactly.
 - Question ids must be unique within the quiz.
 - Questions must be self-contained and must not reference internal pipeline, file names, or "the brief".
+- Every `type-answer` question MUST include both `marks` and a non-empty bullet `markScheme`.
+- Every `type-answer` question MUST include both `marks` and a non-empty bullet `markScheme`.
 - If the request asks for a **6-8 marker** free-text question (or similar):
   - Treat the quiz's `type-answer` question as the 6-8 marker question (i.e. do not write a 1-3 mark plug-and-chug calculation).
   - The `type-answer` question MUST have `marks` between **6 and 8** inclusive (prefer `marks: 6` unless the request says otherwise).
