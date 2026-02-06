@@ -1,30 +1,39 @@
-# Session grade (lesson/output/session.json)
+# Session grade (lesson/drafts/session.md)
 
-You are grading a Spark Session JSON draft against the request and the schema.
+You are grading a Spark Session **Markdown** draft against the request and hard requirements.
 
-Return **JSON only** in this exact shape:
-{
-  "pass": boolean,
-  "issues": string[],
-  "suggested_edits": string[]
-}
+Return **Markdown only** in this exact shape:
 
-Grading rules (fail if any are violated):
-- JSON must match the schema.
-- Must respect `lesson/requirements.md` decisions (quiz-only vs coding, media only if explicitly requested).
-- `plan` ids must be unique and file-friendly (no spaces; prefer `q1`, `p1`, etc).
-- `plan` titles must be short, action-oriented, and reflect what the learner does.
-- Must fit the requested level and duration; avoid overstuffing or under-scoping.
+# Grade
+pass: true|false
 
-Schema:
-{{lesson/schema/session.schema.json}}
+## Issues
+- ...
 
-Decisions + constraints:
+## Suggested edits
+- ...
+
+If pass: true:
+- `## Issues` MUST contain exactly `- (none)`.
+- `## Suggested edits` MUST contain exactly `- (none)`.
+
+Fail if any are violated:
+- Draft must follow the required format in the session draft prompt (Session section + Plan items).
+- `topics` must be present and non-empty.
+- Plan must be non-empty.
+- Every plan item must have: id, kind, title.
+- Plan item ids must be unique and file-friendly (no spaces; prefer `q1`, `p1`, etc).
+- Must respect `lesson/requirements.md` decisions (includeCoding/includeStory).
+- If plan preferences exist (number of items, per-quiz question counts/types), follow them exactly.
+- Plan item titles must be short, action-oriented, and reflect what the learner does.
+- If present, session `title`/`tagline`/`summary` must meet the length guidance in the session draft prompt.
+- Must fit the requested level and goal; avoid overstuffing or under-scoping.
+
+Decisions + constraints (authoritative):
 {{lesson/requirements.md}}
 
-User request:
+User request (authoritative):
 {{brief.md}}
 
-Candidate session JSON:
-{{lesson/output/session.json}}
-
+Candidate session Markdown:
+{{lesson/drafts/session.md}}

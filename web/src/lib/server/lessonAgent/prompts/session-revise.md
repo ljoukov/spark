@@ -1,26 +1,22 @@
-# Session revise (lesson/output/session.json)
+# Session revise (lesson/drafts/session.md)
 
-You are revising a Spark Session JSON draft to address a grading report.
+You are revising a Spark Session **Markdown** draft to address a grading report.
 
-Return **JSON only** (start with `{` and end with `}`), matching the schema.
+Return **Markdown only** (no JSON).
 
 Rules:
-- Do **not** include `id`, `createdAt`, `status`, or `nextLessonProposals`.
 - Fix every issue in the grading report.
 - Keep plan item ids stable unless the grading report requires changing them.
+- Keep the required format from the session draft prompt (Session section + Plan items).
 
-Schema:
-{{lesson/schema/session.schema.json}}
-
-Decisions + constraints:
+Decisions + constraints (authoritative):
 {{lesson/requirements.md}}
 
-User request:
+User request (authoritative):
 {{brief.md}}
 
 Grading report:
-{{lesson/feedback/session-grade.json}}
+{{lesson/feedback/session-grade.md}}
 
-Current session JSON:
-{{lesson/output/session.json}}
-
+Current session Markdown:
+{{lesson/drafts/session.md}}

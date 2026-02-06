@@ -36,6 +36,9 @@ describe("Spark agent lesson pipeline guards", () => {
         "publish_lesson",
         "python_exec",
         "generate_text",
+        "generate_json",
+        "validate_json",
+        "validate_schema",
         "list_files",
         "read_file",
         "read_files",
@@ -51,7 +54,7 @@ describe("Spark agent lesson pipeline guards", () => {
     });
   });
 
-  it("blocks direct writes to lesson/output and lesson/feedback JSON during lesson runs", async () => {
+  it("rejects JSON writes via generate_text", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentToolsForTest } =
         await import("../src/agent/sparkAgentRunner");
@@ -69,49 +72,11 @@ describe("Spark agent lesson pipeline guards", () => {
       });
 
       await expect(
-        tools.write_file.execute({
-          path: "lesson/output/session.json",
-          content: "{}",
+        tools.generate_text.execute({
+          promptPath: "lesson/prompts/session-draft.md",
+          outputPath: "lesson/output/session.json",
         }),
-      ).rejects.toThrow(/Direct writes.*Use generate_text/iu);
-
-      await expect(
-        tools.write_file.execute({
-          path: "lesson/feedback/session-grade.json",
-          content: "{}",
-        }),
-      ).rejects.toThrow(/Direct writes.*Use generate_text/iu);
-    });
-  });
-
-  it("blocks direct patch writes to lesson/output JSON during lesson runs", async () => {
-    await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
-        await import("../src/agent/sparkAgentRunner");
-
-      const tools = buildSparkAgentToolsForTest({
-        workspace: {
-          scheduleUpdate: () => {},
-          deleteFile: () => Promise.resolve(),
-          moveFile: () => Promise.resolve(),
-        },
-        rootDir,
-        userId: "test-user",
-        serviceAccountJson: "{}",
-        enforceLessonPipeline: true,
-      });
-
-      await expect(
-        tools.apply_patch.execute({
-          operations: [
-            {
-              type: "update_file",
-              path: "lesson/output/session.json",
-              diff: "@@ -1,1 +1,1 @@\n-{}\n+{}\n",
-            },
-          ],
-        }),
-      ).rejects.toThrow(/Direct patch writes.*Use generate_text/iu);
+      ).rejects.toThrow(/generate_text cannot write JSON/iu);
     });
   });
 
@@ -134,7 +99,7 @@ describe("Spark agent lesson pipeline guards", () => {
 
       const parsed = tools.generate_text.inputSchema.parse({
         promptPath: "lesson/prompts/session-draft.md",
-        outputPath: "lesson/output/session.json",
+        outputPath: "lesson/drafts/session.md",
         inputPaths: "lesson/requirements.md",
         tools: "web-search",
         modelId: null,
@@ -150,7 +115,7 @@ describe("Spark agent lesson pipeline guards", () => {
     });
   });
 
-  it("infers outputPath + responseSchemaPath for session drafts during lesson runs", async () => {
+  it("requires outputPath for session drafts during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentToolsForTest } =
         await import("../src/agent/sparkAgentRunner");
@@ -167,16 +132,15 @@ describe("Spark agent lesson pipeline guards", () => {
         enforceLessonPipeline: true,
       });
 
-      const parsed = tools.generate_text.inputSchema.parse({
+      const result = tools.generate_text.inputSchema.safeParse({
         promptPath: "lesson/prompts/session-draft.md",
-      }) as { outputPath?: string; responseSchemaPath?: string };
+      });
 
-      expect(parsed.outputPath).toBe("lesson/output/session.json");
-      expect(parsed.responseSchemaPath).toBe("lesson/schema/session.schema.json");
+      expect(result.success).toBe(false);
     });
   });
 
-  it("allows quiz drafts without outputPath during lesson runs (resolved at execution time)", async () => {
+  it("requires outputPath for quiz drafts during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentToolsForTest } =
         await import("../src/agent/sparkAgentRunner");
@@ -197,17 +161,7 @@ describe("Spark agent lesson pipeline guards", () => {
         promptPath: "lesson/prompts/quiz-draft.md",
       });
 
-      expect(result.success).toBe(true);
-      if (!result.success) {
-        throw new Error("Expected schema validation to succeed");
-      }
-
-      const parsed = result.data as {
-        outputPath?: string;
-        responseSchemaPath?: string;
-      };
-      expect(parsed.outputPath).toBeUndefined();
-      expect(parsed.responseSchemaPath).toBeUndefined();
+      expect(result.success).toBe(false);
     });
   });
 });

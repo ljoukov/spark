@@ -1,19 +1,17 @@
-# Code problem revise (lesson/output/code/<planItemId>.json)
+# Code problem revise (lesson/drafts/code/<planItemId>.md)
 
-You are revising a code problem JSON draft to address a grading report.
+You are revising a code problem **Markdown** draft to address a grading report.
 
-Return **JSON only** (start with `{` and end with `}`), matching the schema.
+Return **Markdown only** (no JSON).
 
 Rules:
 - Fix every issue in the grading report.
 - Keep the problem’s core idea stable unless the grading report requires a redesign.
 - Keep examples/tests internally consistent with the reference solution.
+- Keep the required format from the code problem draft prompt.
 
-Schema:
-{{lesson/schema/code.schema.json}}
+Inputs (in attached files):
+- Current problem Markdown: `lesson/drafts/code/<planItemId>.md`
+- Grading report Markdown: `lesson/feedback/code/<planItemId>-grade.md`
 
-Grading report:
-{{lesson/feedback/code-grade.json}}
-
-Current code problem JSON (provided via `generate_text` inputPaths):
-(Provide the target problem JSON via `generate_text` by passing `inputPaths: ["lesson/output/code/<planItemId>.json"]`.)
+Revise the problem to address every issue in the grading report.

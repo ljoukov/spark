@@ -108,6 +108,7 @@ export type ChatGptCodexWebSearchCall = {
 export type ChatGptCodexCollectedResponse = {
   text: string;
   reasoningText: string;
+  reasoningSummaryText: string;
   toolCalls: ChatGptCodexToolCall[];
   webSearchCalls: ChatGptCodexWebSearchCall[];
   usage?: ChatGptCodexUsage;
@@ -171,8 +172,9 @@ export async function collectChatGptCodexResponse(options: {
   const webSearchCallOrder: string[] = [];
   let text = "";
   let reasoningText = "";
+  let reasoningSummaryText = "";
   let sawOutputTextDelta = false;
-  let sawReasoningDelta = false;
+  let sawReasoningSummaryDelta = false;
   let usage: ChatGptCodexUsage | undefined;
   let model: string | undefined;
   let status: string | undefined;
@@ -188,16 +190,17 @@ export async function collectChatGptCodexResponse(options: {
       }
       continue;
     }
-    if (
-      type === "response.reasoning_text.delta" ||
-      type === "response.reasoning_summary_text.delta"
-    ) {
+    if (type === "response.reasoning_summary_text.delta") {
       const delta = typeof event.delta === "string" ? event.delta : "";
       if (delta.length > 0) {
-        sawReasoningDelta = true;
-        reasoningText += delta;
+        sawReasoningSummaryDelta = true;
+        reasoningSummaryText += delta;
         options.onDelta?.({ thoughtDelta: delta });
       }
+      continue;
+    }
+    if (type === "response.reasoning_text.delta") {
+      // Avoid collecting chain-of-thought; summaries are handled separately above.
       continue;
     }
     if (type === "response.refusal.delta") {
@@ -345,22 +348,36 @@ export async function collectChatGptCodexResponse(options: {
             webSearchCalls.set(id, { id, status, action });
             webSearchCallOrder.push(id);
           }
-        } else if (item.type === "reasoning" && !sawReasoningDelta) {
+        } else if (item.type === "reasoning" && !sawReasoningSummaryDelta) {
+          // Prefer summaries; avoid collecting raw chain-of-thought.
+          const summary = Array.isArray(item.summary) ? item.summary : [];
+          for (const entry of summary) {
+            if (!entry || typeof entry !== "object") {
+              continue;
+            }
+            if ((entry as { type?: unknown }).type !== "summary_text") {
+              continue;
+            }
+            const entryText = (entry as { text?: unknown }).text;
+            if (typeof entryText === "string" && entryText.length > 0) {
+              reasoningSummaryText += entryText;
+              options.onDelta?.({ thoughtDelta: entryText });
+            }
+          }
+
           const content = Array.isArray(item.content) ? item.content : [];
           for (const entry of content) {
             if (!entry || typeof entry !== "object") {
               continue;
             }
             const entryType = (entry as { type?: unknown }).type;
-            if (
-              entryType === "reasoning_text" ||
-              entryType === "reasoning_summary_text"
-            ) {
-              const entryText = (entry as { text?: unknown }).text;
-              if (typeof entryText === "string" && entryText.length > 0) {
-                reasoningText += entryText;
-                options.onDelta?.({ thoughtDelta: entryText });
-              }
+            if (entryType !== "reasoning_summary_text") {
+              continue;
+            }
+            const entryText = (entry as { text?: unknown }).text;
+            if (typeof entryText === "string" && entryText.length > 0) {
+              reasoningSummaryText += entryText;
+              options.onDelta?.({ thoughtDelta: entryText });
             }
           }
         }
@@ -421,9 +438,12 @@ export async function collectChatGptCodexResponse(options: {
   const orderedWebSearchCalls = webSearchCallOrder
     .map((key) => webSearchCalls.get(key))
     .filter((call): call is ChatGptCodexWebSearchCall => Boolean(call));
+  // Keep backwards compatibility (reasoningText) but only expose the summary.
+  reasoningText = reasoningSummaryText;
   return {
     text,
     reasoningText,
+    reasoningSummaryText,
     toolCalls: orderedCalls,
     webSearchCalls: orderedWebSearchCalls,
     usage,

@@ -560,8 +560,15 @@ const lessonCreateSchema = z.object({
 	materials: materialsSchema.describe('Optional list of materials/links to incorporate.')
 });
 
-function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>): string {
+function buildLessonBrief(
+	input: z.infer<typeof lessonCreateSchema>,
+	sourceText?: string
+): string {
 	const lines: string[] = ['# Lesson request', '', `## Topic`, input.topic.trim()];
+	const raw = sourceText?.trim();
+	if (raw && raw.length > 0) {
+		lines.push('', '## Original user message', '```', raw, '```');
+	}
 	if (input.title) {
 		lines.push('', '## Title', input.title.trim());
 	}
@@ -670,8 +677,9 @@ function renderLessonTask(options: {
 function buildSparkChatTools(options: {
 	userId: string;
 	serviceAccountJson: string;
+	sourceText?: string;
 }): LlmToolSet {
-	const { userId, serviceAccountJson } = options;
+	const { userId, serviceAccountJson, sourceText } = options;
 	return {
 		list_lessons: tool({
 			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
@@ -767,7 +775,7 @@ function buildSparkChatTools(options: {
 						console.warn('Unable to set current lesson', error);
 					});
 
-					const brief = buildLessonBrief(input);
+					const brief = buildLessonBrief(input, sourceText);
 
 					await setFirestoreDocument({
 						serviceAccountJson,
@@ -824,20 +832,23 @@ function buildSparkChatTools(options: {
 						`Workspace ID: ${workspaceId}`,
 						''
 					].join('\n');
-					const plan = [
-						'# Plan',
-						'',
-						'- [running] Read brief.md, request.json, and lesson/task.md.',
-						'- [pending] Write lesson/requirements.md (hard requirements + decisions).',
-						'- [pending] Generate session draft (generate_text → lesson/output/session.json).',
-						'- [pending] Grade + revise session until pass (lesson/feedback/session-grade.json).',
-						'- [pending] Generate quizzes (generate_text → lesson/output/quiz/*.json).',
-						'- [pending] Grade + revise quizzes (lesson/feedback/*).',
-						'- [pending] Generate code problems if needed (lesson/output/code/*.json).',
-						'- [pending] Verify code problems with python_exec (if coding).',
-						'- [pending] Call publish_lesson (fix errors until published).',
-						'- [pending] Call done.'
-					].join('\n');
+							const plan = [
+								'# Plan',
+								'',
+								'- [running] Read brief.md, request.json, and lesson/task.md.',
+								'- [pending] Write lesson/requirements.md (hard requirements + decisions).',
+								'- [pending] Generate session draft (generate_text → lesson/drafts/session.md).',
+								'- [pending] Grade + revise session draft until pass (lesson/feedback/session-grade.md).',
+								'- [pending] Generate quiz drafts (generate_text → lesson/drafts/quiz/*.md).',
+								'- [pending] Grade + revise quiz drafts (lesson/feedback/quiz/<planItemId>-grade.md).',
+								'- [pending] Generate code problem drafts if needed (lesson/drafts/code/*.md).',
+								'- [pending] Grade + revise code problem drafts (lesson/feedback/code/<planItemId>-grade.md).',
+								'- [pending] Compile output JSON files under lesson/output/ (generate_json from drafts + schema).',
+								'- [pending] Validate output JSON (validate_json; fix issues until ok=true).',
+								'- [pending] Verify code problems with python_exec (if coding).',
+								'- [pending] Call publish_lesson (fix errors until published).',
+								'- [pending] Call done.'
+							].join('\n');
 
 					await Promise.all([
 						writeWorkspaceTextFile({
@@ -978,28 +989,32 @@ function buildSparkChatTools(options: {
 						})
 					]);
 
-					const prompt = [
-						'Create and publish a Spark lesson using the workspace files (brief.md + lesson/*).',
-						'',
-						`sessionId: ${sessionId}`,
-						`workspaceId: ${workspaceId}`,
-						'',
-						'Instructions:',
-						'1) Read brief.md, request.json, and lesson/task.md.',
-						'2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).',
-						'3) Use generate_text + the templates in lesson/prompts/ to do a generate → grade → revise loop for session/quizzes/problems.',
-						'   - For JSON outputs, pass responseSchemaPath pointing at lesson/schema/*.schema.json.',
-						'4) Write final JSON under lesson/output/.',
-						'',
-						'Examples:',
-						" - generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
-						" - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })  (must pass=true before publishing)",
-						" - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
-						'',
-						'5) Call publish_lesson with:',
-						`   - sessionId: ${sessionId}`,
-						"   - sessionPath: 'lesson/output/session.json'",
-						"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
+						const prompt = [
+							'Create and publish a Spark lesson using the workspace files (brief.md + lesson/*).',
+							'',
+							`sessionId: ${sessionId}`,
+							`workspaceId: ${workspaceId}`,
+							'',
+								'Instructions:',
+								'1) Read brief.md, request.json, and lesson/task.md.',
+								'2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).',
+								'3) Use generate_text + the templates in lesson/prompts/ to draft/revise Markdown under lesson/drafts/ and to write grading reports under lesson/feedback/.',
+								'   - Avoid asking generate_text to emit large JSON (it is less reliable than Markdown).',
+								'4) Compile Firestore-ready JSON under lesson/output/ from the Markdown drafts using generate_json + validate_json.',
+								'   - For each JSON output: generate_json({ sourcePath, schemaPath, outputPath }) then validate_json({ schemaPath, inputPath: outputPath }) and fix until ok=true.',
+								'',
+								'Examples:',
+								" - generate_text({ promptPath: 'lesson/prompts/session-draft.md', outputPath: 'lesson/drafts/session.md' })",
+								" - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.md' })  (must pass=true before publishing)",
+								" - generate_text({ promptPath: 'lesson/prompts/quiz-draft.md', outputPath: 'lesson/drafts/quiz/q1.md' })",
+								" - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/drafts/quiz/q1.md'], outputPath: 'lesson/feedback/quiz/q1-grade.md' })",
+								" - generate_json({ sourcePath: 'lesson/drafts/session.md', schemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
+								" - validate_json({ schemaPath: 'lesson/schema/session.schema.json', inputPath: 'lesson/output/session.json' })",
+								'',
+								'5) Call publish_lesson with:',
+								`   - sessionId: ${sessionId}`,
+								"   - sessionPath: 'lesson/output/session.json'",
+								"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
 						'   - includeCoding: true if you included any plan items with kind="problem"; otherwise false.',
 						'   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
 						'6) If publish_lesson fails, fix the files and retry.',
@@ -1089,7 +1104,21 @@ async function generateAssistantResponse(
 		attachmentMessageId: options.messageId,
 		attachmentParts
 	});
-	const tools = buildSparkChatTools({ userId: options.userId, serviceAccountJson: options.serviceAccountJson });
+	const sourceText = (() => {
+		const message = conversation.messages.find(
+			(entry) => entry && entry.id === options.messageId && entry.role === 'user'
+		);
+		if (!message) {
+			return undefined;
+		}
+		const text = extractTextParts(message.content);
+		return text.length > 0 ? text : undefined;
+	})();
+	const tools = buildSparkChatTools({
+		userId: options.userId,
+		serviceAccountJson: options.serviceAccountJson,
+		sourceText
+	});
 	const result = await runToolLoop({
 		modelId: MODEL_ID,
 		contents,

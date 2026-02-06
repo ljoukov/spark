@@ -29,6 +29,7 @@ type CliOptions = {
   chatMaxSteps: number;
   agentMaxSteps: number;
   artifactsDir?: string;
+  mockCreateLesson: boolean;
 };
 
 function requireNonEmptyEnv(name: string): void {
@@ -38,14 +39,20 @@ function requireNonEmptyEnv(name: string): void {
   }
 }
 
+function formatLogLine(message: string): string {
+  const stamp = new Date().toISOString();
+  const line = message.trimEnd();
+  return line.length > 0 ? `${stamp} ${line}` : stamp;
+}
+
 function writeLogLine(logPath: string, message: string): void {
-  fs.appendFileSync(logPath, message.trimEnd() + "\n", { encoding: "utf8" });
+  fs.appendFileSync(logPath, formatLogLine(message) + "\n", { encoding: "utf8" });
 }
 
 function teeLogLine(logPath: string, message: string): void {
-  const line = message.trimEnd();
-  writeLogLine(logPath, line);
-  process.stdout.write(line + "\n");
+  const stamped = formatLogLine(message);
+  fs.appendFileSync(logPath, stamped + "\n", { encoding: "utf8" });
+  process.stdout.write(stamped + "\n");
 }
 
 function teeLogBlock(logPath: string, header: string, block: string): void {
@@ -217,8 +224,15 @@ type LessonAgentLocalRunResult = {
   doneSummary: string | null;
 };
 
-function buildLessonBrief(input: LessonCreateInput): string {
+function buildLessonBrief(
+  input: LessonCreateInput,
+  userQuery?: string,
+): string {
   const lines: string[] = ["# Lesson request", "", "## Topic", input.topic.trim()];
+  const query = userQuery?.trim();
+  if (query && query.length > 0) {
+    lines.push("", "## Original user message", "```", query, "```");
+  }
   if (input.title) {
     lines.push("", "## Title", input.title.trim());
   }
@@ -388,17 +402,51 @@ function buildLessonAgentPrompt(sessionId: string, workspaceId: string): string 
     `sessionId: ${sessionId}`,
     `workspaceId: ${workspaceId}`,
     "",
+    "Step budget:",
+    "- This smoke run is executed with a very small tool-step budget (15).",
+    "- Avoid unnecessary tool calls (especially list_files / reading prompt templates).",
+    "- Batch work: you can call generate_text / generate_json / validate_json multiple times in a single tool step.",
+    "",
     "Instructions:",
     "1) Read brief.md, request.json, and lesson/task.md.",
     "2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).",
-    "3) Use generate_text + the templates in lesson/prompts/ to do a generate -> grade -> revise loop for session/quizzes/problems.",
-    "   - For JSON outputs, pass responseSchemaPath pointing at lesson/schema/*.schema.json.",
-    "4) Write final JSON under lesson/output/.",
+    "3) Use generate_text + the templates in lesson/prompts/ to draft/revise Markdown under lesson/drafts/ and to write grading reports under lesson/feedback/.",
+    "   - Avoid asking generate_text to emit JSON (Markdown is more stable).",
+    "   - Grading prompts output `pass: true|false`. generate_text returns `gradePass: true|false` when it detects this line: use that to decide whether to revise (avoid read_file just to check pass).",
+    "   - Only revise when pass=false.",
+    "   - IMPORTANT dependency: quiz/code draft prompt templates inline lesson/drafts/session.md, so generate the session draft before drafting quizzes/problems.",
+    "4) Compile Firestore-ready JSON under lesson/output/ from the Markdown drafts using generate_json + validate_json.",
+    "   - For each JSON output: generate_json({ sourcePath, schemaPath, outputPath }) then validate_json({ schemaPath, inputPath: outputPath }) and fix until ok=true.",
+    "",
+    "File conventions (multi-quiz):",
+    "- Session draft: lesson/drafts/session.md",
+    "- Session grade: lesson/feedback/session-grade.md",
+    "- Quiz drafts: lesson/drafts/quiz/<planItemId>.md (e.g. q1, q2)",
+    "- Quiz grades: lesson/feedback/quiz/<planItemId>-grade.md",
+    "- Quiz JSON outputs: lesson/output/quiz/<planItemId>.json",
+    "",
+    "Batching rules (critical to finish within 15 steps):",
+    "- You MUST draft ALL quiz Markdown files (q1, q2, ...) in a single step once lesson/drafts/session.md exists.",
+    "- You MUST grade ALL quiz Markdown files in a single step (distinct outputPath per quiz).",
+    "- You MUST run generate_json for session + ALL quizzes in a single step (do NOT do one file per step).",
+    "- You MUST run validate_json for session + ALL quizzes in a single step (do NOT do one file per step).",
+    "- If you only remember one thing: batch JSON generation + validation.",
     "",
     "Examples:",
-    " - generate_text({ promptPath: 'lesson/prompts/session-draft.md', responseSchemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
-    " - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.json' })  (must pass=true before publishing)",
-    " - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/output/quiz/q1.json'], outputPath: 'lesson/feedback/quiz-grade.json' })",
+    " - generate_text({ promptPath: 'lesson/prompts/session-draft.md', outputPath: 'lesson/drafts/session.md' })",
+    " - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.md' })  (must pass=true before publishing)",
+    " - Draft q1 + q2 in the SAME step:",
+    "   generate_text({ promptPath: 'lesson/prompts/quiz-draft.md', outputPath: 'lesson/drafts/quiz/q1.md' })",
+    "   generate_text({ promptPath: 'lesson/prompts/quiz-draft.md', outputPath: 'lesson/drafts/quiz/q2.md' })",
+    " - Grade q1 + q2 in the SAME step:",
+    "   generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/drafts/quiz/q1.md'], outputPath: 'lesson/feedback/quiz/q1-grade.md' })",
+    "   generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/drafts/quiz/q2.md'], outputPath: 'lesson/feedback/quiz/q2-grade.md' })",
+    " - generate_json({ sourcePath: 'lesson/drafts/session.md', schemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
+    " - generate_json({ sourcePath: 'lesson/drafts/quiz/q1.md', schemaPath: 'lesson/schema/quiz.schema.json', outputPath: 'lesson/output/quiz/q1.json' })",
+    " - generate_json({ sourcePath: 'lesson/drafts/quiz/q2.md', schemaPath: 'lesson/schema/quiz.schema.json', outputPath: 'lesson/output/quiz/q2.json' })",
+    " - validate_json({ schemaPath: 'lesson/schema/session.schema.json', inputPath: 'lesson/output/session.json' })",
+    " - validate_json({ schemaPath: 'lesson/schema/quiz.schema.json', inputPath: 'lesson/output/quiz/q1.json' })",
+    " - validate_json({ schemaPath: 'lesson/schema/quiz.schema.json', inputPath: 'lesson/output/quiz/q2.json' })",
     "",
     "5) Call publish_lesson with:",
     `   - sessionId: ${sessionId}`,
@@ -500,8 +548,13 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     .option(
       "--agent-max-steps <number>",
       "Maximum tool-loop steps for the lesson agent",
-      createIntegerParser({ name: "agent-max-steps", min: 50, max: 2000 }),
+      createIntegerParser({ name: "agent-max-steps", min: 1, max: 2000 }),
       300,
+    )
+    .option(
+      "--mock-create-lesson",
+      "Use a mock create_lesson tool (chat routing only; does not run the lesson agent)",
+      false,
     )
     .option(
       "--artifacts-dir <path>",
@@ -515,6 +568,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     agentModel: string;
     chatMaxSteps: number;
     agentMaxSteps: number;
+    mockCreateLesson: boolean;
     artifactsDir?: string;
   }>();
 
@@ -523,7 +577,8 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     chatModelId: z.string().trim().min(1),
     agentModelId: z.string().trim().min(1),
     chatMaxSteps: z.number().int().min(1).max(12),
-    agentMaxSteps: z.number().int().min(50).max(2000),
+    agentMaxSteps: z.number().int().min(1).max(2000),
+    mockCreateLesson: z.boolean(),
     artifactsDir: z
       .string()
       .trim()
@@ -537,6 +592,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     agentModelId: opts.agentModel,
     chatMaxSteps: opts.chatMaxSteps,
     agentMaxSteps: opts.agentMaxSteps,
+    mockCreateLesson: opts.mockCreateLesson,
     artifactsDir: opts.artifactsDir,
   });
 
@@ -546,6 +602,7 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     agentModelId: validated.agentModelId as LlmTextModelId,
     chatMaxSteps: validated.chatMaxSteps,
     agentMaxSteps: validated.agentMaxSteps,
+    mockCreateLesson: validated.mockCreateLesson,
     artifactsDir: validated.artifactsDir,
   };
 }
@@ -596,11 +653,27 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
     .strict();
   type CreateLessonToolOutput = z.infer<typeof createLessonToolOutputSchema>;
 
+  let createLessonInvocation: {
+    count: number;
+    result?: CreateLessonToolOutput;
+  } = { count: 0 };
+
   const create_lesson = tool({
     description:
       "Create a lesson by writing a local workspace and running the lesson-generation agent to completion (mock publish).",
     inputSchema: lessonCreateSchema as z.ZodType<LessonCreateInput>,
     execute: async (input: LessonCreateInput) => {
+      createLessonInvocation.count += 1;
+      if (createLessonInvocation.count > 1) {
+        teeLogLine(
+          logPath,
+          `[chat] create_lesson called more than once (count=${createLessonInvocation.count.toString()})`,
+        );
+        throw new Error(
+          "create_lesson may only be called once in this smoke run.",
+        );
+      }
+
       teeLogBlock(
         logPath,
         "[chat] create_lesson args:",
@@ -642,12 +715,13 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         "",
         "- [running] Read brief.md, request.json, and lesson/task.md.",
         "- [pending] Write lesson/requirements.md (hard requirements + decisions).",
-        "- [pending] Generate session draft (generate_text -> lesson/output/session.json).",
-        "- [pending] Grade + revise session until pass (lesson/feedback/session-grade.json).",
-        "- [pending] Generate quizzes (generate_text -> lesson/output/quiz/*.json).",
-        "- [pending] Grade + revise quizzes (lesson/feedback/*).",
-        "- [pending] Generate code problems if needed (lesson/output/code/*.json).",
-        "- [pending] Verify code problems with python_exec (if coding).",
+        "- [pending] Generate session draft (generate_text -> lesson/drafts/session.md).",
+        "- [pending] Grade + revise session until pass (lesson/feedback/session-grade.md).",
+        "- [pending] Generate quiz drafts (generate_text -> lesson/drafts/quiz/*.md).",
+        "- [pending] Grade + revise quiz drafts (lesson/feedback/quiz/<planItemId>-grade.md).",
+        "- [pending] Generate code problem drafts if needed (lesson/drafts/code/*.md).",
+        "- [pending] Grade + revise code problem drafts (lesson/feedback/code/<planItemId>-grade.md).",
+        "- [pending] Compile output JSON (generate_json + validate_json).",
         "- [pending] Call publish_lesson (fix errors until published).",
         "- [pending] Call done.",
       ].join("\n");
@@ -658,9 +732,13 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         input,
       };
 
-      await writeFile(path.join(workspaceRoot, "brief.md"), buildLessonBrief(input), {
+      await writeFile(
+        path.join(workspaceRoot, "brief.md"),
+        buildLessonBrief(input, options.query),
+        {
         encoding: "utf8",
-      });
+        },
+      );
       await writeFile(
         path.join(workspaceRoot, "request.json"),
         JSON.stringify(request, null, 2) + "\n",
@@ -678,6 +756,24 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         requirements,
         { encoding: "utf8" },
       );
+
+      if (options.mockCreateLesson) {
+        teeLogLine(
+          logPath,
+          "mock-create-lesson enabled (skipping lesson agent run)",
+        );
+        const result: CreateLessonToolOutput = {
+          status: "completed",
+          sessionId,
+          workspaceId,
+          href: `/spark/lesson/${sessionId}`,
+          workspaceRoot,
+          input,
+          agentDoneSummary: null,
+        };
+        createLessonInvocation.result = result;
+        return result;
+      }
 
       const agentPrompt = buildLessonAgentPrompt(sessionId, workspaceId);
       teeLogLine(logPath, "starting lesson agent");
@@ -707,7 +803,7 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         `agent done summary=${agentResult.doneSummary ?? ""}`,
       );
 
-      return {
+      const result: CreateLessonToolOutput = {
         status: "completed",
         sessionId,
         workspaceId,
@@ -716,12 +812,15 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
         input,
         agentDoneSummary: agentResult.doneSummary,
       };
+      createLessonInvocation.result = result;
+      return result;
     },
   });
 
   const chatSystemPrompt = [
     "You are Spark Chat.",
     "When the user asks to create a lesson, you MUST call create_lesson with a plan that matches the requested shape.",
+    "Call create_lesson exactly once. After it succeeds, do not call it again.",
     "Use plan.items to express 'parts'. For this request, use exactly 2 quiz items.",
     "Each quiz item MUST have quiz.questionKinds set to:",
     "- multiple-choice: 3",
@@ -764,6 +863,10 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
     (call) => call.toolName === "create_lesson",
   );
   assert(createLessonCandidates.length > 0, "chat did not call create_lesson");
+  assert(
+    createLessonCandidates.length === 1,
+    `chat called create_lesson ${createLessonCandidates.length.toString()} times (expected exactly 1)`,
+  );
   const successfulCreateLessonCall = [...createLessonCandidates]
     .reverse()
     .find((call) => !call.error);
@@ -795,6 +898,11 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
     assert(info === 1, "expected info-card count=1");
   }
 
+  if (options.mockCreateLesson) {
+    teeLogLine(logPath, "mock-create-lesson enabled: skipping lesson output validation");
+    return;
+  }
+
   const workspaceRoot = createLessonOutput.workspaceRoot;
   const sessionText = await readFile(path.join(workspaceRoot, "lesson/output/session.json"), {
     encoding: "utf8",
@@ -817,12 +925,16 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
       { encoding: "utf8" },
     );
     const rawQuiz = JSON.parse(quizText) as Record<string, unknown>;
+    const progressKeyRaw =
+      typeof rawQuiz.progressKey === "string" ? rawQuiz.progressKey.trim() : "";
+    const progressKey =
+      progressKeyRaw.length > 0
+        ? progressKeyRaw
+        : `lesson:${session.id}:${planItem.id}`;
     const quiz: QuizDefinition = QuizDefinitionSchema.parse({
       ...rawQuiz,
       id: planItem.id,
-      sessionId: session.id,
-      createdAt: new Date().toISOString(),
-      status: "ready",
+      progressKey,
     });
     assertQuizShape(quiz);
   }

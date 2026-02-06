@@ -181,27 +181,23 @@ describe("Gemini thinkingConfig", () => {
   });
 });
 
-describe("Spark agent tool: generate_text", () => {
+describe("Spark agent tool: generate_json", () => {
   beforeEach(() => {
     generateContentStreamMock.mockReset();
   });
 
-  it("writes JSON output via schema, expands templates, and attaches files", async () => {
+  it("writes JSON output and includes schema + source in the prompt", async () => {
     await withTempDir(async (rootDir) => {
       const { buildSparkAgentToolsForTest } =
         await import("../src/agent/sparkAgentRunner");
 
-      const promptPath = "prompt.md";
-      const dataPath = "data.txt";
-      const attachmentPath = "extra.txt";
+      const sourcePath = "source.md";
       const schemaPath = "schema.json";
       const outputPath = "out.json";
 
-      await writeFile(path.join(rootDir, dataPath), "world\n", "utf8");
-      await writeFile(path.join(rootDir, attachmentPath), "EXTRA\n", "utf8");
       await writeFile(
-        path.join(rootDir, promptPath),
-        "Hello {{data.txt}}",
+        path.join(rootDir, sourcePath),
+        "Hello world\n",
         "utf8",
       );
       await writeFile(
@@ -236,18 +232,17 @@ describe("Spark agent tool: generate_text", () => {
 
       generateContentStreamMock.mockImplementation(({ config }) => {
         expect(config).toHaveProperty("responseMimeType", "application/json");
-        expect(config).toHaveProperty("responseJsonSchema");
+        expect(config).not.toHaveProperty("responseJsonSchema");
         return buildSingleChunkStream('{"x":1}');
       });
 
-      const result = await tools.generate_text.execute({
-        promptPath,
-        inputPaths: [attachmentPath],
-        responseSchemaPath: schemaPath,
+      const result = await tools.generate_json.execute({
+        sourcePath,
+        schemaPath,
         outputPath,
       });
 
-      assertPlainRecord(result, "generate_text result");
+      assertPlainRecord(result, "generate_json result");
       expect(result.status).toBe("written");
       expect(scheduled).toContain(outputPath);
       expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
@@ -256,10 +251,9 @@ describe("Spark agent tool: generate_text", () => {
       expect(request?.model).toBe("gemini-2.5-pro");
 
       const promptSent = extractTextFromGoogleContents(request?.contents);
+      expect(promptSent).toContain(`Schema (${schemaPath}):`);
+      expect(promptSent).toContain(`Source (${sourcePath}):`);
       expect(promptSent).toContain("Hello world");
-      expect(promptSent).toContain("# Attached files");
-      expect(promptSent).toContain(`## ${attachmentPath}`);
-      expect(promptSent).toContain("EXTRA");
 
       const written = await readFile(path.join(rootDir, outputPath), "utf8");
       expect(written).toBe('{\n  "x": 1\n}\n');
