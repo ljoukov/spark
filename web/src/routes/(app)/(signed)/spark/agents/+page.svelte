@@ -912,13 +912,6 @@
 						<p class="agents-empty">Stats will appear once the agent starts running.</p>
 					{/if}
 
-					{#if runLog?.stream?.assistant}
-						<h3>Live output</h3>
-						<div class="agents-run__stream markdown-preview">
-							{@html renderMarkdown(runLog.stream.assistant)}
-						</div>
-					{/if}
-
 					<h3>Run log</h3>
 					{#if runLog && runLogLines.length > 0}
 						<div
@@ -1466,21 +1459,6 @@
 
 	.agents-run__wide {
 		grid-column: 1 / -1;
-	}
-
-	.agents-run__stream {
-		padding: 0.85rem;
-		border-radius: 1rem;
-		border: 1px solid rgba(148, 163, 184, 0.18);
-		background: rgba(15, 23, 42, 0.03);
-		max-height: 18rem;
-		overflow: auto;
-	}
-
-	:global([data-theme='dark'] .agents-run__stream),
-	:global(:root:not([data-theme='light']) .agents-run__stream) {
-		background: rgba(15, 23, 42, 0.6);
-		border-color: rgba(148, 163, 184, 0.3);
 	}
 
 	.agents-run__log {
