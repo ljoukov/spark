@@ -24,6 +24,7 @@ Fail if any are violated:
 - Answers and mark schemes must be unambiguous and match the question prompt.
 - The quiz must align with the target plan item, the requested level, and any plan preferences in `lesson/requirements.md` (question counts/types).
 - Quiz/question copy must meet the length guidance in the quiz draft prompt (keep it concise and scannable).
+- Any maths/science formulas included in Markdown fields should be formatted as LaTeX using `$...$` (inline) or `$$...$$` (display). Fail if the draft uses bare formulas like `V=IR` when LaTeX is appropriate.
 - If the request asks for a **6-8 marker** free-text question (or similar), the `type-answer` question must have `marks` between **6 and 8** inclusive and must include a bullet `markScheme`.
 
 Decisions + constraints:

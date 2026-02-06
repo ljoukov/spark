@@ -26,6 +26,9 @@ Fail if any are violated:
 - Must respect `lesson/requirements.md` decisions (includeCoding/includeStory).
 - If plan preferences exist (number of items, per-quiz question counts/types), follow them exactly.
 - Plan item titles must be short, action-oriented, and reflect what the learner does.
+- Every plan item must include an `icon` and it must be a single emoji glyph (NOT an icon/library name like "Bolt", "Calculator", etc).
+- If any plan item includes `meta`, it must be short and user-facing. Fail if `meta` contains debug-y breakdowns like "questions:", "multiple-choice", "type-answer", "info-card", or long semicolon-separated lists.
+- Session + plan copy must avoid LaTeX delimiters (`$...$` / `$$...$$`) because the dashboard renders these fields as plain text. Prefer referencing formulas in words (e.g. "Ohm's law").
 - If present, session `title`/`tagline`/`summary` must meet the length guidance in the session draft prompt.
 - Must fit the requested level and goal; avoid overstuffing or under-scoping.
 
