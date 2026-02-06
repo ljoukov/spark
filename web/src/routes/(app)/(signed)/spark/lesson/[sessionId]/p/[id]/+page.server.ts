@@ -70,7 +70,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	const { session, userId, sessionState } = parentData;
 
 	const planItem = session.plan.find((item) => item.id === id);
-	if (!planItem || planItem.kind !== 'problem') {
+	if (!planItem || planItem.kind !== 'coding_problem') {
 		throw error(404, { message: 'Problem not found in session plan' });
 	}
 

@@ -1,10 +1,11 @@
 # Code problem draft (lesson/drafts/code/<planItemId>.md)
 
-You are drafting a **CodeProblem** for **one** plan item with `kind="problem"`.
+You are drafting a **CodeProblem** for **one** plan item with `kind="coding_problem"`.
 
 Return **Markdown only** (no JSON). This draft will later be converted into `lesson/output/code/<planItemId>.json`.
 
 Rules:
+- This is **competitive programming** style: the learner writes one Python program to read stdin and write stdout, and it must pass tests.
 - Language is **Python** only.
 - Keep stdin/stdout plain text; do not require JSON parsing.
 - Provide exactly 3 examples and at least 3 tests.

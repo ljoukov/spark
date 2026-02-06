@@ -134,11 +134,11 @@ const PlanPartSchemaBase = z.object({
 });
 
 const PlanPartSchemaWithStory = PlanPartSchemaBase.extend({
-  kind: z.enum(["story", "quiz", "problem"]),
+  kind: z.enum(["story", "quiz", "coding_problem"]),
 });
 
 const PlanPartSchemaNoStory = PlanPartSchemaBase.extend({
-  kind: z.enum(["quiz", "problem"]),
+  kind: z.enum(["quiz", "coding_problem"]),
 });
 
 const CodingBlueprintSchema = z.object({
@@ -228,26 +228,28 @@ function createSessionPlanSchema(
       });
     }
 
-    const problemParts = data.parts.filter((part) => part.kind === "problem");
+    const codingProblemParts = data.parts.filter(
+      (part) => part.kind === "coding_problem",
+    );
     if (includeCoding) {
-      if (problemParts.length === 0) {
+      if (codingProblemParts.length === 0) {
         ctx.addIssue({
           code: "custom",
-          message: "parts must include at least one problem segment",
+          message: 'parts must include at least one kind="coding_problem" segment',
         });
       }
-      if (problemParts.length !== data.coding_blueprints.length) {
+      if (codingProblemParts.length !== data.coding_blueprints.length) {
         ctx.addIssue({
           code: "custom",
-          message: `coding_blueprints length ${data.coding_blueprints.length} must match problem parts ${problemParts.length}`,
+          message: `coding_blueprints length ${data.coding_blueprints.length} must match coding_problem parts ${codingProblemParts.length}`,
         });
       }
     } else {
-      if (problemParts.length > 0) {
+      if (codingProblemParts.length > 0) {
         ctx.addIssue({
           code: "custom",
           message:
-            "parts must not include problem segments when includeCoding=false",
+            'parts must not include kind="coding_problem" segments when includeCoding=false',
         });
       }
       if (data.coding_blueprints.length > 0) {
@@ -446,9 +448,9 @@ export function buildPlanIdeasUserPrompt(
           '  - Focal Object: "cipher wheel"',
           '  - Supporting Props: ["ledger", "ink blotter", "wax seal"]',
           "- Naming Note (optional): why the concept/name stuck, if relevant and safe to include.",
-          ...(includeCoding
+              ...(includeCoding
             ? [
-                "- Part Progression with an ordered list of story/quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: story, quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+                "- Part Progression with an ordered list of story/quiz/coding_problem segments; if the brief implies a structure or count (e.g., multiple quizzes or coding problems), follow it, otherwise default to: story, quiz, coding_problem, coding_problem, quiz. Only annotate quiz parts with question counts.",
               ]
             : [
                 "- Part Progression with an ordered list of story/quiz segments only; if the brief implies a structure or count (e.g., multiple quizzes), follow it, otherwise default to: story, quiz, quiz, quiz. Only annotate quiz parts with question counts.",
@@ -456,9 +458,9 @@ export function buildPlanIdeasUserPrompt(
         ]
       : [
           "- Do NOT include story elements, historical hooks, analogies, or visual scenes.",
-          ...(includeCoding
+              ...(includeCoding
             ? [
-                "- Part Progression with an ordered list of quiz/problem segments; if the brief implies a structure or count (e.g., multiple quizzes or problems), follow it, otherwise default to: quiz, problem, problem, quiz. Only annotate quiz parts with question counts.",
+                "- Part Progression with an ordered list of quiz/coding_problem segments; if the brief implies a structure or count (e.g., multiple quizzes or coding problems), follow it, otherwise default to: quiz, coding_problem, coding_problem, quiz. Only annotate quiz parts with question counts.",
               ]
             : [
                 "- Part Progression with an ordered list of quiz segments only; if the brief implies a structure or count (e.g., multiple quizzes), follow it, otherwise default to: quiz, quiz, quiz, quiz. Only annotate quiz parts with question counts.",
@@ -468,14 +470,14 @@ export function buildPlanIdeasUserPrompt(
     "- Concepts To Teach list (may be empty)",
     ...(includeCoding
       ? [
-          "- One Coding Blueprint per problem segment with required skills; each later blueprint must add at least one new concept/skill/pattern beyond earlier ones (not just bigger inputs or a light reskin)",
+          "- One Coding Blueprint per coding_problem segment with required skills; each later blueprint must add at least one new concept/skill/pattern beyond earlier ones (not just bigger inputs or a light reskin)",
           "- Note any common pitfalls/limitations (preconditions, one-way theorems, false positives) that must be surfaced in quizzes",
           "- Call out any randomness or probabilistic steps and how to make them reproducible (fixed seeds, deterministic base sets) so grading and reference solutions are stable",
           "- Only include concepts that appear in the parts summaries or coding blueprint logic; drop anything unused (no stray 'Boolean flags' unless the blueprint explicitly uses a flag).",
           "- Promised Skills must cover every skill the coding blueprints need; avoid adding skills that are not used.",
         ]
       : [
-          "- Do NOT include problem parts or coding_blueprints; set coding_blueprints to []. Use quizzes for all practice.",
+          "- Do NOT include coding_problem parts or coding_blueprints; set coding_blueprints to []. Use quizzes for all practice.",
           "- Only include concepts that appear in the parts summaries; drop anything unused.",
         ]),
     "- If the brief specifies quiz question counts, include them on quiz parts only (never non-quiz) in the progression notes so they can be parsed.",
@@ -517,34 +519,34 @@ export function buildPlanParseUserPrompt(
           "Never quote or repeat any instruction text in visual_scene fields.",
           ...(includeCoding
             ? [
-                'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "problem". Story must be part 1.',
+                'Parts must be ordered sequentially starting at 1 and use kind values "story", "quiz", or "coding_problem". Story must be part 1.',
               ]
             : [
-                'Parts must be ordered sequentially starting at 1 and use kind values "story" or "quiz". Story must be part 1. Do not include problem parts.',
+                'Parts must be ordered sequentially starting at 1 and use kind values "story" or "quiz". Story must be part 1. Do not include coding_problem parts.',
               ]),
         ]
       : [
           ...(includeCoding
             ? [
-                'Parts must be ordered sequentially starting at 1 and use kind values "quiz" or "problem". Do not include story parts.',
+                'Parts must be ordered sequentially starting at 1 and use kind values "quiz" or "coding_problem". Do not include story parts.',
               ]
             : [
-                'Parts must be ordered sequentially starting at 1 and use kind value "quiz" only. Do not include story parts or problem parts.',
+                'Parts must be ordered sequentially starting at 1 and use kind value "quiz" only. Do not include story parts or coding_problem parts.',
               ]),
         ]),
     includeCoding
-      ? "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/problems and any wrap-up quiz."
+      ? "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes/coding problems and any wrap-up quiz."
       : "Select the single best idea for the brief, then follow its Part Progression exactly. Do not drop, merge, or reorder any parts from the progression; preserve the number of quizzes and any wrap-up quiz.",
     "Each parts.summary must be crisp (10-15 words max) and focused on the learner task for that step.",
     ...(includeCoding
       ? [
-          "Include one coding_blueprint per problem part, in the same order as the problem parts.",
+          "Include one coding_blueprint per coding_problem part, in the same order as the coding_problem parts.",
           "Promised skills must include every item listed under coding_blueprints.required_skills; add missing skills instead of changing the blueprint requirements.",
           "Concepts_to_teach must be actually used in the parts summaries or coding_blueprints (logic, constraints, or required_skills). Drop any concept from the Markdown that is not used; never invent new ones.",
         ]
       : [
           "Do NOT include programming tasks.",
-          "Create a quiz-only plan: omit problem parts and set coding_blueprints to [].",
+          "Create a quiz-only plan: omit coding_problem parts and set coding_blueprints to [].",
           "Concepts_to_teach must be used in parts summaries; drop unused concepts.",
         ]),
     ...(includeStory
@@ -577,7 +579,7 @@ export function buildPlanEditUserPrompt(
         ]
       : [
           "Do NOT introduce programming tasks.",
-          "Remove any problem parts and set coding_blueprints to [].",
+          "Remove any coding_problem parts and set coding_blueprints to [].",
         ]),
     "question_count is only allowed on quiz parts; remove it from non-quiz parts.",
     "Remove any concepts_to_teach entries that are not used in parts or coding_blueprints; do not invent new concepts.",
@@ -617,8 +619,8 @@ export function buildPlanGradeUserPrompt(
       ? ["R5 story is first and exactly one story is present;"]
       : ["R5 no story parts are present;"]),
     ...(includeCoding
-      ? ["R6 problem parts count matches coding_blueprints length;"]
-      : ["R6 no problem parts are present and coding_blueprints is empty;"]),
+      ? ["R6 coding_problem parts count matches coding_blueprints length;"]
+      : ["R6 no coding_problem parts are present and coding_blueprints is empty;"]),
     "Output {pass:boolean, issues:string[], missing_skills:string[], suggested_edits:string[]} JSON only.",
     "",
     "Plan JSON:",

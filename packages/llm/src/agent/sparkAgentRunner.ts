@@ -172,8 +172,11 @@ function createAgentSubmodelProgressTracker(options: {
     },
     startStage: (stageName) => parent.startStage(stageName),
     finishStage: (handle) => parent.finishStage(handle),
-    setActiveStages: parent.setActiveStages,
   };
+
+  if (parent.setActiveStages) {
+    trackedProgress.setActiveStages = (stages) => parent.setActiveStages?.(stages);
+  }
 
   return {
     progress: trackedProgress,
@@ -1235,7 +1238,7 @@ function buildAgentSystemPrompt(): string {
     "3) Grade drafts (do not skip):",
     "   - Session grade: lesson/feedback/session-grade.md (must have pass: true before publishing)",
     "   - Quiz grade: lesson/feedback/quiz/<planItemId>-grade.md (one per quiz plan item)",
-    "   - Code grade: lesson/feedback/code/<planItemId>-grade.md (one per problem plan item)",
+    "   - Code grade: lesson/feedback/code/<planItemId>-grade.md (one per coding_problem plan item)",
     "4) Generate Firestore-ready JSON outputs under lesson/output/ from the Markdown drafts:",
     "   - Use generate_json({ sourcePath, schemaPath, outputPath }) for each JSON file.",
     "   - Then run validate_json({ schemaPath, inputPath }) and fix until ok=true.",
@@ -1243,7 +1246,7 @@ function buildAgentSystemPrompt(): string {
     "   - Required outputs:",
     "     - lesson/output/session.json (from lesson/drafts/session.md, schema lesson/schema/session.schema.json)",
     "     - lesson/output/quiz/<planItemId>.json (from lesson/drafts/quiz/<planItemId>.md, schema lesson/schema/quiz.schema.json)",
-    "     - lesson/output/code/<planItemId>.json (from lesson/drafts/code/<planItemId>.md, schema lesson/schema/code.schema.json)",
+    "     - lesson/output/code/<planItemId>.json (from lesson/drafts/code/<planItemId>.md, schema lesson/schema/coding_problem.schema.json)",
     "     - lesson/output/media/<planItemId>.json (rare; only if kind=\"media\" exists; schema lesson/schema/media.schema.json)",
     "5) Publish only after outputs exist and look consistent: call publish_lesson and fix errors until status='published'.",
     "Publish lessons into the user's sessions (not welcome templates).",
@@ -1251,7 +1254,7 @@ function buildAgentSystemPrompt(): string {
     "Schema / files:",
     "- lesson/schema/session.schema.json describes lesson/output/session.json.",
     "- lesson/schema/quiz.schema.json describes lesson/output/quiz/*.json.",
-    "- lesson/schema/code.schema.json describes lesson/output/code/*.json.",
+    "- lesson/schema/coding_problem.schema.json describes lesson/output/code/*.json.",
     "- lesson/schema/media.schema.json describes lesson/output/media/*.json (only if explicitly requested).",
     "",
     "generate_text notes:",
@@ -1261,7 +1264,7 @@ function buildAgentSystemPrompt(): string {
     "- Lesson grading templates output `pass: true|false`. generate_text will return `gradePass: true|false` when it detects this line. Use that instead of reading the grade file back unless you need details to fix a failure.",
     "- Only revise drafts when pass=false. If pass=true, proceed even if the grader suggests optional improvements.",
     "",
-    "Examples (multiple quizzes / problems):",
+    "Examples (multiple quizzes / coding problems):",
     "- Grade quiz q1:",
     "  generate_text({ promptPath: \"lesson/prompts/quiz-grade.md\", inputPaths: [\"lesson/drafts/quiz/q1.md\"], outputPath: \"lesson/feedback/quiz/q1-grade.md\" })",
     "- Revise quiz q1 using its grade report:",
@@ -1273,8 +1276,8 @@ function buildAgentSystemPrompt(): string {
     "",
     "Step limit optimization (important for smoke tests):",
     "- You MAY call multiple tools in a single step when they are independent (they run in parallel).",
-    "- In low-step-budget runs, you MUST batch JSON work: run generate_json for session + all quizzes/problems/media in one step, then validate_json for all outputs in one step.",
-    "- Similarly, once prerequisites exist (e.g. session draft), batch quiz/problem draft and grade calls per plan item in the same step (one outputPath per plan item).",
+    "- In low-step-budget runs, you MUST batch JSON work: run generate_json for session + all quizzes/coding_problems/media in one step, then validate_json for all outputs in one step.",
+    "- Similarly, once prerequisites exist (e.g. session draft), batch quiz/coding_problem draft and grade calls per plan item in the same step (one outputPath per plan item).",
     "- Good batching examples:",
     "  - Grade q1 and q2 in the same step (distinct outputPath per quiz).",
     "  - Generate JSON for session + all quizzes in one step, then validate them all in one step.",
@@ -1462,11 +1465,11 @@ async function validateLessonWorkspaceForPublish(options: {
 
   if (includeCoding === false) {
     const problemCount = sessionDoc.plan.filter(
-      (item) => item.kind === "problem",
+      (item) => item.kind === "coding_problem",
     ).length;
     if (problemCount > 0) {
       throw new Error(
-        "includeCoding=false but session.plan includes problem items.",
+        "includeCoding=false but session.plan includes coding_problem items.",
       );
     }
   }
@@ -1501,7 +1504,7 @@ async function validateLessonWorkspaceForPublish(options: {
 
   const quizPlanItems = sessionDoc.plan.filter((item) => item.kind === "quiz");
   const problemPlanItems = sessionDoc.plan.filter(
-    (item) => item.kind === "problem",
+    (item) => item.kind === "coding_problem",
   );
   const mediaPlanItems = sessionDoc.plan.filter(
     (item) => item.kind === "media",
@@ -1640,7 +1643,7 @@ function buildAgentTools(options: {
       "- media: id, planItemId, sessionId, createdAt, updatedAt",
       "",
       "Inputs:",
-      "- schemaPath (required): One of lesson/schema/session.schema.json|quiz.schema.json|code.schema.json|media.schema.json (or an equivalent hint).",
+      "- schemaPath (required): One of lesson/schema/session.schema.json|quiz.schema.json|coding_problem.schema.json|media.schema.json (or an equivalent hint).",
       "- inputPath (required): JSON file to validate (usually under lesson/output/...).",
       "- sessionId (optional): Override session id for session validation; otherwise inferred from request.json if present.",
       "",
@@ -1682,7 +1685,7 @@ function buildAgentTools(options: {
         if (lowered.endsWith("quiz.schema.json")) {
           return "quiz";
         }
-        if (lowered.endsWith("code.schema.json")) {
+        if (lowered.endsWith("coding_problem.schema.json")) {
           return "code";
         }
         if (lowered.endsWith("media.schema.json")) {
@@ -1796,7 +1799,7 @@ function buildAgentTools(options: {
 
       if (!kind) {
         return fail(
-          'Unknown schema kind. schemaPath should end with "session.schema.json", "quiz.schema.json", "code.schema.json", or "media.schema.json".',
+          'Unknown schema kind. schemaPath should end with "session.schema.json", "quiz.schema.json", "coding_problem.schema.json", or "media.schema.json".',
         );
       }
 
@@ -1956,7 +1959,7 @@ function buildAgentTools(options: {
   return {
     publish_lesson: tool({
       description:
-        "Publish a Spark lesson into the user's sessions (not welcome templates). Reads Firestore-ready JSON from the workspace and writes session + quiz/problem documents to Firestore.",
+        "Publish a Spark lesson into the user's sessions (not welcome templates). Reads Firestore-ready JSON from the workspace and writes session + quiz/coding_problem documents to Firestore.",
       inputSchema: z
         .object({
           sessionId: z.string().trim().min(1),
