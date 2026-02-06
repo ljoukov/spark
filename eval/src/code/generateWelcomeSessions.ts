@@ -181,6 +181,8 @@ const BFS_QUIZZES: QuizDefinition[] = [
         hint: "It behaves like a line at a theme park: first in, first out.",
         answer: "queue",
         acceptableAnswers: ["Queue", "a queue"],
+        marks: 1,
+        markScheme: "States that BFS uses a queue (FIFO).",
         correctFeedback: {
           heading: "You got it",
           message: "A queue keeps the exploration fair and level by level.",
@@ -258,6 +260,8 @@ const BFS_QUIZZES: QuizDefinition[] = [
         hint: "We number them 0, 1, 2, … as we explore.",
         answer: "level",
         acceptableAnswers: ["levels", "Layer", "layer", "layers"],
+        marks: 1,
+        markScheme: "Uses the term level (or layer) for nodes at the same distance.",
         correctFeedback: {
           heading: "Nice vocabulary",
           message:
@@ -404,6 +408,8 @@ const BFS_QUIZZES: QuizDefinition[] = [
         hint: "Use the value promised in both practice problems.",
         answer: "-1",
         acceptableAnswers: ["-1"],
+        marks: 1,
+        markScheme: "Prints -1 to indicate the goal is unreachable.",
         correctFeedback: {
           heading: "Clear signal",
           message:
@@ -990,6 +996,8 @@ const DP_QUIZZES: QuizDefinition[] = [
         hint: 'It rhymes with "calculation" and starts with a t.',
         answer: "tabulation",
         acceptableAnswers: ["Tabulation"],
+        marks: 1,
+        markScheme: "Names tabulation (bottom-up dynamic programming).",
         correctFeedback: {
           heading: "Nice vocabulary",
           message:
@@ -1085,6 +1093,8 @@ const DP_QUIZZES: QuizDefinition[] = [
         hint: "They sit inside the big problem like puzzle pieces.",
         answer: "subproblems",
         acceptableAnswers: ["Subproblem", "subproblem", "Subproblems"],
+        marks: 1,
+        markScheme: "Uses the term subproblems.",
         correctFeedback: {
           heading: "Right term",
           message:
@@ -1173,6 +1183,8 @@ const DP_QUIZZES: QuizDefinition[] = [
         hint: "Look at the recurrence `dp[i] = max(dp[i-1], value[i] + dp[i-2])`.",
         answer: "2",
         acceptableAnswers: ["two", "Two"],
+        marks: 1,
+        markScheme: "States that only the previous two DP values are needed.",
         correctFeedback: {
           heading: "Space saved",
           message:
@@ -1514,6 +1526,8 @@ const FLT_QUIZZES: QuizDefinition[] = [
         hint: "_It's a single digit._",
         answer: "1",
         acceptableAnswers: ["one"],
+        marks: 1,
+        markScheme: "Fills the blank with 1.",
         correctFeedback: {
           heading: "Correct",
           message: "That `1` unlocks modular inverses and exponent reductions.",
@@ -1568,6 +1582,8 @@ const FLT_QUIZZES: QuizDefinition[] = [
           "exponentiation by squaring",
           "fast exponentiation",
         ],
+        marks: 1,
+        markScheme: "Names binary exponentiation (a.k.a. exponentiation by squaring).",
         correctFeedback: {
           heading: "Speed unlocked",
           message:
@@ -1645,6 +1661,8 @@ const FLT_QUIZZES: QuizDefinition[] = [
         hint: "_It signals that no inverse exists._",
         answer: "-1",
         acceptableAnswers: ["negative one", "- 1"],
+        marks: 1,
+        markScheme: "Returns -1 to signal that no modular inverse exists.",
         correctFeedback: {
           heading: "Right call",
           message: "`-1` separates impossible cases from real inverses.",
@@ -1716,6 +1734,8 @@ const FLT_QUIZZES: QuizDefinition[] = [
         hint: "_It's a three-letter word._",
         answer: "mod",
         acceptableAnswers: ["modulo", "take mod"],
+        marks: 1,
+        markScheme: "Take the result modulo p (apply mod after each multiply).",
         correctFeedback: {
           heading: "Exactly",
           message:

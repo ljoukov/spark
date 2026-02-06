@@ -22,6 +22,7 @@ Fail if any are violated:
 - `planItemId`, `title`, `description`, `gradingPrompt` must be present.
 - Question ids must be unique within the quiz.
 - Answers and mark schemes must be unambiguous and match the question prompt.
+- Every `type-answer` question must include `marks` and a non-empty bullet `markScheme`.
 - The quiz must align with the target plan item, the requested level, and any plan preferences in `lesson/requirements.md` (question counts/types).
 - Quiz/question copy must meet the length guidance in the quiz draft prompt (keep it concise and scannable).
 - Any maths/science equations or formulas included in Markdown fields must be formatted as LaTeX using `$...$` (inline) or `$$...$$` (display). Fail if the draft includes equation-like text (e.g. `V=IR`, `V = I × R`, `I = V / R`, `P ∝ I²`) that is not wrapped in LaTeX delimiters.

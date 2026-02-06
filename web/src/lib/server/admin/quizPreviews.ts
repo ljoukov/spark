@@ -50,6 +50,13 @@ const previews: Record<PreviewSlug, PreviewEntry> = {
 					prompt: sequencePrompt,
 					answer: '1, 2, 1/2, 1, 2, 1/2, … (period 3)',
 					acceptableAnswers: ['period 3', 'periodic with period 3'],
+					marks: 4,
+					markScheme: [
+						String.raw`- Compute $x_3 = \\frac{1}{x_1 x_2} = \\frac{1}{2}$.`,
+						String.raw`- Compute $x_4 = \\frac{1}{x_2 x_3} = 1$.`,
+						String.raw`- Compute $x_5 = \\frac{1}{x_3 x_4} = 2$.`,
+						'- Conclude the sequence repeats with period 3.'
+					].join('\n'),
 					hint: String.raw`Start with $x_3=\frac{1}{x_1 x_2}$, then keep applying the recurrence.`,
 					correctFeedback: {
 						message: 'Nice work — the recurrence locks into a 3-cycle for the x-sequence.'

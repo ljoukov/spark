@@ -142,6 +142,8 @@ const QUIZZES: QuizDefinition[] = [
         hint: "It behaves like a line at a theme park: first in, first out.",
         answer: "queue",
         acceptableAnswers: ["Queue", "a queue"],
+        marks: 1,
+        markScheme: "States that BFS uses a queue (FIFO).",
         correctFeedback: {
           heading: "You got it",
           message: "A queue keeps the exploration fair and level by level.",
@@ -219,6 +221,8 @@ const QUIZZES: QuizDefinition[] = [
         hint: "We number them 0, 1, 2, … as we explore.",
         answer: "level",
         acceptableAnswers: ["levels", "Layer", "layer", "layers"],
+        marks: 1,
+        markScheme: "Uses the term level (or layer) for nodes at the same distance.",
         correctFeedback: {
           heading: "Nice vocabulary",
           message:
@@ -367,6 +371,8 @@ const QUIZZES: QuizDefinition[] = [
         hint: "Use the value promised in both practice problems.",
         answer: "-1",
         acceptableAnswers: ["-1"],
+        marks: 1,
+        markScheme: "Prints -1 to indicate the goal is unreachable.",
         correctFeedback: {
           heading: "Clear signal",
           message:

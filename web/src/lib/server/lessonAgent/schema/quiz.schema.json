@@ -202,7 +202,9 @@
               "prompt",
               "correctFeedback",
               "kind",
-              "answer"
+              "answer",
+              "marks",
+              "markScheme"
             ],
             "additionalProperties": false
           },
