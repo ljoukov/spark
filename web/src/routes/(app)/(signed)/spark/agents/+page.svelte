@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import {
@@ -29,6 +29,12 @@
 
 	type ClientUser = { uid: string } | null;
 
+	type RunLogLineView = {
+		key: string;
+		timestampLabel: string;
+		line: string;
+	};
+
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? null);
@@ -52,6 +58,11 @@
 	let stopSuccess = $state<string | null>(null);
 	let fileDialogOpen = $state(false);
 	let authReady = $state(false);
+	let runLogFollow = $state(true);
+	let runLogLines = $state<RunLogLineView[]>([]);
+
+	let runLogScrollEl = $state<HTMLDivElement | null>(null);
+	let runLogScrollFrame: number | null = null;
 
 	const selectedAgent = $derived.by(() => {
 		if (selectedAgentDetail && selectedAgentDetail.id === selectedAgentId) {
@@ -72,7 +83,6 @@
 	const selectedFileHtml = $derived(
 		selectedFileIsMarkdown && selectedFile?.content ? renderMarkdown(selectedFile.content) : ''
 	);
-	const logLines = $derived(runLog?.lines ?? []);
 	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
 
 	function formatUsd(value: number | undefined): string {
@@ -150,6 +160,80 @@
 		}
 	}
 
+	function toRunLogLineView(
+		prev: RunLogLineView[],
+		next: SparkAgentRunLog['lines']
+	): RunLogLineView[] {
+		if (next.length === 0) {
+			return [];
+		}
+
+		if (prev.length === next.length) {
+			let isSame = true;
+			for (let idx = 0; idx < next.length; idx += 1) {
+				const prevEntry = prev[idx];
+				const nextEntry = next[idx];
+				if (!prevEntry || prevEntry.key !== nextEntry.key || prevEntry.line !== nextEntry.line) {
+					isSame = false;
+					break;
+				}
+			}
+			if (isSame) {
+				return prev;
+			}
+		}
+
+		const prevByKey = new Map<string, RunLogLineView>();
+		for (const entry of prev) {
+			prevByKey.set(entry.key, entry);
+		}
+
+		const nextView: RunLogLineView[] = [];
+		for (const entry of next) {
+			const existing = prevByKey.get(entry.key);
+			if (existing && existing.line === entry.line) {
+				nextView.push(existing);
+				continue;
+			}
+			nextView.push({
+				key: entry.key,
+				timestampLabel: formatTimestamp(entry.timestamp),
+				line: entry.line
+			});
+		}
+		return nextView;
+	}
+
+	function isNearLogBottom(el: HTMLDivElement): boolean {
+		const thresholdPx = 24;
+		return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx;
+	}
+
+	function handleRunLogScroll(): void {
+		const el = runLogScrollEl;
+		if (!el) {
+			return;
+		}
+		runLogFollow = isNearLogBottom(el);
+	}
+
+	function scheduleScrollRunLogToBottom(): void {
+		if (!browser) {
+			return;
+		}
+		const el = runLogScrollEl;
+		if (!el) {
+			return;
+		}
+		if (runLogScrollFrame !== null) {
+			cancelAnimationFrame(runLogScrollFrame);
+		}
+		runLogScrollFrame = requestAnimationFrame(() => {
+			runLogScrollFrame = null;
+			el.scrollTop = el.scrollHeight;
+		});
+	}
+
 	function parseLogTimestamp(key: string): Date | null {
 		const match = /^t(\d{13})_\d{3}$/.exec(key);
 		if (!match) {
@@ -177,7 +261,19 @@
 				entries.push({ key, timestamp, line: value });
 			}
 		}
-		entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+		entries.sort((a, b) => {
+			const diff = a.timestamp.getTime() - b.timestamp.getTime();
+			if (diff !== 0) {
+				return diff;
+			}
+			if (a.key < b.key) {
+				return -1;
+			}
+			if (a.key > b.key) {
+				return 1;
+			}
+			return 0;
+		});
 		const limitedEntries = entries.slice(-2000);
 		const payload: Record<string, unknown> = {
 			lines: limitedEntries
@@ -185,17 +281,17 @@
 		if (data.updatedAt !== undefined) {
 			payload.updatedAt = data.updatedAt;
 		}
-			if (data.stats && typeof data.stats === 'object') {
-				payload.stats = data.stats;
-			}
-			if (data.stream && typeof data.stream === 'object') {
-				payload.stream = data.stream;
-			}
-			const parsed = SparkAgentRunLogSchema.safeParse(payload);
-			if (!parsed.success) {
-				return null;
-			}
-			return parsed.data;
+		if (data.stats && typeof data.stats === 'object') {
+			payload.stats = data.stats;
+		}
+		if (data.stream && typeof data.stream === 'object') {
+			payload.stream = data.stream;
+		}
+		const parsed = SparkAgentRunLogSchema.safeParse(payload);
+		if (!parsed.success) {
+			return null;
+		}
+		return parsed.data;
 	}
 
 	async function copyPrompt(text: string): Promise<void> {
@@ -463,6 +559,8 @@
 		}
 		if (!userId || !selectedAgentId || !authReady) {
 			runLog = null;
+			runLogLines = [];
+			runLogFollow = true;
 			return;
 		}
 		const db = getFirestore(getFirebaseApp());
@@ -473,10 +571,13 @@
 			(snap) => {
 				if (!snap.exists()) {
 					runLog = null;
+					runLogLines = [];
 					return;
 				}
 				const data = (snap.data() ?? {}) as Record<string, unknown>;
-				runLog = parseRunLogDoc(data);
+				const parsed = parseRunLogDoc(data);
+				runLog = parsed;
+				runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? []);
 				loadError = null;
 			},
 			(error) => {
@@ -506,6 +607,8 @@
 			selectedAgentDetail = null;
 			files = [];
 			runLog = null;
+			runLogLines = [];
+			runLogFollow = true;
 			stopError = null;
 			stopSuccess = null;
 			return;
@@ -513,8 +616,32 @@
 		selectedAgentDetail = null;
 		files = [];
 		runLog = null;
+		runLogLines = [];
+		runLogFollow = true;
 		stopError = null;
 		stopSuccess = null;
+	});
+
+	let lastRunLogLineCount = 0;
+	let lastRunLogFollow = true;
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		const lineCount = runLogLines.length;
+		const follow = runLogFollow;
+		const shouldScroll =
+			follow && (follow !== lastRunLogFollow || lineCount !== lastRunLogLineCount);
+		lastRunLogLineCount = lineCount;
+		lastRunLogFollow = follow;
+
+		if (!shouldScroll || lineCount === 0) {
+			return;
+		}
+
+		void tick().then(() => {
+			scheduleScrollRunLogToBottom();
+		});
 	});
 
 	$effect(() => {
@@ -647,16 +774,16 @@
 							</span>
 						</div>
 					</div>
-						<div class="agents-detail__meta">
-							<div>
-								<span>Agent ID</span>
-								<p>{selectedAgent.id}</p>
-							</div>
-							<div>
-								<span>Workspace</span>
-								<p>{selectedAgent.workspaceId}</p>
-							</div>
-							<div>
+					<div class="agents-detail__meta">
+						<div>
+							<span>Agent ID</span>
+							<p>{selectedAgent.id}</p>
+						</div>
+						<div>
+							<span>Workspace</span>
+							<p>{selectedAgent.workspaceId}</p>
+						</div>
+						<div>
 							<span>Created</span>
 							<p>{formatTimestamp(selectedAgent.createdAt)}</p>
 						</div>
@@ -781,28 +908,28 @@
 								<p class="agents-run__value">{formatInt(runStats.tokens.cachedTokens)}</p>
 							</div>
 						</div>
-						{:else}
-							<p class="agents-empty">Stats will appear once the agent starts running.</p>
-						{/if}
+					{:else}
+						<p class="agents-empty">Stats will appear once the agent starts running.</p>
+					{/if}
 
-						{#if runLog?.stream?.assistant}
-							<h3>Live output</h3>
-							<div class="agents-run__stream markdown-preview">
-								{@html renderMarkdown(runLog.stream.assistant)}
-							</div>
-						{/if}
+					{#if runLog?.stream?.assistant}
+						<h3>Live output</h3>
+						<div class="agents-run__stream markdown-preview">
+							{@html renderMarkdown(runLog.stream.assistant)}
+						</div>
+					{/if}
 
-						{#if runLog?.stream?.thoughts}
-							<h3>Live thoughts</h3>
-							<pre class="agents-run__stream-thoughts"><code>{runLog.stream.thoughts}</code></pre>
-						{/if}
-
-						<h3>Run log</h3>
-						{#if runLog && logLines.length > 0}
-							<div class="agents-run__log" aria-label="Agent run log">
-								{#each logLines as entry (entry.key)}
-									<div class="agents-run__log-line">
-									<span class="agents-run__log-ts">{formatTimestamp(entry.timestamp)}</span>
+					<h3>Run log</h3>
+					{#if runLog && runLogLines.length > 0}
+						<div
+							class="agents-run__log"
+							aria-label="Agent run log"
+							bind:this={runLogScrollEl}
+							onscroll={handleRunLogScroll}
+						>
+							{#each runLogLines as entry (entry.key)}
+								<div class="agents-run__log-line">
+									<span class="agents-run__log-ts">{entry.timestampLabel}</span>
 									<span class="agents-run__log-msg">{entry.line}</span>
 								</div>
 							{/each}
@@ -825,33 +952,33 @@
 			fileDialogOpen = false;
 		}}
 	></button>
-		<div class="file-dialog" role="dialog" aria-modal="true">
-			<header class="file-dialog__header">
-				<div>
-					<p class="file-dialog__label">Workspace file</p>
-					<h3>{selectedFile.path}</h3>
-				</div>
-				<div class="file-dialog__actions">
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={() => {
-							void openFileRaw(selectedFile);
-						}}
-					>
-						Raw
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={() => {
-							fileDialogOpen = false;
-						}}
-					>
-						×
-					</Button>
-				</div>
-			</header>
+	<div class="file-dialog" role="dialog" aria-modal="true">
+		<header class="file-dialog__header">
+			<div>
+				<p class="file-dialog__label">Workspace file</p>
+				<h3>{selectedFile.path}</h3>
+			</div>
+			<div class="file-dialog__actions">
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => {
+						void openFileRaw(selectedFile);
+					}}
+				>
+					Raw
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => {
+						fileDialogOpen = false;
+					}}
+				>
+					×
+				</Button>
+			</div>
+		</header>
 		<div class="file-dialog__body">
 			{#if selectedFileIsMarkdown}
 				<div class="markdown-preview">{@html selectedFileHtml}</div>
@@ -1337,51 +1464,29 @@
 		font-weight: 650;
 	}
 
-		.agents-run__wide {
-			grid-column: 1 / -1;
-		}
+	.agents-run__wide {
+		grid-column: 1 / -1;
+	}
 
-		.agents-run__stream {
-			padding: 0.85rem;
-			border-radius: 1rem;
-			border: 1px solid rgba(148, 163, 184, 0.18);
-			background: rgba(15, 23, 42, 0.03);
-			max-height: 18rem;
-			overflow: auto;
-		}
+	.agents-run__stream {
+		padding: 0.85rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(148, 163, 184, 0.18);
+		background: rgba(15, 23, 42, 0.03);
+		max-height: 18rem;
+		overflow: auto;
+	}
 
-		:global([data-theme='dark'] .agents-run__stream),
-		:global(:root:not([data-theme='light']) .agents-run__stream) {
-			background: rgba(15, 23, 42, 0.6);
-			border-color: rgba(148, 163, 184, 0.3);
-		}
+	:global([data-theme='dark'] .agents-run__stream),
+	:global(:root:not([data-theme='light']) .agents-run__stream) {
+		background: rgba(15, 23, 42, 0.6);
+		border-color: rgba(148, 163, 184, 0.3);
+	}
 
-		.agents-run__stream-thoughts {
-			padding: 0.85rem;
-			border-radius: 1rem;
-			border: 1px solid rgba(148, 163, 184, 0.18);
-			background: rgba(15, 23, 42, 0.04);
-			max-height: 18rem;
-			overflow: auto;
-			white-space: pre-wrap;
-			word-break: break-word;
-			font-family:
-				'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-				'Courier New', monospace;
-			font-size: 0.82rem;
-			line-height: 1.4;
-		}
-
-		:global([data-theme='dark'] .agents-run__stream-thoughts),
-		:global(:root:not([data-theme='light']) .agents-run__stream-thoughts) {
-			background: rgba(15, 23, 42, 0.6);
-			border-color: rgba(148, 163, 184, 0.3);
-		}
-
-		.agents-run__log {
-			padding: 0.85rem;
-			border-radius: 1rem;
-			border: 1px solid rgba(148, 163, 184, 0.18);
+	.agents-run__log {
+		padding: 0.85rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(148, 163, 184, 0.18);
 		background: rgba(15, 23, 42, 0.04);
 		max-height: 22rem;
 		overflow: auto;
