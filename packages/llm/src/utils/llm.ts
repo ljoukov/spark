@@ -4057,8 +4057,6 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
         : "";
       const debugLabelValue = formatToolValue(record.debugLabel);
       const debugLabel = debugLabelValue ? `debugLabel=${debugLabelValue}` : "";
-      const modelIdValue = formatToolValue(record.modelId);
-      const modelId = modelIdValue ? `modelId=${modelIdValue}` : "";
       const outputModeValue = formatToolValue(record.outputMode);
       const outputMode = outputModeValue ? `outputMode=${outputModeValue}` : "";
       const tools = Array.isArray(record.tools)
@@ -4070,7 +4068,6 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
         inputPathsLabel,
         responseSchema,
         debugLabel,
-        modelId,
         outputMode,
         tools,
       ]
@@ -4084,9 +4081,7 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
       const source = sourceValue ? `sourcePath=${sourceValue}` : "";
       const schema = schemaValue ? `schemaPath=${schemaValue}` : "";
       const output = outputValue ? `outputPath=${outputValue}` : "";
-      const modelIdValue = formatToolValue(record.modelId);
-      const modelId = modelIdValue ? `modelId=${modelIdValue}` : "";
-      return [source, schema, output, modelId].filter(Boolean).join(" ");
+      return [source, schema, output].filter(Boolean).join(" ");
     }
     case "validate_json":
     case "validate_schema": {
@@ -4181,6 +4176,20 @@ function summarizeToolCallInput(toolName: string, input: unknown): string {
     default:
       return "";
   }
+}
+
+function buildToolLogId(turn: number, toolIndex: number): string {
+  return `turn${turn.toString()}/tool${toolIndex.toString()}`;
+}
+
+function formatParallelToolCallsForLog(
+  turn: number,
+  toolNames: readonly string[],
+): string {
+  const entries = toolNames.map(
+    (name, index) => `${buildToolLogId(turn, index + 1)}=${name}`,
+  );
+  return `parallel tool calls: [${entries.join(", ")}]`;
 }
 
 function buildOpenAiFunctionTools(tools: LlmToolSet): OpenAiFunctionTool[] {
@@ -4379,19 +4388,19 @@ export async function runToolLoop(
               `${formatCurrencyUsd(totalCostUsd)}`,
               `${formatMillis(Date.now() - loopStartedAt)}`,
             ].join(" "),
-	          );
-	          const responseText = response.text ?? "";
-	          const reasoningSummaryText =
-	            response.reasoningSummaryText ?? response.reasoningText ?? "";
-	          const functionCalls = response.toolCalls ?? [];
-	          if (reasoningSummaryText.trim().length > 0) {
-	            const flattened = reasoningSummaryText.replace(/\s+/gu, " ").trim();
-	            reporter.log(`thoughts: ${truncateForLog(flattened, 800)}`);
-	          }
-	          if (responseText.trim().length > 0) {
-	            const flattened = responseText.replace(/\s+/gu, " ").trim();
-	            reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
-	          }
+          );
+          const responseText = response.text ?? "";
+          const reasoningSummaryText =
+            response.reasoningSummaryText ?? response.reasoningText ?? "";
+          const functionCalls = response.toolCalls ?? [];
+          if (reasoningSummaryText.trim().length > 0) {
+            const flattened = reasoningSummaryText.replace(/\s+/gu, " ").trim();
+            reporter.log(`thoughts: ${truncateForLog(flattened, 800)}`);
+          }
+          if (responseText.trim().length > 0) {
+            const flattened = responseText.replace(/\s+/gu, " ").trim();
+            reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
+          }
           if (functionCalls.length === 0) {
             if (!responseText) {
               throw new Error(
@@ -4406,9 +4415,21 @@ export async function runToolLoop(
             });
             return { text: responseText, steps };
           }
+          if (functionCalls.length > 1) {
+            const turn = stepIndex + 1;
+            reporter.log(
+              formatParallelToolCallsForLog(
+                turn,
+                functionCalls.map((call) => call.name),
+              ),
+            );
+          }
           const toolCalls: LlmToolCallResult[] = [];
           const toolOutputs: ChatGptInputItem[] = [];
-          const callInputs = functionCalls.map((call) => {
+          const callInputs = functionCalls.map((call, index) => {
+            const turn = stepIndex + 1;
+            const toolIndex = index + 1;
+            const toolId = buildToolLogId(turn, toolIndex);
             const toolName = call.name;
             const { value, error: parseError } = parseOpenAiToolArguments(
               call.arguments,
@@ -4416,8 +4437,8 @@ export async function runToolLoop(
             const toolSummary = summarizeToolCallInput(toolName, value);
             reporter.log(
               toolSummary
-                ? `tool: ${toolName} ${toolSummary}`
-                : `tool: ${toolName}`,
+                ? `tool: ${toolName} id=${toolId} ${toolSummary}`
+                : `tool: ${toolName} id=${toolId}`,
             );
             const ids = normalizeChatGptToolIds({
               callId: call.callId,
@@ -4429,6 +4450,7 @@ export async function runToolLoop(
               value,
               parseError,
               ids,
+              toolId,
             };
           });
           const callResults = await Promise.all(
@@ -4457,7 +4479,7 @@ export async function runToolLoop(
           for (const { entry, result, outputPayload } of callResults) {
             if (result.error) {
               reporter.log(
-                `tool_error: ${entry.toolName} ${truncateToolError(result.error)}`,
+                `tool_error: ${entry.toolName} id=${entry.toolId} ${truncateToolError(result.error)}`,
               );
               continue;
             }
@@ -4554,6 +4576,7 @@ export async function runToolLoop(
                 reporter.log(
                   [
                     `tool_result: ${entry.toolName}`,
+                    `id=${entry.toolId}`,
                     `status=${status}`,
                     gradePass !== null ? `pass=${gradePass.toString()}` : "",
                     modelVersion ? `model=${modelVersion}` : "",
@@ -4571,7 +4594,9 @@ export async function runToolLoop(
                 );
                 continue;
               }
-              reporter.log(`tool_result: ${entry.toolName} status=ok`);
+              reporter.log(
+                `tool_result: ${entry.toolName} id=${entry.toolId} status=ok`,
+              );
               continue;
             }
             if (entry.toolName === "validate_json" || entry.toolName === "validate_schema") {
@@ -4585,7 +4610,9 @@ export async function runToolLoop(
                 const kind =
                   typeof record.kind === "string" ? record.kind : "unknown";
                 if (ok) {
-                  reporter.log(`tool_result: ${entry.toolName} ok=true kind=${kind}`);
+                  reporter.log(
+                    `tool_result: ${entry.toolName} id=${entry.toolId} ok=true kind=${kind}`,
+                  );
                   continue;
                 }
                 const errorValue =
@@ -4602,6 +4629,7 @@ export async function runToolLoop(
                 reporter.log(
                   [
                     `tool_result: ${entry.toolName}`,
+                    `id=${entry.toolId}`,
                     "ok=false",
                     `kind=${kind}`,
                     `issues=${issueCount.toString()}`,
@@ -4613,7 +4641,9 @@ export async function runToolLoop(
                 );
                 continue;
               }
-              reporter.log(`tool_result: ${entry.toolName} ok=false`);
+              reporter.log(
+                `tool_result: ${entry.toolName} id=${entry.toolId} ok=false`,
+              );
               continue;
             }
           }
@@ -4756,8 +4786,9 @@ export async function runToolLoop(
             reporter.log(`failed to write debug snapshot: ${message}`);
           }
           const reasoningSummary = extractOpenAiReasoningSummary(response);
-          if (reasoningSummary) {
-            reporter.log(`summary: ${truncateForLog(reasoningSummary, 800)}`);
+          if (reasoningSummary && reasoningSummary.trim().length > 0) {
+            const flattened = reasoningSummary.replace(/\s+/gu, " ").trim();
+            reporter.log(`thoughts: ${truncateForLog(flattened, 800)}`);
           }
           const outputItems = response.output;
           if (Array.isArray(outputItems)) {
@@ -4865,6 +4896,10 @@ export async function runToolLoop(
           );
           previousResponseId = response.id;
           const responseText = extractOpenAiText(response);
+          if (responseText.trim().length > 0) {
+            const flattened = responseText.replace(/\s+/gu, " ").trim();
+            reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
+          }
           const functionCalls = extractOpenAiFunctionCalls(response.output);
           if (functionCalls.length === 0) {
             if (!responseText) {
@@ -4880,9 +4915,21 @@ export async function runToolLoop(
             });
             return { text: responseText, steps };
           }
+          if (functionCalls.length > 1) {
+            const turn = stepIndex + 1;
+            reporter.log(
+              formatParallelToolCallsForLog(
+                turn,
+                functionCalls.map((call) => call.name),
+              ),
+            );
+          }
           const toolCalls: LlmToolCallResult[] = [];
           const toolOutputs: ResponseInput = [];
-          const callInputs = functionCalls.map((call) => {
+          const callInputs = functionCalls.map((call, index) => {
+            const turn = stepIndex + 1;
+            const toolIndex = index + 1;
+            const toolId = buildToolLogId(turn, toolIndex);
             const toolName = call.name;
             const { value, error: parseError } = parseOpenAiToolArguments(
               call.arguments,
@@ -4890,10 +4937,10 @@ export async function runToolLoop(
             const toolSummary = summarizeToolCallInput(toolName, value);
             reporter.log(
               toolSummary
-                ? `tool: ${toolName} ${toolSummary}`
-                : `tool: ${toolName}`,
+                ? `tool: ${toolName} id=${toolId} ${toolSummary}`
+                : `tool: ${toolName} id=${toolId}`,
             );
-            return { call, toolName, value, parseError };
+            return { call, toolName, value, parseError, toolId };
           });
           const callResults = await Promise.all(
             callInputs.map(async (entry) => {
@@ -4921,113 +4968,189 @@ export async function runToolLoop(
           for (const { entry, result, outputPayload } of callResults) {
             if (result.error) {
               reporter.log(
-                `tool_error: ${entry.toolName} ${truncateToolError(result.error)}`,
+                `tool_error: ${entry.toolName} id=${entry.toolId} ${truncateToolError(result.error)}`,
               );
-              continue;
-            }
-            if (entry.toolName !== "generate_text") {
               continue;
             }
             if (
-              outputPayload &&
-              typeof outputPayload === "object" &&
-              !Array.isArray(outputPayload)
+              entry.toolName === "generate_text" ||
+              entry.toolName === "generate_json"
             ) {
-              const record = outputPayload as Record<string, unknown>;
-              const status =
-                typeof record.status === "string" ? record.status : "ok";
-              const outputPath =
-                typeof record.outputPath === "string" ? record.outputPath : "";
-              const modelVersion =
-                typeof record.modelVersion === "string"
-                  ? record.modelVersion
-                  : typeof record.modelId === "string"
-                    ? record.modelId
+              if (
+                outputPayload &&
+                typeof outputPayload === "object" &&
+                !Array.isArray(outputPayload)
+              ) {
+                const record = outputPayload as Record<string, unknown>;
+                const status =
+                  typeof record.status === "string" ? record.status : "ok";
+                const outputPath =
+                  typeof record.outputPath === "string"
+                    ? record.outputPath
                     : "";
-              const elapsedMs =
-                typeof record.elapsedMs === "number" ? record.elapsedMs : null;
-              const costUsd =
-                typeof record.costUsd === "number" ? record.costUsd : null;
-              const outputBytes =
-                typeof record.outputBytes === "number"
-                  ? record.outputBytes
+                const modelVersion =
+                  typeof record.modelVersion === "string"
+                    ? record.modelVersion
+                    : typeof record.modelId === "string"
+                      ? record.modelId
+                      : "";
+                const elapsedMs =
+                  typeof record.elapsedMs === "number" ? record.elapsedMs : null;
+                const costUsd =
+                  typeof record.costUsd === "number" ? record.costUsd : null;
+                const outputBytes =
+                  typeof record.outputBytes === "number"
+                    ? record.outputBytes
+                    : null;
+                const usageTokensRaw =
+                  record.usageTokens && typeof record.usageTokens === "object"
+                    ? (record.usageTokens as Record<string, unknown>)
+                    : null;
+                const usageTokens: LlmUsageTokenUpdate | null = usageTokensRaw
+                  ? {
+                      promptTokens:
+                        typeof usageTokensRaw.promptTokens === "number"
+                          ? usageTokensRaw.promptTokens
+                          : undefined,
+                      cachedTokens:
+                        typeof usageTokensRaw.cachedTokens === "number"
+                          ? usageTokensRaw.cachedTokens
+                          : undefined,
+                      responseTokens:
+                        typeof usageTokensRaw.responseTokens === "number"
+                          ? usageTokensRaw.responseTokens
+                          : undefined,
+                      responseImageTokens:
+                        typeof usageTokensRaw.responseImageTokens === "number"
+                          ? usageTokensRaw.responseImageTokens
+                          : undefined,
+                      thinkingTokens:
+                        typeof usageTokensRaw.thinkingTokens === "number"
+                          ? usageTokensRaw.thinkingTokens
+                          : undefined,
+                      totalTokens:
+                        typeof usageTokensRaw.totalTokens === "number"
+                          ? usageTokensRaw.totalTokens
+                          : undefined,
+                      toolUsePromptTokens:
+                        typeof usageTokensRaw.toolUsePromptTokens === "number"
+                          ? usageTokensRaw.toolUsePromptTokens
+                          : undefined,
+                    }
                   : null;
-              const usageTokensRaw =
-                record.usageTokens && typeof record.usageTokens === "object"
-                  ? (record.usageTokens as Record<string, unknown>)
-                  : null;
-              const usageTokens: LlmUsageTokenUpdate | null = usageTokensRaw
-                ? {
-                    promptTokens:
-                      typeof usageTokensRaw.promptTokens === "number"
-                        ? usageTokensRaw.promptTokens
-                        : undefined,
-                    cachedTokens:
-                      typeof usageTokensRaw.cachedTokens === "number"
-                        ? usageTokensRaw.cachedTokens
-                        : undefined,
-                    responseTokens:
-                      typeof usageTokensRaw.responseTokens === "number"
-                        ? usageTokensRaw.responseTokens
-                        : undefined,
-                    responseImageTokens:
-                      typeof usageTokensRaw.responseImageTokens === "number"
-                        ? usageTokensRaw.responseImageTokens
-                        : undefined,
-                    thinkingTokens:
-                      typeof usageTokensRaw.thinkingTokens === "number"
-                        ? usageTokensRaw.thinkingTokens
-                        : undefined,
-                    totalTokens:
-                      typeof usageTokensRaw.totalTokens === "number"
-                        ? usageTokensRaw.totalTokens
-                        : undefined,
-                    toolUsePromptTokens:
-                      typeof usageTokensRaw.toolUsePromptTokens === "number"
-                        ? usageTokensRaw.toolUsePromptTokens
-                        : undefined,
+                const tokenSummary = (() => {
+                  if (!usageTokens) {
+                    return "";
                   }
-                : null;
-              const tokenSummary = (() => {
-                if (!usageTokens) {
-                  return "";
-                }
-                const promptTokens = resolveUsageNumber(usageTokens.promptTokens);
-                const toolUseTokens = resolveUsageNumber(
-                  usageTokens.toolUsePromptTokens,
+                  const promptTokens = resolveUsageNumber(
+                    usageTokens.promptTokens,
+                  );
+                  const toolUseTokens = resolveUsageNumber(
+                    usageTokens.toolUsePromptTokens,
+                  );
+                  const cachedTokens = resolveUsageNumber(
+                    usageTokens.cachedTokens,
+                  );
+                  const responseTokens = resolveUsageNumber(
+                    usageTokens.responseTokens,
+                  );
+                  const thinkingTokens = resolveUsageNumber(
+                    usageTokens.thinkingTokens,
+                  );
+                  const responseImageTokens = resolveUsageNumber(
+                    usageTokens.responseImageTokens,
+                  );
+                  const inTokens = promptTokens + toolUseTokens;
+                  const outTokens =
+                    responseTokens + thinkingTokens + responseImageTokens;
+                  return `tokens: in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
+                })();
+                const textChars =
+                  typeof record.textChars === "number"
+                    ? record.textChars
+                    : null;
+                const gradePass =
+                  typeof record.gradePass === "boolean"
+                    ? record.gradePass
+                    : null;
+                reporter.log(
+                  [
+                    `tool_result: ${entry.toolName}`,
+                    `id=${entry.toolId}`,
+                    `status=${status}`,
+                    gradePass !== null ? `pass=${gradePass.toString()}` : "",
+                    modelVersion ? `model=${modelVersion}` : "",
+                    elapsedMs !== null ? `latency=${formatMillis(elapsedMs)}` : "",
+                    outputPath ? `outputPath=${outputPath}` : "",
+                    outputBytes !== null ? `size=${formatBytes(outputBytes)}` : "",
+                    outputBytes === null && textChars !== null
+                      ? `chars=${textChars}`
+                      : "",
+                    costUsd !== null ? `cost=${formatCurrencyUsd(costUsd)}` : "",
+                    tokenSummary,
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
                 );
-                const cachedTokens = resolveUsageNumber(usageTokens.cachedTokens);
-                const responseTokens = resolveUsageNumber(usageTokens.responseTokens);
-                const thinkingTokens = resolveUsageNumber(usageTokens.thinkingTokens);
-                const responseImageTokens = resolveUsageNumber(
-                  usageTokens.responseImageTokens,
-                );
-                const inTokens = promptTokens + toolUseTokens;
-                const outTokens = responseTokens + thinkingTokens + responseImageTokens;
-                return `tokens: in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
-              })();
-              const textChars =
-                typeof record.textChars === "number" ? record.textChars : null;
+                continue;
+              }
               reporter.log(
-                [
-                  "tool_result: generate_text",
-                  `status=${status}`,
-                  modelVersion ? `model=${modelVersion}` : "",
-                  elapsedMs !== null ? `latency=${formatMillis(elapsedMs)}` : "",
-                  outputPath ? `outputPath=${outputPath}` : "",
-                  outputBytes !== null ? `size=${formatBytes(outputBytes)}` : "",
-                  outputBytes === null && textChars !== null
-                    ? `chars=${textChars}`
-                    : "",
-                  costUsd !== null ? `cost=${formatCurrencyUsd(costUsd)}` : "",
-                  tokenSummary,
-                ]
-                  .filter(Boolean)
-                  .join(" "),
+                `tool_result: ${entry.toolName} id=${entry.toolId} status=ok`,
               );
               continue;
             }
-            reporter.log("tool_result: generate_text status=ok");
+            if (entry.toolName === "validate_json" || entry.toolName === "validate_schema") {
+              if (
+                outputPayload &&
+                typeof outputPayload === "object" &&
+                !Array.isArray(outputPayload)
+              ) {
+                const record = outputPayload as Record<string, unknown>;
+                const ok = record.ok === true;
+                const kind =
+                  typeof record.kind === "string" ? record.kind : "unknown";
+                if (ok) {
+                  reporter.log(
+                    `tool_result: ${entry.toolName} id=${entry.toolId} ok=true kind=${kind}`,
+                  );
+                  continue;
+                }
+                const errorValue =
+                  typeof record.error === "string"
+                    ? record.error
+                    : "validation failed";
+                const issuesRaw = record.issues;
+                const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
+                const firstIssue =
+                  Array.isArray(issuesRaw) &&
+                  issuesRaw.length > 0 &&
+                  issuesRaw[0] &&
+                  typeof issuesRaw[0] === "object"
+                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+                    : null;
+                const issuePreview = firstIssue
+                  ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
+                  : "";
+                reporter.log(
+                  [
+                    `tool_result: ${entry.toolName}`,
+                    `id=${entry.toolId}`,
+                    "ok=false",
+                    `kind=${kind}`,
+                    `issues=${issueCount.toString()}`,
+                    `error=${truncateToolError(errorValue)}`,
+                    issuePreview ? `first=${truncateForLog(issuePreview, 160)}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+                );
+                continue;
+              }
+              reporter.log(
+                `tool_result: ${entry.toolName} id=${entry.toolId} ok=false`,
+              );
+              continue;
+            }
           }
           for (const { entry, result, outputPayload } of callResults) {
             toolCalls.push({
@@ -5107,6 +5230,10 @@ export async function runToolLoop(
           });
         }
         const responseText = response.text ?? "";
+        if (responseText.trim().length > 0) {
+          const flattened = responseText.replace(/\s+/gu, " ").trim();
+          reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
+        }
         const functionCalls = response.functionCalls;
         if (!functionCalls || functionCalls.length === 0) {
           if (!responseText) {
@@ -5119,6 +5246,15 @@ export async function runToolLoop(
             toolCalls: [],
           });
           return { text: responseText, steps };
+        }
+        if (functionCalls.length > 1) {
+          const turn = stepIndex + 1;
+          reporter.log(
+            formatParallelToolCallsForLog(
+              turn,
+              functionCalls.map((call) => call.name ?? "unknown"),
+            ),
+          );
         }
         const toolCalls: LlmToolCallResult[] = [];
         const modelContent = response.candidates?.[0]?.content;
@@ -5135,11 +5271,20 @@ export async function runToolLoop(
           geminiContents.push({ role: "model", parts });
         }
         const responseParts: Part[] = [];
-        const callInputs = functionCalls.map((call) => ({
-          call,
-          toolName: call.name ?? "unknown",
-          rawInput: call.args ?? {},
-        }));
+        const callInputs = functionCalls.map((call, index) => {
+          const turn = stepIndex + 1;
+          const toolIndex = index + 1;
+          const toolId = buildToolLogId(turn, toolIndex);
+          const toolName = call.name ?? "unknown";
+          const rawInput = call.args ?? {};
+          const toolSummary = summarizeToolCallInput(toolName, rawInput);
+          reporter.log(
+            toolSummary
+              ? `tool: ${toolName} id=${toolId} ${toolSummary}`
+              : `tool: ${toolName} id=${toolId}`,
+          );
+          return { call, toolName, rawInput, toolId };
+        });
         const callResults = await Promise.all(
           callInputs.map(async (entry) => {
             const { result, outputPayload } = await executeToolCall({
@@ -5150,6 +5295,186 @@ export async function runToolLoop(
             return { entry, result, outputPayload };
           }),
         );
+        const truncateToolError = (value: string): string => {
+          const max = 800;
+          if (value.length <= max) {
+            return value;
+          }
+          return `${value.slice(0, max)}…`;
+        };
+        for (const { entry, result, outputPayload } of callResults) {
+          if (result.error) {
+            reporter.log(
+              `tool_error: ${entry.toolName} id=${entry.toolId} ${truncateToolError(result.error)}`,
+            );
+            continue;
+          }
+          if (
+            entry.toolName === "generate_text" ||
+            entry.toolName === "generate_json"
+          ) {
+            if (
+              outputPayload &&
+              typeof outputPayload === "object" &&
+              !Array.isArray(outputPayload)
+            ) {
+              const record = outputPayload as Record<string, unknown>;
+              const status =
+                typeof record.status === "string" ? record.status : "ok";
+              const outputPath =
+                typeof record.outputPath === "string"
+                  ? record.outputPath
+                  : "";
+              const modelVersion =
+                typeof record.modelVersion === "string"
+                  ? record.modelVersion
+                  : typeof record.modelId === "string"
+                    ? record.modelId
+                    : "";
+              const elapsedMs =
+                typeof record.elapsedMs === "number" ? record.elapsedMs : null;
+              const costUsd =
+                typeof record.costUsd === "number" ? record.costUsd : null;
+              const outputBytes =
+                typeof record.outputBytes === "number"
+                  ? record.outputBytes
+                  : null;
+              const usageTokensRaw =
+                record.usageTokens && typeof record.usageTokens === "object"
+                  ? (record.usageTokens as Record<string, unknown>)
+                  : null;
+              const usageTokens: LlmUsageTokenUpdate | null = usageTokensRaw
+                ? {
+                    promptTokens:
+                      typeof usageTokensRaw.promptTokens === "number"
+                        ? usageTokensRaw.promptTokens
+                        : undefined,
+                    cachedTokens:
+                      typeof usageTokensRaw.cachedTokens === "number"
+                        ? usageTokensRaw.cachedTokens
+                        : undefined,
+                    responseTokens:
+                      typeof usageTokensRaw.responseTokens === "number"
+                        ? usageTokensRaw.responseTokens
+                        : undefined,
+                    responseImageTokens:
+                      typeof usageTokensRaw.responseImageTokens === "number"
+                        ? usageTokensRaw.responseImageTokens
+                        : undefined,
+                    thinkingTokens:
+                      typeof usageTokensRaw.thinkingTokens === "number"
+                        ? usageTokensRaw.thinkingTokens
+                        : undefined,
+                    totalTokens:
+                      typeof usageTokensRaw.totalTokens === "number"
+                        ? usageTokensRaw.totalTokens
+                        : undefined,
+                    toolUsePromptTokens:
+                      typeof usageTokensRaw.toolUsePromptTokens === "number"
+                        ? usageTokensRaw.toolUsePromptTokens
+                        : undefined,
+                  }
+                : null;
+              const tokenSummary = (() => {
+                if (!usageTokens) {
+                  return "";
+                }
+                const promptTokens = resolveUsageNumber(usageTokens.promptTokens);
+                const toolUseTokens = resolveUsageNumber(
+                  usageTokens.toolUsePromptTokens,
+                );
+                const cachedTokens = resolveUsageNumber(usageTokens.cachedTokens);
+                const responseTokens = resolveUsageNumber(usageTokens.responseTokens);
+                const thinkingTokens = resolveUsageNumber(usageTokens.thinkingTokens);
+                const responseImageTokens = resolveUsageNumber(
+                  usageTokens.responseImageTokens,
+                );
+                const inTokens = promptTokens + toolUseTokens;
+                const outTokens =
+                  responseTokens + thinkingTokens + responseImageTokens;
+                return `tokens: in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
+              })();
+              const textChars =
+                typeof record.textChars === "number"
+                  ? record.textChars
+                  : null;
+              const gradePass =
+                typeof record.gradePass === "boolean" ? record.gradePass : null;
+              reporter.log(
+                [
+                  `tool_result: ${entry.toolName}`,
+                  `id=${entry.toolId}`,
+                  `status=${status}`,
+                  gradePass !== null ? `pass=${gradePass.toString()}` : "",
+                  modelVersion ? `model=${modelVersion}` : "",
+                  elapsedMs !== null ? `latency=${formatMillis(elapsedMs)}` : "",
+                  outputPath ? `outputPath=${outputPath}` : "",
+                  outputBytes !== null ? `size=${formatBytes(outputBytes)}` : "",
+                  outputBytes === null && textChars !== null
+                    ? `chars=${textChars}`
+                    : "",
+                  costUsd !== null ? `cost=${formatCurrencyUsd(costUsd)}` : "",
+                  tokenSummary,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              );
+              continue;
+            }
+            reporter.log(`tool_result: ${entry.toolName} id=${entry.toolId} status=ok`);
+            continue;
+          }
+          if (entry.toolName === "validate_json" || entry.toolName === "validate_schema") {
+            if (
+              outputPayload &&
+              typeof outputPayload === "object" &&
+              !Array.isArray(outputPayload)
+            ) {
+              const record = outputPayload as Record<string, unknown>;
+              const ok = record.ok === true;
+              const kind =
+                typeof record.kind === "string" ? record.kind : "unknown";
+              if (ok) {
+                reporter.log(
+                  `tool_result: ${entry.toolName} id=${entry.toolId} ok=true kind=${kind}`,
+                );
+                continue;
+              }
+              const errorValue =
+                typeof record.error === "string"
+                  ? record.error
+                  : "validation failed";
+              const issuesRaw = record.issues;
+              const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
+              const firstIssue =
+                Array.isArray(issuesRaw) &&
+                issuesRaw.length > 0 &&
+                issuesRaw[0] &&
+                typeof issuesRaw[0] === "object"
+                  ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+                  : null;
+              const issuePreview = firstIssue
+                ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
+                : "";
+              reporter.log(
+                [
+                  `tool_result: ${entry.toolName}`,
+                  `id=${entry.toolId}`,
+                  "ok=false",
+                  `kind=${kind}`,
+                  `issues=${issueCount.toString()}`,
+                  `error=${truncateToolError(errorValue)}`,
+                  issuePreview ? `first=${truncateForLog(issuePreview, 160)}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              );
+              continue;
+            }
+            reporter.log(`tool_result: ${entry.toolName} id=${entry.toolId} ok=false`);
+            continue;
+          }
+        }
         for (const { entry, result, outputPayload } of callResults) {
           toolCalls.push({
             ...result,

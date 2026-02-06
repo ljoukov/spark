@@ -1584,7 +1584,7 @@ function buildSessionAgentTools(options: {
             }),
           );
           const output = { files: entries };
-          log(`[agent-tool] read_files paths=${inputPaths.length}`);
+          log(`[agent-tool] read_files paths=${inputPaths.join(", ")}`);
           await logTool({
             tool: "read_files",
             input: { paths: inputPaths },
