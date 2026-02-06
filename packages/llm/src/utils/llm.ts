@@ -3825,6 +3825,86 @@ function truncateForLog(value: string, maxChars: number = 400): string {
   return `${value.slice(0, maxChars)}…(${value.length} chars)`;
 }
 
+function safeJsonStringifyForLog(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+    return "[unserializable]";
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+function formatToolIssuePath(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "(root)";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value.toString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const part of value) {
+      if (typeof part === "string") {
+        parts.push(part);
+        continue;
+      }
+      if (typeof part === "number") {
+        parts.push(part.toString());
+        continue;
+      }
+      parts.push(safeJsonStringifyForLog(part));
+    }
+    if (parts.length === 0) {
+      return "(root)";
+    }
+    return parts.join(".");
+  }
+  return safeJsonStringifyForLog(value);
+}
+
+function formatToolIssueMessage(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value.toString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  return safeJsonStringifyForLog(value);
+}
+
+function formatToolIssuePreview(firstIssue: {
+  path?: unknown;
+  message?: unknown;
+}): string {
+  const path = formatToolIssuePath(firstIssue.path);
+  const message = formatToolIssueMessage(firstIssue.message);
+  if (message.length === 0) {
+    return path;
+  }
+  return `${path}: ${message}`;
+}
+
 export function stripCodexCitationMarkers(value: string): {
   text: string;
   stripped: boolean;
@@ -4619,17 +4699,17 @@ export async function runToolLoop(
                   typeof record.error === "string" ? record.error : "validation failed";
                 const issuesRaw = record.issues;
                 const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
-                const firstIssue =
-                  Array.isArray(issuesRaw) && issuesRaw.length > 0 && issuesRaw[0] && typeof issuesRaw[0] === "object"
-                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
-                    : null;
-                const issuePreview = firstIssue
-                  ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
-                  : "";
-                reporter.log(
-                  [
-                    `tool_result: ${entry.toolName}`,
-                    `id=${entry.toolId}`,
+	                const firstIssue =
+	                  Array.isArray(issuesRaw) && issuesRaw.length > 0 && issuesRaw[0] && typeof issuesRaw[0] === "object"
+	                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+	                    : null;
+	                const issuePreview = firstIssue
+	                  ? formatToolIssuePreview(firstIssue)
+	                  : "";
+	                reporter.log(
+	                  [
+	                    `tool_result: ${entry.toolName}`,
+	                    `id=${entry.toolId}`,
                     "ok=false",
                     `kind=${kind}`,
                     `issues=${issueCount.toString()}`,
@@ -5121,20 +5201,20 @@ export async function runToolLoop(
                     : "validation failed";
                 const issuesRaw = record.issues;
                 const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
-                const firstIssue =
-                  Array.isArray(issuesRaw) &&
-                  issuesRaw.length > 0 &&
-                  issuesRaw[0] &&
-                  typeof issuesRaw[0] === "object"
-                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
-                    : null;
-                const issuePreview = firstIssue
-                  ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
-                  : "";
-                reporter.log(
-                  [
-                    `tool_result: ${entry.toolName}`,
-                    `id=${entry.toolId}`,
+	                const firstIssue =
+	                  Array.isArray(issuesRaw) &&
+	                  issuesRaw.length > 0 &&
+	                  issuesRaw[0] &&
+	                  typeof issuesRaw[0] === "object"
+	                    ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+	                    : null;
+	                const issuePreview = firstIssue
+	                  ? formatToolIssuePreview(firstIssue)
+	                  : "";
+	                reporter.log(
+	                  [
+	                    `tool_result: ${entry.toolName}`,
+	                    `id=${entry.toolId}`,
                     "ok=false",
                     `kind=${kind}`,
                     `issues=${issueCount.toString()}`,
@@ -5446,20 +5526,20 @@ export async function runToolLoop(
                   : "validation failed";
               const issuesRaw = record.issues;
               const issueCount = Array.isArray(issuesRaw) ? issuesRaw.length : 0;
-              const firstIssue =
-                Array.isArray(issuesRaw) &&
-                issuesRaw.length > 0 &&
-                issuesRaw[0] &&
-                typeof issuesRaw[0] === "object"
-                  ? (issuesRaw[0] as { path?: unknown; message?: unknown })
-                  : null;
-              const issuePreview = firstIssue
-                ? `${String(firstIssue.path ?? "(root)")}: ${String(firstIssue.message ?? "")}`
-                : "";
-              reporter.log(
-                [
-                  `tool_result: ${entry.toolName}`,
-                  `id=${entry.toolId}`,
+	              const firstIssue =
+	                Array.isArray(issuesRaw) &&
+	                issuesRaw.length > 0 &&
+	                issuesRaw[0] &&
+	                typeof issuesRaw[0] === "object"
+	                  ? (issuesRaw[0] as { path?: unknown; message?: unknown })
+	                  : null;
+	              const issuePreview = firstIssue
+	                ? formatToolIssuePreview(firstIssue)
+	                : "";
+	              reporter.log(
+	                [
+	                  `tool_result: ${entry.toolName}`,
+	                  `id=${entry.toolId}`,
                   "ok=false",
                   `kind=${kind}`,
                   `issues=${issueCount.toString()}`,

@@ -812,22 +812,22 @@ function buildPlan(storyTitle: string): PlanItem[] {
       summary:
         "Learn the Breadth-first Search rhythm and try tiny checks before you code.",
     },
-    {
-      id: "park-steps",
-      kind: "problem",
-      title: "Practice · Park Steps",
-      icon: "🌲",
-      meta: "Graphs • Easy",
-      summary:
+	    {
+	      id: "park-steps",
+	      kind: "coding_problem",
+	      title: "Practice · Park Steps",
+	      icon: "🌲",
+	      meta: "Graphs • Easy",
+	      summary:
         "Use Breadth-first Search to count the shortest hop count between park spots.",
     },
-    {
-      id: "maze-scout",
-      kind: "problem",
-      title: "Challenge · Maze Scout",
-      icon: "🧩",
-      meta: "Grids • Easy",
-      summary:
+	    {
+	      id: "maze-scout",
+	      kind: "coding_problem",
+	      title: "Challenge · Maze Scout",
+	      icon: "🧩",
+	      meta: "Grids • Easy",
+	      summary:
         "Guide a scout through a grid maze by exploring layers in order.",
     },
     {

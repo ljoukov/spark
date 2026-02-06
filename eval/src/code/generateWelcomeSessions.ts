@@ -2760,20 +2760,20 @@ function buildBfsPlan(storyTitle: string): PlanItem[] {
       summary:
         "Learn the breadth-first search rhythm and try tiny checks before you code.",
     },
-    {
-      id: "park-steps",
-      kind: "problem",
-      title: "Practice · Park Steps",
-      icon: "🌲",
-      meta: "Graphs · Easy",
-      summary: "Use BFS to count the shortest hop count between park spots.",
-    },
-    {
-      id: "maze-scout",
-      kind: "problem",
-      title: "Challenge · Maze Scout",
-      icon: "🧩",
-      meta: "Grids · Easy",
+	    {
+	      id: "park-steps",
+	      kind: "coding_problem",
+	      title: "Practice · Park Steps",
+	      icon: "🌲",
+	      meta: "Graphs · Easy",
+	      summary: "Use BFS to count the shortest hop count between park spots.",
+	    },
+	    {
+	      id: "maze-scout",
+	      kind: "coding_problem",
+	      title: "Challenge · Maze Scout",
+	      icon: "🧩",
+	      meta: "Grids · Easy",
       summary:
         "Guide a scout through a grid maze by exploring layers in order.",
     },
@@ -2812,21 +2812,21 @@ function buildDpPlan(storyTitle: string): PlanItem[] {
       summary:
         "Turn overlapping puzzles into states, transitions, and steady base cases.",
     },
-    {
-      id: "stair-sprint",
-      kind: "problem",
-      title: "Practice · Stair Sprint",
-      icon: "🪜",
-      meta: "Counting · Intro",
+	    {
+	      id: "stair-sprint",
+	      kind: "coding_problem",
+	      title: "Practice · Stair Sprint",
+	      icon: "🪜",
+	      meta: "Counting · Intro",
       summary:
         "Count staircase paths with a DP table that grows from the ground up.",
     },
-    {
-      id: "museum-guard",
-      kind: "problem",
-      title: "Challenge · Museum Guard",
-      icon: "🛡️",
-      meta: "Optimisation · Easy",
+	    {
+	      id: "museum-guard",
+	      kind: "coding_problem",
+	      title: "Challenge · Museum Guard",
+	      icon: "🛡️",
+	      meta: "Optimisation · Easy",
       summary:
         "Maximise guard value while respecting the no-adjacent constraint.",
     },
@@ -2865,22 +2865,22 @@ function buildFermatPlan(storyTitle: string): PlanItem[] {
       summary:
         "See how Fermat's shortcut turns primes into instant power tricks.",
     },
-    {
-      id: "prime-power-pulse",
-      kind: "problem",
-      title: "Practice · Prime Power Pulse",
-      icon: "⚡",
-      meta: "Exponent · Intro",
+	    {
+	      id: "prime-power-pulse",
+	      kind: "coding_problem",
+	      title: "Practice · Prime Power Pulse",
+	      icon: "⚡",
+	      meta: "Exponent · Intro",
       summary: "Practice fast modular exponentiation with binary squaring.",
     },
-    {
-      id: "modular-keysmith",
-      kind: "problem",
-      title: "Challenge · Modular Keysmith",
-      icon: "🔑",
-      meta: "Inverses · Easy",
-      summary: "Forge modular inverses quickly and flag the numbers with none.",
-    },
+	    {
+	      id: "modular-keysmith",
+	      kind: "coding_problem",
+	      title: "Challenge · Modular Keysmith",
+	      icon: "🔑",
+	      meta: "Inverses · Easy",
+	      summary: "Forge modular inverses quickly and flag the numbers with none.",
+	    },
     {
       id: "flt-wrap-quiz",
       kind: "quiz",

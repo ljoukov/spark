@@ -216,7 +216,7 @@ function buildQuizCoverageRequirements(
       }
       continue;
     }
-    if (part.kind === "problem") {
+    if (part.kind === "coding_problem") {
       problemIndex += 1;
       const problemId = part.id ?? `p${problemIndex}`;
       if (currentQuizId) {

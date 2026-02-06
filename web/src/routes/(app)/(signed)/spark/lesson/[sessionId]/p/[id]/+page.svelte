@@ -1564,12 +1564,12 @@
 				<Resizable.Pane class="min-h-0" defaultSize={DEFAULT_LAYOUT[0]} minSize={0}>
 					<div class="pane-column flex h-full min-h-0 w-full flex-1 flex-col gap-2 p-2">
 						<div class="flex items-center justify-between gap-2">
-							<div class="flex flex-col">
-								<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-									>Problem</span
-								>
-								<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
-							</div>
+								<div class="flex flex-col">
+									<span class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+										>Coding problem</span
+									>
+									<h2 class="text-sm leading-tight font-semibold">{problem.title}</h2>
+								</div>
 							<Tooltip.Root>
 								<Tooltip.Trigger>
 									{#snippet child({ props })}
@@ -1592,9 +1592,9 @@
 							</Tooltip.Root>
 						</div>
 						<div
-							class="problem-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
-							aria-label="Problem description"
-						>
+								class="problem-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-input bg-background p-3 text-sm shadow-sm"
+								aria-label="Coding problem description"
+							>
 							<div class="space-y-6">
 								<section class="space-y-3">
 									<div

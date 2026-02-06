@@ -45,10 +45,6 @@ function formatLogLine(message: string): string {
   return line.length > 0 ? `${stamp} ${line}` : stamp;
 }
 
-function writeLogLine(logPath: string, message: string): void {
-  fs.appendFileSync(logPath, formatLogLine(message) + "\n", { encoding: "utf8" });
-}
-
 function teeLogLine(logPath: string, message: string): void {
   const stamped = formatLogLine(message);
   fs.appendFileSync(logPath, stamped + "\n", { encoding: "utf8" });
@@ -68,20 +64,25 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
-function nullableOptionalString(): z.ZodType<string | undefined> {
-  return z.preprocess(
-    (value) => {
-      if (value === null || value === undefined) {
-        return undefined;
-      }
-      if (typeof value === "string") {
-        const trimmed = value.trim();
-        return trimmed.length > 0 ? trimmed : undefined;
-      }
-      return value;
-    },
-    z.string().trim().min(1).optional(),
-  );
+function nullableOptionalString() {
+  // Use outer `.optional()` so Zod inference marks the field optional on object schemas.
+  // Otherwise `z.preprocess(..., z.string().optional())` becomes a required key whose value can be undefined,
+  // which fights exactOptionalPropertyTypes.
+  return z
+    .preprocess(
+      (value) => {
+        if (value === null || value === undefined) {
+          return undefined;
+        }
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return trimmed.length > 0 ? trimmed : undefined;
+        }
+        return value;
+      },
+      z.string().trim().min(1).optional(),
+    )
+    .optional();
 }
 
 const quizQuestionKindSchema = z.enum([
@@ -136,7 +137,7 @@ const quizPreferencesSchema = z
 
 const planItemPreferencesSchema = z
   .object({
-    kind: z.enum(["quiz", "problem", "media"]),
+    kind: z.enum(["quiz", "coding_problem", "media"]),
     title: nullableOptionalString(),
     description: nullableOptionalString(),
     quiz: quizPreferencesSchema.optional(),
@@ -158,22 +159,24 @@ const planPreferencesSchema = z
   })
   .strict();
 
-const materialsSchema = z.preprocess(
-  (value) => {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (typeof value === "string") {
-      const entries = value
-        .split(/[\n,;]+/u)
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0);
-      return entries.length > 0 ? entries : undefined;
-    }
-    return value;
-  },
-  z.array(z.string().trim().min(1)).optional(),
-);
+const materialsSchema = z
+  .preprocess(
+    (value) => {
+      if (value === undefined || value === null) {
+        return undefined;
+      }
+      if (typeof value === "string") {
+        const entries = value
+          .split(/[\n,;]+/u)
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0);
+        return entries.length > 0 ? entries : undefined;
+      }
+      return value;
+    },
+    z.array(z.string().trim().min(1)).optional(),
+  )
+  .optional();
 
 type LessonCreateInput = {
   topic: string;
@@ -182,7 +185,7 @@ type LessonCreateInput = {
   goal?: string;
   plan: {
     items: Array<{
-      kind: "quiz" | "problem" | "media";
+      kind: "quiz" | "coding_problem" | "media";
       title?: string;
       description?: string;
       quiz?: {
@@ -360,7 +363,7 @@ async function copyLessonAgentTemplates(
     "README.md",
     "session.schema.json",
     "quiz.schema.json",
-    "code.schema.json",
+    "coding_problem.schema.json",
     "media.schema.json",
   ];
   for (const file of schemaFiles) {
@@ -452,7 +455,7 @@ function buildLessonAgentPrompt(sessionId: string, workspaceId: string): string 
     `   - sessionId: ${sessionId}`,
     "   - sessionPath: 'lesson/output/session.json'",
     "   - briefPath: 'brief.md' (optional fallback for topic/topics)",
-    '   - includeCoding: true if you included any plan items with kind="problem"; otherwise false.',
+    '   - includeCoding: true if you included any plan items with kind="coding_problem"; otherwise false.',
     '   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
     "6) If publish_lesson fails, fix the files and retry.",
     "7) Call done with a short summary including the sessionId.",
@@ -653,7 +656,7 @@ async function runLessonSmoke(options: CliOptions): Promise<void> {
     .strict();
   type CreateLessonToolOutput = z.infer<typeof createLessonToolOutputSchema>;
 
-  let createLessonInvocation: {
+  const createLessonInvocation: {
     count: number;
     result?: CreateLessonToolOutput;
   } = { count: 0 };

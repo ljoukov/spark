@@ -263,7 +263,7 @@ function normalizePlanStructure(plan: SessionPlan): {
       }
       return { ...part, id };
     }
-    if (part.kind === "problem") {
+    if (part.kind === "coding_problem") {
       problemIndex += 1;
       const id = `p${problemIndex}`;
       if (part.id !== id) {
