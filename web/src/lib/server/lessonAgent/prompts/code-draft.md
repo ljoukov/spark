@@ -10,6 +10,7 @@ Rules:
 - Provide exactly 3 examples and at least 3 tests.
 - Tests 1–3 must match examples 1–3 exactly (same input/output).
 - The reference solution must solve all tests.
+- Use LaTeX for any maths formulas inside Markdown fields (wrap inline in `$...$`, display in `$$...$$`).
 - Keep copy short:
   - Problem `title`: 3-8 words, <= 55 chars.
   - Prefer short, scannable paragraphs and bullets.

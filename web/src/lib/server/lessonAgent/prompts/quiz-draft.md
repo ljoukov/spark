@@ -51,6 +51,10 @@ For kind=type-answer:
 - Question ids must be unique within the quiz.
 - Questions must be self-contained and must not reference internal pipeline, file names, or "the brief".
 - If the request asks for a **6-8 marker** free-text question (or similar), the `type-answer` question MUST have `marks` between **6 and 8** inclusive and MUST include a bullet `markScheme` that clearly allocates those marks.
+- Use LaTeX for maths/science formulas inside Markdown fields:
+  - Inline: wrap in `$...$` (e.g. `$V = IR$`, `$I = \\frac{Q}{t}$`).
+  - Display: wrap in `$$...$$` for standalone equations/derivations.
+  - Do NOT write bare formulas like `V=IR` when LaTeX is suitable.
 - Keep copy short:
   - Quiz `title`: 3-8 words, <= 55 chars.
   - Quiz `description`: 1 sentence, <= 30 words.
