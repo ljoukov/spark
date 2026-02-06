@@ -37,6 +37,7 @@ import {
 import {
   estimateCallCostUsd,
   generateText,
+  getCurrentToolCallContext,
   parseJsonFromLlmText,
   runToolLoop,
   tool,
@@ -455,6 +456,101 @@ function resolveContentType(filePath: string): string | undefined {
 
 async function ensureDir(dirPath: string): Promise<void> {
   await mkdir(dirPath, { recursive: true });
+}
+
+function normaliseDebugPathSegment(value: string): string {
+  const cleaned = value
+    .trim()
+    .replace(/[^a-z0-9\-_/]+/gi, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-_/]+|[-_/]+$/g, "");
+  return cleaned.length > 0 ? cleaned : "segment";
+}
+
+function capUtf8Text(value: string, maxBytes: number): string {
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    return "";
+  }
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) {
+    return value;
+  }
+  const marker = "\n\n[truncated]\n";
+  const totalBytes = Buffer.byteLength(value, "utf8");
+  const ratio = maxBytes / Math.max(1, totalBytes);
+  let end = Math.max(0, Math.floor(value.length * ratio));
+  let slice = value.slice(0, end);
+  while (end > 0 && Buffer.byteLength(slice + marker, "utf8") > maxBytes) {
+    end = Math.floor(end * 0.9);
+    slice = value.slice(0, end);
+  }
+  return slice + marker;
+}
+
+async function resolveLlmDebugAttemptDir(options: {
+  debug: LlmDebugOptions;
+  attempt: number;
+  maxAttempts: number;
+}): Promise<string | null> {
+  const attemptSegment = normaliseDebugPathSegment(
+    `attempt-${String(options.attempt).padStart(2, "0")}-of-${String(options.maxAttempts).padStart(2, "0")}`,
+  );
+  const stageSegment = normaliseDebugPathSegment(options.debug.stage ?? "llm");
+  const segments = [options.debug.rootDir, "stages", stageSegment];
+  if (options.debug.subStage) {
+    segments.push(normaliseDebugPathSegment(options.debug.subStage));
+  }
+  segments.push(attemptSegment);
+  const basePath = path.join(...segments);
+  const exists = await stat(basePath)
+    .then((entry) => entry.isDirectory())
+    .catch(() => false);
+  if (exists) {
+    return basePath;
+  }
+  const parent = path.dirname(basePath);
+  const basename = path.basename(basePath);
+  const entries = await readdir(parent, { withFileTypes: true }).catch(() => []);
+  const candidates = entries
+    .filter(
+      (entry) => entry.isDirectory() && entry.name.startsWith(`${basename}-run-`),
+    )
+    .map((entry) => entry.name)
+    .sort();
+  if (candidates.length === 0) {
+    return null;
+  }
+  return path.join(parent, candidates[candidates.length - 1] ?? "");
+}
+
+async function persistLlmLogsFromDebugDirToWorkspace(options: {
+  rootDir: string;
+  workspace: SparkAgentWorkspace;
+  toolName: "generate_text" | "generate_json";
+  toolIdSegment: string;
+  debugDir: string;
+}): Promise<void> {
+  const maxBytes = 900_000;
+  const targets: Array<{ name: "prompt" | "request" | "response"; filename: string }> = [
+    { name: "prompt", filename: "prompt.txt" },
+    { name: "request", filename: "request.txt" },
+    { name: "response", filename: "response.txt" },
+  ];
+
+  for (const target of targets) {
+    const sourcePath = path.join(options.debugDir, target.filename);
+    let content: string;
+    try {
+      content = await readFile(sourcePath, { encoding: "utf8" });
+    } catch {
+      continue;
+    }
+
+    const relativePath = `${options.toolName}/${options.toolIdSegment}/${target.filename}`;
+    const resolvedPath = resolveWorkspacePath(options.rootDir, relativePath);
+    await ensureDir(path.dirname(resolvedPath));
+    await writeFile(resolvedPath, capUtf8Text(content, maxBytes), { encoding: "utf8" });
+    options.workspace.scheduleUpdate(relativePath);
+  }
 }
 
 async function listFilesRecursive(options: {
@@ -2547,27 +2643,54 @@ function buildAgentTools(options: {
           suppressCompletionLogs: true,
         });
 
-        const text = await generateText({
-          modelId: resolvedModelId,
-          contents: [
-            {
-              role: "user",
-              parts: [{ type: "text", text: promptText }],
-            },
-          ],
-          ...(debug
-            ? {
-                debug: {
-                  ...debug,
-                  subStage: debug.subStage
-                    ? `${debug.subStage}/generate_text`
-                    : "generate_text",
-                },
-              }
-            : {}),
-          ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
-          ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
-        });
+        const toolContext = getCurrentToolCallContext();
+        const toolIdSegment = toolContext
+          ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
+          : `turn0tool0-${Date.now().toString()}`;
+        const callDebug: LlmDebugOptions | undefined = debug
+          ? {
+              ...debug,
+              subStage: [debug.subStage, "generate_text", toolIdSegment]
+                .filter(
+                  (entry): entry is string =>
+                    typeof entry === "string" && entry.trim().length > 0,
+                )
+                .join("/"),
+            }
+          : undefined;
+
+        let text = "";
+        try {
+          text = await generateText({
+            modelId: resolvedModelId,
+            contents: [
+              {
+                role: "user",
+                parts: [{ type: "text", text: promptText }],
+              },
+            ],
+            ...(callDebug ? { debug: callDebug } : {}),
+            ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
+            ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+          });
+        } finally {
+          if (callDebug) {
+            const debugDir = await resolveLlmDebugAttemptDir({
+              debug: callDebug,
+              attempt: 1,
+              maxAttempts: 1,
+            }).catch(() => null);
+            if (debugDir) {
+              await persistLlmLogsFromDebugDirToWorkspace({
+                rootDir,
+                workspace,
+                toolName: "generate_text",
+                toolIdSegment,
+                debugDir,
+              }).catch(() => undefined);
+            }
+          }
+        }
         const submodelSummary = submodelTracker.getSummary();
 
         const formatted = text;
@@ -2689,27 +2812,54 @@ function buildAgentTools(options: {
           suppressCompletionLogs: true,
         });
 
-        const text = await generateText({
-          modelId: resolvedModelId,
-          contents: [
-            {
-              role: "user",
-              parts: [{ type: "text", text: promptText }],
-            },
-          ],
-          ...(debug
-            ? {
-                debug: {
-                  ...debug,
-                  subStage: debug.subStage
-                    ? `${debug.subStage}/generate_json`
-                    : "generate_json",
-                },
-              }
-            : {}),
-          ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
-          responseMimeType: "application/json",
-        });
+        const toolContext = getCurrentToolCallContext();
+        const toolIdSegment = toolContext
+          ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
+          : `turn0tool0-${Date.now().toString()}`;
+        const callDebug: LlmDebugOptions | undefined = debug
+          ? {
+              ...debug,
+              subStage: [debug.subStage, "generate_json", toolIdSegment]
+                .filter(
+                  (entry): entry is string =>
+                    typeof entry === "string" && entry.trim().length > 0,
+                )
+                .join("/"),
+            }
+          : undefined;
+
+        let text = "";
+        try {
+          text = await generateText({
+            modelId: resolvedModelId,
+            contents: [
+              {
+                role: "user",
+                parts: [{ type: "text", text: promptText }],
+              },
+            ],
+            ...(callDebug ? { debug: callDebug } : {}),
+            ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+            responseMimeType: "application/json",
+          });
+        } finally {
+          if (callDebug) {
+            const debugDir = await resolveLlmDebugAttemptDir({
+              debug: callDebug,
+              attempt: 1,
+              maxAttempts: 1,
+            }).catch(() => null);
+            if (debugDir) {
+              await persistLlmLogsFromDebugDirToWorkspace({
+                rootDir,
+                workspace,
+                toolName: "generate_json",
+                toolIdSegment,
+                debugDir,
+              }).catch(() => undefined);
+            }
+          }
+        }
         const submodelSummary = submodelTracker.getSummary();
 
         let parsed: unknown;
@@ -3504,6 +3654,11 @@ export async function runSparkAgentTask(
       },
     };
 
+    const llmDebug: LlmDebugOptions = {
+      rootDir: path.join(workspaceRoot, ".llm-debug"),
+      stage: "spark-agent",
+    };
+
     const tools: LlmToolSet = {
       ...buildAgentTools({
         workspace: workspaceSync,
@@ -3512,6 +3667,7 @@ export async function runSparkAgentTask(
         serviceAccountJson,
         progress,
         enforceLessonPipeline: isLessonRun,
+        debug: llmDebug,
       }),
       done: tool({
         description:
