@@ -1921,6 +1921,21 @@ function formatCurrencyUsd(value: number): string {
   }).format(safeValue);
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0B";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const fractionDigits = value >= 10 ? 0 : 1;
+  return `${value.toFixed(fractionDigits)}${units[unitIndex]}`;
+}
+
 function buildTokenSummaryLine(usage: LlmUsageTokenUpdate | undefined): string {
   if (!usage) {
     return "Tokens: n/a";
@@ -3095,7 +3110,7 @@ async function llmStream({
             response: { textCharsDelta: responseText.length },
           });
         }
-        if (responseText.length > 0 || reasoningText.length > 0) {
+        if (responseText.length > 0 || reasoningSummaryText.length > 0) {
           responseSnapshotWriter.flush();
         }
         latestUsageTokens = extractChatGptUsageTokens(
@@ -3212,8 +3227,36 @@ async function llmStream({
     }
 
     const elapsedMs = Date.now() - startedAt;
+    const costUsd = estimateCallCostUsd({
+      modelId: resolvedModelVersion,
+      tokens: latestUsageTokens,
+      responseImages,
+      imageSize: effectiveImageSize,
+    });
+    const completionCost =
+      latestUsageTokens !== undefined
+        ? `cost=${formatCurrencyUsd(costUsd)}`
+        : "cost=n/a";
+    const completionTokens = (() => {
+      if (!latestUsageTokens) {
+        return "tokens=n/a";
+      }
+      const promptTokens = resolveUsageNumber(latestUsageTokens.promptTokens);
+      const toolUseTokens = resolveUsageNumber(
+        latestUsageTokens.toolUsePromptTokens,
+      );
+      const cachedTokens = resolveUsageNumber(latestUsageTokens.cachedTokens);
+      const responseTokens = resolveUsageNumber(latestUsageTokens.responseTokens);
+      const thinkingTokens = resolveUsageNumber(latestUsageTokens.thinkingTokens);
+      const responseImageTokens = resolveUsageNumber(
+        latestUsageTokens.responseImageTokens,
+      );
+      const inTokens = promptTokens + toolUseTokens;
+      const outTokens = responseTokens + thinkingTokens + responseImageTokens;
+      return `tokens in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
+    })();
     log(
-      `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}`,
+      `completed model ${resolvedModelVersion} in ${formatMillis(elapsedMs)}, ${completionCost}, ${completionTokens}`,
     );
 
     await responseSnapshotWriter.complete();
@@ -3232,12 +3275,6 @@ async function llmStream({
       responseImageBytes,
       thinkingChars: thinkingTextChars,
     };
-    const costUsd = estimateCallCostUsd({
-      modelId: resolvedModelVersion,
-      tokens: latestUsageTokens,
-      responseImages,
-      imageSize: effectiveImageSize,
-    });
 
     if (stage.debugDir || debugLogDir) {
       const trimmedResponseText = extractSnapshotText(responseContent);
@@ -4440,6 +4477,74 @@ export async function runToolLoop(
                   typeof record.outputPath === "string"
                     ? record.outputPath
                     : "";
+                const modelVersion =
+                  typeof record.modelVersion === "string"
+                    ? record.modelVersion
+                    : typeof record.modelId === "string"
+                      ? record.modelId
+                      : "";
+                const elapsedMs =
+                  typeof record.elapsedMs === "number" ? record.elapsedMs : null;
+                const costUsd =
+                  typeof record.costUsd === "number" ? record.costUsd : null;
+                const outputBytes =
+                  typeof record.outputBytes === "number"
+                    ? record.outputBytes
+                    : null;
+                const usageTokensRaw =
+                  record.usageTokens && typeof record.usageTokens === "object"
+                    ? (record.usageTokens as Record<string, unknown>)
+                    : null;
+                const usageTokens: LlmUsageTokenUpdate | null = usageTokensRaw
+                  ? {
+                      promptTokens:
+                        typeof usageTokensRaw.promptTokens === "number"
+                          ? usageTokensRaw.promptTokens
+                          : undefined,
+                      cachedTokens:
+                        typeof usageTokensRaw.cachedTokens === "number"
+                          ? usageTokensRaw.cachedTokens
+                          : undefined,
+                      responseTokens:
+                        typeof usageTokensRaw.responseTokens === "number"
+                          ? usageTokensRaw.responseTokens
+                          : undefined,
+                      responseImageTokens:
+                        typeof usageTokensRaw.responseImageTokens === "number"
+                          ? usageTokensRaw.responseImageTokens
+                          : undefined,
+                      thinkingTokens:
+                        typeof usageTokensRaw.thinkingTokens === "number"
+                          ? usageTokensRaw.thinkingTokens
+                          : undefined,
+                      totalTokens:
+                        typeof usageTokensRaw.totalTokens === "number"
+                          ? usageTokensRaw.totalTokens
+                          : undefined,
+                      toolUsePromptTokens:
+                        typeof usageTokensRaw.toolUsePromptTokens === "number"
+                          ? usageTokensRaw.toolUsePromptTokens
+                          : undefined,
+                    }
+                  : null;
+                const tokenSummary = (() => {
+                  if (!usageTokens) {
+                    return "";
+                  }
+                  const promptTokens = resolveUsageNumber(usageTokens.promptTokens);
+                  const toolUseTokens = resolveUsageNumber(
+                    usageTokens.toolUsePromptTokens,
+                  );
+                  const cachedTokens = resolveUsageNumber(usageTokens.cachedTokens);
+                  const responseTokens = resolveUsageNumber(usageTokens.responseTokens);
+                  const thinkingTokens = resolveUsageNumber(usageTokens.thinkingTokens);
+                  const responseImageTokens = resolveUsageNumber(
+                    usageTokens.responseImageTokens,
+                  );
+                  const inTokens = promptTokens + toolUseTokens;
+                  const outTokens = responseTokens + thinkingTokens + responseImageTokens;
+                  return `tokens: in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
+                })();
                 const textChars =
                   typeof record.textChars === "number"
                     ? record.textChars
@@ -4451,8 +4556,15 @@ export async function runToolLoop(
                     `tool_result: ${entry.toolName}`,
                     `status=${status}`,
                     gradePass !== null ? `pass=${gradePass.toString()}` : "",
+                    modelVersion ? `model=${modelVersion}` : "",
+                    elapsedMs !== null ? `latency=${formatMillis(elapsedMs)}` : "",
                     outputPath ? `outputPath=${outputPath}` : "",
-                    textChars !== null ? `chars=${textChars}` : "",
+                    outputBytes !== null ? `size=${formatBytes(outputBytes)}` : "",
+                    outputBytes === null && textChars !== null
+                      ? `chars=${textChars}`
+                      : "",
+                    costUsd !== null ? `cost=${formatCurrencyUsd(costUsd)}` : "",
+                    tokenSummary,
                   ]
                     .filter(Boolean)
                     .join(" "),
@@ -4826,14 +4938,89 @@ export async function runToolLoop(
                 typeof record.status === "string" ? record.status : "ok";
               const outputPath =
                 typeof record.outputPath === "string" ? record.outputPath : "";
+              const modelVersion =
+                typeof record.modelVersion === "string"
+                  ? record.modelVersion
+                  : typeof record.modelId === "string"
+                    ? record.modelId
+                    : "";
+              const elapsedMs =
+                typeof record.elapsedMs === "number" ? record.elapsedMs : null;
+              const costUsd =
+                typeof record.costUsd === "number" ? record.costUsd : null;
+              const outputBytes =
+                typeof record.outputBytes === "number"
+                  ? record.outputBytes
+                  : null;
+              const usageTokensRaw =
+                record.usageTokens && typeof record.usageTokens === "object"
+                  ? (record.usageTokens as Record<string, unknown>)
+                  : null;
+              const usageTokens: LlmUsageTokenUpdate | null = usageTokensRaw
+                ? {
+                    promptTokens:
+                      typeof usageTokensRaw.promptTokens === "number"
+                        ? usageTokensRaw.promptTokens
+                        : undefined,
+                    cachedTokens:
+                      typeof usageTokensRaw.cachedTokens === "number"
+                        ? usageTokensRaw.cachedTokens
+                        : undefined,
+                    responseTokens:
+                      typeof usageTokensRaw.responseTokens === "number"
+                        ? usageTokensRaw.responseTokens
+                        : undefined,
+                    responseImageTokens:
+                      typeof usageTokensRaw.responseImageTokens === "number"
+                        ? usageTokensRaw.responseImageTokens
+                        : undefined,
+                    thinkingTokens:
+                      typeof usageTokensRaw.thinkingTokens === "number"
+                        ? usageTokensRaw.thinkingTokens
+                        : undefined,
+                    totalTokens:
+                      typeof usageTokensRaw.totalTokens === "number"
+                        ? usageTokensRaw.totalTokens
+                        : undefined,
+                    toolUsePromptTokens:
+                      typeof usageTokensRaw.toolUsePromptTokens === "number"
+                        ? usageTokensRaw.toolUsePromptTokens
+                        : undefined,
+                  }
+                : null;
+              const tokenSummary = (() => {
+                if (!usageTokens) {
+                  return "";
+                }
+                const promptTokens = resolveUsageNumber(usageTokens.promptTokens);
+                const toolUseTokens = resolveUsageNumber(
+                  usageTokens.toolUsePromptTokens,
+                );
+                const cachedTokens = resolveUsageNumber(usageTokens.cachedTokens);
+                const responseTokens = resolveUsageNumber(usageTokens.responseTokens);
+                const thinkingTokens = resolveUsageNumber(usageTokens.thinkingTokens);
+                const responseImageTokens = resolveUsageNumber(
+                  usageTokens.responseImageTokens,
+                );
+                const inTokens = promptTokens + toolUseTokens;
+                const outTokens = responseTokens + thinkingTokens + responseImageTokens;
+                return `tokens: in=${formatOptionalNumber(inTokens)} cached=${formatOptionalNumber(cachedTokens)} out=${formatOptionalNumber(outTokens)}`;
+              })();
               const textChars =
                 typeof record.textChars === "number" ? record.textChars : null;
               reporter.log(
                 [
                   "tool_result: generate_text",
                   `status=${status}`,
+                  modelVersion ? `model=${modelVersion}` : "",
+                  elapsedMs !== null ? `latency=${formatMillis(elapsedMs)}` : "",
                   outputPath ? `outputPath=${outputPath}` : "",
-                  textChars !== null ? `chars=${textChars}` : "",
+                  outputBytes !== null ? `size=${formatBytes(outputBytes)}` : "",
+                  outputBytes === null && textChars !== null
+                    ? `chars=${textChars}`
+                    : "",
+                  costUsd !== null ? `cost=${formatCurrencyUsd(costUsd)}` : "",
+                  tokenSummary,
                 ]
                   .filter(Boolean)
                   .join(" "),
