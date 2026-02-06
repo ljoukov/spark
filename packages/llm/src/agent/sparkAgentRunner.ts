@@ -774,6 +774,7 @@ function createEmptyCallTokenState(): CallTokenState {
 }
 
 class AgentRunStatsTracker {
+  private readonly primaryModelId: string;
   private modelCalls = 0;
   private readonly modelsUsed = new Set<string>();
   private readonly tokens: CallTokenState = createEmptyCallTokenState();
@@ -788,17 +789,38 @@ class AgentRunStatsTracker {
       modelVersion?: string;
       tokens: CallTokenState;
       appliedCostUsd: number;
+      costBucket: "model" | "tool";
     }
   >();
 
+  constructor(options?: { primaryModelId?: string }) {
+    const raw = options?.primaryModelId?.trim() ?? "";
+    this.primaryModelId = raw.length > 0 ? raw : "";
+  }
+
+  private resolveCostBucket(modelId: string): "model" | "tool" {
+    const trimmed = modelId.trim();
+    if (this.primaryModelId && trimmed === this.primaryModelId) {
+      return "model";
+    }
+    // Fallback heuristic: tool loop models are "LLM cost", sub-model calls are
+    // "tools cost" (e.g. generate_text / generate_json using Gemini).
+    if (trimmed.startsWith("chatgpt-")) {
+      return "model";
+    }
+    return "tool";
+  }
+
   startModelCall(details: { modelId: string }): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("agent-model-call");
+    const costBucket = this.resolveCostBucket(details.modelId);
     this.modelCalls += 1;
     this.modelsUsed.add(details.modelId);
     this.callInfo.set(handle, {
       modelId: details.modelId,
       tokens: createEmptyCallTokenState(),
       appliedCostUsd: 0,
+      costBucket,
     });
     return handle;
   }
@@ -876,6 +898,7 @@ class AgentRunStatsTracker {
       modelVersion?: string;
       tokens: CallTokenState;
       appliedCostUsd: number;
+      costBucket: "model" | "tool";
     },
     tokens: LlmUsageTokenUpdate,
   ): void {
@@ -932,7 +955,11 @@ class AgentRunStatsTracker {
     });
     const costDelta = Math.max(0, callCostUsd - state.appliedCostUsd);
     if (costDelta > 0) {
-      this.modelCostUsd += costDelta;
+      if (state.costBucket === "tool") {
+        this.toolCostUsd += costDelta;
+      } else {
+        this.modelCostUsd += costDelta;
+      }
       state.appliedCostUsd = callCostUsd;
     }
   }
@@ -3283,7 +3310,10 @@ export async function runSparkAgentTask(
   }
   const agentDocPath = `users/${options.userId}/agents/${options.agentId}`;
 
-  const statsTracker = new AgentRunStatsTracker();
+  const toolLoopModelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+  const statsTracker = new AgentRunStatsTracker({
+    primaryModelId: toolLoopModelId,
+  });
 
   let prompt = "";
   let logSync: AgentLogSync | undefined;
@@ -3424,7 +3454,7 @@ export async function runSparkAgentTask(
       }
     };
 
-    const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
+    const modelId = toolLoopModelId;
     const isLessonRun = Boolean(
       typeof agentData.lessonSessionId === "string" &&
       agentData.lessonSessionId.trim().length > 0,
