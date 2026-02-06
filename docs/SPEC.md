@@ -241,6 +241,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
+- Agent sub-model LLM debug snapshots (per `generate_text` / `generate_json` tool call) are stored in the workspace as files:
+  - `generate_text/turn{N}tool{M}/{prompt|request|response}.txt`
+  - `generate_json/turn{N}tool{M}/{prompt|request|response}.txt`
+  - `{N}` is the tool-loop turn/step number and `{M}` is the (1-based) parallel tool index within that turn.
 - Lesson creation (from `/spark` chat) is implemented as an Agent run:
   - The chat collects a lesson topic plus optional constraints:
     - Goal + level
@@ -333,6 +337,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
   - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up).
   - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
+  - A `Download zip` action that returns the full workspace contents (including LLM logs) plus a plain-text `agent.log` file for the run.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, coding problems, media steps).
 - `/logout` signs out and returns to `/`.
 - Implements newsletter sign-up (Mailcoach/ConvertKit) via Cloudflare KV (or a third-party API).

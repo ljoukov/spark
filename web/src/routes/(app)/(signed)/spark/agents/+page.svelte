@@ -56,6 +56,8 @@
 	let stopSubmitting = $state(false);
 	let stopError = $state<string | null>(null);
 	let stopSuccess = $state<string | null>(null);
+	let downloadSubmitting = $state(false);
+	let downloadError = $state<string | null>(null);
 	let fileDialogOpen = $state(false);
 	let authReady = $state(false);
 	let runLogFollow = $state(true);
@@ -387,6 +389,41 @@
 
 	const canRequestStop = $derived.by(() => showStopButton && !stopSubmitting);
 
+	async function downloadRunZip(): Promise<void> {
+		if (!browser) {
+			return;
+		}
+		if (!selectedAgentId || downloadSubmitting) {
+			return;
+		}
+		downloadSubmitting = true;
+		downloadError = null;
+		try {
+			const response = await fetch(`/api/spark/agents/${selectedAgentId}/download`, {
+				method: 'GET'
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				throw new Error(payload?.error ?? payload?.message ?? 'download_failed');
+			}
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `spark-agent-${selectedAgentId}.zip`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			window.setTimeout(() => {
+				URL.revokeObjectURL(url);
+			}, 60_000);
+		} catch (error) {
+			downloadError = error instanceof Error ? error.message : 'Unable to download zip right now.';
+		} finally {
+			downloadSubmitting = false;
+		}
+	}
+
 	async function requestStop(): Promise<void> {
 		if (!selectedAgentId || !canRequestStop) {
 			return;
@@ -611,6 +648,7 @@
 			runLogFollow = true;
 			stopError = null;
 			stopSuccess = null;
+			downloadError = null;
 			return;
 		}
 		selectedAgentDetail = null;
@@ -620,6 +658,7 @@
 		runLogFollow = true;
 		stopError = null;
 		stopSuccess = null;
+		downloadError = null;
 	});
 
 	let lastRunLogLineCount = 0;
@@ -754,6 +793,16 @@
 							>
 								{copySuccess ? 'Copied' : 'Copy prompt'}
 							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={downloadSubmitting}
+								onclick={() => {
+									void downloadRunZip();
+								}}
+							>
+								{downloadSubmitting ? 'Downloading…' : 'Download zip'}
+							</Button>
 							{#if showStopButton}
 								<Button
 									variant="destructive"
@@ -814,6 +863,12 @@
 						<div class="agents-detail__summary">
 							<p class="agents-detail__eyebrow">Stop request</p>
 							<p>{stopSuccess}</p>
+						</div>
+					{/if}
+					{#if downloadError}
+						<div class="agents-detail__error">
+							<p class="agents-detail__eyebrow">Download</p>
+							<p>{downloadError}</p>
 						</div>
 					{/if}
 					<div class="agents-detail__timeline">
