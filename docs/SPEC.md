@@ -331,7 +331,8 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`) and Agents (`/spark/agents`).
 - `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected run details:
   - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
-  - Live output/thoughts streamed from `agents/{agentId}/logs/log.stream`.
+  - Live output streamed from `agents/{agentId}/logs/log.stream.assistant` (thoughts are captured in the run log and are not shown separately in the UI).
+  - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up).
   - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, problems, media steps).
 - `/logout` signs out and returns to `/`.
