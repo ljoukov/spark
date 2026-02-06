@@ -104,22 +104,27 @@
 	});
 
 	const baseTimeline = $derived(
-		hasPlanItems
-			? sessionPlan.map<TimelineStep>((item) => {
-					const icon =
-						item.icon ?? (item.kind === 'quiz' ? '📝' : item.kind === 'problem' ? '🧠' : '🎧');
-					const meta =
-						item.meta ??
-						(item.kind === 'quiz' ? 'Quiz' : item.kind === 'problem' ? 'Problem' : 'Clip');
-					const description = item.summary ?? '';
-					const href =
-						item.kind === 'quiz'
-							? `/spark/lesson/${sessionId}/quiz/${item.id}`
-							: item.kind === 'problem'
-								? `/spark/lesson/${sessionId}/p/${item.id}`
-								: `/spark/lesson/${sessionId}/m/${item.id}`;
-					return {
-						key: item.id,
+					hasPlanItems
+						? sessionPlan.map<TimelineStep>((item) => {
+								const icon =
+									item.icon ??
+									(item.kind === 'quiz' ? '📝' : item.kind === 'coding_problem' ? '🧠' : '🎧');
+								const meta =
+									item.meta ??
+									(item.kind === 'quiz'
+										? 'Quiz'
+										: item.kind === 'coding_problem'
+											? 'Coding problem'
+											: 'Clip');
+								const description = item.summary ?? '';
+								const href =
+									item.kind === 'quiz'
+										? `/spark/lesson/${sessionId}/quiz/${item.id}`
+										: item.kind === 'coding_problem'
+											? `/spark/lesson/${sessionId}/p/${item.id}`
+											: `/spark/lesson/${sessionId}/m/${item.id}`;
+								return {
+									key: item.id,
 						title: item.title,
 						icon,
 						meta,

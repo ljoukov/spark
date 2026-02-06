@@ -87,7 +87,7 @@
               },
               "kind": {
                 "type": "string",
-                "const": "problem"
+                "const": "coding_problem"
               },
               "difficulty": {
                 "$ref": "#/definitions/Session/properties/summary"
@@ -308,7 +308,7 @@
                   },
                   "kind": {
                     "type": "string",
-                    "const": "problem"
+                    "const": "coding_problem"
                   },
                   "difficulty": {
                     "$ref": "#/definitions/Session/properties/summary"

@@ -30,7 +30,9 @@ Use one section per plan item:
 - Plan item ids must be unique and file-friendly (no spaces). Prefer `q1`, `q2`, `p1`, `m1`.
 - If `lesson/requirements.md` contains plan preferences (number of items, per-quiz question counts/types), follow them exactly.
 - `kind="media"` only if the learner explicitly requested a story/audio clip.
-- If this is not programming practice, make it quiz-only (no `kind="problem"` items).
+- `kind="coding_problem"` means a competitive-programming style task: the learner writes **Python** to solve a stdin/stdout problem and pass tests. This is NOT a “math/science word problem”.
+- Only include `kind="coding_problem"` if the learner explicitly asked for coding/programming/Python practice (e.g. BIO prep).
+- If the learner asks for “problems” in a science/maths sense, make it quiz-only (no `kind="coding_problem"` items).
 - Plan item `title` should be action-oriented and start with a verb (e.g. "Measure current", "Calculate potential difference").
 - Every plan item must include an `icon` as a single emoji glyph (not a library/icon identifier).
 - Session + plan copy is rendered as plain text in the dashboard timeline (not Markdown): avoid `$...$` / `$$...$$` LaTeX delimiters and avoid writing equations. Refer to formulas by name (e.g. "Ohm's law") instead.

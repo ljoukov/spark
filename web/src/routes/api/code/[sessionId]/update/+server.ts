@@ -77,7 +77,7 @@ function computeQuizXp(quiz: Awaited<ReturnType<typeof getUserQuiz>>): number {
 }
 
 function computeCodeXp(planItem: PlanItem, state: PlanItemState): number {
-	if (planItem.kind !== 'problem' || state.status !== 'completed') {
+	if (planItem.kind !== 'coding_problem' || state.status !== 'completed') {
 		return 0;
 	}
 	const source = state.code?.source;
@@ -181,12 +181,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			xpAvailable,
 			quizId: parsedBody.quizCompletion.quizId
 		};
-	} else if (
-		planItem.kind === 'problem' &&
-		incomingState.status === 'completed' &&
-		typeof incomingState.code?.source === 'string' &&
-		incomingState.code.source.trim().length > 0
-	) {
+		} else if (
+			planItem.kind === 'coding_problem' &&
+			incomingState.status === 'completed' &&
+			typeof incomingState.code?.source === 'string' &&
+			incomingState.code.source.trim().length > 0
+		) {
 		const xpAvailable = computeCodeXp(planItem, incomingState);
 		if (xpAvailable > 0) {
 			awardingContext = {
@@ -267,12 +267,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				...baseProgressPayload,
 				quizId: awardingContext.quizId
 			};
-		} else {
-			const problemDifficulty = planItem.kind === 'problem' ? (planItem.difficulty ?? null) : null;
-			progressPayload = {
-				...baseProgressPayload,
-				problemId: planItem.id,
-				difficulty: problemDifficulty,
+			} else {
+				const problemDifficulty =
+					planItem.kind === 'coding_problem' ? (planItem.difficulty ?? null) : null;
+				progressPayload = {
+					...baseProgressPayload,
+					problemId: planItem.id,
+					difficulty: problemDifficulty,
 				language: incomingState.code?.language ?? null
 			};
 		}

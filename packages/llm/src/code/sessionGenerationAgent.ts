@@ -1247,7 +1247,7 @@ async function loadFirestoreOutputs(options: {
     .filter((item) => item.kind === "quiz")
     .map((item) => item.id);
   const planProblemIds = session.plan
-    .filter((item) => item.kind === "problem")
+    .filter((item) => item.kind === "coding_problem")
     .map((item) => item.id);
   const quizIds = new Set(quizzes.map((quiz) => quiz.id));
   const problemIds = new Set(problems.map((problem) => problem.slug));
@@ -1266,13 +1266,13 @@ async function loadFirestoreOutputs(options: {
   if (options.includeCoding) {
     if (planProblemIds.length !== problems.length) {
       throw new Error(
-        `Plan has ${planProblemIds.length} problem items but firestore/code has ${problems.length} docs.`,
+        `Plan has ${planProblemIds.length} coding_problem items but firestore/code has ${problems.length} docs.`,
       );
     }
     for (const id of planProblemIds) {
       if (!problemIds.has(id)) {
         throw new Error(
-          `Plan problem id '${id}' missing firestore/code/${id}.json`,
+          `Plan coding_problem id '${id}' missing firestore/code/${id}.json`,
         );
       }
     }

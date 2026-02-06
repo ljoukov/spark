@@ -25,7 +25,7 @@ import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
 import lessonSchemaReadme from '$lib/server/lessonAgent/schema/README.md?raw';
 import lessonSessionSchemaJson from '$lib/server/lessonAgent/schema/session.schema.json?raw';
 import lessonQuizSchemaJson from '$lib/server/lessonAgent/schema/quiz.schema.json?raw';
-import lessonCodeSchemaJson from '$lib/server/lessonAgent/schema/code.schema.json?raw';
+import lessonCodingProblemSchemaJson from '$lib/server/lessonAgent/schema/coding_problem.schema.json?raw';
 import lessonMediaSchemaJson from '$lib/server/lessonAgent/schema/media.schema.json?raw';
 import lessonPromptSessionDraft from '$lib/server/lessonAgent/prompts/session-draft.md?raw';
 import lessonPromptSessionGrade from '$lib/server/lessonAgent/prompts/session-grade.md?raw';
@@ -495,15 +495,23 @@ const quizPreferencesSchema = z
 		}
 	});
 
-const planItemPreferencesSchema = z
-	.object({
-		kind: z
-			.enum(['quiz', 'problem', 'media'])
-			.describe('Plan item kind: quiz, coding problem, or media/story.'),
-		title: z.string().trim().min(1).describe('Optional short title for the plan item.').optional(),
-		description: z
-			.string()
-			.trim()
+	const planItemPreferencesSchema = z
+		.object({
+			kind: z
+				.enum(['quiz', 'coding_problem', 'problem', 'media'])
+				.transform((value): 'quiz' | 'coding_problem' | 'media' => {
+					if (value === 'problem') {
+						return 'coding_problem';
+					}
+					return value;
+				})
+				.describe(
+					'Plan item kind: quiz, coding_problem (Python competitive programming), or media/story.'
+				),
+			title: z.string().trim().min(1).describe('Optional short title for the plan item.').optional(),
+			description: z
+				.string()
+				.trim()
 			.min(1)
 			.describe('Optional description for the plan item.')
 			.optional(),
@@ -899,14 +907,14 @@ function buildSparkChatTools(options: {
 							content: lessonQuizSchemaJson.trim() + '\n',
 							now
 						}),
-						writeWorkspaceTextFile({
-							serviceAccountJson,
-							userId,
-							workspaceId,
-							path: 'lesson/schema/code.schema.json',
-							content: lessonCodeSchemaJson.trim() + '\n',
-							now
-						}),
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId,
+								path: 'lesson/schema/coding_problem.schema.json',
+								content: lessonCodingProblemSchemaJson.trim() + '\n',
+								now
+							}),
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
@@ -1015,7 +1023,7 @@ function buildSparkChatTools(options: {
 								`   - sessionId: ${sessionId}`,
 								"   - sessionPath: 'lesson/output/session.json'",
 								"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
-						'   - includeCoding: true if you included any plan items with kind="problem"; otherwise false.',
+							'   - includeCoding: true if you included any plan items with kind="coding_problem"; otherwise false.',
 						'   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
 						'6) If publish_lesson fails, fix the files and retry.',
 						'7) Call done with a short summary including the sessionId.',

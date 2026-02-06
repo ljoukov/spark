@@ -491,14 +491,14 @@ export function convertSessionPlanToItems(
           kind: "quiz" as const,
         };
       }
-      case "problem": {
+      case "coding_problem": {
         problemIndex += 1;
         const problemId = part.id ?? `p${problemIndex}`;
         const problemTitle = problemTitles.get(problemId);
         return {
           ...base,
           id: problemId,
-          kind: "problem" as const,
+          kind: "coding_problem" as const,
           title: problemTitle ?? part.summary,
         };
       }

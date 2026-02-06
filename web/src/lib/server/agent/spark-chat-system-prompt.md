@@ -12,7 +12,8 @@ Lessons (tool use):
 - Plan shape to collect when relevant:
   - How many plan items?
   - For each quiz plan item: how many questions, and what mix of question kinds: multiple-choice, type-answer, info-card.
-  - If the user requests coding practice, confirm how many coding problems (problem plan items) to include.
+  - If the user requests coding practice, confirm how many coding problems (coding_problem plan items) to include.
+  - Only use coding problems when the user explicitly asked for coding/programming/Python practice (e.g. BIO prep). If the user asks for “problems” in a science/maths sense, do not treat that as a coding request.
 - Do not claim a lesson has started unless create_lesson returned status="started".
 - After create_lesson, say the lesson is being created (do NOT claim it is ready yet).
 - Do not claim a lesson is ready unless you checked with get_lesson_status and it returned status="ready".

@@ -19,8 +19,8 @@ const QuizPlanItemSchema = planItemBase.extend({
   progressKey: optionalTrimmed,
 });
 
-const ProblemPlanItemSchema = planItemBase.extend({
-  kind: z.literal("problem"),
+const CodingProblemPlanItemSchema = planItemBase.extend({
+  kind: z.literal("coding_problem"),
   difficulty: optionalTrimmed,
   topic: optionalTrimmed,
 });
@@ -32,7 +32,7 @@ const MediaPlanItemSchema = planItemBase.extend({
 
 export const PlanItemSchema = z.discriminatedUnion("kind", [
   QuizPlanItemSchema,
-  ProblemPlanItemSchema,
+  CodingProblemPlanItemSchema,
   MediaPlanItemSchema,
 ]);
 
