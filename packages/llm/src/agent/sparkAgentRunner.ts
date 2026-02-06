@@ -45,7 +45,7 @@ import {
   type LlmDebugOptions,
   type LlmToolSet,
 } from "../utils/llm";
-import { isGeminiModelId, type GeminiModelId } from "../utils/gemini";
+import { type GeminiModelId } from "../utils/gemini";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import type {
   JobProgressReporter,
@@ -2289,10 +2289,6 @@ function buildAgentTools(options: {
               (value) => normalizeOptionalStringArray(value),
               z.array(z.string().trim().min(1)).optional(),
             ),
-            modelId: z.preprocess(
-              (value) => normalizeOptionalString(value),
-              z.string().trim().min(1).optional(),
-            ),
             tools: z.preprocess(
               (value) => normalizeToolTypes(value),
               z.array(z.enum(toolTypes)).optional(),
@@ -2310,14 +2306,11 @@ function buildAgentTools(options: {
       execute: async ({
         promptPath,
         inputPaths,
-        modelId,
         tools,
         outputPath,
         outputMode,
       }) => {
-        const resolvedModelId: GeminiModelId = isGeminiModelId(modelId ?? "")
-          ? (modelId as GeminiModelId)
-          : DEFAULT_GENERATE_TEXT_MODEL_ID;
+        const resolvedModelId: GeminiModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
 
         const resolvedPromptPath = promptPath.trim();
         const resolvedOutputPath = outputPath.trim();
@@ -2624,25 +2617,10 @@ function buildAgentTools(options: {
           sourcePath: z.string().trim().min(1),
           schemaPath: z.string().trim().min(1),
           outputPath: z.string().trim().min(1),
-          modelId: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              if (typeof value === "string") {
-                const trimmed = value.trim();
-                return trimmed.length > 0 ? trimmed : undefined;
-              }
-              return value;
-            },
-            z.string().trim().min(1).optional(),
-          ),
         })
         .strict(),
-      execute: async ({ sourcePath, schemaPath, outputPath, modelId }) => {
-        const resolvedModelId: GeminiModelId = isGeminiModelId(modelId ?? "")
-          ? (modelId as GeminiModelId)
-          : DEFAULT_GENERATE_TEXT_MODEL_ID;
+      execute: async ({ sourcePath, schemaPath, outputPath }) => {
+        const resolvedModelId: GeminiModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
 
         const resolvedSourcePath = sourcePath.trim();
         const resolvedSchemaPath = schemaPath.trim();

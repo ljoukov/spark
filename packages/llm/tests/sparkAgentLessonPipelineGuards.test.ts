@@ -102,16 +102,13 @@ describe("Spark agent lesson pipeline guards", () => {
         outputPath: "lesson/drafts/session.md",
         inputPaths: "lesson/requirements.md",
         tools: "web-search",
-        modelId: null,
       }) as {
         inputPaths?: string[];
         tools?: string[];
-        modelId?: string;
       };
 
       expect(parsed.inputPaths).toEqual(["lesson/requirements.md"]);
       expect(parsed.tools).toEqual(["web-search"]);
-      expect(parsed.modelId).toBeUndefined();
     });
   });
 
