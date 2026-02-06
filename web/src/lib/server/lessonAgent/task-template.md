@@ -48,12 +48,27 @@ Notes:
    - Only include `kind="media"` if the user explicitly asked for a story/audio clip.
    - If plan preferences are provided in this file, you must follow them exactly (number of plan items, and per-quiz question counts/types).
 3) Generate -> grade -> revise loop (do not skip grading):
-   - Use `generate_text` for drafting and grading (store prompts under `lesson/prompts/` and feedback under `lesson/feedback/`).
+   - Use `generate_text` to draft/revise **Markdown** under `lesson/drafts/` (avoid asking `generate_text` to emit large JSON).
+   - Grade drafts with `generate_text` and store feedback **Markdown** under `lesson/feedback/` (must include `pass: true|false`).
+   - Store feedback per plan item (do not overwrite when there are multiple items):
+     - Quiz grade: `lesson/feedback/quiz/<planItemId>-grade.md`
+     - Code grade: `lesson/feedback/code/<planItemId>-grade.md`
    - Prompt templates may include `{{path/to/file}}` placeholders to inline workspace files.
+   - IMPORTANT: Quiz/code grade and revise prompts require `inputPaths` so the model can see the candidate draft (and grade report for revise).
+     - Example (grade quiz q1):
+       - `generate_text({ promptPath: "lesson/prompts/quiz-grade.md", inputPaths: ["lesson/drafts/quiz/q1.md"], outputPath: "lesson/feedback/quiz/q1-grade.md" })`
+     - Example (revise quiz q1):
+       - `generate_text({ promptPath: "lesson/prompts/quiz-revise.md", inputPaths: ["lesson/drafts/quiz/q1.md", "lesson/feedback/quiz/q1-grade.md"], outputPath: "lesson/drafts/quiz/q1.md" })`
+   - Step limit optimisation: When operations are independent, batch tool calls in the same agent step.
+     - Grade q1 and q2 in the same step (distinct output paths).
+     - `generate_json` for session + all quizzes in the same step, then `validate_json` for all outputs in the same step.
 4) Ordering:
    - If coding is included: draft/verify problems first, then draft the session plan/quizzes from the verified problems.
    - Otherwise: draft the session plan first, then draft quizzes.
-5) Write final JSON outputs under `lesson/output/` (use `generate_text` with `responseSchemaPath` pointing at `lesson/schema/*.schema.json`):
+5) Compile Firestore-ready JSON outputs under `lesson/output/` from the Markdown drafts:
+   - Use `generate_json({ sourcePath, schemaPath, outputPath })` for each JSON output file.
+   - Then run `validate_json({ schemaPath, inputPath })` and fix until `ok=true`.
+   - Fixes can be done by editing the source Markdown and re-running `generate_json`, or by patching the JSON directly.
    - `lesson/output/session.json` — Session document (includes `plan[]`)
    - `lesson/output/quiz/<planItemId>.json` — for each `plan[]` item with `kind="quiz"`
    - `lesson/output/code/<planItemId>.json` — for each `plan[]` item with `kind="problem"`

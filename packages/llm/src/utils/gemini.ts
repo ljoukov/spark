@@ -60,6 +60,20 @@ const GEMINI_PRO_PREVIEW_PRICING: GeminiProPreviewPricing = {
   outputRateHigh: 18 / 1_000_000,
 };
 
+// Pricing from Gemini 2.5 Pro public rates (per 1M tokens, USD):
+// - Input: $1.25 (<=200k prompt tokens), $2.50 (>200k)
+// - Output (including thinking): $10.00 (<=200k), $15.00 (>200k)
+// - Context caching: $0.125 (<=200k), $0.25 (>200k)
+const GEMINI_2_5_PRO_PRICING: GeminiProPreviewPricing = {
+  threshold: 200_000,
+  inputRateLow: 1.25 / 1_000_000,
+  inputRateHigh: 2.5 / 1_000_000,
+  cachedRateLow: 0.125 / 1_000_000,
+  cachedRateHigh: 0.25 / 1_000_000,
+  outputRateLow: 10 / 1_000_000,
+  outputRateHigh: 15 / 1_000_000,
+};
+
 const GEMINI_IMAGE_PREVIEW_PRICING: GeminiImagePreviewPricing = {
   inputRate: 2 / 1_000_000,
   cachedRate: 0.2 / 1_000_000,
@@ -79,6 +93,9 @@ export function isGeminiModelId(value: string): value is GeminiModelId {
 export function getGeminiProPreviewPricing(
   modelId: string,
 ): GeminiProPreviewPricing | undefined {
+  if (modelId.includes("gemini-2.5-pro")) {
+    return GEMINI_2_5_PRO_PRICING;
+  }
   if (modelId.includes("gemini-3-pro")) {
     return GEMINI_PRO_PREVIEW_PRICING;
   }

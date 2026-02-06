@@ -1,21 +1,43 @@
-# Session draft (lesson/output/session.json)
+# Session draft (lesson/drafts/session.md)
 
-You are generating the **Spark Session** JSON for a single learner.
+You are drafting the **Spark Session** plan for a single learner.
 
-Return **JSON only** (start with `{` and end with `}`), matching the schema.
+Return **Markdown only** (no JSON). This draft will later be converted into `lesson/output/session.json` for publishing.
 
-Rules:
-- Write in **UK English**.
-- Do **not** include `id`, `createdAt`, `status`, or `nextLessonProposals` (the publisher will set these).
-- `topics` must be a non-empty array of short strings.
-- `plan` must be non-empty and every plan item must have a unique `id`.
-- Use short, stable ids like `q1`, `q2`, `p1`, `p2`, `m1`.
-- If `lesson/requirements.md` contains plan preferences (number of items, quiz question counts/types), follow them exactly and reflect quiz counts in `plan[].meta` (e.g. "8 questions").
+Write in **UK English**.
+
+## Required format (strict)
+
+# Session
+- topics: <at least 1 short topic>
+- title: <optional>
+- summary: <optional>
+- tagline: <optional>
+- emoji: <optional>
+
+# Plan
+Use one section per plan item:
+
+## <id> (<kind>)
+- title: <required>
+- summary: <optional>
+- description: <optional>
+- icon: <optional>
+- meta: <optional> (include quiz question counts/types if specified)
+
+## Rules
+- Plan must be non-empty.
+- Plan item ids must be unique and file-friendly (no spaces). Prefer `q1`, `q2`, `p1`, `m1`.
+- If `lesson/requirements.md` contains plan preferences (number of items, per-quiz question counts/types), follow them exactly.
 - `kind="media"` only if the learner explicitly requested a story/audio clip.
-- If the lesson is not programming practice, make it quiz-only (no `kind="problem"` items).
-
-Schema:
-{{lesson/schema/session.schema.json}}
+- If this is not programming practice, make it quiz-only (no `kind="problem"` items).
+- Plan item `title` should be action-oriented and start with a verb (e.g. "Measure current", "Calculate potential difference").
+- Keep copy short. If you can't confidently stay within the limits for an optional field, omit that field rather than exceeding:
+  - Session `title` (if present): 4-10 words, <= 60 chars.
+  - Session `tagline` (if present): 6-12 words, <= 90 chars. If unsure, omit `tagline`.
+  - Session `summary` (if present): 1-2 sentences, <= 45 words.
+  - Plan item `title`: 3-8 words, <= 55 chars.
+  - Plan item `summary` (if present): 1 sentence, <= 25 words.
 
 Decisions + constraints (authoritative):
 {{lesson/requirements.md}}

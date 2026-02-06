@@ -56,8 +56,8 @@ describe("Spark agent tool: publish_lesson guards", () => {
 
       await mkdir(path.join(rootDir, "lesson/feedback"), { recursive: true });
       await writeFile(
-        path.join(rootDir, "lesson/feedback/session-grade.json"),
-        JSON.stringify({ pass: false }, null, 2) + "\n",
+        path.join(rootDir, "lesson/feedback/session-grade.md"),
+        "# Grade\npass: false\n\n## Issues\n- failing smoke guard\n",
         { encoding: "utf8" },
       );
 
