@@ -138,43 +138,86 @@
 	</Card.Header>
 	<Card.Content class="space-y-3">
 		{#each planItems as item (item.id)}
-			<div class="rounded-xl border border-border/70 p-4">
-				<div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-					<div class="space-y-1">
-						<div class="flex flex-wrap items-center gap-2">
-							<p class="text-sm font-semibold text-foreground">{item.title}</p>
-							<span
-								class={cn(
-									'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-									itemStatusBadgeClass(item.state.status)
-								)}
-							>
-								{item.state.status}
-							</span>
-							<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-								{item.kind}
-							</span>
-						</div>
-						<p class="text-xs text-muted-foreground">
-							<span class="font-mono">{item.id}</span>
-						</p>
-						<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
-							<p>
-								<span class="text-foreground/70">Started</span>
-								<span class="ml-1">{formatInstant(item.state.startedAt)}</span>
+			{#if item.kind === 'quiz'}
+				<a
+					href={`quiz/${encodeURIComponent(item.id)}`}
+					class="block rounded-xl border border-border/70 p-4 transition-colors hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+				>
+					<div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+						<div class="space-y-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<p class="text-sm font-semibold text-foreground hover:underline">
+									{item.title}
+								</p>
+								<span
+									class={cn(
+										'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+										itemStatusBadgeClass(item.state.status)
+									)}
+								>
+									{item.state.status}
+								</span>
+								<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+									{item.kind}
+								</span>
+							</div>
+							<p class="text-xs text-muted-foreground">
+								<span class="font-mono">{item.id}</span>
 							</p>
-							<p>
-								<span class="text-foreground/70">Completed</span>
-								<span class="ml-1">{formatInstant(item.state.completedAt)}</span>
-							</p>
+							<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
+								<p>
+									<span class="text-foreground/70">Started</span>
+									<span class="ml-1">{formatInstant(item.state.startedAt)}</span>
+								</p>
+								<p>
+									<span class="text-foreground/70">Completed</span>
+									<span class="ml-1">{formatInstant(item.state.completedAt)}</span>
+								</p>
+							</div>
+							{#if item.summary}
+								<p class="pt-1 text-xs text-muted-foreground">{item.summary}</p>
+							{/if}
 						</div>
-						{#if item.summary}
-							<p class="pt-1 text-xs text-muted-foreground">{item.summary}</p>
-						{/if}
+					</div>
+				</a>
+			{:else}
+				<div class="rounded-xl border border-border/70 p-4">
+					<div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+						<div class="space-y-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<p class="text-sm font-semibold text-foreground">{item.title}</p>
+								<span
+									class={cn(
+										'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+										itemStatusBadgeClass(item.state.status)
+									)}
+								>
+									{item.state.status}
+								</span>
+								<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+									{item.kind}
+								</span>
+							</div>
+							<p class="text-xs text-muted-foreground">
+								<span class="font-mono">{item.id}</span>
+							</p>
+							<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">
+								<p>
+									<span class="text-foreground/70">Started</span>
+									<span class="ml-1">{formatInstant(item.state.startedAt)}</span>
+								</p>
+								<p>
+									<span class="text-foreground/70">Completed</span>
+									<span class="ml-1">{formatInstant(item.state.completedAt)}</span>
+								</p>
+							</div>
+							{#if item.summary}
+								<p class="pt-1 text-xs text-muted-foreground">{item.summary}</p>
+							{/if}
+						</div>
 					</div>
 				</div>
-			</div>
+			{/if}
 		{/each}
 	</Card.Content>
 </Card.Root>
-
