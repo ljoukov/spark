@@ -50,8 +50,8 @@ export const QuizTypeAnswerSchema =
     answer: z.string().min(1),
     acceptableAnswers: z.array(trimmedString).optional(),
     placeholder: z.string().optional(),
-    marks: z.number().int().min(1).max(20).optional(),
-    markScheme: z.string().min(1).optional(),
+    marks: z.number().int().min(1).max(20),
+    markScheme: z.string().trim().min(1),
   });
 
 export const QuizInfoCardSchema = QuizQuestionBaseSchema.extend({

@@ -45,8 +45,8 @@ export type QuizTypeAnswerQuestion = QuizQuestionBase & {
 	answerHtml?: string;
 	acceptableAnswers?: string[];
 	placeholder?: string;
-	marks?: number;
-	markScheme?: string;
+	marks: number;
+	markScheme: string;
 };
 
 export type QuizInfoCardQuestion = QuizQuestionBase & {
