@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes } from "node:crypto";
 import {
   appendFile,
@@ -68,6 +69,19 @@ import type {
   ModelCallHandle,
 } from "./concurrency";
 import { formatMillis } from "./format";
+
+export type LlmToolCallContext = {
+  readonly toolName: string;
+  readonly toolId: string;
+  readonly turn: number;
+  readonly toolIndex: number;
+};
+
+const toolCallContextStorage = new AsyncLocalStorage<LlmToolCallContext>();
+
+export function getCurrentToolCallContext(): LlmToolCallContext | null {
+  return toolCallContextStorage.getStore() ?? null;
+}
 
 function estimateUploadBytes(parts: readonly LlmContentPart[]): number {
   return parts.reduce((total, part) => {
@@ -4531,22 +4545,34 @@ export async function runToolLoop(
               parseError,
               ids,
               toolId,
+              turn,
+              toolIndex,
             };
           });
           const callResults = await Promise.all(
             callInputs.map(async (entry) => {
-              const rawInput = rewriteWriteFileInputForUserFacingCitations({
-                toolName: entry.toolName,
-                rawInput: entry.value,
-                webSearchUrls,
-              });
-              const { result, outputPayload } = await executeToolCall({
-                toolName: entry.toolName,
-                tool: options.tools[entry.toolName],
-                rawInput,
-                parseError: entry.parseError,
-              });
-              return { entry, result, outputPayload };
+              return await toolCallContextStorage.run(
+                {
+                  toolName: entry.toolName,
+                  toolId: entry.toolId,
+                  turn: entry.turn,
+                  toolIndex: entry.toolIndex,
+                },
+                async () => {
+                  const rawInput = rewriteWriteFileInputForUserFacingCitations({
+                    toolName: entry.toolName,
+                    rawInput: entry.value,
+                    webSearchUrls,
+                  });
+                  const { result, outputPayload } = await executeToolCall({
+                    toolName: entry.toolName,
+                    tool: options.tools[entry.toolName],
+                    rawInput,
+                    parseError: entry.parseError,
+                  });
+                  return { entry, result, outputPayload };
+                },
+              );
             }),
           );
           const truncateToolError = (value: string): string => {
@@ -5020,22 +5046,32 @@ export async function runToolLoop(
                 ? `tool: ${toolName} id=${toolId} ${toolSummary}`
                 : `tool: ${toolName} id=${toolId}`,
             );
-            return { call, toolName, value, parseError, toolId };
+            return { call, toolName, value, parseError, toolId, turn, toolIndex };
           });
           const callResults = await Promise.all(
             callInputs.map(async (entry) => {
-              const rawInput = rewriteWriteFileInputForUserFacingCitations({
-                toolName: entry.toolName,
-                rawInput: entry.value,
-                webSearchUrls,
-              });
-              const { result, outputPayload } = await executeToolCall({
-                toolName: entry.toolName,
-                tool: options.tools[entry.toolName],
-                rawInput,
-                parseError: entry.parseError,
-              });
-              return { entry, result, outputPayload };
+              return await toolCallContextStorage.run(
+                {
+                  toolName: entry.toolName,
+                  toolId: entry.toolId,
+                  turn: entry.turn,
+                  toolIndex: entry.toolIndex,
+                },
+                async () => {
+                  const rawInput = rewriteWriteFileInputForUserFacingCitations({
+                    toolName: entry.toolName,
+                    rawInput: entry.value,
+                    webSearchUrls,
+                  });
+                  const { result, outputPayload } = await executeToolCall({
+                    toolName: entry.toolName,
+                    tool: options.tools[entry.toolName],
+                    rawInput,
+                    parseError: entry.parseError,
+                  });
+                  return { entry, result, outputPayload };
+                },
+              );
             }),
           );
           const truncateToolError = (value: string): string => {
@@ -5363,16 +5399,26 @@ export async function runToolLoop(
               ? `tool: ${toolName} id=${toolId} ${toolSummary}`
               : `tool: ${toolName} id=${toolId}`,
           );
-          return { call, toolName, rawInput, toolId };
+          return { call, toolName, rawInput, toolId, turn, toolIndex };
         });
         const callResults = await Promise.all(
           callInputs.map(async (entry) => {
-            const { result, outputPayload } = await executeToolCall({
-              toolName: entry.toolName,
-              tool: options.tools[entry.toolName],
-              rawInput: entry.rawInput,
-            });
-            return { entry, result, outputPayload };
+            return await toolCallContextStorage.run(
+              {
+                toolName: entry.toolName,
+                toolId: entry.toolId,
+                turn: entry.turn,
+                toolIndex: entry.toolIndex,
+              },
+              async () => {
+                const { result, outputPayload } = await executeToolCall({
+                  toolName: entry.toolName,
+                  tool: options.tools[entry.toolName],
+                  rawInput: entry.rawInput,
+                });
+                return { entry, result, outputPayload };
+              },
+            );
           }),
         );
         const truncateToolError = (value: string): string => {
