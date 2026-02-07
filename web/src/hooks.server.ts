@@ -1,6 +1,7 @@
 import { isUserAdmin } from '$lib/server/utils/admin';
-import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
+import { AUTH_SESSION_COOKIE_NAME, AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
+import { readAppSessionCookieValue, setAppSessionCookie } from '$lib/server/auth/sessionCookie';
 import { z } from 'zod';
 import { json, type Handle, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
@@ -65,6 +66,21 @@ export const handle = (async ({ event, resolve }) => {
 		appUser: NonNullable<App.Locals['appUser']>;
 	};
 
+	const verifySession = async (): Promise<NonNullable<App.Locals['appUser']> | null> => {
+		const raw = event.cookies.get(AUTH_SESSION_COOKIE_NAME);
+		const session = await readAppSessionCookieValue(raw);
+		if (!session) {
+			return null;
+		}
+		return {
+			uid: session.uid,
+			email: session.email,
+			name: session.name,
+			photoUrl: session.photoUrl,
+			isAnonymous: session.isAnonymous
+		};
+	};
+
 	const verifyCookie = async (label: string): Promise<VerifiedAuthResult | null> => {
 		const raw = event.cookies.get(AUTH_TOKEN_COOKIE_NAME);
 		const parsed = z.string().min(1).safeParse(raw);
@@ -92,20 +108,42 @@ export const handle = (async ({ event, resolve }) => {
 	};
 
 	if (shouldHydrateAppUser(pathname)) {
-		const verified = await verifyCookie('app-auth');
-		if (verified) {
-			event.locals.appUser = verified.appUser;
+		const sessionUser = await verifySession();
+		if (sessionUser) {
+			event.locals.appUser = sessionUser;
+		} else {
+			const verified = await verifyCookie('app-auth');
+			if (verified) {
+				event.locals.appUser = verified.appUser;
+				try {
+					await setAppSessionCookie(event.cookies, event.url, verified.appUser);
+				} catch (err) {
+					console.log('[app-auth] failed to issue session cookie', err);
+				}
+			}
 		}
 	}
 
 	if (pathname.startsWith('/admin')) {
-		const verified = await verifyCookie('admin-auth');
 		let hasValidToken = false;
 		let isAdmin = false;
-		if (verified) {
-			event.locals.appUser = verified.appUser;
+		const sessionUser = await verifySession();
+		if (sessionUser) {
+			event.locals.appUser = sessionUser;
 			hasValidToken = true;
-			isAdmin = isUserAdmin({ userId: verified.payload.sub } as { userId: string });
+			isAdmin = isUserAdmin({ userId: sessionUser.uid } as { userId: string });
+		} else {
+			const verified = await verifyCookie('admin-auth');
+			if (verified) {
+				event.locals.appUser = verified.appUser;
+				hasValidToken = true;
+				isAdmin = isUserAdmin({ userId: verified.payload.sub } as { userId: string });
+				try {
+					await setAppSessionCookie(event.cookies, event.url, verified.appUser);
+				} catch (err) {
+					console.log('[admin-auth] failed to issue session cookie', err);
+				}
+			}
 		}
 
 		const isAdminRoot = pathname === '/admin' || pathname === '/admin/';

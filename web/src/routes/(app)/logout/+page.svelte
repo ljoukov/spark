@@ -104,6 +104,11 @@
 		ui.wasGuest = Boolean(user?.isAnonymous);
 		if (!user) {
 			clearIdTokenCookie();
+			try {
+				await fetch('/api/logout', { method: 'POST' });
+			} catch {
+				// Best-effort; ignore failures while signing out.
+			}
 			ui.status = 'not_signed_in';
 			return;
 		}
@@ -112,6 +117,11 @@
 		try {
 			await firebaseSignOut();
 			clearIdTokenCookie();
+			try {
+				await fetch('/api/logout', { method: 'POST' });
+			} catch {
+				// Best-effort; ignore failures while signing out.
+			}
 			ui.status = 'signed_out';
 		} catch (error) {
 			const fallback = 'Unexpected error while signing out. Please try again.';

@@ -31,13 +31,30 @@
 		ui.errorMessage = '';
 	}
 
+	function resolveRedirectTarget(): string {
+		if (typeof window === 'undefined') {
+			return '/spark';
+		}
+		const raw = new URL(window.location.href).searchParams.get('redirectTo');
+		if (!raw) {
+			return '/spark';
+		}
+		if (!raw.startsWith('/') || raw.startsWith('//')) {
+			return '/spark';
+		}
+		if (raw.includes('\n') || raw.includes('\r')) {
+			return '/spark';
+		}
+		return raw;
+	}
+
 	function redirectToSpark(): void {
 		if (redirecting) {
 			return;
 		}
 		redirecting = true;
 		if (typeof window !== 'undefined') {
-			window.location.href = '/spark';
+			window.location.href = resolveRedirectTarget();
 		}
 	}
 

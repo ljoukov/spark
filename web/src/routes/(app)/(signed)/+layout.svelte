@@ -172,6 +172,8 @@
 		let stopAuthListener: () => void = () => {};
 		let syncingProfile = false;
 		let lastSyncedSignature: string | null = null;
+		let redirectingToLogin = false;
+		let bootAuthTimer: number | null = null;
 
 		async function syncProfileFrom(firebaseUser: User): Promise<void> {
 			if (syncingProfile) {
@@ -198,17 +200,17 @@
 						isAnonymous: firebaseUser.isAnonymous
 					})
 				});
-					if (!response.ok) {
-						const details = await response.json().catch(() => null);
-						console.warn('Failed to sync profile for Spark user', details);
-						return;
-					}
-				lastSyncedSignature = signature;
-				} catch (error) {
-					console.error('Unexpected error while syncing Spark profile', error);
-				} finally {
-					syncingProfile = false;
+				if (!response.ok) {
+					const details = await response.json().catch(() => null);
+					console.warn('Failed to sync profile for Spark user', details);
+					return;
 				}
+				lastSyncedSignature = signature;
+			} catch (error) {
+				console.error('Unexpected error while syncing Spark profile', error);
+			} finally {
+				syncingProfile = false;
+			}
 		}
 
 		function updateUserFromAuth(firebaseUser: User): void {
@@ -228,20 +230,56 @@
 		try {
 			const app = getFirebaseApp();
 			const auth = getAuth(app);
-			stopAuthListener = onIdTokenChanged(auth, (firebaseUser) => {
-				if (!firebaseUser) {
+			const clearSessionAndRedirect = async (): Promise<void> => {
+				if (redirectingToLogin) {
 					return;
 				}
-				updateUserFromAuth(firebaseUser);
-				void syncProfileFrom(firebaseUser);
+				redirectingToLogin = true;
+				try {
+					await fetch('/api/logout', { method: 'POST' });
+				} catch {
+					// Best-effort; ignore failures while redirecting.
+				}
+				const redirectTo = `${window.location.pathname}${window.location.search}`;
+				window.location.href = `/login?redirectTo=${encodeURIComponent(redirectTo)}`;
+			};
+
+			stopAuthListener = onIdTokenChanged(auth, (firebaseUser) => {
+				if (firebaseUser) {
+					if (bootAuthTimer !== null) {
+						window.clearTimeout(bootAuthTimer);
+						bootAuthTimer = null;
+					}
+					updateUserFromAuth(firebaseUser);
+					void syncProfileFrom(firebaseUser);
+					return;
+				}
+
+				// If SSR thinks we're signed in (session cookie) but Firebase is missing, the UI will
+				// half-render and all Firestore reads will fail. Give Firebase a moment to hydrate
+				// its persisted state before we clear the server session + bounce to /login.
+				if (bootAuthTimer !== null) {
+					return;
+				}
+				bootAuthTimer = window.setTimeout(() => {
+					bootAuthTimer = null;
+					if (auth.currentUser) {
+						return;
+					}
+					void clearSessionAndRedirect();
+				}, 1200);
 			});
-			} catch (error) {
-				console.error('Failed to initialize Spark auth listeners', error);
-			}
+		} catch (error) {
+			console.error('Failed to initialize Spark auth listeners', error);
+		}
 
 		return () => {
 			unsubscribeTheme();
 			stopAuthListener();
+			if (bootAuthTimer !== null) {
+				window.clearTimeout(bootAuthTimer);
+				bootAuthTimer = null;
+			}
 		};
 	});
 
