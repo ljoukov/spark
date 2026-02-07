@@ -42,7 +42,7 @@
 		kind: 'image' | 'file';
 		file: SparkAgentFile;
 	};
-	type ChatStreamPhase = 'idle' | 'connecting' | 'calling' | 'thinking' | 'responding';
+	type ChatStreamPhase = 'idle' | 'connecting' | 'sending' | 'thinking' | 'responding';
 
 	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
@@ -1000,14 +1000,17 @@
 						}))
 					})
 				},
-				{
-					onEvent: (event) => {
-						if (event.event === 'meta') {
-							try {
-								const payload = JSON.parse(event.data) as {
-									conversationId: string;
-									messageId?: string;
-									assistantMessageId?: string;
+					{
+						onEvent: (event) => {
+							if (event.event === 'meta') {
+								if (chatStreamPhase !== 'thinking' && chatStreamPhase !== 'responding') {
+									chatStreamPhase = 'sending';
+								}
+								try {
+									const payload = JSON.parse(event.data) as {
+										conversationId: string;
+										messageId?: string;
+										assistantMessageId?: string;
 								};
 								if (payload.conversationId) {
 									setConversationId(payload.conversationId);
@@ -1018,15 +1021,14 @@
 								}
 								if (payload.messageId) {
 									pendingScrollMessageId = payload.messageId;
-								}
-								if (payload.assistantMessageId) {
-									activeAssistantId = payload.assistantMessageId;
-									chatStreamAssistantMessageId = payload.assistantMessageId;
-									chatStreamPhase = 'calling';
-									streamingByMessageId = {
-										...streamingByMessageId,
-										[payload.assistantMessageId]: ''
-									};
+									}
+									if (payload.assistantMessageId) {
+										activeAssistantId = payload.assistantMessageId;
+										chatStreamAssistantMessageId = payload.assistantMessageId;
+										streamingByMessageId = {
+											...streamingByMessageId,
+											[payload.assistantMessageId]: ''
+										};
 									streamingThoughtsByMessageId = {
 										...streamingThoughtsByMessageId,
 										[payload.assistantMessageId]: ''
@@ -1034,11 +1036,11 @@
 								}
 							} catch {
 								// ignore
+								}
+								return;
 							}
-							return;
-						}
-						if (event.event === 'thought') {
-							if (!activeAssistantId) {
+							if (event.event === 'thought') {
+								if (!activeAssistantId) {
 								return;
 							}
 							const existing = streamingThoughtsByMessageId[activeAssistantId] ?? '';
@@ -1089,16 +1091,13 @@
 							}
 							chatStreamPhase = 'idle';
 							chatStreamAssistantMessageId = null;
-							return;
-						}
-					},
-					onOpen: () => {
-						chatStreamPhase = 'calling';
+								return;
+							}
+						},
 					}
-				}
-			);
-		} catch (err) {
-			if (err instanceof DOMException && err.name === 'AbortError') {
+				);
+			} catch (err) {
+				if (err instanceof DOMException && err.name === 'AbortError') {
 				// stream stopped by user
 			} else {
 				console.error('Spark AI Agent request failed', err);
@@ -1406,35 +1405,35 @@
 										{/each}
 									</div>
 								{/if}
-								{#if message.role === 'assistant'}
-									<div class="message-bubble">
-										{#if thinkingText}
-											<div class="message-thinking">
-												<p class="message-thinking__label">llm thinking...</p>
-												<div class="message-thinking__body">{thinkingText}</div>
-											</div>
-										{/if}
-										{#if messageHtml}
-											<div class="message-markdown markdown">{@html messageHtml}</div>
-										{:else if !thinkingText}
-											{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
-												<p class="message-placeholder message-status">
-													<span class="message-status__spinner" aria-hidden="true"></span>
-													connecting...
-												</p>
-											{:else if isActiveStreamMessage && chatStreamPhase === 'calling'}
-												<p class="message-placeholder message-status">
-													<span class="message-status__spinner" aria-hidden="true"></span>
-													calling llm...
-												</p>
-											{:else if isActiveStreamMessage && chatStreamPhase === 'thinking'}
-												<p class="message-placeholder message-status">
-													<span class="message-status__spinner" aria-hidden="true"></span>
-													llm thinking...
-												</p>
-											{:else}
-												<p class="message-placeholder">…</p>
+									{#if message.role === 'assistant'}
+										<div class="message-bubble">
+											{#if thinkingText}
+												<div class="message-thinking">
+													<p class="message-thinking__label">Thinking...</p>
+													<div class="message-thinking__body">{thinkingText}</div>
+												</div>
 											{/if}
+											{#if messageHtml}
+												<div class="message-markdown markdown">{@html messageHtml}</div>
+											{:else if !thinkingText}
+												{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
+													<p class="message-placeholder message-status">
+														<span class="message-status__spinner" aria-hidden="true"></span>
+														Establishing connection...
+													</p>
+												{:else if isActiveStreamMessage && chatStreamPhase === 'sending'}
+													<p class="message-placeholder message-status">
+														<span class="message-status__spinner" aria-hidden="true"></span>
+														Sending request...
+													</p>
+												{:else if isActiveStreamMessage && chatStreamPhase === 'thinking'}
+													<p class="message-placeholder message-status">
+														<span class="message-status__spinner" aria-hidden="true"></span>
+														Thinking...
+													</p>
+												{:else}
+													<p class="message-placeholder">…</p>
+												{/if}
 										{/if}
 									</div>
 								{:else if messageText}

@@ -41,7 +41,7 @@ async function requestGradeFromModel(
 			lastError = error;
 		}
 	}
-	throw lastError ?? new Error('LLM request failed');
+	throw lastError ?? new Error('Grading request failed');
 }
 
 function buildGradingPrompt(input: GradeTypeAnswerInput): string {
