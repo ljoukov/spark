@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
+import { setAppSessionCookie } from '$lib/server/auth/sessionCookie';
 import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { env } from '$env/dynamic/private';
 
@@ -18,7 +19,7 @@ const bodySchema = z
 		isAnonymous: isAnonymous ?? false
 	}));
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
 	const authResult = await authenticateApiRequest(request);
 	if (!authResult.ok) {
 		return authResult.response;
@@ -40,6 +41,21 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const { name, email, photoUrl, isAnonymous } = parsedBody;
+
+	try {
+		await setAppSessionCookie(cookies, new URL(request.url), {
+			uid: user.uid,
+			name,
+			email,
+			photoUrl,
+			isAnonymous
+		});
+	} catch (error) {
+		console.warn('Failed to issue Spark session cookie (continuing)', {
+			error: error instanceof Error ? error.message : String(error),
+			userId: user.uid
+		});
+	}
 
 	// Best-effort user doc upsert.
 	// This must be Workers-compatible; Firebase Admin Firestore uses gRPC/protobuf codegen
