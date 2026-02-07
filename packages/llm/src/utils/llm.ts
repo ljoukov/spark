@@ -5317,41 +5317,138 @@ export async function runToolLoop(
       });
       recordPromptUsage(callHandle, promptContents);
       try {
-        const response = await runGeminiCall(async (client) =>
-          client.models.generateContent({
+        type GeminiToolLoopStreamResponse = {
+          readonly responseText: string;
+          readonly functionCalls: Array<NonNullable<Part["functionCall"]>>;
+          readonly modelParts: Part[];
+          readonly usageMetadata?: unknown;
+          readonly modelVersion?: string;
+        };
+
+        const onDelta = options.onDelta;
+        const thinkingConfig: GenerateContentConfig["thinkingConfig"] = (() => {
+          switch (options.modelId) {
+            case "gemini-3-pro-preview":
+              return { includeThoughts: true } as const;
+            case "gemini-2.5-pro":
+              return { includeThoughts: true, thinkingBudget: 32_768 } as const;
+            case "gemini-flash-latest":
+            case "gemini-flash-lite-latest":
+              return { includeThoughts: true, thinkingBudget: 24_576 } as const;
+            default:
+              return { includeThoughts: true } as const;
+          }
+        })();
+        const config: GenerateContentConfig = {
+          maxOutputTokens: 32_000,
+          tools: geminiTools,
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.VALIDATED,
+            },
+          },
+          thinkingConfig,
+        };
+        const response: GeminiToolLoopStreamResponse = await runGeminiCall(
+          async (client): Promise<GeminiToolLoopStreamResponse> => {
+          const stream = await client.models.generateContentStream({
             model: options.modelId,
             contents: geminiContents,
-            config: {
-              maxOutputTokens: 32_000,
-              tools: geminiTools,
-              toolConfig: {
-                functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.VALIDATED,
-                },
-              },
-            },
-          }),
-        );
+            config,
+          });
+          let responseText = "";
+          const modelParts: Part[] = [];
+          const functionCalls: Array<NonNullable<Part["functionCall"]>> = [];
+          const seenFunctionCallIds = new Set<string>();
+          const seenFunctionCallKeys = new Set<string>();
+          let latestUsageMetadata: unknown;
+          let resolvedModelVersion: string | undefined = undefined;
+
+          for await (const chunk of stream) {
+            if (chunk.modelVersion) {
+              resolvedModelVersion = chunk.modelVersion;
+            }
+            if (chunk.usageMetadata) {
+              latestUsageMetadata = chunk.usageMetadata;
+            }
+
+            const candidates = chunk.candidates;
+            if (!candidates || candidates.length === 0) {
+              continue;
+            }
+            const primary = candidates[0];
+            const content = primary.content;
+            const parts = content?.parts;
+            if (!parts || parts.length === 0) {
+              continue;
+            }
+
+            for (const part of parts) {
+              modelParts.push(part);
+
+              const call = part.functionCall;
+              if (call) {
+                const id = typeof call.id === "string" ? call.id : "";
+                const shouldAdd = (() => {
+                  if (id.length > 0) {
+                    if (seenFunctionCallIds.has(id)) {
+                      return false;
+                    }
+                    seenFunctionCallIds.add(id);
+                    return true;
+                  }
+                  const key = JSON.stringify({
+                    name: call.name ?? "",
+                    args: call.args ?? null,
+                  });
+                  if (seenFunctionCallKeys.has(key)) {
+                    return false;
+                  }
+                  seenFunctionCallKeys.add(key);
+                  return true;
+                })();
+
+                if (shouldAdd) {
+                  functionCalls.push(call);
+                }
+              }
+
+              if (typeof part.text === "string" && part.text.length > 0) {
+                if (part.thought) {
+                  onDelta?.({ thoughtDelta: part.text });
+                } else {
+                  responseText += part.text;
+                  onDelta?.({ textDelta: part.text });
+                }
+              }
+            }
+          }
+
+          return {
+            responseText,
+            functionCalls,
+            modelParts,
+            usageMetadata: latestUsageMetadata,
+            modelVersion: resolvedModelVersion ?? options.modelId,
+          };
+        });
         const usageTokens = extractUsageTokens(
-          (response as { usageMetadata?: unknown }).usageMetadata,
+          response.usageMetadata,
         );
-        const modelVersion =
-          (response as { modelVersion?: string }).modelVersion ??
-          (response as { model?: string }).model ??
-          undefined;
+        const modelVersion = response.modelVersion;
         if (usageTokens || modelVersion) {
           reporter.recordModelUsage(callHandle, {
             modelVersion,
             tokens: usageTokens,
           });
         }
-        const responseText = response.text ?? "";
+        const responseText = response.responseText;
         if (responseText.trim().length > 0) {
           const flattened = responseText.replace(/\s+/gu, " ").trim();
           reporter.log(`assistant: ${truncateForLog(flattened, 800)}`);
         }
         const functionCalls = response.functionCalls;
-        if (!functionCalls || functionCalls.length === 0) {
+        if (functionCalls.length === 0) {
           if (!responseText) {
             throw new Error("Tool loop response did not include text output.");
           }
@@ -5373,9 +5470,14 @@ export async function runToolLoop(
           );
         }
         const toolCalls: LlmToolCallResult[] = [];
-        const modelContent = response.candidates?.[0]?.content;
-        if (modelContent) {
-          geminiContents.push(modelContent);
+        const modelPartsForHistory = response.modelParts.filter((part) => {
+          if (typeof part.text === "string" && part.thought === true) {
+            return false;
+          }
+          return true;
+        });
+        if (modelPartsForHistory.length > 0) {
+          geminiContents.push({ role: "model", parts: modelPartsForHistory });
         } else {
           const parts: Part[] = [];
           if (responseText) {
