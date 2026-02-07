@@ -24,7 +24,7 @@ Fail if any are violated:
 - Problem must be appropriate for the requested level and the lesson plan.
 - Problem copy must meet the length guidance in the code problem draft prompt (keep it concise).
 - Any maths/science equations or formulas in Markdown fields must be written as LaTeX using `$...$` (inline) or `$$...$$` (display).
-- Fail if any `$...$` / `$$...$$` formula is wrapped in backticks (inline code), since that produces `<code>` instead of rendered math.
+- Fail if any `$...$` / `$$...$$` formula is wrapped in backticks (inline code); LaTeX should render as math, not `<code>`.
 
 Decisions + constraints:
 {{lesson/requirements.md}}
