@@ -2,19 +2,21 @@
   "name": "spark-monorepo",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.8",
   "workspaces": [
+    "proto",
     "web",
     "packages/*",
     "eval"
   ],
   "scripts": {
-    "postinstall": "npm -w web run prepare || true",
+    "postinstall": "bun --cwd=web run prepare || true",
     "format": "bash scripts/format-swift.sh",
-    "generate": "npm --prefix proto run generate",
-    "repo:format": "npm run format --workspace eval && npm run format --workspace web && npm run format --workspace @spark/llm && npm run format --workspace @spark/schemas && npm run format",
-    "repo:lint": "npm run lint --workspace eval && npm run lint --workspace web && npm run lint --workspace @spark/llm && npm run lint --workspace @spark/schemas",
-    "repo:typecheck": "npm run typecheck --workspace eval && npm run typecheck --workspace web && npm run typecheck --workspace @spark/llm && npm run typecheck --workspace @spark/schemas",
-    "repo:check": "npm run repo:format && npm run repo:lint && npm run repo:typecheck",
-    "check": "NODE_OPTIONS=\"--trace-warnings --trace-deprecation --throw-deprecation\" npm run repo:check"
+    "generate": "bun --cwd=proto run generate",
+    "repo:format": "bun --cwd=eval run format && bun --cwd=web run format && bun --cwd=packages/llm run format && bun --cwd=packages/schemas run format && bun --cwd=packages/proto run format && bun run format",
+    "repo:lint": "bun --cwd=eval run lint && bun --cwd=web run lint && bun --cwd=packages/llm run lint && bun --cwd=packages/schemas run lint && bun --cwd=packages/proto run lint",
+    "repo:typecheck": "bun --cwd=eval run typecheck && bun --cwd=web run typecheck && bun --cwd=packages/llm run typecheck && bun --cwd=packages/schemas run typecheck && bun --cwd=packages/proto run typecheck",
+    "repo:check": "bun run repo:format && bun run repo:lint && bun run repo:typecheck",
+    "check": "bun run repo:check"
   }
 }

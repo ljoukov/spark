@@ -148,7 +148,7 @@ The decoded payload includes `{ access, refresh, expires, accountId }` and may a
 Run the helper to complete the browser-based OAuth flow and print a `CHATGPT_AUTH_JSON_B64=...` line you can paste into your server environment:
 
 ```
-npm --prefix eval run auth:chatgpt
+bun --cwd=eval run auth:chatgpt
 ```
 
 ## Debug Snapshots (Prompts and Responses)

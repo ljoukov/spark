@@ -36,7 +36,7 @@ Dive deeper in the [Product & Architecture Specification](docs/SPEC.md).
 ## Monorepo layout
 - [`Spark/`](Spark): SwiftUI app modules for capture, quiz, and progress flows.
 - [`web/`](web): SvelteKit project for marketing pages, authenticated portal, and API endpoints.
-- [`proto/`](proto): Source for protobuf contracts (`npm run generate` produces TypeScript and Swift bindings).
+- [`proto/`](proto): Source for protobuf contracts (`bun run generate` produces TypeScript and Swift bindings).
 - [`data/`](data): Fixtures used during prototyping and testing.
 - [`docs/`](docs): Living documentation, including [SPEC](docs/SPEC.md).
 - [`spark-data/`](spark-data): Private submodule that stores licensed study materials. The contents remain empty in fresh clones unless you have credentials to access the private repository.
