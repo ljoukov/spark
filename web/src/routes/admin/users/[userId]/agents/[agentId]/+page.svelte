@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
@@ -9,6 +10,9 @@
 	const agent = $derived(data.agent);
 	const files = $derived(data.files);
 	const log = $derived(data.log);
+
+	let downloadSubmitting = $state(false);
+	let downloadError = $state<string | null>(null);
 
 	function formatInstant(value: string | null): string {
 		if (!value) {
@@ -58,6 +62,44 @@
 		const gb = mb / 1024;
 		return `${gb.toFixed(1)} GB`;
 	}
+
+	async function downloadRunZip(): Promise<void> {
+		if (!browser) {
+			return;
+		}
+		if (!agent || downloadSubmitting) {
+			return;
+		}
+		downloadSubmitting = true;
+		downloadError = null;
+		try {
+			const response = await fetch(
+				`/api/admin/users/${encodeURIComponent(data.user.uid)}/agents/${encodeURIComponent(agent.id)}/download`,
+				{
+					method: 'GET'
+				}
+			);
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				throw new Error(payload?.error ?? payload?.message ?? 'download_failed');
+			}
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `spark-agent-${agent.id}.zip`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			window.setTimeout(() => {
+				URL.revokeObjectURL(url);
+			}, 60_000);
+		} catch (error) {
+			downloadError = error instanceof Error ? error.message : 'Unable to download zip right now.';
+		} finally {
+			downloadSubmitting = false;
+		}
+	}
 </script>
 
 {#if !data.agentDocFound}
@@ -92,22 +134,41 @@
 			<Card.Description>Read-only view of the run state, logs, and workspace.</Card.Description>
 		</Card.Header>
 		<Card.Content class="space-y-4">
-			<div class="flex flex-wrap items-center gap-2">
-				<p class="font-mono text-xs break-all">{agent.id}</p>
-				<span
-					class={cn(
-						'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-						statusBadgeClass(agent.status)
-					)}
-				>
-					{agent.status}
-				</span>
-				{#if agent.stopRequested}
-					<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-						stop requested
+			<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<div class="flex flex-wrap items-center gap-2">
+					<p class="font-mono text-xs break-all">{agent.id}</p>
+					<span
+						class={cn(
+							'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+							statusBadgeClass(agent.status)
+						)}
+					>
+						{agent.status}
 					</span>
-				{/if}
+					{#if agent.stopRequested}
+						<span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+							stop requested
+						</span>
+					{/if}
+				</div>
+
+				<Button
+					variant="secondary"
+					size="sm"
+					disabled={downloadSubmitting}
+					onclick={() => {
+						void downloadRunZip();
+					}}
+				>
+					{downloadSubmitting ? 'Downloading…' : 'Download zip'}
+				</Button>
 			</div>
+
+			{#if downloadError}
+				<p class="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+					{downloadError}
+				</p>
+			{/if}
 
 			<div class="grid gap-3 md:grid-cols-2">
 				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
@@ -250,4 +311,3 @@
 		</Card.Content>
 	</Card.Root>
 {/if}
-
