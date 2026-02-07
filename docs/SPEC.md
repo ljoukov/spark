@@ -328,7 +328,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Svelte 5 gotcha: do not capture reactive `data` (from `$props`) in top-level initializers. Use `$derived`, `$effect`, or lazy functions (e.g. for context) so values update and avoid `state_referenced_locally`.
 
 - Landing page (`/`) is a logged-out home/marketing hero with the preview video and a visible `LOGIN` CTA; clicking it navigates to `/login`. If the server detects an authenticated session it redirects straight to `/spark` (no `destination` query, no guest mode).
-- `/login` renders the sign-in dialog (Google auth) and redirects to `/spark` on success.
+- `/login` renders the sign-in dialog. Clicking "Continue with Google" navigates to `/login/continue`, which starts Firebase redirect-based Google sign-in. Google returns to `/login/continue` (not `/login`) to avoid flashing the sign-in UI twice, then the client syncs the server session via `POST /api/login` and redirects to `/spark` (or `redirectTo`).
 - Web app pages (including `/spark` and `/admin`) are built with shadcn and SvelteKit.
 - The main web app experience (landing, auth, and signed-in pages) lives under the `(app)` layout group so that `/admin` does not inherit app-only client effects.
 - Public marketing site + lightweight authenticated portal for testing (e.g., shareable quizzes or onboarding instructions).

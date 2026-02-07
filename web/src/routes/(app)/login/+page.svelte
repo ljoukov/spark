@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
-	import { getFirebaseApp, startGoogleSignInRedirect } from '$lib/utils/firebaseClient';
+	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { clearIdTokenCookie, setIdTokenCookie } from '$lib/auth/tokenCookie';
 	import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth';
 
@@ -163,18 +163,15 @@
 		}
 	}
 
-	async function handleGoogleSignIn() {
+	function handleGoogleSignIn() {
 		if (ui.signingInWithGoogle || ui.signingInAnonymously || ui.syncingProfile || redirecting) {
 			return;
 		}
 		resetError();
 		ui.signingInWithGoogle = true;
-		try {
-			await startGoogleSignInRedirect();
-		} catch (error) {
-			const fallback = 'Unable to start Google sign-in. Please try again.';
-			ui.errorMessage = error instanceof Error ? error.message : fallback;
-			ui.signingInWithGoogle = false;
+		if (typeof window !== 'undefined') {
+			const redirectTo = resolveRedirectTarget();
+			window.location.href = `/login/continue?redirectTo=${encodeURIComponent(redirectTo)}`;
 		}
 	}
 
