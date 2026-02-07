@@ -136,7 +136,11 @@ Recommended defaults:
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
     - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
     - The send button is disabled until all uploads finish; while uploading it shows an inline spinner.
-    - Streaming may include a short “thinking” preview while the assistant response is generated.
+    - While streaming, the assistant bubble exposes client + LLM phases:
+      - `connecting...` while the SSE request is opening.
+      - `calling llm...` once the connection is open and the server has accepted the request.
+      - `llm thinking...` while the model streams thought deltas (rendered in a 4-line, tail-capped thoughts box).
+      - The assistant response streams as it is generated (no explicit "responding" label; tokens append into the message body).
     - Conversations are stored in Firestore as a single append-only document per thread.
     - Phase 1 always routes user messages to the agent LLM and streams responses back to the client (no direct messaging yet).
     - The server downloads any attachments on the latest user message and submits them to the LLM as inline parts.
