@@ -27,6 +27,7 @@ import {
 
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
+import { formatMillis } from "../utils/format";
 import {
   deleteFirestoreDocument,
   getFirestoreDocument,
@@ -189,6 +190,32 @@ const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_STREAM_MAX_CHARS = 20_000;
 const STOP_POLL_INTERVAL_MS = 10_000;
+
+function formatUsdTotal(value: number): string {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return `$${safeValue.toFixed(2)}`;
+}
+
+function parseGenerateToolCostUsd(message: string): {
+  toolName: "generate_text" | "generate_json";
+  costUsd: number;
+} | null {
+  if (!message.startsWith("tool_result:")) {
+    return null;
+  }
+  const match = message.match(
+    /^tool_result:\s+(generate_text|generate_json)\b.*\bcost=\$([\d,.]+)\b/u,
+  );
+  if (!match) {
+    return null;
+  }
+  const toolName = match[1] as "generate_text" | "generate_json";
+  const costValue = Number.parseFloat(match[2].replace(/,/gu, ""));
+  if (!Number.isFinite(costValue) || costValue < 0) {
+    return null;
+  }
+  return { toolName, costUsd: costValue };
+}
 
 type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
   location?: { href: string };
@@ -3464,6 +3491,8 @@ export async function runSparkAgentTask(
   const statsTracker = new AgentRunStatsTracker({
     primaryModelId: toolLoopModelId,
   });
+  let generateTextCostUsd = 0;
+  let generateJsonCostUsd = 0;
 
   let prompt = "";
   let logSync: AgentLogSync | undefined;
@@ -3616,6 +3645,14 @@ export async function runSparkAgentTask(
     const progress: JobProgressReporter = {
       log: (message) => {
         throwIfStopRequested();
+        const toolCost = parseGenerateToolCostUsd(message);
+        if (toolCost) {
+          if (toolCost.toolName === "generate_text") {
+            generateTextCostUsd += toolCost.costUsd;
+          } else {
+            generateJsonCostUsd += toolCost.costUsd;
+          }
+        }
         console.log(`[spark-agent:${options.agentId}] ${message}`);
         logSync?.append(message);
         statsTracker.parseLogLine(message);
@@ -3706,6 +3743,7 @@ export async function runSparkAgentTask(
     }
     startStopPolling();
 
+    const toolLoopStartedAt = Date.now();
     const toolLoopResult = await runToolLoop({
       modelId,
       systemPrompt: buildAgentSystemPrompt(),
@@ -3754,6 +3792,17 @@ export async function runSparkAgentTask(
         summary: summary.length > 0 ? summary : undefined,
       });
     }
+
+    const totals = statsTracker.snapshot();
+    progress.log(
+      [
+        "run_summary:",
+        `agent_llm=${formatUsdTotal(totals.modelCostUsd)}`,
+        `generate_text=${formatUsdTotal(generateTextCostUsd)}`,
+        `generate_json=${formatUsdTotal(generateJsonCostUsd)}`,
+        `wallclock=${formatMillis(Date.now() - toolLoopStartedAt)}`,
+      ].join(" "),
+    );
 
     await logSync?.flushAll().catch(() => undefined);
   } catch (error) {
