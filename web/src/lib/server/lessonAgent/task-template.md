@@ -88,6 +88,6 @@ Notes:
 - Write in UK English.
 - Keep plan item titles short and action-oriented (what the learner does).
 - Plan item `icon` values must be a single emoji glyph (not icon library names like "Bolt").
-- Use LaTeX for maths/science formulas in quiz/coding problem Markdown (`$...$` inline, `$$...$$` display).
+- Use LaTeX for maths/science formulas in quiz/coding problem Markdown (`$...$` inline, `$$...$$` display). Do not wrap `$...$` / `$$...$$` formulas in backticks (inline code), or they will render as `<code>` instead of math.
 - Avoid references to "the brief", "the user uploaded", page numbers, or internal pipeline.
 - For code problems, ensure the reference solution passes all tests (use `python_exec` to verify).
