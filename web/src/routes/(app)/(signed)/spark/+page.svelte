@@ -42,6 +42,7 @@
 		kind: 'image' | 'file';
 		file: SparkAgentFile;
 	};
+	type ChatStreamPhase = 'idle' | 'connecting' | 'calling' | 'thinking' | 'responding';
 
 	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
@@ -63,6 +64,8 @@
 	let error = $state<string | null>(null);
 	let streamingByMessageId = $state<Record<string, string>>({});
 	let streamingThoughtsByMessageId = $state<Record<string, string>>({});
+	let chatStreamPhase = $state<ChatStreamPhase>('idle');
+	let chatStreamAssistantMessageId = $state<string | null>(null);
 	let authReady = $state(false);
 	let composerExpanded = $state(false);
 	let composerRef = $state<HTMLDivElement | null>(null);
@@ -695,6 +698,8 @@
 		conversation = null;
 		streamingByMessageId = {};
 		streamingThoughtsByMessageId = {};
+		chatStreamPhase = 'idle';
+		chatStreamAssistantMessageId = null;
 		error = null;
 		attachmentError = null;
 		draft = '';
@@ -957,6 +962,8 @@
 		}
 
 		sending = true;
+		chatStreamPhase = 'connecting';
+		chatStreamAssistantMessageId = null;
 		error = null;
 		attachmentError = null;
 		pendingScrollText = trimmed || null;
@@ -1014,6 +1021,8 @@
 								}
 								if (payload.assistantMessageId) {
 									activeAssistantId = payload.assistantMessageId;
+									chatStreamAssistantMessageId = payload.assistantMessageId;
+									chatStreamPhase = 'calling';
 									streamingByMessageId = {
 										...streamingByMessageId,
 										[payload.assistantMessageId]: ''
@@ -1038,6 +1047,9 @@
 								...streamingThoughtsByMessageId,
 								[activeAssistantId]: nextThoughts
 							};
+							if (chatStreamPhase !== 'responding') {
+								chatStreamPhase = 'thinking';
+							}
 							return;
 						}
 						if (event.event === 'text') {
@@ -1050,6 +1062,7 @@
 								...streamingByMessageId,
 								[activeAssistantId]: nextText
 							};
+							chatStreamPhase = 'responding';
 							return;
 						}
 						if (event.event === 'error') {
@@ -1064,6 +1077,8 @@
 								delete next[activeAssistantId];
 								streamingThoughtsByMessageId = next;
 							}
+							chatStreamPhase = 'idle';
+							chatStreamAssistantMessageId = null;
 							return;
 						}
 						if (event.event === 'done') {
@@ -1072,11 +1087,13 @@
 								delete next[activeAssistantId];
 								streamingThoughtsByMessageId = next;
 							}
+							chatStreamPhase = 'idle';
+							chatStreamAssistantMessageId = null;
 							return;
 						}
 					},
 					onOpen: () => {
-						// no-op
+						chatStreamPhase = 'calling';
 					}
 				}
 			);
@@ -1091,6 +1108,8 @@
 			sending = false;
 			streamAbort = null;
 			composerExpanded = false;
+			chatStreamPhase = 'idle';
+			chatStreamAssistantMessageId = null;
 		}
 	}
 
@@ -1334,6 +1353,12 @@
 							{@const messageHtml =
 								message.role === 'assistant' && messageText ? renderMarkdown(messageText) : ''}
 							{@const thinkingText = streamingThoughtsByMessageId[message.id] ?? ''}
+							{@const isActiveStreamMessage =
+								sending &&
+								message.role === 'assistant' &&
+								(chatStreamAssistantMessageId
+									? chatStreamAssistantMessageId === message.id
+									: message.id === messages[messages.length - 1]?.id)}
 							{@const messageAttachments = resolveMessageAttachments(message)}
 							<div
 								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'}`}
@@ -1385,14 +1410,31 @@
 									<div class="message-bubble">
 										{#if thinkingText}
 											<div class="message-thinking">
-												<p class="message-thinking__label">Thinking</p>
+												<p class="message-thinking__label">llm thinking...</p>
 												<div class="message-thinking__body">{thinkingText}</div>
 											</div>
 										{/if}
 										{#if messageHtml}
 											<div class="message-markdown markdown">{@html messageHtml}</div>
 										{:else if !thinkingText}
-											<p class="message-placeholder">…</p>
+											{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													connecting...
+												</p>
+											{:else if isActiveStreamMessage && chatStreamPhase === 'calling'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													calling llm...
+												</p>
+											{:else if isActiveStreamMessage && chatStreamPhase === 'thinking'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													llm thinking...
+												</p>
+											{:else}
+												<p class="message-placeholder">…</p>
+											{/if}
 										{/if}
 									</div>
 								{:else if messageText}
@@ -2108,6 +2150,27 @@
 
 	.message-placeholder {
 		opacity: 0.6;
+	}
+
+	.message-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
+	.message-status__spinner {
+		width: 0.95rem;
+		height: 0.95rem;
+		border-radius: 9999px;
+		border: 2px solid color-mix(in srgb, var(--chat-border) 75%, transparent);
+		border-top-color: color-mix(in srgb, var(--foreground) 55%, transparent);
+		animation: message-status-spin 1s linear infinite;
+	}
+
+	@keyframes message-status-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.agent-composer {

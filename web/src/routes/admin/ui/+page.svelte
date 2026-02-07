@@ -11,6 +11,12 @@
 			cta: 'Open'
 		},
 		{
+			title: 'Spark chat stream',
+			description: 'Preview the /spark chat loading + thinking states.',
+			href: '/admin/ui/spark-stream',
+			cta: 'Open'
+		},
+		{
 			title: 'Dialogs',
 			description: 'Confirmation, error, and progress dialog states.',
 			href: null,
