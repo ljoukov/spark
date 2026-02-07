@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
-import { AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
+import { AUTH_SESSION_COOKIE_NAME, AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
+import { readAppSessionCookieValue } from '$lib/server/auth/sessionCookie';
 
 export type VerifiedFirebaseToken = Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
 
@@ -20,17 +21,17 @@ export function extractBearerToken(header: string | null): string | null {
 	return match?.[1]?.trim() ?? null;
 }
 
-function extractCookieToken(header: string | null): string | null {
+function extractCookieValue(header: string | null, name: string): string | null {
 	if (!header) {
 		return null;
 	}
 	const parts = header.split(';');
 	for (const part of parts) {
-		const [name, ...valueParts] = part.split('=');
-		if (!name || valueParts.length === 0) {
+		const [cookieName, ...valueParts] = part.split('=');
+		if (!cookieName || valueParts.length === 0) {
 			continue;
 		}
-		if (name.trim() !== AUTH_TOKEN_COOKIE_NAME) {
+		if (cookieName.trim() !== name) {
 			continue;
 		}
 		const rawValue = valueParts.join('=');
@@ -49,8 +50,42 @@ function extractCookieToken(header: string | null): string | null {
 }
 
 export async function authenticateApiRequest(request: Request): Promise<ApiAuthResult> {
-	const tokenFromCookie = extractCookieToken(request.headers.get('cookie'));
-	const token = tokenFromCookie ?? extractBearerToken(request.headers.get('authorization'));
+	const cookieHeader = request.headers.get('cookie');
+
+	const bearerToken = extractBearerToken(request.headers.get('authorization'));
+	const tokenFromCookie = extractCookieValue(cookieHeader, AUTH_TOKEN_COOKIE_NAME);
+	const token = bearerToken ?? tokenFromCookie;
+
+	if (token) {
+		try {
+			const decodedToken = await verifyFirebaseIdToken(token);
+			return {
+				ok: true,
+				user: {
+					uid: decodedToken.sub,
+					token,
+					decodedToken
+				}
+			};
+		} catch (error) {
+			console.warn('Failed to verify Firebase ID token for API request', error);
+			// Fall back to the long-lived session cookie below.
+		}
+	}
+
+	const sessionFromCookie = extractCookieValue(cookieHeader, AUTH_SESSION_COOKIE_NAME);
+	const session = await readAppSessionCookieValue(sessionFromCookie);
+	if (session) {
+		return {
+			ok: true,
+			user: {
+				uid: session.uid,
+				token: null,
+				decodedToken: null
+			}
+		};
+	}
+
 	if (!token) {
 		return {
 			ok: false,
@@ -61,30 +96,13 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
 		};
 	}
 
-	try {
-		const decodedToken = await verifyFirebaseIdToken(token);
-		return {
-			ok: true,
-			user: {
-				uid: decodedToken.sub,
-				token,
-				decodedToken
-			}
-		};
-	} catch (error) {
-		console.warn('Failed to verify Firebase ID token for API request', error);
-		let message = 'Invalid or expired authentication token';
-		if (typeof error === 'object' && error !== null && 'code' in error) {
-			const code = String((error as { code?: unknown }).code ?? '');
-			if (code === 'ERR_JWT_EXPIRED') {
-				message = 'Your session expired. Please sign in again.';
-			}
-		} else if (error instanceof Error && error.message.includes('JWTExpired')) {
-			message = 'Your session expired. Please sign in again.';
-		}
-		return {
-			ok: false,
-			response: json({ error: 'unauthorized', message }, { status: 401 })
-		};
+	let message = 'Invalid or expired authentication token';
+	if (typeof token === 'string' && token.length > 0) {
+		// We already attempted to verify the token above; treat the request as unauthorized.
+		message = 'Your session expired. Please sign in again.';
 	}
+	return {
+		ok: false,
+		response: json({ error: 'unauthorized', message }, { status: 401 })
+	};
 }
