@@ -1,6 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
-import { zipSync, strToU8 } from 'fflate';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
@@ -14,6 +13,8 @@ import {
 const paramsSchema = z.object({
 	agentId: z.string().trim().min(1)
 });
+
+const textEncoder = new TextEncoder();
 
 function requireServiceAccountJson(): string {
 	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -90,6 +91,133 @@ function toSafeWorkspaceZipPath(filePath: string): string | null {
 	return parts.join('/');
 }
 
+function encodeUtf8(value: string): Uint8Array {
+	return textEncoder.encode(value);
+}
+
+const CRC32_TABLE = (() => {
+	const table = new Uint32Array(256);
+	for (let idx = 0; idx < 256; idx += 1) {
+		let crc = idx;
+		for (let bit = 0; bit < 8; bit += 1) {
+			crc = (crc & 1) !== 0 ? (0xedb88320 ^ (crc >>> 1)) : crc >>> 1;
+		}
+		table[idx] = crc >>> 0;
+	}
+	return table;
+})();
+
+function crc32(data: Uint8Array): number {
+	let crc = 0xffffffff;
+	for (const byte of data) {
+		crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+	}
+	return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16LE(buffer: Uint8Array, offset: number, value: number): void {
+	buffer[offset] = value & 0xff;
+	buffer[offset + 1] = (value >>> 8) & 0xff;
+}
+
+function writeUint32LE(buffer: Uint8Array, offset: number, value: number): void {
+	buffer[offset] = value & 0xff;
+	buffer[offset + 1] = (value >>> 8) & 0xff;
+	buffer[offset + 2] = (value >>> 16) & 0xff;
+	buffer[offset + 3] = (value >>> 24) & 0xff;
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+	let total = 0;
+	for (const chunk of chunks) {
+		total += chunk.byteLength;
+	}
+	const joined = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		joined.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return joined;
+}
+
+type ZipEntry = {
+	name: string;
+	data: Uint8Array;
+};
+
+function buildZip(entries: readonly ZipEntry[]): Uint8Array {
+	const localParts: Uint8Array[] = [];
+	const centralParts: Uint8Array[] = [];
+
+	let offset = 0;
+	for (const entry of entries) {
+		const nameBytes = encodeUtf8(entry.name);
+		const data = entry.data;
+		const size = data.byteLength;
+		if (size > 0xffffffff) {
+			throw new Error(`Zip entry too large: ${entry.name}`);
+		}
+		const checksum = crc32(data);
+
+		const localHeader = new Uint8Array(30 + nameBytes.byteLength);
+		writeUint32LE(localHeader, 0, 0x04034b50);
+		writeUint16LE(localHeader, 4, 20);
+		writeUint16LE(localHeader, 6, 0x0800); // UTF-8 names
+		writeUint16LE(localHeader, 8, 0); // stored
+		writeUint16LE(localHeader, 10, 0);
+		writeUint16LE(localHeader, 12, 0);
+		writeUint32LE(localHeader, 14, checksum);
+		writeUint32LE(localHeader, 18, size);
+		writeUint32LE(localHeader, 22, size);
+		writeUint16LE(localHeader, 26, nameBytes.byteLength);
+		writeUint16LE(localHeader, 28, 0);
+		localHeader.set(nameBytes, 30);
+
+		localParts.push(localHeader, data);
+
+		const centralHeader = new Uint8Array(46 + nameBytes.byteLength);
+		writeUint32LE(centralHeader, 0, 0x02014b50);
+		writeUint16LE(centralHeader, 4, 20);
+		writeUint16LE(centralHeader, 6, 20);
+		writeUint16LE(centralHeader, 8, 0x0800);
+		writeUint16LE(centralHeader, 10, 0);
+		writeUint16LE(centralHeader, 12, 0);
+		writeUint16LE(centralHeader, 14, 0);
+		writeUint32LE(centralHeader, 16, checksum);
+		writeUint32LE(centralHeader, 20, size);
+		writeUint32LE(centralHeader, 24, size);
+		writeUint16LE(centralHeader, 28, nameBytes.byteLength);
+		writeUint16LE(centralHeader, 30, 0);
+		writeUint16LE(centralHeader, 32, 0);
+		writeUint16LE(centralHeader, 34, 0);
+		writeUint16LE(centralHeader, 36, 0);
+		writeUint32LE(centralHeader, 38, 0);
+		writeUint32LE(centralHeader, 42, offset);
+		centralHeader.set(nameBytes, 46);
+
+		centralParts.push(centralHeader);
+		offset += localHeader.byteLength + data.byteLength;
+	}
+
+	const centralDir = concatBytes(centralParts);
+	const centralOffset = offset;
+	const centralSize = centralDir.byteLength;
+	const entryCount = entries.length;
+
+	const endRecord = new Uint8Array(22);
+	writeUint32LE(endRecord, 0, 0x06054b50);
+	writeUint16LE(endRecord, 4, 0);
+	writeUint16LE(endRecord, 6, 0);
+	writeUint16LE(endRecord, 8, entryCount);
+	writeUint16LE(endRecord, 10, entryCount);
+	writeUint32LE(endRecord, 12, centralSize);
+	writeUint32LE(endRecord, 16, centralOffset);
+	writeUint16LE(endRecord, 20, 0);
+
+	return concatBytes([...localParts, centralDir, endRecord]);
+}
+
 export const GET: RequestHandler = async ({ request, params }) => {
 	const authResult = await authenticateApiRequest(request);
 	if (!authResult.ok) {
@@ -146,18 +274,19 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	const agentLogText = formatAgentLogText(logSnap.exists ? logSnap.data : null);
 
 	const archiveLabel = `spark-agent-${agentId}`;
-	const archiveEntries: Record<string, Uint8Array> = {
-		'agent.log': strToU8(agentLogText)
-	};
+	const archiveEntries: ZipEntry[] = [{ name: 'agent.log', data: encodeUtf8(agentLogText) }];
 	for (const file of workspaceFiles) {
 		const safePath = toSafeWorkspaceZipPath(file.path);
 		if (!safePath) {
 			continue;
 		}
-		archiveEntries[`workspace/${safePath}`] = strToU8(file.content ?? '');
+		archiveEntries.push({
+			name: `workspace/${safePath}`,
+			data: encodeUtf8(file.content ?? '')
+		});
 	}
 
-	const zipped = zipSync(archiveEntries, { level: 9 });
+	const zipped = buildZip(archiveEntries);
 	const body = new ArrayBuffer(zipped.byteLength);
 	new Uint8Array(body).set(zipped);
 	return new Response(body, {

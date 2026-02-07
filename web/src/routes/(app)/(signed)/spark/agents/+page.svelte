@@ -1267,12 +1267,20 @@
 		justify-content: space-between;
 		gap: 1rem;
 		align-items: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.agents-detail__header > div:first-child {
+		min-width: 0;
+		flex: 1 1 18rem;
 	}
 
 	.agents-detail__header-actions {
 		display: inline-flex;
 		gap: 0.5rem;
 		align-items: center;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 	}
 
 	.agents-detail__header h2 {
