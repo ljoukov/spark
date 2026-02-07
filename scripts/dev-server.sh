@@ -11,12 +11,13 @@ WEB_DIR="${ROOT_DIR}/web"
 usage() {
   cat <<EOF >&2
 Usage:
-  $(basename "$0") <start|stop|restart> [port]
+  $(basename "$0") <start|stop|restart|logs> [port]
 
 Examples:
   $(basename "$0") start
   $(basename "$0") restart 8082
   $(basename "$0") stop
+  $(basename "$0") logs
 EOF
 }
 
@@ -88,6 +89,16 @@ stop_session() {
   echo "Stopped ${SESSION_NAME}"
 }
 
+tail_logs() {
+  if [[ ! -f "${LOG_FILE}" ]]; then
+    echo "Log file not found: ${LOG_FILE}" >&2
+    echo "Start the server first: $(basename "$0") start [port]" >&2
+    exit 1
+  fi
+  echo "Tailing ${LOG_FILE} (Ctrl+C to stop)"
+  tail -n 50 -f "${LOG_FILE}"
+}
+
 ACTION="${1:-}"
 PORT="${2:-${DEFAULT_PORT}}"
 
@@ -96,22 +107,26 @@ if [[ -z "${ACTION}" ]]; then
   exit 2
 fi
 
-require_tmux
-
 case "${ACTION}" in
   start)
+    require_tmux
     validate_port "${PORT}"
     require_https_certs
     start_session "${PORT}"
     ;;
   stop)
+    require_tmux
     stop_session
     ;;
   restart)
+    require_tmux
     validate_port "${PORT}"
     require_https_certs
     stop_session
     start_session "${PORT}"
+    ;;
+  logs)
+    tail_logs
     ;;
   *)
     usage
