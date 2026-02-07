@@ -2,8 +2,11 @@
 
 ## 0) Monorepo Layout & Tooling Assumptions
 
+- JS/TS tooling uses Bun:
+  - Install deps at repo root with `bun install` (lockfile: `bun.lock`, config: `bunfig.toml`).
+  - Run workspace scripts via `bun run ...` (see root `package.json`).
 - `proto/` — Protocol Buffer definitions for mobile APIs (CheckMate first).
-  - Run `npm run generate` to emit TypeScript protos into `packages/proto/src/gen` and Swift protos into `CheckMate/proto`.
+  - Run `bun run generate` to emit TypeScript protos into `packages/proto/src/gen` and Swift protos into `CheckMate/proto`.
   - TypeScript: alias `$proto` points at `packages/proto/src`.
   - Swift types are generated via `swift-protobuf` and used by the iOS apps.
 - `web/` — SvelteKit (latest) project deployed to Cloudflare Workers (Workers Builds Git integration). Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
@@ -72,7 +75,7 @@ If you need `/admin`, include the userId in `ADMIN_USER_IDS`.
 2) Start the web dev server (HTTPS for Firebase Auth):
 
 ```
-npm --prefix web run dev:https
+bun --cwd=web run dev:https
 ```
 
 3) Open the email login page and sign in using the credentials from `.env.local`:
@@ -88,7 +91,7 @@ Useful entry points after sign-in:
 Notes:
 - Auth is fully enforced; Firestore rules have no test-user exceptions.
 - The test user is a normal production user, so it is fast for verifying real Firestore behavior.
-- HTTP dev for iOS still runs on `http://127.0.0.1:8080` via `npm --prefix web run dev`.
+- HTTP dev for iOS still runs on `http://127.0.0.1:8080` via `bun --cwd=web run dev`.
 
 #### 0.1.2) Browser UI Checks and Screenshots
 

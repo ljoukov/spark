@@ -7,7 +7,7 @@
 A vertically stacked set of interactive headings that each reveal a section of content.
 
 ```sh
-npx shadcn-svelte@latest add accordion
+bunx shadcn-svelte@latest add accordion
 ```
 
 ```svelte
@@ -28,7 +28,7 @@ npx shadcn-svelte@latest add accordion
 A modal dialog that interrupts the user with important content and expects a response.
 
 ```sh
-npx shadcn-svelte@latest add alert-dialog
+bunx shadcn-svelte@latest add alert-dialog
 ```
 
 ```svelte
@@ -59,7 +59,7 @@ npx shadcn-svelte@latest add alert-dialog
 Displays a callout for user attention.
 
 ```sh
-npx shadcn-svelte@latest add alert
+bunx shadcn-svelte@latest add alert
 ```
 
 ```svelte
@@ -78,7 +78,7 @@ npx shadcn-svelte@latest add alert
 Displays content within a desired ratio.
 
 ```sh
-npx shadcn-svelte@latest add aspect-ratio
+bunx shadcn-svelte@latest add aspect-ratio
 ```
 
 ```svelte
@@ -98,7 +98,7 @@ npx shadcn-svelte@latest add aspect-ratio
 An image element with a fallback for representing the user.
 
 ```sh
-npx shadcn-svelte@latest add avatar
+bunx shadcn-svelte@latest add avatar
 ```
 
 ```svelte
@@ -117,7 +117,7 @@ npx shadcn-svelte@latest add avatar
 Displays a badge or a component that looks like a badge.
 
 ```sh
-npx shadcn-svelte@latest add badge
+bunx shadcn-svelte@latest add badge
 ```
 
 ```svelte
@@ -133,7 +133,7 @@ npx shadcn-svelte@latest add badge
 Displays the path to the current resource using a hierarchy of links.
 
 ```sh
-npx shadcn-svelte@latest add breadcrumb
+bunx shadcn-svelte@latest add breadcrumb
 ```
 
 ```svelte
@@ -163,7 +163,7 @@ npx shadcn-svelte@latest add breadcrumb
 Displays a button or a component that looks like a button.
 
 ```sh
-npx shadcn-svelte@latest add button
+bunx shadcn-svelte@latest add button
 ```
 
 ```svelte
@@ -179,7 +179,7 @@ npx shadcn-svelte@latest add button
 A calendar component that allows users to select dates.
 
 ```sh
-npx shadcn-svelte@latest add calendar
+bunx shadcn-svelte@latest add calendar
 ```
 
 ```svelte
@@ -198,7 +198,7 @@ npx shadcn-svelte@latest add calendar
 Displays a card with header, content, and footer.
 
 ```sh
-npx shadcn-svelte@latest add card
+bunx shadcn-svelte@latest add card
 ```
 
 ```svelte
@@ -225,7 +225,7 @@ npx shadcn-svelte@latest add card
 A carousel with motion and swipe built using Embla.
 
 ```sh
-npx shadcn-svelte@latest add carousel
+bunx shadcn-svelte@latest add carousel
 ```
 
 ```svelte
@@ -249,7 +249,7 @@ npx shadcn-svelte@latest add carousel
 **Important:** LayerChart v2 is still in pre-release and is actively evolving. Only use if you're comfortable with potential breaking changes before stable v2.
 
 ```sh
-npx shadcn-svelte@latest add chart
+bunx shadcn-svelte@latest add chart
 ```
 
 ```svelte
@@ -276,7 +276,7 @@ npx shadcn-svelte@latest add chart
 A control that allows the user to toggle between checked and not checked.
 
 ```sh
-npx shadcn-svelte@latest add checkbox
+bunx shadcn-svelte@latest add checkbox
 ```
 
 ```svelte
@@ -292,7 +292,7 @@ npx shadcn-svelte@latest add checkbox
 An interactive component which expands/collapses a panel.
 
 ```sh
-npx shadcn-svelte@latest add collapsible
+bunx shadcn-svelte@latest add collapsible
 ```
 
 ```svelte
@@ -313,7 +313,7 @@ npx shadcn-svelte@latest add collapsible
 Autocomplete input and command palette with a list of suggestions.
 
 ```sh
-npx shadcn-svelte@latest add combobox
+bunx shadcn-svelte@latest add combobox
 ```
 
 ```svelte
@@ -413,7 +413,7 @@ npx shadcn-svelte@latest add combobox
 Fast, composable, unstyled command menu for Svelte.
 
 ```sh
-npx shadcn-svelte@latest add command
+bunx shadcn-svelte@latest add command
 ```
 
 ```svelte
@@ -445,7 +445,7 @@ npx shadcn-svelte@latest add command
 Displays a menu to the user — such as a set of actions or functions — triggered by right click.
 
 ```sh
-npx shadcn-svelte@latest add context-menu
+bunx shadcn-svelte@latest add context-menu
 ```
 
 ```svelte
@@ -469,7 +469,7 @@ npx shadcn-svelte@latest add context-menu
 | | Status | | Amount | |
 
 ```sh
-npx shadcn-svelte@latest add data-table
+bunx shadcn-svelte@latest add data-table
 ```
 
 ```svelte
@@ -502,7 +502,7 @@ export const data: Payment[] = [
 A date picker component with range and presets.
 
 ```sh
-npx shadcn-svelte@latest add date-picker
+bunx shadcn-svelte@latest add date-picker
 ```
 
 ```svelte
@@ -548,7 +548,7 @@ npx shadcn-svelte@latest add date-picker
 A window overlaid on either the primary window or another dialog window, rendering the content underneath inert.
 
 ```sh
-npx shadcn-svelte@latest add dialog
+bunx shadcn-svelte@latest add dialog
 ```
 
 ```svelte
@@ -575,7 +575,7 @@ npx shadcn-svelte@latest add dialog
 A drawer component for Svelte.
 
 ```sh
-npx shadcn-svelte@latest add drawer
+bunx shadcn-svelte@latest add drawer
 ```
 
 ```svelte
@@ -603,7 +603,7 @@ npx shadcn-svelte@latest add drawer
 Displays a menu to the user — such as a set of actions or functions — triggered by a button.
 
 ```sh
-npx shadcn-svelte@latest add dropdown-menu
+bunx shadcn-svelte@latest add dropdown-menu
 ```
 
 ```svelte
@@ -631,7 +631,7 @@ npx shadcn-svelte@latest add dropdown-menu
 Building forms with Formsnap, Superforms, & Zod.
 
 ```sh
-npx shadcn-svelte@latest add form
+bunx shadcn-svelte@latest add form
 ```
 
 ```svelte
@@ -649,7 +649,7 @@ export type FormSchema = typeof formSchema;
 For sighted users to preview content available behind a link.
 
 ```sh
-npx shadcn-svelte@latest add hover-card
+bunx shadcn-svelte@latest add hover-card
 ```
 
 ```svelte
@@ -668,7 +668,7 @@ npx shadcn-svelte@latest add hover-card
 Accessible one-time password component with copy paste functionality.
 
 ```sh
-npx shadcn-svelte@latest add input-otp
+bunx shadcn-svelte@latest add input-otp
 ```
 
 ```svelte
@@ -698,7 +698,7 @@ npx shadcn-svelte@latest add input-otp
 Displays a form input field or a component that looks like an input field.
 
 ```sh
-npx shadcn-svelte@latest add input
+bunx shadcn-svelte@latest add input
 ```
 
 ```svelte
@@ -714,7 +714,7 @@ npx shadcn-svelte@latest add input
 Renders an accessible label associated with controls.
 
 ```sh
-npx shadcn-svelte@latest add label
+bunx shadcn-svelte@latest add label
 ```
 
 ```svelte
@@ -730,7 +730,7 @@ npx shadcn-svelte@latest add label
 A visually persistent menu common in desktop applications that provides quick access to a consistent set of commands.
 
 ```sh
-npx shadcn-svelte@latest add menubar
+bunx shadcn-svelte@latest add menubar
 ```
 
 ```svelte
@@ -761,7 +761,7 @@ npx shadcn-svelte@latest add menubar
 ````
 
 ```sh
-npx shadcn-svelte@latest add navigation-menu
+bunx shadcn-svelte@latest add navigation-menu
 ````
 
 ```svelte
@@ -966,7 +966,7 @@ npx shadcn-svelte@latest add navigation-menu
 Pagination with page navigation, next and previous links.
 
 ```sh
-npx shadcn-svelte@latest add pagination
+bunx shadcn-svelte@latest add pagination
 ```
 
 ```svelte
@@ -1006,7 +1006,7 @@ npx shadcn-svelte@latest add pagination
 Displays rich content in a portal, triggered by a button.
 
 ```sh
-npx shadcn-svelte@latest add popover
+bunx shadcn-svelte@latest add popover
 ```
 
 ```svelte
@@ -1025,7 +1025,7 @@ npx shadcn-svelte@latest add popover
 Displays an indicator showing the completion progress of a task, typically displayed as a progress bar.
 
 ```sh
-npx shadcn-svelte@latest add progress
+bunx shadcn-svelte@latest add progress
 ```
 
 ```svelte
@@ -1041,7 +1041,7 @@ npx shadcn-svelte@latest add progress
 A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time.
 
 ```sh
-npx shadcn-svelte@latest add radio-group
+bunx shadcn-svelte@latest add radio-group
 ```
 
 ```svelte
@@ -1067,7 +1067,7 @@ npx shadcn-svelte@latest add radio-group
 A calendar component that allows users to select a range of dates.
 
 ```sh
-npx shadcn-svelte@latest add range-calendar
+bunx shadcn-svelte@latest add range-calendar
 ```
 
 ```svelte
@@ -1092,7 +1092,7 @@ npx shadcn-svelte@latest add range-calendar
 Accessible resizable panel groups and layouts with keyboard support.
 
 ```sh
-npx shadcn-svelte@latest add resizable
+bunx shadcn-svelte@latest add resizable
 ```
 
 ```svelte
@@ -1112,7 +1112,7 @@ npx shadcn-svelte@latest add resizable
 Augments native scroll functionality for custom, cross-browser styling.
 
 ```sh
-npx shadcn-svelte@latest add scroll-area
+bunx shadcn-svelte@latest add scroll-area
 ```
 
 ```svelte
@@ -1134,7 +1134,7 @@ npx shadcn-svelte@latest add scroll-area
 Displays a list of options for the user to pick from—triggered by a button.
 
 ```sh
-npx shadcn-svelte@latest add select
+bunx shadcn-svelte@latest add select
 ```
 
 ```svelte
@@ -1157,7 +1157,7 @@ npx shadcn-svelte@latest add select
 Visually or semantically separates content.
 
 ```sh
-npx shadcn-svelte@latest add separator
+bunx shadcn-svelte@latest add separator
 ```
 
 ```svelte
@@ -1173,7 +1173,7 @@ npx shadcn-svelte@latest add separator
 Extends the Dialog component to display content that complements the main content of the screen.
 
 ```sh
-npx shadcn-svelte@latest add sheet
+bunx shadcn-svelte@latest add sheet
 ```
 
 ```svelte
@@ -1200,7 +1200,7 @@ npx shadcn-svelte@latest add sheet
 A sidebar that collapses to icons.
 
 ```sh
-npx shadcn-svelte@latest add sidebar
+bunx shadcn-svelte@latest add sidebar
 ```
 
 ```svelte
@@ -1225,7 +1225,7 @@ npx shadcn-svelte@latest add sidebar
 Use to show a placeholder while content is loading.
 
 ```sh
-npx shadcn-svelte@latest add skeleton
+bunx shadcn-svelte@latest add skeleton
 ```
 
 ```svelte
@@ -1239,7 +1239,7 @@ npx shadcn-svelte@latest add skeleton
 An input where the user selects a value from within a given range.
 
 ```sh
-npx shadcn-svelte@latest add slider
+bunx shadcn-svelte@latest add slider
 ```
 
 ```svelte
@@ -1256,7 +1256,7 @@ npx shadcn-svelte@latest add slider
 An opinionated toast component for Svelte.
 
 ```sh
-npx shadcn-svelte@latest add sonner
+bunx shadcn-svelte@latest add sonner
 ```
 
 ```svelte
@@ -1273,7 +1273,7 @@ npx shadcn-svelte@latest add sonner
 Airplane Mode
 
 ```sh
-npx shadcn-svelte@latest add switch
+bunx shadcn-svelte@latest add switch
 ```
 
 ```svelte
@@ -1289,7 +1289,7 @@ npx shadcn-svelte@latest add switch
 A responsive table component.
 
 ```sh
-npx shadcn-svelte@latest add table
+bunx shadcn-svelte@latest add table
 ```
 
 ```svelte
@@ -1303,7 +1303,7 @@ npx shadcn-svelte@latest add table
 A set of layered sections of content—known as tab panels—that are displayed one at a time.
 
 ```sh
-npx shadcn-svelte@latest add tabs
+bunx shadcn-svelte@latest add tabs
 ```
 
 ```svelte
@@ -1326,7 +1326,7 @@ npx shadcn-svelte@latest add tabs
 ````
 
 ```sh
-npx shadcn-svelte@latest add textarea
+bunx shadcn-svelte@latest add textarea
 ````
 
 ```svelte
@@ -1340,7 +1340,7 @@ npx shadcn-svelte@latest add textarea
 A set of two-state buttons that can be toggled on or off.
 
 ```sh
-npx shadcn-svelte@latest add toggle-group
+bunx shadcn-svelte@latest add toggle-group
 ```
 
 ```svelte
@@ -1360,7 +1360,7 @@ npx shadcn-svelte@latest add toggle-group
 A two-state button that can be either on or off.
 
 ```sh
-npx shadcn-svelte@latest add toggle
+bunx shadcn-svelte@latest add toggle
 ```
 
 ```svelte
@@ -1376,7 +1376,7 @@ npx shadcn-svelte@latest add toggle
 A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.
 
 ```sh
-npx shadcn-svelte@latest add tooltip
+bunx shadcn-svelte@latest add tooltip
 ```
 
 ```svelte
@@ -1399,7 +1399,7 @@ npx shadcn-svelte@latest add tooltip
 Styles for headings, paragraphs, lists...etc
 
 ```sh
-npx shadcn-svelte@latest add typography
+bunx shadcn-svelte@latest add typography
 ```
 
 ```svelte
@@ -1536,7 +1536,7 @@ Clean, modern building blocks. Works with all Svelte projects. Copy and paste in
 A simple sidebar with navigation grouped by section
 
 ```sh
-npx shadcn-svelte@latest add sidebar-01
+bunx shadcn-svelte@latest add sidebar-01
 ```
 
 +page.svelte
@@ -1584,7 +1584,7 @@ npx shadcn-svelte@latest add sidebar-01
 A simple login form
 
 ```sh
-npx shadcn-svelte@latest add login-01
+bunx shadcn-svelte@latest add login-01
 ```
 
 ```svelte

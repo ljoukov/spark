@@ -18,7 +18,7 @@
     "test:llm-openai": "tsx src/tests/testOpenAiApi.ts",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",
-    "lint": "npm run typecheck && npm run eslint",
+    "lint": "bun run typecheck && bun run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "test": "vitest --run",
     "session:generateTestSession": "tsx src/code/generateTestSession.ts",

@@ -12,7 +12,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
-    "lint": "npm run typecheck"
+    "lint": "bun run typecheck"
   },
   "dependencies": {
     "zod": "^4.3.5"
