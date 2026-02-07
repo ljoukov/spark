@@ -6,6 +6,7 @@ import typescript from 'highlight.js/lib/languages/typescript';
 import python from 'highlight.js/lib/languages/python';
 import c from 'highlight.js/lib/languages/c';
 import cpp from 'highlight.js/lib/languages/cpp';
+import katex from 'katex';
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('typescript', typescript);
@@ -60,7 +61,48 @@ function resolveLanguageLabel(raw: string, normalized: string): string {
 	return raw || normalized || 'text';
 }
 
+type CodeSpanMath = { expr: string; displayMode: boolean };
+
+function parseCodeSpanMath(value: string): CodeSpanMath | null {
+	const trimmed = value.trim();
+	if (trimmed.length < 3) {
+		return null;
+	}
+	if (trimmed.includes('\n') || trimmed.includes('\r')) {
+		return null;
+	}
+
+	if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
+		const expr = trimmed.slice(2, -2).trim();
+		if (expr.length === 0 || expr.includes('$')) {
+			return null;
+		}
+		return { expr, displayMode: true };
+	}
+
+	if (trimmed.startsWith('$') && trimmed.endsWith('$') && trimmed.length > 2) {
+		const expr = trimmed.slice(1, -1).trim();
+		if (expr.length === 0 || expr.includes('$')) {
+			return null;
+		}
+		return { expr, displayMode: false };
+	}
+
+	return null;
+}
+
 const renderer = new marked.Renderer();
+renderer.codespan = (token) => {
+	const code = typeof token.text === 'string' ? token.text : '';
+	const math = parseCodeSpanMath(code);
+	if (math) {
+		return katex.renderToString(math.expr, {
+			displayMode: math.displayMode,
+			throwOnError: false
+		});
+	}
+	return `<code>${escapeHtml(code)}</code>`;
+};
 renderer.code = (token) => {
 	const code = typeof token.text === 'string' ? token.text : '';
 	const rawLanguage = (token.lang ?? '').trim().split(/\s+/u)[0]?.toLowerCase() ?? '';
