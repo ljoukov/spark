@@ -130,6 +130,7 @@ Recommended defaults:
     - After the second assistant reply, the latest assistant response expands to a minimum height to keep breathing room above the composer without adding trailing spacer after the response.
     - The composer is sticky at the bottom with a rounded “Ask anything” input, leading attach button, and trailing send control.
     - Keyboard: desktop Enter submits (Shift+Enter inserts a new line); on mobile Enter inserts a new line and sending uses the send button.
+    - Composer input auto-expands up to 12 lines (then scrolls) with a 12,000 character cap.
     - Assistant output renders markdown via SparkMarkdown (including LaTeX + code blocks).
     - Code blocks render inside a framed container with a language label and copy button; user bubbles can expand to the same max width as assistant replies with a small left inset.
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.

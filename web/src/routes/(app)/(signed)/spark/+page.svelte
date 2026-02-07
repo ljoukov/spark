@@ -46,6 +46,8 @@
 	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
 	const MAX_FILES_PER_CONVERSATION = 10;
+	const MAX_COMPOSER_LINES = 12;
+	const MAX_COMPOSER_CHARS = 12_000;
 
 	let { data }: { data: PageData } = $props();
 
@@ -1535,8 +1537,8 @@
 									bind:value={draft}
 									placeholder="Ask anything"
 									ariaLabel="Message Spark AI Agent"
-									maxLines={6}
-									maxChars={1200}
+									maxLines={MAX_COMPOSER_LINES}
+									maxChars={MAX_COMPOSER_CHARS}
 									disabled={sending}
 									variant="chat"
 									inputClass="composer-textarea"
