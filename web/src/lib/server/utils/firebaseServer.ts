@@ -1,5 +1,5 @@
 import { clientFirebaseConfig } from '$lib/config/firebase';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, customFetch, jwtVerify } from 'jose';
 import { z } from 'zod';
 
 const PROJECT_ID = clientFirebaseConfig.projectId; // From firebase config
@@ -8,7 +8,17 @@ const JWKS_URL = new URL(
 	'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 );
 
-const jwks = createRemoteJWKSet(JWKS_URL);
+// During SSR, SvelteKit temporarily wraps `globalThis.fetch` to detect/guard
+// eager fetches during component rendering. `jose` uses global fetch by default,
+// which can trip the dev warning when Firebase token verification happens during
+// SSR. Capture a stable fetch reference once and pass it explicitly.
+const stableFetch: typeof fetch = (
+	globalThis as unknown as { __sparkStableFetch?: typeof fetch }
+).__sparkStableFetch ?? globalThis.fetch.bind(globalThis);
+(globalThis as unknown as { __sparkStableFetch?: typeof fetch }).__sparkStableFetch = stableFetch;
+const jwks = createRemoteJWKSet(JWKS_URL, {
+	[customFetch]: stableFetch
+});
 
 const FirebaseIdTokenSchema = z
 	.object({
