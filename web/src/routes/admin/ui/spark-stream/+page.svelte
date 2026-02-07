@@ -4,10 +4,10 @@
 	import { renderMarkdown } from '$lib/markdown';
 
 	const phases = [
-		'connecting...',
-		'calling llm...',
-		'llm thinking...',
-		'llm responding...'
+		'Establishing connection...',
+		'Sending request...',
+		'Thinking...',
+		'Responding...'
 	] as const;
 
 	type PhaseIndex = 0 | 1 | 2 | 3;
@@ -147,7 +147,7 @@
 	<div class="space-y-2">
 		<h1 class="text-2xl font-semibold tracking-tight text-foreground">Spark chat stream preview</h1>
 		<p class="text-sm text-muted-foreground">
-			Simulates the client-side states shown in <code>/spark</code> while an LLM response streams.
+			Simulates the client-side states shown in <code>/spark</code> while an assistant response streams.
 		</p>
 	</div>
 
@@ -174,7 +174,7 @@
 				/>
 				<div class="flex justify-between text-[10px] font-medium text-muted-foreground">
 					<span>connecting</span>
-					<span>calling</span>
+					<span>sending</span>
 					<span>thinking</span>
 					<span>responding</span>
 				</div>
@@ -216,10 +216,10 @@
 				{#if phaseIndex >= 2}
 					<div class="rounded-xl border border-border/70 bg-muted/30 p-4">
 						<p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-							llm thinking...
+							Thinking...
 						</p>
-						<pre class="mt-2 max-h-32 overflow-hidden whitespace-pre-wrap text-sm text-muted-foreground">
-{thoughtText}</pre
+						<pre class="mt-2 max-h-32 overflow-hidden whitespace-pre-wrap text-sm text-muted-foreground"
+							>{thoughtText}</pre
 						>
 					</div>
 				{/if}
@@ -239,4 +239,3 @@
 		</Card.Content>
 	</Card.Root>
 </div>
-
