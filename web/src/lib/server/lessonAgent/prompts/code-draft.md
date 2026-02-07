@@ -11,7 +11,7 @@ Rules:
 - Provide exactly 3 examples and at least 3 tests.
 - Tests 1–3 must match examples 1–3 exactly (same input/output).
 - The reference solution must solve all tests.
-- Use LaTeX for any maths formulas inside Markdown fields (wrap inline in `$...$`, display in `$$...$$`). Do not wrap `$...$` / `$$...$$` formulas in backticks (inline code), or they will render as `<code>` instead of math. Any time you write an equation (e.g. contains `=` or `∝`), it should be LaTeX.
+- Use LaTeX for any maths formulas inside Markdown fields (wrap inline in `$...$`, display in `$$...$$`). Do not wrap `$...$` / `$$...$$` formulas in backticks (inline code); LaTeX should render as math, not `<code>`. Any time you write an equation (e.g. contains `=` or `∝`), it should be LaTeX.
 - Keep copy short:
   - Problem `title`: 3-8 words, <= 55 chars.
   - Prefer short, scannable paragraphs and bullets.
