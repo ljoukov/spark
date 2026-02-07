@@ -38,10 +38,8 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 
 ## Quiz LLM Eval
 
-- Prepare input: `eval/src/quiz/prepare-input.ts` (`npm --prefix eval run prepare-input`). Reads raw assets from `spark-data/quiz/downloads/**`, classifies them, and writes curated bundles to `spark-data/quiz/eval-input/**`.
-- Generate quizzes: `eval/src/quiz/run-eval.ts` (`npm --prefix eval run eval`). Consumes `spark-data/quiz/eval-input/**` and writes quiz JSON (including indexes) to `spark-data/quiz/eval-output/**`.
-- Runner flags: pass via `npm --prefix eval run eval -- --seed=<int>`; `--seed=<int>` reproducibly shuffles input ordering, `--maxPrefix=<int>` filters page buckets by their numeric prefix (e.g. `--maxPrefix=20` keeps `01_page`–`20-to-49_pages`), and `--limit=<n>` caps the remaining queue after filters.
-- Audit summaries: `eval/src/quiz/audit-eval.ts` (`npm --prefix eval run audit`). Consumes `spark-data/quiz/eval-output/**` and emits stats plus Markdown reports under `spark-data/quiz/eval-audit/**`.
+- Prepare input: `eval/src/quiz/eval/prepare-input.ts` (`bun --cwd=eval run quiz:prepare-input`). Reads raw assets from `spark-data/quiz/downloads/**`, classifies them, and writes curated bundles to `spark-data/quiz/eval-input/**`.
+- Generate a quiz JSON from a single PDF: `eval/src/quiz/generateQuiz.ts` (`bun --cwd=eval run quiz:generate -- --input-file <path>`). Prints the quiz definition to stdout.
 - Env: requires `GOOGLE_SERVICE_ACCOUNT_JSON` (in environment or `.env.local` at repo root) with access to Gemini (Vertex AI) and Text-to-Speech APIs. Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
 - Purpose: generates sample quizzes using production prompt builders, judges them, and writes artifacts consumed by the Admin UI.

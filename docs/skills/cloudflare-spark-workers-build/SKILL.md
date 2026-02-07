@@ -45,8 +45,8 @@ curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/
 
 Key fields to confirm:
 - `root_directory` (expected: `/web`)
-- `build_command` (expected: `npm run build:cloudflare`)
-- `deploy_command` (expected: `npx wrangler deploy`)
+- `build_command` (expected: `bun run build:cloudflare`)
+- `deploy_command` (expected: `bunx wrangler deploy`)
 - `environment_variables` (build-time injected variables)
 - `trigger.trigger_uuid` (used to patch env vars and trigger builds)
 
@@ -74,20 +74,21 @@ curl -sS \"https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/
   -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\"
 ```
 
-## Common Failure Class A: `npm ci` lockfile mismatch
+## Common Failure Class A: `bun install --frozen-lockfile` lockfile mismatch
 
 Symptom in logs:
-- `npm ci can only install packages when your package.json and package-lock.json ... are in sync`
+- Bun lockfile mismatch / frozen lockfile failure
 
 Fix:
-- Ensure the lockfile(s) Cloudflare uses are updated and committed.
-- For Spark’s layout, Cloudflare runs `npm clean-install` in `root_directory=/web`, but the install can still consult workspace metadata. Keep repo lockfiles consistent.
+- Ensure `bun.lock` is updated and committed.
+- For Spark’s layout, Workers Builds runs in `root_directory=/web`, but the install can still consult workspace metadata. Keep workspace `package.json` files and the root `bun.lock` consistent.
 
 Typical local fix:
 
 ```bash
-npm install --package-lock-only
-git add package-lock.json
+rm -rf node_modules
+bun install
+git add bun.lock
 git commit -m \"[fix] sync lockfile\"
 git push
 ```
@@ -124,7 +125,7 @@ Notes:
 
 Symptom in logs:
 - `Success: Build command completed`
-- then `Executing user deploy command: npx wrangler deploy`
+- then `Executing user deploy command: bunx wrangler deploy`
 - followed by bundling/import errors
 
 Cause:
@@ -151,13 +152,13 @@ If the app complains at runtime (after a successful deployment) that `GOOGLE_SER
 
 ```bash
 cd web
-printf '%s' \"<service_account_json>\" | npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON --name spark
+printf '%s' \"<service_account_json>\" | bunx wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON --name spark
 ```
 
 Verify names:
 
 ```bash
-npx wrangler secret list --name spark
+bunx wrangler secret list --name spark
 ```
 
 ## Common Runtime Failure: Firestore Admin SDK In Workers
@@ -211,7 +212,7 @@ List recent versions (newest at the bottom unless you sort):
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=\"<account_id>\"
 export CLOUDFLARE_API_TOKEN=\"<token>\"
-npx wrangler versions list --name spark --json
+bunx wrangler versions list --name spark --json
 ```
 
 Useful fields (per version object):
@@ -222,7 +223,7 @@ Useful fields (per version object):
 View a specific version:
 
 ```bash
-npx wrangler versions view <version_id> --name spark --json
+bunx wrangler versions view <version_id> --name spark --json
 ```
 
 Workers.dev preview URL for an alias:

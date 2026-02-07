@@ -14,11 +14,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",
-    "lint": "npm run typecheck && npm run eslint",
+    "lint": "bun run typecheck && bun run eslint",
     "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
     "test": "vitest --run",
-    "smoke:lesson-agent": "npm --prefix ../../eval run tools:lesson-agent-smoke --",
-    "test:llm-integration": "npm run smoke:lesson-agent --"
+    "smoke:lesson-agent": "bun --cwd=../../eval run tools:lesson-agent-smoke --",
+    "test:llm-integration": "bun run smoke:lesson-agent --"
   },
   "files": [
     "dist"
