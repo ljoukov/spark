@@ -914,18 +914,18 @@
 					</div>
 				</div>
 
-				<section class="agents-run">
-					<h3>Run stats</h3>
-					{#if runStats}
-						<div class="agents-run__stats">
-							<div>
-								<span class="agents-run__label">LLM cost</span>
-								<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Tools cost</span>
-								<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
-							</div>
+					<section class="agents-run">
+						<h3>Run stats</h3>
+						{#if runStats}
+							<div class="agents-run__stats">
+								<div>
+									<span class="agents-run__label">Model cost</span>
+									<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
+								</div>
+								<div>
+									<span class="agents-run__label">Tools cost</span>
+									<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
+								</div>
 							<div>
 								<span class="agents-run__label">Total cost</span>
 								<p class="agents-run__value">{formatUsd(runStats.totalCostUsd)}</p>
