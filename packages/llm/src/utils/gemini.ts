@@ -7,6 +7,7 @@ import type {
 } from "@google/genai";
 
 import { getGoogleAuthOptions, getGoogleServiceAccount } from "./googleAuth";
+import { configureGlobalHttpDispatcher } from "./http";
 
 const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
@@ -178,6 +179,7 @@ function resolveLocation(): string {
 async function getGeminiClient(): Promise<GoogleGenAI> {
   if (!clientPromise) {
     clientPromise = Promise.resolve().then(() => {
+      configureGlobalHttpDispatcher();
       const projectId = resolveProjectId();
       const location = resolveLocation();
       const googleAuthOptions = getGoogleAuthOptions(CLOUD_PLATFORM_SCOPE);
