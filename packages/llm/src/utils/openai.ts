@@ -1,7 +1,7 @@
 import OpenAI from "openai";
-import { Agent, setGlobalDispatcher } from "undici";
 
 import { loadLocalEnv } from "./env";
+import { configureGlobalHttpDispatcher } from "./http";
 
 let cachedApiKey: string | null = null;
 let cachedClient: OpenAI | null = null;
@@ -29,11 +29,9 @@ function getOpenAiFetch(): typeof fetch {
   }
 
   const timeoutMs = resolveOpenAiTimeoutMs();
-  const dispatcher = new Agent({
-    bodyTimeout: timeoutMs,
-    headersTimeout: timeoutMs,
+  configureGlobalHttpDispatcher({
+    timeoutMs,
   });
-  setGlobalDispatcher(dispatcher);
   cachedFetch = globalThis.fetch.bind(globalThis);
 
   return cachedFetch;

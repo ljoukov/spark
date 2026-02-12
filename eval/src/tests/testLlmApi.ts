@@ -1,10 +1,24 @@
 import { ensureEvalEnvLoaded } from "../utils/paths";
 import { runToolLoop, tool, type LlmTextModelId } from "@spark/llm/utils/llm";
-import { OPENAI_MODEL_VARIANT_IDS } from "@spark/llm/utils/openai-llm";
+import {
+  DEFAULT_OPENAI_MODEL_ID,
+  OPENAI_MODEL_VARIANT_IDS,
+  resolveOpenAiModelVariant,
+} from "@spark/llm/utils/openai-llm";
 import { GEMINI_MODEL_IDS } from "@spark/llm/utils/gemini";
 import { z } from "zod";
 
 ensureEvalEnvLoaded();
+
+function describeModelProvider(modelId: LlmTextModelId): string {
+  const openAiModel = resolveOpenAiModelVariant(modelId);
+  if (openAiModel) {
+    return openAiModel.provider === "api"
+      ? "openai-api"
+      : "openai-chatgpt";
+  }
+  return "gemini";
+}
 
 const tools = {
   weather: tool({
@@ -29,6 +43,10 @@ const tools = {
 };
 
 async function runToolCheck(modelId: LlmTextModelId): Promise<void> {
+  process.stdout.write(
+    `[tool-loop] provider=${describeModelProvider(modelId)} model=${modelId}\n`,
+  );
+
   const result = await runToolLoop({
     modelId,
     prompt:
@@ -87,7 +105,7 @@ function parseCliOptions(args: readonly string[]):
       model: z.enum(MODEL_IDS).optional(),
     })
     .transform(({ model }) => ({
-      modelIds: [model ?? "gpt-5.2"],
+      modelIds: [model ?? DEFAULT_OPENAI_MODEL_ID],
     }));
 
   const raw: { model?: string } = {};
