@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { requireFunctionTool } from "./toolAssertions";
+
 vi.mock("pyodide", () => {
   return {
     loadPyodide: () => {
@@ -52,7 +54,10 @@ describe("Spark agent tool: python_exec", () => {
         serviceAccountJson: "{}",
       });
 
-      const out = await tools.python_exec.execute({
+      const pythonExecTool = tools.python_exec;
+      requireFunctionTool(pythonExecTool);
+
+      const out = await pythonExecTool.execute({
         scriptPath: "script.py",
         stdinPath: "in.txt",
         stdoutPath: "out.txt",

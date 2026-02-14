@@ -4,6 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import { requireFunctionTool } from "./toolAssertions";
+
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "spark-pipeline-test-"));
   try {
@@ -71,8 +73,11 @@ describe("Spark agent lesson pipeline guards", () => {
         enforceLessonPipeline: true,
       });
 
+      const generateTextTool = tools.generate_text;
+      requireFunctionTool(generateTextTool);
+
       await expect(
-        tools.generate_text.execute({
+        generateTextTool.execute({
           promptPath: "lesson/prompts/session-draft.md",
           outputPath: "lesson/output/session.json",
         }),
@@ -97,7 +102,10 @@ describe("Spark agent lesson pipeline guards", () => {
         enforceLessonPipeline: true,
       });
 
-      const parsed = tools.generate_text.inputSchema.parse({
+      const generateTextTool = tools.generate_text;
+      requireFunctionTool(generateTextTool);
+
+      const parsed = generateTextTool.inputSchema.parse({
         promptPath: "lesson/prompts/session-draft.md",
         outputPath: "lesson/drafts/session.md",
         inputPaths: "lesson/requirements.md",
@@ -129,7 +137,10 @@ describe("Spark agent lesson pipeline guards", () => {
         enforceLessonPipeline: true,
       });
 
-      const result = tools.generate_text.inputSchema.safeParse({
+      const generateTextTool = tools.generate_text;
+      requireFunctionTool(generateTextTool);
+
+      const result = generateTextTool.inputSchema.safeParse({
         promptPath: "lesson/prompts/session-draft.md",
       });
 
@@ -154,7 +165,10 @@ describe("Spark agent lesson pipeline guards", () => {
         enforceLessonPipeline: true,
       });
 
-      const result = tools.generate_text.inputSchema.safeParse({
+      const generateTextTool = tools.generate_text;
+      requireFunctionTool(generateTextTool);
+
+      const result = generateTextTool.inputSchema.safeParse({
         promptPath: "lesson/prompts/quiz-draft.md",
       });
 

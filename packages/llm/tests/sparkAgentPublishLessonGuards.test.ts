@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { requireFunctionTool } from "./toolAssertions";
+
 vi.mock("../src/utils/gcp/firestoreRest", () => {
   return {
     getFirestoreDocument: vi.fn(() =>
@@ -43,8 +45,11 @@ describe("Spark agent tool: publish_lesson guards", () => {
         enforceLessonPipeline: true,
       });
 
+      const publishLessonTool = tools.publish_lesson;
+      requireFunctionTool(publishLessonTool);
+
       await expect(
-        tools.publish_lesson.execute({ sessionId: "s1" }),
+        publishLessonTool.execute({ sessionId: "s1" }),
       ).rejects.toThrow(/Missing required session grading report/iu);
     });
   });
@@ -73,8 +78,11 @@ describe("Spark agent tool: publish_lesson guards", () => {
         enforceLessonPipeline: true,
       });
 
+      const publishLessonTool = tools.publish_lesson;
+      requireFunctionTool(publishLessonTool);
+
       await expect(
-        tools.publish_lesson.execute({ sessionId: "s1" }),
+        publishLessonTool.execute({ sessionId: "s1" }),
       ).rejects.toThrow(/pass=false/iu);
     });
   });
