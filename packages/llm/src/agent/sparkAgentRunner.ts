@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import {
   mkdir,
   readFile,
@@ -222,29 +224,51 @@ type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
   self?: typeof globalThis;
 };
 
-function resolvePyodideIndexUrl(explicit?: string): string | undefined {
+const require = createRequire(import.meta.url);
+const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
+const PYODIDE_BASE_DIR = path.dirname(PYODIDE_PACKAGE_JSON_PATH);
+const LOCAL_PYODIDE_INDEX_URL = path.join(PYODIDE_BASE_DIR, path.sep);
+
+function resolvePyodideIndexUrl(explicit?: string): string {
   const fromEnv =
     process.env.PYODIDE_INDEX_URL ??
     process.env.PYODIDE_BASE_URL ??
     process.env.PYTHON_RUNTIME_INDEX_URL;
   const raw = explicit?.trim() ?? fromEnv?.trim() ?? "";
+  const normalise = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    // Pyodide's Node loader resolves indexURL as a filesystem path (path.resolve),
+    // which breaks http(s) URLs (e.g. "https://..." becomes "https:/...") and then
+    // attempts to read them via fs. For server-side agent runs, prefer the local
+    // indexURL shipped with the `pyodide` npm package.
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return null;
+    }
+
+    if (trimmed.startsWith("file://")) {
+      try {
+        const resolved = fileURLToPath(trimmed);
+        return resolved.endsWith(path.sep) ? resolved : `${resolved}${path.sep}`;
+      } catch {
+        return null;
+      }
+    }
+
+    if (trimmed.endsWith(path.sep)) {
+      return trimmed;
+    }
+    return `${trimmed}${path.sep}`;
+  };
+
   if (!raw) {
-    return undefined;
+    return LOCAL_PYODIDE_INDEX_URL;
   }
-  if (raw.endsWith("/")) {
-    return raw;
-  }
-  if (
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("file://")
-  ) {
-    return `${raw}/`;
-  }
-  if (raw.endsWith(path.sep)) {
-    return raw;
-  }
-  return `${raw}${path.sep}`;
+
+  return normalise(raw) ?? LOCAL_PYODIDE_INDEX_URL;
 }
 
 function ensurePyodideEnvironment(indexURL: string): void {
@@ -270,12 +294,8 @@ async function ensurePythonRuntime(
         /* @vite-ignore */ "pyodide"
       )) as typeof import("pyodide");
       const resolvedIndex = resolvePyodideIndexUrl(indexURL);
-      const options: { indexURL?: string } = {};
-      if (resolvedIndex) {
-        ensurePyodideEnvironment(resolvedIndex);
-        options.indexURL = resolvedIndex;
-      }
-      return await pyodideModule.loadPyodide(options);
+      ensurePyodideEnvironment(resolvedIndex);
+      return await pyodideModule.loadPyodide({ indexURL: resolvedIndex });
     })();
   }
   return pythonRuntimePromise;
@@ -3168,11 +3188,22 @@ export async function runSparkLessonAgentLocal(options: {
   };
 
   let publishResult: LocalPublishLessonResult | null = null;
+  const publishLessonInputSchema: z.ZodType<PublishLessonToolInput> =
+    "inputSchema" in baseTools.publish_lesson
+      ? (baseTools.publish_lesson.inputSchema as z.ZodType<PublishLessonToolInput>)
+      : z
+          .object({
+            sessionId: z.string().trim().min(1),
+            sessionPath: z.string().trim().min(1).optional(),
+            briefPath: z.string().trim().min(1).optional(),
+            includeStory: z.boolean().optional(),
+            includeCoding: z.boolean().optional(),
+          })
+          .strict();
   const publish_lesson = tool({
     description:
       "Mock publish_lesson for local runs. Validates workspace JSON and returns counts but does not write Firestore.",
-    inputSchema: baseTools.publish_lesson
-      .inputSchema as z.ZodType<PublishLessonToolInput>,
+    inputSchema: publishLessonInputSchema,
     execute: async (input: PublishLessonToolInput) => {
       const resolvedSessionPath =
         input.sessionPath ?? "lesson/output/session.json";
@@ -3696,6 +3727,32 @@ export async function runSparkAgentTask(
       stage: "spark-agent",
     };
 
+    const doneTool = tool({
+      description:
+        "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
+      inputSchema: z
+        .object({
+          summary: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({ summary }) => {
+        doneCalled = true;
+        logSync?.append(
+          summary ? `done: ${summary}` : "done: completed without summary",
+        );
+        logSync?.setStats(statsTracker.snapshot());
+        await workspaceSync?.flushAll();
+        await logSync?.flushAll();
+        await updateAgentStatus({
+          serviceAccountJson,
+          agentDocPath,
+          status: "done",
+          resultSummary: summary,
+        });
+        return { status: "done", summary };
+      },
+    });
+
     const tools: LlmToolSet = {
       ...buildAgentTools({
         workspace: workspaceSync,
@@ -3706,31 +3763,7 @@ export async function runSparkAgentTask(
         enforceLessonPipeline: isLessonRun,
         debug: llmDebug,
       }),
-      done: tool({
-        description:
-          "Mark the agent run as complete. Flushes workspace updates and records a short summary.",
-        inputSchema: z
-          .object({
-            summary: z.string().trim().min(1).optional(),
-          })
-          .strict(),
-        execute: async ({ summary }) => {
-          doneCalled = true;
-          logSync?.append(
-            summary ? `done: ${summary}` : "done: completed without summary",
-          );
-          logSync?.setStats(statsTracker.snapshot());
-          await workspaceSync?.flushAll();
-          await logSync?.flushAll();
-          await updateAgentStatus({
-            serviceAccountJson,
-            agentDocPath,
-            status: "done",
-            resultSummary: summary,
-          });
-          return { status: "done", summary };
-        },
-      }),
+      done: doneTool,
     };
 
     progress.log(
@@ -3788,7 +3821,7 @@ export async function runSparkAgentTask(
         }
       }
 
-      await tools.done.execute({
+      await doneTool.execute({
         summary: summary.length > 0 ? summary : undefined,
       });
     }

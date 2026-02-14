@@ -4,28 +4,49 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobProgressReporter } from "../src/utils/concurrency";
 
+import { requireFunctionTool } from "./toolAssertions";
+
+const dummyServiceAccount = JSON.stringify({
+  project_id: "test-project",
+  client_email: "test@example.com",
+  private_key: "-----BEGIN PRIVATE KEY-----\\nTESTKEY\\n-----END PRIVATE KEY-----",
+});
+
+if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+  process.env.GOOGLE_SERVICE_ACCOUNT_JSON = dummyServiceAccount;
+}
+
 type GeminiStreamRequest = {
   model: string;
   contents: unknown;
   config: Record<string, unknown>;
 };
 
-const generateContentStreamMock =
-  vi.fn<(req: GeminiStreamRequest) => AsyncIterable<unknown>>();
+const { generateContentStreamMock } = vi.hoisted(() => ({
+  generateContentStreamMock: vi.fn<(req: GeminiStreamRequest) => AsyncIterable<unknown>>(),
+}));
 
-vi.mock("../src/utils/gemini", async () => {
-  const actual = await vi.importActual<typeof import("../src/utils/gemini")>(
-    "../src/utils/gemini",
-  );
+vi.mock("@google/genai", () => {
+  class GoogleGenAI {
+    readonly models = {
+      generateContentStream: generateContentStreamMock,
+    };
+
+    constructor(_options: unknown) {
+      void _options;
+    }
+  }
+
   return {
-    ...actual,
-    runGeminiCall: async (fn: (client: unknown) => Promise<void>) => {
-      const client = {
-        models: {
-          generateContentStream: generateContentStreamMock,
-        },
-      };
-      await fn(client);
+    GoogleGenAI,
+    FinishReason: {
+      SAFETY: "SAFETY",
+      BLOCKLIST: "BLOCKLIST",
+      PROHIBITED_CONTENT: "PROHIBITED_CONTENT",
+      SPII: "SPII",
+    },
+    FunctionCallingConfigMode: {
+      VALIDATED: "VALIDATED",
     },
   };
 });
@@ -236,7 +257,10 @@ describe("Spark agent tool: generate_json", () => {
         return buildSingleChunkStream('{"x":1}');
       });
 
-      const result = await tools.generate_json.execute({
+      const generateJsonTool = tools.generate_json;
+      requireFunctionTool(generateJsonTool);
+
+      const result = await generateJsonTool.execute({
         sourcePath,
         schemaPath,
         outputPath,

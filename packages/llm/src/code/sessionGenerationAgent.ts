@@ -2528,7 +2528,7 @@ function parseCliArgs(args: readonly string[]): {
     includeCoding: parsed.data.includeCoding,
     storyPlanItemId: parsed.data.storyPlanItemId,
     storySegmentCount: parsed.data.storySegmentCount,
-    modelId: parsed.data.modelId as LlmTextModelId | undefined,
+    modelId: parsed.data.modelId,
     maxSteps: parsed.data.maxSteps,
   };
 }
