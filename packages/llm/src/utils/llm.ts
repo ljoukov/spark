@@ -8,6 +8,9 @@ import {
   generateImages as generateImagesV2,
   generateJson as generateJsonV2,
   getCurrentToolCallContext,
+  isLlmImageModelId as isLlmImageModelIdV2,
+  isLlmModelId as isLlmModelIdV2,
+  isLlmTextModelId as isLlmTextModelIdV2,
   LlmJsonCallError,
   parseJsonFromLlmText,
   runToolLoop as runToolLoopV2,
@@ -18,9 +21,12 @@ import {
   tool,
   type JsonSchema,
   type LlmExecutableTool,
+  type LlmImageModelId as LlmImageModelIdV2,
   type LlmImageData,
   type LlmImageSize,
+  type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
+  type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
   type LlmToolSet,
@@ -85,6 +91,44 @@ export function convertGooglePartsToLlmParts(parts: readonly GooglePart[]): LlmC
 export type LlmTextModelId = string;
 export type LlmImageModelId = string;
 export type LlmModelId = string;
+
+const LEGACY_LLM_MODEL_ID_ALIASES = {
+  "gpt-5.2-codex": "gpt-5.3-codex",
+  "chatgpt-gpt-5.2-codex": "chatgpt-gpt-5.3-codex",
+} as const;
+
+function normaliseLlmModelId(modelId: string): string {
+  const mapped =
+    LEGACY_LLM_MODEL_ID_ALIASES[modelId as keyof typeof LEGACY_LLM_MODEL_ID_ALIASES];
+  if (mapped !== undefined) {
+    return mapped;
+  }
+  return modelId;
+}
+
+function resolveLlmModelId(modelId: string): LlmModelIdV2 {
+  const normalisedModelId = normaliseLlmModelId(modelId);
+  if (isLlmModelIdV2(normalisedModelId)) {
+    return normalisedModelId;
+  }
+  throw new Error(`Unsupported model id: ${modelId}`);
+}
+
+function resolveLlmTextModelId(modelId: string): LlmTextModelIdV2 {
+  const normalisedModelId = normaliseLlmModelId(modelId);
+  if (isLlmTextModelIdV2(normalisedModelId)) {
+    return normalisedModelId;
+  }
+  throw new Error(`Unsupported text model id: ${modelId}`);
+}
+
+function resolveLlmImageModelId(modelId: string): LlmImageModelIdV2 {
+  const normalisedModelId = normaliseLlmModelId(modelId);
+  if (isLlmImageModelIdV2(normalisedModelId)) {
+    return normalisedModelId;
+  }
+  throw new Error(`Unsupported image model id: ${modelId}`);
+}
 
 export type LlmDebugOptions = {
   readonly rootDir: string;
@@ -283,7 +327,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
   reportPromptUsage(progress, handle, options.contents);
 
   const call = streamText({
-    model: options.modelId,
+    model: resolveLlmModelId(options.modelId),
     input: toInputMessages(options.contents),
     tools: options.tools,
     responseMimeType: options.responseMimeType,
@@ -359,7 +403,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
 
   try {
     const { value } = await generateJsonV2({
-      model: options.modelId,
+      model: resolveLlmTextModelId(options.modelId),
       input: toInputMessages(options.contents),
       schema: options.schema,
       maxAttempts,
@@ -425,7 +469,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
   void progress;
 
   const result = await runToolLoopV2({
-    model: options.modelId,
+    model: resolveLlmTextModelId(options.modelId),
     input,
     ...(instructions ? { instructions } : {}),
     tools: options.tools,
@@ -453,7 +497,7 @@ export async function generateImages(options: LlmGenerateImagesOptions): Promise
   void options.debug;
 
   return await generateImagesV2({
-    model: options.modelId,
+    model: resolveLlmImageModelId(options.modelId),
     stylePrompt: options.stylePrompt,
     styleImages: options.styleImages,
     imagePrompts: options.imagePrompts,
@@ -473,7 +517,7 @@ export async function generateImageInBatches(
   void options.debug;
 
   return await generateImageInBatchesV2({
-    model: options.modelId,
+    model: resolveLlmImageModelId(options.modelId),
     stylePrompt: options.stylePrompt,
     styleImages: options.styleImages,
     imagePrompts: options.imagePrompts,

@@ -3,26 +3,12 @@ import path from "node:path";
 
 let envLoaded = false;
 
-function applyRuntimeLlmDefaults(): void {
-  if (!("bun" in process.versions)) {
-    return;
-  }
-
-  if (process.env.OPENAI_RESPONSES_WEBSOCKET_MODE === undefined) {
-    process.env.OPENAI_RESPONSES_WEBSOCKET_MODE = "off";
-  }
-  if (process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE === undefined) {
-    process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE = "off";
-  }
-}
-
 export function loadLocalEnv(): void {
   if (envLoaded) {
     return;
   }
   const envPath = path.join(process.cwd(), ".env.local");
   loadEnvFromFile(envPath, { override: false });
-  applyRuntimeLlmDefaults();
   envLoaded = true;
 }
 
