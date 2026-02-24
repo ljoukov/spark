@@ -8,6 +8,7 @@
 	import Camera from '@lucide/svelte/icons/camera';
 	import Mic from '@lucide/svelte/icons/mic';
 	import Plus from '@lucide/svelte/icons/plus';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { ChatInput } from '$lib/components/chat/index.js';
@@ -37,6 +38,7 @@
 		previewUrl?: string | null;
 		storagePath?: string;
 		error?: string;
+		sourceFile?: File;
 	};
 	type MessageAttachment = {
 		kind: 'image' | 'file';
@@ -47,6 +49,8 @@
 	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
 	const MAX_FILES_PER_CONVERSATION = 10;
+	const MAX_UPLOAD_ATTEMPTS = 3;
+	const UPLOAD_RETRY_BASE_DELAY_MS = 500;
 	const MAX_COMPOSER_LINES = 12;
 	const MAX_COMPOSER_CHARS = 12_000;
 
@@ -356,6 +360,10 @@
 					continue;
 				}
 				usedServerIds.add(entry.id);
+				if (entry.status === 'uploading' && serverEntry.status === 'failed') {
+					next.push(entry);
+					continue;
+				}
 				if (serverEntry.status === 'attached') {
 					cleanupPreviewUrl(entry.previewUrl);
 					continue;
@@ -750,6 +758,46 @@
 		return '';
 	}
 
+	function wait(ms: number): Promise<void> {
+		return new Promise((resolve) => {
+			setTimeout(resolve, ms);
+		});
+	}
+
+	function shouldRetryUpload(status: number, errorCode: string | undefined): boolean {
+		if (status === 408 || status === 425 || status === 429) {
+			return true;
+		}
+		if (status >= 500) {
+			return true;
+		}
+		if (errorCode === 'upload_failed' || errorCode === 'attachment_state_failed') {
+			return true;
+		}
+		return false;
+	}
+
+	function resolveAttachmentErrorMessage(message: string | undefined): string {
+		if (!message || message.trim().length === 0) {
+			return 'Upload failed. Please try again.';
+		}
+		return message.trim();
+	}
+
+	function resolveRetryDelayMs(attemptNumber: number): number {
+		const multiplier = Math.max(1, attemptNumber);
+		return UPLOAD_RETRY_BASE_DELAY_MS * multiplier;
+	}
+
+	function resolveConversationIdForAttachmentUpload(): string {
+		if (conversationId) {
+			return conversationId;
+		}
+		const nextConversationId = createConversationId();
+		setConversationId(nextConversationId);
+		return nextConversationId;
+	}
+
 	async function removeAttachmentOnServer(
 		activeConversationId: string,
 		fileId: string
@@ -769,69 +817,117 @@
 		file: File,
 		activeConversationId: string
 	): Promise<void> {
-		const form = new FormData();
-		form.append('conversationId', activeConversationId);
-		form.append('file', file);
-		try {
-			const response = await fetch('/api/spark/agent/attachments', {
-				method: 'POST',
-				body: form
-			});
-			const payload = await response.json().catch(() => null);
-			if (!response.ok) {
-				const message = payload?.message ?? 'Upload failed. Please try again.';
-				if (pendingRemovalByLocalId.has(localId)) {
-					pendingRemovalByLocalId.delete(localId);
-					return;
-				}
-				updateLocalAttachment(localId, { status: 'failed', error: message });
-				attachmentError = message;
+		for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt += 1) {
+			if (pendingRemovalByLocalId.has(localId)) {
+				pendingRemovalByLocalId.delete(localId);
 				return;
 			}
-			const parsed = SparkAgentAttachmentSchema.safeParse(payload?.attachment);
-			if (!parsed.success) {
+			const form = new FormData();
+			form.append('conversationId', activeConversationId);
+			form.append('file', file);
+			try {
+				const response = await fetch('/api/spark/agent/attachments', {
+					method: 'POST',
+					body: form
+				});
+				const payload = (await response.json().catch(() => null)) as
+					| { attachment?: unknown; error?: string; message?: string }
+					| null;
+				if (!response.ok) {
+					const message = resolveAttachmentErrorMessage(payload?.message);
+					const retryable = shouldRetryUpload(response.status, payload?.error);
+					if (retryable && attempt < MAX_UPLOAD_ATTEMPTS) {
+						await wait(resolveRetryDelayMs(attempt));
+						continue;
+					}
+					if (pendingRemovalByLocalId.has(localId)) {
+						pendingRemovalByLocalId.delete(localId);
+						return;
+					}
+					updateLocalAttachment(localId, {
+						status: 'failed',
+						error: message
+					});
+					attachmentError = message;
+					return;
+				}
+				const parsed = SparkAgentAttachmentSchema.safeParse(payload?.attachment);
+				if (!parsed.success) {
+					if (attempt < MAX_UPLOAD_ATTEMPTS) {
+						await wait(resolveRetryDelayMs(attempt));
+						continue;
+					}
+					if (pendingRemovalByLocalId.has(localId)) {
+						pendingRemovalByLocalId.delete(localId);
+						return;
+					}
+					updateLocalAttachment(localId, {
+						status: 'failed',
+						error: 'Upload failed. Please try again.'
+					});
+					return;
+				}
+				const attachment = parsed.data;
+				if (pendingRemovalByLocalId.has(localId)) {
+					pendingRemovalByLocalId.delete(localId);
+					resolveIgnoredAttachmentIds(activeConversationId).add(attachment.id);
+					try {
+						await removeAttachmentOnServer(activeConversationId, attachment.id);
+					} catch (removeError) {
+						console.warn('Failed to remove attachment after upload', removeError);
+					}
+					return;
+				}
+				resolveIgnoredAttachmentIds(activeConversationId).delete(attachment.id);
+				updateLocalAttachment(localId, {
+					id: attachment.id,
+					status: attachment.status,
+					filename: attachment.filename ?? file.name,
+					contentType: attachment.contentType,
+					sizeBytes: attachment.sizeBytes,
+					storagePath: attachment.storagePath,
+					error: attachment.error,
+					sourceFile: undefined
+				});
+				return;
+			} catch (uploadError) {
+				if (attempt < MAX_UPLOAD_ATTEMPTS) {
+					await wait(resolveRetryDelayMs(attempt));
+					continue;
+				}
 				if (pendingRemovalByLocalId.has(localId)) {
 					pendingRemovalByLocalId.delete(localId);
 					return;
 				}
+				console.error('Attachment upload failed', uploadError);
 				updateLocalAttachment(localId, {
 					status: 'failed',
 					error: 'Upload failed. Please try again.'
 				});
 				return;
 			}
-			const attachment = parsed.data;
-			if (pendingRemovalByLocalId.has(localId)) {
-				pendingRemovalByLocalId.delete(localId);
-				resolveIgnoredAttachmentIds(activeConversationId).add(attachment.id);
-				try {
-					await removeAttachmentOnServer(activeConversationId, attachment.id);
-				} catch (removeError) {
-					console.warn('Failed to remove attachment after upload', removeError);
-				}
-				return;
-			}
-			resolveIgnoredAttachmentIds(activeConversationId).delete(attachment.id);
-			updateLocalAttachment(localId, {
-				id: attachment.id,
-				status: attachment.status,
-				filename: attachment.filename ?? file.name,
-				contentType: attachment.contentType,
-				sizeBytes: attachment.sizeBytes,
-				storagePath: attachment.storagePath,
-				error: attachment.error
-			});
-		} catch (uploadError) {
-			if (pendingRemovalByLocalId.has(localId)) {
-				pendingRemovalByLocalId.delete(localId);
-				return;
-			}
-			console.error('Attachment upload failed', uploadError);
-			updateLocalAttachment(localId, {
-				status: 'failed',
-				error: 'Upload failed. Please try again.'
-			});
 		}
+	}
+
+	async function retryAttachmentUpload(entry: LocalAttachment): Promise<void> {
+		if (entry.status !== 'failed') {
+			return;
+		}
+		if (!entry.sourceFile) {
+			attachmentError = 'Cannot retry this file. Please remove it and upload again.';
+			return;
+		}
+		const activeConversationId = resolveConversationIdForAttachmentUpload();
+		attachmentError = null;
+		if (entry.id) {
+			resolveIgnoredAttachmentIds(activeConversationId).delete(entry.id);
+		}
+		resolveIgnoredFingerprints(activeConversationId).delete(entry.fingerprint);
+		updateLocalAttachment(entry.localId, {
+			status: 'uploading',
+			error: undefined
+		});
+		void uploadAttachment(entry.localId, entry.sourceFile, activeConversationId);
 	}
 
 	async function addAttachments(files: File[]): Promise<void> {
@@ -887,7 +983,8 @@
 				sizeBytes: file.size,
 				status: 'uploading',
 				fingerprint,
-				previewUrl
+				previewUrl,
+				sourceFile: file
 			};
 			attachments = [...attachments, entry];
 			count += 1;
@@ -1499,6 +1596,24 @@
 												<div class="attachment-status" aria-label="Uploading">
 													<span class="attachment-spinner" aria-hidden="true"></span>
 												</div>
+											{:else if attachment.status === 'failed'}
+												<button
+													class="attachment-retry"
+													type="button"
+													aria-label="Retry upload"
+													onclick={() => void retryAttachmentUpload(attachment)}
+													disabled={!attachment.sourceFile || sending}
+												>
+													<RotateCcw size={14} />
+												</button>
+												<button
+													class="attachment-remove"
+													type="button"
+													aria-label="Remove attachment"
+													onclick={() => void removeAttachment(attachment)}
+												>
+													<span class="attachment-remove__glyph" aria-hidden="true">×</span>
+												</button>
 											{:else}
 												<button
 													class="attachment-remove"
@@ -1510,7 +1625,7 @@
 												</button>
 											{/if}
 											{#if attachment.status === 'failed'}
-												<div class="attachment-error">Upload failed</div>
+												<div class="attachment-error">{attachment.error ?? 'Upload failed'}</div>
 											{/if}
 										</div>
 									</div>
@@ -2232,6 +2347,11 @@
 		padding: 0.35rem;
 	}
 
+	.attachment-card.failed {
+		border-color: rgba(220, 38, 38, 0.48);
+		background: color-mix(in srgb, rgba(220, 38, 38, 0.14) 72%, var(--chat-surface));
+	}
+
 	.attachment-card.is-image {
 		min-width: 120px;
 		max-width: 180px;
@@ -2318,6 +2438,26 @@
 		place-items: center;
 	}
 
+	.attachment-retry {
+		position: absolute;
+		top: 0.35rem;
+		left: 0.35rem;
+		width: 1.35rem;
+		height: 1.35rem;
+		border-radius: 999px;
+		border: none;
+		background: color-mix(in srgb, var(--foreground) 16%, transparent);
+		color: var(--foreground);
+		cursor: pointer;
+		display: grid;
+		place-items: center;
+	}
+
+	.attachment-retry:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
 	.attachment-remove__glyph {
 		display: block;
 		font-size: 0.95rem;
@@ -2333,6 +2473,9 @@
 		font-size: 0.6rem;
 		text-align: center;
 		color: rgba(185, 28, 28, 0.9);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.composer-spinner {

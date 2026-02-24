@@ -139,6 +139,7 @@ Recommended defaults:
     - Code blocks render inside a framed container with a language label and copy button; user bubbles can expand to the same max width as assistant replies with a small left inset.
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
     - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
+    - Uploads are retried automatically up to 3 attempts on transient failures. If all attempts fail, the tile switches to an error state with the failure message, a retry icon action, and a remove `×` action.
     - The send button is disabled until all uploads finish; while uploading it shows an inline spinner.
     - While streaming, the assistant bubble exposes client + server phases:
       - `Establishing connection...` while the SSE request is opening (client-side fetch).
