@@ -39,7 +39,8 @@ import lessonPromptCodeRevise from '$lib/server/lessonAgent/prompts/code-revise.
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
-const MODEL_ID = 'gemini-2.5-pro' as const;
+const MODEL_ID = 'chatgpt-gpt-5.3-codex' as const;
+const OPENAI_REASONING_EFFORT = 'low' as const;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
@@ -1208,6 +1209,7 @@ async function generateAssistantResponse(
 		contents,
 		tools,
 		maxSteps: 12,
+		openAiReasoningEffort: OPENAI_REASONING_EFFORT,
 		onDelta: handlers.onDelta
 	});
 	return normalizeSparkLinks(result.text);

@@ -59,7 +59,7 @@ import type {
   StageHandle,
 } from "../utils/concurrency";
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.2-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 
@@ -414,6 +414,9 @@ function loadAgentEnv(): void {
 function resolveOpenAiReasoningEffort(
   modelId: LlmTextModelId,
 ): OpenAiReasoningEffort | undefined {
+  if (modelId.includes("gpt-5.3-codex")) {
+    return "xhigh";
+  }
   if (modelId.includes("gpt-5.2")) {
     return "medium";
   }
