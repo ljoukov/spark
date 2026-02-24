@@ -1,3 +1,0 @@
-[submodule "spark-data"]
-        path = spark-data
-        url = https://github.com/ljoukov/spark-data.git

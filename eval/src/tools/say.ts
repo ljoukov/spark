@@ -30,7 +30,7 @@ const CliOptionsSchema = z.object({
 function parseCliOptions(argv: readonly string[]): CliOptions {
   const program = createCliCommand(
     "tts:say",
-    "Synthesize text to speech and save it under spark-data/tts/synthetic",
+    "Synthesize text to speech and save it under data/tts/synthetic",
   );
 
   program
@@ -95,7 +95,7 @@ function buildOutputPath({
     .replaceAll("-", "")
     .replaceAll(".", "");
   const outputDir = path.join(
-    WORKSPACE_PATHS.sparkDataRoot,
+    WORKSPACE_PATHS.dataRoot,
     "tts",
     "synthetic",
   );

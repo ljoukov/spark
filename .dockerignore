@@ -12,6 +12,7 @@ node_modules
 **/.eslintcache
 
 # Large or irrelevant directories
+data
 spark-data
 Spark
 

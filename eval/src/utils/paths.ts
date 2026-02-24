@@ -9,16 +9,16 @@ const SRC_ROOT = path.resolve(UTILS_DIR, "..");
 const EVAL_ROOT = path.resolve(SRC_ROOT, "..");
 const REPO_ROOT = path.resolve(EVAL_ROOT, "..");
 const WEB_ROOT = path.join(REPO_ROOT, "web");
-const SPARK_DATA_ROOT = path.join(REPO_ROOT, "spark-data");
-const QUIZ_ROOT = path.join(SPARK_DATA_ROOT, "quiz");
-const CODE_ROOT = path.join(SPARK_DATA_ROOT, "code");
+const DATA_ROOT = path.join(REPO_ROOT, "data");
+const QUIZ_ROOT = path.join(DATA_ROOT, "quiz");
+const CODE_ROOT = path.join(DATA_ROOT, "code");
 
 export const WORKSPACE_PATHS = {
   repoRoot: REPO_ROOT,
   evalRoot: EVAL_ROOT,
   srcRoot: SRC_ROOT,
   webRoot: WEB_ROOT,
-  sparkDataRoot: SPARK_DATA_ROOT,
+  dataRoot: DATA_ROOT,
   quizRoot: QUIZ_ROOT,
   quizDownloadsDir: path.join(QUIZ_ROOT, "downloads"),
   quizEvalInputDir: path.join(QUIZ_ROOT, "eval-input"),

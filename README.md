@@ -37,9 +37,8 @@ Dive deeper in the [Product & Architecture Specification](docs/SPEC.md).
 - [`Spark/`](Spark): SwiftUI app modules for capture, quiz, and progress flows.
 - [`web/`](web): SvelteKit project for marketing pages, authenticated portal, and API endpoints.
 - [`proto/`](proto): Source for protobuf contracts (`bun run generate` produces TypeScript and Swift bindings).
-- [`data/`](data): Fixtures used during prototyping and testing.
+- `data/` (gitignored): Local workspace for eval fixtures and generated artifacts.
 - [`docs/`](docs): Living documentation, including [SPEC](docs/SPEC.md).
-- [`spark-data/`](spark-data): Private submodule that stores licensed study materials. The contents remain empty in fresh clones unless you have credentials to access the private repository.
 
 ## Agent-guided development
 Spark is actively maintained with a coding-agent workflow. The repository’s [agent playbook](AGENTS.md) captures expectations around specs, validation, and commit discipline. Contributors should review it alongside the [SPEC](docs/SPEC.md) document before shipping changes to keep human and agent collaborators aligned.

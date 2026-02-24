@@ -198,7 +198,7 @@ const PlacementModeSchema = z.enum(["link", "copy", "move"]);
 function parseCliOptions(argv: readonly string[]): CliOptions {
   const program = createCliCommand(
     "prepare-input",
-    "Classify raw study materials into spark-data/quiz/eval-input",
+    "Classify raw study materials into data/quiz/eval-input",
   );
 
   program

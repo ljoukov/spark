@@ -9,20 +9,16 @@
 
 ## Repository Setup
 
-- After cloning, sync submodule URLs with `git submodule sync --recursive`.
-- Initialize and update all submodules with `git submodule update --init --recursive`.
-- Re-run the update command if new submodules are added or refs change.
+- This repo has no required submodules.
+- Eval assets and generated artifacts belong under the gitignored `data/` workspace.
 - All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 - Long-lived processes should run in the background (e.g. `nohup … &`) with logs redirected to a file. tmux is optional and not required.
 
-## spark-data Submodule
+## Local Data Workspace
 
-- Install Git LFS once (`brew install git-lfs && git lfs install`). The `spark-data/quiz/eval-output/` directory is packaged into `eval-output.tar.gz` and tracked via LFS to keep the repository responsive.
-- To align your workspace with `origin/main`, run `scripts/git-sync-spark-data.sh`. It fast-forwards the submodule checkout to the commit referenced by `origin/main` and restores `spark-data/quiz/eval-output/` from the tarball when available.
-- When you change files inside `spark-data/`, keep generated artifacts under `spark-data/quiz/eval-output/`, then run `scripts/git-publish-spark-data.sh "spark-data commit message" "[optional super repo commit message]"`. The script repackages `eval-output/`, commits and pushes the submodule, and updates the super-repo pointer (default commit message `[chore] update spark-data to <sha>`).
-- Both scripts abort if the working trees are dirty; commit or stash unrelated changes first.
-- The legacy helper scripts (`spark-data/output-pack.sh`, `spark-data/output-unpack.sh`, and `spark-data/AGENTS.md`) were removed in favour of the repo-level tooling above; do not recreate them.
+- Keep large local inputs/outputs under `data/` (for example `data/quiz/downloads`, `data/quiz/eval-input`, `data/quiz/eval-output`, `data/code/synthetic`).
+- `data/` is intentionally ignored by git. Do not commit licensed or generated datasets into the repository.
 
 For details, read `docs/SPEC.md`.
 
@@ -38,7 +34,7 @@ IMPORTANT: maintain (i.e. make changes if contradicting changes are made or crit
 
 ## Quiz LLM Eval
 
-- Prepare input: `eval/src/quiz/eval/prepare-input.ts` (`bun --cwd=eval run quiz:prepare-input`). Reads raw assets from `spark-data/quiz/downloads/**`, classifies them, and writes curated bundles to `spark-data/quiz/eval-input/**`.
+- Prepare input: `eval/src/quiz/eval/prepare-input.ts` (`bun --cwd=eval run quiz:prepare-input`). Reads raw assets from `data/quiz/downloads/**`, classifies them, and writes curated bundles to `data/quiz/eval-input/**`.
 - Generate a quiz JSON from a single PDF: `eval/src/quiz/generateQuiz.ts` (`bun --cwd=eval run quiz:generate -- --input-file <path>`). Prints the quiz definition to stdout.
 - Env: requires `GOOGLE_SERVICE_ACCOUNT_JSON` (in environment or `.env.local` at repo root) with access to Gemini (Vertex AI) and Text-to-Speech APIs. Optional proxy vars `HTTPS_PROXY`/`HTTP_PROXY` respected.
 - Behavior: uses the same fixed question counts as production (base=10, extension=10) for consistency; not configurable via env.
