@@ -110,6 +110,7 @@ type ConversationInit = {
 };
 
 const SYSTEM_PROMPT = sparkChatSystemPrompt.trim();
+const MAX_ERROR_LOG_DEPTH = 100;
 
 const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
 	user: 'user',
@@ -117,6 +118,81 @@ const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
 	system: 'system',
 	tool: 'tool'
 };
+
+function serializeErrorContext(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+	if (depth <= 0) {
+		return '[Max depth reached]';
+	}
+	if (value instanceof Error) {
+		return serializeErrorForLog(value, depth - 1, seen);
+	}
+	if (typeof value === 'bigint') {
+		return value.toString();
+	}
+	if (typeof value !== 'object' || value === null) {
+		return value;
+	}
+	if (seen.has(value)) {
+		return '[Circular]';
+	}
+	seen.add(value);
+	if (Array.isArray(value)) {
+		const result: unknown[] = [];
+		for (const item of value) {
+			result.push(serializeErrorContext(item, depth - 1, seen));
+		}
+		return result;
+	}
+	const result: Record<string, unknown> = {};
+	for (const [key, nestedValue] of Object.entries(value)) {
+		result[key] = serializeErrorContext(nestedValue, depth - 1, seen);
+	}
+	return result;
+}
+
+function serializeErrorForLog(
+	error: unknown,
+	depth = MAX_ERROR_LOG_DEPTH,
+	seen = new WeakSet<object>()
+): Record<string, unknown> {
+	if (error instanceof Error) {
+		if (seen.has(error)) {
+			return {
+				type: error.constructor?.name ?? 'Error',
+				message: '[Circular error reference]'
+			};
+		}
+		seen.add(error);
+		const result: Record<string, unknown> = {
+			type: error.constructor?.name ?? 'Error',
+			name: error.name,
+			message: error.message
+		};
+		if (error.stack) {
+			result.stack = error.stack;
+		}
+		const cause = (error as Error & { cause?: unknown }).cause;
+		if (cause !== undefined) {
+			result.cause = serializeErrorContext(cause, depth - 1, seen);
+		}
+		for (const [key, value] of Object.entries(error)) {
+			if (!(key in result)) {
+				result[key] = serializeErrorContext(value, depth - 1, seen);
+			}
+		}
+		return result;
+	}
+	if (error === null) {
+		return { type: 'null', value: null };
+	}
+	if (error === undefined) {
+		return { type: 'undefined', value: 'undefined' };
+	}
+	return {
+		type: typeof error,
+		value: serializeErrorContext(error, depth - 1, seen)
+	};
+}
 
 function resolveConversationId(value: string | undefined): string {
 	if (value && value.trim().length > 0) {
@@ -1070,7 +1146,7 @@ function buildSparkChatTools(options: {
 					console.error('Spark lesson creation tool failed', {
 						userId,
 						topic: input.topic,
-						error: error instanceof Error ? error.message : String(error)
+						error: serializeErrorForLog(error)
 					});
 					if (sessionSaved && sessionId) {
 						await patchFirestoreDocument({
@@ -1190,7 +1266,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	try {
 		parsedBody = requestSchema.parse(await request.json());
 	} catch (error) {
-		console.error('Failed to parse Spark AI Agent request body', { error, userId });
+		console.error('Failed to parse Spark AI Agent request body', {
+			userId,
+			error: serializeErrorForLog(error)
+		});
 		if (error instanceof z.ZodError) {
 			return json({ error: 'invalid_body', issues: error.issues }, { status: 400 });
 		}
@@ -1225,9 +1304,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		).conversation;
 	} catch (error) {
 		console.error('Spark AI Agent Firestore unavailable', {
-			error: error instanceof Error ? error.message : String(error),
 			userId,
-			conversationId
+			conversationId,
+			error: serializeErrorForLog(error)
 		});
 		return json(
 			{
@@ -1313,9 +1392,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	} catch (error) {
 		console.error('Spark AI Agent conversation write failed', {
-			error: error instanceof Error ? error.message : String(error),
 			userId,
-			conversationId
+			conversationId,
+			error: serializeErrorForLog(error)
 		});
 		return json(
 			{
@@ -1414,7 +1493,12 @@ export const POST: RequestHandler = async ({ request }) => {
 				})
 			});
 		} catch (error) {
-			console.error('Failed to generate Spark AI Agent response', { error, userId });
+			console.error('Failed to generate Spark AI Agent response', {
+				userId,
+				conversationId,
+				messageId: assistantMessageId,
+				error: serializeErrorForLog(error)
+			});
 			const fallback = 'Sorry — Spark AI Agent could not respond just now. Please try again.';
 			assistantText = fallback;
 			await flushUpdate(true);
