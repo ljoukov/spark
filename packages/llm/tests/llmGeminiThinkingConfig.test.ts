@@ -26,7 +26,7 @@ const { generateContentStreamMock } = vi.hoisted(() => ({
   generateContentStreamMock: vi.fn<(req: GeminiStreamRequest) => AsyncIterable<unknown>>(),
 }));
 
-vi.mock("@google/genai", () => {
+vi.mock("@google/genai/node", () => {
   class GoogleGenAI {
     readonly models = {
       generateContentStream: generateContentStreamMock,

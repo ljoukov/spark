@@ -1,10 +1,10 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai/node";
 import type {
   Content,
   GenerateContentResponse,
   GoogleGenAIOptions,
   Part,
-} from "@google/genai";
+} from "@google/genai/node";
 
 import { getGoogleAuthOptions, getGoogleServiceAccount } from "./googleAuth";
 
