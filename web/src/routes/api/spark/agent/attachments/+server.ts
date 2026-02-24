@@ -127,6 +127,24 @@ class AttachmentLimitError extends Error {
 	}
 }
 
+function logAttachmentPostReject(options: {
+	userId: string;
+	conversationId?: string;
+	code: string;
+	status: number;
+	message: string;
+	details?: Record<string, unknown>;
+}): void {
+	console.warn('[spark-chat][attachments] upload rejected', {
+		userId: options.userId,
+		conversationId: options.conversationId,
+		code: options.code,
+		status: options.status,
+		message: options.message,
+		...(options.details ?? {})
+	});
+}
+
 export const GET: RequestHandler = async ({ request, url }) => {
 	const authResult = await authenticateApiRequest(request);
 	if (!authResult.ok) {
@@ -256,16 +274,44 @@ export const POST: RequestHandler = async ({ request }) => {
 		conversationId = conversationIdSchema.parse(rawConversationId);
 	} catch (error) {
 		if (error instanceof z.ZodError) {
+			logAttachmentPostReject({
+				userId,
+				code: 'invalid_body',
+				status: 400,
+				message: 'conversationId is missing/invalid',
+				details: { issues: error.issues }
+			});
 			return json({ error: 'invalid_body', issues: error.issues }, { status: 400 });
 		}
+		logAttachmentPostReject({
+			userId,
+			code: 'invalid_body',
+			status: 400,
+			message: 'conversationId parse failed'
+		});
 		return json({ error: 'invalid_body' }, { status: 400 });
 	}
 
 	const fileEntry = formData.get('file');
 	if (!isFileLike(fileEntry)) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'missing_file',
+			status: 400,
+			message: 'No file provided in multipart form-data'
+		});
 		return json({ error: 'missing_file', message: 'No file provided' }, { status: 400 });
 	}
 	if (typeof fileEntry.size === 'number' && fileEntry.size > MAX_FILE_SIZE_BYTES) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'file_too_large',
+			status: 413,
+			message: 'File exceeds 25 MB limit',
+			details: { sizeBytes: fileEntry.size, maxBytes: MAX_FILE_SIZE_BYTES, filename: fileEntry.name }
+		});
 		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
@@ -279,14 +325,38 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const sizeBytes = buffer.byteLength;
 	if (sizeBytes === 0) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'empty_file',
+			status: 400,
+			message: 'File is empty',
+			details: { filename: fileEntry.name }
+		});
 		return json({ error: 'empty_file', message: 'File is empty' }, { status: 400 });
 	}
 	if (sizeBytes > MAX_FILE_SIZE_BYTES) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'file_too_large',
+			status: 413,
+			message: 'File exceeds 25 MB limit after reading bytes',
+			details: { sizeBytes, maxBytes: MAX_FILE_SIZE_BYTES, filename: fileEntry.name }
+		});
 		return json({ error: 'file_too_large', message: 'File exceeds 25 MB limit' }, { status: 413 });
 	}
 
 	const contentType = detectContentType(buffer);
 	if (!contentType) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'unsupported_file',
+			status: 415,
+			message: 'Unsupported attachment content signature',
+			details: { filename: fileEntry.name, claimedType: fileEntry.type || null, sizeBytes }
+		});
 		return json(
 			{ error: 'unsupported_file', message: 'Only JPG, PNG, WEBP, or PDF files are supported.' },
 			{ status: 415 }
@@ -361,6 +431,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		uploadStatus = nextAttachment;
 	} catch (error) {
 		if (error instanceof AttachmentLimitError) {
+			logAttachmentPostReject({
+				userId,
+				conversationId,
+				code: error.code,
+				status: error.status,
+				message: error.message,
+				details: { fileId, filename, sizeBytes }
+			});
 			return json({ error: error.code, message: error.message }, { status: error.status });
 		}
 		console.error('Failed to update attachment state', { error, userId, conversationId });
@@ -371,6 +449,14 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	if (!uploadStatus) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'attachment_state_failed',
+			status: 500,
+			message: 'Attachment upload status was not initialized',
+			details: { fileId, filename }
+		});
 		return json({ error: 'attachment_state_failed' }, { status: 500 });
 	}
 
@@ -458,6 +544,14 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	if (!finalAttachment) {
+		logAttachmentPostReject({
+			userId,
+			conversationId,
+			code: 'upload_failed',
+			status: 500,
+			message: 'Upload completed without final attachment state',
+			details: { fileId, filename, contentType }
+		});
 		return json({ error: 'upload_failed' }, { status: 500 });
 	}
 

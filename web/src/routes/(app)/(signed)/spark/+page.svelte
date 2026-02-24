@@ -51,6 +51,7 @@
 	const MAX_FILES_PER_CONVERSATION = 10;
 	const MAX_UPLOAD_ATTEMPTS = 3;
 	const UPLOAD_RETRY_BASE_DELAY_MS = 500;
+	const INTERRUPTED_UPLOAD_MESSAGE = 'Upload interrupted. Remove and add this file again.';
 	const MAX_COMPOSER_LINES = 12;
 	const MAX_COMPOSER_CHARS = 12_000;
 
@@ -86,6 +87,7 @@
 	const pendingRemovalByLocalId = new Set<string>();
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
 	const ignoredFingerprintsByConversation = new Map<string, Set<string>>();
+	const uploadQueueByConversation = new Map<string, Promise<void>>();
 	const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
 	let tooltipState = $state({
 		text: '',
@@ -333,15 +335,23 @@
 						cleanupPreviewUrl(entry.previewUrl);
 						continue;
 					}
+					const nextStatus =
+						matchedServer.status === 'uploading' && !entry.sourceFile
+							? 'failed'
+							: matchedServer.status;
+					const nextError =
+						matchedServer.status === 'uploading' && !entry.sourceFile
+							? INTERRUPTED_UPLOAD_MESSAGE
+							: matchedServer.error;
 					next.push({
 						...entry,
 						id: matchedServer.id,
-						status: matchedServer.status,
+						status: nextStatus,
 						filename: matchedServer.filename ?? entry.filename,
 						contentType: matchedServer.contentType,
 						sizeBytes: matchedServer.sizeBytes,
 						storagePath: matchedServer.storagePath,
-						error: matchedServer.error
+						error: nextError
 					});
 					continue;
 				}
@@ -368,14 +378,20 @@
 					cleanupPreviewUrl(entry.previewUrl);
 					continue;
 				}
+				const nextStatus =
+					serverEntry.status === 'uploading' && !entry.sourceFile ? 'failed' : serverEntry.status;
+				const nextError =
+					serverEntry.status === 'uploading' && !entry.sourceFile
+						? INTERRUPTED_UPLOAD_MESSAGE
+						: serverEntry.error;
 				next.push({
 					...entry,
-					status: serverEntry.status,
+					status: nextStatus,
 					filename: serverEntry.filename ?? entry.filename,
 					contentType: serverEntry.contentType,
 					sizeBytes: serverEntry.sizeBytes,
 					storagePath: serverEntry.storagePath,
-					error: serverEntry.error
+					error: nextError
 				});
 				continue;
 			}
@@ -399,15 +415,18 @@
 			if (ignoredFingerprints.has(fingerprintServer(serverEntry))) {
 				continue;
 			}
+			const nextStatus = serverEntry.status === 'uploading' ? 'failed' : serverEntry.status;
+			const nextError =
+				serverEntry.status === 'uploading' ? INTERRUPTED_UPLOAD_MESSAGE : serverEntry.error;
 			next.push({
 				localId: serverEntry.id,
 				id: serverEntry.id,
 				filename: serverEntry.filename ?? 'Attachment',
 				contentType: serverEntry.contentType,
 				sizeBytes: serverEntry.sizeBytes,
-				status: serverEntry.status,
+				status: nextStatus,
 				storagePath: serverEntry.storagePath,
-				error: serverEntry.error,
+				error: nextError,
 				fingerprint: fingerprintServer(serverEntry)
 			});
 		}
@@ -798,6 +817,29 @@
 		return nextConversationId;
 	}
 
+	function enqueueAttachmentUpload(
+		activeConversationId: string,
+		task: () => Promise<void>
+	): Promise<void> {
+		const existing = uploadQueueByConversation.get(activeConversationId) ?? Promise.resolve();
+		const next = existing
+			.catch(() => undefined)
+			.then(task)
+			.catch((error) => {
+				console.error('[spark-chat] attachment upload queue task failed', {
+					conversationId: activeConversationId,
+					error: error instanceof Error ? error.message : String(error)
+				});
+			})
+			.finally(() => {
+				if (uploadQueueByConversation.get(activeConversationId) === next) {
+					uploadQueueByConversation.delete(activeConversationId);
+				}
+			});
+		uploadQueueByConversation.set(activeConversationId, next);
+		return next;
+	}
+
 	async function removeAttachmentOnServer(
 		activeConversationId: string,
 		fileId: string
@@ -836,8 +878,28 @@
 				if (!response.ok) {
 					const message = resolveAttachmentErrorMessage(payload?.message);
 					const retryable = shouldRetryUpload(response.status, payload?.error);
+					console.warn('[spark-chat] attachment upload attempt failed', {
+						localId,
+						conversationId: activeConversationId,
+						filename: file.name,
+						attempt,
+						maxAttempts: MAX_UPLOAD_ATTEMPTS,
+						status: response.status,
+						errorCode: payload?.error,
+						retryable,
+						message
+					});
 					if (retryable && attempt < MAX_UPLOAD_ATTEMPTS) {
-						await wait(resolveRetryDelayMs(attempt));
+						const sleepMs = resolveRetryDelayMs(attempt);
+						console.warn('[spark-chat] attachment upload retry sleep', {
+							localId,
+							conversationId: activeConversationId,
+							filename: file.name,
+							attempt,
+							nextAttempt: attempt + 1,
+							sleepMs
+						});
+						await wait(sleepMs);
 						continue;
 					}
 					if (pendingRemovalByLocalId.has(localId)) {
@@ -853,8 +915,24 @@
 				}
 				const parsed = SparkAgentAttachmentSchema.safeParse(payload?.attachment);
 				if (!parsed.success) {
+					console.warn('[spark-chat] attachment upload returned invalid payload', {
+						localId,
+						conversationId: activeConversationId,
+						filename: file.name,
+						attempt,
+						maxAttempts: MAX_UPLOAD_ATTEMPTS
+					});
 					if (attempt < MAX_UPLOAD_ATTEMPTS) {
-						await wait(resolveRetryDelayMs(attempt));
+						const sleepMs = resolveRetryDelayMs(attempt);
+						console.warn('[spark-chat] attachment upload retry sleep', {
+							localId,
+							conversationId: activeConversationId,
+							filename: file.name,
+							attempt,
+							nextAttempt: attempt + 1,
+							sleepMs
+						});
+						await wait(sleepMs);
 						continue;
 					}
 					if (pendingRemovalByLocalId.has(localId)) {
@@ -892,7 +970,17 @@
 				return;
 			} catch (uploadError) {
 				if (attempt < MAX_UPLOAD_ATTEMPTS) {
-					await wait(resolveRetryDelayMs(attempt));
+					const sleepMs = resolveRetryDelayMs(attempt);
+					console.warn('[spark-chat] attachment upload request threw; retrying', {
+						localId,
+						conversationId: activeConversationId,
+						filename: file.name,
+						attempt,
+						nextAttempt: attempt + 1,
+						sleepMs,
+						error: uploadError instanceof Error ? uploadError.message : String(uploadError)
+					});
+					await wait(sleepMs);
 					continue;
 				}
 				if (pendingRemovalByLocalId.has(localId)) {
@@ -913,7 +1001,8 @@
 		if (entry.status !== 'failed') {
 			return;
 		}
-		if (!entry.sourceFile) {
+		const sourceFile = entry.sourceFile;
+		if (!sourceFile) {
 			attachmentError = 'Cannot retry this file. Please remove it and upload again.';
 			return;
 		}
@@ -927,7 +1016,9 @@
 			status: 'uploading',
 			error: undefined
 		});
-		void uploadAttachment(entry.localId, entry.sourceFile, activeConversationId);
+		void enqueueAttachmentUpload(activeConversationId, () =>
+			uploadAttachment(entry.localId, sourceFile, activeConversationId)
+		);
 	}
 
 	async function addAttachments(files: File[]): Promise<void> {
@@ -989,7 +1080,9 @@
 			attachments = [...attachments, entry];
 			count += 1;
 			sizeBytes += file.size;
-			void uploadAttachment(localId, file, nextConversationId);
+			void enqueueAttachmentUpload(nextConversationId, () =>
+				uploadAttachment(localId, file, nextConversationId)
+			);
 		}
 	}
 
@@ -1572,7 +1665,13 @@
 										attachment.previewUrl ??
 										resolveAttachmentDownloadUrl(conversationId, attachment.id)}
 									{@const sizeLabel = formatBytes(attachment.sizeBytes)}
-									{@const tooltip = `${attachment.filename} • ${sizeLabel}`}
+									{@const failureMessage =
+										attachment.status === 'failed'
+											? attachment.error ?? 'Upload failed. Retry or remove this file.'
+											: null}
+									{@const tooltip = failureMessage
+										? `${attachment.filename} • ${sizeLabel} • ${failureMessage}`
+										: `${attachment.filename} • ${sizeLabel}`}
 									<div class="attachment-card-wrap" use:tooltipAction={tooltip}>
 										<div
 											class={`attachment-card ${isImage ? 'is-image' : 'is-file'} ${attachment.status}`}
@@ -1597,15 +1696,20 @@
 													<span class="attachment-spinner" aria-hidden="true"></span>
 												</div>
 											{:else if attachment.status === 'failed'}
-												<button
-													class="attachment-retry"
-													type="button"
-													aria-label="Retry upload"
-													onclick={() => void retryAttachmentUpload(attachment)}
-													disabled={!attachment.sourceFile || sending}
-												>
-													<RotateCcw size={14} />
-												</button>
+												<div class="attachment-status attachment-status--failed" aria-hidden="true"></div>
+												<span class="attachment-failed-badge" aria-hidden="true">!</span>
+												{#if attachment.sourceFile}
+													<button
+														class="attachment-retry attachment-retry--primary"
+														type="button"
+														aria-label="Retry upload"
+														title={failureMessage ?? undefined}
+														onclick={() => void retryAttachmentUpload(attachment)}
+														disabled={sending}
+													>
+														<RotateCcw size={16} />
+													</button>
+												{/if}
 												<button
 													class="attachment-remove"
 													type="button"
@@ -1623,9 +1727,6 @@
 												>
 													<span class="attachment-remove__glyph" aria-hidden="true">×</span>
 												</button>
-											{/if}
-											{#if attachment.status === 'failed'}
-												<div class="attachment-error">{attachment.error ?? 'Upload failed'}</div>
 											{/if}
 										</div>
 									</div>
@@ -2352,6 +2453,10 @@
 		background: color-mix(in srgb, rgba(220, 38, 38, 0.14) 72%, var(--chat-surface));
 	}
 
+	.attachment-card.failed img {
+		filter: saturate(0.7) brightness(0.8);
+	}
+
 	.attachment-card.is-image {
 		min-width: 120px;
 		max-width: 180px;
@@ -2414,6 +2519,12 @@
 		backdrop-filter: blur(4px);
 	}
 
+	.attachment-status--failed {
+		background: color-mix(in srgb, rgba(220, 38, 38, 0.2) 62%, transparent);
+		backdrop-filter: blur(1.5px);
+		pointer-events: none;
+	}
+
 	.attachment-spinner {
 		width: 1.4rem;
 		height: 1.4rem;
@@ -2439,11 +2550,6 @@
 	}
 
 	.attachment-retry {
-		position: absolute;
-		top: 0.35rem;
-		left: 0.35rem;
-		width: 1.35rem;
-		height: 1.35rem;
 		border-radius: 999px;
 		border: none;
 		background: color-mix(in srgb, var(--foreground) 16%, transparent);
@@ -2451,6 +2557,43 @@
 		cursor: pointer;
 		display: grid;
 		place-items: center;
+	}
+
+	.attachment-retry--primary {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 2.15rem;
+		height: 2.15rem;
+		color: #fff;
+		background: color-mix(in srgb, rgb(220, 38, 38) 88%, rgb(127, 29, 29));
+		box-shadow:
+			0 6px 16px -8px rgba(127, 29, 29, 0.9),
+			0 0 0 2px rgba(255, 255, 255, 0.78);
+		z-index: 2;
+	}
+
+	.attachment-retry--primary:hover:enabled {
+		background: color-mix(in srgb, rgb(185, 28, 28) 92%, rgb(127, 29, 29));
+	}
+
+	.attachment-failed-badge {
+		position: absolute;
+		top: 0.35rem;
+		left: 0.35rem;
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 999px;
+		display: grid;
+		place-items: center;
+		font-size: 0.78rem;
+		font-weight: 700;
+		line-height: 1;
+		color: rgba(127, 29, 29, 0.95);
+		background: rgba(255, 255, 255, 0.9);
+		border: 1px solid rgba(220, 38, 38, 0.45);
+		z-index: 2;
 	}
 
 	.attachment-retry:disabled {
@@ -2463,19 +2606,6 @@
 		font-size: 0.95rem;
 		line-height: 1;
 		transform: translateY(-0.5px);
-	}
-
-	.attachment-error {
-		position: absolute;
-		bottom: 0.3rem;
-		left: 0.35rem;
-		right: 0.35rem;
-		font-size: 0.6rem;
-		text-align: center;
-		color: rgba(185, 28, 28, 0.9);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
 	.composer-spinner {

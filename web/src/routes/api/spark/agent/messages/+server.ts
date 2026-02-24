@@ -41,6 +41,9 @@ const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
 const MODEL_ID = 'chatgpt-gpt-5.3-codex' as const;
 const OPENAI_REASONING_EFFORT = 'low' as const;
+const GENERATION_MAX_ATTEMPTS = 3;
+const GENERATION_RETRY_BASE_DELAY_MS = 800;
+const GENERATION_RETRY_MAX_DELAY_MS = 4_000;
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
@@ -470,6 +473,79 @@ function buildLlmContents(
 type StreamHandlers = {
 	onDelta?: (delta: LlmTextDelta) => void;
 };
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
+
+function resolveErrorStatusCode(error: unknown, depth = 0): number | null {
+	if (depth > 3) {
+		return null;
+	}
+	if (!error || typeof error !== 'object') {
+		return null;
+	}
+	const asRecord = error as {
+		status?: unknown;
+		code?: unknown;
+		response?: { status?: unknown };
+		cause?: unknown;
+	};
+	if (typeof asRecord.status === 'number' && Number.isFinite(asRecord.status)) {
+		return asRecord.status;
+	}
+	if (
+		asRecord.response &&
+		typeof asRecord.response.status === 'number' &&
+		Number.isFinite(asRecord.response.status)
+	) {
+		return asRecord.response.status;
+	}
+	if (typeof asRecord.code === 'number' && Number.isFinite(asRecord.code)) {
+		return asRecord.code;
+	}
+	if (typeof asRecord.code === 'string') {
+		const parsed = Number.parseInt(asRecord.code, 10);
+		if (Number.isFinite(parsed)) {
+			return parsed;
+		}
+	}
+	if (asRecord.cause !== undefined) {
+		return resolveErrorStatusCode(asRecord.cause, depth + 1);
+	}
+	return null;
+}
+
+function isRetryableGenerationError(error: unknown): boolean {
+	const statusCode = resolveErrorStatusCode(error);
+	if (statusCode === 408 || statusCode === 425 || statusCode === 429) {
+		return true;
+	}
+	if (typeof statusCode === 'number' && statusCode >= 500) {
+		return true;
+	}
+	if (error instanceof Error) {
+		const message = error.message.toLowerCase();
+		if (
+			message.includes('resource exhausted') ||
+			message.includes('rate limit') ||
+			message.includes('too many requests') ||
+			message.includes('temporarily unavailable')
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function resolveGenerationRetryDelayMs(attempt: number): number {
+	const exponential = GENERATION_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1);
+	const capped = Math.min(exponential, GENERATION_RETRY_MAX_DELAY_MS);
+	const jitter = Math.floor(Math.random() * 250);
+	return capped + jitter;
+}
 
 function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
 	const serviceUrl = env.TASKS_SERVICE_URL;
@@ -1215,6 +1291,82 @@ async function generateAssistantResponse(
 	return normalizeSparkLinks(result.text);
 }
 
+async function generateAssistantResponseWithRetries(
+	conversation: ConversationDoc,
+	options: {
+		userId: string;
+		conversationId: string;
+		bucketName: string;
+		serviceAccountJson: string;
+		messageId: string;
+		attachments: z.infer<typeof attachmentSchema>[];
+	},
+	handlers: StreamHandlers
+): Promise<string> {
+	let lastError: unknown;
+	for (let attempt = 1; attempt <= GENERATION_MAX_ATTEMPTS; attempt += 1) {
+		let emittedDelta = false;
+		try {
+			return await generateAssistantResponse(
+				conversation,
+				{
+					userId: options.userId,
+					bucketName: options.bucketName,
+					serviceAccountJson: options.serviceAccountJson,
+					messageId: options.messageId,
+					attachments: options.attachments
+				},
+				{
+					onDelta: (delta) => {
+						if (
+							(typeof delta.textDelta === 'string' && delta.textDelta.length > 0) ||
+							(typeof delta.thoughtDelta === 'string' && delta.thoughtDelta.length > 0)
+						) {
+							emittedDelta = true;
+						}
+						handlers.onDelta?.(delta);
+					}
+				}
+			);
+		} catch (error) {
+			lastError = error;
+			const statusCode = resolveErrorStatusCode(error);
+			const retryable = isRetryableGenerationError(error);
+			const canRetry =
+				retryable && !emittedDelta && attempt < GENERATION_MAX_ATTEMPTS;
+			console.warn('[spark-chat] generation attempt failed', {
+				userId: options.userId,
+				conversationId: options.conversationId,
+				messageId: options.messageId,
+				attempt,
+				maxAttempts: GENERATION_MAX_ATTEMPTS,
+				statusCode,
+				retryable,
+				emittedDelta,
+				willRetry: canRetry,
+				error: serializeErrorForLog(error)
+			});
+			if (!canRetry) {
+				throw error;
+			}
+			const sleepMs = resolveGenerationRetryDelayMs(attempt);
+			console.warn('[spark-chat] retry sleep before next generation attempt', {
+				userId: options.userId,
+				conversationId: options.conversationId,
+				messageId: options.messageId,
+				attempt,
+				nextAttempt: attempt + 1,
+				sleepMs
+			});
+			await sleep(sleepMs);
+		}
+	}
+	if (lastError) {
+		throw lastError;
+	}
+	throw new Error('Generation failed after all retry attempts.');
+}
+
 function hasGeminiCredentials(): boolean {
 	return Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
 }
@@ -1474,10 +1626,11 @@ export const POST: RequestHandler = async ({ request }) => {
 				await streamFallbackText(FALLBACK_RESPONSE, handleDelta);
 				assistantText = FALLBACK_RESPONSE;
 			} else {
-				assistantText = await generateAssistantResponse(
+				assistantText = await generateAssistantResponseWithRetries(
 					conversation,
 					{
 						userId,
+						conversationId,
 						bucketName,
 						serviceAccountJson,
 						messageId,
