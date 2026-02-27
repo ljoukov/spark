@@ -1117,6 +1117,8 @@ type AgentLogSyncOptions = {
   agentId: string;
   throttleMs: number;
   initialStats: AgentRunStatsSnapshot;
+  mirrorToConsole?: boolean;
+  consolePrefix?: string;
 };
 
 class AgentLogSync {
@@ -1137,6 +1139,8 @@ class AgentLogSync {
   private disposed = false;
   private lastKeyMs = 0;
   private seq = 0;
+  private mirrorToConsole: boolean;
+  private consolePrefix: string;
 
   constructor(options: AgentLogSyncOptions) {
     this.serviceAccountJson = options.serviceAccountJson;
@@ -1145,6 +1149,8 @@ class AgentLogSync {
     this.throttleMs = options.throttleMs;
     this.createdAt = new Date();
     this.pendingStats = options.initialStats;
+    this.mirrorToConsole = options.mirrorToConsole ?? false;
+    this.consolePrefix = options.consolePrefix ?? "";
     this.scheduleUpdate();
   }
 
@@ -1155,6 +1161,9 @@ class AgentLogSync {
   append(line: string): void {
     if (this.disposed) {
       return;
+    }
+    if (this.mirrorToConsole) {
+      console.log(`${this.consolePrefix}${line}`);
     }
     const key = this.nextLineKey();
     this.pendingLines.set(key, line);
@@ -3608,10 +3617,9 @@ export async function runSparkAgentTask(
       agentId: options.agentId,
       throttleMs: AGENT_LOG_THROTTLE_MS,
       initialStats: statsTracker.snapshot(),
+      mirrorToConsole: true,
+      consolePrefix: `[spark-agent:${options.agentId}] `,
     });
-    console.log(
-      `[spark-agent:${options.agentId}] start workspaceId=${options.workspaceId}`,
-    );
     logSync.append(`start: workspaceId=${options.workspaceId}`);
 
     workspaceRoot = path.join(
@@ -3687,7 +3695,6 @@ export async function runSparkAgentTask(
             generateJsonCostUsd += toolCost.costUsd;
           }
         }
-        console.log(`[spark-agent:${options.agentId}] ${message}`);
         logSync?.append(message);
         statsTracker.parseLogLine(message);
         logSync?.setStats(statsTracker.snapshot());
