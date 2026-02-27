@@ -73,6 +73,7 @@ Notes
 
 - Prefer small, cohesive commits; split unrelated changes.
 - Use `config` for build/release/app settings; `ci` for pipelines.
+- Do not mention co-author trailers in user-facing commit summaries (report the commit hash/message only).
 
 ## Code Style
 

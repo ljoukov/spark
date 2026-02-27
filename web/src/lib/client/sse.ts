@@ -8,6 +8,13 @@ type SseHandlers = {
 	onOpen?: (response: Response) => void;
 };
 
+function parseSseFieldValue(raw: string): string {
+	if (raw.startsWith(' ')) {
+		return raw.slice(1);
+	}
+	return raw;
+}
+
 function parseEventBlock(block: string): SseEvent | null {
 	const lines = block.split('\n');
 	let event = 'message';
@@ -18,11 +25,11 @@ function parseEventBlock(block: string): SseEvent | null {
 			continue;
 		}
 		if (line.startsWith('event:')) {
-			event = line.slice(6).trim();
+			event = parseSseFieldValue(line.slice(6));
 			continue;
 		}
 		if (line.startsWith('data:')) {
-			data.push(line.slice(5).trimStart());
+			data.push(parseSseFieldValue(line.slice(5)));
 		}
 	}
 
@@ -87,9 +94,8 @@ export async function streamSse(
 		}
 	}
 
-	const trimmed = buffer.trim();
-	if (trimmed.length > 0) {
-		const event = parseEventBlock(trimmed);
+	if (buffer.length > 0) {
+		const event = parseEventBlock(buffer);
 		if (event) {
 			handlers.onEvent(event);
 		}
