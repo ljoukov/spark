@@ -39,8 +39,8 @@ All calls accept:
   - `tools?`: `{ type: 'web-search', mode?: 'cached' | 'live' }` and `{ type: 'code-execution' }` (mapped to Google Search / OpenAI web search + code interpreter)
 
 OpenAI model routing:
-- `gpt-5.2`, `gpt-5.2-codex` → OpenAI API.
-- `chatgpt-gpt-5.2`, `chatgpt-gpt-5.2-codex`, `chatgpt-gpt-5.1-codex-mini` → ChatGPT Codex backend (OAuth).
+- `gpt-5.2`, `gpt-5.3-codex` → OpenAI API (`gpt-5.2-codex` is normalized to `gpt-5.3-codex`).
+- `chatgpt-gpt-5.2`, `chatgpt-gpt-5.3-codex`, `chatgpt-gpt-5.1-codex-mini` → ChatGPT Codex backend (OAuth) (`chatgpt-gpt-5.2-codex` is normalized to `chatgpt-gpt-5.3-codex`).
 
 ### JSON convenience
 

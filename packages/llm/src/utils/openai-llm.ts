@@ -6,7 +6,7 @@ const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
-export const OPENAI_MODEL_IDS = ["gpt-5.2", "gpt-5.2-codex"] as const;
+export const OPENAI_MODEL_IDS = ["gpt-5.2", "gpt-5.3-codex"] as const;
 
 export const CHATGPT_ONLY_MODEL_IDS = ["gpt-5.1-codex-mini"] as const;
 
@@ -99,7 +99,7 @@ export function resolveOpenAiModelVariant(
 }
 
 export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
-  if (modelId.includes("gpt-5.2")) {
+  if (modelId.includes("gpt-5.2") || modelId.includes("gpt-5.3-codex")) {
     return OPENAI_GPT_52_PRICING;
   }
   if (modelId.includes("gpt-5.1-codex-mini")) {
