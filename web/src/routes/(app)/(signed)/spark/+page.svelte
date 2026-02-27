@@ -83,6 +83,7 @@
 	let agentStreamRef = $state<HTMLDivElement | null>(null);
 	let attachments = $state<LocalAttachment[]>([]);
 	let attachmentError = $state<string | null>(null);
+	let clipboardAttachmentCounter = $state(0);
 	let lastAttachmentConversationId = $state<string | null>(null);
 	const pendingRemovalByLocalId = new Set<string>();
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
@@ -183,6 +184,22 @@
 			return '';
 		}
 		return parts[parts.length - 1]?.toLowerCase() ?? '';
+	}
+
+	function resolveExtensionForContentType(contentType: string): string {
+		if (contentType === 'application/pdf') {
+			return 'pdf';
+		}
+		if (contentType === 'image/png') {
+			return 'png';
+		}
+		if (contentType === 'image/webp') {
+			return 'webp';
+		}
+		if (contentType === 'image/jpeg') {
+			return 'jpg';
+		}
+		return '';
 	}
 
 	function resolveAttachmentFingerprint(
@@ -757,6 +774,73 @@
 		openFilePicker(photoInputRef);
 	}
 
+	function extractClipboardFiles(event: ClipboardEvent): File[] {
+		const clipboardData = event.clipboardData;
+		if (!clipboardData) {
+			return [];
+		}
+		const selected: File[] = [];
+		for (const item of Array.from(clipboardData.items)) {
+			if (item.kind !== 'file') {
+				continue;
+			}
+			const file = item.getAsFile();
+			if (!file) {
+				continue;
+			}
+			if (!isSupportedClientFile(file)) {
+				continue;
+			}
+			selected.push(file);
+		}
+		if (selected.length > 0) {
+			return selected;
+		}
+		for (const file of Array.from(clipboardData.files)) {
+			if (!isSupportedClientFile(file)) {
+				continue;
+			}
+			selected.push(file);
+		}
+		return selected;
+	}
+
+	function normalizeClipboardFiles(files: File[]): File[] {
+		if (files.length === 0) {
+			return [];
+		}
+		const normalized: File[] = [];
+		let nextCounter = clipboardAttachmentCounter;
+		for (const file of files) {
+			nextCounter += 1;
+			const extensionFromName = resolveFileExtension(file.name);
+			const extensionFromType = resolveExtensionForContentType(resolveClientContentType(file));
+			const extension = extensionFromName || extensionFromType;
+			const filename =
+				extension.length > 0 ? `clipboard-${nextCounter}.${extension}` : `clipboard-${nextCounter}`;
+			normalized.push(
+				new File([file], filename, {
+					type: file.type,
+					lastModified: file.lastModified || Date.now()
+				})
+			);
+		}
+		clipboardAttachmentCounter = nextCounter;
+		return normalized;
+	}
+
+	async function handleComposerPaste(event: ClipboardEvent): Promise<void> {
+		if (sending) {
+			return;
+		}
+		const pastedFiles = extractClipboardFiles(event);
+		if (pastedFiles.length === 0) {
+			return;
+		}
+		event.preventDefault();
+		await addAttachments(normalizeClipboardFiles(pastedFiles));
+	}
+
 	function resolveClientContentType(file: File): string {
 		if (file.type) {
 			return file.type;
@@ -1190,17 +1274,17 @@
 						}))
 					})
 				},
-					{
-						onEvent: (event) => {
-							if (event.event === 'meta') {
-								if (chatStreamPhase !== 'thinking' && chatStreamPhase !== 'responding') {
-									chatStreamPhase = 'sending';
-								}
-								try {
-									const payload = JSON.parse(event.data) as {
-										conversationId: string;
-										messageId?: string;
-										assistantMessageId?: string;
+				{
+					onEvent: (event) => {
+						if (event.event === 'meta') {
+							if (chatStreamPhase !== 'thinking' && chatStreamPhase !== 'responding') {
+								chatStreamPhase = 'sending';
+							}
+							try {
+								const payload = JSON.parse(event.data) as {
+									conversationId: string;
+									messageId?: string;
+									assistantMessageId?: string;
 								};
 								if (payload.conversationId) {
 									setConversationId(payload.conversationId);
@@ -1211,14 +1295,14 @@
 								}
 								if (payload.messageId) {
 									pendingScrollMessageId = payload.messageId;
-									}
-									if (payload.assistantMessageId) {
-										activeAssistantId = payload.assistantMessageId;
-										chatStreamAssistantMessageId = payload.assistantMessageId;
-										streamingByMessageId = {
-											...streamingByMessageId,
-											[payload.assistantMessageId]: ''
-										};
+								}
+								if (payload.assistantMessageId) {
+									activeAssistantId = payload.assistantMessageId;
+									chatStreamAssistantMessageId = payload.assistantMessageId;
+									streamingByMessageId = {
+										...streamingByMessageId,
+										[payload.assistantMessageId]: ''
+									};
 									streamingThoughtsByMessageId = {
 										...streamingThoughtsByMessageId,
 										[payload.assistantMessageId]: ''
@@ -1226,11 +1310,11 @@
 								}
 							} catch {
 								// ignore
-								}
-								return;
 							}
-							if (event.event === 'thought') {
-								if (!activeAssistantId) {
+							return;
+						}
+						if (event.event === 'thought') {
+							if (!activeAssistantId) {
 								return;
 							}
 							const existing = streamingThoughtsByMessageId[activeAssistantId] ?? '';
@@ -1281,13 +1365,13 @@
 							}
 							chatStreamPhase = 'idle';
 							chatStreamAssistantMessageId = null;
-								return;
-							}
+							return;
+						}
 						},
-					}
-				);
-			} catch (err) {
-				if (err instanceof DOMException && err.name === 'AbortError') {
+				}
+			);
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') {
 				// stream stopped by user
 			} else {
 				console.error('Spark AI Agent request failed', err);
@@ -1595,35 +1679,35 @@
 										{/each}
 									</div>
 								{/if}
-									{#if message.role === 'assistant'}
-										<div class="message-bubble">
-											{#if thinkingText}
-												<div class="message-thinking">
-													<p class="message-thinking__label">Thinking...</p>
-													<div class="message-thinking__body">{thinkingText}</div>
-												</div>
+								{#if message.role === 'assistant'}
+									<div class="message-bubble">
+										{#if thinkingText}
+											<div class="message-thinking">
+												<p class="message-thinking__label">Thinking...</p>
+												<div class="message-thinking__body">{thinkingText}</div>
+											</div>
+										{/if}
+										{#if messageHtml}
+											<div class="message-markdown markdown">{@html messageHtml}</div>
+										{:else if !thinkingText}
+											{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													Establishing connection...
+												</p>
+											{:else if isActiveStreamMessage && chatStreamPhase === 'sending'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													Sending request...
+												</p>
+											{:else if isActiveStreamMessage && chatStreamPhase === 'thinking'}
+												<p class="message-placeholder message-status">
+													<span class="message-status__spinner" aria-hidden="true"></span>
+													Thinking...
+												</p>
+											{:else}
+												<p class="message-placeholder">…</p>
 											{/if}
-											{#if messageHtml}
-												<div class="message-markdown markdown">{@html messageHtml}</div>
-											{:else if !thinkingText}
-												{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
-													<p class="message-placeholder message-status">
-														<span class="message-status__spinner" aria-hidden="true"></span>
-														Establishing connection...
-													</p>
-												{:else if isActiveStreamMessage && chatStreamPhase === 'sending'}
-													<p class="message-placeholder message-status">
-														<span class="message-status__spinner" aria-hidden="true"></span>
-														Sending request...
-													</p>
-												{:else if isActiveStreamMessage && chatStreamPhase === 'thinking'}
-													<p class="message-placeholder message-status">
-														<span class="message-status__spinner" aria-hidden="true"></span>
-														Thinking...
-													</p>
-												{:else}
-													<p class="message-placeholder">…</p>
-												{/if}
 										{/if}
 									</div>
 								{:else if messageText}
@@ -1803,6 +1887,7 @@
 									onInput={({ value, isExpanded }) => {
 										composerExpanded = isExpanded ?? value.includes('\n');
 									}}
+									onPaste={(event) => void handleComposerPaste(event)}
 									onSubmit={() => void sendMessage()}
 								/>
 							</div>

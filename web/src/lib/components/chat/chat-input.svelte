@@ -19,6 +19,7 @@
 		submitMode?: SubmitMode;
 		onInput?: (detail: { value: string; isExpanded?: boolean }) => void;
 		onSubmit?: (detail: { value: string }) => void;
+		onPaste?: (event: ClipboardEvent) => void;
 	};
 
 	let {
@@ -34,7 +35,8 @@
 		variant = 'default',
 		submitMode = 'modEnter',
 		onInput = undefined,
-		onSubmit = undefined
+		onSubmit = undefined,
+		onPaste = undefined
 	}: Props = $props();
 
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -139,6 +141,10 @@
 		}
 	}
 
+	function handlePaste(event: ClipboardEvent) {
+		onPaste?.(event);
+	}
+
 	$effect(() => {
 		void value;
 		resizeTextarea();
@@ -151,6 +157,7 @@
 	bind:value
 	oninput={handleInput}
 	onkeydown={handleKeyDown}
+	onpaste={handlePaste}
 	{disabled}
 	{autocomplete}
 	{spellcheck}

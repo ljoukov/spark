@@ -138,6 +138,7 @@ Recommended defaults:
     - Assistant output renders markdown via SparkMarkdown (including LaTeX + code blocks).
     - Code blocks render inside a framed container with a language label and copy button; user bubbles can expand to the same max width as assistant replies with a small left inset.
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
+    - Pasting clipboard files into the composer attaches supported images/PDFs through the same upload path as picker-selected files; pasted files are named `clipboard-{N}` (with inferred extension when available).
     - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
     - Uploads are retried automatically up to 3 attempts on transient failures. If all attempts fail, the tile switches to an error state with the failure message, a retry icon action, and a remove `×` action.
     - The send button is disabled until all uploads finish; while uploading it shows an inline spinner.
