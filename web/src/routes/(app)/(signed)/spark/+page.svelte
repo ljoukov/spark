@@ -1626,6 +1626,7 @@
 							{@const messageHtml =
 								message.role === 'assistant' && messageText ? renderMarkdown(messageText) : ''}
 							{@const thinkingText = streamingThoughtsByMessageId[message.id] ?? ''}
+							{@const thinkingHtml = thinkingText ? renderMarkdown(thinkingText) : ''}
 							{@const isActiveStreamMessage =
 								sending &&
 								message.role === 'assistant' &&
@@ -1684,7 +1685,9 @@
 										{#if thinkingText}
 											<div class="message-thinking">
 												<p class="message-thinking__label">Thinking...</p>
-												<div class="message-thinking__body">{thinkingText}</div>
+												<div class="message-thinking__body message-markdown markdown">
+													{@html thinkingHtml}
+												</div>
 											</div>
 										{/if}
 										{#if messageHtml}
@@ -2430,12 +2433,15 @@
 
 	.message-thinking__body {
 		margin-top: 0.35rem;
-		white-space: pre-wrap;
 		font-size: 0.8rem;
 		line-height: 1.45;
 		color: var(--text-secondary, rgba(30, 41, 59, 0.75));
 		max-height: 6.5rem;
 		overflow: hidden;
+	}
+
+	:global(.message-thinking__body > * + *) {
+		margin-top: 0.45rem;
 	}
 
 	.agent-message.is-user .message-bubble {
