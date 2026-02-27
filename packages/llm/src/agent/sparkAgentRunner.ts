@@ -49,7 +49,6 @@ import {
   type LlmDebugOptions,
   type LlmToolSet,
 } from "../utils/llm";
-import { type GeminiModelId } from "../utils/gemini";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import type {
   JobProgressReporter,
@@ -187,7 +186,7 @@ function createAgentSubmodelProgressTracker(options: {
     getSummary: () => lastSummary,
   };
 }
-const DEFAULT_GENERATE_TEXT_MODEL_ID: GeminiModelId = "gemini-2.5-pro";
+const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_STREAM_MAX_CHARS = 20_000;
@@ -217,6 +216,122 @@ function parseGenerateToolCostUsd(message: string): {
     return null;
   }
   return { toolName, costUsd: costValue };
+}
+
+function serializeTraceValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    const serialized = JSON.stringify(value, null, 2);
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+    return String(value);
+  } catch (error) {
+    return `<<unserializable trace payload: ${errorAsString(error)}>>`;
+  }
+}
+
+async function persistToolLoopTrace(options: {
+  serviceAccountJson: string;
+  userId: string;
+  agentId: string;
+  toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>;
+  consolePrefix: string;
+}): Promise<{ stepCount: number; toolCallCount: number }> {
+  const logDocPath = `users/${options.userId}/agents/${options.agentId}/logs/log`;
+  const now = new Date();
+  let toolCallCount = 0;
+
+  for (const step of options.toolLoopResult.steps) {
+    const stepDocPath = `${logDocPath}/toolTraceSteps/s${String(step.step).padStart(6, "0")}`;
+    const stepText = typeof step.text === "string" ? step.text : "";
+    const toolCalls = step.toolCalls;
+    toolCallCount += toolCalls.length;
+
+    await setFirestoreDocument({
+      serviceAccountJson: options.serviceAccountJson,
+      documentPath: stepDocPath,
+      data: {
+        step: step.step,
+        modelId: step.modelId,
+        text: stepText,
+        toolCallCount: toolCalls.length,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    console.log(
+      `${options.consolePrefix}trace_step: step=${step.step} model=${step.modelId} toolCalls=${toolCalls.length}`,
+    );
+    if (stepText.length > 0) {
+      console.log(`${options.consolePrefix}trace_step_text(step=${step.step}): ${stepText}`);
+    }
+
+    for (const [toolIndex, toolCall] of toolCalls.entries()) {
+      const callIndex = toolIndex + 1;
+      const input = serializeTraceValue(toolCall.input);
+      const output = serializeTraceValue(toolCall.output);
+      const callId =
+        typeof toolCall.callId === "string" && toolCall.callId.trim().length > 0
+          ? toolCall.callId
+          : undefined;
+      const error =
+        typeof toolCall.error === "string" && toolCall.error.trim().length > 0
+          ? toolCall.error
+          : undefined;
+
+      await setFirestoreDocument({
+        serviceAccountJson: options.serviceAccountJson,
+        documentPath: `${stepDocPath}/toolCalls/c${String(callIndex).padStart(6, "0")}`,
+        data: {
+          step: step.step,
+          toolIndex: callIndex,
+          toolName: toolCall.toolName,
+          ...(callId ? { callId } : {}),
+          ...(error ? { error } : {}),
+          input,
+          output,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      console.log(
+        [
+          `${options.consolePrefix}trace_tool_call:`,
+          `step=${step.step}`,
+          `index=${callIndex}`,
+          `tool=${toolCall.toolName}`,
+          ...(callId ? [`callId=${callId}`] : []),
+          ...(error ? [`error=${error}`] : []),
+        ].join(" "),
+      );
+      console.log(
+        `${options.consolePrefix}trace_tool_input(step=${step.step} index=${callIndex}): ${input}`,
+      );
+      console.log(
+        `${options.consolePrefix}trace_tool_output(step=${step.step} index=${callIndex}): ${output}`,
+      );
+    }
+  }
+
+  await patchFirestoreDocument({
+    serviceAccountJson: options.serviceAccountJson,
+    documentPath: logDocPath,
+    updates: {
+      "trace.updatedAt": now,
+      "trace.stepCount": options.toolLoopResult.steps.length,
+      "trace.toolCallCount": toolCallCount,
+    },
+  });
+
+  return {
+    stepCount: options.toolLoopResult.steps.length,
+    toolCallCount,
+  };
 }
 
 type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
@@ -949,8 +1064,8 @@ class AgentRunStatsTracker {
     if (this.primaryModelId && trimmed === this.primaryModelId) {
       return "model";
     }
-    // Fallback heuristic: tool loop models are "LLM cost", sub-model calls are
-    // "tools cost" (e.g. generate_text / generate_json using Gemini).
+    // Fallback heuristic: tool-loop calls are "model cost", and calls made by
+    // agent tools are tracked as "tool cost".
     if (trimmed.startsWith("chatgpt-")) {
       return "model";
     }
@@ -994,6 +1109,19 @@ class AgentRunStatsTracker {
     this.toolCalls += 1;
     const next = (this.toolCallsByName.get(toolName) ?? 0) + 1;
     this.toolCallsByName.set(toolName, next);
+  }
+
+  recordToolCallsFromResult(
+    toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>,
+  ): void {
+    if (this.toolCalls > 0) {
+      return;
+    }
+    for (const step of toolLoopResult.steps) {
+      for (const toolCall of step.toolCalls) {
+        this.recordToolCall(toolCall.toolName);
+      }
+    }
   }
 
   parseLogLine(message: string): void {
@@ -1130,6 +1258,7 @@ class AgentLogSync {
   private createdAtWritten = false;
   private lastWriteAt = 0;
   private pendingLines = new Map<string, string>();
+  private pendingThoughtDeltas = new Map<string, string>();
   private pendingStats: AgentRunStatsSnapshot | null = null;
   private streamAssistant = "";
   private streamThoughts = "";
@@ -1201,6 +1330,11 @@ class AgentLogSync {
     if (!delta) {
       return;
     }
+    if (this.mirrorToConsole) {
+      console.log(`${this.consolePrefix}thought_delta: ${delta}`);
+    }
+    const deltaKey = this.nextLineKey();
+    this.pendingThoughtDeltas.set(deltaKey, delta);
     const next = this.streamThoughts + delta;
     this.streamThoughts =
       next.length > AGENT_STREAM_MAX_CHARS
@@ -1220,6 +1354,7 @@ class AgentLogSync {
     }
     if (
       this.pendingLines.size === 0 &&
+      this.pendingThoughtDeltas.size === 0 &&
       !this.pendingStats &&
       !this.streamDirty
     ) {
@@ -1291,6 +1426,7 @@ class AgentLogSync {
     if (
       !force &&
       this.pendingLines.size === 0 &&
+      this.pendingThoughtDeltas.size === 0 &&
       !this.pendingStats &&
       !this.streamDirty
     ) {
@@ -1314,7 +1450,12 @@ class AgentLogSync {
         this.inFlight = undefined;
         if (
           !this.disposed &&
-          (this.pendingLines.size > 0 || this.pendingStats || this.streamDirty)
+          (
+            this.pendingLines.size > 0 ||
+            this.pendingThoughtDeltas.size > 0 ||
+            this.pendingStats ||
+            this.streamDirty
+          )
         ) {
           this.scheduleUpdate();
         }
@@ -1328,15 +1469,17 @@ class AgentLogSync {
       return;
     }
     const linesEntries = Array.from(this.pendingLines.entries());
+    const thoughtEntries = Array.from(this.pendingThoughtDeltas.entries());
     const stats = this.pendingStats;
     const streamDirty = this.streamDirty;
     const streamAssistant = this.streamAssistant;
     const streamThoughts = this.streamThoughts;
     this.pendingLines.clear();
+    this.pendingThoughtDeltas.clear();
     this.pendingStats = null;
     this.streamDirty = false;
 
-    if (linesEntries.length === 0 && !stats && !streamDirty) {
+    if (linesEntries.length === 0 && thoughtEntries.length === 0 && !stats && !streamDirty) {
       return;
     }
 
@@ -1383,6 +1526,11 @@ class AgentLogSync {
           this.pendingLines.set(key, value);
         }
       }
+      for (const [key, value] of thoughtEntries) {
+        if (!this.pendingThoughtDeltas.has(key)) {
+          this.pendingThoughtDeltas.set(key, value);
+        }
+      }
       if (!this.pendingStats && stats) {
         this.pendingStats = stats;
       }
@@ -1390,6 +1538,30 @@ class AgentLogSync {
         this.streamDirty = true;
       }
       throw error;
+    }
+
+    if (thoughtEntries.length > 0) {
+      try {
+        for (const [key, delta] of thoughtEntries) {
+          await setFirestoreDocument({
+            serviceAccountJson: this.serviceAccountJson,
+            documentPath: `${this.documentPath()}/thoughtDeltas/${key}`,
+            data: {
+              key,
+              delta,
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+      } catch (error) {
+        for (const [key, value] of thoughtEntries) {
+          if (!this.pendingThoughtDeltas.has(key)) {
+            this.pendingThoughtDeltas.set(key, value);
+          }
+        }
+        throw error;
+      }
     }
   }
 }
@@ -2495,7 +2667,8 @@ function buildAgentTools(options: {
         outputPath,
         outputMode,
       }) => {
-        const resolvedModelId: GeminiModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
+        const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
+        const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
 
         const resolvedPromptPath = promptPath.trim();
         const resolvedOutputPath = outputPath.trim();
@@ -2731,6 +2904,9 @@ function buildAgentTools(options: {
             ...(callDebug ? { debug: callDebug } : {}),
             ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
             ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+            ...(resolvedReasoningEffort
+              ? { openAiReasoningEffort: resolvedReasoningEffort }
+              : {}),
           });
         } finally {
           if (callDebug) {
@@ -2832,7 +3008,8 @@ function buildAgentTools(options: {
         })
         .strict(),
       execute: async ({ sourcePath, schemaPath, outputPath }) => {
-        const resolvedModelId: GeminiModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
+        const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
+        const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
 
         const resolvedSourcePath = sourcePath.trim();
         const resolvedSchemaPath = schemaPath.trim();
@@ -2899,6 +3076,9 @@ function buildAgentTools(options: {
             ],
             ...(callDebug ? { debug: callDebug } : {}),
             ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+            ...(resolvedReasoningEffort
+              ? { openAiReasoningEffort: resolvedReasoningEffort }
+              : {}),
             responseMimeType: "application/json",
           });
         } finally {
@@ -3805,6 +3985,25 @@ export async function runSparkAgentTask(
         }
       },
     });
+    statsTracker.recordToolCallsFromResult(toolLoopResult);
+    logSync?.setStats(statsTracker.snapshot());
+
+    try {
+      const traceSummary = await persistToolLoopTrace({
+        serviceAccountJson,
+        userId: options.userId,
+        agentId: options.agentId,
+        toolLoopResult,
+        consolePrefix: `[spark-agent:${options.agentId}] `,
+      });
+      logSync?.append(
+        `trace_summary: steps=${traceSummary.stepCount} tool_calls=${traceSummary.toolCallCount}`,
+      );
+    } catch (error) {
+      logSync?.append(
+        `warn: failed to persist full tool trace: ${errorAsString(error)}`,
+      );
+    }
 
     if (!doneCalled) {
       const responseText = toolLoopResult.text.trim();

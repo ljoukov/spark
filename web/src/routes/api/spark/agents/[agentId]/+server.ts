@@ -34,7 +34,7 @@ function decodeFileId(value: string): string {
 }
 
 function parseLogTimestamp(key: string): Date | null {
-	const match = /^t(\d{13})_\d{3}$/.exec(key);
+	const match = /^t(\d{13})_\d+$/.exec(key);
 	if (!match) {
 		return null;
 	}

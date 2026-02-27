@@ -21,7 +21,7 @@ function decodeFileId(value: string): string {
 }
 
 function parseLogTimestamp(key: string): { ms: number; seq: number } | null {
-	const match = /^t(\d{13})_(\d{3})$/.exec(key);
+	const match = /^t(\d{13})_(\d+)$/.exec(key);
 	if (!match) {
 		return null;
 	}
@@ -279,4 +279,3 @@ export async function buildSparkAgentDownloadZip(args: {
 	new Uint8Array(body).set(zipped);
 	return { ok: true, filename: `${archiveLabel}.zip`, body };
 }
-
