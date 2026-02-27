@@ -8,9 +8,6 @@ import {
   generateImages as generateImagesV2,
   generateJson as generateJsonV2,
   getCurrentToolCallContext,
-  isLlmImageModelId as isLlmImageModelIdV2,
-  isLlmModelId as isLlmModelIdV2,
-  isLlmTextModelId as isLlmTextModelIdV2,
   LlmJsonCallError,
   parseJsonFromLlmText,
   runToolLoop as runToolLoopV2,
@@ -19,14 +16,13 @@ import {
   stripCodexCitationMarkers,
   toGeminiJsonSchema,
   tool,
+  isFireworksModelId,
+  isGeminiModelId,
   type JsonSchema,
   type LlmExecutableTool,
-  type LlmImageModelId as LlmImageModelIdV2,
   type LlmImageData,
   type LlmImageSize,
-  type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
-  type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
   type LlmToolSet,
@@ -35,7 +31,7 @@ import type { Part as GooglePart } from "@google/genai";
 import type { ResponseTextConfig } from "openai/resources/responses/responses";
 import { z } from "zod";
 
-import type { OpenAiReasoningEffort } from "./openai-llm";
+import { isOpenAiModelVariantId, type OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
 import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
 
@@ -106,28 +102,30 @@ function normaliseLlmModelId(modelId: string): string {
   return modelId;
 }
 
-function resolveLlmModelId(modelId: string): LlmModelIdV2 {
+function resolveLlmModelId(modelId: string): string {
   const normalisedModelId = normaliseLlmModelId(modelId);
-  if (isLlmModelIdV2(normalisedModelId)) {
-    return normalisedModelId;
+  const trimmedModelId = normalisedModelId.trim();
+  if (trimmedModelId.length === 0) {
+    throw new Error(`Unsupported model id: ${modelId}`);
   }
-  throw new Error(`Unsupported model id: ${modelId}`);
+  if (trimmedModelId.startsWith("gemini-") && !isGeminiModelId(trimmedModelId)) {
+    throw new Error(`Unsupported model id: ${modelId}`);
+  }
+  if (isFireworksModelId(trimmedModelId)) {
+    return trimmedModelId;
+  }
+  if (isOpenAiModelVariantId(trimmedModelId)) {
+    return trimmedModelId;
+  }
+  return trimmedModelId;
 }
 
-function resolveLlmTextModelId(modelId: string): LlmTextModelIdV2 {
-  const normalisedModelId = normaliseLlmModelId(modelId);
-  if (isLlmTextModelIdV2(normalisedModelId)) {
-    return normalisedModelId;
-  }
-  throw new Error(`Unsupported text model id: ${modelId}`);
+function resolveLlmTextModelId(modelId: string): string {
+  return resolveLlmModelId(modelId);
 }
 
-function resolveLlmImageModelId(modelId: string): LlmImageModelIdV2 {
-  const normalisedModelId = normaliseLlmModelId(modelId);
-  if (isLlmImageModelIdV2(normalisedModelId)) {
-    return normalisedModelId;
-  }
-  throw new Error(`Unsupported image model id: ${modelId}`);
+function resolveLlmImageModelId(modelId: string): string {
+  return resolveLlmModelId(modelId);
 }
 
 export type LlmDebugOptions = {
