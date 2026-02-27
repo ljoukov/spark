@@ -130,7 +130,7 @@ Recommended defaults:
   - Spark AI Agent (web, Phase 1)
     - Logged-in web home at `/spark` is the Spark AI Agent chat experience.
     - The chat stream is a continuous list of messages (no section summaries/collapsed sections); the composer stays pinned at the bottom.
-    - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles.
+    - The UI mirrors ChatGPT: a centered conversation column, assistant replies render as clean text blocks, and user messages appear as right-aligned pill bubbles with left-aligned text inside each bubble.
     - After the second assistant reply, the latest assistant response expands to a minimum height to keep breathing room above the composer without adding trailing spacer after the response.
     - The composer is sticky at the bottom with a rounded “Ask anything” input, leading attach button, and trailing send control.
     - Keyboard: desktop Enter submits (Shift+Enter inserts a new line); on mobile Enter inserts a new line and sending uses the send button.

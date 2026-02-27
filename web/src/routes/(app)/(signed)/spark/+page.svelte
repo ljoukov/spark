@@ -2445,6 +2445,7 @@
 		background: var(--chat-user-bg);
 		width: auto;
 		max-width: min(46rem, 100%);
+		text-align: left;
 		box-shadow: 0 10px 30px -26px rgba(15, 23, 42, 0.3);
 	}
 
