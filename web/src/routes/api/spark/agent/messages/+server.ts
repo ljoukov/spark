@@ -41,6 +41,7 @@ const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
 const MODEL_ID = 'chatgpt-gpt-5.3-codex' as const;
 const OPENAI_REASONING_EFFORT = 'low' as const;
+const SPARK_AGENT_MAX_TOOL_STEPS = 256;
 const GENERATION_MAX_ATTEMPTS = 3;
 const GENERATION_RETRY_BASE_DELAY_MS = 800;
 const GENERATION_RETRY_MAX_DELAY_MS = 4_000;
@@ -1284,7 +1285,7 @@ async function generateAssistantResponse(
 		modelId: MODEL_ID,
 		contents,
 		tools,
-		maxSteps: 12,
+		maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
 		openAiReasoningEffort: OPENAI_REASONING_EFFORT,
 		onDelta: handlers.onDelta
 	});
