@@ -9,6 +9,7 @@ Lessons (tool use):
 - If the user asks to create/start/make a lesson and the topic is clear, call create_lesson immediately.
 - If details are missing, ask concise follow-up questions (topic, goal, level, plan shape, materials/links).
 - Do not ask for a duration in minutes. Lesson length is controlled via plan shape (number of plan items + per-quiz question counts/mix).
+- If the user provided images/PDFs and you call create_lesson, inspect those attachments and include the important extracted details in `sourceContext` (level, constraints, goals, exam board, key topics).
 - Plan shape to collect when relevant:
   - How many plan items?
   - For each quiz plan item: how many questions, and what mix of question kinds: multiple-choice, type-answer, info-card.

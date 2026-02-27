@@ -85,6 +85,20 @@ function nullableOptionalString() {
     .optional();
 }
 
+function nullableOptionalQuizPreferences() {
+  return z
+    .preprocess(
+      (value) => {
+        if (value === null || value === undefined) {
+          return undefined;
+        }
+        return value;
+      },
+      quizPreferencesSchema.optional(),
+    )
+    .optional();
+}
+
 const quizQuestionKindSchema = z.enum([
   "multiple-choice",
   "type-answer",
@@ -140,7 +154,7 @@ const planItemPreferencesSchema = z
     kind: z.enum(["quiz", "coding_problem", "media"]),
     title: nullableOptionalString(),
     description: nullableOptionalString(),
-    quiz: quizPreferencesSchema.optional(),
+    quiz: nullableOptionalQuizPreferences(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -183,6 +197,7 @@ type LessonCreateInput = {
   title?: string;
   level?: string;
   goal?: string;
+  sourceContext?: string;
   plan: {
     items: Array<{
       kind: "quiz" | "coding_problem" | "media";
@@ -206,6 +221,7 @@ const lessonCreateSchema = z
     title: nullableOptionalString(),
     level: nullableOptionalString(),
     goal: nullableOptionalString(),
+    sourceContext: nullableOptionalString(),
     plan: planPreferencesSchema,
     materials: materialsSchema,
   })
@@ -244,6 +260,9 @@ function buildLessonBrief(
   }
   if (input.goal) {
     lines.push("", "## Goal", input.goal.trim());
+  }
+  if (input.sourceContext) {
+    lines.push("", "## Source context", input.sourceContext.trim());
   }
   if (input.plan.items.length > 0) {
     lines.push("", "## Plan preferences");
@@ -535,12 +554,12 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     .option(
       "--chat-model <id>",
       "Chat model ID for the routing tool loop",
-      "chatgpt-gpt-5.2-codex",
+      "chatgpt-gpt-5.3-codex",
     )
     .option(
       "--agent-model <id>",
       "Agent model ID for the lesson-generation tool loop",
-      "chatgpt-gpt-5.2-codex",
+      "chatgpt-gpt-5.3-codex",
     )
     .option(
       "--chat-max-steps <number>",

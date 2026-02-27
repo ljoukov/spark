@@ -649,27 +649,48 @@ const quizPreferencesSchema = z
 		}
 	});
 
-	const planItemPreferencesSchema = z
-		.object({
-			kind: z
-				.enum(['quiz', 'coding_problem', 'problem', 'media'])
-				.transform((value): 'quiz' | 'coding_problem' | 'media' => {
-					if (value === 'problem') {
-						return 'coding_problem';
-					}
-					return value;
-				})
-				.describe(
-					'Plan item kind: quiz, coding_problem (Python competitive programming), or media/story.'
-				),
-			title: z.string().trim().min(1).describe('Optional short title for the plan item.').optional(),
-			description: z
-				.string()
-				.trim()
-			.min(1)
-			.describe('Optional description for the plan item.')
-			.optional(),
-		quiz: quizPreferencesSchema.describe('Quiz constraints (only when kind="quiz").').optional()
+function nullableOptionalString() {
+	return z
+		.preprocess((value) => {
+			if (value === null || value === undefined) {
+				return undefined;
+			}
+			if (typeof value === 'string') {
+				const trimmed = value.trim();
+				return trimmed.length > 0 ? trimmed : undefined;
+			}
+			return value;
+		}, z.string().trim().min(1).optional())
+		.optional();
+}
+
+const nullableOptionalQuizPreferencesSchema = z
+	.preprocess((value) => {
+		if (value === null || value === undefined) {
+			return undefined;
+		}
+		return value;
+	}, quizPreferencesSchema.optional())
+	.optional();
+
+const planItemPreferencesSchema = z
+	.object({
+		kind: z
+			.enum(['quiz', 'coding_problem', 'problem', 'media'])
+			.transform((value): 'quiz' | 'coding_problem' | 'media' => {
+				if (value === 'problem') {
+					return 'coding_problem';
+				}
+				return value;
+			})
+			.describe(
+				'Plan item kind: quiz, coding_problem (Python competitive programming), or media/story.'
+			),
+		title: nullableOptionalString().describe('Optional short title for the plan item.'),
+		description: nullableOptionalString().describe('Optional description for the plan item.'),
+		quiz: nullableOptionalQuizPreferencesSchema.describe(
+			'Quiz constraints (only when kind="quiz").'
+		)
 	})
 	.strict()
 	.superRefine((value, ctx) => {
@@ -715,9 +736,12 @@ const materialsSchema = z.preprocess(
 
 const lessonCreateSchema = z.object({
 	topic: z.string().trim().min(1).describe('Lesson topic.'),
-	title: z.string().trim().min(1).describe('Optional lesson title override.').optional(),
-	level: z.string().trim().min(1).describe('Optional learner level.').optional(),
-	goal: z.string().trim().min(1).describe('Optional learning goal.').optional(),
+	title: nullableOptionalString().describe('Optional lesson title override.'),
+	level: nullableOptionalString().describe('Optional learner level.'),
+	goal: nullableOptionalString().describe('Optional learning goal.'),
+	sourceContext: nullableOptionalString().describe(
+		'Optional key details extracted from user-provided images or PDFs that should be reflected in the lesson.'
+	),
 	plan: planPreferencesSchema,
 	materials: materialsSchema.describe('Optional list of materials/links to incorporate.')
 });
@@ -739,6 +763,9 @@ function buildLessonBrief(
 	}
 	if (input.goal) {
 		lines.push('', '## Goal', input.goal.trim());
+	}
+	if (input.sourceContext) {
+		lines.push('', '## Source context', input.sourceContext.trim());
 	}
 	if (input.plan?.items && input.plan.items.length > 0) {
 		lines.push('', '## Plan preferences');
@@ -840,8 +867,16 @@ function buildSparkChatTools(options: {
 	userId: string;
 	serviceAccountJson: string;
 	sourceText?: string;
+	requiresAttachmentContext?: boolean;
+	attachmentLabels?: string[];
 }): LlmToolSet {
-	const { userId, serviceAccountJson, sourceText } = options;
+	const {
+		userId,
+		serviceAccountJson,
+		sourceText,
+		requiresAttachmentContext = false,
+		attachmentLabels = []
+	} = options;
 	return {
 		list_lessons: tool({
 			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
@@ -904,6 +939,7 @@ function buildSparkChatTools(options: {
 				'Start creating a new lesson (published into the user’s sessions, not welcome templates).',
 				'Creates a workspace with brief.md and launches a background agent to generate and publish the lesson.',
 				'Lesson length is controlled via plan shape (no fixed duration minutes).',
+				'If the user attached images/PDFs, include the key extracted details in sourceContext.',
 				'',
 				'Plan shape:',
 				'- Provide plan.items; the array length sets the number of plan items.',
@@ -913,6 +949,15 @@ function buildSparkChatTools(options: {
 			].join('\n'),
 			inputSchema: lessonCreateSchema,
 			execute: async (input) => {
+				if (requiresAttachmentContext && !input.sourceContext?.trim()) {
+					const labels =
+						attachmentLabels.length > 0
+							? attachmentLabels.join(', ')
+							: 'uploaded image/PDF attachments';
+					throw new Error(
+						`sourceContext is required when the user uploads attachments. Inspect the attachment content and provide the key details (level, topic constraints, goals, exam board) in sourceContext before calling create_lesson. Attachments: ${labels}`
+					);
+				}
 				let sessionId: string | null = null;
 				let sessionSaved = false;
 				try {
@@ -1279,7 +1324,19 @@ async function generateAssistantResponse(
 	const tools = buildSparkChatTools({
 		userId: options.userId,
 		serviceAccountJson: options.serviceAccountJson,
-		sourceText
+		sourceText,
+		requiresAttachmentContext: options.attachments.length > 0,
+		attachmentLabels: options.attachments.map((attachment) => {
+			const filename = attachment.filename?.trim();
+			if (filename && filename.length > 0) {
+				return filename;
+			}
+			const pageSuffix =
+				typeof attachment.pageCount === 'number' && attachment.pageCount > 0
+					? ` (${attachment.pageCount.toString()} pages)`
+					: '';
+			return `${attachment.contentType}${pageSuffix}`;
+		})
 	});
 	const result = await runToolLoop({
 		modelId: MODEL_ID,
