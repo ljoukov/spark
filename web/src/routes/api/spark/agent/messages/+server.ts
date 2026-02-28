@@ -51,6 +51,9 @@ const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
 	'image/jpeg',
 	'image/png',
 	'image/webp',
+	'image/gif',
+	'image/heic',
+	'image/heif',
 	'application/pdf'
 ]);
 const FALLBACK_RESPONSE = [

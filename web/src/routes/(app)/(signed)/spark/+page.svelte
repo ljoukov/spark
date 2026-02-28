@@ -186,9 +186,24 @@
 		return parts[parts.length - 1]?.toLowerCase() ?? '';
 	}
 
+	function replaceFileExtension(name: string, extension: string): string {
+		const base = name.replace(/\.[^/.]+$/, '');
+		const normalizedBase = base.length > 0 ? base : 'upload';
+		return `${normalizedBase}.${extension}`;
+	}
+
 	function resolveExtensionForContentType(contentType: string): string {
 		if (contentType === 'application/pdf') {
 			return 'pdf';
+		}
+		if (contentType === 'image/gif') {
+			return 'gif';
+		}
+		if (contentType === 'image/heic') {
+			return 'heic';
+		}
+		if (contentType === 'image/heif') {
+			return 'heif';
 		}
 		if (contentType === 'image/png') {
 			return 'png';
@@ -215,7 +230,15 @@
 			return true;
 		}
 		const ext = resolveFileExtension(filename);
-		return ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp';
+		return (
+			ext === 'jpg' ||
+			ext === 'jpeg' ||
+			ext === 'png' ||
+			ext === 'webp' ||
+			ext === 'gif' ||
+			ext === 'heic' ||
+			ext === 'heif'
+		);
 	}
 
 	function isPdfType(contentType: string, filename: string): boolean {
@@ -226,12 +249,27 @@
 	}
 
 	function isSupportedClientFile(file: File): boolean {
-		const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-		if (file.type && allowed.has(file.type)) {
-			return true;
+		const allowed = new Set([
+			'image/jpeg',
+			'image/png',
+			'image/webp',
+			'image/gif',
+			'image/heic',
+			'image/heif',
+			'application/pdf'
+		]);
+		if (file.type) {
+			const normalized = file.type.toLowerCase();
+			if (
+				allowed.has(normalized) ||
+				normalized.startsWith('image/heic') ||
+				normalized.startsWith('image/heif')
+			) {
+				return true;
+			}
 		}
 		const ext = resolveFileExtension(file.name);
-		return ['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(ext);
+		return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'pdf'].includes(ext);
 	}
 
 	function cleanupPreviewUrl(url: string | null | undefined): void {
@@ -359,7 +397,10 @@
 					const nextError =
 						matchedServer.status === 'uploading' && !entry.sourceFile
 							? INTERRUPTED_UPLOAD_MESSAGE
-							: matchedServer.error;
+							: resolveAttachmentErrorMessage({
+									message: matchedServer.error,
+									errorCode: matchedServer.error
+								});
 					next.push({
 						...entry,
 						id: matchedServer.id,
@@ -395,12 +436,15 @@
 					cleanupPreviewUrl(entry.previewUrl);
 					continue;
 				}
-				const nextStatus =
-					serverEntry.status === 'uploading' && !entry.sourceFile ? 'failed' : serverEntry.status;
-				const nextError =
-					serverEntry.status === 'uploading' && !entry.sourceFile
-						? INTERRUPTED_UPLOAD_MESSAGE
-						: serverEntry.error;
+					const nextStatus =
+						serverEntry.status === 'uploading' && !entry.sourceFile ? 'failed' : serverEntry.status;
+					const nextError =
+						serverEntry.status === 'uploading' && !entry.sourceFile
+							? INTERRUPTED_UPLOAD_MESSAGE
+							: resolveAttachmentErrorMessage({
+									message: serverEntry.error,
+									errorCode: serverEntry.error
+								});
 				next.push({
 					...entry,
 					status: nextStatus,
@@ -434,7 +478,12 @@
 			}
 			const nextStatus = serverEntry.status === 'uploading' ? 'failed' : serverEntry.status;
 			const nextError =
-				serverEntry.status === 'uploading' ? INTERRUPTED_UPLOAD_MESSAGE : serverEntry.error;
+				serverEntry.status === 'uploading'
+					? INTERRUPTED_UPLOAD_MESSAGE
+					: resolveAttachmentErrorMessage({
+							message: serverEntry.error,
+							errorCode: serverEntry.error
+						});
 			next.push({
 				localId: serverEntry.id,
 				id: serverEntry.id,
@@ -843,11 +892,20 @@
 
 	function resolveClientContentType(file: File): string {
 		if (file.type) {
-			return file.type;
+			return file.type.toLowerCase();
 		}
 		const ext = resolveFileExtension(file.name);
 		if (ext === 'pdf') {
 			return 'application/pdf';
+		}
+		if (ext === 'gif') {
+			return 'image/gif';
+		}
+		if (ext === 'heic') {
+			return 'image/heic';
+		}
+		if (ext === 'heif') {
+			return 'image/heif';
 		}
 		if (ext === 'png') {
 			return 'image/png';
@@ -861,11 +919,87 @@
 		return '';
 	}
 
+	function isHeicType(contentType: string, filename: string): boolean {
+		const normalizedType = contentType.toLowerCase();
+		if (normalizedType === 'image/heic' || normalizedType === 'image/heif') {
+			return true;
+		}
+		if (normalizedType.startsWith('image/heic') || normalizedType.startsWith('image/heif')) {
+			return true;
+		}
+		const ext = resolveFileExtension(filename);
+		return ext === 'heic' || ext === 'heif';
+	}
+
+	function loadImageFromObjectUrl(objectUrl: string): Promise<HTMLImageElement> {
+		return new Promise((resolve, reject) => {
+			const image = new Image();
+			image.onload = () => {
+				resolve(image);
+			};
+			image.onerror = () => {
+				reject(new Error('image_load_failed'));
+			};
+			image.src = objectUrl;
+		});
+	}
+
+	async function normalizeAttachmentForModel(file: File): Promise<File> {
+		const contentType = resolveClientContentType(file);
+		if (!isHeicType(contentType, file.name)) {
+			return file;
+		}
+		if (!browser || typeof document === 'undefined') {
+			return file;
+		}
+		const objectUrl = URL.createObjectURL(file);
+		try {
+			const image = await loadImageFromObjectUrl(objectUrl);
+			const width = Math.max(1, image.naturalWidth || image.width);
+			const height = Math.max(1, image.naturalHeight || image.height);
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			const context = canvas.getContext('2d');
+			if (!context) {
+				throw new Error('canvas_context_unavailable');
+			}
+			context.drawImage(image, 0, 0, width, height);
+			const jpegBlob = await new Promise<Blob | null>((resolve) => {
+				canvas.toBlob(resolve, 'image/jpeg', 0.92);
+			});
+			if (!jpegBlob) {
+				throw new Error('jpeg_encoding_failed');
+			}
+			const nextName = replaceFileExtension(file.name, 'jpg');
+			return new File([jpegBlob], nextName, {
+				type: 'image/jpeg',
+				lastModified: file.lastModified || Date.now()
+			});
+		} finally {
+			URL.revokeObjectURL(objectUrl);
+		}
+	}
+
 	function wait(ms: number): Promise<void> {
 		return new Promise((resolve) => {
 			setTimeout(resolve, ms);
 		});
 	}
+
+	const ATTACHMENT_ERROR_REASON_BY_CODE: Record<string, string> = {
+		unsupported_file: 'This format is not supported. Use JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF.',
+		file_too_large: 'This file is too large. Max size is 25 MB.',
+		too_many_files: 'You can attach up to 10 files per conversation.',
+		total_size_exceeded: 'Attachments are limited to 50 MB per conversation.',
+		empty_file: 'The selected file is empty.',
+		missing_file: 'No file was received by the server.',
+		invalid_file: 'The file could not be read.',
+		invalid_body: 'The upload request was malformed.',
+		attachment_state_failed: 'Upload setup failed on the server. Please retry.',
+		upload_failed: 'Upload failed while saving the file. Please retry.',
+		removed: 'Attachment was removed.'
+	};
 
 	function shouldRetryUpload(status: number, errorCode: string | undefined): boolean {
 		if (status === 408 || status === 425 || status === 429) {
@@ -880,11 +1014,44 @@
 		return false;
 	}
 
-	function resolveAttachmentErrorMessage(message: string | undefined): string {
-		if (!message || message.trim().length === 0) {
-			return 'Upload failed. Please try again.';
+	function resolveAttachmentErrorMessage(options: {
+		message?: string;
+		errorCode?: string;
+		status?: number;
+	}): string {
+		const trimmedMessage = options.message?.trim();
+		if (trimmedMessage && !ATTACHMENT_ERROR_REASON_BY_CODE[trimmedMessage]) {
+			const details: string[] = [];
+			if (options.errorCode && options.errorCode.trim().length > 0) {
+				details.push(`code: ${options.errorCode.trim()}`);
+			}
+			if (typeof options.status === 'number') {
+				details.push(`HTTP ${options.status.toString()}`);
+			}
+			if (details.length === 0) {
+				return trimmedMessage;
+			}
+			return `${trimmedMessage} (${details.join(', ')})`;
 		}
-		return message.trim();
+		const code = options.errorCode?.trim() || trimmedMessage || '';
+		const mapped = ATTACHMENT_ERROR_REASON_BY_CODE[code];
+		if (mapped) {
+			const details: string[] = [];
+			if (code.length > 0) {
+				details.push(`code: ${code}`);
+			}
+			if (typeof options.status === 'number') {
+				details.push(`HTTP ${options.status.toString()}`);
+			}
+			if (details.length === 0) {
+				return mapped;
+			}
+			return `${mapped} (${details.join(', ')})`;
+		}
+		if (trimmedMessage && trimmedMessage.length > 0) {
+			return trimmedMessage;
+		}
+		return 'Upload failed. Please try again.';
 	}
 
 	function resolveRetryDelayMs(attemptNumber: number): number {
@@ -960,7 +1127,11 @@
 					| { attachment?: unknown; error?: string; message?: string }
 					| null;
 				if (!response.ok) {
-					const message = resolveAttachmentErrorMessage(payload?.message);
+					const message = resolveAttachmentErrorMessage({
+						message: payload?.message,
+						errorCode: payload?.error,
+						status: response.status
+					});
 					const retryable = shouldRetryUpload(response.status, payload?.error);
 					console.warn('[spark-chat] attachment upload attempt failed', {
 						localId,
@@ -1025,8 +1196,10 @@
 					}
 					updateLocalAttachment(localId, {
 						status: 'failed',
-						error: 'Upload failed. Please try again.'
+						error: 'Upload failed: invalid server response. Please retry. (code: invalid_response)'
 					});
+					attachmentError =
+						'Upload failed: invalid server response. Please retry. (code: invalid_response)';
 					return;
 				}
 				const attachment = parsed.data;
@@ -1072,10 +1245,14 @@
 					return;
 				}
 				console.error('Attachment upload failed', uploadError);
+				const message = resolveAttachmentErrorMessage({
+					message: uploadError instanceof Error ? uploadError.message : String(uploadError)
+				});
 				updateLocalAttachment(localId, {
 					status: 'failed',
-					error: 'Upload failed. Please try again.'
+					error: message
 				});
+				attachmentError = message;
 				return;
 			}
 		}
@@ -1126,9 +1303,23 @@
 			resolveIgnoredAttachmentIds(nextConversationId),
 			resolveIgnoredFingerprints(nextConversationId)
 		);
-		for (const file of files) {
+		for (const sourceFile of files) {
+			let file = sourceFile;
+			try {
+				file = await normalizeAttachmentForModel(sourceFile);
+			} catch (conversionError) {
+				console.warn('[spark-chat] failed to convert HEIC/HEIF attachment', {
+					filename: sourceFile.name,
+					contentType: sourceFile.type,
+					error: conversionError instanceof Error ? conversionError.message : String(conversionError)
+				});
+				attachmentError =
+					'Unable to process this HEIC/HEIF file in your browser. Convert it to JPG/PNG and try again.';
+				continue;
+			}
+
 			if (!isSupportedClientFile(file)) {
-				attachmentError = 'Only JPG, PNG, WEBP, or PDF files are supported.';
+				attachmentError = 'Only JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF files are supported.';
 				continue;
 			}
 			if (file.size > MAX_FILE_SIZE_BYTES) {

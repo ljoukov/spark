@@ -11,6 +11,8 @@ import { env } from '$env/dynamic/private';
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES_PER_CONVERSATION = 10;
+const HEIC_MAJOR_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs']);
+const HEIF_MAJOR_BRANDS = new Set(['mif1', 'msf1']);
 
 const conversationIdSchema = z.string().trim().min(1, 'conversationId is required');
 const removeSchema = z.object({
@@ -31,6 +33,39 @@ function isFileLike(value: FormDataEntryValue | null): value is File {
 		return true;
 	}
 	return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
+}
+
+function readAsciiToken(buffer: Uint8Array, offset: number): string | null {
+	if (buffer.length < offset + 4) {
+		return null;
+	}
+	let token = '';
+	for (let i = 0; i < 4; i += 1) {
+		token += String.fromCharCode(buffer[offset + i] ?? 0);
+	}
+	return token;
+}
+
+function detectHeifContentType(buffer: Uint8Array): string | null {
+	const boxType = readAsciiToken(buffer, 4);
+	if (boxType !== 'ftyp') {
+		return null;
+	}
+	const maxOffset = Math.min(buffer.length - 4, 64);
+	for (let offset = 8; offset <= maxOffset; offset += 4) {
+		const brand = readAsciiToken(buffer, offset);
+		if (!brand) {
+			continue;
+		}
+		const normalizedBrand = brand.toLowerCase();
+		if (HEIC_MAJOR_BRANDS.has(normalizedBrand)) {
+			return 'image/heic';
+		}
+		if (HEIF_MAJOR_BRANDS.has(normalizedBrand)) {
+			return 'image/heif';
+		}
+	}
+	return null;
 }
 
 function detectContentType(buffer: Uint8Array): string | null {
@@ -62,6 +97,21 @@ function detectContentType(buffer: Uint8Array): string | null {
 		buffer[11] === 0x50
 	) {
 		return 'image/webp';
+	}
+	if (
+		buffer.length >= 6 &&
+		buffer[0] === 0x47 &&
+		buffer[1] === 0x49 &&
+		buffer[2] === 0x46 &&
+		buffer[3] === 0x38 &&
+		(buffer[4] === 0x37 || buffer[4] === 0x39) &&
+		buffer[5] === 0x61
+	) {
+		return 'image/gif';
+	}
+	const heifContentType = detectHeifContentType(buffer);
+	if (heifContentType) {
+		return heifContentType;
 	}
 	if (
 		buffer.length >= 5 &&
@@ -358,7 +408,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			details: { filename: fileEntry.name, claimedType: fileEntry.type || null, sizeBytes }
 		});
 		return json(
-			{ error: 'unsupported_file', message: 'Only JPG, PNG, WEBP, or PDF files are supported.' },
+			{
+				error: 'unsupported_file',
+				message: 'Only JPG, PNG, WEBP, GIF, HEIC/HEIF, or PDF files are supported.'
+			},
 			{ status: 415 }
 		);
 	}

@@ -138,9 +138,10 @@ Recommended defaults:
     - Assistant output renders markdown via SparkMarkdown (including LaTeX + code blocks).
     - Code blocks render inside a framed container with a language label and copy button; user bubbles can expand to the same max width as assistant replies with a small left inset.
     - The attach menu (plus button) includes “Add photos & files” and, on mobile-capable devices, “Take photo”.
-    - Pasting clipboard files into the composer attaches supported images/PDFs through the same upload path as picker-selected files; pasted files are named `clipboard-{N}` (with inferred extension when available).
+    - Pasting clipboard files into the composer attaches supported images/PDFs (JPG/PNG/WEBP/GIF/HEIC/HEIF/PDF) through the same upload path as picker-selected files; pasted files are named `clipboard-{N}` (with inferred extension when available).
+    - HEIC/HEIF uploads are normalized to JPEG client-side before upload when decoding succeeds, so current model adapters can treat them as standard image inputs.
     - Attachments render as horizontally scrolling preview cards above the input field. Each card shows a spinner while uploading and a remove `×` once ready.
-    - Uploads are retried automatically up to 3 attempts on transient failures. If all attempts fail, the tile switches to an error state with the failure message, a retry icon action, and a remove `×` action.
+    - Uploads are retried automatically up to 3 attempts on transient failures. If all attempts fail, the tile switches to an error state with a user-facing reason plus compact debug details (`code` and, when available, `HTTP` status), a retry icon action, and a remove `×` action.
     - The send button is disabled until all uploads finish; while uploading it shows an inline spinner.
     - While streaming, the assistant bubble exposes client + server phases:
       - `Establishing connection...` while the SSE request is opening (client-side fetch).
@@ -157,7 +158,7 @@ Recommended defaults:
 
 ## 2) Key Functional Requirements
 
-- Inputs: JPG/PNG/WEBP images and PDFs. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
+- Inputs: JPG/PNG/WEBP/GIF/HEIC/HEIF images and PDFs. Max 25 MB per file (413 on server rejection), max 10 files per conversation, and 50 MB total per conversation (client + server enforced). Text is optional when attachments are present.
 - Metadata: `programme = gcse_triple_science`, optional `subject`, `board`, `topic`, `subtopic`. Server enriches or corrects metadata when confident; clients treat board/subject as optional choices.
 - Generation modes:
   - **Extraction mode** when source already contains Q&A pairs — preserve wording verbatim.
