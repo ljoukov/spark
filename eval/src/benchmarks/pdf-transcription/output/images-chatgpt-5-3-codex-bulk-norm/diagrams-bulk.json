@@ -1,0 +1,44 @@
+{
+  "diagrams": [
+    {
+      "id": "diag-H1-p3",
+      "problemId": "H1",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.664,
+        "top": 0.07,
+        "width": 0.207,
+        "height": 0.158
+      },
+      "label": "H1 diagram",
+      "confidence": 0.88
+    },
+    {
+      "id": "diag-H2-p3",
+      "problemId": "H2",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.656,
+        "top": 0.223,
+        "width": 0.223,
+        "height": 0.132
+      },
+      "label": "H2 network",
+      "confidence": 0.9
+    },
+    {
+      "id": "diag-H3-p3",
+      "problemId": "H3",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.633,
+        "top": 0.388,
+        "width": 0.254,
+        "height": 0.207
+      },
+      "label": "H3 squares/trapezium diagram",
+      "confidence": 0.9
+    }
+  ],
+  "notes": "Diagrams for H1–H3 are on the third provided image; no qualifying diagrams found on the first two images."
+}

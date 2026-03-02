@@ -1,0 +1,87 @@
+{
+  "approachId": "pdf-gemini-pro",
+  "approachLabel": "PDF + gemini-2.5-pro",
+  "strategy": "bulk",
+  "coordinateMode": "int1000",
+  "status": "fail",
+  "reason": "[gemini-2.5-pro] The text for all problems has been accurately transcribed. However, the diagrams provided for problems H2 and H3 are severely cropped and incomplete. They are missing key labels and parts of the figures mentioned in the problem descriptions (e.g., point B in H2, points A and B in H3), rendering the problems unsolvable from the information provided.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is largely accurate, but the extracted diagrams are materially incomplete/cropped and therefore not faithful to the source page.",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-int1000",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-int1000/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-int1000/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-pro-bulk-int1000/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-bulk.json"
+  ],
+  "pipeline": {
+    "modelCalls": 2,
+    "latencyMs": 124240,
+    "costUsd": 0
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 55231,
+    "costUsd": 0.0267675,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "fail",
+        "summary": "The text for all problems has been accurately transcribed. However, the diagrams provided for problems H2 and H3 are severely cropped and incomplete. They are missing key labels and parts of the figures mentioned in the problem descriptions (e.g., point B in H2, points A and B in H3), rendering the problems unsolvable from the information provided.",
+        "issues": [
+          "The diagram for problem H2 is incomplete; it is missing point 'B' and the right side of the network.",
+          "The diagram for problem H3 is incomplete; it is missing points 'A' and 'B' and significant portions of the square ABCD."
+        ],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 55225,
+          "costUsd": 0.01586125,
+          "usageTokens": {
+            "promptTokens": 2713,
+            "responseTokens": 157,
+            "thinkingTokens": 1090,
+            "totalTokens": 3960
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The text for H1–H3 is largely accurate, but the extracted diagrams are materially incomplete/cropped and therefore not faithful to the source page.",
+        "issues": [
+          "All three referenced diagram images (h1-1.png, h2-2.png, h3-3.png) are severely cropped and do not show the full diagrams from the source.",
+          "H1 diagram is missing substantial right-side content (square and arcs not fully visible).",
+          "H2 network diagram is incomplete (right side and point B region cut off), which is essential to the route-counting problem.",
+          "H3 geometry diagram is incomplete (right side including parts near B/A cut off), so key structure is missing."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 9831,
+          "costUsd": 0.010906250000000001,
+          "usageTokens": {
+            "promptTokens": 5861,
+            "cachedTokens": 0,
+            "responseTokens": 153,
+            "thinkingTokens": 205,
+            "totalTokens": 6219
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 179471,
+    "costUsd": 0.0267675
+  }
+}

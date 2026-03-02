@@ -1,0 +1,79 @@
+{
+  "approachId": "images-chatgpt-5-3-codex",
+  "approachLabel": "PDF as images + chatgpt-gpt-5.3-codex",
+  "strategy": "bulk",
+  "coordinateMode": "int1000",
+  "status": "pass",
+  "reason": "All judges passed",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-int1000",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-int1000/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-int1000/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-bulk-int1000/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-bulk.json"
+  ],
+  "pipeline": {
+    "modelCalls": 2,
+    "latencyMs": 21285,
+    "costUsd": 0.020525
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 79906,
+    "costUsd": 0.021810000000000003,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "pass",
+        "summary": "The transcription is a faithful representation of the first three problems (H1, H2, H3) from the source document. All text, numerical values, and mathematical notations are accurate.",
+        "issues": [],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 79897,
+          "costUsd": 0.012497500000000002,
+          "usageTokens": {
+            "promptTokens": 2718,
+            "responseTokens": 62,
+            "thinkingTokens": 848,
+            "totalTokens": 3628
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "pass",
+        "summary": "The transcription is materially faithful to the source for H1–H3, including the key statements, numerical values, and question prompts. The extracted diagrams correspond to the original figures.",
+        "issues": [],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 5719,
+          "costUsd": 0.009312500000000001,
+          "usageTokens": {
+            "promptTokens": 6002,
+            "cachedTokens": 0,
+            "responseTokens": 53,
+            "thinkingTokens": 128,
+            "totalTokens": 6183
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 101191,
+    "costUsd": 0.042335000000000005
+  }
+}

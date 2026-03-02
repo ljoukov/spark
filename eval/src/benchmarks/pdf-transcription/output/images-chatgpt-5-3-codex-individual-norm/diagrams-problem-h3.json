@@ -1,0 +1,18 @@
+{
+  "diagrams": [
+    {
+      "id": "H3-diagram-1",
+      "problemId": "H3",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.644,
+        "top": 0.424,
+        "width": 0.189,
+        "height": 0.203
+      },
+      "label": "H3",
+      "description": "Diagram of squares ABCD and EFGD with internal segment FB and shaded trapezium BCGF.",
+      "confidence": 0.9
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "diagrams": [
+    {
+      "id": "diagram-H1-p3",
+      "problemId": "H1",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.674,
+        "top": 0.072,
+        "width": 0.24,
+        "height": 0.18
+      },
+      "bbox1000": {
+        "left": 674,
+        "top": 72,
+        "right": 914,
+        "bottom": 252
+      },
+      "label": "H1 diagram",
+      "description": "Shaded shape formed by four equal circular arcs around a central square.",
+      "confidence": 0.74
+    },
+    {
+      "id": "diagram-H2-p3",
+      "problemId": "H2",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.654,
+        "top": 0.305,
+        "width": 0.263,
+        "height": 0.119
+      },
+      "bbox1000": {
+        "left": 654,
+        "top": 305,
+        "right": 917,
+        "bottom": 424
+      },
+      "label": "H2 network",
+      "description": "Network of connected triangles with endpoints labelled A and B.",
+      "confidence": 0.73
+    },
+    {
+      "id": "diagram-H3-p3",
+      "problemId": "H3",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.631,
+        "top": 0.47,
+        "width": 0.289,
+        "height": 0.221
+      },
+      "bbox1000": {
+        "left": 631,
+        "top": 470,
+        "right": 920,
+        "bottom": 691
+      },
+      "label": "H3 squares",
+      "description": "Two squares and a diagonal segment forming trapezium BCGF; vertices labelled A, B, C, D, E, F, G.",
+      "confidence": 0.76
+    }
+  ],
+  "notes": "Only the three right-hand-side diagrams for problems H1–H3 were included; text-only regions were excluded."
+}

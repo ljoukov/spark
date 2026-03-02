@@ -1,0 +1,86 @@
+{
+  "approachId": "images-gpt-5-2",
+  "approachLabel": "PDF as images + gpt-5.2",
+  "strategy": "individual",
+  "coordinateMode": "int1000",
+  "status": "fail",
+  "reason": "[chatgpt-gpt-5.3-codex] The H1–H3 question text is largely accurate, but the extracted diagrams are not faithful to the source and appear to be unrelated cropped regions. Since these problems depend on correct figures, this is a material fidelity failure.",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-int1000",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-int1000/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-int1000/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-individual-int1000/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-problem-h1.json",
+    "output/diagrams-problem-h2.json",
+    "output/diagrams-problem-h3.json"
+  ],
+  "pipeline": {
+    "modelCalls": 6,
+    "latencyMs": 58284,
+    "costUsd": 0.0689066
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 75748,
+    "costUsd": 0.024303750000000002,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "pass",
+        "summary": "The transcription is a perfect match for the first three problems (H1, H2, H3) from the source PDF. All text, mathematical values, and diagrams are correct.",
+        "issues": [],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 75739,
+          "costUsd": 0.014422500000000001,
+          "usageTokens": {
+            "promptTokens": 2722,
+            "responseTokens": 49,
+            "thinkingTokens": 1053,
+            "totalTokens": 3824
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The H1–H3 question text is largely accurate, but the extracted diagrams are not faithful to the source and appear to be unrelated cropped regions. Since these problems depend on correct figures, this is a material fidelity failure.",
+        "issues": [
+          "All three extracted diagram images (H1, H2, H3) are incorrect/mismatched and do not show the actual problem figures from the source page.",
+          "H1 diagram is missing (shown image is a UKMT logo fragment instead of the square-with-arcs figure).",
+          "H2 diagram is missing (shown image is a text box fragment instead of the network from A to B).",
+          "H3 diagram is missing (shown image is body-text fragment instead of the squares/trapezium geometry figure)."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 7185,
+          "costUsd": 0.009881250000000001,
+          "usageTokens": {
+            "promptTokens": 6073,
+            "cachedTokens": 0,
+            "responseTokens": 166,
+            "thinkingTokens": 63,
+            "totalTokens": 6302
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 134032,
+    "costUsd": 0.09321035
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "diagrams": [
+    {
+      "id": "diagram-H1-1",
+      "problemId": "H1",
+      "page": 1,
+      "bboxNorm": {
+        "left": 0.684,
+        "top": 0.06,
+        "width": 0.245,
+        "height": 0.19
+      },
+      "label": "H1 diagram",
+      "description": "Shaded four-arc (clover-like) shape around a central square.",
+      "confidence": 0.74
+    }
+  ],
+  "notes": "Only the H1 diagram on the provided H1/H2/H3 page was included; text and other problem diagrams were excluded."
+}

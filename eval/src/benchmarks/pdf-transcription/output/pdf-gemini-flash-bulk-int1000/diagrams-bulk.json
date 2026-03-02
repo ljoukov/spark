@@ -1,0 +1,59 @@
+{
+  "diagrams": [
+    {
+      "id": "H1_D1",
+      "problemId": "H1",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.605,
+        "top": 0.09,
+        "width": 0.175,
+        "height": 0.095
+      },
+      "bbox1000": {
+        "left": 605,
+        "top": 90,
+        "right": 780,
+        "bottom": 185
+      },
+      "confidence": 0
+    },
+    {
+      "id": "H2_D1",
+      "problemId": "H2",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.62,
+        "top": 0.215,
+        "width": 0.145,
+        "height": 0.1
+      },
+      "bbox1000": {
+        "left": 620,
+        "top": 215,
+        "right": 765,
+        "bottom": 315
+      },
+      "confidence": 0
+    },
+    {
+      "id": "H3_D1",
+      "problemId": "H3",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.575,
+        "top": 0.355,
+        "width": 0.2,
+        "height": 0.17
+      },
+      "bbox1000": {
+        "left": 575,
+        "top": 355,
+        "right": 775,
+        "bottom": 525
+      },
+      "confidence": 0
+    }
+  ],
+  "notes": "Extracted diagrams for problems H1, H2, and H3 from page 3."
+}

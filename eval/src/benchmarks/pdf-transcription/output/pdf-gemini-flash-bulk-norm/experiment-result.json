@@ -1,0 +1,84 @@
+{
+  "approachId": "pdf-gemini-flash",
+  "approachLabel": "PDF + gemini-flash-latest",
+  "strategy": "bulk",
+  "coordinateMode": "norm",
+  "status": "fail",
+  "reason": "[chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are not faithful to the source: they are cropped/incomplete and omit important parts of the figures and labels needed to solve the problems.",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-norm",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-norm/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-norm/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/pdf-gemini-flash-bulk-norm/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-bulk.json"
+  ],
+  "pipeline": {
+    "modelCalls": 2,
+    "latencyMs": 54090,
+    "costUsd": 0
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 91166,
+    "costUsd": 0.021021250000000002,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "pass",
+        "summary": "The transcription is a faithful representation of the source document for all three problems.",
+        "issues": [],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 91158,
+          "costUsd": 0.0098975,
+          "usageTokens": {
+            "promptTokens": 2726,
+            "responseTokens": 39,
+            "thinkingTokens": 610,
+            "totalTokens": 3375
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are not faithful to the source: they are cropped/incomplete and omit important parts of the figures and labels needed to solve the problems.",
+        "issues": [
+          "H1 diagram is cropped (left side missing), so the full four-arc square configuration is not fully shown.",
+          "H2 diagram is cropped and does not show the full network; key left side (including point A) is missing.",
+          "H3 diagram is cropped/incomplete, omitting parts of the square/trapezium layout and labels.",
+          "Because these are geometry/network questions, incomplete diagrams are a key fidelity failure even if text is mostly correct."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 10967,
+          "costUsd": 0.011123750000000002,
+          "usageTokens": {
+            "promptTokens": 5923,
+            "cachedTokens": 0,
+            "responseTokens": 153,
+            "thinkingTokens": 219,
+            "totalTokens": 6295
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 145256,
+    "costUsd": 0.021021250000000002
+  }
+}

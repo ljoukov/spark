@@ -1,0 +1,22 @@
+{
+  "diagrams": [
+    {
+      "id": "d_p3_h1_1",
+      "problemId": "H1",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.593,
+        "top": 0.094,
+        "width": 0.149,
+        "height": 0.078
+      },
+      "bbox1000": {
+        "left": 593,
+        "top": 94,
+        "right": 742,
+        "bottom": 172
+      },
+      "confidence": 1
+    }
+  ]
+}

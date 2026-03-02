@@ -1,0 +1,84 @@
+{
+  "approachId": "images-gpt-5-2",
+  "approachLabel": "PDF as images + gpt-5.2",
+  "strategy": "bulk",
+  "coordinateMode": "int1000",
+  "status": "fail",
+  "reason": "[chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is largely faithful to source page 3, but the extracted diagrams are incorrect: the linked diagram images do not show the H1/H2/H3 question figures from the source and instead appear to be unrelated page crops.",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-int1000",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-int1000/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-int1000/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-int1000/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-bulk.json"
+  ],
+  "pipeline": {
+    "modelCalls": 2,
+    "latencyMs": 25408,
+    "costUsd": 0.029876
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 58577,
+    "costUsd": 0.022705000000000003,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "pass",
+        "summary": "The transcription accurately reproduces the text and mathematical content of the first three problems (H1, H2, H3) from the source PDF. The diagrams are also correct.",
+        "issues": [],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 58572,
+          "costUsd": 0.011850000000000001,
+          "usageTokens": {
+            "promptTokens": 2712,
+            "responseTokens": 59,
+            "thinkingTokens": 787,
+            "totalTokens": 3558
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The transcribed text for H1–H3 is largely faithful to source page 3, but the extracted diagrams are incorrect: the linked diagram images do not show the H1/H2/H3 question figures from the source and instead appear to be unrelated page crops.",
+        "issues": [
+          "All three referenced extracted diagram files (h1-1.png, h2-2.png, h3-3.png) are wrong and do not contain the actual H1/H2/H3 diagrams from source-page-03.",
+          "H1 diagram is materially missing/incorrect (shows a UKMT logo crop instead of the square-with-arcs figure).",
+          "H2 diagram is materially missing/incorrect (shows instruction-page text crop instead of the network graph from A to B).",
+          "H3 diagram is materially missing/incorrect (shows instruction-page text crop instead of the two-squares/trapezium figure)."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 7549,
+          "costUsd": 0.010855,
+          "usageTokens": {
+            "promptTokens": 6188,
+            "cachedTokens": 0,
+            "responseTokens": 194,
+            "thinkingTokens": 118,
+            "totalTokens": 6500
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 83985,
+    "costUsd": 0.052581
+  }
+}

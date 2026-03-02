@@ -1,0 +1,86 @@
+{
+  "approachId": "images-gpt-5-2",
+  "approachLabel": "PDF as images + gpt-5.2",
+  "strategy": "bulk",
+  "coordinateMode": "norm",
+  "status": "fail",
+  "reason": "[gemini-2.5-pro] The transcription of the text for all three problems is accurate. However, the diagrams for problems H2 and H3 are severely cropped and incomplete, making them unusable. The H2 diagram is missing its lower half and the crucial labels 'A' and 'B'. The H3 diagram is cropped, obscuring vertices B and C and the shading that identifies the trapezium BCGF.; [chatgpt-gpt-5.3-codex] The problem text for H1–H3 is largely accurate, but the extracted diagrams are not faithfully transcribed: H2 and H3 images are incomplete/mis-cropped, and H1 includes unrelated content from the next question.",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-norm",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-norm/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-norm/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-gpt-5-2-bulk-norm/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-bulk.json"
+  ],
+  "pipeline": {
+    "modelCalls": 2,
+    "latencyMs": 27150,
+    "costUsd": 0.025420850000000002
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 65985,
+    "costUsd": 0.03880125,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "fail",
+        "summary": "The transcription of the text for all three problems is accurate. However, the diagrams for problems H2 and H3 are severely cropped and incomplete, making them unusable. The H2 diagram is missing its lower half and the crucial labels 'A' and 'B'. The H3 diagram is cropped, obscuring vertices B and C and the shading that identifies the trapezium BCGF.",
+        "issues": [
+          "The diagram for problem H2 is incomplete. It shows only the top two triangles of the network, while the original diagram has four. The start point 'A' and end point 'B' are also missing.",
+          "The diagram for problem H3 is incomplete. It is cropped on the top and right sides, partially or completely cutting off vertices B and C, and obscuring the shading of the trapezium BCGF mentioned in the problem description."
+        ],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 65971,
+          "costUsd": 0.027097500000000004,
+          "usageTokens": {
+            "promptTokens": 2718,
+            "responseTokens": 197,
+            "thinkingTokens": 2173,
+            "totalTokens": 5088
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The problem text for H1–H3 is largely accurate, but the extracted diagrams are not faithfully transcribed: H2 and H3 images are incomplete/mis-cropped, and H1 includes unrelated content from the next question.",
+        "issues": [
+          "Diagram fidelity is poor: h2-2.png does not show the full H2 network (key route structure is missing).",
+          "Diagram fidelity is poor: h3-3.png is a partial crop of H3 and includes unrelated surrounding text; the full geometric configuration is not preserved.",
+          "h1-1.png includes extra content from below (part of the next diagram), indicating incorrect extraction boundaries."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 8580,
+          "costUsd": 0.01170375,
+          "usageTokens": {
+            "promptTokens": 6147,
+            "cachedTokens": 0,
+            "responseTokens": 144,
+            "thinkingTokens": 258,
+            "totalTokens": 6549
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 93135,
+    "costUsd": 0.0642221
+  }
+}

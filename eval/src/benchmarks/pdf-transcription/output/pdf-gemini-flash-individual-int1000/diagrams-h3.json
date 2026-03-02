@@ -1,0 +1,25 @@
+{
+  "diagrams": [
+    {
+      "id": "H3_diagram_1",
+      "problemId": "H3",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.589,
+        "top": 0.373,
+        "width": 0.148,
+        "height": 0.15
+      },
+      "bbox1000": {
+        "left": 589,
+        "top": 373,
+        "right": 737,
+        "bottom": 523
+      },
+      "label": "Geometric diagram showing squares ABCD and EFGD",
+      "description": "Diagram associated with problem H3.",
+      "confidence": 0.98
+    }
+  ],
+  "notes": "Extracted the single diagram associated with problem H3 on page 3."
+}

@@ -1,0 +1,18 @@
+{
+  "diagrams": [
+    {
+      "id": "H2_1",
+      "problemId": "H2",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.58,
+        "top": 0.21,
+        "width": 0.19,
+        "height": 0.16
+      },
+      "description": "Network graph for H2",
+      "confidence": 1
+    }
+  ],
+  "notes": "Extracted diagram bounding box for problem H2 on page 3."
+}

@@ -1,0 +1,17 @@
+{
+  "diagrams": [
+    {
+      "id": "H1-diagram-1",
+      "problemId": "H1",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.663,
+        "top": 0.067,
+        "width": 0.189,
+        "height": 0.136
+      },
+      "label": "H1 diagram",
+      "confidence": 0.95
+    }
+  ]
+}

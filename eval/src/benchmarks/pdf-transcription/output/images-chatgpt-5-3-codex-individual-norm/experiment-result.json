@@ -1,0 +1,85 @@
+{
+  "approachId": "images-chatgpt-5-3-codex",
+  "approachLabel": "PDF as images + chatgpt-gpt-5.3-codex",
+  "strategy": "individual",
+  "coordinateMode": "norm",
+  "status": "fail",
+  "reason": "[chatgpt-gpt-5.3-codex] The transcription text for H1–H3 is materially accurate, but the extracted diagrams are not faithful: only H1’s diagram is correct, while H2 and H3 diagrams are missing/incorrect (wrong image crops).",
+  "runDir": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-norm",
+  "outputMarkdownPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-norm/output/transcription-with-diagrams.md",
+  "outputJsonPath": "/Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-norm/output/experiment-result.json",
+  "reportOutputDir": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm",
+  "reportOutputMarkdownPath": "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/transcription-with-diagrams.md",
+  "reportDiagramImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/diagrams/h1-1.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/diagrams/h2-2.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/diagrams/h3-3.png"
+  ],
+  "reportSourcePageImagePaths": [
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/source-pages/source-page-01.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/source-pages/source-page-02.png",
+    "/Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/output/images-chatgpt-5-3-codex-individual-norm/source-pages/source-page-03.png"
+  ],
+  "manifests": [
+    "output/diagrams-problem-h1.json",
+    "output/diagrams-problem-h2.json",
+    "output/diagrams-problem-h3.json"
+  ],
+  "pipeline": {
+    "modelCalls": 6,
+    "latencyMs": 49564,
+    "costUsd": 0.04663125
+  },
+  "judging": {
+    "modelCalls": 2,
+    "latencyMs": 61991,
+    "costUsd": 0.021677500000000002,
+    "verdicts": [
+      {
+        "modelId": "gemini-2.5-pro",
+        "verdict": "pass",
+        "summary": "The transcription is a faithful representation of the original document for the specified problems (H1, H2, H3), including all text, mathematical notation, and diagrams.",
+        "issues": [],
+        "metrics": {
+          "modelId": "gemini-2.5-pro",
+          "modelVersion": "gemini-2.5-pro",
+          "elapsedMs": 61980,
+          "costUsd": 0.01116375,
+          "usageTokens": {
+            "promptTokens": 2715,
+            "responseTokens": 58,
+            "thinkingTokens": 719,
+            "totalTokens": 3492
+          }
+        }
+      },
+      {
+        "modelId": "chatgpt-gpt-5.3-codex",
+        "verdict": "fail",
+        "summary": "The transcription text for H1–H3 is materially accurate, but the extracted diagrams are not faithful: only H1’s diagram is correct, while H2 and H3 diagrams are missing/incorrect (wrong image crops).",
+        "issues": [
+          "H2 diagram image is incorrect: it shows a cropped fragment of page text/header instead of the A-to-B network graph.",
+          "H3 diagram image is incorrect: it shows a cropped text fragment instead of the squares/trapezium geometry diagram.",
+          "Diagrams are key content for these geometry/combinatorics questions, so missing/incorrect diagram extraction is a material fidelity failure."
+        ],
+        "metrics": {
+          "modelId": "chatgpt-gpt-5.3-codex",
+          "modelVersion": "chatgpt-gpt-5.3-codex",
+          "elapsedMs": 6558,
+          "costUsd": 0.01051375,
+          "usageTokens": {
+            "promptTokens": 6019,
+            "cachedTokens": 0,
+            "responseTokens": 139,
+            "thinkingTokens": 160,
+            "totalTokens": 6318
+          }
+        }
+      }
+    ]
+  },
+  "total": {
+    "latencyMs": 111555,
+    "costUsd": 0.06830875
+  }
+}

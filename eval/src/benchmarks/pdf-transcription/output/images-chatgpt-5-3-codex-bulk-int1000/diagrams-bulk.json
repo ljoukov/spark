@@ -1,0 +1,58 @@
+{
+  "diagrams": [
+    {
+      "id": "H1-diagram",
+      "problemId": "H1",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.648,
+        "top": 0.066,
+        "width": 0.185,
+        "height": 0.148
+      },
+      "bbox1000": {
+        "left": 648,
+        "top": 66,
+        "right": 833,
+        "bottom": 214
+      },
+      "confidence": 0.94
+    },
+    {
+      "id": "H2-diagram",
+      "problemId": "H2",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.659,
+        "top": 0.226,
+        "width": 0.17,
+        "height": 0.101
+      },
+      "bbox1000": {
+        "left": 659,
+        "top": 226,
+        "right": 829,
+        "bottom": 327
+      },
+      "confidence": 0.93
+    },
+    {
+      "id": "H3-diagram",
+      "problemId": "H3",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.633,
+        "top": 0.379,
+        "width": 0.2,
+        "height": 0.177
+      },
+      "bbox1000": {
+        "left": 633,
+        "top": 379,
+        "right": 833,
+        "bottom": 556
+      },
+      "confidence": 0.95
+    }
+  ]
+}

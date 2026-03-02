@@ -1,0 +1,40 @@
+{
+  "diagrams": [
+    {
+      "id": "D1",
+      "problemId": "H1",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.7639,
+        "top": 0.0829,
+        "width": 0.1705,
+        "height": 0.0971
+      },
+      "confidence": 1
+    },
+    {
+      "id": "D2",
+      "problemId": "H2",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.7689,
+        "top": 0.213,
+        "width": 0.1477,
+        "height": 0.0704
+      },
+      "confidence": 1
+    },
+    {
+      "id": "D3",
+      "problemId": "H3",
+      "page": 3,
+      "bboxNorm": {
+        "left": 0.74,
+        "top": 0.3378,
+        "width": 0.1894,
+        "height": 0.115
+      },
+      "confidence": 1
+    }
+  ]
+}
