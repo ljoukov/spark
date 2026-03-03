@@ -2,20 +2,18 @@
 
 This is a separate benchmark from `pdf-transcription` (the multi-model comparison suite).
 
-It runs a single agentic workflow using:
+It runs one or more agentic workflows (in parallel when multiple models are provided) using:
 
-- model: `chatgpt-gpt-5.3-codex`
+- default model: `chatgpt-gpt-5.3-codex`
 - production tools from `@spark/llm/agent/sparkAgentRunner`
-- required crop loop tools: `pdf_to_images`, `crop_image`, and `read_file`
+- required extraction/crop tools: `pdf_to_images`, `read_pdf`, `crop_image`, `trim_image`, `draw_grid_overlay`, and `view_image`
+- optional reference-text tool (enabled by default): `extract_pdf_reference_text`
 
-The benchmark requires the agent to:
+Canonical workflow instructions are maintained in:
 
-1. Render PDF pages.
-2. Extract H1/H2/H3 diagrams with `bbox1000`.
-3. Re-check crops and re-crop when extra text or clipping is present.
-4. Produce markdown transcription and diagram manifest.
+- `packages/llm/src/agent/skills/pdfTranscription.ts` (`PDF_TRANSCRIPTION_SKILL_TEXT`)
 
-The full benchmark task is written into `workspace/task.md`; the runtime prompt only tells the agent to read that file and follow it.
+The benchmark writes that skill into `workspace/TASK.md` and instructs the agent to follow it.
 
 It then runs two judges (`gemini-2.5-pro`, `chatgpt-gpt-5.3-codex`) and reports pass/fail, latency, cost, and tool calls.
 
@@ -27,6 +25,30 @@ From repo root:
 bun --cwd=eval run bench:pdf-transcription-agentic
 ```
 
+Subagents are disabled by default. Enable them explicitly:
+
+```bash
+bun --cwd=eval run bench:pdf-transcription-agentic -- --use-subagents
+```
+
+Disable PDF reference-text extraction (image-only transcription mode):
+
+```bash
+bun --cwd=eval run bench:pdf-transcription-agentic -- --disable-reference-text
+```
+
+Single model override:
+
+```bash
+bun --cwd=eval run bench:pdf-transcription-agentic -- --model-id=gemini-2.5-pro
+```
+
+Parallel multi-model run:
+
+```bash
+bun --cwd=eval run bench:pdf-transcription-agentic -- --models=chatgpt-gpt-5.3-codex,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
+```
+
 Optional custom PDF:
 
 ```bash
@@ -35,10 +57,12 @@ bun --cwd=eval run bench:pdf-transcription-agentic -- --source-pdf=/absolute/pat
 
 ## Outputs
 
-- Run workspace and logs: `eval/src/benchmarks/pdf-transcription-agentic/output/<run-id>/`
+- Run workspace and logs: `eval/src/benchmarks/pdf-transcription-agentic/output/<model-id>/<timestamp>-<id>/`
 - Summary JSON: `.../summary.json`
 - Agent console log mirror: `.../agent.log`
+- Per-agent logs when `--use-subagents` is enabled: `.../agent_main.log` and `.../agent_<agent_id>.log`
 - Agent event stream log: `.../agent-log.jsonl`
-- Auto-generated report: `eval/src/benchmarks/pdf-transcription-agentic/RESULTS.md`
+- Run-local report: `.../RESULTS.md`
+- Reference-text artifact when enabled: `workspace/output/reference/pdf-text.md`
 
 The benchmark prints stage transitions and live agent events to console while it runs.

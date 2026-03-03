@@ -13,7 +13,7 @@ import {
 
 import { z } from "zod";
 
-import { buildSparkAgentToolsForTest } from "@spark/llm/agent/sparkAgentRunner";
+import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
 import {
   estimateCallCostUsd,
   generateText,
@@ -48,8 +48,9 @@ const DEFAULT_SOURCE_PDF_PATH = path.join(
   "hamilton-2017-q.pdf",
 );
 const RESULTS_MARKDOWN_PATH = path.join(BENCHMARK_DIR, "RESULTS.md");
-const REPORT_OUTPUT_DIR = path.join(BENCHMARK_DIR, "output");
-const RUNS_OUTPUT_DIR = path.join(BENCHMARK_DIR, "runs");
+const BENCHMARK_OUTPUT_DIR = path.join(BENCHMARK_DIR, "output");
+const REPORT_OUTPUT_DIR = path.join(BENCHMARK_OUTPUT_DIR, "report");
+const RUNS_OUTPUT_DIR = path.join(BENCHMARK_OUTPUT_DIR, "runs");
 const REPORT_JSON_BASENAME = "benchmark-results.json";
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
 const PROBLEM_IDS = ["H1", "H2", "H3"] as const;
@@ -942,7 +943,7 @@ async function buildToolHarness(runDir: string): Promise<{
   scheduledUpdates: string[];
 }> {
   const scheduledUpdates: string[] = [];
-  const tools = buildSparkAgentToolsForTest({
+  const tools = buildSparkAgentTools({
     workspace: {
       scheduleUpdate: (inputPath) => {
         scheduledUpdates.push(inputPath);
@@ -1428,7 +1429,7 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
   lines.push(`Source PDF: ${report.sourcePdfPath}`);
   lines.push(`JSON report: ${report.reportJsonPath}`);
   lines.push("");
-  lines.push("Output copies are stored under `output/<config-name>/`.");
+  lines.push("Output copies are stored under `output/report/<config-name>/`.");
   lines.push("");
   lines.push("## Results");
   lines.push("");

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { appendFileSync } from "node:fs";
 import {
@@ -12,14 +13,22 @@ import {
 } from "node:fs/promises";
 
 import { z } from "zod";
-
-import { buildSparkAgentToolsForTest } from "@spark/llm/agent/sparkAgentRunner";
 import {
-  createToolLoopSteeringChannel,
+  createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
+  isLlmTextModelId,
+  runAgentLoop,
+} from "@ljoukov/llm";
+import type { AgentTelemetryEvent } from "@ljoukov/llm";
+
+import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
+import {
+  applyPdfTranscriptionSkillTools,
+  PDF_TRANSCRIPTION_SKILL_TEXT,
+} from "@spark/llm/agent/skills/pdfTranscription";
+import {
   estimateCallCostUsd,
   generateText,
   parseJsonFromLlmText,
-  runToolLoop,
   tool,
   type LlmContent,
   type LlmContentPart,
@@ -32,7 +41,6 @@ import type {
   LlmUsageChunk,
   LlmUsageTokenUpdate,
   ModelCallHandle,
-  StageHandle,
 } from "@spark/llm/utils/concurrency";
 
 import { ensureEvalEnvLoaded } from "../../utils/paths";
@@ -47,17 +55,18 @@ const DEFAULT_SOURCE_PDF_PATH = path.join(
   "hamilton-2017-q.pdf",
 );
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const RESULTS_MARKDOWN_PATH = path.join(BENCHMARK_DIR, "RESULTS.md");
-const MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const JUDGE_MODEL_IDS = [
   "gemini-2.5-pro",
   "chatgpt-gpt-5.3-codex",
 ] as const satisfies readonly [LlmTextModelId, LlmTextModelId];
-const MAX_STEPS = 120;
+const MAX_STEPS = 200;
+const TARGET_PROBLEM_IDS = ["H1", "H2", "H3"] as const;
 const REQUIRED_TOOL_NAMES = [
   "list_files",
   "read_file",
   "read_files",
+  "read_pdf",
   "view_image",
   "write_file",
   "move_file",
@@ -77,13 +86,18 @@ type AgentPathConfig = {
   outputMarkdownPath: string;
   outputManifestPath: string;
   outputNotesPath: string;
+  outputReferenceTextPath: string;
   agentLogPath: string;
+  agentMainLogPath: string;
   eventLogPath: string;
   summaryJsonPath: string;
 };
 
 type CliArgs = {
   sourcePdfPath: string;
+  modelIds: LlmTextModelId[];
+  useSubagents: boolean;
+  useReferenceText: boolean;
 };
 
 type ModelCallMetrics = {
@@ -100,18 +114,6 @@ type JudgeVerdict = {
   summary: string;
   issues: string[];
   metrics: ModelCallMetrics;
-};
-
-type ToolCallTrace = {
-  ts: string;
-  turn: number;
-  toolIndex: number;
-  toolName: string;
-  phase: "started" | "completed";
-  durationMs?: number;
-  error?: string;
-  inputSnippet: string;
-  outputSnippet?: string;
 };
 
 type UsageTotals = {
@@ -136,6 +138,7 @@ type AgenticBenchmarkResult = {
   transcriptionPath: string;
   diagramManifestPath: string;
   notesPath: string;
+  referenceTextPath?: string;
   agentLogPath: string;
   eventLogPath: string;
   summaryJsonPath: string;
@@ -164,6 +167,14 @@ type AgenticBenchmarkResult = {
   };
 };
 
+type AgenticBenchmarkRunOutcome = {
+  modelId: LlmTextModelId;
+  useSubagents: boolean;
+  useReferenceText: boolean;
+  result?: AgenticBenchmarkResult;
+  error?: string;
+};
+
 type JudgeResultJson = {
   verdict: "pass" | "fail";
   summary: string;
@@ -176,25 +187,161 @@ const JudgeResultSchema = z.object({
   issues: z.array(z.string().trim().min(1)).default([]),
 });
 
-const AgentDiagramManifestSchema = z.object({
-  diagrams: z.array(
-    z.object({
-      id: z.string().trim().min(1).optional(),
-      problemId: z.string().trim().min(1),
-      page: z.number().int().min(1),
-      sourceImagePath: z.string().trim().min(1).optional(),
-      cropPath: z.string().trim().min(1),
-      bbox1000: z.object({
-        left: z.number().int().min(0).max(1000),
-        top: z.number().int().min(0).max(1000),
-        right: z.number().int().min(0).max(1000),
-        bottom: z.number().int().min(0).max(1000),
-      }),
-      notes: z.string().trim().min(1).optional(),
-    }),
-  ),
+const Bbox1000Schema = z.object({
+  left: z.number().int().min(0).max(1000),
+  top: z.number().int().min(0).max(1000),
+  right: z.number().int().min(0).max(1000),
+  bottom: z.number().int().min(0).max(1000),
+});
+
+const AgentDiagramEntrySchema = z.object({
+  problemId: z.string().trim().min(1),
+  page: z.number().int().min(1),
+  sourceImagePath: z.string().trim().min(1).optional(),
+  cropPath: z.string().trim().min(1).optional(),
+  bbox1000: Bbox1000Schema.optional(),
+  status: z.enum(["ok", "imperfect", "failed"]).default("ok"),
+  failureReason: z.string().trim().min(1).nullable().optional(),
   notes: z.string().trim().min(1).optional(),
 });
+
+const AgentProblemDiagramAttemptSchema = z.object({
+  cropPath: z.string().trim().min(1).optional(),
+  trimmedPath: z.string().trim().min(1).optional(),
+  result: z.string().trim().min(1).optional(),
+  reason: z.string().trim().min(1).optional(),
+});
+
+const AgentProblemDiagramSchema = z.object({
+  status: z.string().trim().min(1).optional(),
+  finalPath: z.string().trim().min(1).optional(),
+  sourcePage: z.string().trim().min(1).optional(),
+  bbox1000: Bbox1000Schema.optional(),
+  attempts: z.array(AgentProblemDiagramAttemptSchema).optional(),
+  failureReason: z.string().trim().min(1).optional(),
+});
+
+function normaliseProblemDiagramStatus(input: {
+  rawStatus: string | undefined;
+  hasCropPath: boolean;
+}): "ok" | "imperfect" | "failed" {
+  const normalised = input.rawStatus?.trim().toLowerCase();
+  if (normalised === "ok" || normalised === "success" || normalised === "accepted") {
+    return "ok";
+  }
+  if (normalised === "failed" || normalised === "failure" || normalised === "error") {
+    return "failed";
+  }
+  if (!input.hasCropPath) {
+    return "failed";
+  }
+  return "imperfect";
+}
+
+const AgentDiagramManifestSchema = z.object({
+  diagrams: z.array(AgentDiagramEntrySchema).min(1),
+  globalNotes: z.string().trim().min(1).optional(),
+});
+
+const AgentDiagramManifestListSchema = z.array(AgentDiagramEntrySchema).min(1);
+
+const AgentProblemManifestInputSchema = z.object({
+  problems: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        page: z.number().int().min(1).optional(),
+        diagram: AgentProblemDiagramSchema.optional(),
+      }),
+    )
+    .min(1),
+  globalNotes: z.string().trim().min(1).optional(),
+});
+
+function normaliseProblemManifest(
+  manifest: z.infer<typeof AgentProblemManifestInputSchema>,
+): z.infer<typeof AgentDiagramManifestSchema> {
+  const diagrams = manifest.problems.map((problem) => {
+    const attempts = problem.diagram?.attempts ?? [];
+
+    let fallbackCropPath: string | undefined;
+    for (let index = attempts.length - 1; index >= 0; index -= 1) {
+      const attempt = attempts[index];
+      if (typeof attempt?.trimmedPath === "string" && attempt.trimmedPath.length > 0) {
+        fallbackCropPath = attempt.trimmedPath;
+        break;
+      }
+      if (typeof attempt?.cropPath === "string" && attempt.cropPath.length > 0) {
+        fallbackCropPath = attempt.cropPath;
+        break;
+      }
+    }
+
+    const cropPath =
+      typeof problem.diagram?.finalPath === "string" && problem.diagram.finalPath.length > 0
+        ? problem.diagram.finalPath
+        : fallbackCropPath;
+
+    let attemptReason: string | undefined;
+    for (let index = attempts.length - 1; index >= 0; index -= 1) {
+      const attempt = attempts[index];
+      if (typeof attempt?.reason === "string" && attempt.reason.length > 0) {
+        attemptReason = attempt.reason;
+        break;
+      }
+    }
+
+    const failureReason =
+      typeof problem.diagram?.failureReason === "string" && problem.diagram.failureReason.length > 0
+        ? problem.diagram.failureReason
+        : attemptReason;
+    const status = normaliseProblemDiagramStatus({
+      rawStatus: problem.diagram?.status,
+      hasCropPath: typeof cropPath === "string" && cropPath.length > 0,
+    });
+
+    return {
+      problemId: problem.id,
+      page: problem.page ?? 1,
+      ...(typeof problem.diagram?.sourcePage === "string" && problem.diagram.sourcePage.length > 0
+        ? { sourceImagePath: problem.diagram.sourcePage }
+        : {}),
+      ...(typeof cropPath === "string" && cropPath.length > 0 ? { cropPath } : {}),
+      ...(problem.diagram?.bbox1000 ? { bbox1000: problem.diagram.bbox1000 } : {}),
+      status,
+      ...(status === "failed"
+        ? { failureReason: failureReason ?? "Missing diagram crop output in manifest." }
+        : {}),
+      ...(status !== "failed" && typeof failureReason === "string" && failureReason.length > 0
+        ? { notes: failureReason }
+        : {}),
+    };
+  });
+
+  return AgentDiagramManifestSchema.parse({
+    diagrams,
+    ...(typeof manifest.globalNotes === "string" ? { globalNotes: manifest.globalNotes } : {}),
+  });
+}
+
+function parseAgentDiagramManifest(input: unknown): z.infer<typeof AgentDiagramManifestSchema> {
+  const asObject = AgentDiagramManifestSchema.safeParse(input);
+  if (asObject.success) {
+    return asObject.data;
+  }
+
+  const asList = AgentDiagramManifestListSchema.safeParse(input);
+  if (asList.success) {
+    return { diagrams: asList.data };
+  }
+
+  const asProblemManifest = AgentProblemManifestInputSchema.safeParse(input);
+  if (asProblemManifest.success) {
+    return normaliseProblemManifest(asProblemManifest.data);
+  }
+
+  throw asObject.error;
+}
 
 function formatMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) {
@@ -248,14 +395,21 @@ function truncateText(input: string, maxChars: number): string {
   return `${input.slice(0, maxChars)}…`;
 }
 
+function redactInlineDataUrls(input: string): string {
+  return input.replaceAll(
+    /(data:[^;,\s"]+;base64,)[^"\s]+/gu,
+    "$1...",
+  );
+}
+
 function serialiseSnippet(value: unknown, maxChars = 500): string {
   if (typeof value === "string") {
-    return truncateText(value.replace(/\s+/gu, " ").trim(), maxChars);
+    return truncateText(redactInlineDataUrls(value).replace(/\s+/gu, " ").trim(), maxChars);
   }
   try {
     const text = JSON.stringify(value);
     if (typeof text === "string") {
-      return truncateText(text.replace(/\s+/gu, " ").trim(), maxChars);
+      return truncateText(redactInlineDataUrls(text).replace(/\s+/gu, " ").trim(), maxChars);
     }
     return "<unserializable>";
   } catch {
@@ -267,18 +421,168 @@ function toSingleLine(input: string): string {
   return input.replace(/\r?\n/gu, "\\n");
 }
 
+function toModelSlug(modelId: string): string {
+  const slug = modelId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+/u, "")
+    .replace(/-+$/u, "");
+  if (slug.length === 0) {
+    return "model";
+  }
+  return slug;
+}
+
+function toRunTimestampSlug(): string {
+  return new Date().toISOString().replace(/[:.]/gu, "-");
+}
+
+function shortId(id: string): string {
+  return id.length <= 8 ? id : id.slice(0, 8);
+}
+
+function extractAgentIdFromSpawnOutput(output: unknown): string | null {
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return null;
+  }
+  const record = output as Record<string, unknown>;
+  const directAgentId = record.agent_id;
+  if (typeof directAgentId === "string" && directAgentId.trim().length > 0) {
+    return directAgentId.trim();
+  }
+  const directId = record.id;
+  if (typeof directId === "string" && directId.trim().length > 0) {
+    return directId.trim();
+  }
+  const nestedAgent = record.agent;
+  if (!nestedAgent || typeof nestedAgent !== "object" || Array.isArray(nestedAgent)) {
+    return null;
+  }
+  const nestedRecord = nestedAgent as Record<string, unknown>;
+  const nestedAgentId = nestedRecord.agent_id;
+  if (typeof nestedAgentId === "string" && nestedAgentId.trim().length > 0) {
+    return nestedAgentId.trim();
+  }
+  const nestedId = nestedRecord.id;
+  if (typeof nestedId === "string" && nestedId.trim().length > 0) {
+    return nestedId.trim();
+  }
+  return null;
+}
+
 function parseCliArgs(args: readonly string[]): CliArgs {
-  const raw: { sourcePdfPath?: string } = {};
+  const raw: {
+    sourcePdfPath?: string;
+    modelId?: string;
+    models?: string;
+    useSubagents?: string;
+    useReferenceText?: string;
+  } = {};
   for (const arg of args) {
     if (arg.startsWith("--source-pdf=")) {
       raw.sourcePdfPath = arg.slice("--source-pdf=".length).trim();
+      continue;
+    }
+    if (arg.startsWith("--model-id=")) {
+      raw.modelId = arg.slice("--model-id=".length).trim();
+      continue;
+    }
+    if (arg.startsWith("--models=")) {
+      raw.models = arg.slice("--models=".length).trim();
+      continue;
+    }
+    if (arg === "--use-subagents") {
+      raw.useSubagents = "true";
+      continue;
+    }
+    if (arg === "--no-use-subagents") {
+      raw.useSubagents = "false";
+      continue;
+    }
+    if (arg.startsWith("--use-subagents=")) {
+      raw.useSubagents = arg.slice("--use-subagents=".length).trim();
+      continue;
+    }
+    if (arg === "--use-reference-text" || arg === "--enable-reference-text") {
+      raw.useReferenceText = "true";
+      continue;
+    }
+    if (arg === "--no-use-reference-text" || arg === "--disable-reference-text") {
+      raw.useReferenceText = "false";
+      continue;
+    }
+    if (arg.startsWith("--use-reference-text=")) {
+      raw.useReferenceText = arg.slice("--use-reference-text=".length).trim();
+      continue;
+    }
+    if (arg.startsWith("--reference-text=")) {
+      raw.useReferenceText = arg.slice("--reference-text=".length).trim();
     }
   }
-  return z
+
+  const parsed = z
     .object({
       sourcePdfPath: z.string().trim().min(1).default(DEFAULT_SOURCE_PDF_PATH),
+      modelId: z.string().trim().min(1).optional(),
+      models: z.string().trim().min(1).optional(),
+      useSubagents: z.string().trim().min(1).optional(),
+      useReferenceText: z.string().trim().min(1).optional(),
     })
     .parse(raw);
+
+  const parseBooleanFlag = (
+    value: string | undefined,
+    defaultValue: boolean,
+    flagName: string,
+  ): boolean => {
+    if (typeof value !== "string") {
+      return defaultValue;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalized)) {
+      return false;
+    }
+    throw new Error(
+      `Invalid ${flagName} value: "${value}". Use true/false (or 1/0, yes/no, on/off).`,
+    );
+  };
+
+  const normaliseModelId = (modelId: string): LlmTextModelId => {
+    const trimmed = modelId.trim();
+    if (trimmed.length === 0) {
+      throw new Error("Model id cannot be empty.");
+    }
+    const corrected = trimmed.replaceAll("-gtp-", "-gpt-");
+    return corrected;
+  };
+
+  const modelIds: LlmTextModelId[] = [];
+  if (typeof parsed.models === "string") {
+    for (const part of parsed.models.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+      modelIds.push(normaliseModelId(trimmed));
+    }
+  }
+  if (typeof parsed.modelId === "string") {
+    modelIds.push(normaliseModelId(parsed.modelId));
+  }
+  if (modelIds.length === 0) {
+    modelIds.push(DEFAULT_AGENT_MODEL_ID);
+  }
+
+  const dedupedModelIds = Array.from(new Set(modelIds));
+  return {
+    sourcePdfPath: parsed.sourcePdfPath,
+    modelIds: dedupedModelIds,
+    useSubagents: parseBooleanFlag(parsed.useSubagents, false, "--use-subagents"),
+    useReferenceText: parseBooleanFlag(parsed.useReferenceText, true, "--use-reference-text"),
+  };
 }
 
 async function assertFileExists(inputPath: string): Promise<void> {
@@ -305,6 +609,44 @@ async function listFilesRecursive(rootDir: string): Promise<string[]> {
   return output;
 }
 
+function sanitiseActorLabel(actor: string): string {
+  const trimmed = actor.trim();
+  if (trimmed.length === 0) {
+    return "main";
+  }
+  return trimmed.replaceAll(/[^a-zA-Z0-9:_-]/gu, "_");
+}
+
+function resolveToolEventActor(event: Extract<LlmStreamEvent, { type: "tool_call" }>): string {
+  const input = event.input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return "main";
+  }
+  const record = input as Record<string, unknown>;
+
+  const explicitActorKeys = ["subagentName", "subagent", "agentName", "agent"] as const;
+  for (const key of explicitActorKeys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return sanitiseActorLabel(value);
+    }
+  }
+
+  const idValue = record.id;
+  if (
+    typeof idValue === "string" &&
+    idValue.trim().length > 0 &&
+    (event.toolName === "send_input" ||
+      event.toolName === "wait" ||
+      event.toolName === "close_agent" ||
+      event.toolName === "resume_agent")
+  ) {
+    return `agent:${sanitiseActorLabel(idValue)}`;
+  }
+
+  return "main";
+}
+
 function mergeUsageTokens(
   current: LlmUsageTokenUpdate | null,
   next: LlmUsageTokenUpdate | undefined,
@@ -324,6 +666,27 @@ function mergeUsageTokens(
     totalTokens: next.totalTokens ?? current.totalTokens,
     toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
   };
+}
+
+function resolveManifestImagePath(options: {
+  workspaceDir: string;
+  manifestDir: string;
+  rawPath: string;
+  workspaceFileSet: ReadonlySet<string>;
+}): string | null {
+  const normalisedPath = options.rawPath.replaceAll("\\", "/");
+  const candidates = Array.from(
+    new Set([
+      path.resolve(options.workspaceDir, normalisedPath),
+      path.resolve(options.manifestDir, normalisedPath),
+    ]),
+  );
+  for (const candidatePath of candidates) {
+    if (options.workspaceFileSet.has(candidatePath)) {
+      return candidatePath;
+    }
+  }
+  return null;
 }
 
 async function generateTextWithMetrics(options: {
@@ -369,14 +732,12 @@ async function generateTextWithMetrics(options: {
     progress,
   });
   const elapsedMs = Date.now() - startedAt;
-  const resolvedModel = modelVersion ?? options.modelId;
-  const costUsd = usageTokens
-    ? estimateCallCostUsd({
-        modelId: resolvedModel,
-        tokens: usageTokens,
-        responseImages: 0,
-      })
-    : 0;
+  const usageForCost: LlmUsageTokenUpdate = {};
+  const costUsd = estimateCallCostUsd({
+    modelId: options.modelId,
+    tokens: usageForCost,
+    responseImages: 0,
+  });
 
   return {
     text,
@@ -421,11 +782,11 @@ async function runJudge(options: {
     {
       type: "text",
       text: [
-        "Validate transcription fidelity and crop quality for Hamilton 2017 H1-H3.",
+        "Validate transcription fidelity and diagram crop quality for Hamilton 2017 H1-H3.",
         attachPdf
           ? "Use attached PDF + source page images as ground truth."
           : "Use attached source page images as ground truth.",
-        "Check that extracted diagrams do not contain unrelated surrounding text where avoidable.",
+        "Use attached extracted diagram crops to check whether crops are tight and readable.",
         'Return JSON only: {"verdict":"pass|fail","summary":"string","issues":["string"]}',
       ].join("\n"),
     },
@@ -467,25 +828,36 @@ async function runJudge(options: {
   };
 }
 
-async function buildPathConfig(sourcePdfPath: string): Promise<AgentPathConfig> {
-  const runId = new Date().toISOString().replace(/[:.]/gu, "-");
-  const runRootDir = path.join(OUTPUT_ROOT_DIR, runId);
+async function buildPathConfig(options: {
+  sourcePdfPath: string;
+  modelId: string;
+}): Promise<AgentPathConfig> {
+  const modelSlug = toModelSlug(options.modelId);
+  const runId = `${toRunTimestampSlug()}-${randomUUID().slice(0, 8)}`;
+  const runRootDir = path.join(OUTPUT_ROOT_DIR, modelSlug, runId);
   const workspaceDir = path.join(runRootDir, "workspace");
-  const taskPath = path.join(workspaceDir, "task.md");
+  const taskPath = path.join(workspaceDir, "TASK.md");
   const sourceDir = path.join(workspaceDir, "source");
   const sourcePdfTargetPath = path.join(sourceDir, "hamilton-2017-q.pdf");
   const outputDir = path.join(workspaceDir, "output");
   const outputMarkdownPath = path.join(outputDir, "transcription.md");
   const outputManifestPath = path.join(outputDir, "diagram-manifest.json");
   const outputNotesPath = path.join(outputDir, "agent-notes.md");
+  const outputReferenceTextPath = path.join(outputDir, "reference", "pdf-text.md");
   const agentLogPath = path.join(runRootDir, "agent.log");
+  const agentMainLogPath = path.join(runRootDir, "agent_main.log");
   const eventLogPath = path.join(runRootDir, "agent-log.jsonl");
   const summaryJsonPath = path.join(runRootDir, "summary.json");
 
+  await rm(runRootDir, { recursive: true, force: true });
   await mkdir(sourceDir, { recursive: true });
   await mkdir(outputDir, { recursive: true });
-  await copyFile(sourcePdfPath, sourcePdfTargetPath);
-  await writeFile(taskPath, `${createAgentTaskDescription()}\n`, "utf8");
+  await copyFile(options.sourcePdfPath, sourcePdfTargetPath);
+  await writeFile(
+    taskPath,
+    `${createAgentTaskDescription()}\n`,
+    "utf8",
+  );
 
   return {
     runRootDir,
@@ -497,7 +869,9 @@ async function buildPathConfig(sourcePdfPath: string): Promise<AgentPathConfig> 
     outputMarkdownPath,
     outputManifestPath,
     outputNotesPath,
+    outputReferenceTextPath,
     agentLogPath,
+    agentMainLogPath,
     eventLogPath,
     summaryJsonPath,
   };
@@ -508,45 +882,20 @@ function createAgentTaskDescription(): string {
     "# Task",
     "Transcribe Hamilton Olympiad 2017 problems H1, H2, H3 with diagrams.",
     "",
-    "## Constraints",
-    "- You must convert the PDF into page images first using `pdf_to_images` on `source/hamilton-2017-q.pdf`.",
-    "- Do NOT call `read_file` on `source/hamilton-2017-q.pdf` in any mode (`text`, `auto`, or `base64`).",
-    "- The benchmark expects extraction/transcription from rendered page images only.",
-    "- `read_file` is text-only. Use `view_image` for every PNG/JPEG image check.",
-    "- After rendering, open each page image file with `view_image` to inspect content.",
-    "- You must use `crop_image` with `bbox1000` integer coordinates to extract diagrams for H1/H2/H3.",
-    "- Every `crop_image` call for diagrams must include `bbox1000`; do not omit bbox fields.",
-    "- Do not use `fullImage: true` for diagram crops.",
-    "- After every crop, call `view_image` for the crop image to inspect quality.",
-    "- Keep improving crops until they are tightly centered on the diagram and avoid unrelated text/graphics when possible.",
-    "- If perfect crop is impossible, state that explicitly in notes.",
+    "## Workflow Skill",
+    "Follow this workflow text exactly:",
     "",
-    "## Required outputs",
-    "1) `output/transcription.md` with sections `## H1`, `## H2`, `## H3` and LaTeX math.",
-    "2) `output/diagram-manifest.json` with:",
-    "```json",
-    "{",
-    '  "diagrams": [',
-    "    {",
-    '      "problemId": "H1|H2|H3",',
-    '      "page": 1,',
-    '      "sourceImagePath": "output/source-pages/source-page-01.png",',
-    '      "cropPath": "output/diagrams/h1.png",',
-    '      "bbox1000": { "left": 0, "top": 0, "right": 1000, "bottom": 1000 },',
-    '      "notes": "optional"',
-    "    }",
-    "  ]",
-    "}",
-    "```",
-    "3) `output/agent-notes.md` summarizing crop-correction decisions.",
+    "~~~markdown",
+    PDF_TRANSCRIPTION_SKILL_TEXT,
+    "~~~",
     "",
-    "When complete, call `done` with a concise summary including total diagrams extracted and correction count.",
+    "When complete, call 'done' with a concise summary including diagrams extracted and any crop failures.",
   ].join("\n");
 }
 
 function createAgentPrompt(): string {
   return [
-    "Read `task.md` from the workspace root.",
+    "Read 'TASK.md' from the workspace root.",
     "Follow it exactly.",
   ].join("\n");
 }
@@ -573,12 +922,19 @@ function addUsageTotals(target: UsageTotals, next: LlmUsageTokenUpdate): void {
   target.toolUsePromptTokens += next.toolUsePromptTokens ?? 0;
 }
 
-async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchmarkResult> {
-  const paths = await buildPathConfig(sourcePdfPath);
+async function runAgenticBenchmark(options: {
+  sourcePdfPath: string;
+  modelId: LlmTextModelId;
+  useSubagents: boolean;
+  useReferenceText: boolean;
+}): Promise<AgenticBenchmarkResult> {
+  const paths = await buildPathConfig({
+    sourcePdfPath: options.sourcePdfPath,
+    modelId: options.modelId,
+  });
   const logLines: string[] = [];
   const agentLogLines: string[] = [];
   const eventLogRecords: Array<Record<string, unknown>> = [];
-  const toolCallTrace: ToolCallTrace[] = [];
   const toolCallsByName: Record<string, number> = {};
   const usageTotals = emptyUsageTotals();
   let usageCostUsd = 0;
@@ -595,13 +951,134 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   ] as const;
   let completedStages = 0;
   let failedToWriteAgentLog = false;
+  const failedSplitLogPaths = new Set<string>();
+  const bufferedSubagentLogLinesByRunId = new Map<string, string[]>();
+  const subagentRunIdToAgentId = new Map<string, string>();
+  const pendingSubagentRunIds: string[] = [];
+  const pendingSpawnedAgentIds: string[] = [];
+  const splitLogPathsCreated = new Set<string>();
 
   await writeFile(paths.agentLogPath, "", "utf8");
+  if (options.useSubagents) {
+    await writeFile(paths.agentMainLogPath, "", "utf8");
+  }
 
   const stagePercent = (): string => {
     const total = stageOrder.length;
     const value = Math.round((completedStages / total) * 100);
     return value.toString().padStart(2, "0");
+  };
+
+  const buildAgentPrefix = (actor: string): string =>
+    `[spark-agent:pdf-bench/${sanitiseActorLabel(actor)}]`;
+
+  const resolveSplitLogPath = (actor: string): string | null => {
+    if (!options.useSubagents) {
+      return null;
+    }
+    if (actor === "main") {
+      return paths.agentMainLogPath;
+    }
+    if (actor.startsWith("agent:")) {
+      const rawAgentId = actor.slice("agent:".length).trim();
+      if (rawAgentId.length === 0) {
+        return null;
+      }
+      return path.join(paths.runRootDir, `agent_${sanitiseActorLabel(rawAgentId)}.log`);
+    }
+    return null;
+  };
+
+  const appendSplitLogLine = (actor: string, timestampedLine: string): void => {
+    const splitLogPath = resolveSplitLogPath(actor);
+    if (!splitLogPath) {
+      return;
+    }
+    if (failedSplitLogPaths.has(splitLogPath)) {
+      return;
+    }
+    try {
+      appendFileSync(splitLogPath, `${timestampedLine}\n`, "utf8");
+      splitLogPathsCreated.add(splitLogPath);
+    } catch (error: unknown) {
+      failedSplitLogPaths.add(splitLogPath);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[pdf-bench] failed to write ${path.basename(splitLogPath)}: ${message}`);
+    }
+  };
+
+  const flushBufferedSubagentLines = (runId: string, agentId: string): void => {
+    const buffered = bufferedSubagentLogLinesByRunId.get(runId);
+    if (!buffered || buffered.length === 0) {
+      return;
+    }
+    const actor = `agent:${agentId}`;
+    for (const line of buffered) {
+      appendSplitLogLine(actor, line);
+    }
+    bufferedSubagentLogLinesByRunId.delete(runId);
+  };
+
+  const tryPairPendingSubagentIds = (): void => {
+    while (pendingSubagentRunIds.length > 0 && pendingSpawnedAgentIds.length > 0) {
+      const runId = pendingSubagentRunIds.shift();
+      const agentId = pendingSpawnedAgentIds.shift();
+      if (!runId || !agentId) {
+        continue;
+      }
+      const safeAgentId = sanitiseActorLabel(agentId);
+      subagentRunIdToAgentId.set(runId, safeAgentId);
+      flushBufferedSubagentLines(runId, safeAgentId);
+      const mappingLine = `subagent_mapping: runId=${runId} agentId=${safeAgentId}`;
+      const mappedLine = `${buildAgentPrefix("main")} ${mappingLine}`;
+      console.log(mappedLine);
+      const timestamped = `${new Date().toISOString()} ${mappedLine}`;
+      agentLogLines.push(timestamped);
+      if (!failedToWriteAgentLog) {
+        try {
+          appendFileSync(paths.agentLogPath, `${timestamped}\n`, "utf8");
+        } catch (error: unknown) {
+          failedToWriteAgentLog = true;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[pdf-bench] failed to write agent.log: ${message}`);
+        }
+      }
+      appendSplitLogLine("main", timestamped);
+    }
+  };
+
+  const registerPendingSubagentRun = (runId: string): void => {
+    if (subagentRunIdToAgentId.has(runId)) {
+      return;
+    }
+    if (pendingSubagentRunIds.includes(runId)) {
+      return;
+    }
+    pendingSubagentRunIds.push(runId);
+    tryPairPendingSubagentIds();
+  };
+
+  const registerSpawnedAgentId = (agentId: string): void => {
+    const safeAgentId = sanitiseActorLabel(agentId);
+    pendingSpawnedAgentIds.push(safeAgentId);
+    tryPairPendingSubagentIds();
+  };
+
+  const resolveTelemetryActor = (runId: string): string => {
+    const agentId = subagentRunIdToAgentId.get(runId);
+    if (agentId) {
+      return `agent:${agentId}`;
+    }
+    return `subagent-run:${shortId(runId)}`;
+  };
+
+  const trackUnmappedTelemetryLine = (runId: string, timestampedLine: string): void => {
+    if (subagentRunIdToAgentId.has(runId)) {
+      return;
+    }
+    const existing = bufferedSubagentLogLinesByRunId.get(runId) ?? [];
+    existing.push(timestampedLine);
+    bufferedSubagentLogLinesByRunId.set(runId, existing);
   };
 
   const logStage = (kind: "start" | "done", stage: (typeof stageOrder)[number]): void => {
@@ -610,7 +1087,7 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
     }
     const line = `[${stagePercent()}%] [pdf-bench] stage:${kind} ${stage}`;
     console.log(line);
-    const agentLine = `[spark-agent:pdf-bench] stage:${kind} ${stage}`;
+    const agentLine = `${buildAgentPrefix("main")} stage:${kind} ${stage}`;
     console.log(agentLine);
     const timestamped = `${new Date().toISOString()} ${agentLine}`;
     agentLogLines.push(timestamped);
@@ -623,10 +1100,11 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
         console.error(`[pdf-bench] failed to write agent.log: ${message}`);
       }
     }
+    appendSplitLogLine("main", timestamped);
   };
 
-  const logAgent = (line: string): void => {
-    const normalisedLine = `[spark-agent:pdf-bench] ${sanitizeLogText(line)}`;
+  const logAgent = (line: string, actor = "main"): string => {
+    const normalisedLine = `${buildAgentPrefix(actor)} ${sanitizeLogText(line)}`;
     console.log(normalisedLine);
     const timestamped = `${new Date().toISOString()} ${normalisedLine}`;
     agentLogLines.push(timestamped);
@@ -639,31 +1117,38 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
         console.error(`[pdf-bench] failed to write agent.log: ${message}`);
       }
     }
+    appendSplitLogLine(actor, timestamped);
+    return timestamped;
+  };
+
+  const logSubagentTelemetry = (runId: string, line: string): void => {
+    const actor = resolveTelemetryActor(runId);
+    const timestamped = logAgent(line, actor);
+    trackUnmappedTelemetryLine(runId, timestamped);
   };
 
   try {
     logAgent(
-      `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} taskPath=${toRepoRelativePath(paths.taskPath)} model=${MODEL_ID}`,
+      `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} taskPath=${toRepoRelativePath(paths.taskPath)} model=${options.modelId} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
     );
     logStage("start", "prepare-workspace");
     const workspace = {
-      scheduleUpdate: (_inputPath: string): void => {},
-      deleteFile: async (inputPath: string): Promise<void> => {
-        const resolved = path.resolve(paths.workspaceDir, inputPath);
-        await rm(resolved, { recursive: true, force: true });
+      scheduleUpdate: (inputPath: string): void => {
+        void inputPath;
       },
-      moveFile: async (from: string, to: string): Promise<void> => {
-        const source = path.resolve(paths.workspaceDir, from);
-        const target = path.resolve(paths.workspaceDir, to);
-        await mkdir(path.dirname(target), { recursive: true });
-        await copyFile(source, target);
-        await rm(source, { force: true });
+      deleteFile: async (): Promise<void> => {
+        // Filesystem deletion already happened inside buildSparkAgentTools.
+        // This benchmark workspace does not mirror state to an external store.
+      },
+      moveFile: async (): Promise<void> => {
+        // Filesystem move already happened inside buildSparkAgentTools.
+        // This benchmark workspace does not mirror state to an external store.
       },
     };
     logStage("done", "prepare-workspace");
 
     logStage("start", "resolve-tools");
-    const allTools = buildSparkAgentToolsForTest({
+    const allTools = buildSparkAgentTools({
       workspace,
       rootDir: paths.workspaceDir,
       userId: "benchmark-runner",
@@ -682,80 +1167,86 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
       ...allTools,
       done: doneTool,
     };
-    const selectedTools: LlmToolSet = {};
+    const selectedToolsBase: LlmToolSet = {};
     for (const toolName of REQUIRED_TOOL_NAMES) {
       const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
       if (!candidate) {
         throw new Error(`Required tool missing: ${toolName}`);
       }
-      (selectedTools as Record<string, unknown>)[toolName] = candidate;
+      (selectedToolsBase as Record<string, unknown>)[toolName] = candidate;
     }
-
-    const cropToolCandidate = (selectedTools as Record<string, unknown>).crop_image;
-    if (
-      !cropToolCandidate ||
-      typeof cropToolCandidate !== "object" ||
-      !("execute" in cropToolCandidate) ||
-      typeof (cropToolCandidate as { execute?: unknown }).execute !== "function"
-    ) {
-      throw new Error("Required crop_image tool is not executable.");
-    }
-    const strictCropImageTool = tool({
-      description: [
-        "Crop a PNG image using required bbox1000 integer coordinates.",
-        "Always provide bbox1000; do not call this tool without bbox values.",
-      ].join("\n"),
-      inputSchema: z
-        .object({
-          sourcePath: z.string().trim().min(1),
-          outputPath: z.string().trim().min(1),
-          bbox1000: z.object({
-            left: z.number().int().min(0).max(1000),
-            top: z.number().int().min(0).max(1000),
-            right: z.number().int().min(0).max(1000),
-            bottom: z.number().int().min(0).max(1000),
-          }),
-        })
-        .strict(),
-      execute: async ({ sourcePath, outputPath, bbox1000 }) => {
-        const delegate = cropToolCandidate as {
-          execute: (input: {
-            sourcePath: string;
-            outputPath: string;
-            bbox1000: {
-              left: number;
-              top: number;
-              right: number;
-              bottom: number;
-            };
-          }) => Promise<unknown> | unknown;
-        };
-        return await delegate.execute({
-          sourcePath,
-          outputPath,
-          bbox1000,
-        });
+    const selectedTools = applyPdfTranscriptionSkillTools({
+      tools: selectedToolsBase,
+      rootDir: paths.workspaceDir,
+      includeReferenceTextTool: options.useReferenceText,
+      targetProblemIds: TARGET_PROBLEM_IDS,
+      onFileWritten: (outputPath) => {
+        workspace.scheduleUpdate(outputPath);
       },
     });
-    (selectedTools as Record<string, unknown>).crop_image = strictCropImageTool;
 
     logAgent(
       `exposed tools: ${Object.keys(selectedTools).sort((a, b) => a.localeCompare(b)).join(", ")}`,
     );
     logStage("done", "resolve-tools");
 
-    const steering = createToolLoopSteeringChannel();
-    const startedAt = Date.now();
+  const steering = createAgentLoopSteeringChannel();
+  const startedAt = Date.now();
+  const onTelemetryEvent = (telemetryEvent: AgentTelemetryEvent): void => {
+    if (telemetryEvent.depth <= 0) {
+      return;
+    }
+    registerPendingSubagentRun(telemetryEvent.runId);
+    const modelName =
+      typeof telemetryEvent.model === "string" ? telemetryEvent.model : String(telemetryEvent.model);
+
+    if (telemetryEvent.type === "agent.run.started") {
+      logSubagentTelemetry(
+        telemetryEvent.runId,
+        `subagent_started: runId=${telemetryEvent.runId} parentRunId=${telemetryEvent.parentRunId ?? "n/a"} depth=${telemetryEvent.depth.toString()} model=${modelName}`,
+      );
+      return;
+    }
+
+    if (telemetryEvent.type === "agent.run.completed") {
+      logSubagentTelemetry(
+        telemetryEvent.runId,
+        `subagent_done: runId=${telemetryEvent.runId} success=${telemetryEvent.success ? "true" : "false"} duration=${formatMs(telemetryEvent.durationMs)} steps=${telemetryEvent.stepCount?.toString() ?? "n/a"} toolCalls=${telemetryEvent.toolCallCount?.toString() ?? "n/a"} cost=${formatUsd(telemetryEvent.totalCostUsd ?? 0)}${telemetryEvent.error ? ` error=${toSingleLine(telemetryEvent.error)}` : ""}`,
+      );
+      return;
+    }
+
+    const streamEvent = telemetryEvent.event;
+    if (streamEvent.type !== "tool_call") {
+      return;
+    }
+
+    const inputSnippet = serialiseSnippet(streamEvent.input);
+    if (streamEvent.phase === "started") {
+      logSubagentTelemetry(
+        telemetryEvent.runId,
+        `trace_tool_call: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} input=${inputSnippet}`,
+      );
+      return;
+    }
+
+    const outputSnippet = serialiseSnippet(streamEvent.output);
+    const status = typeof streamEvent.error === "string" ? `error=${streamEvent.error}` : "ok";
+    logSubagentTelemetry(
+      telemetryEvent.runId,
+      `trace_tool_result: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} durationMs=${typeof streamEvent.durationMs === "number" ? streamEvent.durationMs.toString() : "n/a"} ${status} output=${outputSnippet}`,
+    );
+  };
 
   const onEvent = (event: LlmStreamEvent): void => {
     const nowIso = new Date().toISOString();
     if (event.type === "delta") {
       if (event.channel === "thought") {
         thoughtChars += event.text.length;
-        logAgent(`thought_delta: ${toSingleLine(event.text)}`);
+        logAgent(`thought_delta: ${toSingleLine(event.text)}`, "main");
       } else {
         responseChars += event.text.length;
-        logAgent(`response_delta: ${toSingleLine(event.text)}`);
+        logAgent(`response_delta: ${toSingleLine(event.text)}`, "main");
       }
       eventLogRecords.push({
         ts: nowIso,
@@ -769,8 +1260,11 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
     if (event.type === "usage") {
       usageCostUsd += event.costUsd;
       addUsageTotals(usageTotals, event.usage);
+      const modelVersionLabel =
+        typeof event.modelVersion === "string" ? event.modelVersion : "n/a";
       logAgent(
-        `usage: modelVersion=${event.modelVersion ?? "n/a"} cost=${formatUsd(event.costUsd)} tokens=${serialiseSnippet(event.usage, 300)}`,
+        `usage: modelVersion=${modelVersionLabel} cost=${formatUsd(event.costUsd)} tokens=${serialiseSnippet(event.usage, 300)}`,
+        "main",
       );
       eventLogRecords.push({
         ts: nowIso,
@@ -783,7 +1277,7 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
     }
 
     if (event.type === "model") {
-      logAgent(`model: ${event.modelVersion}`);
+      logAgent(`model: ${event.modelVersion}`, "main");
       eventLogRecords.push({
         ts: nowIso,
         type: event.type,
@@ -793,42 +1287,35 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
     }
 
     if (event.type !== "tool_call") {
-      logAgent(`event: ${event.type}`);
+      logAgent(`event: ${event.type}`, "main");
       eventLogRecords.push({ ts: nowIso, type: event.type });
       return;
     }
 
+    const actor = resolveToolEventActor(event);
     const inputSnippet = serialiseSnippet(event.input);
     const outputSnippet =
       event.phase === "completed" ? serialiseSnippet(event.output) : undefined;
     if (event.phase === "started") {
       logAgent(
         `trace_tool_call: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} input=${inputSnippet}`,
+        actor,
       );
     } else {
       const status = typeof event.error === "string" ? `error=${event.error}` : "ok";
       logAgent(
         `trace_tool_result: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} durationMs=${typeof event.durationMs === "number" ? event.durationMs.toString() : "n/a"} ${status} output=${outputSnippet ?? "<none>"}`,
+        actor,
       );
     }
-    const trace: ToolCallTrace = {
-      ts: nowIso,
-      turn: event.turn,
-      toolIndex: event.toolIndex,
-      toolName: event.toolName,
-      phase: event.phase,
-      inputSnippet,
-      ...(outputSnippet ? { outputSnippet } : {}),
-      ...(event.phase === "completed" && typeof event.durationMs === "number"
-        ? { durationMs: event.durationMs }
-        : {}),
-      ...(event.phase === "completed" && typeof event.error === "string"
-        ? { error: event.error }
-        : {}),
-    };
-    toolCallTrace.push(trace);
     if (event.phase === "completed") {
       toolCallsByName[event.toolName] = (toolCallsByName[event.toolName] ?? 0) + 1;
+      if (event.toolName === "spawn_agent") {
+        const agentId = extractAgentIdFromSpawnOutput(event.output);
+        if (agentId) {
+          registerSpawnedAgentId(agentId);
+        }
+      }
       if (event.toolName === "done") {
         const output =
           event.output && typeof event.output === "object" && !Array.isArray(event.output)
@@ -859,20 +1346,29 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   };
 
   logStage("start", "agent-loop");
-  const toolLoopResult = await runToolLoop({
-    modelId: MODEL_ID,
+  if (!isLlmTextModelId(options.modelId)) {
+    throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
+  }
+  const toolLoopResult = await runAgentLoop({
+    model: options.modelId,
+    input: createAgentPrompt(),
     maxSteps: MAX_STEPS,
     openAiReasoningEffort: "high",
     tools: selectedTools,
+    subagents: options.useSubagents ? { promptPattern: "codex" } : false,
+    telemetry: {
+      includeLlmStreamEvents: true,
+      sink: {
+        emit: onTelemetryEvent,
+      },
+    },
     steering,
     onEvent,
-    contents: [
-      {
-        role: "user",
-        parts: [{ type: "text", text: createAgentPrompt() }],
-      },
-    ],
   });
+  usageCostUsd =
+    typeof toolLoopResult.totalCostUsd === "number" && Number.isFinite(toolLoopResult.totalCostUsd)
+      ? toolLoopResult.totalCostUsd
+      : usageCostUsd;
   logStage("done", "agent-loop");
 
   const agentLatencyMs = Date.now() - startedAt;
@@ -881,17 +1377,56 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   );
   logStage("start", "collect-agent-outputs");
   const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
-  const sourcePageImagePaths = workspaceFiles.filter((item) =>
-    /source-page-\d+\.png$/u.test(path.basename(item)),
-  );
-
+  const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
+  const sourcePageImagePaths = workspaceFiles.filter((item) => {
+    if (!item.startsWith(outputDirPrefix)) {
+      return false;
+    }
+    if (item.includes(`${path.sep}diagrams${path.sep}`)) {
+      return false;
+    }
+    if (path.extname(item).toLowerCase() !== ".png") {
+      return false;
+    }
+    return /^page-\d{4}\.png$/u.test(path.basename(item));
+  });
   const manifestText = await readFile(paths.outputManifestPath, "utf8");
-  const manifest = AgentDiagramManifestSchema.parse(JSON.parse(manifestText));
-  const diagramImagePaths = manifest.diagrams
-    .map((item) => path.resolve(paths.workspaceDir, item.cropPath))
-    .filter((item) => path.extname(item).toLowerCase() === ".png");
+  const manifest = parseAgentDiagramManifest(JSON.parse(manifestText));
+  const notesText = await readFile(paths.outputNotesPath, "utf8");
+  const referenceText = options.useReferenceText
+    ? await readFile(paths.outputReferenceTextPath, "utf8")
+    : null;
+  const workspaceFileSet = new Set(workspaceFiles.map((item) => path.resolve(item)));
+  const manifestDir = path.dirname(paths.outputManifestPath);
+  const diagramImagePaths = Array.from(
+    new Set(
+      manifest.diagrams
+        .map((item) => {
+          if (typeof item.cropPath !== "string") {
+            return null;
+          }
+          return resolveManifestImagePath({
+            workspaceDir: paths.workspaceDir,
+            manifestDir,
+            rawPath: item.cropPath,
+            workspaceFileSet,
+          });
+        })
+        .filter((item): item is string => item !== null)
+        .filter((item) => path.extname(item).toLowerCase() === ".png"),
+    ),
+  );
   logAgent(
-    `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()} sourcePages=${sourcePageImagePaths.length.toString()} diagrams=${diagramImagePaths.length.toString()}`,
+    [
+      `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()}`,
+      `sourcePages=${sourcePageImagePaths.length.toString()}`,
+      `diagrams=${diagramImagePaths.length.toString()}`,
+      `manifestEntries=${manifest.diagrams.length.toString()}`,
+      `notesChars=${notesText.length.toString()}`,
+      `referenceChars=${
+        referenceText === null ? "disabled" : referenceText.length.toString()
+      }`,
+    ].join(" "),
   );
   logStage("done", "collect-agent-outputs");
 
@@ -929,7 +1464,9 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   const totalLatencyMs = agentLatencyMs + judgingLatencyMs;
   const totalCostUsd = usageCostUsd + judgingCostUsd;
 
-  logLines.push(`model=${MODEL_ID} maxSteps=${MAX_STEPS.toString()}`);
+  logLines.push(
+    `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
+  );
   logLines.push(`agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(usageCostUsd)}`);
   logLines.push(
     `judging_latency=${formatMs(judgingLatencyMs)} judging_cost=${formatUsd(judgingCostUsd)}`,
@@ -937,6 +1474,16 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   logLines.push(`tool_calls=${Object.values(toolCallsByName).reduce((sum, n) => sum + n, 0).toString()}`);
   logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
   logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
+  if (options.useSubagents) {
+    logLines.push(`agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`);
+    const subagentLogs = Array.from(splitLogPathsCreated)
+      .filter((item) => path.basename(item) !== path.basename(paths.agentMainLogPath))
+      .map((item) => toRepoRelativePath(item))
+      .sort((a, b) => a.localeCompare(b));
+    logLines.push(
+      `agent_subagent_logs=${subagentLogs.length > 0 ? subagentLogs.join(",") : "none"}`,
+    );
+  }
   logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
 
   logStage("start", "write-artifacts");
@@ -949,7 +1496,7 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
 
   const result: AgenticBenchmarkResult = {
     generatedAt: new Date().toISOString(),
-    modelId: MODEL_ID,
+    modelId: options.modelId,
     status: overallPass ? "pass" : "fail",
     reason,
     sourcePdfPath: toRepoRelativePath(paths.sourcePdfPath),
@@ -959,6 +1506,9 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
     transcriptionPath: toRepoRelativePath(paths.outputMarkdownPath),
     diagramManifestPath: toRepoRelativePath(paths.outputManifestPath),
     notesPath: toRepoRelativePath(paths.outputNotesPath),
+    ...(options.useReferenceText
+      ? { referenceTextPath: toRepoRelativePath(paths.outputReferenceTextPath) }
+      : {}),
     agentLogPath: toRepoRelativePath(paths.agentLogPath),
     eventLogPath: toRepoRelativePath(paths.eventLogPath),
     summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
@@ -989,19 +1539,6 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
 
   await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
   await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
-
-  const toolTraceLines = toolCallTrace
-    .map((entry) => {
-      const duration = typeof entry.durationMs === "number" ? `${entry.durationMs.toString()}ms` : "n/a";
-      const status = entry.error ? `error=${entry.error}` : "ok";
-      return `- [${entry.ts}] turn=${entry.turn.toString()} idx=${entry.toolIndex.toString()} tool=${entry.toolName} phase=${entry.phase} duration=${duration} ${status}`;
-    })
-    .join("\n");
-  await writeFile(
-    path.join(paths.runRootDir, "tool-trace.md"),
-    `${toolTraceLines}\n`,
-    "utf8",
-  );
   logStage("done", "write-artifacts");
   logAgent(
     `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} runDir=${result.runDir}`,
@@ -1015,7 +1552,7 @@ async function runAgenticBenchmark(sourcePdfPath: string): Promise<AgenticBenchm
   }
 }
 
-async function renderResultsMarkdown(result: AgenticBenchmarkResult): Promise<string> {
+async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Promise<string> {
   const lines: string[] = [];
   lines.push("# PDF Transcription Agentic Benchmark Results");
   lines.push("");
@@ -1032,7 +1569,10 @@ async function renderResultsMarkdown(result: AgenticBenchmarkResult): Promise<st
   lines.push(`- Task file: ${result.taskPath}`);
   lines.push(`- Transcription: ${result.transcriptionPath}`);
   lines.push(`- Diagram manifest: ${result.diagramManifestPath}`);
-  lines.push(`- Notes: ${result.notesPath}`);
+  lines.push(`- Agent notes: ${result.notesPath}`);
+  if (typeof result.referenceTextPath === "string") {
+    lines.push(`- PDF reference text: ${result.referenceTextPath}`);
+  }
   lines.push(`- Agent log: ${result.agentLogPath}`);
   lines.push(`- Agent event log: ${result.eventLogPath}`);
   lines.push(`- Summary JSON: ${result.summaryJsonPath}`);
@@ -1093,7 +1633,99 @@ async function renderResultsMarkdown(result: AgenticBenchmarkResult): Promise<st
     lines.push("```");
   }
   lines.push("");
+  lines.push("## Crop Notes");
+  lines.push("");
+  const notesMarkdown = await readFile(fromRepoRelativePath(result.notesPath), "utf8").catch(() => "");
+  if (notesMarkdown.trim().length === 0) {
+    lines.push("_Missing crop notes output._");
+  } else {
+    lines.push("```markdown");
+    lines.push(notesMarkdown.trimEnd());
+    lines.push("```");
+  }
+  lines.push("");
+  if (typeof result.referenceTextPath === "string") {
+    lines.push("## PDF Reference Text");
+    lines.push("");
+    const referenceText = await readFile(
+      fromRepoRelativePath(result.referenceTextPath),
+      "utf8",
+    ).catch(() => "");
+    if (referenceText.trim().length === 0) {
+      lines.push("_Missing reference text output._");
+    } else {
+      lines.push("```markdown");
+      lines.push(referenceText.trimEnd());
+      lines.push("```");
+    }
+    lines.push("");
+  }
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+async function renderResultsMarkdown(
+  outcomes: readonly AgenticBenchmarkRunOutcome[],
+): Promise<string> {
+  const ordered = [...outcomes].sort((a, b) => a.modelId.localeCompare(b.modelId));
+  if (ordered.length === 1 && ordered[0]?.result) {
+    return await renderSingleResultsMarkdown(ordered[0].result);
+  }
+
+  const generatedAt = new Date().toISOString();
+  const lines: string[] = [];
+  lines.push("# PDF Transcription Agentic Benchmark Results");
+  lines.push("");
+  lines.push(`Generated at: ${generatedAt}`);
+  lines.push(`Runs: ${ordered.length.toString()}`);
+  lines.push("");
+  lines.push("## Summary");
+  lines.push("");
+  for (const outcome of ordered) {
+    if (outcome.result) {
+      lines.push(
+        `- ${outcome.modelId}: subagents=${outcome.useSubagents ? "ENABLED" : "DISABLED"} referenceText=${outcome.useReferenceText ? "ENABLED" : "DISABLED"} status=${outcome.result.status.toUpperCase()} latency=${formatMs(outcome.result.total.latencyMs)} cost=${formatUsd(outcome.result.total.costUsd)} runDir=${outcome.result.runDir}`,
+      );
+    } else {
+      lines.push(
+        `- ${outcome.modelId}: subagents=${outcome.useSubagents ? "ENABLED" : "DISABLED"} referenceText=${outcome.useReferenceText ? "ENABLED" : "DISABLED"} status=ERROR latency=n/a cost=n/a runDir=${toRepoRelativePath(path.join(OUTPUT_ROOT_DIR, toModelSlug(outcome.modelId)))} error=${outcome.error ?? "unknown error"}`,
+      );
+    }
+  }
+  lines.push("");
+
+  for (const outcome of ordered) {
+    lines.push(`## Model: ${outcome.modelId}`);
+    lines.push("");
+    if (outcome.result) {
+      const single = await renderSingleResultsMarkdown(outcome.result);
+      const singleLines = single.trimEnd().split("\n");
+      const bodyStart = singleLines.findIndex((line) => line.startsWith("## Paths"));
+      if (bodyStart >= 0) {
+        lines.push(...singleLines.slice(bodyStart));
+      } else {
+        lines.push(...singleLines);
+      }
+    } else {
+      lines.push(`- Subagents: ${outcome.useSubagents ? "ENABLED" : "DISABLED"}`);
+      lines.push(`- Reference text: ${outcome.useReferenceText ? "ENABLED" : "DISABLED"}`);
+      lines.push(`- Status: ERROR`);
+      lines.push(`- Error: ${outcome.error ?? "unknown error"}`);
+      lines.push(
+        `- Run dir: ${toRepoRelativePath(path.join(OUTPUT_ROOT_DIR, toModelSlug(outcome.modelId)))}`,
+      );
+    }
+    lines.push("");
+  }
+
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function resolveResultsMarkdownPath(outcomes: readonly AgenticBenchmarkRunOutcome[]): string {
+  if (outcomes.length === 1 && outcomes[0]?.result) {
+    const runDir = fromRepoRelativePath(outcomes[0].result.runDir);
+    return path.join(runDir, "RESULTS.md");
+  }
+  return path.join(OUTPUT_ROOT_DIR, `RESULTS-${toRunTimestampSlug()}.md`);
 }
 
 async function main(): Promise<void> {
@@ -1102,9 +1734,45 @@ async function main(): Promise<void> {
 
   await mkdir(OUTPUT_ROOT_DIR, { recursive: true });
 
-  const result = await runAgenticBenchmark(cli.sourcePdfPath);
-  const markdown = await renderResultsMarkdown(result);
-  await writeFile(RESULTS_MARKDOWN_PATH, markdown, "utf8");
+  const outcomes = await Promise.all(
+    cli.modelIds.map(
+      async (modelId): Promise<AgenticBenchmarkRunOutcome> => {
+        try {
+          const result = await runAgenticBenchmark({
+            sourcePdfPath: cli.sourcePdfPath,
+            modelId,
+            useSubagents: cli.useSubagents,
+            useReferenceText: cli.useReferenceText,
+          });
+          return {
+            modelId,
+            useSubagents: cli.useSubagents,
+            useReferenceText: cli.useReferenceText,
+            result,
+          };
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            modelId,
+            useSubagents: cli.useSubagents,
+            useReferenceText: cli.useReferenceText,
+            error: sanitizeLogText(message),
+          };
+        }
+      },
+    ),
+  );
+  const markdown = await renderResultsMarkdown(outcomes);
+  const resultsMarkdownPath = resolveResultsMarkdownPath(outcomes);
+  await writeFile(resultsMarkdownPath, markdown, "utf8");
+  console.log(`[pdf-bench] wrote ${toRepoRelativePath(resultsMarkdownPath)}`);
+
+  const failedCount = outcomes.filter((outcome) => !outcome.result).length;
+  if (failedCount > 0) {
+    throw new Error(
+      `Benchmark finished with ${failedCount.toString()} failed model run(s). See ${toRepoRelativePath(resultsMarkdownPath)}.`,
+    );
+  }
 }
 
 void main().catch((error: unknown) => {
