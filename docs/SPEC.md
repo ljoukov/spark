@@ -271,7 +271,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
-  - Storage-link JSON files (`{ "type": "storage_link", "storagePath": "...", ... }`) are treated as first-class runner inputs: the runner scans workspace JSON files, resolves these links, and injects resolved files into the initial multimodal model context (subject to attachment count/size limits and user-upload path checks).
+  - Storage-link JSON files (`{ "type": "storage_link", "storagePath": "...", ... }`) are treated as first-class runner inputs. The runner resolves links from workspace docs, materializes linked files into local workspace paths (for example `grader/uploads/<filename>`), and injects resolved files into the initial multimodal model context (subject to attachment count/size limits and user-upload path checks).
 - Agent sub-model LLM debug snapshots (per `generate_text` / `generate_json` tool call) are stored in the workspace as files:
   - `generate_text/turn{N}tool{M}/{prompt|request|response}.txt`
   - `generate_json/turn{N}tool{M}/{prompt|request|response}.txt`
@@ -290,8 +290,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, copies `grader/memory.md` from the user config, writes `grader/task.md`, and schedules `runAgent`.
   - Attachment selection is conversation-aware (not only the latest message): relevant prior user uploads in the same thread are reused for retries/follow-ups unless replaced.
   - Selected uploads are written as metadata in `request.json` and `grader/uploads/index.json`, and each upload also gets a storage-link file under `grader/uploads/links/{attachmentId}.json`.
+  - Link files are workspace metadata only; they are not written into the agent's local filesystem layer. Instead, linked uploads are materialized into local paths like `grader/uploads/<filename>` so tools such as `view_image` work directly on file paths.
   - The runner resolves these attachments (plus any `inputAttachments` metadata on the agent doc) and injects corresponding images/files into the run-agent model input as inline multimodal parts.
-  - The grader agent uses `web_search` to find official references, `read_pdf` (Gemini `gemini-flash-latest`) to transcribe official PDFs, `extract_pdf_diagrams` for diagram bounding-box manifests when needed, and `web_fetch` only for non-PDF pages; it writes `grader/output/run-summary.json` plus one markdown file per problem under `grader/output/problems/`.
+  - The grader agent uses `web_search` to find official references, `pdf_to_images` + `draw_grid_overlay` + `crop_image` + `trim_image` + `view_image` for PDF/image transcription workflows, `extract_pdf_diagrams` for diagram bounding-box manifests when needed, and `web_fetch` only for non-PDF pages; it writes `grader/output/run-summary.json` plus one markdown file per problem under `grader/output/problems/`.
+  - Image outputs generated during the run are uploaded to Firebase Storage under `spark/uploads/{uid}/{md5}` and a workspace storage-link JSON is written (adjacent `links/{md5}.json`) so retries and UI inspection can resolve the binary asset via link metadata.
   - On completion, the runner parses `grader/output/run-summary.json` and patches the grader run document with totals + per-problem summary metadata for `/spark/grader`.
 
 - Prompting and tool-use strategy:
@@ -378,7 +380,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
   - Failed runs show a Retry button in the run header; retrying creates a new agent run with the same prompt and retry-safe metadata, copies the prior workspace files into a new workspace, and starts a fresh task.
   - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up).
-  - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
+  - Workspace files (Markdown renders inline). Image files and image storage-link files are previewable in the modal, and `Raw` opens the underlying file/link target in a new tab.
   - A `Download zip` action that returns the full workspace contents (including LLM logs) plus a plain-text `agent.log` file for the run.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, coding problems, media steps).
 - `/logout` signs out and returns to `/`.

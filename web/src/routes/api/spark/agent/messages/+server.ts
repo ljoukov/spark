@@ -1,6 +1,6 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import { createTask, runToolLoop, tool } from '@spark/llm';
+import { createTask, PDF_TRANSCRIPTION_SKILL_TEXT, runToolLoop, tool } from '@spark/llm';
 import type { LlmContent, LlmContentPart, LlmTextDelta, LlmToolSet } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -854,12 +854,28 @@ function renderGraderTask(options: {
 	workspaceId: string;
 	olympiadLabel: string;
 }): string {
-	return graderTaskTemplate
+	const baseTask = graderTaskTemplate
 		.replaceAll('{{RUN_ID}}', options.runId)
 		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
 		.replaceAll('{{OLYMPIAD_LABEL}}', options.olympiadLabel)
-		.trim()
-		.concat('\n');
+		.trim();
+	const transcriptionSkillSection = [
+		'',
+		'## PDF transcription workflow (must follow)',
+		'Apply this workflow when transcribing:',
+		"- official paper PDFs (problem statements + diagrams),",
+		"- official solutions / mark-scheme PDFs,",
+		"- student-uploaded PDFs/images.",
+		'',
+		'~~~markdown',
+		PDF_TRANSCRIPTION_SKILL_TEXT,
+		'~~~',
+		'',
+		'Run-mode constraints for grader runs:',
+		"- Use main-agent execution only (no subagents).",
+		"- Keep reference-text extraction disabled; rely on page images and direct PDF reading tools.",
+	].join('\n');
+	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
 
 function buildGraderAgentPrompt(options: {
@@ -1717,21 +1733,21 @@ function buildSparkChatTools(options: {
 							content: memory.content.trimEnd() + '\n',
 							now
 						}),
-						writeWorkspaceTextFile({
-							serviceAccountJson,
-							userId,
-							workspaceId,
-							path: GRADER_UPLOADS_MANIFEST_PATH,
-							content: JSON.stringify(
-								{
-									attachments: runAttachments.map((attachment) => ({
-										...attachment,
-										linkPath: `grader/uploads/links/${attachment.id}.json`
-									}))
-								},
-								null,
-								2
-							),
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId,
+								path: GRADER_UPLOADS_MANIFEST_PATH,
+								content: JSON.stringify(
+									{
+										attachments: runAttachments.map((attachment) => ({
+											...attachment,
+											workspacePath: `grader/uploads/${(attachment.filename ?? attachment.id).replace(/[/\\]+/g, '-')}`
+										}))
+									},
+									null,
+									2
+								),
 							now
 						}),
 						...runAttachments.map((attachment) =>

@@ -20,6 +20,40 @@ function decodeFileId(value: string): string {
 	}
 }
 
+function isBinaryWorkspaceContentType(contentType: string | undefined): boolean {
+	if (!contentType) {
+		return false;
+	}
+	const normalized = contentType.trim().toLowerCase();
+	if (normalized.startsWith('image/')) {
+		return true;
+	}
+	if (normalized === 'application/pdf') {
+		return true;
+	}
+	return false;
+}
+
+function decodeWorkspaceFileContent(file: SparkAgentWorkspaceFile): Uint8Array {
+	const content = file.content ?? '';
+	if (!isBinaryWorkspaceContentType(file.contentType)) {
+		return encodeUtf8(content);
+	}
+	const match = content.match(/^data:[^;]+;base64,([A-Za-z0-9+/=\s]+)$/u);
+	if (!match) {
+		return encodeUtf8(content);
+	}
+	const encoded = (match[1] ?? '').replace(/\s+/gu, '');
+	if (encoded.length === 0) {
+		return encodeUtf8(content);
+	}
+	try {
+		return Uint8Array.from(Buffer.from(encoded, 'base64'));
+	} catch {
+		return encodeUtf8(content);
+	}
+}
+
 function parseLogTimestamp(key: string): { ms: number; seq: number } | null {
 	const match = /^t(\d{13})_(\d+)$/.exec(key);
 	if (!match) {
@@ -477,7 +511,7 @@ export async function buildSparkAgentDownloadZip(args: {
 		}
 		archiveEntries.push({
 			name: `workspace/${safePath}`,
-			data: encodeUtf8(file.content ?? '')
+			data: decodeWorkspaceFileContent(file)
 		});
 	}
 

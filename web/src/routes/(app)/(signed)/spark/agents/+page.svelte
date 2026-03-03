@@ -35,6 +35,16 @@
 		line: string;
 	};
 
+	type WorkspaceStorageLink = {
+		type: 'storage_link';
+		id: string;
+		storagePath: string;
+		contentType: string;
+		filename?: string | null;
+		sizeBytes?: number | null;
+		pageCount?: number | null;
+	};
+
 	const RUN_LOG_THOUGHTS_KEY = 'stream.thoughts';
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
@@ -83,9 +93,65 @@
 	const selectedFile = $derived(
 		selectedFilePath ? (files.find((file) => file.path === selectedFilePath) ?? null) : null
 	);
+	const selectedFileStorageLink = $derived.by(() => {
+		if (!selectedFile || typeof selectedFile.content !== 'string') {
+			return null;
+		}
+		const text = selectedFile.content.trim();
+		if (!text.startsWith('{')) {
+			return null;
+		}
+		try {
+			const parsed = JSON.parse(text) as Partial<WorkspaceStorageLink>;
+			if (
+				parsed.type !== 'storage_link' ||
+				typeof parsed.id !== 'string' ||
+				parsed.id.trim().length === 0 ||
+				typeof parsed.storagePath !== 'string' ||
+				parsed.storagePath.trim().length === 0 ||
+				typeof parsed.contentType !== 'string' ||
+				parsed.contentType.trim().length === 0
+			) {
+				return null;
+			}
+			return {
+				type: 'storage_link' as const,
+				id: parsed.id.trim(),
+				storagePath: parsed.storagePath.trim(),
+				contentType: parsed.contentType.trim(),
+				filename: typeof parsed.filename === 'string' ? parsed.filename : null,
+				sizeBytes: typeof parsed.sizeBytes === 'number' ? parsed.sizeBytes : null,
+				pageCount: typeof parsed.pageCount === 'number' ? parsed.pageCount : null
+			};
+		} catch {
+			return null;
+		}
+	});
 	const selectedFileIsMarkdown = $derived.by(() => {
 		const path = selectedFile?.path?.toLowerCase() ?? '';
 		return path.endsWith('.md') || path.endsWith('.markdown');
+	});
+	const selectedFileImageSrc = $derived.by(() => {
+		if (!selectedFile) {
+			return null;
+		}
+		const contentType = selectedFile.contentType?.toLowerCase() ?? '';
+		const content = selectedFile.content ?? '';
+		if (contentType.startsWith('image/') && content.startsWith('data:image/')) {
+			return content;
+		}
+		if (
+			selectedFileStorageLink &&
+			selectedFileStorageLink.contentType.toLowerCase().startsWith('image/') &&
+			selectedAgent?.workspaceId
+		) {
+			const params = new URLSearchParams({
+				workspaceId: selectedAgent.workspaceId,
+				path: selectedFile.path
+			});
+			return `/api/spark/agents/workspace-link?${params.toString()}`;
+		}
+		return null;
 	});
 	const selectedFileHtml = $derived(
 		selectedFileIsMarkdown && selectedFile?.content ? renderMarkdown(selectedFile.content) : ''
@@ -344,6 +410,13 @@
 
 	async function openFileRaw(file: SparkAgentWorkspaceFile): Promise<void> {
 		if (!browser) {
+			return;
+		}
+		if (selectedFileImageSrc && selectedFile?.path === file.path) {
+			const openedImage = window.open(selectedFileImageSrc, '_blank', 'noopener,noreferrer');
+			if (!openedImage) {
+				throw new Error('Popup blocked');
+			}
 			return;
 		}
 		const content = typeof file.content === 'string' ? file.content : '';
@@ -1125,13 +1198,17 @@
 				</Button>
 			</div>
 		</header>
-		<div class="file-dialog__body">
-			{#if selectedFileIsMarkdown}
-				<div class="markdown-preview">{@html selectedFileHtml}</div>
-			{:else}
-				<pre class="file-preview"><code>{selectedFile.content}</code></pre>
-			{/if}
-		</div>
+			<div class="file-dialog__body">
+				{#if selectedFileIsMarkdown}
+					<div class="markdown-preview">{@html selectedFileHtml}</div>
+				{:else if selectedFileImageSrc}
+					<div class="file-image-preview">
+						<img src={selectedFileImageSrc} alt={selectedFile.path} loading="lazy" />
+					</div>
+				{:else}
+					<pre class="file-preview"><code>{selectedFile.content}</code></pre>
+				{/if}
+			</div>
 	</div>
 {/if}
 
@@ -1566,6 +1643,21 @@
 			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
 			'Courier New', monospace;
 		font-size: 0.85rem;
+	}
+
+	.file-image-preview {
+		display: flex;
+		justify-content: center;
+		align-items: flex-start;
+	}
+
+	.file-image-preview img {
+		display: block;
+		max-width: 100%;
+		max-height: min(70vh, 48rem);
+		border-radius: 0.6rem;
+		border: 1px solid rgba(148, 163, 184, 0.35);
+		background: rgba(15, 23, 42, 0.04);
 	}
 
 	.markdown-preview :global(p) {

@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   mkdir,
@@ -39,7 +40,7 @@ import {
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
-import { downloadStorageObject } from "../utils/gcp/storageRest";
+import { downloadStorageObject, uploadStorageObject } from "../utils/gcp/storageRest";
 import {
   estimateCallCostUsd,
   generateText,
@@ -55,6 +56,10 @@ import {
   type LlmDebugOptions,
   type LlmToolSet,
 } from "../utils/llm";
+import {
+  applyPdfTranscriptionSkillTools,
+  PDF_TRANSCRIPTION_SKILL_TEXT,
+} from "./skills/pdfTranscription";
 import {
   encodeBgraBitmapToPng,
   getPdfPageCount,
@@ -554,6 +559,7 @@ type WorkspaceSyncOptions = {
   serviceAccountJson: string;
   userId: string;
   workspaceId: string;
+  bucketName: string;
   rootDir: string;
 };
 
@@ -650,6 +656,22 @@ const WorkspaceAttachmentManifestSchema = z
   })
   .passthrough();
 
+const WorkspaceAttachmentManifestEntryWithLinkPathSchema =
+  AgentAttachmentInputSchema.extend({
+    linkPath: z.preprocess(
+      (value) => parseOptionalString(value),
+      z.string().trim().min(1).optional(),
+    ),
+  });
+
+const WorkspaceAttachmentManifestWithLinksSchema = z
+  .object({
+    attachments: z
+      .array(WorkspaceAttachmentManifestEntryWithLinkPathSchema)
+      .optional(),
+  })
+  .passthrough();
+
 const GraderSummaryProblemSchema = z.object({
   id: z.string().trim().min(1),
   index: z.number().int().min(1),
@@ -681,6 +703,52 @@ function loadAgentEnv(): void {
   loadLocalEnv();
   const repoRoot = path.resolve(process.cwd());
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
+}
+
+function formatWorkspaceRunTimestamp(value: Date): string {
+  return value.toISOString().replace(/[:.]/gu, "-");
+}
+
+function shouldUsePersistentDevWorkspaceRoot(): boolean {
+  const forced = parseOptionalString(process.env.SPARK_AGENT_LOCAL_WORKSPACE);
+  if (forced) {
+    const normalized = forced.toLowerCase();
+    if (
+      normalized === "1" ||
+      normalized === "true" ||
+      normalized === "yes" ||
+      normalized === "on"
+    ) {
+      return true;
+    }
+    if (
+      normalized === "0" ||
+      normalized === "false" ||
+      normalized === "no" ||
+      normalized === "off"
+    ) {
+      return false;
+    }
+  }
+  return process.env.NODE_ENV !== "production";
+}
+
+function resolveAgentWorkspaceRoot(options: {
+  workspaceId: string;
+  runStartedAt: Date;
+}): { rootDir: string; cleanupOnExit: boolean } {
+  if (shouldUsePersistentDevWorkspaceRoot()) {
+    const repoRoot = path.resolve(process.cwd());
+    const timestamp = formatWorkspaceRunTimestamp(options.runStartedAt);
+    return {
+      rootDir: path.join(repoRoot, "data", "spark-agent", timestamp, options.workspaceId),
+      cleanupOnExit: false,
+    };
+  }
+  return {
+    rootDir: path.join(os.tmpdir(), "spark-agent-workspaces", options.workspaceId),
+    cleanupOnExit: true,
+  };
 }
 
 function resolveOpenAiReasoningEffort(
@@ -763,6 +831,95 @@ function toResolvedAttachmentInput(
     sizeBytes: entry.sizeBytes,
     ...(pageCount ? { pageCount } : {}),
   };
+}
+
+function normalizeStorageObjectName(storagePath: string): string {
+  return storagePath.replace(/^\/+/u, "");
+}
+
+function extensionForContentType(contentType: string): string {
+  const normalized = contentType.trim().toLowerCase();
+  if (normalized === "image/jpeg") {
+    return ".jpg";
+  }
+  if (normalized === "image/png") {
+    return ".png";
+  }
+  if (normalized === "image/webp") {
+    return ".webp";
+  }
+  if (normalized === "image/gif") {
+    return ".gif";
+  }
+  if (normalized === "application/pdf") {
+    return ".pdf";
+  }
+  return "";
+}
+
+function sanitizeAttachmentFilename(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[/\\]+/gu, "-")
+    .replace(/\s+/gu, " ");
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  return "attachment";
+}
+
+function resolveAttachmentFilename(attachment: ResolvedAttachmentInput): string {
+  const candidate =
+    typeof attachment.filename === "string" ? attachment.filename.trim() : "";
+  if (candidate.length > 0) {
+    return sanitizeAttachmentFilename(candidate);
+  }
+  const idBase = attachment.id.replace(/[^a-z0-9_-]+/giu, "-").trim();
+  const ext = extensionForContentType(attachment.contentType);
+  if (idBase.length > 0) {
+    if (ext && !idBase.toLowerCase().endsWith(ext)) {
+      return `${idBase}${ext}`;
+    }
+    return idBase;
+  }
+  const fallback = `attachment${ext || ""}`;
+  return fallback;
+}
+
+function resolveMaterializedAttachmentPath(options: {
+  sourcePath: string;
+  attachment: ResolvedAttachmentInput;
+  usedPaths: Set<string>;
+}): string {
+  const sourcePathPosix = options.sourcePath.replace(/\\/gu, "/");
+  let baseDir = path.posix.dirname(sourcePathPosix);
+  if (path.posix.basename(baseDir).toLowerCase() === "links") {
+    baseDir = path.posix.dirname(baseDir);
+  }
+  const filename = resolveAttachmentFilename(options.attachment);
+  let candidatePath = path.posix.join(baseDir, filename);
+  if (!options.usedPaths.has(candidatePath)) {
+    options.usedPaths.add(candidatePath);
+    return candidatePath;
+  }
+  const ext = path.posix.extname(filename);
+  const stem = filename.slice(0, filename.length - ext.length);
+  const suffixBaseRaw = options.attachment.id
+    .replace(/[^a-z0-9_-]+/giu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  const suffixBase = suffixBaseRaw.length > 0 ? suffixBaseRaw.slice(0, 16) : "file";
+  let counter = 1;
+  while (true) {
+    const suffix =
+      counter === 1 ? suffixBase : `${suffixBase}-${counter.toString()}`;
+    candidatePath = path.posix.join(baseDir, `${stem}-${suffix}${ext}`);
+    if (!options.usedPaths.has(candidatePath)) {
+      options.usedPaths.add(candidatePath);
+      return candidatePath;
+    }
+    counter += 1;
+  }
 }
 
 function mergeAttachmentInputs(options: {
@@ -1187,6 +1344,43 @@ function resolveContentType(filePath: string): string | undefined {
   return undefined;
 }
 
+function isBinaryWorkspaceContentType(contentType: string | undefined): boolean {
+  if (typeof contentType !== "string" || contentType.trim().length === 0) {
+    return false;
+  }
+  const normalized = contentType.trim().toLowerCase();
+  if (normalized.startsWith("image/")) {
+    return true;
+  }
+  if (normalized === "application/pdf") {
+    return true;
+  }
+  return false;
+}
+
+function encodeBinaryWorkspaceContent(options: {
+  contentType: string;
+  bytes: Buffer;
+}): string {
+  return `data:${options.contentType};base64,${options.bytes.toString("base64")}`;
+}
+
+function decodeBinaryWorkspaceContent(content: string): Buffer | null {
+  const match = content.match(/^data:[^;]+;base64,([A-Za-z0-9+/=\s]+)$/u);
+  if (!match) {
+    return null;
+  }
+  const encoded = match[1]?.replace(/\s+/gu, "");
+  if (!encoded) {
+    return null;
+  }
+  try {
+    return Buffer.from(encoded, "base64");
+  } catch {
+    return null;
+  }
+}
+
 function clampToUnit(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -1435,13 +1629,19 @@ class WorkspaceSync {
   private serviceAccountJson: string;
   private userId: string;
   private workspaceId: string;
+  private bucketName: string;
   private rootDir: string;
   private fileMeta = new Map<string, WorkspaceFileMeta>();
+  private touchedPaths = new Set<string>();
+  private discoveredLinkAttachments: ResolvedAttachmentInput[] = [];
+  private materializedAttachmentPaths = new Set<string>();
+  private materializedAttachmentStoragePaths = new Set<string>();
 
   constructor(options: WorkspaceSyncOptions) {
     this.serviceAccountJson = options.serviceAccountJson;
     this.userId = options.userId;
     this.workspaceId = options.workspaceId;
+    this.bucketName = options.bucketName;
     this.rootDir = options.rootDir;
   }
 
@@ -1467,6 +1667,110 @@ class WorkspaceSync {
     return created;
   }
 
+  getTouchedPaths(): string[] {
+    return Array.from(this.touchedPaths).sort((a, b) => a.localeCompare(b));
+  }
+
+  getDiscoveredLinkAttachments(): ResolvedAttachmentInput[] {
+    return mergeAttachmentInputs({
+      primary: this.discoveredLinkAttachments,
+      secondary: [],
+    });
+  }
+
+  async upsertVirtualTextFile(options: {
+    filePath: string;
+    content: string;
+    contentType?: string;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }): Promise<void> {
+    const now = options.updatedAt ?? new Date();
+    const createdAt = options.createdAt ?? now;
+    const payload: Record<string, unknown> = {
+      path: options.filePath,
+      content: options.content,
+      createdAt,
+      updatedAt: now,
+      sizeBytes: Buffer.byteLength(options.content, "utf8"),
+    };
+    if (
+      typeof options.contentType === "string" &&
+      options.contentType.trim().length > 0
+    ) {
+      payload.contentType = options.contentType.trim();
+    }
+    await patchFirestoreDocument({
+      serviceAccountJson: this.serviceAccountJson,
+      documentPath: this.fileDocPath(options.filePath),
+      updates: payload,
+    });
+    const meta = this.ensureMeta(options.filePath);
+    meta.createdAt = createdAt;
+    meta.updatedAt = now;
+    meta.lastWriteAt = now.getTime();
+    meta.pending = false;
+  }
+
+  private recordDiscoveredLinkAttachment(entry: ResolvedAttachmentInput): void {
+    this.discoveredLinkAttachments = mergeAttachmentInputs({
+      primary: this.discoveredLinkAttachments,
+      secondary: [entry],
+    });
+  }
+
+  private async materializeLinkAttachment(options: {
+    attachment: ResolvedAttachmentInput;
+    sourcePath: string;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }): Promise<void> {
+    this.recordDiscoveredLinkAttachment(options.attachment);
+    const storagePath = options.attachment.storagePath.trim();
+    if (
+      storagePath.length === 0 ||
+      this.materializedAttachmentStoragePaths.has(storagePath)
+    ) {
+      return;
+    }
+    const objectName = normalizeStorageObjectName(storagePath);
+    if (objectName.length === 0) {
+      return;
+    }
+    const materializedPath = resolveMaterializedAttachmentPath({
+      sourcePath: options.sourcePath,
+      attachment: options.attachment,
+      usedPaths: this.materializedAttachmentPaths,
+    });
+    let downloaded:
+      | {
+          bytes: Uint8Array;
+          contentType: string | null;
+        }
+      | undefined;
+    try {
+      downloaded = await downloadStorageObject({
+        serviceAccountJson: this.serviceAccountJson,
+        bucketName: this.bucketName,
+        objectName,
+      });
+    } catch (error) {
+      console.warn(
+        `Failed to materialize link attachment "${storagePath}" in workspace: ${errorAsString(error)}`,
+      );
+      return;
+    }
+    const resolvedPath = resolveWorkspacePath(this.rootDir, materializedPath);
+    await ensureDir(path.dirname(resolvedPath));
+    await writeFile(resolvedPath, Buffer.from(downloaded.bytes));
+    this.materializedAttachmentStoragePaths.add(storagePath);
+    const meta = this.ensureMeta(materializedPath);
+    meta.createdAt = options.createdAt ?? meta.createdAt;
+    meta.updatedAt = options.updatedAt ?? meta.updatedAt;
+    meta.lastWriteAt =
+      (options.updatedAt ?? options.createdAt)?.getTime() ?? meta.lastWriteAt;
+  }
+
   async load(): Promise<void> {
     const docs = await listFirestoreDocuments({
       serviceAccountJson: this.serviceAccountJson,
@@ -1489,11 +1793,62 @@ class WorkspaceSync {
         continue;
       }
       const content = typeof data.content === "string" ? data.content : "";
+      const contentType =
+        typeof data.contentType === "string" && data.contentType.trim().length > 0
+          ? data.contentType.trim().toLowerCase()
+          : undefined;
       const createdAt = resolveFirestoreDate(data.createdAt);
       const updatedAt = resolveFirestoreDate(data.updatedAt);
+      let parsedJson: unknown | undefined;
+      if (
+        (contentType === "application/json" || content.trimStart().startsWith("{")) &&
+        content.trim().length > 0
+      ) {
+        parsedJson = (() => {
+          try {
+            return JSON.parse(content);
+          } catch {
+            return undefined;
+          }
+        })();
+      }
+      if (parsedJson !== undefined) {
+        const directLink = WorkspaceStorageLinkSchema.safeParse(parsedJson);
+        if (directLink.success) {
+          await this.materializeLinkAttachment({
+            attachment: toResolvedAttachmentInput(directLink.data),
+            sourcePath: rawPath,
+            createdAt,
+            updatedAt,
+          });
+          // Do not write link json files to the local workspace filesystem.
+          continue;
+        }
+        const manifestWithLinks =
+          WorkspaceAttachmentManifestWithLinksSchema.safeParse(parsedJson);
+        if (manifestWithLinks.success && manifestWithLinks.data.attachments) {
+          for (const entry of manifestWithLinks.data.attachments) {
+            await this.materializeLinkAttachment({
+              attachment: toResolvedAttachmentInput(entry),
+              sourcePath: entry.linkPath ?? rawPath,
+              createdAt,
+              updatedAt,
+            });
+          }
+        }
+      }
       const resolved = resolveWorkspacePath(this.rootDir, rawPath);
       await ensureDir(path.dirname(resolved));
-      await writeFile(resolved, content, { encoding: "utf8" });
+      if (isBinaryWorkspaceContentType(contentType)) {
+        const decoded = decodeBinaryWorkspaceContent(content);
+        if (decoded) {
+          await writeFile(resolved, decoded);
+        } else {
+          await writeFile(resolved, content, { encoding: "utf8" });
+        }
+      } else {
+        await writeFile(resolved, content, { encoding: "utf8" });
+      }
       const meta = this.ensureMeta(rawPath);
       meta.createdAt = createdAt ?? meta.createdAt;
       meta.updatedAt = updatedAt ?? meta.updatedAt;
@@ -1507,6 +1862,7 @@ class WorkspaceSync {
     if (meta.disposed) {
       return;
     }
+    this.touchedPaths.add(filePath);
     meta.pending = true;
     if (meta.inFlight) {
       return;
@@ -1656,16 +2012,27 @@ class WorkspaceSync {
       return;
     }
     const resolved = resolveWorkspacePath(this.rootDir, filePath);
+    const contentType = resolveContentType(filePath);
     let content = "";
+    let sizeBytes = 0;
     try {
-      content = await readFile(resolved, { encoding: "utf8" });
+      if (isBinaryWorkspaceContentType(contentType)) {
+        const bytes = await readFile(resolved);
+        content = encodeBinaryWorkspaceContent({
+          contentType: contentType ?? "application/octet-stream",
+          bytes,
+        });
+        sizeBytes = bytes.byteLength;
+      } else {
+        content = await readFile(resolved, { encoding: "utf8" });
+        sizeBytes = Buffer.byteLength(content, "utf8");
+      }
     } catch (error) {
       throw new Error(
         `Failed to read workspace file "${filePath}": ${errorAsString(error)}`,
       );
     }
     const now = new Date();
-    const sizeBytes = Buffer.byteLength(content, "utf8");
     const createdAt = meta.createdAt ?? now;
     meta.createdAt = createdAt;
     meta.updatedAt = now;
@@ -1677,7 +2044,6 @@ class WorkspaceSync {
       updatedAt: now,
       sizeBytes,
     };
-    const contentType = resolveContentType(filePath);
     if (contentType) {
       payload.contentType = contentType;
     }
@@ -1686,6 +2052,98 @@ class WorkspaceSync {
       documentPath: this.fileDocPath(filePath),
       updates: payload,
     });
+  }
+}
+
+function resolveWorkspaceLinkPathForImageFile(
+  imagePath: string,
+  linkId: string,
+): string {
+  const normalized = imagePath.replace(/\\/gu, "/");
+  const dir = path.posix.dirname(normalized);
+  return path.posix.join(dir, "links", `${linkId}.json`);
+}
+
+async function publishWorkspaceImageLinks(options: {
+  rootDir: string;
+  workspaceSync: WorkspaceSync;
+  serviceAccountJson: string;
+  bucketName: string;
+  userId: string;
+  log?: (line: string) => void;
+}): Promise<void> {
+  const uniqueTouchedPaths = Array.from(
+    new Set(options.workspaceSync.getTouchedPaths()),
+  );
+  for (const touchedPath of uniqueTouchedPaths) {
+    const contentType = resolveContentType(touchedPath);
+    if (
+      typeof contentType !== "string" ||
+      !contentType.toLowerCase().startsWith("image/")
+    ) {
+      continue;
+    }
+    const resolved = resolveWorkspacePath(options.rootDir, touchedPath);
+    const fileStats = await stat(resolved).catch(() => undefined);
+    if (!fileStats || !fileStats.isFile() || fileStats.size <= 0) {
+      continue;
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(resolved);
+    } catch (error) {
+      options.log?.(
+        `warn: failed to read generated image "${touchedPath}": ${errorAsString(error)}`,
+      );
+      continue;
+    }
+    if (bytes.length === 0) {
+      continue;
+    }
+    const linkId = createHash("md5").update(bytes).digest("hex");
+    const storagePath = `spark/uploads/${options.userId}/${linkId}`;
+    try {
+      await uploadStorageObject({
+        serviceAccountJson: options.serviceAccountJson,
+        bucketName: options.bucketName,
+        objectName: storagePath,
+        contentType,
+        data: Uint8Array.from(bytes),
+        onlyIfMissing: true,
+      });
+    } catch (error) {
+      options.log?.(
+        `warn: failed to upload generated image "${touchedPath}": ${errorAsString(error)}`,
+      );
+      continue;
+    }
+    const filename = path.posix.basename(touchedPath.replace(/\\/gu, "/"));
+    const linkPath = resolveWorkspaceLinkPathForImageFile(touchedPath, linkId);
+    const linkContent =
+      JSON.stringify(
+        {
+          type: "storage_link",
+          id: linkId,
+          storagePath,
+          contentType,
+          filename,
+          sizeBytes: bytes.length,
+          pageCount: null,
+        },
+        null,
+        2,
+      ) + "\n";
+    await options.workspaceSync
+      .upsertVirtualTextFile({
+        filePath: linkPath,
+        content: linkContent,
+        contentType: "application/json",
+      })
+      .catch((error) => {
+        options.log?.(
+          `warn: failed to write workspace link "${linkPath}": ${errorAsString(error)}`,
+        );
+      });
   }
 }
 
@@ -2209,8 +2667,17 @@ class AgentLogSync {
   }
 }
 
-function buildAgentSystemPrompt(): string {
-  return [
+function stripDeprecatedPdfReadTools(tools: LlmToolSet): LlmToolSet {
+  const nextTools: LlmToolSet = { ...tools };
+  delete (nextTools as Record<string, unknown>).read_pdf;
+  delete (nextTools as Record<string, unknown>).extract_pdf_text;
+  return nextTools;
+}
+
+function buildAgentSystemPrompt(options?: {
+  includePdfTranscriptionSkill?: boolean;
+}): string {
+  const lines = [
     "You are Spark Agent, a tool-using assistant.",
     "",
     "General rules:",
@@ -2222,7 +2689,7 @@ function buildAgentSystemPrompt(): string {
     "- Prefer fewer, larger writes over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
-    "- Use read_pdf for PDF URLs or workspace PDF files when you need a faithful transcription.",
+    "- For PDF transcription, render workspace PDFs with pdf_to_images and inspect page images with view_image.",
     "- Use extract_pdf_diagrams when you need diagram bounding boxes from a PDF.",
     "- Do NOT use web_fetch for PDFs.",
     "- When the task is complete, you MUST call done({summary}).",
@@ -2288,7 +2755,17 @@ function buildAgentSystemPrompt(): string {
     "Python execution:",
     "- Use python_exec for calculations or verification (e.g. validate that a reference solution matches tests).",
     "- Provide stdinPath and capture stdout/stderr to workspace files so results are persisted.",
-  ].join("\n");
+  ];
+  if (options?.includePdfTranscriptionSkill) {
+    lines.push(
+      "",
+      "PDF transcription workflow (required when handling PDF/image grading tasks):",
+      "~~~markdown",
+      PDF_TRANSCRIPTION_SKILL_TEXT,
+      "~~~",
+    );
+  }
+  return lines.join("\n");
 }
 
 type ValidatedLessonPublishBundle = {
@@ -4584,7 +5061,7 @@ function buildAgentTools(options: {
         "Use this to download HTML/text sources found via web_search.",
         "For HTML responses, this tool returns stripped plain text.",
         "For non-text responses (except PDFs), this tool returns metadata and optionally writes base64 to outputPath.",
-        "Do not use this tool for PDFs; use read_pdf instead.",
+        "Do not use this tool for PDFs; place PDFs in the workspace and use pdf_to_images.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -4602,7 +5079,7 @@ function buildAgentTools(options: {
         }
         if (parsed.pathname.toLowerCase().endsWith(".pdf")) {
           throw new Error(
-            `web_fetch does not support PDF URLs ("${url}"). Use read_pdf instead.`,
+            `web_fetch does not support PDF URLs ("${url}"). Place the PDF in workspace and use pdf_to_images.`,
           );
         }
 
@@ -4635,7 +5112,7 @@ function buildAgentTools(options: {
         const safeMaxChars = maxChars ?? WEB_FETCH_DEFAULT_MAX_CHARS;
         if (contentType === "application/pdf") {
           throw new Error(
-            `web_fetch received PDF content from "${finalUrl}". Use read_pdf instead.`,
+            `web_fetch received PDF content from "${finalUrl}". Place the PDF in workspace and use pdf_to_images.`,
           );
         }
 
@@ -4906,8 +5383,8 @@ function buildAgentTools(options: {
     }),
     extract_pdf_text: tool({
       description: [
-        "Legacy alias for read_pdf when the PDF already exists in the workspace.",
-        "Use read_pdf for new calls.",
+        "Legacy text extraction helper for workspace PDFs.",
+        "Prefer the pdf_to_images + view_image workflow for grading and diagram-sensitive transcription tasks.",
       ].join("\n"),
       inputSchema: z
         .object({
@@ -5377,7 +5854,7 @@ function buildAgentTools(options: {
   return tools;
 }
 
-export function buildSparkAgentToolsForTest(options: {
+export function buildSparkAgentTools(options: {
   workspace: SparkAgentWorkspace;
   rootDir: string;
   userId: string;
@@ -5386,7 +5863,7 @@ export function buildSparkAgentToolsForTest(options: {
   enforceLessonPipeline?: boolean;
   debug?: LlmDebugOptions;
 }): LlmToolSet {
-  return buildAgentTools(options);
+  return stripDeprecatedPdfReadTools(buildAgentTools(options));
 }
 
 export async function runSparkLessonAgentLocal(options: {
@@ -5431,15 +5908,17 @@ export async function runSparkLessonAgentLocal(options: {
     },
   };
 
-  const baseTools = buildAgentTools({
-    workspace,
-    rootDir: options.rootDir,
-    userId: options.userId,
-    serviceAccountJson: "{}",
-    progress,
-    enforceLessonPipeline: true,
-    debug: options.debug,
-  });
+  const baseTools = stripDeprecatedPdfReadTools(
+    buildAgentTools({
+      workspace,
+      rootDir: options.rootDir,
+      userId: options.userId,
+      serviceAccountJson: "{}",
+      progress,
+      enforceLessonPipeline: true,
+      debug: options.debug,
+    }),
+  );
 
   type PublishLessonToolInput = {
     sessionId: string;
@@ -5806,6 +6285,7 @@ export async function runSparkAgentTask(
   let prompt = "";
   let logSync: AgentLogSync | undefined;
   let workspaceRoot: string | undefined;
+  let cleanupWorkspaceRoot = true;
   let workspaceSync: WorkspaceSync | undefined;
   let graderRunId: string | null = null;
   let graderSummaryPath = "grader/output/run-summary.json";
@@ -5823,6 +6303,22 @@ export async function runSparkAgentTask(
       stopPollTimer = undefined;
     }
     await stopPollInFlight?.catch(() => undefined);
+  };
+
+  const publishGeneratedImageLinks = async (): Promise<void> => {
+    if (!workspaceRoot || !workspaceSync) {
+      return;
+    }
+    await publishWorkspaceImageLinks({
+      rootDir: workspaceRoot,
+      workspaceSync,
+      serviceAccountJson,
+      bucketName,
+      userId: options.userId,
+      log: (line) => {
+        logSync?.append(line);
+      },
+    });
   };
 
   try {
@@ -5951,16 +6447,19 @@ export async function runSparkAgentTask(
       `start: workspaceId=${options.workspaceId} modelId=${toolLoopModelId}`,
     );
 
-    workspaceRoot = path.join(
-      os.tmpdir(),
-      "spark-agent-workspaces",
-      options.workspaceId,
-    );
+    const workspaceRootConfig = resolveAgentWorkspaceRoot({
+      workspaceId: options.workspaceId,
+      runStartedAt: new Date(),
+    });
+    workspaceRoot = workspaceRootConfig.rootDir;
+    cleanupWorkspaceRoot = workspaceRootConfig.cleanupOnExit;
     await ensureDir(workspaceRoot);
+    logSync.append(`workspace_root: ${workspaceRoot}`);
     workspaceSync = new WorkspaceSync({
       serviceAccountJson,
       userId: options.userId,
       workspaceId: options.workspaceId,
+      bucketName,
       rootDir: workspaceRoot,
     });
     await workspaceSync.load();
@@ -6021,11 +6520,17 @@ export async function runSparkAgentTask(
       .catch([])
       .parse(rawAgentInputAttachments)
       .map((entry) => toResolvedAttachmentInput(entry));
-    const workspaceLinkAttachments = await discoverWorkspaceLinkAttachments({
+    const discoveredWorkspaceLinkAttachments =
+      workspaceSync.getDiscoveredLinkAttachments();
+    const scannedWorkspaceLinkAttachments = await discoverWorkspaceLinkAttachments({
       rootDir: workspaceRoot,
       log: (line) => {
         logSync?.append(line);
       },
+    });
+    const workspaceLinkAttachments = mergeAttachmentInputs({
+      primary: discoveredWorkspaceLinkAttachments,
+      secondary: scannedWorkspaceLinkAttachments,
     });
     const inlineInputAttachments = mergeAttachmentInputs({
       primary: explicitInputAttachments,
@@ -6188,19 +6693,32 @@ export async function runSparkAgentTask(
       },
     });
 
-    const tools: LlmToolSet = {
-      ...buildAgentTools({
-        workspace: workspaceSync,
-        rootDir: workspaceRoot,
-        userId: options.userId,
-        serviceAccountJson,
-        progress,
-        enforceLessonPipeline: isLessonRun,
-        allowPythonExec: graderRunId === null,
-        debug: llmDebug,
-      }),
+    const baseTools: LlmToolSet = {
+      ...stripDeprecatedPdfReadTools(
+        buildAgentTools({
+          workspace: workspaceSync,
+          rootDir: workspaceRoot,
+          userId: options.userId,
+          serviceAccountJson,
+          progress,
+          enforceLessonPipeline: isLessonRun,
+          allowPythonExec: graderRunId === null,
+          debug: llmDebug,
+        }),
+      ),
       done: doneTool,
     };
+    const tools =
+      graderRunId === null
+        ? baseTools
+        : applyPdfTranscriptionSkillTools({
+            tools: baseTools,
+            rootDir: workspaceRoot,
+            includeReferenceTextTool: false,
+            onFileWritten: (outputPath) => {
+              workspaceSync?.scheduleUpdate(outputPath);
+            },
+          });
 
     progress.log(
       `exposed tools: ${Object.keys(tools).sort().join(", ")}`,
@@ -6212,7 +6730,9 @@ export async function runSparkAgentTask(
     }
     startStopPolling();
 
-    const agentSystemPrompt = buildAgentSystemPrompt();
+    const agentSystemPrompt = buildAgentSystemPrompt({
+      includePdfTranscriptionSkill: graderRunId !== null,
+    });
     let initialContents: LlmContent[] | null = null;
     if (inlineInputAttachments.length > 0) {
       const loaded = await loadAttachmentParts({
@@ -6345,10 +6865,20 @@ export async function runSparkAgentTask(
       ].join(" "),
     );
 
+    await publishGeneratedImageLinks().catch((error) => {
+      logSync?.append(
+        `warn: failed to publish generated image links: ${errorAsString(error)}`,
+      );
+    });
     await logSync?.flushAll().catch(() => undefined);
   } catch (error) {
     if (error instanceof StopRequestedError) {
       logSync?.append("warn: agent stopped by user request");
+      await publishGeneratedImageLinks().catch((publishError) => {
+        logSync?.append(
+          `warn: failed to publish generated image links: ${errorAsString(publishError)}`,
+        );
+      });
       await workspaceSync?.flushAll().catch(() => undefined);
       await logSync?.flushAll().catch(() => undefined);
       await updateAgentStatus({
@@ -6376,6 +6906,11 @@ export async function runSparkAgentTask(
     const message = errorAsString(error);
     console.error(`[spark-agent:${options.agentId}] failed: ${message}`);
     logSync?.append(`error: ${message}`);
+    await publishGeneratedImageLinks().catch((publishError) => {
+      logSync?.append(
+        `warn: failed to publish generated image links: ${errorAsString(publishError)}`,
+      );
+    });
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
     const statusUpdated = await updateAgentStatus({
@@ -6411,7 +6946,7 @@ export async function runSparkAgentTask(
   } finally {
     await stopStopPolling();
     logSync?.dispose();
-    if (workspaceRoot) {
+    if (workspaceRoot && cleanupWorkspaceRoot) {
       await rm(workspaceRoot, { recursive: true, force: true }).catch(
         () => undefined,
       );

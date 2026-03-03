@@ -16,6 +16,7 @@ Read these files first:
 4. `grader/uploads/index.json`
 
 Uploaded student work (photos/PDFs/text) is also attached in the model context. Treat it as the ground truth for transcription.
+Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 
 ## Required workflow
 
@@ -27,11 +28,12 @@ Uploaded student work (photos/PDFs/text) is also attached in the model context. 
    - prefer official UKMT URLs over mirror hosts.
    - for official PDF sources, do NOT use `web_fetch`.
    - write extraction instructions to `grader/prompts/<name>.md`.
-   - call `read_pdf` with the official PDF `url`, `promptPath`, and `outputPath` to extract exact problem statements and marking guidance into readable `.txt` files.
-   - for diagram-heavy questions, call `extract_pdf_diagrams` to get per-problem diagram bounding boxes, and include diagram references in your outputs.
+   - use the PDF transcription workflow for workspace PDFs and diagram-sensitive tasks: `pdf_to_images` -> `draw_grid_overlay` -> `crop_image` -> `trim_image` -> `view_image`.
+   - keep working files under `grader/` and include final diagram file references in outputs.
    - only use `web_fetch` for non-PDF pages (for example thresholds/help pages).
 3. Transcribe precisely:
    - transcribe each graded problem statement.
+   - transcribe official solution text/steps from official sources before grading.
    - transcribe the student's solution exactly from uploads before evaluating.
 4. Grade each problem deeply:
    - compare against official marking guidance.
