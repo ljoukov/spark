@@ -2,12 +2,16 @@ import { Buffer } from "node:buffer";
 
 import {
   appendMarkdownSourcesSection,
+  createToolLoopSteeringChannel as createToolLoopSteeringChannelV2,
   convertGooglePartsToLlmParts as convertGooglePartsToLlmPartsV2,
   estimateCallCostUsd,
   generateImageInBatches as generateImageInBatchesV2,
   generateImages as generateImagesV2,
   generateJson as generateJsonV2,
   getCurrentToolCallContext,
+  isLlmImageModelId,
+  isLlmModelId,
+  isLlmTextModelId,
   LlmJsonCallError,
   parseJsonFromLlmText,
   runToolLoop as runToolLoopV2,
@@ -16,22 +20,24 @@ import {
   stripCodexCitationMarkers,
   toGeminiJsonSchema,
   tool,
-  isFireworksModelId,
-  isGeminiModelId,
   type JsonSchema,
   type LlmExecutableTool,
   type LlmImageData,
+  type LlmImageModelId as LlmImageModelIdV2,
   type LlmImageSize,
+  type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
+  type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
+  type LlmToolLoopSteeringChannel as LlmToolLoopSteeringChannelV2,
   type LlmToolSet,
 } from "@ljoukov/llm";
 import type { Part as GooglePart } from "@google/genai";
 import type { ResponseTextConfig } from "openai/resources/responses/responses";
 import { z } from "zod";
 
-import { isOpenAiModelVariantId, type OpenAiReasoningEffort } from "./openai-llm";
+import type { OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
 import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
 
@@ -57,10 +63,17 @@ export type {
   LlmExecutableTool,
   LlmImageData,
   LlmImageSize,
+  LlmStreamEvent,
   LlmToolCallContext,
   LlmToolConfig,
   LlmToolSet,
 };
+
+export type LlmToolLoopSteeringChannel = LlmToolLoopSteeringChannelV2;
+
+export function createToolLoopSteeringChannel(): LlmToolLoopSteeringChannel {
+  return createToolLoopSteeringChannelV2();
+}
 
 export type LlmRole = "user" | "model" | "system" | "tool";
 
@@ -102,30 +115,32 @@ function normaliseLlmModelId(modelId: string): string {
   return modelId;
 }
 
-function resolveLlmModelId(modelId: string): string {
+function resolveLlmModelId(modelId: string): LlmModelIdV2 {
   const normalisedModelId = normaliseLlmModelId(modelId);
   const trimmedModelId = normalisedModelId.trim();
   if (trimmedModelId.length === 0) {
     throw new Error(`Unsupported model id: ${modelId}`);
   }
-  if (trimmedModelId.startsWith("gemini-") && !isGeminiModelId(trimmedModelId)) {
-    throw new Error(`Unsupported model id: ${modelId}`);
-  }
-  if (isFireworksModelId(trimmedModelId)) {
+  if (isLlmModelId(trimmedModelId)) {
     return trimmedModelId;
   }
-  if (isOpenAiModelVariantId(trimmedModelId)) {
-    return trimmedModelId;
+  throw new Error(`Unsupported model id: ${modelId}`);
+}
+
+function resolveLlmTextModelId(modelId: string): LlmTextModelIdV2 {
+  const resolvedModelId = resolveLlmModelId(modelId);
+  if (isLlmTextModelId(resolvedModelId)) {
+    return resolvedModelId;
   }
-  return trimmedModelId;
+  throw new Error(`Unsupported text model id: ${modelId}`);
 }
 
-function resolveLlmTextModelId(modelId: string): string {
-  return resolveLlmModelId(modelId);
-}
-
-function resolveLlmImageModelId(modelId: string): string {
-  return resolveLlmModelId(modelId);
+function resolveLlmImageModelId(modelId: string): LlmImageModelIdV2 {
+  const resolvedModelId = resolveLlmModelId(modelId);
+  if (isLlmImageModelId(resolvedModelId)) {
+    return resolvedModelId;
+  }
+  throw new Error(`Unsupported image model id: ${modelId}`);
 }
 
 export type LlmDebugOptions = {
@@ -218,6 +233,8 @@ export type LlmToolLoopOptions = {
   readonly debug?: LlmDebugOptions;
   readonly openAiReasoningEffort?: OpenAiReasoningEffort;
   readonly onDelta?: (delta: LlmTextDelta) => void;
+  readonly onEvent?: (event: LlmStreamEvent) => void;
+  readonly steering?: LlmToolLoopSteeringChannel;
 } & (LlmToolLoopPromptOptions | LlmToolLoopContentsOptions);
 
 function createFallbackProgress(label: string): JobProgressReporter {
@@ -442,8 +459,10 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
 
   const progress = options.progress ?? createFallbackProgress(options.modelId);
 
-  const onEvent: ((event: LlmStreamEvent) => void) | undefined = options.onDelta
+  const onEvent: ((event: LlmStreamEvent) => void) | undefined =
+    options.onDelta || options.onEvent
     ? (event) => {
+        options.onEvent?.(event);
         if (event.type !== "delta") {
           return;
         }
@@ -474,6 +493,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     modelTools: options.modelTools,
     maxSteps: options.maxSteps,
     openAiReasoningEffort: options.openAiReasoningEffort,
+    steering: options.steering,
     ...(onEvent ? { onEvent } : {}),
   });
 

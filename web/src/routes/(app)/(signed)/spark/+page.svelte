@@ -49,6 +49,12 @@
 	const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 	const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
 	const MAX_FILES_PER_CONVERSATION = 10;
+	const MAX_INLINE_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+	const TARGET_IMAGE_ATTACHMENT_BYTES = Math.floor(MAX_INLINE_ATTACHMENT_BYTES * 0.9);
+	const MAX_IMAGE_NORMALIZATION_ATTEMPTS = 10;
+	const MIN_IMAGE_NORMALIZATION_QUALITY = 0.55;
+	const MAX_IMAGE_NORMALIZATION_DIMENSION = 3072;
+	const MIN_IMAGE_NORMALIZATION_DIMENSION = 640;
 	const MAX_UPLOAD_ATTEMPTS = 3;
 	const UPLOAD_RETRY_BASE_DELAY_MS = 500;
 	const INTERRUPTED_UPLOAD_MESSAGE = 'Upload interrupted. Remove and add this file again.';
@@ -436,15 +442,15 @@
 					cleanupPreviewUrl(entry.previewUrl);
 					continue;
 				}
-					const nextStatus =
-						serverEntry.status === 'uploading' && !entry.sourceFile ? 'failed' : serverEntry.status;
-					const nextError =
-						serverEntry.status === 'uploading' && !entry.sourceFile
-							? INTERRUPTED_UPLOAD_MESSAGE
-							: resolveAttachmentErrorMessage({
-									message: serverEntry.error,
-									errorCode: serverEntry.error
-								});
+				const nextStatus =
+					serverEntry.status === 'uploading' && !entry.sourceFile ? 'failed' : serverEntry.status;
+				const nextError =
+					serverEntry.status === 'uploading' && !entry.sourceFile
+						? INTERRUPTED_UPLOAD_MESSAGE
+						: resolveAttachmentErrorMessage({
+								message: serverEntry.error,
+								errorCode: serverEntry.error
+							});
 				next.push({
 					...entry,
 					status: nextStatus,
@@ -931,6 +937,21 @@
 		return ext === 'heic' || ext === 'heif';
 	}
 
+	function isRasterImageType(contentType: string): boolean {
+		const normalizedType = contentType.toLowerCase();
+		if (!normalizedType.startsWith('image/')) {
+			return false;
+		}
+		if (normalizedType === 'image/gif') {
+			return false;
+		}
+		return true;
+	}
+
+	function isClipboardAttachmentFilename(filename: string): boolean {
+		return /^clipboard-\d+(?:\.[a-z0-9]+)?$/iu.test(filename.trim().toLowerCase());
+	}
+
 	function loadImageFromObjectUrl(objectUrl: string): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const image = new Image();
@@ -946,7 +967,13 @@
 
 	async function normalizeAttachmentForModel(file: File): Promise<File> {
 		const contentType = resolveClientContentType(file);
-		if (!isHeicType(contentType, file.name)) {
+		const isHeic = isHeicType(contentType, file.name);
+		const isRasterImage = isRasterImageType(contentType);
+		const shouldNormalizeImage =
+			isHeic ||
+			(isRasterImage &&
+				(file.size > TARGET_IMAGE_ATTACHMENT_BYTES || isClipboardAttachmentFilename(file.name)));
+		if (!shouldNormalizeImage) {
 			return file;
 		}
 		if (!browser || typeof document === 'undefined') {
@@ -955,24 +982,63 @@
 		const objectUrl = URL.createObjectURL(file);
 		try {
 			const image = await loadImageFromObjectUrl(objectUrl);
-			const width = Math.max(1, image.naturalWidth || image.width);
-			const height = Math.max(1, image.naturalHeight || image.height);
-			const canvas = document.createElement('canvas');
-			canvas.width = width;
-			canvas.height = height;
-			const context = canvas.getContext('2d');
-			if (!context) {
-				throw new Error('canvas_context_unavailable');
+			const sourceWidth = Math.max(1, image.naturalWidth || image.width);
+			const sourceHeight = Math.max(1, image.naturalHeight || image.height);
+			const sourceMaxDimension = Math.max(sourceWidth, sourceHeight);
+			const initialScale =
+				sourceMaxDimension > MAX_IMAGE_NORMALIZATION_DIMENSION
+					? MAX_IMAGE_NORMALIZATION_DIMENSION / sourceMaxDimension
+					: 1;
+			let scale = initialScale;
+			let quality = 0.92;
+			let bestBlob: Blob | null = null;
+			for (let attempt = 1; attempt <= MAX_IMAGE_NORMALIZATION_ATTEMPTS; attempt += 1) {
+				const width = Math.max(1, Math.round(sourceWidth * scale));
+				const height = Math.max(1, Math.round(sourceHeight * scale));
+				const canvas = document.createElement('canvas');
+				canvas.width = width;
+				canvas.height = height;
+				const context = canvas.getContext('2d');
+				if (!context) {
+					throw new Error('canvas_context_unavailable');
+				}
+				context.fillStyle = '#ffffff';
+				context.fillRect(0, 0, width, height);
+				context.drawImage(image, 0, 0, width, height);
+				const blob = await new Promise<Blob | null>((resolve) => {
+					canvas.toBlob(resolve, 'image/jpeg', quality);
+				});
+				if (!blob) {
+					throw new Error('jpeg_encoding_failed');
+				}
+				if (!bestBlob || blob.size < bestBlob.size) {
+					bestBlob = blob;
+				}
+				if (blob.size <= TARGET_IMAGE_ATTACHMENT_BYTES) {
+					bestBlob = blob;
+					break;
+				}
+				const canLowerQuality = quality - 0.08 >= MIN_IMAGE_NORMALIZATION_QUALITY;
+				if (canLowerQuality) {
+					quality = Math.max(MIN_IMAGE_NORMALIZATION_QUALITY, quality - 0.08);
+					continue;
+				}
+				const nextWidth = Math.floor(width * 0.85);
+				const nextHeight = Math.floor(height * 0.85);
+				const canDownscale =
+					nextWidth >= MIN_IMAGE_NORMALIZATION_DIMENSION &&
+					nextHeight >= MIN_IMAGE_NORMALIZATION_DIMENSION;
+				if (!canDownscale) {
+					break;
+				}
+				scale *= 0.85;
+				quality = 0.92;
 			}
-			context.drawImage(image, 0, 0, width, height);
-			const jpegBlob = await new Promise<Blob | null>((resolve) => {
-				canvas.toBlob(resolve, 'image/jpeg', 0.92);
-			});
-			if (!jpegBlob) {
+			if (!bestBlob) {
 				throw new Error('jpeg_encoding_failed');
 			}
 			const nextName = replaceFileExtension(file.name, 'jpg');
-			return new File([jpegBlob], nextName, {
+			return new File([bestBlob], nextName, {
 				type: 'image/jpeg',
 				lastModified: file.lastModified || Date.now()
 			});
@@ -1123,9 +1189,11 @@
 					method: 'POST',
 					body: form
 				});
-				const payload = (await response.json().catch(() => null)) as
-					| { attachment?: unknown; error?: string; message?: string }
-					| null;
+				const payload = (await response.json().catch(() => null)) as {
+					attachment?: unknown;
+					error?: string;
+					message?: string;
+				} | null;
 				if (!response.ok) {
 					const message = resolveAttachmentErrorMessage({
 						message: payload?.message,
@@ -1308,13 +1376,18 @@
 			try {
 				file = await normalizeAttachmentForModel(sourceFile);
 			} catch (conversionError) {
-				console.warn('[spark-chat] failed to convert HEIC/HEIF attachment', {
+				console.warn('[spark-chat] failed to normalize image attachment', {
 					filename: sourceFile.name,
 					contentType: sourceFile.type,
-					error: conversionError instanceof Error ? conversionError.message : String(conversionError)
+					error:
+						conversionError instanceof Error ? conversionError.message : String(conversionError)
 				});
-				attachmentError =
-					'Unable to process this HEIC/HEIF file in your browser. Convert it to JPG/PNG and try again.';
+				attachmentError = 'Unable to process this image in your browser. Try a smaller JPG/PNG.';
+				continue;
+			}
+			const normalizedContentType = resolveClientContentType(file);
+			if (isRasterImageType(normalizedContentType) && file.size > MAX_INLINE_ATTACHMENT_BYTES) {
+				attachmentError = `This image is ${formatBytes(file.size)} after compression. Please crop or resize below ${formatBytes(MAX_INLINE_ATTACHMENT_BYTES)}.`;
 				continue;
 			}
 
@@ -1558,7 +1631,7 @@
 							chatStreamAssistantMessageId = null;
 							return;
 						}
-						},
+					}
 				}
 			);
 		} catch (err) {
@@ -1787,6 +1860,7 @@
 				New chat
 			</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
+			<Button variant="ghost" size="sm" href="/spark/grader">Grader</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 
@@ -1945,7 +2019,7 @@
 									{@const sizeLabel = formatBytes(attachment.sizeBytes)}
 									{@const failureMessage =
 										attachment.status === 'failed'
-											? attachment.error ?? 'Upload failed. Retry or remove this file.'
+											? (attachment.error ?? 'Upload failed. Retry or remove this file.')
 											: null}
 									{@const tooltip = failureMessage
 										? `${attachment.filename} • ${sizeLabel} • ${failureMessage}`
@@ -1974,7 +2048,10 @@
 													<span class="attachment-spinner" aria-hidden="true"></span>
 												</div>
 											{:else if attachment.status === 'failed'}
-												<div class="attachment-status attachment-status--failed" aria-hidden="true"></div>
+												<div
+													class="attachment-status attachment-status--failed"
+													aria-hidden="true"
+												></div>
 												<span class="attachment-failed-badge" aria-hidden="true">!</span>
 												{#if attachment.sourceFile}
 													<button

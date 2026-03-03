@@ -1,0 +1,326 @@
+import { env } from '$env/dynamic/private';
+import {
+	getFirestoreDocument,
+	listFirestoreDocuments,
+	patchFirestoreDocument,
+	setFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
+import { z } from 'zod';
+
+export const DEFAULT_GRADER_OLYMPIAD_KEY = 'hamilton_ukmt' as const;
+export const DEFAULT_GRADER_OLYMPIAD_LABEL = 'Hamilton Olympiad by UKMT' as const;
+export const GRADER_MEMORY_FILE_PATH = 'memory.md' as const;
+export const GRADER_SUMMARY_PATH = 'grader/output/run-summary.json' as const;
+export const GRADER_PROBLEMS_DIR = 'grader/output/problems' as const;
+
+const userIdSchema = z.string().trim().min(1, 'userId is required');
+const runIdSchema = z.string().trim().min(1, 'runId is required');
+const trimmedString = z.string().trim().min(1);
+
+const firestoreTimestampSchema = z.preprocess((value) => {
+	if (value instanceof Date) {
+		return value;
+	}
+	if (typeof value === 'string' || typeof value === 'number') {
+		const date = new Date(value);
+		if (!Number.isNaN(date.getTime())) {
+			return date;
+		}
+		return value;
+	}
+	if (
+		value &&
+		typeof value === 'object' &&
+		'seconds' in value &&
+		'nanoseconds' in value &&
+		typeof (value as { seconds: unknown }).seconds === 'number' &&
+		typeof (value as { nanoseconds: unknown }).nanoseconds === 'number'
+	) {
+		const seconds = (value as { seconds: number }).seconds;
+		const nanoseconds = (value as { nanoseconds: number }).nanoseconds;
+		return new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000));
+	}
+	return value;
+}, z.date());
+
+const sparkGraderProblemVerdictSchema = z.enum(['correct', 'partial', 'incorrect', 'ungraded']);
+
+const sparkGraderTotalsSchema = z.object({
+	awardedMarks: z.number().min(0),
+	maxMarks: z.number().min(0),
+	problemCount: z.number().int().min(0),
+	gradedCount: z.number().int().min(0),
+	percentage: z.number().min(0).max(100).optional()
+});
+
+const sparkGraderProblemSummarySchema = z.object({
+	id: trimmedString,
+	index: z.number().int().min(1),
+	title: trimmedString.optional(),
+	awardedMarks: z.number().min(0).optional(),
+	maxMarks: z.number().min(0).optional(),
+	verdict: sparkGraderProblemVerdictSchema.optional(),
+	filePath: trimmedString
+});
+
+const sparkGraderPaperSchema = z.object({
+	olympiad: trimmedString.optional(),
+	year: trimmedString.optional(),
+	paperName: trimmedString.optional(),
+	paperUrl: trimmedString.optional(),
+	markSchemeUrl: trimmedString.optional()
+});
+
+const sparkGraderRunSchema = z.object({
+	id: trimmedString,
+	agentId: trimmedString,
+	workspaceId: trimmedString,
+	conversationId: trimmedString.optional(),
+	userPrompt: trimmedString.optional(),
+	olympiadKey: trimmedString,
+	olympiadLabel: trimmedString,
+	memoryPath: trimmedString,
+	summaryPath: trimmedString,
+	problemsDir: trimmedString,
+	sourceAttachmentIds: z.array(trimmedString).optional(),
+	sourceAttachmentCount: z.number().int().min(0).optional(),
+	status: z.enum(['created', 'executing', 'stopped', 'failed', 'done']),
+	paper: sparkGraderPaperSchema.optional(),
+	totals: sparkGraderTotalsSchema.optional(),
+	problems: z.array(sparkGraderProblemSummarySchema).optional(),
+	resultSummary: z.string().trim().optional(),
+	error: z.string().trim().optional(),
+	createdAt: firestoreTimestampSchema,
+	updatedAt: firestoreTimestampSchema,
+	completedAt: firestoreTimestampSchema.optional()
+});
+
+type SparkGraderRun = z.infer<typeof sparkGraderRunSchema>;
+
+const sparkGraderMemoryFileSchema = z.object({
+	path: z.literal('memory.md'),
+	content: z.string(),
+	olympiadKey: trimmedString,
+	olympiadLabel: trimmedString,
+	createdAt: firestoreTimestampSchema,
+	updatedAt: firestoreTimestampSchema,
+	sizeBytes: z.number().int().min(0).optional(),
+	contentType: trimmedString.optional()
+});
+
+type SparkGraderMemoryFile = z.infer<typeof sparkGraderMemoryFileSchema>;
+
+function requireServiceAccountJson(): string {
+	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+	if (!value || value.trim().length === 0) {
+		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+	}
+	return value;
+}
+
+function encodeFileId(path: string): string {
+	return encodeURIComponent(path);
+}
+
+function docIdFromPath(documentPath: string): string {
+	const parts = documentPath.split('/').filter(Boolean);
+	return parts[parts.length - 1] ?? documentPath;
+}
+
+function resolveSparkUserDocPath(userId: string): string {
+	const parsedUserId = userIdSchema.parse(userId);
+	return `spark/${parsedUserId}`;
+}
+
+export function resolveGraderRunDocPath(userId: string, runId: string): string {
+	return `${resolveSparkUserDocPath(userId)}/graderRuns/${runIdSchema.parse(runId)}`;
+}
+
+function resolveGraderMemoryFileDocPath(userId: string): string {
+	return `${resolveSparkUserDocPath(userId)}/graderConfig/config/files/${encodeFileId(GRADER_MEMORY_FILE_PATH)}`;
+}
+
+export function buildDefaultGraderMemoryMarkdown(options?: {
+	olympiadKey?: string;
+	olympiadLabel?: string;
+}): string {
+	const olympiadKey = options?.olympiadKey?.trim() || DEFAULT_GRADER_OLYMPIAD_KEY;
+	const olympiadLabel = options?.olympiadLabel?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
+	return [
+		'# Grader memory',
+		'',
+		'Default olympiad profile for automated paper grading runs.',
+		'',
+		`- olympiad_key: ${olympiadKey}`,
+		`- olympiad_label: ${olympiadLabel}`,
+		'',
+		'If the learner asks for a different olympiad, update this file first.'
+	].join('\n');
+}
+
+export function parseGraderMemoryMarkdown(content: string): {
+	olympiadKey: string;
+	olympiadLabel: string;
+} {
+	const text = content.trim();
+	const keyMatch = text.match(/^\s*-\s*olympiad_key\s*:\s*(.+?)\s*$/imu);
+	const labelMatch = text.match(/^\s*-\s*olympiad_label\s*:\s*(.+?)\s*$/imu);
+	const olympiadKey = keyMatch?.[1]?.trim() || DEFAULT_GRADER_OLYMPIAD_KEY;
+	const olympiadLabel = labelMatch?.[1]?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
+	return { olympiadKey, olympiadLabel };
+}
+
+export async function readOrCreateGraderMemoryFile(userId: string): Promise<SparkGraderMemoryFile> {
+	const serviceAccountJson = requireServiceAccountJson();
+	const documentPath = resolveGraderMemoryFileDocPath(userId);
+	const now = new Date();
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson,
+		documentPath
+	});
+	if (snapshot.exists && snapshot.data) {
+		const parsed = sparkGraderMemoryFileSchema.safeParse(snapshot.data);
+		if (parsed.success) {
+			return parsed.data;
+		}
+	}
+	const content = buildDefaultGraderMemoryMarkdown();
+	const memoryDoc: SparkGraderMemoryFile = {
+		path: GRADER_MEMORY_FILE_PATH,
+		content,
+		olympiadKey: DEFAULT_GRADER_OLYMPIAD_KEY,
+		olympiadLabel: DEFAULT_GRADER_OLYMPIAD_LABEL,
+		contentType: 'text/markdown',
+		sizeBytes: new TextEncoder().encode(content).byteLength,
+		createdAt: now,
+		updatedAt: now
+	};
+	await setFirestoreDocument({
+		serviceAccountJson,
+		documentPath,
+		data: memoryDoc as unknown as Record<string, unknown>
+	});
+	return memoryDoc;
+}
+
+export async function saveGraderMemoryFile(
+	userId: string,
+	options: {
+		content: string;
+		olympiadKey: string;
+		olympiadLabel: string;
+	}
+): Promise<SparkGraderMemoryFile> {
+	const serviceAccountJson = requireServiceAccountJson();
+	const now = new Date();
+	const content = options.content;
+	const memoryDoc = sparkGraderMemoryFileSchema.parse({
+		path: GRADER_MEMORY_FILE_PATH,
+		content,
+		olympiadKey: options.olympiadKey,
+		olympiadLabel: options.olympiadLabel,
+		contentType: 'text/markdown',
+		sizeBytes: new TextEncoder().encode(content).byteLength,
+		createdAt: now,
+		updatedAt: now
+	});
+	await setFirestoreDocument({
+		serviceAccountJson,
+		documentPath: resolveGraderMemoryFileDocPath(userId),
+		data: memoryDoc as unknown as Record<string, unknown>
+	});
+	return memoryDoc;
+}
+
+export async function createGraderRun(userId: string, run: SparkGraderRun): Promise<void> {
+	const validated = sparkGraderRunSchema.parse(run);
+	await setFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: resolveGraderRunDocPath(userId, validated.id),
+		data: validated as unknown as Record<string, unknown>
+	});
+}
+
+export async function patchGraderRun(
+	userId: string,
+	runId: string,
+	updates: Record<string, unknown>
+): Promise<void> {
+	await patchFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: resolveGraderRunDocPath(userId, runId),
+		updates
+	});
+}
+
+export async function listGraderRuns(userId: string, limit = 50): Promise<SparkGraderRun[]> {
+	const docs = await listFirestoreDocuments({
+		serviceAccountJson: requireServiceAccountJson(),
+		collectionPath: `${resolveSparkUserDocPath(userId)}/graderRuns`,
+		limit,
+		orderBy: 'createdAt desc'
+	});
+	const runs: SparkGraderRun[] = [];
+	for (const doc of docs) {
+		const parsed = sparkGraderRunSchema.safeParse({
+			id: docIdFromPath(doc.documentPath),
+			...doc.data
+		});
+		if (!parsed.success) {
+			console.warn('Skipping invalid grader run document', {
+				documentPath: doc.documentPath,
+				issues: parsed.error.issues
+			});
+			continue;
+		}
+		runs.push(parsed.data);
+	}
+	return runs;
+}
+
+export async function getGraderRun(userId: string, runId: string): Promise<SparkGraderRun | null> {
+	const docPath = resolveGraderRunDocPath(userId, runId);
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson: requireServiceAccountJson(),
+		documentPath: docPath
+	});
+	if (!snapshot.exists || !snapshot.data) {
+		return null;
+	}
+	const parsed = sparkGraderRunSchema.safeParse({
+		id: runIdSchema.parse(runId),
+		...snapshot.data
+	});
+	if (!parsed.success) {
+		console.warn('Invalid grader run payload', {
+			docPath,
+			issues: parsed.error.issues
+		});
+		return null;
+	}
+	return parsed.data;
+}
+
+export async function getWorkspaceTextFile(
+	userId: string,
+	workspaceId: string,
+	filePath: string
+): Promise<string | null> {
+	const serviceAccountJson = requireServiceAccountJson();
+	const path = filePath.trim();
+	if (path.length === 0) {
+		return null;
+	}
+	const snapshot = await getFirestoreDocument({
+		serviceAccountJson,
+		documentPath: `users/${userId}/workspace/${workspaceId}/files/${encodeFileId(path)}`
+	});
+	if (!snapshot.exists || !snapshot.data) {
+		return null;
+	}
+	const content = snapshot.data.content;
+	if (typeof content !== 'string') {
+		return null;
+	}
+	return content;
+}

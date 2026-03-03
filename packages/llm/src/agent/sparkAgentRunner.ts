@@ -14,6 +14,7 @@ import {
 
 import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
+import { createFilesystemToolSetForModel } from "@ljoukov/llm";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
@@ -37,6 +38,8 @@ import {
   patchFirestoreDocument,
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
+import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
+import { downloadStorageObject } from "../utils/gcp/storageRest";
 import {
   estimateCallCostUsd,
   generateText,
@@ -44,11 +47,19 @@ import {
   parseJsonFromLlmText,
   runToolLoop,
   tool,
+  type LlmContent,
+  type LlmContentPart,
+  type LlmStreamEvent,
   type LlmTextModelId,
   type LlmToolConfig,
   type LlmDebugOptions,
   type LlmToolSet,
 } from "../utils/llm";
+import {
+  encodeBgraBitmapToPng,
+  getPdfPageCount,
+  renderPdfPagesBgra,
+} from "../utils/pdfium";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import type {
   JobProgressReporter,
@@ -57,10 +68,12 @@ import type {
   ModelCallHandle,
   StageHandle,
 } from "../utils/concurrency";
+import { PNG } from "pngjs";
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
+const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
 
 type TrackedSubmodelCallSummary = {
   readonly modelId: string;
@@ -84,10 +97,12 @@ function mergeUsageTokens(
     promptTokens: next.promptTokens ?? current.promptTokens,
     cachedTokens: next.cachedTokens ?? current.cachedTokens,
     responseTokens: next.responseTokens ?? current.responseTokens,
-    responseImageTokens: next.responseImageTokens ?? current.responseImageTokens,
+    responseImageTokens:
+      next.responseImageTokens ?? current.responseImageTokens,
     thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
     totalTokens: next.totalTokens ?? current.totalTokens,
-    toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+    toolUsePromptTokens:
+      next.toolUsePromptTokens ?? current.toolUsePromptTokens,
   };
 }
 
@@ -139,7 +154,10 @@ function createAgentSubmodelProgressTracker(options: {
     recordModelUsage: (handle, chunk) => {
       const state = active.get(handle);
       if (state) {
-        if (typeof chunk.modelVersion === "string" && chunk.modelVersion.trim().length > 0) {
+        if (
+          typeof chunk.modelVersion === "string" &&
+          chunk.modelVersion.trim().length > 0
+        ) {
           state.modelVersion = chunk.modelVersion.trim();
         }
         state.usageTokens = mergeUsageTokens(state.usageTokens, chunk.tokens);
@@ -178,7 +196,8 @@ function createAgentSubmodelProgressTracker(options: {
   };
 
   if (parent.setActiveStages) {
-    trackedProgress.setActiveStages = (stages) => parent.setActiveStages?.(stages);
+    trackedProgress.setActiveStages = (stages) =>
+      parent.setActiveStages?.(stages);
   }
 
   return {
@@ -190,7 +209,21 @@ const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_STREAM_MAX_CHARS = 20_000;
+const AGENT_TOOL_LOG_SNIPPET_MAX_BYTES = 4 * 1024;
+const AGENT_TOOL_LOG_SNIPPET_MAX_CHARS = 1_000;
 const STOP_POLL_INTERVAL_MS = 10_000;
+const AGENT_INLINE_ATTACHMENTS_MAX_COUNT = 24;
+const AGENT_INLINE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const WORKSPACE_LINK_DISCOVERY_MAX_DEPTH = 8;
+const WORKSPACE_LINK_DISCOVERY_MAX_FILES = 400;
+const WORKSPACE_LINK_DISCOVERY_MAX_JSON_BYTES = 512 * 1024;
+const WEB_FETCH_TIMEOUT_MS = 20_000;
+const WEB_FETCH_MAX_BYTES = 6 * 1024 * 1024;
+const WEB_FETCH_DEFAULT_MAX_CHARS = 20_000;
+const PDF_EXTRACTION_MAX_BYTES = 16 * 1024 * 1024;
+const PDF_EXTRACTION_DEFAULT_MAX_CHARS = 200_000;
+const PDF_DIAGRAM_DEFAULT_MAX_ITEMS = 32;
+const PDF_DIAGRAM_MAX_ITEMS = 64;
 
 function formatUsdTotal(value: number): string {
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -198,19 +231,29 @@ function formatUsdTotal(value: number): string {
 }
 
 function parseGenerateToolCostUsd(message: string): {
-  toolName: "generate_text" | "generate_json";
+  toolName:
+    | "generate_text"
+    | "generate_json"
+    | "extract_pdf_text"
+    | "read_pdf"
+    | "extract_pdf_diagrams";
   costUsd: number;
 } | null {
   if (!message.startsWith("tool_result:")) {
     return null;
   }
   const match = message.match(
-    /^tool_result:\s+(generate_text|generate_json)\b.*\bcost=\$([\d,.]+)\b/u,
+    /^tool_result:\s+(generate_text|generate_json|extract_pdf_text|read_pdf|extract_pdf_diagrams)\b.*\bcost=\$([\d,.]+)\b/u,
   );
   if (!match) {
     return null;
   }
-  const toolName = match[1] as "generate_text" | "generate_json";
+  const toolName = match[1] as
+    | "generate_text"
+    | "generate_json"
+    | "extract_pdf_text"
+    | "read_pdf"
+    | "extract_pdf_diagrams";
   const costValue = Number.parseFloat(match[2].replace(/,/gu, ""));
   if (!Number.isFinite(costValue) || costValue < 0) {
     return null;
@@ -230,6 +273,54 @@ function serializeTraceValue(value: unknown): string {
     return String(value);
   } catch (error) {
     return `<<unserializable trace payload: ${errorAsString(error)}>>`;
+  }
+}
+
+function formatToolLogSnippet(value: unknown): string {
+  const capped = capUtf8Text(serializeTraceValue(value), AGENT_TOOL_LOG_SNIPPET_MAX_BYTES);
+  const compact = capped.replace(/\s+/gu, " ").trim();
+  if (compact.length === 0) {
+    return "<empty>";
+  }
+  if (compact.length <= AGENT_TOOL_LOG_SNIPPET_MAX_CHARS) {
+    return compact;
+  }
+  return `${compact.slice(0, AGENT_TOOL_LOG_SNIPPET_MAX_CHARS)}…`;
+}
+
+function appendToolCallStreamLog(options: {
+  event: LlmStreamEvent;
+  append: (line: string) => void;
+}): void {
+  const event = options.event;
+  if (event.type !== "tool_call") {
+    return;
+  }
+  const callIdSegment =
+    typeof event.callId === "string" && event.callId.trim().length > 0
+      ? ` callId=${event.callId}`
+      : "";
+  const prefix = [
+    `tool_call_${event.phase}:`,
+    `turn=${event.turn.toString()}`,
+    `index=${event.toolIndex.toString()}`,
+    `tool=${event.toolName}${callIdSegment}`,
+  ].join(" ");
+  if (event.phase === "started") {
+    options.append(prefix);
+    options.append(`tool_call_input: ${formatToolLogSnippet(event.input)}`);
+    return;
+  }
+  const durationSegment =
+    typeof event.durationMs === "number" && Number.isFinite(event.durationMs)
+      ? ` durationMs=${Math.max(0, Math.round(event.durationMs)).toString()}`
+      : "";
+  options.append(
+    `${prefix} status=${event.error ? "error" : "ok"}${durationSegment}`,
+  );
+  options.append(`tool_call_output: ${formatToolLogSnippet(event.output)}`);
+  if (typeof event.error === "string" && event.error.trim().length > 0) {
+    options.append(`tool_call_error: ${event.error.trim()}`);
   }
 }
 
@@ -263,13 +354,6 @@ async function persistToolLoopTrace(options: {
       },
     });
 
-    console.log(
-      `${options.consolePrefix}trace_step: step=${step.step} model=${step.modelId} toolCalls=${toolCalls.length}`,
-    );
-    if (stepText.length > 0) {
-      console.log(`${options.consolePrefix}trace_step_text(step=${step.step}): ${stepText}`);
-    }
-
     for (const [toolIndex, toolCall] of toolCalls.entries()) {
       const callIndex = toolIndex + 1;
       const input = serializeTraceValue(toolCall.input);
@@ -299,22 +383,6 @@ async function persistToolLoopTrace(options: {
         },
       });
 
-      console.log(
-        [
-          `${options.consolePrefix}trace_tool_call:`,
-          `step=${step.step}`,
-          `index=${callIndex}`,
-          `tool=${toolCall.toolName}`,
-          ...(callId ? [`callId=${callId}`] : []),
-          ...(error ? [`error=${error}`] : []),
-        ].join(" "),
-      );
-      console.log(
-        `${options.consolePrefix}trace_tool_input(step=${step.step} index=${callIndex}): ${input}`,
-      );
-      console.log(
-        `${options.consolePrefix}trace_tool_output(step=${step.step} index=${callIndex}): ${output}`,
-      );
     }
   }
 
@@ -367,7 +435,9 @@ function resolvePyodideIndexUrl(explicit?: string): string {
     if (trimmed.startsWith("file://")) {
       try {
         const resolved = fileURLToPath(trimmed);
-        return resolved.endsWith(path.sep) ? resolved : `${resolved}${path.sep}`;
+        return resolved.endsWith(path.sep)
+          ? resolved
+          : `${resolved}${path.sep}`;
       } catch {
         return null;
       }
@@ -520,6 +590,93 @@ type AgentRunOptions = {
   maxSteps?: number;
 };
 
+function parseOptionalString(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function parseOptionalPositiveInt(value: unknown): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number") {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || value < 1) {
+    return undefined;
+  }
+  return value;
+}
+
+const AgentAttachmentInputSchema = z.object({
+  id: z.preprocess(
+    (value) => parseOptionalString(value),
+    z.string().trim().min(1).optional(),
+  ),
+  storagePath: z.string().trim().min(1),
+  contentType: z.string().trim().min(1),
+  filename: z.preprocess(
+    (value) => parseOptionalString(value),
+    z.string().trim().min(1).optional(),
+  ),
+  sizeBytes: z.number().int().min(1),
+  pageCount: z.preprocess(
+    (value) => parseOptionalPositiveInt(value),
+    z.number().int().min(1).optional(),
+  ),
+});
+
+type AgentAttachmentInput = z.infer<typeof AgentAttachmentInputSchema>;
+
+const WorkspaceStorageLinkSchema = z
+  .object({
+    type: z.literal("storage_link"),
+  })
+  .merge(AgentAttachmentInputSchema)
+  .passthrough();
+
+const WorkspaceAttachmentManifestSchema = z
+  .object({
+    attachments: z.array(AgentAttachmentInputSchema).optional(),
+  })
+  .passthrough();
+
+const GraderSummaryProblemSchema = z.object({
+  id: z.string().trim().min(1),
+  index: z.number().int().min(1),
+  title: z.string().trim().min(1).optional(),
+  awardedMarks: z.number().min(0).optional(),
+  maxMarks: z.number().min(0).optional(),
+  verdict: z.enum(["correct", "partial", "incorrect", "ungraded"]).optional(),
+  filePath: z.string().trim().min(1),
+});
+
+const GraderRunSummarySchema = z.object({
+  olympiad: z.string().trim().min(1).optional(),
+  year: z.string().trim().min(1).optional(),
+  paperName: z.string().trim().min(1).optional(),
+  paperUrl: z.string().trim().min(1).optional(),
+  markSchemeUrl: z.string().trim().min(1).optional(),
+  totals: z
+    .object({
+      awardedMarks: z.number().min(0),
+      maxMarks: z.number().min(0),
+    })
+    .optional(),
+  problems: z.array(GraderSummaryProblemSchema).min(1),
+});
+
+type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
+
 function loadAgentEnv(): void {
   loadLocalEnv();
   const repoRoot = path.resolve(process.cwd());
@@ -569,6 +726,402 @@ function resolveWorkspacePath(
   return resolved;
 }
 
+function isUserUploadPath(userId: string, storagePath: string): boolean {
+  return storagePath.startsWith(`spark/uploads/${userId}/`);
+}
+
+type ResolvedAttachmentInput = {
+  id: string;
+  storagePath: string;
+  contentType: string;
+  filename?: string;
+  sizeBytes: number;
+  pageCount?: number;
+};
+
+function toResolvedAttachmentInput(
+  entry: AgentAttachmentInput,
+): ResolvedAttachmentInput {
+  const fallbackId = `${entry.storagePath}#${entry.contentType}`;
+  const attachmentId =
+    typeof entry.id === "string" && entry.id.trim().length > 0
+      ? entry.id.trim()
+      : fallbackId;
+  const filename =
+    typeof entry.filename === "string" && entry.filename.trim().length > 0
+      ? entry.filename.trim()
+      : undefined;
+  const pageCount =
+    typeof entry.pageCount === "number" && entry.pageCount > 0
+      ? entry.pageCount
+      : undefined;
+  return {
+    id: attachmentId,
+    storagePath: entry.storagePath,
+    contentType: entry.contentType,
+    ...(filename ? { filename } : {}),
+    sizeBytes: entry.sizeBytes,
+    ...(pageCount ? { pageCount } : {}),
+  };
+}
+
+function mergeAttachmentInputs(options: {
+  primary: ResolvedAttachmentInput[];
+  secondary: ResolvedAttachmentInput[];
+}): ResolvedAttachmentInput[] {
+  const merged: ResolvedAttachmentInput[] = [];
+  const seenIds = new Set<string>();
+  const seenPaths = new Set<string>();
+  const push = (entry: ResolvedAttachmentInput): void => {
+    if (seenIds.has(entry.id) || seenPaths.has(entry.storagePath)) {
+      return;
+    }
+    seenIds.add(entry.id);
+    seenPaths.add(entry.storagePath);
+    merged.push(entry);
+  };
+  for (const entry of options.primary) {
+    push(entry);
+  }
+  for (const entry of options.secondary) {
+    push(entry);
+  }
+  return merged;
+}
+
+async function discoverWorkspaceLinkAttachments(options: {
+  rootDir: string;
+  log?: (line: string) => void;
+}): Promise<ResolvedAttachmentInput[]> {
+  let files: string[] = [];
+  try {
+    files = await listFilesRecursive({
+      rootDir: options.rootDir,
+      maxDepth: WORKSPACE_LINK_DISCOVERY_MAX_DEPTH,
+    });
+  } catch (error) {
+    options.log?.(
+      `warn: unable to scan workspace for storage links: ${errorAsString(error)}`,
+    );
+    return [];
+  }
+  const jsonFiles = files
+    .filter(
+      (entry) => !entry.endsWith("/") && entry.toLowerCase().endsWith(".json"),
+    )
+    .sort()
+    .slice(0, WORKSPACE_LINK_DISCOVERY_MAX_FILES);
+  const discovered: ResolvedAttachmentInput[] = [];
+  for (const relativePath of jsonFiles) {
+    const resolvedPath = resolveWorkspacePath(options.rootDir, relativePath);
+    const fileStats = await stat(resolvedPath).catch(() => undefined);
+    if (!fileStats || !fileStats.isFile()) {
+      continue;
+    }
+    if (
+      fileStats.size <= 0 ||
+      fileStats.size > WORKSPACE_LINK_DISCOVERY_MAX_JSON_BYTES
+    ) {
+      continue;
+    }
+    let text = "";
+    try {
+      text = await readFile(resolvedPath, { encoding: "utf8" });
+    } catch {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    const directLink = WorkspaceStorageLinkSchema.safeParse(parsed);
+    if (directLink.success) {
+      discovered.push(toResolvedAttachmentInput(directLink.data));
+      continue;
+    }
+    const manifest = WorkspaceAttachmentManifestSchema.safeParse(parsed);
+    if (!manifest.success || !manifest.data.attachments) {
+      continue;
+    }
+    for (const entry of manifest.data.attachments) {
+      discovered.push(toResolvedAttachmentInput(entry));
+    }
+  }
+  const deduped = mergeAttachmentInputs({ primary: discovered, secondary: [] });
+  if (deduped.length > 0) {
+    options.log?.(
+      `attachment_links: discovered ${deduped.length.toString()} storage link attachment(s)`,
+    );
+  }
+  return deduped;
+}
+
+function resolveAttachmentLabel(attachment: ResolvedAttachmentInput): string {
+  const filename =
+    typeof attachment.filename === "string" ? attachment.filename.trim() : "";
+  if (filename.length > 0) {
+    return filename;
+  }
+  return attachment.id;
+}
+
+async function loadAttachmentParts(options: {
+  serviceAccountJson: string;
+  bucketName: string;
+  userId: string;
+  attachments: ResolvedAttachmentInput[];
+  log?: (line: string) => void;
+}): Promise<{ parts: LlmContentPart[]; notes: string[] }> {
+  const parts: LlmContentPart[] = [];
+  const notes: string[] = [];
+  let index = 0;
+  for (const attachment of options.attachments.slice(
+    0,
+    AGENT_INLINE_ATTACHMENTS_MAX_COUNT,
+  )) {
+    index += 1;
+    const label = resolveAttachmentLabel(attachment);
+    if (!isUserUploadPath(options.userId, attachment.storagePath)) {
+      const note = `[${index.toString()}] skipped ${label}: disallowed storage path`;
+      notes.push(note);
+      options.log?.(`warn: ${note}`);
+      continue;
+    }
+    let downloaded:
+      | {
+          bytes: Uint8Array;
+          contentType: string | null;
+        }
+      | undefined;
+    try {
+      downloaded = await downloadStorageObject({
+        serviceAccountJson: options.serviceAccountJson,
+        bucketName: options.bucketName,
+        objectName: attachment.storagePath,
+      });
+    } catch (error) {
+      const note = `[${index.toString()}] skipped ${label}: download failed (${errorAsString(error)})`;
+      notes.push(note);
+      options.log?.(`warn: ${note}`);
+      continue;
+    }
+    const bytes = downloaded.bytes;
+    if (bytes.length <= 0) {
+      const note = `[${index.toString()}] skipped ${label}: file is empty`;
+      notes.push(note);
+      options.log?.(`warn: ${note}`);
+      continue;
+    }
+    if (bytes.length > AGENT_INLINE_ATTACHMENT_MAX_BYTES) {
+      const note = `[${index.toString()}] skipped ${label}: file too large (${bytes.length.toString()} bytes)`;
+      notes.push(note);
+      options.log?.(`warn: ${note}`);
+      continue;
+    }
+    const mimeType =
+      downloaded.contentType && downloaded.contentType.trim().length > 0
+        ? downloaded.contentType
+        : attachment.contentType;
+    const data = Buffer.from(bytes).toString("base64");
+    parts.push({
+      type: "inlineData",
+      data,
+      mimeType,
+    });
+    options.log?.(
+      `input_attachment: added ${label} mime=${mimeType} bytes=${bytes.length.toString()}`,
+    );
+  }
+  return { parts, notes };
+}
+
+function buildInitialToolLoopContents(options: {
+  systemPrompt: string;
+  prompt: string;
+  inlineParts: LlmContentPart[];
+  notes: string[];
+}): LlmContent[] {
+  const userParts: LlmContentPart[] = [{ type: "text", text: options.prompt }];
+  if (options.notes.length > 0) {
+    userParts.push({
+      type: "text",
+      text: [
+        "",
+        "Attachment ingestion notes:",
+        ...options.notes.map((entry) => `- ${entry}`),
+      ].join("\n"),
+    });
+  }
+  for (const part of options.inlineParts) {
+    userParts.push(part);
+  }
+  return [
+    {
+      role: "system",
+      parts: [{ type: "text", text: options.systemPrompt }],
+    },
+    {
+      role: "user",
+      parts: userParts,
+    },
+  ];
+}
+
+async function readGraderRunSummaryFromWorkspace(options: {
+  rootDir: string;
+  summaryPath: string;
+  log?: (line: string) => void;
+}): Promise<GraderRunSummary | null> {
+  let text = "";
+  try {
+    text = await readFile(
+      resolveWorkspacePath(options.rootDir, options.summaryPath),
+      {
+        encoding: "utf8",
+      },
+    );
+  } catch (error) {
+    options.log?.(
+      `warn: unable to read grader summary "${options.summaryPath}": ${errorAsString(error)}`,
+    );
+    return null;
+  }
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(text);
+  } catch (error) {
+    options.log?.(
+      `warn: grader summary "${options.summaryPath}" is invalid JSON: ${errorAsString(error)}`,
+    );
+    return null;
+  }
+  const parsed = GraderRunSummarySchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    options.log?.(
+      `warn: grader summary "${options.summaryPath}" failed schema validation`,
+    );
+    return null;
+  }
+  return parsed.data;
+}
+
+function summariseGraderTotals(summary: GraderRunSummary): {
+  awardedMarks: number;
+  maxMarks: number;
+  problemCount: number;
+  gradedCount: number;
+  percentage: number;
+} {
+  const awardedFromProblems = summary.problems.reduce((sum, problem) => {
+    if (typeof problem.awardedMarks === "number") {
+      return sum + problem.awardedMarks;
+    }
+    return sum;
+  }, 0);
+  const maxFromProblems = summary.problems.reduce((sum, problem) => {
+    if (typeof problem.maxMarks === "number") {
+      return sum + problem.maxMarks;
+    }
+    return sum;
+  }, 0);
+  const awardedMarks =
+    typeof summary.totals?.awardedMarks === "number"
+      ? summary.totals.awardedMarks
+      : awardedFromProblems;
+  const maxMarks =
+    typeof summary.totals?.maxMarks === "number"
+      ? summary.totals.maxMarks
+      : maxFromProblems;
+  const gradedCount = summary.problems.filter(
+    (problem) =>
+      typeof problem.awardedMarks === "number" &&
+      typeof problem.maxMarks === "number",
+  ).length;
+  const percentage = maxMarks > 0 ? (awardedMarks / maxMarks) * 100 : 0;
+  return {
+    awardedMarks,
+    maxMarks,
+    problemCount: summary.problems.length,
+    gradedCount,
+    percentage: Number.isFinite(percentage) ? percentage : 0,
+  };
+}
+
+async function patchGraderRunStatus(options: {
+  serviceAccountJson: string;
+  userId: string;
+  runId: string;
+  updates: Record<string, unknown>;
+}): Promise<void> {
+  await patchFirestoreDocument({
+    serviceAccountJson: options.serviceAccountJson,
+    documentPath: `spark/${options.userId}/graderRuns/${options.runId}`,
+    updates: options.updates,
+  });
+}
+
+function decodeHtmlToText(input: string): string {
+  return input
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, " ")
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/&nbsp;/giu, " ")
+    .replace(/&amp;/giu, "&")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+async function readResponseBytesWithLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const contentLengthHeader = response.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      throw new Error(
+        `Response too large (${contentLength.toString()} bytes); limit is ${maxBytes.toString()} bytes.`,
+      );
+    }
+  }
+
+  const body = response.body;
+  if (!body) {
+    return new Uint8Array();
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+    total += value.byteLength;
+    if (total > maxBytes) {
+      throw new Error(
+        `Response exceeded ${maxBytes.toString()} bytes while downloading.`,
+      );
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+}
+
 function resolveFirestoreDate(value: unknown): Date | undefined {
   if (value instanceof Date) {
     return value;
@@ -616,7 +1169,125 @@ function resolveContentType(filePath: string): string | undefined {
   if (ext === ".txt") {
     return "text/plain";
   }
+  if (ext === ".png") {
+    return "image/png";
+  }
+  if (ext === ".jpg" || ext === ".jpeg") {
+    return "image/jpeg";
+  }
+  if (ext === ".gif") {
+    return "image/gif";
+  }
+  if (ext === ".webp") {
+    return "image/webp";
+  }
+  if (ext === ".pdf") {
+    return "application/pdf";
+  }
   return undefined;
+}
+
+function clampToUnit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
+}
+
+function toCropPixelsFromNorm(options: {
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  widthNorm: number;
+  heightNorm: number;
+}): { left: number; top: number; right: number; bottom: number } {
+  const leftNorm = clampToUnit(options.left);
+  const topNorm = clampToUnit(options.top);
+  const rightNorm = clampToUnit(options.left + options.widthNorm);
+  const bottomNorm = clampToUnit(options.top + options.heightNorm);
+  const left = Math.max(
+    0,
+    Math.min(options.width - 1, Math.floor(leftNorm * options.width)),
+  );
+  const top = Math.max(
+    0,
+    Math.min(options.height - 1, Math.floor(topNorm * options.height)),
+  );
+  const right = Math.max(
+    left + 1,
+    Math.min(options.width, Math.ceil(rightNorm * options.width)),
+  );
+  const bottom = Math.max(
+    top + 1,
+    Math.min(options.height, Math.ceil(bottomNorm * options.height)),
+  );
+  return { left, top, right, bottom };
+}
+
+function toCropPixelsFrom1000(options: {
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}): { left: number; top: number; right: number; bottom: number } {
+  const normalized = {
+    left: clampToUnit(options.left / 1000),
+    top: clampToUnit(options.top / 1000),
+    right: clampToUnit(options.right / 1000),
+    bottom: clampToUnit(options.bottom / 1000),
+  };
+  const left = Math.max(
+    0,
+    Math.min(options.width - 1, Math.floor(normalized.left * options.width)),
+  );
+  const top = Math.max(
+    0,
+    Math.min(options.height - 1, Math.floor(normalized.top * options.height)),
+  );
+  const right = Math.max(
+    left + 1,
+    Math.min(options.width, Math.ceil(normalized.right * options.width)),
+  );
+  const bottom = Math.max(
+    top + 1,
+    Math.min(options.height, Math.ceil(normalized.bottom * options.height)),
+  );
+  return { left, top, right, bottom };
+}
+
+function cropPngBuffer(options: {
+  source: Buffer;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}): Buffer {
+  const decoded = PNG.sync.read(options.source);
+  const width = decoded.width;
+  const height = decoded.height;
+  const left = Math.max(0, Math.min(width - 1, options.left));
+  const top = Math.max(0, Math.min(height - 1, options.top));
+  const right = Math.max(left + 1, Math.min(width, options.right));
+  const bottom = Math.max(top + 1, Math.min(height, options.bottom));
+  const cropWidth = right - left;
+  const cropHeight = bottom - top;
+
+  const cropped = new PNG({ width: cropWidth, height: cropHeight });
+  for (let row = 0; row < cropHeight; row += 1) {
+    const srcOffset = ((top + row) * width + left) * 4;
+    const dstOffset = row * cropWidth * 4;
+    decoded.data.copy(cropped.data, dstOffset, srcOffset, srcOffset + cropWidth * 4);
+  }
+  return PNG.sync.write(cropped);
 }
 
 async function ensureDir(dirPath: string): Promise<void> {
@@ -674,10 +1345,13 @@ async function resolveLlmDebugAttemptDir(options: {
   }
   const parent = path.dirname(basePath);
   const basename = path.basename(basePath);
-  const entries = await readdir(parent, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(parent, { withFileTypes: true }).catch(
+    () => [],
+  );
   const candidates = entries
     .filter(
-      (entry) => entry.isDirectory() && entry.name.startsWith(`${basename}-run-`),
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith(`${basename}-run-`),
     )
     .map((entry) => entry.name)
     .sort();
@@ -690,12 +1364,20 @@ async function resolveLlmDebugAttemptDir(options: {
 async function persistLlmLogsFromDebugDirToWorkspace(options: {
   rootDir: string;
   workspace: SparkAgentWorkspace;
-  toolName: "generate_text" | "generate_json";
+  toolName:
+    | "generate_text"
+    | "generate_json"
+    | "extract_pdf_text"
+    | "read_pdf"
+    | "extract_pdf_diagrams";
   toolIdSegment: string;
   debugDir: string;
 }): Promise<void> {
   const maxBytes = 900_000;
-  const targets: Array<{ name: "prompt" | "request" | "response"; filename: string }> = [
+  const targets: Array<{
+    name: "prompt" | "request" | "response";
+    filename: string;
+  }> = [
     { name: "prompt", filename: "prompt.txt" },
     { name: "request", filename: "request.txt" },
     { name: "response", filename: "response.txt" },
@@ -713,7 +1395,9 @@ async function persistLlmLogsFromDebugDirToWorkspace(options: {
     const relativePath = `${options.toolName}/${options.toolIdSegment}/${target.filename}`;
     const resolvedPath = resolveWorkspacePath(options.rootDir, relativePath);
     await ensureDir(path.dirname(resolvedPath));
-    await writeFile(resolvedPath, capUtf8Text(content, maxBytes), { encoding: "utf8" });
+    await writeFile(resolvedPath, capUtf8Text(content, maxBytes), {
+      encoding: "utf8",
+    });
     options.workspace.scheduleUpdate(relativePath);
   }
 }
@@ -1258,7 +1942,6 @@ class AgentLogSync {
   private createdAtWritten = false;
   private lastWriteAt = 0;
   private pendingLines = new Map<string, string>();
-  private pendingThoughtDeltas = new Map<string, string>();
   private pendingStats: AgentRunStatsSnapshot | null = null;
   private streamAssistant = "";
   private streamThoughts = "";
@@ -1333,8 +2016,6 @@ class AgentLogSync {
     if (this.mirrorToConsole) {
       console.log(`${this.consolePrefix}thought_delta: ${delta}`);
     }
-    const deltaKey = this.nextLineKey();
-    this.pendingThoughtDeltas.set(deltaKey, delta);
     const next = this.streamThoughts + delta;
     this.streamThoughts =
       next.length > AGENT_STREAM_MAX_CHARS
@@ -1354,7 +2035,6 @@ class AgentLogSync {
     }
     if (
       this.pendingLines.size === 0 &&
-      this.pendingThoughtDeltas.size === 0 &&
       !this.pendingStats &&
       !this.streamDirty
     ) {
@@ -1426,7 +2106,6 @@ class AgentLogSync {
     if (
       !force &&
       this.pendingLines.size === 0 &&
-      this.pendingThoughtDeltas.size === 0 &&
       !this.pendingStats &&
       !this.streamDirty
     ) {
@@ -1450,12 +2129,7 @@ class AgentLogSync {
         this.inFlight = undefined;
         if (
           !this.disposed &&
-          (
-            this.pendingLines.size > 0 ||
-            this.pendingThoughtDeltas.size > 0 ||
-            this.pendingStats ||
-            this.streamDirty
-          )
+          (this.pendingLines.size > 0 || this.pendingStats || this.streamDirty)
         ) {
           this.scheduleUpdate();
         }
@@ -1469,17 +2143,15 @@ class AgentLogSync {
       return;
     }
     const linesEntries = Array.from(this.pendingLines.entries());
-    const thoughtEntries = Array.from(this.pendingThoughtDeltas.entries());
     const stats = this.pendingStats;
     const streamDirty = this.streamDirty;
     const streamAssistant = this.streamAssistant;
     const streamThoughts = this.streamThoughts;
     this.pendingLines.clear();
-    this.pendingThoughtDeltas.clear();
     this.pendingStats = null;
     this.streamDirty = false;
 
-    if (linesEntries.length === 0 && thoughtEntries.length === 0 && !stats && !streamDirty) {
+    if (linesEntries.length === 0 && !stats && !streamDirty) {
       return;
     }
 
@@ -1526,11 +2198,6 @@ class AgentLogSync {
           this.pendingLines.set(key, value);
         }
       }
-      for (const [key, value] of thoughtEntries) {
-        if (!this.pendingThoughtDeltas.has(key)) {
-          this.pendingThoughtDeltas.set(key, value);
-        }
-      }
       if (!this.pendingStats && stats) {
         this.pendingStats = stats;
       }
@@ -1538,30 +2205,6 @@ class AgentLogSync {
         this.streamDirty = true;
       }
       throw error;
-    }
-
-    if (thoughtEntries.length > 0) {
-      try {
-        for (const [key, delta] of thoughtEntries) {
-          await setFirestoreDocument({
-            serviceAccountJson: this.serviceAccountJson,
-            documentPath: `${this.documentPath()}/thoughtDeltas/${key}`,
-            data: {
-              key,
-              delta,
-              createdAt: now,
-              updatedAt: now,
-            },
-          });
-        }
-      } catch (error) {
-        for (const [key, value] of thoughtEntries) {
-          if (!this.pendingThoughtDeltas.has(key)) {
-            this.pendingThoughtDeltas.set(key, value);
-          }
-        }
-        throw error;
-      }
     }
   }
 }
@@ -1572,11 +2215,16 @@ function buildAgentSystemPrompt(): string {
     "",
     "General rules:",
     "- Work with workspace-relative paths only (no absolute paths, no .. segments).",
-    "- Use list_files/read_file/read_files to inspect the workspace before editing.",
+    "- Use list_files/read_file/read_files to inspect text files in the workspace before editing.",
+    "- Use view_image for image files (read_file is text-only).",
     "- Use write_file to create/overwrite files; use apply_patch for small edits to existing files.",
     "- Use move_file for renames and delete_file for deletions.",
     "- Prefer fewer, larger writes over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
+    "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
+    "- Use read_pdf for PDF URLs or workspace PDF files when you need a faithful transcription.",
+    "- Use extract_pdf_diagrams when you need diagram bounding boxes from a PDF.",
+    "- Do NOT use web_fetch for PDFs.",
     "- When the task is complete, you MUST call done({summary}).",
     "",
     "Lesson creation pipeline (CRITICAL):",
@@ -1601,7 +2249,7 @@ function buildAgentSystemPrompt(): string {
     "     - lesson/output/session.json (from lesson/drafts/session.md, schema lesson/schema/session.schema.json)",
     "     - lesson/output/quiz/<planItemId>.json (from lesson/drafts/quiz/<planItemId>.md, schema lesson/schema/quiz.schema.json)",
     "     - lesson/output/code/<planItemId>.json (from lesson/drafts/code/<planItemId>.md, schema lesson/schema/coding_problem.schema.json)",
-    "     - lesson/output/media/<planItemId>.json (rare; only if kind=\"media\" exists; schema lesson/schema/media.schema.json)",
+    '     - lesson/output/media/<planItemId>.json (rare; only if kind="media" exists; schema lesson/schema/media.schema.json)',
     "5) Publish only after outputs exist and look consistent: call publish_lesson and fix errors until status='published'.",
     "Publish lessons into the user's sessions (not welcome templates).",
     "",
@@ -1620,13 +2268,13 @@ function buildAgentSystemPrompt(): string {
     "",
     "Examples (multiple quizzes / coding problems):",
     "- Grade quiz q1:",
-    "  generate_text({ promptPath: \"lesson/prompts/quiz-grade.md\", inputPaths: [\"lesson/drafts/quiz/q1.md\"], outputPath: \"lesson/feedback/quiz/q1-grade.md\" })",
+    '  generate_text({ promptPath: "lesson/prompts/quiz-grade.md", inputPaths: ["lesson/drafts/quiz/q1.md"], outputPath: "lesson/feedback/quiz/q1-grade.md" })',
     "- Revise quiz q1 using its grade report:",
-    "  generate_text({ promptPath: \"lesson/prompts/quiz-revise.md\", inputPaths: [\"lesson/drafts/quiz/q1.md\", \"lesson/feedback/quiz/q1-grade.md\"], outputPath: \"lesson/drafts/quiz/q1.md\" })",
+    '  generate_text({ promptPath: "lesson/prompts/quiz-revise.md", inputPaths: ["lesson/drafts/quiz/q1.md", "lesson/feedback/quiz/q1-grade.md"], outputPath: "lesson/drafts/quiz/q1.md" })',
     "- Grade code problem p1:",
-    "  generate_text({ promptPath: \"lesson/prompts/code-grade.md\", inputPaths: [\"lesson/drafts/code/p1.md\"], outputPath: \"lesson/feedback/code/p1-grade.md\" })",
+    '  generate_text({ promptPath: "lesson/prompts/code-grade.md", inputPaths: ["lesson/drafts/code/p1.md"], outputPath: "lesson/feedback/code/p1-grade.md" })',
     "- Revise code problem p1 using its grade report:",
-    "  generate_text({ promptPath: \"lesson/prompts/code-revise.md\", inputPaths: [\"lesson/drafts/code/p1.md\", \"lesson/feedback/code/p1-grade.md\"], outputPath: \"lesson/drafts/code/p1.md\" })",
+    '  generate_text({ promptPath: "lesson/prompts/code-revise.md", inputPaths: ["lesson/drafts/code/p1.md", "lesson/feedback/code/p1-grade.md"], outputPath: "lesson/drafts/code/p1.md" })',
     "",
     "Step limit optimization (important for smoke tests):",
     "- You MAY call multiple tools in a single step when they are independent (they run in parallel).",
@@ -1971,6 +2619,7 @@ function buildAgentTools(options: {
   serviceAccountJson: string;
   progress?: JobProgressReporter;
   enforceLessonPipeline?: boolean;
+  allowPythonExec?: boolean;
   debug?: LlmDebugOptions;
 }): LlmToolSet {
   const {
@@ -1980,10 +2629,12 @@ function buildAgentTools(options: {
     serviceAccountJson,
     progress,
     enforceLessonPipeline,
+    allowPythonExec,
     debug,
   } = options;
 
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
+  const shouldAllowPythonExec = allowPythonExec ?? true;
 
   const validate_json = tool({
     description: [
@@ -2008,23 +2659,21 @@ function buildAgentTools(options: {
       .object({
         schemaPath: z.string().trim().min(1),
         inputPath: z.string().trim().min(1),
-        sessionId: z.preprocess(
-          (value) => {
-            if (value === null || value === undefined) {
-              return undefined;
-            }
-            if (typeof value === "string") {
-              const trimmed = value.trim();
-              return trimmed.length > 0 ? trimmed : undefined;
-            }
-            return value;
-          },
-          z.string().trim().min(1).optional(),
-        ),
+        sessionId: z.preprocess((value) => {
+          if (value === null || value === undefined) {
+            return undefined;
+          }
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+          }
+          return value;
+        }, z.string().trim().min(1).optional()),
       })
       .strict(),
     execute: async ({ schemaPath, inputPath, sessionId }) => {
-      const normalize = (value: string): string => value.replace(/\\/g, "/").trim();
+      const normalize = (value: string): string =>
+        value.replace(/\\/g, "/").trim();
 
       const resolvedSchemaPath = normalize(schemaPath);
       const resolvedInputPath = normalize(inputPath);
@@ -2048,7 +2697,8 @@ function buildAgentTools(options: {
         return null;
       };
 
-      const kind = resolveKind(resolvedSchemaPath) ?? resolveKind(resolvedInputPath);
+      const kind =
+        resolveKind(resolvedSchemaPath) ?? resolveKind(resolvedInputPath);
 
       const formatIssuePath = (segments: Array<string | number>): string => {
         if (segments.length === 0) {
@@ -2081,7 +2731,10 @@ function buildAgentTools(options: {
           message: issue.message,
         }));
 
-      const fail = (message: string, issues?: Array<{ path: string; message: string }>) => ({
+      const fail = (
+        message: string,
+        issues?: Array<{ path: string; message: string }>,
+      ) => ({
         ok: false as const,
         schemaPath: resolvedSchemaPath,
         inputPath: resolvedInputPath,
@@ -2114,9 +2767,12 @@ function buildAgentTools(options: {
           return provided;
         }
         try {
-          const raw = await readFile(resolveWorkspacePath(rootDir, "request.json"), {
-            encoding: "utf8",
-          });
+          const raw = await readFile(
+            resolveWorkspacePath(rootDir, "request.json"),
+            {
+              encoding: "utf8",
+            },
+          );
           const parsed = JSON.parse(raw) as Record<string, unknown>;
           const fromRequest =
             typeof parsed.sessionId === "string" ? parsed.sessionId.trim() : "";
@@ -2173,7 +2829,10 @@ function buildAgentTools(options: {
             };
             const parsed = SessionSchema.safeParse(candidate);
             if (!parsed.success) {
-              return fail("Session validation failed.", buildZodIssues(parsed.error));
+              return fail(
+                "Session validation failed.",
+                buildZodIssues(parsed.error),
+              );
             }
             return {
               ok: true as const,
@@ -2203,7 +2862,9 @@ function buildAgentTools(options: {
             }
             const resolvedSessionId = await resolveSessionId();
             const progressKeyRaw =
-              typeof record.progressKey === "string" ? record.progressKey.trim() : "";
+              typeof record.progressKey === "string"
+                ? record.progressKey.trim()
+                : "";
             const progressKey =
               progressKeyRaw.length > 0
                 ? progressKeyRaw
@@ -2215,7 +2876,10 @@ function buildAgentTools(options: {
             };
             const parsed = QuizDefinitionSchema.safeParse(candidate);
             if (!parsed.success) {
-              return fail("Quiz validation failed.", buildZodIssues(parsed.error));
+              return fail(
+                "Quiz validation failed.",
+                buildZodIssues(parsed.error),
+              );
             }
             return {
               ok: true as const,
@@ -2291,7 +2955,10 @@ function buildAgentTools(options: {
             };
             const parsed = SessionMediaDocSchema.safeParse(candidate);
             if (!parsed.success) {
-              return fail("Media validation failed.", buildZodIssues(parsed.error));
+              return fail(
+                "Media validation failed.",
+                buildZodIssues(parsed.error),
+              );
             }
             return {
               ok: true as const,
@@ -2310,7 +2977,739 @@ function buildAgentTools(options: {
     },
   });
 
-  return {
+  const resolvePdfPromptText = async (options: {
+    toolName: "extract_pdf_text" | "read_pdf" | "extract_pdf_diagrams";
+    prompt?: string;
+    promptPath?: string;
+  }): Promise<string> => {
+    if (typeof options.prompt === "string" && options.prompt.trim().length > 0) {
+      return options.prompt.trim();
+    }
+    const resolvedPromptPath = options.promptPath?.trim() ?? "";
+    if (resolvedPromptPath.length === 0) {
+      throw new Error(
+        `${options.toolName} requires either prompt or promptPath.`,
+      );
+    }
+    const promptText = await readFile(
+      resolveWorkspacePath(rootDir, resolvedPromptPath),
+      { encoding: "utf8" },
+    );
+    const trimmedPrompt = promptText.trim();
+    if (trimmedPrompt.length === 0) {
+      throw new Error(
+        `${options.toolName} prompt from "${resolvedPromptPath}" is empty.`,
+      );
+    }
+    return trimmedPrompt;
+  };
+
+  const decodePdfBytesFromWorkspace = async (options: {
+    toolName: "extract_pdf_text" | "read_pdf" | "extract_pdf_diagrams";
+    pdfPath: string;
+  }): Promise<{ pdfBytes: Buffer; resolvedPdfPath: string }> => {
+    const resolvedPdfPath = options.pdfPath.trim();
+    const rawPdfFile = await readFile(
+      resolveWorkspacePath(rootDir, resolvedPdfPath),
+    );
+    let pdfBytes = rawPdfFile;
+    const isRawPdf = rawPdfFile.subarray(0, 5).toString("utf8") === "%PDF-";
+    if (!isRawPdf) {
+      const rawText = rawPdfFile.toString("utf8").trim();
+      const withoutPrefix = rawText.replace(
+        /^data:application\/pdf;base64,/iu,
+        "",
+      );
+      const compact = withoutPrefix.replace(/\s+/gu, "");
+      if (compact.length === 0) {
+        throw new Error(
+          `${options.toolName} could not decode "${resolvedPdfPath}" as PDF bytes.`,
+        );
+      }
+      const normalizedBase64 = compact.replace(/-/gu, "+").replace(/_/gu, "/");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(normalizedBase64)) {
+        throw new Error(
+          `${options.toolName} expected base64 data in "${resolvedPdfPath}".`,
+        );
+      }
+      if (normalizedBase64.length % 4 !== 0) {
+        throw new Error(
+          `${options.toolName} expected padded base64 in "${resolvedPdfPath}".`,
+        );
+      }
+      pdfBytes = Buffer.from(normalizedBase64, "base64");
+    }
+    return { pdfBytes, resolvedPdfPath };
+  };
+
+  const fetchPdfBytesFromUrl = async (options: {
+    toolName: "read_pdf" | "extract_pdf_diagrams";
+    url: string;
+  }): Promise<{ pdfBytes: Buffer; finalUrl: string; contentType: string }> => {
+    const rawUrl = options.url.trim();
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(
+        `${options.toolName} supports only http/https URLs (got "${parsed.protocol}").`,
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, WEB_FETCH_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(parsed.toString(), {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const pdfBytes = await readResponseBytesWithLimit(
+      response,
+      PDF_EXTRACTION_MAX_BYTES,
+    );
+    const contentTypeHeader = response.headers.get("content-type");
+    const contentType = contentTypeHeader
+      ? (contentTypeHeader.split(";")[0]?.trim().toLowerCase() ??
+        "application/octet-stream")
+      : "application/octet-stream";
+    const finalUrl = response.url || parsed.toString();
+    const hasPdfHeader =
+      Buffer.from(pdfBytes).subarray(0, 5).toString("utf8") === "%PDF-";
+    if (!hasPdfHeader) {
+      throw new Error(
+        `${options.toolName} expected PDF bytes from "${finalUrl}" but received ${contentType}.`,
+      );
+    }
+    return { pdfBytes: Buffer.from(pdfBytes), finalUrl, contentType };
+  };
+
+  const PdfDiagramBoxSchema = z
+    .object({
+      left: z.number().min(0).max(1),
+      top: z.number().min(0).max(1),
+      width: z.number().positive().max(1),
+      height: z.number().positive().max(1),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (value.left + value.width > 1.001) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bboxNorm.left + bboxNorm.width must be <= 1.",
+          path: ["width"],
+        });
+      }
+      if (value.top + value.height > 1.001) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bboxNorm.top + bboxNorm.height must be <= 1.",
+          path: ["height"],
+        });
+      }
+    });
+
+  const PdfDiagramGridBoxSchema = z
+    .object({
+      left: z.number().int().min(0).max(1000),
+      top: z.number().int().min(0).max(1000),
+      right: z.number().int().min(0).max(1000),
+      bottom: z.number().int().min(0).max(1000),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (value.right <= value.left) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bbox1000.right must be greater than bbox1000.left.",
+          path: ["right"],
+        });
+      }
+      if (value.bottom <= value.top) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "bbox1000.bottom must be greater than bbox1000.top.",
+          path: ["bottom"],
+        });
+      }
+    });
+
+  const PdfDiagramItemSchema = z
+    .object({
+      id: z.string().trim().min(1),
+      problemId: z.string().trim().min(1),
+      page: z.number().int().min(1),
+      bboxNorm: PdfDiagramBoxSchema,
+      bbox1000: PdfDiagramGridBoxSchema.optional(),
+      label: z.string().trim().min(1).optional(),
+      description: z.string().trim().min(1).optional(),
+      confidence: z.number().min(0).max(1).optional(),
+    })
+    .strict();
+
+  const PdfDiagramManifestSchema = z
+    .object({
+      diagrams: z.array(PdfDiagramItemSchema).max(PDF_DIAGRAM_MAX_ITEMS),
+      notes: z.string().trim().min(1).optional(),
+    })
+    .strict();
+
+  const toFiniteNumber = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseFloat(value.trim());
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
+  const toFiniteInteger = (value: unknown): number | null => {
+    const numeric = toFiniteNumber(value);
+    if (numeric === null) {
+      return null;
+    }
+    return Math.round(numeric);
+  };
+
+  const clamp1000 = (value: number): number => {
+    return Math.max(0, Math.min(1000, value));
+  };
+
+  const toTrimmedString = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    return trimmed;
+  };
+
+  const normalisePdfDiagramManifest = (
+    raw: unknown,
+    maxDiagrams: number,
+  ): z.infer<typeof PdfDiagramManifestSchema> => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("extract_pdf_diagrams expected a JSON object.");
+    }
+    const rawRecord = raw as Record<string, unknown>;
+    const rawDiagrams = rawRecord.diagrams;
+    if (!Array.isArray(rawDiagrams)) {
+      throw new Error(
+        'extract_pdf_diagrams expected a "diagrams" array in model output.',
+      );
+    }
+    const normalizedItems: z.infer<typeof PdfDiagramItemSchema>[] = [];
+    for (const [index, rawEntry] of rawDiagrams.entries()) {
+      if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+        continue;
+      }
+      const entry = rawEntry as Record<string, unknown>;
+      const bboxGridRaw =
+        entry.bbox1000 &&
+        typeof entry.bbox1000 === "object" &&
+        !Array.isArray(entry.bbox1000)
+          ? (entry.bbox1000 as Record<string, unknown>)
+          : entry.bbox_int &&
+              typeof entry.bbox_int === "object" &&
+              !Array.isArray(entry.bbox_int)
+            ? (entry.bbox_int as Record<string, unknown>)
+            : null;
+      const bboxRaw =
+        entry.bboxNorm &&
+        typeof entry.bboxNorm === "object" &&
+        !Array.isArray(entry.bboxNorm)
+          ? (entry.bboxNorm as Record<string, unknown>)
+          : entry.bbox && typeof entry.bbox === "object" && !Array.isArray(entry.bbox)
+            ? (entry.bbox as Record<string, unknown>)
+            : null;
+      if (!bboxRaw && !bboxGridRaw) {
+        continue;
+      }
+      const left = bboxRaw ? toFiniteNumber(bboxRaw.left ?? bboxRaw.x) : null;
+      const top = bboxRaw ? toFiniteNumber(bboxRaw.top ?? bboxRaw.y) : null;
+      const width = bboxRaw ? toFiniteNumber(bboxRaw.width ?? bboxRaw.w) : null;
+      const height = bboxRaw ? toFiniteNumber(bboxRaw.height ?? bboxRaw.h) : null;
+      const page = toFiniteNumber(
+        entry.page ?? entry.pageNumber ?? entry.page_number,
+      );
+      const problemId =
+        toTrimmedString(entry.problemId ?? entry.problem ?? entry.problem_id) ??
+        "unknown";
+      const id =
+        toTrimmedString(entry.id) ??
+        `${problemId.toLowerCase()}-${(index + 1).toString()}`;
+      if (page === null) {
+        continue;
+      }
+      const label = toTrimmedString(entry.label);
+      const description = toTrimmedString(entry.description);
+      const confidence = toFiniteNumber(entry.confidence);
+      let normalizedBbox:
+        | {
+            left: number;
+            top: number;
+            width: number;
+            height: number;
+          }
+        | null = null;
+      let bbox1000:
+        | {
+            left: number;
+            top: number;
+            right: number;
+            bottom: number;
+          }
+        | undefined;
+
+      if (bboxGridRaw) {
+        const leftGrid = toFiniteInteger(bboxGridRaw.left ?? bboxGridRaw.x0);
+        const topGrid = toFiniteInteger(bboxGridRaw.top ?? bboxGridRaw.y0);
+        const widthGrid = toFiniteInteger(bboxGridRaw.width ?? bboxGridRaw.w);
+        const heightGrid = toFiniteInteger(bboxGridRaw.height ?? bboxGridRaw.h);
+        const rightGrid =
+          toFiniteInteger(bboxGridRaw.right ?? bboxGridRaw.x1) ??
+          (leftGrid !== null && widthGrid !== null ? leftGrid + widthGrid : null);
+        const bottomGrid =
+          toFiniteInteger(bboxGridRaw.bottom ?? bboxGridRaw.y1) ??
+          (topGrid !== null && heightGrid !== null ? topGrid + heightGrid : null);
+
+        if (
+          leftGrid !== null &&
+          topGrid !== null &&
+          rightGrid !== null &&
+          bottomGrid !== null
+        ) {
+          const left1000 = clamp1000(leftGrid);
+          const top1000 = clamp1000(topGrid);
+          const right1000 = clamp1000(rightGrid);
+          const bottom1000 = clamp1000(bottomGrid);
+          if (right1000 > left1000 && bottom1000 > top1000) {
+            bbox1000 = {
+              left: left1000,
+              top: top1000,
+              right: right1000,
+              bottom: bottom1000,
+            };
+            normalizedBbox = {
+              left: left1000 / 1000,
+              top: top1000 / 1000,
+              width: (right1000 - left1000) / 1000,
+              height: (bottom1000 - top1000) / 1000,
+            };
+          }
+        }
+      }
+
+      if (normalizedBbox === null) {
+        if (left === null || top === null || width === null || height === null) {
+          continue;
+        }
+        normalizedBbox = {
+          left,
+          top,
+          width,
+          height,
+        };
+      }
+
+      normalizedItems.push({
+        id,
+        problemId,
+        page: Math.max(1, Math.round(page)),
+        bboxNorm: normalizedBbox,
+        ...(bbox1000 ? { bbox1000 } : {}),
+        ...(label ? { label } : {}),
+        ...(description ? { description } : {}),
+        ...(confidence !== null
+          ? { confidence: Math.max(0, Math.min(1, confidence)) }
+          : {}),
+      });
+    }
+    const notes = toTrimmedString(rawRecord.notes);
+    const normalized: z.infer<typeof PdfDiagramManifestSchema> = {
+      diagrams: normalizedItems.slice(0, Math.max(1, maxDiagrams)),
+      ...(notes ? { notes } : {}),
+    };
+    const parsed = PdfDiagramManifestSchema.safeParse(normalized);
+    if (!parsed.success) {
+      const issueSummary = parsed.error.issues
+        .slice(0, 10)
+        .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("; ");
+      throw new Error(
+        `extract_pdf_diagrams returned invalid diagram manifest: ${issueSummary}`,
+      );
+    }
+    return parsed.data;
+  };
+
+  const extractPdfTextToWorkspace = async (options: {
+    toolName: "extract_pdf_text" | "read_pdf";
+    pdfBytes: Uint8Array;
+    outputPath: string;
+    promptText: string;
+    modelId?: string;
+    maxChars?: number;
+    sourceInfo: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> => {
+    const resolvedOutputPath = options.outputPath.trim();
+    if (resolvedOutputPath.endsWith(".json")) {
+      throw new Error(
+        `${options.toolName} cannot write JSON ("${resolvedOutputPath}").`,
+      );
+    }
+    const pdfBytes = Buffer.from(options.pdfBytes);
+    if (pdfBytes.length === 0) {
+      throw new Error(`${options.toolName} received an empty PDF payload.`);
+    }
+    if (pdfBytes.length > PDF_EXTRACTION_MAX_BYTES) {
+      throw new Error(
+        `${options.toolName} PDF is too large (${pdfBytes.length.toString()} bytes, max ${PDF_EXTRACTION_MAX_BYTES.toString()} bytes).`,
+      );
+    }
+    if (pdfBytes.subarray(0, 5).toString("utf8") !== "%PDF-") {
+      throw new Error(
+        `${options.toolName} expected PDF bytes (missing %PDF- header).`,
+      );
+    }
+
+    const resolvedModelId: LlmTextModelId =
+      typeof options.modelId === "string" && options.modelId.trim().length > 0
+        ? options.modelId.trim()
+        : DEFAULT_PDF_EXTRACTION_MODEL_ID;
+    const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+    const extractionPrompt = [
+      "Extract text from the attached PDF.",
+      "Follow the user instructions exactly.",
+      "Return plain text only.",
+      "",
+      "Instructions:",
+      options.promptText,
+    ].join("\n");
+
+    const submodelTracker = createAgentSubmodelProgressTracker({
+      progress,
+      suppressCompletionLogs: true,
+    });
+
+    const toolContext = getCurrentToolCallContext();
+    const toolIdSegment = toolContext
+      ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
+      : `turn0tool0-${Date.now().toString()}`;
+    const callDebug: LlmDebugOptions | undefined = debug
+      ? {
+          ...debug,
+          subStage: [debug.subStage, options.toolName, toolIdSegment]
+            .filter(
+              (entry): entry is string =>
+                typeof entry === "string" && entry.trim().length > 0,
+            )
+            .join("/"),
+        }
+      : undefined;
+
+    let extractedText = "";
+    try {
+      extractedText = await generateText({
+        modelId: resolvedModelId,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { type: "text", text: extractionPrompt },
+              {
+                type: "inlineData",
+                data: pdfBytes.toString("base64"),
+                mimeType: "application/pdf",
+              },
+            ],
+          },
+        ],
+        ...(callDebug ? { debug: callDebug } : {}),
+        ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+        ...(resolvedReasoningEffort
+          ? { openAiReasoningEffort: resolvedReasoningEffort }
+          : {}),
+      });
+    } finally {
+      if (callDebug) {
+        const debugDir = await resolveLlmDebugAttemptDir({
+          debug: callDebug,
+          attempt: 1,
+          maxAttempts: 1,
+        }).catch(() => null);
+        if (debugDir) {
+          await persistLlmLogsFromDebugDirToWorkspace({
+            rootDir,
+            workspace,
+            toolName: options.toolName,
+            toolIdSegment,
+            debugDir,
+          }).catch(() => undefined);
+        }
+      }
+    }
+
+    const safeMaxChars = options.maxChars ?? PDF_EXTRACTION_DEFAULT_MAX_CHARS;
+    const normalizedText = extractedText.trim();
+    const cappedText = capUtf8Text(normalizedText, safeMaxChars * 6).slice(
+      0,
+      safeMaxChars,
+    );
+    const truncated = cappedText.length < normalizedText.length;
+    const submodelSummary = submodelTracker.getSummary();
+
+    const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
+    await ensureDir(path.dirname(resolved));
+    await writeFile(resolved, cappedText, { encoding: "utf8" });
+    workspace.scheduleUpdate(resolvedOutputPath);
+    const outputBytes = Buffer.byteLength(cappedText, "utf8");
+
+    return {
+      status: "written",
+      modelId: resolvedModelId,
+      ...(submodelSummary?.modelVersion
+        ? { modelVersion: submodelSummary.modelVersion }
+        : {}),
+      ...(submodelSummary?.elapsedMs !== undefined
+        ? { elapsedMs: submodelSummary.elapsedMs }
+        : {}),
+      ...(typeof submodelSummary?.costUsd === "number"
+        ? { costUsd: submodelSummary.costUsd }
+        : {}),
+      ...(submodelSummary?.usageTokens
+        ? { usageTokens: submodelSummary.usageTokens }
+        : {}),
+      outputPath: resolvedOutputPath,
+      promptChars: options.promptText.length,
+      textChars: cappedText.length,
+      outputBytes,
+      pdfBytes: pdfBytes.length,
+      ...(truncated ? { truncated: true } : {}),
+      ...options.sourceInfo,
+    };
+  };
+
+  const extractPdfDiagramManifestToWorkspace = async (options: {
+    toolName: "extract_pdf_diagrams";
+    pdfBytes: Uint8Array;
+    outputPath: string;
+    promptText: string;
+    modelId?: string;
+    maxDiagrams?: number;
+    sourceInfo: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> => {
+    const resolvedOutputPath = options.outputPath.trim();
+    if (!resolvedOutputPath.endsWith(".json")) {
+      throw new Error(
+        `${options.toolName} outputPath must end with ".json" (got "${resolvedOutputPath}").`,
+      );
+    }
+    const pdfBytes = Buffer.from(options.pdfBytes);
+    if (pdfBytes.length === 0) {
+      throw new Error(`${options.toolName} received an empty PDF payload.`);
+    }
+    if (pdfBytes.length > PDF_EXTRACTION_MAX_BYTES) {
+      throw new Error(
+        `${options.toolName} PDF is too large (${pdfBytes.length.toString()} bytes, max ${PDF_EXTRACTION_MAX_BYTES.toString()} bytes).`,
+      );
+    }
+    if (pdfBytes.subarray(0, 5).toString("utf8") !== "%PDF-") {
+      throw new Error(
+        `${options.toolName} expected PDF bytes (missing %PDF- header).`,
+      );
+    }
+
+    const safeMaxDiagrams = Math.max(
+      1,
+      Math.min(
+        PDF_DIAGRAM_MAX_ITEMS,
+        options.maxDiagrams ?? PDF_DIAGRAM_DEFAULT_MAX_ITEMS,
+      ),
+    );
+    const resolvedModelId: LlmTextModelId =
+      typeof options.modelId === "string" && options.modelId.trim().length > 0
+        ? options.modelId.trim()
+        : DEFAULT_PDF_EXTRACTION_MODEL_ID;
+    const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+    const extractionPrompt = [
+      "Extract diagram bounding boxes from the attached PDF.",
+      "Return JSON only.",
+      "",
+      "Schema (exact keys):",
+      "{",
+      '  "diagrams": [',
+      "    {",
+      '      "id": "string",',
+      '      "problemId": "string",',
+      '      "page": 1,',
+      '      "bbox1000": { "left": 0, "top": 0, "right": 1000, "bottom": 1000 },',
+      '      "label": "string (optional)",',
+      '      "description": "string (optional)",',
+      '      "confidence": 0.0',
+      "    }",
+      "  ],",
+      '  "notes": "string (optional)"',
+      "}",
+      "",
+      "Rules:",
+      "- page is 1-based page number.",
+      "- bbox1000 uses integer coordinates on a 0..1000 grid per page axis.",
+      "- left/top are top-left corner; right/bottom are bottom-right corner.",
+      "- Use integers only for bbox1000 fields.",
+      `- Return at most ${safeMaxDiagrams.toString()} diagram entries.`,
+      "- Include only diagrams relevant to the user instructions.",
+      "",
+      "User instructions:",
+      options.promptText,
+    ].join("\n");
+
+    const submodelTracker = createAgentSubmodelProgressTracker({
+      progress,
+      suppressCompletionLogs: true,
+    });
+
+    const toolContext = getCurrentToolCallContext();
+    const toolIdSegment = toolContext
+      ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
+      : `turn0tool0-${Date.now().toString()}`;
+    const callDebug: LlmDebugOptions | undefined = debug
+      ? {
+          ...debug,
+          subStage: [debug.subStage, options.toolName, toolIdSegment]
+            .filter(
+              (entry): entry is string =>
+                typeof entry === "string" && entry.trim().length > 0,
+            )
+            .join("/"),
+        }
+      : undefined;
+
+    let rawText = "";
+    try {
+      rawText = await generateText({
+        modelId: resolvedModelId,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { type: "text", text: extractionPrompt },
+              {
+                type: "inlineData",
+                data: pdfBytes.toString("base64"),
+                mimeType: "application/pdf",
+              },
+            ],
+          },
+        ],
+        ...(callDebug ? { debug: callDebug } : {}),
+        ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+        ...(resolvedReasoningEffort
+          ? { openAiReasoningEffort: resolvedReasoningEffort }
+          : {}),
+        responseMimeType: "application/json",
+      });
+    } finally {
+      if (callDebug) {
+        const debugDir = await resolveLlmDebugAttemptDir({
+          debug: callDebug,
+          attempt: 1,
+          maxAttempts: 1,
+        }).catch(() => null);
+        if (debugDir) {
+          await persistLlmLogsFromDebugDirToWorkspace({
+            rootDir,
+            workspace,
+            toolName: options.toolName,
+            toolIdSegment,
+            debugDir,
+          }).catch(() => undefined);
+        }
+      }
+    }
+
+    let parsedRaw: unknown;
+    try {
+      parsedRaw = parseJsonFromLlmText(rawText);
+    } catch (error) {
+      throw new Error(
+        `extract_pdf_diagrams returned invalid JSON: ${errorAsString(error)}`,
+      );
+    }
+    const manifest = normalisePdfDiagramManifest(parsedRaw, safeMaxDiagrams);
+    const formatted = JSON.stringify(manifest, null, 2) + "\n";
+    const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
+    await ensureDir(path.dirname(resolved));
+    await writeFile(resolved, formatted, { encoding: "utf8" });
+    workspace.scheduleUpdate(resolvedOutputPath);
+    const submodelSummary = submodelTracker.getSummary();
+    const outputBytes = Buffer.byteLength(formatted, "utf8");
+
+    return {
+      status: "written",
+      modelId: resolvedModelId,
+      ...(submodelSummary?.modelVersion
+        ? { modelVersion: submodelSummary.modelVersion }
+        : {}),
+      ...(submodelSummary?.elapsedMs !== undefined
+        ? { elapsedMs: submodelSummary.elapsedMs }
+        : {}),
+      ...(typeof submodelSummary?.costUsd === "number"
+        ? { costUsd: submodelSummary.costUsd }
+        : {}),
+      ...(submodelSummary?.usageTokens
+        ? { usageTokens: submodelSummary.usageTokens }
+        : {}),
+      outputPath: resolvedOutputPath,
+      promptChars: options.promptText.length,
+      outputBytes,
+      pdfBytes: pdfBytes.length,
+      diagramCount: manifest.diagrams.length,
+      ...options.sourceInfo,
+    };
+  };
+
+  const filesystemToolSet = createFilesystemToolSetForModel(
+    DEFAULT_AGENT_MODEL_ID,
+    {
+      cwd: rootDir,
+      allowOutsideCwd: false,
+    },
+  );
+  const requireFilesystemTool = (
+    toolName: "read_file" | "view_image",
+  ): LlmToolSet[string] => {
+    const candidate = (filesystemToolSet as LlmToolSet)[toolName];
+    if (!candidate) {
+      throw new Error(`Missing filesystem tool "${toolName}" in @ljoukov/llm toolset.`);
+    }
+    return candidate;
+  };
+  const codexReadFileTool = requireFilesystemTool("read_file");
+  const codexViewImageTool = requireFilesystemTool("view_image");
+  const executeCodexReadFile = async (input: {
+    file_path: string;
+    offset?: number | null;
+    limit?: number | null;
+  }): Promise<unknown> => {
+    return await (codexReadFileTool as { execute: (value: unknown) => Promise<unknown> }).execute(
+      input,
+    );
+  };
+
+  const tools: LlmToolSet = {
     publish_lesson: tool({
       description:
         "Publish a Spark lesson into the user's sessions (not welcome templates). Reads Firestore-ready JSON from the workspace and writes session + quiz/coding_problem documents to Firestore.",
@@ -2575,7 +3974,9 @@ function buildAgentTools(options: {
         "- tools (optional): web-search|code-execution.",
       ].join("\n"),
       inputSchema: (() => {
-        const normalizeOptionalString = (value: unknown): string | undefined => {
+        const normalizeOptionalString = (
+          value: unknown,
+        ): string | undefined => {
           if (value === null || value === undefined) {
             return undefined;
           }
@@ -2668,7 +4069,8 @@ function buildAgentTools(options: {
         outputMode,
       }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+        const resolvedReasoningEffort =
+          resolveOpenAiReasoningEffort(resolvedModelId);
 
         const resolvedPromptPath = promptPath.trim();
         const resolvedOutputPath = outputPath.trim();
@@ -2682,10 +4084,13 @@ function buildAgentTools(options: {
         const normalizeSlashes = (value: string): string =>
           value.replace(/\\/g, "/").trim();
 
-        const normalizedPromptPath = normalizeSlashes(resolvedPromptPath).toLowerCase();
+        const normalizedPromptPath =
+          normalizeSlashes(resolvedPromptPath).toLowerCase();
         const promptFileName = normalizedPromptPath.split("/").at(-1) ?? "";
         const normalizedOutputPath = normalizeSlashes(resolvedOutputPath);
-        let effectiveInputPaths = (inputPaths ?? []).map((p) => normalizeSlashes(p));
+        let effectiveInputPaths = (inputPaths ?? []).map((p) =>
+          normalizeSlashes(p),
+        );
 
         const dedupePaths = (paths: string[]): string[] => {
           const seen = new Set<string>();
@@ -2703,33 +4108,39 @@ function buildAgentTools(options: {
 
         const hasAttachedPathWithPrefix = (prefix: string): boolean => {
           const normalizedPrefix = prefix.replace(/\\/g, "/");
-          return effectiveInputPaths.some((p) => p.startsWith(normalizedPrefix));
+          return effectiveInputPaths.some((p) =>
+            p.startsWith(normalizedPrefix),
+          );
         };
 
-        const isLessonPrompt = normalizedPromptPath.startsWith("lesson/prompts/");
+        const isLessonPrompt =
+          normalizedPromptPath.startsWith("lesson/prompts/");
 
         if (isLessonPrompt) {
-          const requireQuizDraft = (
+          const requireQuizDraft =
             promptFileName === "quiz-grade.md" ||
-            promptFileName === "quiz-revise.md"
-          );
-          const requireCodeDraft = (
+            promptFileName === "quiz-revise.md";
+          const requireCodeDraft =
             promptFileName === "code-grade.md" ||
-            promptFileName === "code-revise.md"
-          );
+            promptFileName === "code-revise.md";
           const requireQuizGradeReport = promptFileName === "quiz-revise.md";
           const requireCodeGradeReport = promptFileName === "code-revise.md";
 
           // Best-effort auto-attachment based on naming conventions to keep the agent from
           // spinning when it forgets inputPaths.
           if (
-            (promptFileName === "quiz-grade.md" || promptFileName === "quiz-revise.md") &&
+            (promptFileName === "quiz-grade.md" ||
+              promptFileName === "quiz-revise.md") &&
             !hasAttachedPathWithPrefix("lesson/drafts/quiz/")
           ) {
             const match =
               promptFileName === "quiz-grade.md"
-                ? normalizedOutputPath.match(/^lesson\/feedback\/quiz\/([^/]+)-grade\.md$/u)
-                : normalizedOutputPath.match(/^lesson\/drafts\/quiz\/([^/]+)\.md$/u);
+                ? normalizedOutputPath.match(
+                    /^lesson\/feedback\/quiz\/([^/]+)-grade\.md$/u,
+                  )
+                : normalizedOutputPath.match(
+                    /^lesson\/drafts\/quiz\/([^/]+)\.md$/u,
+                  );
             const planItemId = match?.[1]?.trim();
             if (planItemId) {
               effectiveInputPaths = dedupePaths([
@@ -2739,13 +4150,18 @@ function buildAgentTools(options: {
             }
           }
           if (
-            (promptFileName === "code-grade.md" || promptFileName === "code-revise.md") &&
+            (promptFileName === "code-grade.md" ||
+              promptFileName === "code-revise.md") &&
             !hasAttachedPathWithPrefix("lesson/drafts/code/")
           ) {
             const match =
               promptFileName === "code-grade.md"
-                ? normalizedOutputPath.match(/^lesson\/feedback\/code\/([^/]+)-grade\.md$/u)
-                : normalizedOutputPath.match(/^lesson\/drafts\/code\/([^/]+)\.md$/u);
+                ? normalizedOutputPath.match(
+                    /^lesson\/feedback\/code\/([^/]+)-grade\.md$/u,
+                  )
+                : normalizedOutputPath.match(
+                    /^lesson\/drafts\/code\/([^/]+)\.md$/u,
+                  );
             const planItemId = match?.[1]?.trim();
             if (planItemId) {
               effectiveInputPaths = dedupePaths([
@@ -2754,8 +4170,13 @@ function buildAgentTools(options: {
               ]);
             }
           }
-          if (promptFileName === "quiz-revise.md" && !hasAttachedPathWithPrefix("lesson/feedback/quiz/")) {
-            const match = normalizedOutputPath.match(/^lesson\/drafts\/quiz\/([^/]+)\.md$/u);
+          if (
+            promptFileName === "quiz-revise.md" &&
+            !hasAttachedPathWithPrefix("lesson/feedback/quiz/")
+          ) {
+            const match = normalizedOutputPath.match(
+              /^lesson\/drafts\/quiz\/([^/]+)\.md$/u,
+            );
             const planItemId = match?.[1]?.trim();
             if (planItemId) {
               effectiveInputPaths = dedupePaths([
@@ -2764,8 +4185,13 @@ function buildAgentTools(options: {
               ]);
             }
           }
-          if (promptFileName === "code-revise.md" && !hasAttachedPathWithPrefix("lesson/feedback/code/")) {
-            const match = normalizedOutputPath.match(/^lesson\/drafts\/code\/([^/]+)\.md$/u);
+          if (
+            promptFileName === "code-revise.md" &&
+            !hasAttachedPathWithPrefix("lesson/feedback/code/")
+          ) {
+            const match = normalizedOutputPath.match(
+              /^lesson\/drafts\/code\/([^/]+)\.md$/u,
+            );
             const planItemId = match?.[1]?.trim();
             if (planItemId) {
               effectiveInputPaths = dedupePaths([
@@ -2775,12 +4201,18 @@ function buildAgentTools(options: {
             }
           }
 
-          if (requireQuizDraft && !hasAttachedPathWithPrefix("lesson/drafts/quiz/")) {
+          if (
+            requireQuizDraft &&
+            !hasAttachedPathWithPrefix("lesson/drafts/quiz/")
+          ) {
             throw new Error(
               "lesson quiz grade/revise prompts require inputPaths that include the candidate quiz Markdown under lesson/drafts/quiz/ (e.g. lesson/drafts/quiz/q1.md).",
             );
           }
-          if (requireCodeDraft && !hasAttachedPathWithPrefix("lesson/drafts/code/")) {
+          if (
+            requireCodeDraft &&
+            !hasAttachedPathWithPrefix("lesson/drafts/code/")
+          ) {
             throw new Error(
               "lesson code grade/revise prompts require inputPaths that include the candidate problem Markdown under lesson/drafts/code/ (e.g. lesson/drafts/code/p1.md).",
             );
@@ -2903,7 +4335,9 @@ function buildAgentTools(options: {
             ],
             ...(callDebug ? { debug: callDebug } : {}),
             ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
-            ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+            ...(submodelTracker.progress
+              ? { progress: submodelTracker.progress }
+              : {}),
             ...(resolvedReasoningEffort
               ? { openAiReasoningEffort: resolvedReasoningEffort }
               : {}),
@@ -2969,7 +4403,9 @@ function buildAgentTools(options: {
           ...(typeof submodelSummary?.costUsd === "number"
             ? { costUsd: submodelSummary.costUsd }
             : {}),
-          ...(submodelSummary?.usageTokens ? { usageTokens: submodelSummary.usageTokens } : {}),
+          ...(submodelSummary?.usageTokens
+            ? { usageTokens: submodelSummary.usageTokens }
+            : {}),
           promptPath: resolvedPromptPath,
           inputPaths: effectiveInputPaths,
           outputPath: resolvedOutputPath,
@@ -2979,7 +4415,6 @@ function buildAgentTools(options: {
           outputBytes,
           ...(gradePass === undefined ? {} : { gradePass }),
         };
-
       },
     }),
     generate_json: tool({
@@ -3009,7 +4444,8 @@ function buildAgentTools(options: {
         .strict(),
       execute: async ({ sourcePath, schemaPath, outputPath }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+        const resolvedReasoningEffort =
+          resolveOpenAiReasoningEffort(resolvedModelId);
 
         const resolvedSourcePath = sourcePath.trim();
         const resolvedSchemaPath = schemaPath.trim();
@@ -3075,7 +4511,9 @@ function buildAgentTools(options: {
               },
             ],
             ...(callDebug ? { debug: callDebug } : {}),
-            ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
+            ...(submodelTracker.progress
+              ? { progress: submodelTracker.progress }
+              : {}),
             ...(resolvedReasoningEffort
               ? { openAiReasoningEffort: resolvedReasoningEffort }
               : {}),
@@ -3129,12 +4567,653 @@ function buildAgentTools(options: {
           ...(typeof submodelSummary?.costUsd === "number"
             ? { costUsd: submodelSummary.costUsd }
             : {}),
-          ...(submodelSummary?.usageTokens ? { usageTokens: submodelSummary.usageTokens } : {}),
+          ...(submodelSummary?.usageTokens
+            ? { usageTokens: submodelSummary.usageTokens }
+            : {}),
           schemaPath: resolvedSchemaPath,
           sourcePath: resolvedSourcePath,
           outputPath: resolvedOutputPath,
           textChars: formatted.length,
           outputBytes,
+        };
+      },
+    }),
+    web_fetch: tool({
+      description: [
+        "Fetch a NON-PDF URL and return extracted text or binary metadata.",
+        "Use this to download HTML/text sources found via web_search.",
+        "For HTML responses, this tool returns stripped plain text.",
+        "For non-text responses (except PDFs), this tool returns metadata and optionally writes base64 to outputPath.",
+        "Do not use this tool for PDFs; use read_pdf instead.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          url: z.string().trim().min(1),
+          outputPath: z.string().trim().min(1).optional(),
+          maxChars: z.number().int().min(200).max(200_000).optional(),
+        })
+        .strict(),
+      execute: async ({ url, outputPath, maxChars }) => {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          throw new Error(
+            `web_fetch supports only http/https URLs (got "${parsed.protocol}").`,
+          );
+        }
+        if (parsed.pathname.toLowerCase().endsWith(".pdf")) {
+          throw new Error(
+            `web_fetch does not support PDF URLs ("${url}"). Use read_pdf instead.`,
+          );
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+          controller.abort();
+        }, WEB_FETCH_TIMEOUT_MS);
+
+        let response: Response;
+        try {
+          response = await fetch(parsed.toString(), {
+            method: "GET",
+            redirect: "follow",
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+
+        const bytes = await readResponseBytesWithLimit(
+          response,
+          WEB_FETCH_MAX_BYTES,
+        );
+        const contentTypeHeader = response.headers.get("content-type");
+        const contentType = contentTypeHeader
+          ? (contentTypeHeader.split(";")[0]?.trim().toLowerCase() ??
+            "application/octet-stream")
+          : "application/octet-stream";
+        const finalUrl = response.url || parsed.toString();
+        const safeMaxChars = maxChars ?? WEB_FETCH_DEFAULT_MAX_CHARS;
+        if (contentType === "application/pdf") {
+          throw new Error(
+            `web_fetch received PDF content from "${finalUrl}". Use read_pdf instead.`,
+          );
+        }
+
+        const asText = () => {
+          const decoded = new TextDecoder("utf-8", { fatal: false }).decode(
+            bytes,
+          );
+          if (
+            contentType === "text/html" ||
+            contentType === "application/xhtml+xml"
+          ) {
+            return decodeHtmlToText(decoded);
+          }
+          return decoded.trim();
+        };
+
+        const isLikelyText =
+          contentType.startsWith("text/") ||
+          contentType.includes("json") ||
+          contentType.includes("xml") ||
+          contentType.includes("html");
+
+        if (isLikelyText) {
+          const text = capUtf8Text(asText(), safeMaxChars * 6).slice(
+            0,
+            safeMaxChars,
+          );
+          if (outputPath) {
+            const resolved = resolveWorkspacePath(rootDir, outputPath);
+            await ensureDir(path.dirname(resolved));
+            await writeFile(resolved, text, { encoding: "utf8" });
+            workspace.scheduleUpdate(outputPath);
+          }
+          return {
+            status: response.status,
+            ok: response.ok,
+            url: parsed.toString(),
+            finalUrl,
+            contentType,
+            bytes: bytes.byteLength,
+            text,
+            ...(outputPath ? { outputPath } : {}),
+          };
+        }
+
+        const base64 = Buffer.from(bytes).toString("base64");
+        if (outputPath) {
+          const resolved = resolveWorkspacePath(rootDir, outputPath);
+          await ensureDir(path.dirname(resolved));
+          await writeFile(resolved, base64, { encoding: "utf8" });
+          workspace.scheduleUpdate(outputPath);
+        }
+        return {
+          status: response.status,
+          ok: response.ok,
+          url: parsed.toString(),
+          finalUrl,
+          contentType,
+          bytes: bytes.byteLength,
+          base64Chars: base64.length,
+          ...(outputPath ? { outputPath } : {}),
+        };
+      },
+    }),
+    read_pdf: tool({
+      description: [
+        "Read and transcribe a PDF using a multimodal model.",
+        "Provide either url (official PDF URL) or pdfPath (workspace file), plus prompt/promptPath and outputPath.",
+        `By default this tool uses ${DEFAULT_PDF_EXTRACTION_MODEL_ID}; pass modelId to override.`,
+        "This tool requires real PDF bytes and rejects HTML mirror pages.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          url: z.string().trim().min(1).optional(),
+          pdfPath: z.string().trim().min(1).optional(),
+          prompt: z.string().trim().min(1).optional(),
+          promptPath: z.string().trim().min(1).optional(),
+          outputPath: z.string().trim().min(1),
+          modelId: z.string().trim().min(1).optional(),
+          maxChars: z
+            .number()
+            .int()
+            .min(200)
+            .max(PDF_EXTRACTION_DEFAULT_MAX_CHARS)
+            .optional(),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          const hasUrl = typeof value.url === "string" && value.url.trim().length > 0;
+          const hasPdfPath =
+            typeof value.pdfPath === "string" && value.pdfPath.trim().length > 0;
+          const hasPrompt =
+            typeof value.prompt === "string" && value.prompt.trim().length > 0;
+          const hasPromptPath =
+            typeof value.promptPath === "string" &&
+            value.promptPath.trim().length > 0;
+          if (hasUrl === hasPdfPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "read_pdf expects exactly one of url or pdfPath.",
+              path: ["url"],
+            });
+          }
+          if (hasPrompt && hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "read_pdf expects either prompt or promptPath, not both.",
+              path: ["prompt"],
+            });
+          }
+          if (!hasPrompt && !hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "read_pdf requires either prompt or promptPath.",
+              path: ["prompt"],
+            });
+          }
+        }),
+      execute: async ({ url, pdfPath, prompt, promptPath, outputPath, maxChars, modelId }) => {
+        const promptText = await resolvePdfPromptText({
+          toolName: "read_pdf",
+          prompt,
+          promptPath,
+        });
+
+        if (typeof pdfPath === "string" && pdfPath.trim().length > 0) {
+          const decoded = await decodePdfBytesFromWorkspace({
+            toolName: "read_pdf",
+            pdfPath,
+          });
+          return await extractPdfTextToWorkspace({
+            toolName: "read_pdf",
+            pdfBytes: decoded.pdfBytes,
+            outputPath,
+            promptText,
+            modelId,
+            maxChars,
+            sourceInfo: {
+              pdfPath: decoded.resolvedPdfPath,
+            },
+          });
+        }
+
+        const rawUrl = url?.trim() ?? "";
+        const fetched = await fetchPdfBytesFromUrl({
+          toolName: "read_pdf",
+          url: rawUrl,
+        });
+
+        return await extractPdfTextToWorkspace({
+          toolName: "read_pdf",
+          pdfBytes: fetched.pdfBytes,
+          outputPath,
+          promptText,
+          modelId,
+          maxChars,
+          sourceInfo: {
+            url: rawUrl,
+            finalUrl: fetched.finalUrl,
+            contentType: fetched.contentType,
+          },
+        });
+      },
+    }),
+    extract_pdf_diagrams: tool({
+      description: [
+        "Extract diagram bounding boxes from a PDF using a multimodal model.",
+        "Provide either url (official PDF URL) or pdfPath (workspace file), plus prompt/promptPath and outputPath.",
+        "Writes a JSON manifest with per-diagram problem id, page, normalized bounding box, and optional labels.",
+        `By default this tool uses ${DEFAULT_PDF_EXTRACTION_MODEL_ID}; pass modelId to override.`,
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          url: z.string().trim().min(1).optional(),
+          pdfPath: z.string().trim().min(1).optional(),
+          prompt: z.string().trim().min(1).optional(),
+          promptPath: z.string().trim().min(1).optional(),
+          outputPath: z.string().trim().min(1),
+          modelId: z.string().trim().min(1).optional(),
+          maxDiagrams: z.number().int().min(1).max(PDF_DIAGRAM_MAX_ITEMS).optional(),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          const hasUrl = typeof value.url === "string" && value.url.trim().length > 0;
+          const hasPdfPath =
+            typeof value.pdfPath === "string" && value.pdfPath.trim().length > 0;
+          const hasPrompt =
+            typeof value.prompt === "string" && value.prompt.trim().length > 0;
+          const hasPromptPath =
+            typeof value.promptPath === "string" &&
+            value.promptPath.trim().length > 0;
+          if (hasUrl === hasPdfPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                "extract_pdf_diagrams expects exactly one of url or pdfPath.",
+              path: ["url"],
+            });
+          }
+          if (hasPrompt && hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                "extract_pdf_diagrams expects either prompt or promptPath, not both.",
+              path: ["prompt"],
+            });
+          }
+          if (!hasPrompt && !hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "extract_pdf_diagrams requires either prompt or promptPath.",
+              path: ["prompt"],
+            });
+          }
+        }),
+      execute: async ({
+        url,
+        pdfPath,
+        prompt,
+        promptPath,
+        outputPath,
+        modelId,
+        maxDiagrams,
+      }) => {
+        const promptText = await resolvePdfPromptText({
+          toolName: "extract_pdf_diagrams",
+          prompt,
+          promptPath,
+        });
+
+        if (typeof pdfPath === "string" && pdfPath.trim().length > 0) {
+          const decoded = await decodePdfBytesFromWorkspace({
+            toolName: "extract_pdf_diagrams",
+            pdfPath,
+          });
+          return await extractPdfDiagramManifestToWorkspace({
+            toolName: "extract_pdf_diagrams",
+            pdfBytes: decoded.pdfBytes,
+            outputPath,
+            promptText,
+            modelId,
+            maxDiagrams,
+            sourceInfo: {
+              pdfPath: decoded.resolvedPdfPath,
+            },
+          });
+        }
+
+        const rawUrl = url?.trim() ?? "";
+        const fetched = await fetchPdfBytesFromUrl({
+          toolName: "extract_pdf_diagrams",
+          url: rawUrl,
+        });
+        return await extractPdfDiagramManifestToWorkspace({
+          toolName: "extract_pdf_diagrams",
+          pdfBytes: fetched.pdfBytes,
+          outputPath,
+          promptText,
+          modelId,
+          maxDiagrams,
+          sourceInfo: {
+            url: rawUrl,
+            finalUrl: fetched.finalUrl,
+            contentType: fetched.contentType,
+          },
+        });
+      },
+    }),
+    extract_pdf_text: tool({
+      description: [
+        "Legacy alias for read_pdf when the PDF already exists in the workspace.",
+        "Use read_pdf for new calls.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          pdfPath: z.string().trim().min(1),
+          prompt: z.string().trim().min(1).optional(),
+          promptPath: z.string().trim().min(1).optional(),
+          outputPath: z.string().trim().min(1),
+          maxChars: z
+            .number()
+            .int()
+            .min(200)
+            .max(PDF_EXTRACTION_DEFAULT_MAX_CHARS)
+            .optional(),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          const hasPrompt =
+            typeof value.prompt === "string" && value.prompt.trim().length > 0;
+          const hasPromptPath =
+            typeof value.promptPath === "string" &&
+            value.promptPath.trim().length > 0;
+          if (hasPrompt && hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                "extract_pdf_text expects either prompt or promptPath, not both.",
+              path: ["prompt"],
+            });
+          }
+          if (!hasPrompt && !hasPromptPath) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "extract_pdf_text requires either prompt or promptPath.",
+              path: ["prompt"],
+            });
+          }
+        }),
+      execute: async ({ pdfPath, prompt, promptPath, outputPath, maxChars }) => {
+        const promptText = await resolvePdfPromptText({
+          toolName: "extract_pdf_text",
+          prompt,
+          promptPath,
+        });
+        const decoded = await decodePdfBytesFromWorkspace({
+          toolName: "extract_pdf_text",
+          pdfPath,
+        });
+        return await extractPdfTextToWorkspace({
+          toolName: "extract_pdf_text",
+          pdfBytes: decoded.pdfBytes,
+          outputPath,
+          promptText,
+          maxChars,
+          sourceInfo: {
+            pdfPath: decoded.resolvedPdfPath,
+          },
+        });
+      },
+    }),
+    pdf_to_images: tool({
+      description: [
+        "Render pages from a workspace PDF into PNG images in the workspace.",
+        "Use this for agentic diagram extraction loops before calling crop_image.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          pdfPath: z.string().trim().min(1),
+          outputDir: z.string().trim().min(1),
+          pageNumbers: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              return value;
+            },
+            z.array(z.number().int().min(1)).max(200).optional(),
+          ),
+          scale: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              return value;
+            },
+            z.number().min(0.5).max(6).optional(),
+          ),
+          filenamePrefix: z.preprocess(
+            (value) => parseOptionalString(value),
+            z.string().trim().min(1).optional(),
+          ),
+        })
+        .strict(),
+      execute: async ({ pdfPath, outputDir, pageNumbers, scale, filenamePrefix }) => {
+        const decoded = await decodePdfBytesFromWorkspace({
+          toolName: "read_pdf",
+          pdfPath,
+        });
+        const pdfBytes = Uint8Array.from(decoded.pdfBytes);
+        const pageCount = await getPdfPageCount({ pdfBytes });
+        const requestedPages =
+          pageNumbers && pageNumbers.length > 0
+            ? [...new Set(pageNumbers)].sort((a, b) => a - b)
+            : Array.from({ length: pageCount }, (_, index) => index + 1);
+        if (requestedPages.length === 0) {
+          throw new Error("pdf_to_images requires at least one page to render.");
+        }
+        for (const pageNumber of requestedPages) {
+          if (pageNumber > pageCount) {
+            throw new Error(
+              `pdf_to_images page ${pageNumber.toString()} exceeds page count ${pageCount.toString()}.`,
+            );
+          }
+        }
+        const renderedByPage = await renderPdfPagesBgra({
+          pdfBytes,
+          pageNumbers: requestedPages,
+          scale,
+        });
+        const normalizedOutputDir = outputDir.replace(/\\/g, "/").replace(/\/+$/u, "");
+        if (normalizedOutputDir.length === 0) {
+          throw new Error("outputDir must not be empty.");
+        }
+        const prefix = (filenamePrefix ?? "page").replace(/[^a-z0-9_-]+/giu, "-");
+        const written: Array<{
+          page: number;
+          path: string;
+          width: number;
+          height: number;
+          bytes: number;
+        }> = [];
+        for (const pageNumber of requestedPages) {
+          const bitmap = renderedByPage.get(pageNumber);
+          if (!bitmap) {
+            continue;
+          }
+          const relativePath = `${normalizedOutputDir}/${prefix}-${pageNumber
+            .toString()
+            .padStart(4, "0")}.png`;
+          const resolvedPath = resolveWorkspacePath(rootDir, relativePath);
+          await ensureDir(path.dirname(resolvedPath));
+          const pngBytes = Buffer.from(encodeBgraBitmapToPng(bitmap));
+          await writeFile(resolvedPath, pngBytes);
+          workspace.scheduleUpdate(relativePath);
+          written.push({
+            page: pageNumber,
+            path: relativePath,
+            width: bitmap.width,
+            height: bitmap.height,
+            bytes: pngBytes.byteLength,
+          });
+        }
+        return {
+          status: "written",
+          pdfPath: decoded.resolvedPdfPath,
+          pageCount,
+          outputDir: normalizedOutputDir,
+          pages: written,
+        };
+      },
+    }),
+    crop_image: tool({
+      description: [
+        "Crop a PNG image from the workspace using bbox1000 (int coords) or bboxNorm.",
+        "For a deliberate full-page copy, set fullImage=true and omit bbox fields.",
+        "Use this to iteratively refine diagram crops from page images.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          sourcePath: z.string().trim().min(1),
+          outputPath: z.string().trim().min(1),
+          fullImage: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              return value;
+            },
+            z.boolean().optional(),
+          ),
+          bbox1000: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              return value;
+            },
+            z
+              .object({
+                left: z.number().int().min(0).max(1000),
+                top: z.number().int().min(0).max(1000),
+                right: z.number().int().min(0).max(1000),
+                bottom: z.number().int().min(0).max(1000),
+              })
+              .optional(),
+          ),
+          bboxNorm: z.preprocess(
+            (value) => {
+              if (value === null || value === undefined) {
+                return undefined;
+              }
+              return value;
+            },
+            z
+              .object({
+                left: z.number().min(0).max(1),
+                top: z.number().min(0).max(1),
+                width: z.number().positive().max(1),
+                height: z.number().positive().max(1),
+              })
+              .optional(),
+          ),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          const has1000 = value.bbox1000 !== undefined;
+          const hasNorm = value.bboxNorm !== undefined;
+          const hasFullImage = value.fullImage === true;
+          if (has1000 && hasNorm) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "crop_image expects at most one of bbox1000 or bboxNorm.",
+              path: ["bbox1000"],
+            });
+          }
+          if (hasFullImage && (has1000 || hasNorm)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                "crop_image with fullImage=true cannot include bbox1000 or bboxNorm.",
+              path: ["fullImage"],
+            });
+          }
+          if (!hasFullImage && !has1000 && !hasNorm) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                "crop_image expects bbox1000 or bboxNorm; use fullImage=true for full-page copy.",
+              path: ["bbox1000"],
+            });
+          }
+        }),
+      execute: async ({ sourcePath, outputPath, fullImage, bbox1000, bboxNorm }) => {
+        const resolvedSourcePath = resolveWorkspacePath(rootDir, sourcePath);
+        const sourceBytes = await readFile(resolvedSourcePath);
+        const sourceMime = resolveContentType(sourcePath);
+        if (sourceMime !== "image/png") {
+          throw new Error(
+            `crop_image currently supports PNG only. Received ${sourceMime ?? "unknown"} for "${sourcePath}".`,
+          );
+        }
+        const decoded = PNG.sync.read(sourceBytes);
+        const pixels = (() => {
+          if (bbox1000 !== undefined) {
+            return toCropPixelsFrom1000({
+              width: decoded.width,
+              height: decoded.height,
+              left: bbox1000.left,
+              top: bbox1000.top,
+              right: bbox1000.right,
+              bottom: bbox1000.bottom,
+            });
+          }
+          if (bboxNorm !== undefined) {
+            return toCropPixelsFromNorm({
+              width: decoded.width,
+              height: decoded.height,
+              left: bboxNorm.left,
+              top: bboxNorm.top,
+              widthNorm: bboxNorm.width,
+              heightNorm: bboxNorm.height,
+            });
+          }
+          if (fullImage === true) {
+            return {
+              left: 0,
+              top: 0,
+              right: decoded.width,
+              bottom: decoded.height,
+            };
+          }
+          throw new Error(
+            "crop_image received no crop bounds. Provide bbox1000/bboxNorm or set fullImage=true.",
+          );
+        })();
+        const croppedBytes = cropPngBuffer({
+          source: sourceBytes,
+          left: pixels.left,
+          top: pixels.top,
+          right: pixels.right,
+          bottom: pixels.bottom,
+        });
+        const resolvedOutputPath = resolveWorkspacePath(rootDir, outputPath);
+        await ensureDir(path.dirname(resolvedOutputPath));
+        await writeFile(resolvedOutputPath, croppedBytes);
+        workspace.scheduleUpdate(outputPath);
+        return {
+          status: "written",
+          sourcePath,
+          outputPath,
+          sourceWidth: decoded.width,
+          sourceHeight: decoded.height,
+          cropWidth: pixels.right - pixels.left,
+          cropHeight: pixels.bottom - pixels.top,
+          bboxPixels: pixels,
+          fullImage: fullImage === true,
+          outputBytes: croppedBytes.byteLength,
         };
       },
     }),
@@ -3174,18 +5253,8 @@ function buildAgentTools(options: {
         return { path: inputPath, entries: results };
       },
     }),
-    read_file: tool({
-      description: "Read a text file from the workspace.",
-      inputSchema: z.object({
-        path: z.string().trim().min(1),
-      }),
-      execute: async ({ path: inputPath }) => {
-        const resolved = resolveWorkspacePath(rootDir, inputPath);
-        const content = await readFile(resolved, { encoding: "utf8" });
-        const bytes = Buffer.byteLength(content, "utf8");
-        return { path: inputPath, content, bytes };
-      },
-    }),
+    read_file: codexReadFileTool,
+    view_image: codexViewImageTool,
     read_files: tool({
       description: "Read multiple text files from the workspace.",
       inputSchema: z.object({
@@ -3194,10 +5263,19 @@ function buildAgentTools(options: {
       execute: async ({ paths }) => {
         const files = await Promise.all(
           paths.map(async (entry) => {
-            const resolved = resolveWorkspacePath(rootDir, entry);
-            const content = await readFile(resolved, { encoding: "utf8" });
-            const bytes = Buffer.byteLength(content, "utf8");
-            return { path: entry, content, bytes };
+            const output = await executeCodexReadFile({
+              file_path: entry,
+            });
+            const candidate =
+              output && typeof output === "object" && !Array.isArray(output)
+                ? (output as Record<string, unknown>)
+                : null;
+            const content = typeof candidate?.content === "string" ? candidate.content : "";
+            return {
+              path: entry,
+              content,
+              bytes: Buffer.byteLength(content, "utf8"),
+            };
           }),
         );
         return { files };
@@ -3293,6 +5371,10 @@ function buildAgentTools(options: {
       },
     }),
   };
+  if (!shouldAllowPythonExec) {
+    delete (tools as Record<string, unknown>).python_exec;
+  }
+  return tools;
 }
 
 export function buildSparkAgentToolsForTest(options: {
@@ -3382,7 +5464,8 @@ export async function runSparkLessonAgentLocal(options: {
   let publishResult: LocalPublishLessonResult | null = null;
   const publishLessonInputSchema: z.ZodType<PublishLessonToolInput> =
     "inputSchema" in baseTools.publish_lesson
-      ? (baseTools.publish_lesson.inputSchema as z.ZodType<PublishLessonToolInput>)
+      ? (baseTools.publish_lesson
+          .inputSchema as z.ZodType<PublishLessonToolInput>)
       : z
           .object({
             sessionId: z.string().trim().min(1),
@@ -3708,6 +5791,8 @@ export async function runSparkAgentTask(
   if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
     throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
   }
+  const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+  const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
   const agentDocPath = `users/${options.userId}/agents/${options.agentId}`;
 
   const toolLoopModelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
@@ -3716,11 +5801,15 @@ export async function runSparkAgentTask(
   });
   let generateTextCostUsd = 0;
   let generateJsonCostUsd = 0;
+  let pdfToolCostUsd = 0;
 
   let prompt = "";
   let logSync: AgentLogSync | undefined;
   let workspaceRoot: string | undefined;
   let workspaceSync: WorkspaceSync | undefined;
+  let graderRunId: string | null = null;
+  let graderSummaryPath = "grader/output/run-summary.json";
+  let graderProblemsDir = "grader/output/problems";
 
   let stopRequested = false;
   let stopPollTimer: NodeJS.Timeout | undefined;
@@ -3747,6 +5836,27 @@ export async function runSparkAgentTask(
     }
 
     const agentData = agentSnap.data ?? {};
+    const rawGraderRunId =
+      typeof agentData.graderRunId === "string"
+        ? agentData.graderRunId.trim()
+        : "";
+    if (rawGraderRunId.length > 0) {
+      graderRunId = rawGraderRunId;
+    }
+    const rawSummaryPath =
+      typeof agentData.graderSummaryPath === "string"
+        ? agentData.graderSummaryPath.trim()
+        : "";
+    if (rawSummaryPath.length > 0) {
+      graderSummaryPath = rawSummaryPath;
+    }
+    const rawProblemsDir =
+      typeof agentData.graderProblemsDir === "string"
+        ? agentData.graderProblemsDir.trim()
+        : "";
+    if (rawProblemsDir.length > 0) {
+      graderProblemsDir = rawProblemsDir;
+    }
     const currentStatus =
       typeof agentData.status === "string" ? agentData.status.trim() : "";
     if (
@@ -3768,6 +5878,19 @@ export async function runSparkAgentTask(
         status: "stopped",
         resultSummary: "Stopped by user.",
       });
+      if (graderRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: graderRunId,
+          updates: {
+            status: "stopped",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            resultSummary: "Stopped by user before execution.",
+          },
+        }).catch(() => undefined);
+      }
       return;
     }
 
@@ -3782,6 +5905,19 @@ export async function runSparkAgentTask(
         status: "failed",
         error: "Agent prompt is missing.",
       });
+      if (graderRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: graderRunId,
+          updates: {
+            status: "failed",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            error: "Agent prompt is missing.",
+          },
+        }).catch(() => undefined);
+      }
       return;
     }
 
@@ -3790,6 +5926,17 @@ export async function runSparkAgentTask(
       agentDocPath,
       status: "executing",
     });
+    if (graderRunId) {
+      await patchGraderRunStatus({
+        serviceAccountJson,
+        userId: options.userId,
+        runId: graderRunId,
+        updates: {
+          status: "executing",
+          updatedAt: new Date(),
+        },
+      }).catch(() => undefined);
+    }
 
     logSync = new AgentLogSync({
       serviceAccountJson,
@@ -3800,7 +5947,9 @@ export async function runSparkAgentTask(
       mirrorToConsole: true,
       consolePrefix: `[spark-agent:${options.agentId}] `,
     });
-    logSync.append(`start: workspaceId=${options.workspaceId}`);
+    logSync.append(
+      `start: workspaceId=${options.workspaceId} modelId=${toolLoopModelId}`,
+    );
 
     workspaceRoot = path.join(
       os.tmpdir(),
@@ -3860,6 +6009,33 @@ export async function runSparkAgentTask(
       typeof agentData.lessonSessionId === "string" &&
       agentData.lessonSessionId.trim().length > 0,
     );
+    const rawAgentInputAttachments: unknown[] = [];
+    if (Array.isArray(agentData.inputAttachments)) {
+      rawAgentInputAttachments.push(...agentData.inputAttachments);
+    }
+    if (Array.isArray(agentData.graderInputAttachments)) {
+      rawAgentInputAttachments.push(...agentData.graderInputAttachments);
+    }
+    const explicitInputAttachments = z
+      .array(AgentAttachmentInputSchema)
+      .catch([])
+      .parse(rawAgentInputAttachments)
+      .map((entry) => toResolvedAttachmentInput(entry));
+    const workspaceLinkAttachments = await discoverWorkspaceLinkAttachments({
+      rootDir: workspaceRoot,
+      log: (line) => {
+        logSync?.append(line);
+      },
+    });
+    const inlineInputAttachments = mergeAttachmentInputs({
+      primary: explicitInputAttachments,
+      secondary: workspaceLinkAttachments,
+    }).slice(0, AGENT_INLINE_ATTACHMENTS_MAX_COUNT);
+    if (inlineInputAttachments.length > 0) {
+      logSync?.append(
+        `input_attachments: using ${inlineInputAttachments.length.toString()} attachment(s)`,
+      );
+    }
     const maxSteps =
       options.maxSteps ??
       (isLessonRun ? DEFAULT_LESSON_MAX_STEPS : DEFAULT_MAX_STEPS);
@@ -3871,8 +6047,10 @@ export async function runSparkAgentTask(
         if (toolCost) {
           if (toolCost.toolName === "generate_text") {
             generateTextCostUsd += toolCost.costUsd;
-          } else {
+          } else if (toolCost.toolName === "generate_json") {
             generateJsonCostUsd += toolCost.costUsd;
+          } else {
+            pdfToolCostUsd += toolCost.costUsd;
           }
         }
         logSync?.append(message);
@@ -3939,6 +6117,73 @@ export async function runSparkAgentTask(
           status: "done",
           resultSummary: summary,
         });
+        if (graderRunId && workspaceRoot) {
+          const runSummary = await readGraderRunSummaryFromWorkspace({
+            rootDir: workspaceRoot,
+            summaryPath: graderSummaryPath,
+            log: (line) => {
+              logSync?.append(line);
+            },
+          });
+          const now = new Date();
+          if (runSummary) {
+            const totals = summariseGraderTotals(runSummary);
+            const paper: Record<string, string> = {};
+            if (runSummary.olympiad) {
+              paper.olympiad = runSummary.olympiad;
+            }
+            if (runSummary.year) {
+              paper.year = runSummary.year;
+            }
+            if (runSummary.paperName) {
+              paper.paperName = runSummary.paperName;
+            }
+            if (runSummary.paperUrl) {
+              paper.paperUrl = runSummary.paperUrl;
+            }
+            if (runSummary.markSchemeUrl) {
+              paper.markSchemeUrl = runSummary.markSchemeUrl;
+            }
+            await patchGraderRunStatus({
+              serviceAccountJson,
+              userId: options.userId,
+              runId: graderRunId,
+              updates: {
+                status: "done",
+                updatedAt: now,
+                completedAt: now,
+                resultSummary: summary,
+                ...(Object.keys(paper).length > 0 ? { paper } : {}),
+                totals,
+                problems: runSummary.problems,
+                summaryPath: graderSummaryPath,
+                problemsDir: graderProblemsDir,
+              },
+            }).catch((error) => {
+              logSync?.append(
+                `warn: failed to patch grader run summary: ${errorAsString(error)}`,
+              );
+            });
+          } else {
+            await patchGraderRunStatus({
+              serviceAccountJson,
+              userId: options.userId,
+              runId: graderRunId,
+              updates: {
+                status: "done",
+                updatedAt: now,
+                completedAt: now,
+                resultSummary: summary,
+                summaryPath: graderSummaryPath,
+                problemsDir: graderProblemsDir,
+              },
+            }).catch((error) => {
+              logSync?.append(
+                `warn: failed to patch grader run status: ${errorAsString(error)}`,
+              );
+            });
+          }
+        }
         return { status: "done", summary };
       },
     });
@@ -3951,13 +6196,14 @@ export async function runSparkAgentTask(
         serviceAccountJson,
         progress,
         enforceLessonPipeline: isLessonRun,
+        allowPythonExec: graderRunId === null,
         debug: llmDebug,
       }),
       done: doneTool,
     };
 
     progress.log(
-      `[spark-agent:${options.agentId}] exposed tools: ${Object.keys(tools).sort().join(", ")}`,
+      `exposed tools: ${Object.keys(tools).sort().join(", ")}`,
     );
 
     await pollStopRequested();
@@ -3966,25 +6212,77 @@ export async function runSparkAgentTask(
     }
     startStopPolling();
 
+    const agentSystemPrompt = buildAgentSystemPrompt();
+    let initialContents: LlmContent[] | null = null;
+    if (inlineInputAttachments.length > 0) {
+      const loaded = await loadAttachmentParts({
+        serviceAccountJson,
+        bucketName,
+        userId: options.userId,
+        attachments: inlineInputAttachments,
+        log: (line) => {
+          logSync?.append(line);
+        },
+      });
+      if (loaded.parts.length > 0 || loaded.notes.length > 0) {
+        initialContents = buildInitialToolLoopContents({
+          systemPrompt: agentSystemPrompt,
+          prompt,
+          inlineParts: loaded.parts,
+          notes: loaded.notes,
+        });
+      }
+    }
+
     const toolLoopStartedAt = Date.now();
-    const toolLoopResult = await runToolLoop({
-      modelId,
-      systemPrompt: buildAgentSystemPrompt(),
-      prompt,
-      tools,
-      modelTools: [{ type: "web-search", mode: "live" }],
-      maxSteps,
-      progress,
-      openAiReasoningEffort,
-      onDelta: (delta) => {
-        if (delta.thoughtDelta) {
-          logSync?.appendThoughtDelta(delta.thoughtDelta);
-        }
-        if (delta.textDelta) {
-          logSync?.appendAssistantDelta(delta.textDelta);
-        }
-      },
-    });
+    const onToolLoopDelta = (delta: {
+      thoughtDelta?: string;
+      textDelta?: string;
+    }): void => {
+      if (delta.thoughtDelta) {
+        logSync?.appendThoughtDelta(delta.thoughtDelta);
+      }
+      if (delta.textDelta) {
+        logSync?.appendAssistantDelta(delta.textDelta);
+      }
+    };
+    const onToolLoopEvent = (event: LlmStreamEvent): void => {
+      if (!logSync) {
+        return;
+      }
+      appendToolCallStreamLog({
+        event,
+        append: (line) => {
+          logSync?.append(line);
+        },
+      });
+    };
+    const toolLoopResult = await runToolLoop(
+      initialContents
+        ? {
+            modelId,
+            contents: initialContents,
+            tools,
+            modelTools: [{ type: "web-search", mode: "live" }],
+            maxSteps,
+            progress,
+            openAiReasoningEffort,
+            onDelta: onToolLoopDelta,
+            onEvent: onToolLoopEvent,
+          }
+        : {
+            modelId,
+            systemPrompt: agentSystemPrompt,
+            prompt,
+            tools,
+            modelTools: [{ type: "web-search", mode: "live" }],
+            maxSteps,
+            progress,
+            openAiReasoningEffort,
+            onDelta: onToolLoopDelta,
+            onEvent: onToolLoopEvent,
+          },
+    );
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
 
@@ -4042,6 +6340,7 @@ export async function runSparkAgentTask(
         `agent_llm=${formatUsdTotal(totals.modelCostUsd)}`,
         `generate_text=${formatUsdTotal(generateTextCostUsd)}`,
         `generate_json=${formatUsdTotal(generateJsonCostUsd)}`,
+        `pdf_tools=${formatUsdTotal(pdfToolCostUsd)}`,
         `wallclock=${formatMillis(Date.now() - toolLoopStartedAt)}`,
       ].join(" "),
     );
@@ -4058,6 +6357,19 @@ export async function runSparkAgentTask(
         status: "stopped",
         resultSummary: "Stopped by user.",
       }).catch(() => undefined);
+      if (graderRunId) {
+        await patchGraderRunStatus({
+          serviceAccountJson,
+          userId: options.userId,
+          runId: graderRunId,
+          updates: {
+            status: "stopped",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            resultSummary: "Stopped by user.",
+          },
+        }).catch(() => undefined);
+      }
       return;
     }
 
@@ -4081,6 +6393,19 @@ export async function runSparkAgentTask(
       });
     if (!statusUpdated) {
       throw error;
+    }
+    if (graderRunId) {
+      await patchGraderRunStatus({
+        serviceAccountJson,
+        userId: options.userId,
+        runId: graderRunId,
+        updates: {
+          status: "failed",
+          updatedAt: new Date(),
+          completedAt: new Date(),
+          error: message,
+        },
+      }).catch(() => undefined);
     }
     return;
   } finally {

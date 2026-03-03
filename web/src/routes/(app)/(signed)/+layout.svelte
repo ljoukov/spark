@@ -80,22 +80,22 @@
 		{ label: 'Dark', value: 'dark' }
 	];
 
-		function getIdentityCopyValue(): string | null {
-			if (!user?.uid || user.uid.trim().length === 0) {
-				return null;
-			}
-			const lines: string[] = [];
-			const name = user.name?.trim() ?? '';
-			if (name.length > 0) {
-				lines.push(`Name: ${name}`);
-			}
-			const email = user.email?.trim() ?? '';
-			if (email.length > 0) {
-				lines.push(`Email: ${email}`);
-			}
-			lines.push(`UserID: ${user.uid.trim()}`);
-			return lines.join('\n');
+	function getIdentityCopyValue(): string | null {
+		if (!user?.uid || user.uid.trim().length === 0) {
+			return null;
 		}
+		const lines: string[] = [];
+		const name = user.name?.trim() ?? '';
+		if (name.length > 0) {
+			lines.push(`Name: ${name}`);
+		}
+		const email = user.email?.trim() ?? '';
+		if (email.length > 0) {
+			lines.push(`Email: ${email}`);
+		}
+		lines.push(`UserID: ${user.uid.trim()}`);
+		return lines.join('\n');
+	}
 
 	async function copyIdentityToClipboard(): Promise<void> {
 		const value = getIdentityCopyValue();
@@ -368,16 +368,16 @@
 							<div class="app-user-menu__row">
 								<span class="app-user-menu__name">{getDisplayName()}</span>
 								{#if canCopyIdentity && !hasEmailIdentity}
-										<button
-											type="button"
-											class="app-user-menu__copy"
-											aria-label="Copy user info"
-											title="Copy user info"
-											onclick={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-												void copyIdentityToClipboard();
-											}}
+									<button
+										type="button"
+										class="app-user-menu__copy"
+										aria-label="Copy user info"
+										title="Copy user info"
+										onclick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											void copyIdentityToClipboard();
+										}}
 									>
 										{#if copiedIdentity}
 											<CheckIcon class="app-user-menu__copy-icon" />
@@ -390,16 +390,16 @@
 							<div class="app-user-menu__row app-user-menu__row--secondary">
 								<span class="app-user-menu__email">{getEmailLabel()}</span>
 								{#if canCopyIdentity && hasEmailIdentity}
-										<button
-											type="button"
-											class="app-user-menu__copy"
-											aria-label="Copy user info"
-											title="Copy user info"
-											onclick={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-												void copyIdentityToClipboard();
-											}}
+									<button
+										type="button"
+										class="app-user-menu__copy"
+										aria-label="Copy user info"
+										title="Copy user info"
+										onclick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											void copyIdentityToClipboard();
+										}}
 									>
 										{#if copiedIdentity}
 											<CheckIcon class="app-user-menu__copy-icon" />
@@ -418,6 +418,14 @@
 							}}
 						>
 							Lessons
+						</DropdownMenu.Item>
+						<DropdownMenu.Item
+							class="app-user-menu__link"
+							onSelect={() => {
+								void goto('/spark/grader');
+							}}
+						>
+							Grader runs
 						</DropdownMenu.Item>
 						<DropdownMenu.Separator />
 						<DropdownMenu.Sub>
@@ -652,14 +660,14 @@
 		align-items: flex-start;
 	}
 
-		.app-user-menu__name {
-			display: block;
-			font-weight: 600;
-			font-size: 0.95rem;
-			min-width: 0;
-			word-break: break-word;
-			flex: 1;
-		}
+	.app-user-menu__name {
+		display: block;
+		font-weight: 600;
+		font-size: 0.95rem;
+		min-width: 0;
+		word-break: break-word;
+		flex: 1;
+	}
 
 	.app-user-menu__email {
 		display: block;
@@ -671,20 +679,20 @@
 		flex: 1;
 	}
 
-		.app-user-menu__copy {
-			flex: 0 0 auto;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			width: 18px;
-			height: 18px;
-			padding: 0;
-			border: 0;
-			border-radius: 9999px;
-			background: transparent;
-			color: var(--muted-foreground);
-			cursor: pointer;
-		}
+	.app-user-menu__copy {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		border: 0;
+		border-radius: 9999px;
+		background: transparent;
+		color: var(--muted-foreground);
+		cursor: pointer;
+	}
 
 	.app-user-menu__copy:hover {
 		background: var(--muted);

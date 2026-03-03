@@ -44,9 +44,19 @@ Example spec:
     { "action": "waitFor", "selector": "text=LOGIN" },
     { "action": "screenshot", "path": "01-landing.jpg", "quality": 90 },
     { "action": "click", "selector": "text=LOGIN" },
-    { "action": "screenshot", "path": "02-after-login-click.jpg", "afterMs": 100, "quality": 90 },
+    {
+      "action": "screenshot",
+      "path": "02-after-login-click.jpg",
+      "afterMs": 100,
+      "quality": 90
+    },
     { "action": "clickText", "text": "Continue with Google" },
-    { "action": "screenshot", "path": "03-after-google-click.jpg", "afterMs": 100, "quality": 90 }
+    {
+      "action": "screenshot",
+      "path": "03-after-google-click.jpg",
+      "afterMs": 100,
+      "quality": 90
+    }
   ]
 }
 ```
@@ -65,7 +75,7 @@ Local UI checks use a real Firebase user (no auth bypass). Configure the test us
 
 Steps:
 
-1) Add this to `web/.env.local`:
+1. Add this to `web/.env.local`:
 
 ```
 TEST_USER_EMAIL_ID_PASSWORD=you@example.com/firestoreUserId/your-password
@@ -73,23 +83,25 @@ TEST_USER_EMAIL_ID_PASSWORD=you@example.com/firestoreUserId/your-password
 
 If you need `/admin`, include the userId in `ADMIN_USER_IDS`.
 
-2) Start the web dev server (HTTPS for Firebase Auth):
+2. Start the web dev server (HTTPS for Firebase Auth):
 
 ```
 bun --cwd=web run dev:https
 ```
 
-3) Open the email login page and sign in using the credentials from `.env.local`:
+3. Open the email login page and sign in using the credentials from `.env.local`:
 
 ```
 https://localhost:8081/login-with-email
 ```
 
 Useful entry points after sign-in:
+
 - `/spark` (Spark AI chat), `/spark/lesson`, `/spark/lessons`
 - `/admin` (requires the userId in `ADMIN_USER_IDS`)
 
 Notes:
+
 - Auth is fully enforced; Firestore rules have no test-user exceptions.
 - The test user is a normal production user, so it is fast for verifying real Firestore behavior.
 - HTTP dev for iOS still runs on `http://127.0.0.1:8080` via `bun --cwd=web run dev`.
@@ -97,11 +109,13 @@ Notes:
 #### 0.1.2) Browser UI Checks and Screenshots
 
 Manual checks:
+
 - Keep the dev server running (see 0.1.1).
 - Open the target route(s) in a browser and verify the UI state.
 - Use the browser screenshot tool (full-page if needed) for quick evidence.
 
 Automated screenshots (Playwright template):
+
 - Create a JSON spec listing each click/wait and every screenshot. Store reusable flows under `screenshots/<flow>/flow.json` and commit them; otherwise use a temp spec outside the repo (e.g. `/tmp/spark-webflow.json`).
 - Save repo screenshots under `screenshots/<flow>/` (not `.logs/`) and use `.jpg` with `quality: 90`.
 - Use a consistent viewport and include an explicit wait after navigation or actions that trigger spinners.
@@ -115,6 +129,7 @@ python3 scripts/web_screenshot_flow.py --spec /tmp/spark-webflow.json --out-dir 
 ```
 
 Recommended defaults:
+
 - Desktop: 1440x900, fullPage true
 - Mobile: 390x844, fullPage true
 - Screenshots should be taken right after the UI reaches the expected state (with a small `afterMs` wait if there is loading).
@@ -181,9 +196,9 @@ Spark AI Agent uses a dedicated endpoint:
 - Non-streaming clients receive `202 Accepted` JSON with `{ conversationId, messageId }`.
 - `POST /api/spark/agent/attachments` accepts multipart form data with `conversationId` + `file` and returns `{ attachment }`.
 - Auth uses Firebase ID tokens (including email/password sign-in for local test-user flows).
-additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
-name of the oneof in `SparkApiRequestProto.request`.
-`/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
+  additional CGI parameter "method" (eg ?method=create) is added to the url, there method name is
+  name of the oneof in `SparkApiRequestProto.request`.
+  `/api/internal/tasks` (POST only) is an internal task-runner hook for background work. Access requires a Bearer token that exactly matches the `TASKS_API_KEY` environment variable; all other methods or missing/incorrect tokens are rejected.
 
 ### CheckMate RPC endpoint (Connect protocol)
 
@@ -233,6 +248,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 
   Web SSR session: the web app issues a long-lived, encrypted, HTTP-only session cookie (`appSession`, max age 1 year) after successful Firebase sign-in (minted via `POST /api/login`). This cookie is used by `web/src/hooks.server.ts` to keep `/spark/*` SSR routes logged in even when the 1-hour Firebase ID token expires (for example after laptop sleep). The cookie is cleared via `POST /api/logout` (also called by `/logout`). Requires `COOKIE_SECRET_KEY` (32 bytes, base64) in the server environment.
+
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Server access uses the Firestore REST API with a service-account JWT flow (WebCrypto) using `GOOGLE_SERVICE_ACCOUNT_JSON`. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/uploads/<uid>/<md5>` with security rules enforcing ownership. Server access uses the Storage JSON API (REST) with the same service-account JWT flow; objects are read/written by `storagePath` (no `downloadUrl` requirement). The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
 
@@ -246,7 +262,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 ### 3.5 Spark AI Agent Runs (Phase 2)
 
 - Agent runs are stored under `users/{userId}/agents/{agentId}`.
-  - Fields: `{ id, prompt, status, workspaceId, stop_requested?, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
+  - Fields: `{ id, prompt, status, workspaceId, stop_requested?, inputAttachments?, createdAt, updatedAt, statesTimeline[], resultSummary?, error? }`.
   - `status` ∈ `created | executing | stopped | failed | done`.
   - `statesTimeline[]` entries contain `{ state, timestamp }`.
 - Agent runs use a hosted web search tool during the LLM tool loop when available (e.g. OpenAI Responses `web_search` with external web access enabled).
@@ -255,6 +271,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
   - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
+  - Storage-link JSON files (`{ "type": "storage_link", "storagePath": "...", ... }`) are treated as first-class runner inputs: the runner scans workspace JSON files, resolves these links, and injects resolved files into the initial multimodal model context (subject to attachment count/size limits and user-upload path checks).
 - Agent sub-model LLM debug snapshots (per `generate_text` / `generate_json` tool call) are stored in the workspace as files:
   - `generate_text/turn{N}tool{M}/{prompt|request|response}.txt`
   - `generate_json/turn{N}tool{M}/{prompt|request|response}.txt`
@@ -269,6 +286,13 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Server writes `brief.md`, `request.json`, plus `lesson/task.md` + `lesson/schema/*` into the workspace and schedules a `runAgent` task.
   - The agent follows `lesson/task.md`, authors Firestore-ready JSON under `lesson/output/` (`session.json`, `quiz/*.json`, `code/*.json`, optional `media/*.json`), then calls `publish_lesson` with a `sessionPath`.
   - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
+- Olympiad grading (from `/spark` chat) is implemented as an Agent run:
+  - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, copies `grader/memory.md` from the user config, writes `grader/task.md`, and schedules `runAgent`.
+  - Attachment selection is conversation-aware (not only the latest message): relevant prior user uploads in the same thread are reused for retries/follow-ups unless replaced.
+  - Selected uploads are written as metadata in `request.json` and `grader/uploads/index.json`, and each upload also gets a storage-link file under `grader/uploads/links/{attachmentId}.json`.
+  - The runner resolves these attachments (plus any `inputAttachments` metadata on the agent doc) and injects corresponding images/files into the run-agent model input as inline multimodal parts.
+  - The grader agent uses `web_search` to find official references, `read_pdf` (Gemini `gemini-flash-latest`) to transcribe official PDFs, `extract_pdf_diagrams` for diagram bounding-box manifests when needed, and `web_fetch` only for non-PDF pages; it writes `grader/output/run-summary.json` plus one markdown file per problem under `grader/output/problems/`.
+  - On completion, the runner parses `grader/output/run-summary.json` and patches the grader run document with totals + per-problem summary metadata for `/spark/grader`.
 
 - Prompting and tool-use strategy:
   - Tool definitions (name + description + Zod schema) are the “API contract”. Put field-level semantics and constraints in the tool schema/description, not scattered across prompts.
@@ -277,6 +301,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - Prompt locations:
     - Spark chat system prompt: `web/src/lib/server/agent/spark-chat-system-prompt.md` (loaded server-side via `?raw`).
     - Lesson agent task template + prompts: `web/src/lib/server/lessonAgent/task-template.md`, `web/src/lib/server/lessonAgent/prompts/*.md`.
+    - Grader agent task template: `web/src/lib/server/graderAgent/task-template.md`.
     - Lesson JSON schemas: `web/src/lib/server/lessonAgent/schema/*.schema.json`.
 
 - Agent run logs live under `users/{userId}/agents/{agentId}/logs/log` (single doc).
@@ -311,6 +336,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - `SparkApiRequest.request = SyncRequest` (optional to bootstrap client caches)
 - Web app uses JSON endpoints under `/api/*`; non-proto marketing endpoints remain separate (`/api/health`, `/api/newsletter`).
 - `POST /api/spark/agents` creates a new Spark Agent run, persists the agent doc, assigns a workspace, and schedules the `runAgent` task.
+- `POST /api/spark/agents/{agentId}/retry` retries a failed run by cloning the source prompt + retry-safe metadata (including attachment metadata such as `inputAttachments`/`graderInputAttachments`) into a new agent doc, copying workspace files into a fresh workspace, and scheduling a new `runAgent` task.
 - Logging & tracing: console logs captured via Cloudflare Workers logs/observability; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
 
 ## 5) iOS App (SwiftUI)
@@ -346,9 +372,11 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu showing display name + email/guest label and a copy button that copies `Name`/`Email`/`UserID` lines to the clipboard (omitting missing fields), theme picker, Firebase auth sync) reused by `/spark` and `/spark/lesson`.
-- `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`) and Agents (`/spark/agents`).
+- `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`), Grader runs (`/spark/grader`), and Agents (`/spark/agents`).
+- `/spark/grader` lists olympiad grading runs launched from chat. Opening a run (`/spark/grader/{runId}`) shows totals, paper metadata/source links, and per-problem grading rows; opening a problem (`/spark/grader/{runId}/{problemId}`) shows the generated markdown sections for problem statement, official problem statement, official solution, student transcript, grading notes, line-by-line annotations, and overall feedback.
 - `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected run details:
   - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
+  - Failed runs show a Retry button in the run header; retrying creates a new agent run with the same prompt and retry-safe metadata, copies the prior workspace files into a new workspace, and starts a fresh task.
   - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up).
   - Workspace files (Markdown renders inline) with a `Raw` action that opens the file contents in a new tab.
   - A `Download zip` action that returns the full workspace contents (including LLM logs) plus a plain-text `agent.log` file for the run.
@@ -378,6 +406,8 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - `quiz/{quizId}`: quiz definitions delivered to the `/spark/lesson` experience. Shape follows `QuizDefinitionSchema` (id, title, optional metadata, gradingPrompt, and an ordered array of questions). Type-answer questions include `marks` + `markScheme` for server grading. Written by server tooling; client never writes or reads directly.
   - `code/{problemId}`: code problem metadata (slug, topics, markdown description, examples, test cases, stdin/stdout solution) scoped to the user and session. Mirrors the structure in `CodeProblemSchema` and is used by the problem detail page.
 - `media/{planItemId}`: narration clips with synced imagery. Documents follow `SessionMediaDocSchema` (`id`, `planItemId`, `sessionId`, `audio: { storagePath, mimeType?, durationSec }`, `images: Array<{ index, storagePath, startSec, durationSec }>` for the story panels (default 10, configurable), `narration: Array<{ text, startSec, durationSec, speaker? }>`, optional `posterImage`/`endingImage` stills (`{ storagePath }`), `metadataVersion` (current v3), timestamps). Audio files live in Firebase Storage at `spark/{userId}/sessions/{sessionId}/{planItemId}.mp3` and are served via the authenticated `/api/media` proxy (Storage JSON API via service account).
+- `spark/{uid}/graderConfig/config/files/memory.md`: user-specific grader memory file (markdown) storing default olympiad profile (default `Hamilton Olympiad by UKMT`). Chat grader runs copy this file into workspace as `grader/memory.md`; users can override olympiad per run and the memory file is updated accordingly.
+- `spark/{uid}/graderRuns/{runId}`: grading run metadata launched from `create_grader`. Each document stores `{ id, agentId, workspaceId, conversationId?, userPrompt?, olympiadKey, olympiadLabel, memoryPath, summaryPath, problemsDir, sourceAttachmentIds?, sourceAttachmentCount?, status: 'created'|'executing'|'stopped'|'failed'|'done', paper?, totals?, problems?, resultSummary?, error?, createdAt, updatedAt, completedAt? }`. `paper` captures inferred paper metadata/URLs and `problems` contains per-problem summary rows (`id`, `index`, `title`, marks, verdict, `filePath`) used by `/spark/grader`.
 - On a user's first visit to `/spark/lesson`, if no sessions exist the server fetches available welcome templates from `spark-admin/templates/sessions`. Each template document provides `{ id, title, summary?, plan, tagline, emoji, topic, key? }` plus child collections for `quiz/`, `code/`, and `media/`. The `/spark/lesson` welcome screen lists the templates as lesson cards (poster image or emoji, two-line-clamped tagline, and a “Launch” CTA); picking one clones the template into `spark/{uid}/sessions/{sessionId}` with matching subcollections, copies any narration media into the user namespace, and updates `currentSessionId`.
 - `spark/{uid}/state/{sessionId}`: session state document mirrored into SvelteKit responses. Shape `{ sessionId, items: Record<planItemId, { status: 'not_started' | 'in_progress' | 'completed', startedAt?, completedAt?, quiz?: { lastQuestionIndex?: number, serverCompletedAt?: Timestamp, questions: Record<questionId, { status: 'pending' | 'correct' | 'incorrect' | 'skipped', selectedOptionId?, typedValue?, hintUsed?, dontKnow?, firstViewedAt?, answeredAt?, grade?: { awardedMarks, maxMarks, feedback, heading?, tone? } }> }, code?: { language: 'python', source: string, savedAt: Timestamp, lastRunStatus?: 'passed' | 'failed' | 'error', lastRunAt?: Timestamp } }>, lastUpdatedAt }`. `feedback` stores Markdown only; HTML is derived at render time and never persisted. Only the server reads/writes this collection; browser code receives the state through `load` functions and applies changes by POSTing to `/api/code/{sessionId}/update`, which validates via `@spark/schemas` before persisting.
 - Loading feedback (web `/spark/lesson`): any user action that triggers a server round-trip must surface a visible loading cue. Prefer subtle inline spinners on the action target (timeline rows, dialog buttons) for quick navigations; reserve full-screen or modal overlays for major page transitions (opening a lesson from `/spark/lessons`, generating new lesson flows) so learners feel the weight of the transition without unnecessary friction. Free-text grading shows a spinner inside the quiz Submit button with “Submitting…” then “Grading…” once the stream starts; network errors swap the button label to “Network error, retry.”

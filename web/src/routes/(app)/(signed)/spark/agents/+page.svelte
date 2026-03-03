@@ -35,6 +35,8 @@
 		line: string;
 	};
 
+	const RUN_LOG_THOUGHTS_KEY = 'stream.thoughts';
+
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? null);
@@ -56,6 +58,9 @@
 	let stopSubmitting = $state(false);
 	let stopError = $state<string | null>(null);
 	let stopSuccess = $state<string | null>(null);
+	let retrySubmitting = $state(false);
+	let retryError = $state<string | null>(null);
+	let retrySuccess = $state<string | null>(null);
 	let downloadSubmitting = $state(false);
 	let downloadError = $state<string | null>(null);
 	let fileDialogOpen = $state(false);
@@ -164,13 +169,17 @@
 
 	function toRunLogLineView(
 		prev: RunLogLineView[],
-		next: SparkAgentRunLog['lines']
+		next: SparkAgentRunLog['lines'],
+		stream?: SparkAgentRunLog['stream']
 	): RunLogLineView[] {
-		if (next.length === 0) {
+		const thoughts = typeof stream?.thoughts === 'string' ? stream.thoughts.trim() : '';
+		const hasThoughts = thoughts.length > 0;
+		const expectedLength = next.length + (hasThoughts ? 1 : 0);
+		if (next.length === 0 && !hasThoughts) {
 			return [];
 		}
 
-		if (prev.length === next.length) {
+		if (prev.length === expectedLength) {
 			let isSame = true;
 			for (let idx = 0; idx < next.length; idx += 1) {
 				const prevEntry = prev[idx];
@@ -178,6 +187,19 @@
 				if (!prevEntry || prevEntry.key !== nextEntry.key || prevEntry.line !== nextEntry.line) {
 					isSame = false;
 					break;
+				}
+			}
+			if (isSame && hasThoughts) {
+				const thoughtsEntry = prev[next.length];
+				const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
+				const thoughtTimestampLabel = formatTimestamp(thoughtTimestamp);
+				if (
+					!thoughtsEntry ||
+					thoughtsEntry.key !== RUN_LOG_THOUGHTS_KEY ||
+					thoughtsEntry.line !== thoughts ||
+					thoughtsEntry.timestampLabel !== thoughtTimestampLabel
+				) {
+					isSame = false;
 				}
 			}
 			if (isSame) {
@@ -201,6 +223,14 @@
 				key: entry.key,
 				timestampLabel: formatTimestamp(entry.timestamp),
 				line: entry.line
+			});
+		}
+		if (hasThoughts) {
+			const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
+			nextView.push({
+				key: RUN_LOG_THOUGHTS_KEY,
+				timestampLabel: formatTimestamp(thoughtTimestamp),
+				line: thoughts
 			});
 		}
 		return nextView;
@@ -389,6 +419,15 @@
 
 	const canRequestStop = $derived.by(() => showStopButton && !stopSubmitting);
 
+	const showRetryButton = $derived.by(() => {
+		if (!selectedAgentId || !selectedAgent) {
+			return false;
+		}
+		return selectedAgent.status === 'failed';
+	});
+
+	const canRetry = $derived.by(() => showRetryButton && !retrySubmitting);
+
 	async function downloadRunZip(): Promise<void> {
 		if (!browser) {
 			return;
@@ -447,6 +486,37 @@
 			stopError = error instanceof Error ? error.message : 'Unable to stop this agent right now.';
 		} finally {
 			stopSubmitting = false;
+		}
+	}
+
+	async function retryAgent(): Promise<void> {
+		if (!selectedAgentId || !canRetry) {
+			return;
+		}
+		retryError = null;
+		retrySuccess = null;
+		retrySubmitting = true;
+		try {
+			const response = await fetch(`/api/spark/agents/${selectedAgentId}/retry`, {
+				method: 'POST'
+			});
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				throw new Error(payload?.error ?? payload?.message ?? 'retry_failed');
+			}
+			const payload = await response.json().catch(() => null);
+			if (payload && typeof payload.agentId === 'string' && payload.agentId.trim().length > 0) {
+				selectedAgentId = payload.agentId;
+				selectedAgentDetail = null;
+			}
+			retrySuccess = 'Retry started.';
+			window.setTimeout(() => {
+				retrySuccess = null;
+			}, 2500);
+		} catch (error) {
+			retryError = error instanceof Error ? error.message : 'Unable to retry this agent right now.';
+		} finally {
+			retrySubmitting = false;
 		}
 	}
 
@@ -614,7 +684,7 @@
 				const data = (snap.data() ?? {}) as Record<string, unknown>;
 				const parsed = parseRunLogDoc(data);
 				runLog = parsed;
-				runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? []);
+				runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? [], parsed?.stream);
 				loadError = null;
 			},
 			(error) => {
@@ -648,6 +718,8 @@
 			runLogFollow = true;
 			stopError = null;
 			stopSuccess = null;
+			retryError = null;
+			retrySuccess = null;
 			downloadError = null;
 			return;
 		}
@@ -658,6 +730,8 @@
 		runLogFollow = true;
 		stopError = null;
 		stopSuccess = null;
+		retryError = null;
+		retrySuccess = null;
 		downloadError = null;
 	});
 
@@ -815,6 +889,18 @@
 									{stopSubmitting ? 'Stopping…' : 'Stop'}
 								</Button>
 							{/if}
+							{#if showRetryButton}
+								<Button
+									variant="secondary"
+									size="sm"
+									disabled={retrySubmitting}
+									onclick={() => {
+										void retryAgent();
+									}}
+								>
+									{retrySubmitting ? 'Retrying…' : 'Retry'}
+								</Button>
+							{/if}
 							{#if showStopRequestedBadge}
 								<span class="status-pill status-pill--stopped">stop requested</span>
 							{/if}
@@ -863,6 +949,18 @@
 						<div class="agents-detail__summary">
 							<p class="agents-detail__eyebrow">Stop request</p>
 							<p>{stopSuccess}</p>
+						</div>
+					{/if}
+					{#if retryError}
+						<div class="agents-detail__error">
+							<p class="agents-detail__eyebrow">Retry</p>
+							<p>{retryError}</p>
+						</div>
+					{/if}
+					{#if retrySuccess}
+						<div class="agents-detail__summary">
+							<p class="agents-detail__eyebrow">Retry</p>
+							<p>{retrySuccess}</p>
 						</div>
 					{/if}
 					{#if downloadError}
@@ -914,18 +1012,18 @@
 					</div>
 				</div>
 
-					<section class="agents-run">
-						<h3>Run stats</h3>
-						{#if runStats}
-							<div class="agents-run__stats">
-								<div>
-									<span class="agents-run__label">Model cost</span>
-									<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
-								</div>
-								<div>
-									<span class="agents-run__label">Tools cost</span>
-									<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
-								</div>
+				<section class="agents-run">
+					<h3>Run stats</h3>
+					{#if runStats}
+						<div class="agents-run__stats">
+							<div>
+								<span class="agents-run__label">Model cost</span>
+								<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
+							</div>
+							<div>
+								<span class="agents-run__label">Tools cost</span>
+								<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
+							</div>
 							<div>
 								<span class="agents-run__label">Total cost</span>
 								<p class="agents-run__value">{formatUsd(runStats.totalCostUsd)}</p>

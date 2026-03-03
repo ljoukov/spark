@@ -8,17 +8,39 @@ import {
 	type SparkAgentContentPart,
 	type SparkAgentMessage
 } from '@spark/schemas';
+import {
+	DEFAULT_GRADER_OLYMPIAD_KEY,
+	DEFAULT_GRADER_OLYMPIAD_LABEL,
+	GRADER_MEMORY_FILE_PATH,
+	GRADER_PROBLEMS_DIR,
+	GRADER_SUMMARY_PATH,
+	buildDefaultGraderMemoryMarkdown,
+	createGraderRun,
+	parseGraderMemoryMarkdown,
+	patchGraderRun,
+	readOrCreateGraderMemoryFile,
+	saveGraderMemoryFile
+} from '$lib/server/grader/repo';
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { getFirestoreDocument, patchFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import {
+	getFirestoreDocument,
+	patchFirestoreDocument,
+	setFirestoreDocument
+} from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { encodeBytesToBase64 } from '$lib/server/gcp/base64';
 import { env } from '$env/dynamic/private';
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
-import { listSessions, getSession, saveSession, setCurrentSessionId } from '$lib/server/session/repo';
+import {
+	listSessions,
+	getSession,
+	saveSession,
+	setCurrentSessionId
+} from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
 import sparkChatSystemPrompt from '$lib/server/agent/spark-chat-system-prompt.md?raw';
 import lessonTaskTemplate from '$lib/server/lessonAgent/task-template.md?raw';
@@ -36,6 +58,7 @@ import lessonPromptQuizRevise from '$lib/server/lessonAgent/prompts/quiz-revise.
 import lessonPromptCodeDraft from '$lib/server/lessonAgent/prompts/code-draft.md?raw';
 import lessonPromptCodeGrade from '$lib/server/lessonAgent/prompts/code-grade.md?raw';
 import lessonPromptCodeRevise from '$lib/server/lessonAgent/prompts/code-revise.md?raw';
+import graderTaskTemplate from '$lib/server/graderAgent/task-template.md?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
@@ -73,6 +96,8 @@ const FALLBACK_RESPONSE = [
 	'',
 	'Want me to tailor this to your exam board and weak topics?'
 ].join('\n');
+const GRADER_ATTACHMENT_LIMIT = 24;
+const GRADER_UPLOADS_MANIFEST_PATH = 'grader/uploads/index.json';
 
 const attachmentSchema = z.object({
 	id: z.string().trim().min(1, 'id is required'),
@@ -220,6 +245,7 @@ function resolveConversationDoc(
 				.map((entry) => normalizeMessage(entry, now))
 				.filter((entry): entry is SparkAgentMessage => entry !== null)
 		: [];
+	const attachments = normalizeAttachments(raw?.attachments, now);
 	const participantIds = Array.isArray(raw?.participantIds)
 		? raw.participantIds.filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
 		: [];
@@ -231,7 +257,8 @@ function resolveConversationDoc(
 		createdAt,
 		updatedAt: now,
 		lastMessageAt: now,
-		messages
+		messages,
+		attachments
 	};
 
 	const isNew = !raw;
@@ -255,6 +282,101 @@ function normalizeAttachments(raw: unknown, fallback: Date): SparkAgentAttachmen
 		});
 	}
 	return attachments;
+}
+
+function toAttachmentInput(entry: SparkAgentAttachment): z.infer<typeof attachmentSchema> | null {
+	if (entry.status === 'failed' || entry.status === 'uploading') {
+		return null;
+	}
+	return {
+		id: entry.id,
+		storagePath: entry.storagePath,
+		contentType: entry.contentType,
+		filename: entry.filename,
+		sizeBytes: entry.sizeBytes,
+		pageCount: entry.pageCount
+	};
+}
+
+function toAttachmentFromMessagePart(
+	part: SparkAgentContentPart
+): z.infer<typeof attachmentSchema> | null {
+	if (part.type !== 'image' && part.type !== 'file') {
+		return null;
+	}
+	const fallbackId = `${part.file.storagePath}#${part.file.contentType}`;
+	const attachmentId =
+		typeof part.file.id === 'string' && part.file.id.trim().length > 0 ? part.file.id : fallbackId;
+	return {
+		id: attachmentId,
+		storagePath: part.file.storagePath,
+		contentType: part.file.contentType,
+		filename: part.file.filename,
+		sizeBytes: part.file.sizeBytes,
+		pageCount: part.file.pageCount
+	};
+}
+
+function resolveAttachmentsForToolCall(options: {
+	conversation: ConversationDoc;
+	currentMessageId: string;
+	currentMessageAttachments: z.infer<typeof attachmentSchema>[];
+	limit: number;
+}): z.infer<typeof attachmentSchema>[] {
+	const knownAttachments = (options.conversation.attachments ?? [])
+		.map((entry) => toAttachmentInput(entry))
+		.filter((entry): entry is z.infer<typeof attachmentSchema> => entry !== null);
+	const attachmentById = new Map<string, z.infer<typeof attachmentSchema>>();
+	for (const entry of knownAttachments) {
+		attachmentById.set(entry.id, entry);
+	}
+	for (const entry of options.currentMessageAttachments) {
+		attachmentById.set(entry.id, entry);
+	}
+	const selected: z.infer<typeof attachmentSchema>[] = [];
+	const seen = new Set<string>();
+	const pushAttachment = (entry: z.infer<typeof attachmentSchema>): void => {
+		if (seen.has(entry.id)) {
+			return;
+		}
+		seen.add(entry.id);
+		selected.push(entry);
+	};
+	for (const entry of options.currentMessageAttachments) {
+		pushAttachment(entry);
+	}
+	for (let index = options.conversation.messages.length - 1; index >= 0; index -= 1) {
+		if (selected.length >= options.limit) {
+			break;
+		}
+		const message = options.conversation.messages[index];
+		if (!message || message.role !== 'user') {
+			continue;
+		}
+		const isCurrentMessage = message.id === options.currentMessageId;
+		if (!isCurrentMessage && selected.length >= options.limit) {
+			continue;
+		}
+		for (const part of message.content) {
+			if (selected.length >= options.limit) {
+				break;
+			}
+			const fromPart = toAttachmentFromMessagePart(part);
+			if (!fromPart) {
+				continue;
+			}
+			const normalized = attachmentById.get(fromPart.id) ?? fromPart;
+			attachmentById.set(normalized.id, normalized);
+			pushAttachment(normalized);
+		}
+	}
+	for (const entry of knownAttachments) {
+		if (selected.length >= options.limit) {
+			break;
+		}
+		pushAttachment(entry);
+	}
+	return selected.slice(0, options.limit);
 }
 
 function toConversationPayload(conversation: ConversationDoc): Record<string, unknown> {
@@ -598,6 +720,175 @@ async function writeWorkspaceTextFile(options: {
 	});
 }
 
+function normalizeOlympiadKey(value: string): string {
+	const normalized = value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/gu, '_')
+		.replace(/^_+|_+$/gu, '');
+	if (normalized.length > 0) {
+		return normalized.slice(0, 64);
+	}
+	return DEFAULT_GRADER_OLYMPIAD_KEY;
+}
+
+function upsertMarkdownConfigLine(content: string, key: string, value: string): string {
+	const pattern = new RegExp(`^\\s*-\\s*${key}\\s*:\\s*.*$`, 'imu');
+	const replacement = `- ${key}: ${value}`;
+	if (pattern.test(content)) {
+		return content.replace(pattern, replacement);
+	}
+	const trimmed = content.trimEnd();
+	if (trimmed.length === 0) {
+		return `${replacement}\n`;
+	}
+	return `${trimmed}\n${replacement}\n`;
+}
+
+async function resolveGraderMemoryForRun(options: {
+	userId: string;
+	olympiadOverride?: string;
+}): Promise<{
+	path: string;
+	content: string;
+	olympiadKey: string;
+	olympiadLabel: string;
+}> {
+	const current = await readOrCreateGraderMemoryFile(options.userId);
+	const override = options.olympiadOverride?.trim();
+	if (!override || override.length === 0) {
+		return {
+			path: GRADER_MEMORY_FILE_PATH,
+			content: current.content,
+			olympiadKey: current.olympiadKey,
+			olympiadLabel: current.olympiadLabel
+		};
+	}
+	const nextKey = normalizeOlympiadKey(override);
+	let nextContent = current.content;
+	if (nextContent.trim().length === 0) {
+		nextContent = buildDefaultGraderMemoryMarkdown({
+			olympiadKey: nextKey,
+			olympiadLabel: override
+		});
+	} else {
+		nextContent = upsertMarkdownConfigLine(nextContent, 'olympiad_key', nextKey);
+		nextContent = upsertMarkdownConfigLine(nextContent, 'olympiad_label', override);
+	}
+	const saved = await saveGraderMemoryFile(options.userId, {
+		content: nextContent,
+		olympiadKey: nextKey,
+		olympiadLabel: override
+	});
+	return {
+		path: GRADER_MEMORY_FILE_PATH,
+		content: saved.content,
+		olympiadKey: saved.olympiadKey,
+		olympiadLabel: saved.olympiadLabel
+	};
+}
+
+const graderCreateSchema = z
+	.object({
+		olympiad: nullableOptionalString().describe(
+			'Optional olympiad name override for this learner (for example: Hamilton Olympiad by UKMT).'
+		),
+		notes: nullableOptionalString().describe(
+			'Optional grading focus for this run (for example: focus on proof rigor and notation).'
+		)
+	})
+	.strict();
+
+function buildGraderBrief(options: {
+	sourceText?: string;
+	input: z.infer<typeof graderCreateSchema>;
+	attachments: z.infer<typeof attachmentSchema>[];
+	memory: {
+		olympiadKey: string;
+		olympiadLabel: string;
+	};
+}): string {
+	const lines: string[] = [
+		'# Grader request',
+		'',
+		'## Default olympiad profile',
+		`- olympiad_key: ${options.memory.olympiadKey}`,
+		`- olympiad_label: ${options.memory.olympiadLabel}`
+	];
+	const rawSource = options.sourceText?.trim();
+	if (rawSource && rawSource.length > 0) {
+		lines.push('', '## Original user message', '```', rawSource, '```');
+	}
+	if (options.input.notes) {
+		lines.push('', '## User grading focus', options.input.notes.trim());
+	}
+	if (options.attachments.length > 0) {
+		lines.push('', '## Uploaded work');
+		let index = 0;
+		for (const attachment of options.attachments) {
+			index += 1;
+			const label = attachment.filename?.trim() || attachment.id;
+			const pages =
+				typeof attachment.pageCount === 'number' && attachment.pageCount > 0
+					? `, pages=${attachment.pageCount.toString()}`
+					: '';
+			lines.push(
+				`- ${index}. ${label} (${attachment.contentType}, size=${attachment.sizeBytes.toString()}${pages})`
+			);
+		}
+	} else {
+		lines.push('', '## Uploaded work', '- No attachments were included for this run.');
+	}
+	lines.push(
+		'',
+		'## Objectives',
+		'- Identify olympiad + year/paper from the learner work.',
+		'- Find official paper and mark scheme.',
+		'- Transcribe student work accurately before grading.'
+	);
+	return lines.join('\n').trim() + '\n';
+}
+
+function renderGraderTask(options: {
+	runId: string;
+	workspaceId: string;
+	olympiadLabel: string;
+}): string {
+	return graderTaskTemplate
+		.replaceAll('{{RUN_ID}}', options.runId)
+		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
+		.replaceAll('{{OLYMPIAD_LABEL}}', options.olympiadLabel)
+		.trim()
+		.concat('\n');
+}
+
+function buildGraderAgentPrompt(options: {
+	runId: string;
+	workspaceId: string;
+	memoryPath: string;
+	summaryPath: string;
+	problemsDir: string;
+}): string {
+	return [
+		'Grade an olympiad student submission from uploaded work and produce structured outputs.',
+		'',
+		`graderRunId: ${options.runId}`,
+		`workspaceId: ${options.workspaceId}`,
+		'',
+		'Read and follow these files first:',
+		'- brief.md',
+		'- request.json',
+		'- grader/task.md',
+		`- grader/${options.memoryPath}`,
+		'- grader/uploads/index.json',
+		'',
+		'Deliverables:',
+		`1) Write per-problem markdown files under ${options.problemsDir}/`,
+		`2) Write ${options.summaryPath}`,
+		'3) Call done with olympiad/year and total marks summary'
+	].join('\n');
+}
+
 const quizQuestionKindSchema = z
 	.enum(['multiple-choice', 'type-answer', 'info-card'])
 	.describe('Quiz question kind.');
@@ -643,7 +934,11 @@ const quizPreferencesSchema = z
 			seenKinds.add(entry.kind);
 			sum += entry.count;
 		}
-		if (typeof value.questionCount === 'number' && kinds.length > 0 && sum !== value.questionCount) {
+		if (
+			typeof value.questionCount === 'number' &&
+			kinds.length > 0 &&
+			sum !== value.questionCount
+		) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['questionKinds'],
@@ -749,10 +1044,7 @@ const lessonCreateSchema = z.object({
 	materials: materialsSchema.describe('Optional list of materials/links to incorporate.')
 });
 
-function buildLessonBrief(
-	input: z.infer<typeof lessonCreateSchema>,
-	sourceText?: string
-): string {
+function buildLessonBrief(input: z.infer<typeof lessonCreateSchema>, sourceText?: string): string {
 	const lines: string[] = ['# Lesson request', '', `## Topic`, input.topic.trim()];
 	const raw = sourceText?.trim();
 	if (raw && raw.length > 0) {
@@ -809,7 +1101,11 @@ function buildLessonBrief(
 			lines.push(`- ${item}`);
 		}
 	}
-	lines.push('', '## Notes', '- Publish this lesson into the user’s sessions (not welcome templates).');
+	lines.push(
+		'',
+		'## Notes',
+		'- Publish this lesson into the user’s sessions (not welcome templates).'
+	);
 	return lines.join('\n').trim() + '\n';
 }
 
@@ -870,6 +1166,8 @@ function buildSparkChatTools(options: {
 	userId: string;
 	serviceAccountJson: string;
 	sourceText?: string;
+	conversationId?: string;
+	attachmentsForMessage: z.infer<typeof attachmentSchema>[];
 	requiresAttachmentContext?: boolean;
 	attachmentLabels?: string[];
 }): LlmToolSet {
@@ -877,6 +1175,8 @@ function buildSparkChatTools(options: {
 		userId,
 		serviceAccountJson,
 		sourceText,
+		conversationId,
+		attachmentsForMessage,
 		requiresAttachmentContext = false,
 		attachmentLabels = []
 	} = options;
@@ -890,7 +1190,9 @@ function buildSparkChatTools(options: {
 				.strict(),
 			execute: async ({ limit }) => {
 				const sessions = await listSessions(userId, limit ?? 20);
-				const states = await Promise.all(sessions.map((session) => getSessionState(userId, session.id)));
+				const states = await Promise.all(
+					sessions.map((session) => getSessionState(userId, session.id))
+				);
 				const lessons = sessions.map((session, index) => {
 					const state = states[index];
 					const { completed, total } = countCompletedSteps(session, state);
@@ -1042,23 +1344,23 @@ function buildSparkChatTools(options: {
 						`Workspace ID: ${workspaceId}`,
 						''
 					].join('\n');
-							const plan = [
-								'# Plan',
-								'',
-								'- [running] Read brief.md, request.json, and lesson/task.md.',
-								'- [pending] Write lesson/requirements.md (hard requirements + decisions).',
-								'- [pending] Generate session draft (generate_text → lesson/drafts/session.md).',
-								'- [pending] Grade + revise session draft until pass (lesson/feedback/session-grade.md).',
-								'- [pending] Generate quiz drafts (generate_text → lesson/drafts/quiz/*.md).',
-								'- [pending] Grade + revise quiz drafts (lesson/feedback/quiz/<planItemId>-grade.md).',
-								'- [pending] Generate code problem drafts if needed (lesson/drafts/code/*.md).',
-								'- [pending] Grade + revise code problem drafts (lesson/feedback/code/<planItemId>-grade.md).',
-								'- [pending] Compile output JSON files under lesson/output/ (generate_json from drafts + schema).',
-								'- [pending] Validate output JSON (validate_json; fix issues until ok=true).',
-								'- [pending] Verify code problems with python_exec (if coding).',
-								'- [pending] Call publish_lesson (fix errors until published).',
-								'- [pending] Call done.'
-							].join('\n');
+					const plan = [
+						'# Plan',
+						'',
+						'- [running] Read brief.md, request.json, and lesson/task.md.',
+						'- [pending] Write lesson/requirements.md (hard requirements + decisions).',
+						'- [pending] Generate session draft (generate_text → lesson/drafts/session.md).',
+						'- [pending] Grade + revise session draft until pass (lesson/feedback/session-grade.md).',
+						'- [pending] Generate quiz drafts (generate_text → lesson/drafts/quiz/*.md).',
+						'- [pending] Grade + revise quiz drafts (lesson/feedback/quiz/<planItemId>-grade.md).',
+						'- [pending] Generate code problem drafts if needed (lesson/drafts/code/*.md).',
+						'- [pending] Grade + revise code problem drafts (lesson/feedback/code/<planItemId>-grade.md).',
+						'- [pending] Compile output JSON files under lesson/output/ (generate_json from drafts + schema).',
+						'- [pending] Validate output JSON (validate_json; fix issues until ok=true).',
+						'- [pending] Verify code problems with python_exec (if coding).',
+						'- [pending] Call publish_lesson (fix errors until published).',
+						'- [pending] Call done.'
+					].join('\n');
 
 					await Promise.all([
 						writeWorkspaceTextFile({
@@ -1109,14 +1411,14 @@ function buildSparkChatTools(options: {
 							content: lessonQuizSchemaJson.trim() + '\n',
 							now
 						}),
-							writeWorkspaceTextFile({
-								serviceAccountJson,
-								userId,
-								workspaceId,
-								path: 'lesson/schema/coding_problem.schema.json',
-								content: lessonCodingProblemSchemaJson.trim() + '\n',
-								now
-							}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'lesson/schema/coding_problem.schema.json',
+							content: lessonCodingProblemSchemaJson.trim() + '\n',
+							now
+						}),
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
@@ -1199,33 +1501,33 @@ function buildSparkChatTools(options: {
 						})
 					]);
 
-						const prompt = [
-							'Create and publish a Spark lesson using the workspace files (brief.md + lesson/*).',
-							'',
-							`sessionId: ${sessionId}`,
-							`workspaceId: ${workspaceId}`,
-							'',
-								'Instructions:',
-								'1) Read brief.md, request.json, and lesson/task.md.',
-								'2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).',
-								'3) Use generate_text + the templates in lesson/prompts/ to draft/revise Markdown under lesson/drafts/ and to write grading reports under lesson/feedback/.',
-								'   - Avoid asking generate_text to emit large JSON (it is less reliable than Markdown).',
-								'4) Compile Firestore-ready JSON under lesson/output/ from the Markdown drafts using generate_json + validate_json.',
-								'   - For each JSON output: generate_json({ sourcePath, schemaPath, outputPath }) then validate_json({ schemaPath, inputPath: outputPath }) and fix until ok=true.',
-								'',
-								'Examples:',
-								" - generate_text({ promptPath: 'lesson/prompts/session-draft.md', outputPath: 'lesson/drafts/session.md' })",
-								" - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.md' })  (must pass=true before publishing)",
-								" - generate_text({ promptPath: 'lesson/prompts/quiz-draft.md', outputPath: 'lesson/drafts/quiz/q1.md' })",
-								" - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/drafts/quiz/q1.md'], outputPath: 'lesson/feedback/quiz/q1-grade.md' })",
-								" - generate_json({ sourcePath: 'lesson/drafts/session.md', schemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
-								" - validate_json({ schemaPath: 'lesson/schema/session.schema.json', inputPath: 'lesson/output/session.json' })",
-								'',
-								'5) Call publish_lesson with:',
-								`   - sessionId: ${sessionId}`,
-								"   - sessionPath: 'lesson/output/session.json'",
-								"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
-							'   - includeCoding: true if you included any plan items with kind="coding_problem"; otherwise false.',
+					const prompt = [
+						'Create and publish a Spark lesson using the workspace files (brief.md + lesson/*).',
+						'',
+						`sessionId: ${sessionId}`,
+						`workspaceId: ${workspaceId}`,
+						'',
+						'Instructions:',
+						'1) Read brief.md, request.json, and lesson/task.md.',
+						'2) Fill lesson/requirements.md with hard requirements + decisions (includeCoding/includeStory).',
+						'3) Use generate_text + the templates in lesson/prompts/ to draft/revise Markdown under lesson/drafts/ and to write grading reports under lesson/feedback/.',
+						'   - Avoid asking generate_text to emit large JSON (it is less reliable than Markdown).',
+						'4) Compile Firestore-ready JSON under lesson/output/ from the Markdown drafts using generate_json + validate_json.',
+						'   - For each JSON output: generate_json({ sourcePath, schemaPath, outputPath }) then validate_json({ schemaPath, inputPath: outputPath }) and fix until ok=true.',
+						'',
+						'Examples:',
+						" - generate_text({ promptPath: 'lesson/prompts/session-draft.md', outputPath: 'lesson/drafts/session.md' })",
+						" - generate_text({ promptPath: 'lesson/prompts/session-grade.md', outputPath: 'lesson/feedback/session-grade.md' })  (must pass=true before publishing)",
+						" - generate_text({ promptPath: 'lesson/prompts/quiz-draft.md', outputPath: 'lesson/drafts/quiz/q1.md' })",
+						" - generate_text({ promptPath: 'lesson/prompts/quiz-grade.md', inputPaths: ['lesson/drafts/quiz/q1.md'], outputPath: 'lesson/feedback/quiz/q1-grade.md' })",
+						" - generate_json({ sourcePath: 'lesson/drafts/session.md', schemaPath: 'lesson/schema/session.schema.json', outputPath: 'lesson/output/session.json' })",
+						" - validate_json({ schemaPath: 'lesson/schema/session.schema.json', inputPath: 'lesson/output/session.json' })",
+						'',
+						'5) Call publish_lesson with:',
+						`   - sessionId: ${sessionId}`,
+						"   - sessionPath: 'lesson/output/session.json'",
+						"   - briefPath: 'brief.md' (optional fallback for topic/topics)",
+						'   - includeCoding: true if you included any plan items with kind="coding_problem"; otherwise false.',
 						'   - includeStory: true if you included any plan items with kind="media"; otherwise false.',
 						'6) If publish_lesson fails, fix the files and retry.',
 						'7) Call done with a short summary including the sessionId.',
@@ -1287,6 +1589,232 @@ function buildSparkChatTools(options: {
 					throw error;
 				}
 			}
+		}),
+		create_grader: tool({
+			description: [
+				'Start an olympiad grading run from the learner’s uploaded solutions.',
+				'Creates a grader workspace, seeds grader/task.md + grader/memory.md, and launches a background agent.',
+				'Use this when the learner asks to mark/grade olympiad paper solutions.',
+				'If uploads are present, they are attached to the grader agent context automatically.',
+				'Returns href and graderRunsHref for navigation.'
+			].join('\n'),
+			inputSchema: graderCreateSchema,
+			execute: async (input) => {
+				const tasksEnv = requireTasksEnv();
+				const runId = randomUUID();
+				const workspaceId = randomUUID();
+				const agentId = randomUUID();
+				const now = new Date();
+				let runCreated = false;
+				try {
+					const memory = await resolveGraderMemoryForRun({
+						userId,
+						olympiadOverride: input.olympiad
+					});
+					const memoryConfig = parseGraderMemoryMarkdown(memory.content);
+					const olympiadKey = memoryConfig.olympiadKey || DEFAULT_GRADER_OLYMPIAD_KEY;
+					const olympiadLabel = memoryConfig.olympiadLabel || DEFAULT_GRADER_OLYMPIAD_LABEL;
+					const runAttachments = attachmentsForMessage
+						.slice(0, GRADER_ATTACHMENT_LIMIT)
+						.map((attachment) => ({
+							id: attachment.id,
+							storagePath: attachment.storagePath,
+							contentType: attachment.contentType,
+							filename: attachment.filename,
+							sizeBytes: attachment.sizeBytes,
+							pageCount: attachment.pageCount
+						}));
+					await createGraderRun(userId, {
+						id: runId,
+						agentId,
+						workspaceId,
+						conversationId,
+						userPrompt: sourceText?.trim() || input.notes || undefined,
+						olympiadKey,
+						olympiadLabel,
+						memoryPath: `grader/${memory.path}`,
+						summaryPath: GRADER_SUMMARY_PATH,
+						problemsDir: GRADER_PROBLEMS_DIR,
+						sourceAttachmentIds: runAttachments.map((attachment) => attachment.id),
+						sourceAttachmentCount: runAttachments.length,
+						status: 'created',
+						createdAt: now,
+						updatedAt: now
+					});
+					runCreated = true;
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/workspace/${workspaceId}`,
+						data: {
+							id: workspaceId,
+							agentId,
+							createdAt: now,
+							updatedAt: now
+						}
+					});
+					const brief = buildGraderBrief({
+						sourceText,
+						input,
+						attachments: runAttachments,
+						memory: {
+							olympiadKey,
+							olympiadLabel
+						}
+					});
+					const graderTask = renderGraderTask({
+						runId,
+						workspaceId,
+						olympiadLabel
+					});
+					const prompt = buildGraderAgentPrompt({
+						runId,
+						workspaceId,
+						memoryPath: memory.path,
+						summaryPath: GRADER_SUMMARY_PATH,
+						problemsDir: GRADER_PROBLEMS_DIR
+					});
+					await Promise.all([
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'brief.md',
+							content: brief,
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'request.json',
+							content: JSON.stringify(
+								{
+									runId,
+									createdAt: now.toISOString(),
+									conversationId: conversationId ?? null,
+									sourceText: sourceText ?? null,
+									input,
+									attachments: runAttachments
+								},
+								null,
+								2
+							),
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: 'grader/task.md',
+							content: graderTask,
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: `grader/${memory.path}`,
+							content: memory.content.trimEnd() + '\n',
+							now
+						}),
+						writeWorkspaceTextFile({
+							serviceAccountJson,
+							userId,
+							workspaceId,
+							path: GRADER_UPLOADS_MANIFEST_PATH,
+							content: JSON.stringify(
+								{
+									attachments: runAttachments.map((attachment) => ({
+										...attachment,
+										linkPath: `grader/uploads/links/${attachment.id}.json`
+									}))
+								},
+								null,
+								2
+							),
+							now
+						}),
+						...runAttachments.map((attachment) =>
+							writeWorkspaceTextFile({
+								serviceAccountJson,
+								userId,
+								workspaceId,
+								path: `grader/uploads/links/${attachment.id}.json`,
+								content: JSON.stringify(
+									{
+										type: 'storage_link',
+										id: attachment.id,
+										storagePath: attachment.storagePath,
+										contentType: attachment.contentType,
+										filename: attachment.filename ?? null,
+										sizeBytes: attachment.sizeBytes,
+										pageCount: attachment.pageCount ?? null
+									},
+									null,
+									2
+								),
+								now
+							})
+						)
+					]);
+					await setFirestoreDocument({
+						serviceAccountJson,
+						documentPath: `users/${userId}/agents/${agentId}`,
+						data: {
+							id: agentId,
+							prompt,
+							status: 'created',
+							workspaceId,
+							graderRunId: runId,
+							graderSummaryPath: GRADER_SUMMARY_PATH,
+							graderProblemsDir: GRADER_PROBLEMS_DIR,
+							inputAttachments: runAttachments,
+							graderInputAttachments: runAttachments,
+							createdAt: now,
+							updatedAt: now,
+							statesTimeline: [{ state: 'created', timestamp: now }]
+						}
+					});
+					await createTask(
+						{
+							type: 'runAgent',
+							runAgent: { userId, agentId, workspaceId }
+						},
+						{
+							serviceUrl: tasksEnv.serviceUrl,
+							apiKey: tasksEnv.apiKey,
+							serviceAccountJson
+						}
+					);
+					return {
+						status: 'started',
+						runId,
+						agentId,
+						workspaceId,
+						href: `/spark/grader/${runId}`,
+						graderRunsHref: '/spark/grader'
+					};
+				} catch (error) {
+					console.error('Spark grader creation tool failed', {
+						userId,
+						runId,
+						error: serializeErrorForLog(error)
+					});
+					if (runCreated) {
+						const message =
+							error instanceof Error && error.message.trim().length > 0
+								? error.message.trim()
+								: 'Failed to start grader run.';
+						await patchGraderRun(userId, runId, {
+							status: 'failed',
+							updatedAt: new Date(),
+							completedAt: new Date(),
+							error: message
+						}).catch(() => undefined);
+					}
+					throw error;
+				}
+			}
 		})
 	};
 }
@@ -1295,6 +1823,7 @@ async function generateAssistantResponse(
 	conversation: ConversationDoc,
 	options: {
 		userId: string;
+		conversationId: string;
 		bucketName: string;
 		serviceAccountJson: string;
 		messageId: string;
@@ -1324,10 +1853,18 @@ async function generateAssistantResponse(
 		const text = extractTextParts(message.content);
 		return text.length > 0 ? text : undefined;
 	})();
+	const attachmentsForTools = resolveAttachmentsForToolCall({
+		conversation,
+		currentMessageId: options.messageId,
+		currentMessageAttachments: options.attachments,
+		limit: GRADER_ATTACHMENT_LIMIT
+	});
 	const tools = buildSparkChatTools({
 		userId: options.userId,
 		serviceAccountJson: options.serviceAccountJson,
 		sourceText,
+		conversationId: options.conversationId,
+		attachmentsForMessage: attachmentsForTools,
 		requiresAttachmentContext: options.attachments.length > 0,
 		attachmentLabels: options.attachments.map((attachment) => {
 			const filename = attachment.filename?.trim();
@@ -1372,6 +1909,7 @@ async function generateAssistantResponseWithRetries(
 				conversation,
 				{
 					userId: options.userId,
+					conversationId: options.conversationId,
 					bucketName: options.bucketName,
 					serviceAccountJson: options.serviceAccountJson,
 					messageId: options.messageId,
@@ -1393,8 +1931,7 @@ async function generateAssistantResponseWithRetries(
 			lastError = error;
 			const statusCode = resolveErrorStatusCode(error);
 			const retryable = isRetryableGenerationError(error);
-			const canRetry =
-				retryable && !emittedDelta && attempt < GENERATION_MAX_ATTEMPTS;
+			const canRetry = retryable && !emittedDelta && attempt < GENERATION_MAX_ATTEMPTS;
 			console.warn('[spark-chat] generation attempt failed', {
 				userId: options.userId,
 				conversationId: options.conversationId,
@@ -1439,9 +1976,11 @@ function normalizeSparkLinks(text: string): string {
 			'$1'
 		)
 		.replace(
-			/https?:\/\/[^\s)]+(\/spark\/lessons)(?=[\s)\].,!?]|$)/giu,
+			/https?:\/\/[^\s)]+(\/spark\/grader\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/giu,
 			'$1'
-		);
+		)
+		.replace(/https?:\/\/[^\s)]+(\/spark\/lessons)(?=[\s)\].,!?]|$)/giu, '$1')
+		.replace(/https?:\/\/[^\s)]+(\/spark\/grader)(?=[\s)\].,!?]|$)/giu, '$1');
 }
 
 async function streamFallbackText(
@@ -1510,13 +2049,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			serviceAccountJson,
 			documentPath: conversationDocPath
 		});
-		conversationAttachments = normalizeAttachments(snapshot.data?.attachments, now);
-		conversation = resolveConversationDoc(
+		const resolvedConversation = resolveConversationDoc(
 			snapshot.exists ? (snapshot.data ?? undefined) : undefined,
 			userId,
 			conversationId,
 			now
-		).conversation;
+		);
+		conversation = resolvedConversation.conversation;
+		conversationAttachments = conversation.attachments ?? [];
 	} catch (error) {
 		console.error('Spark AI Agent Firestore unavailable', {
 			userId,
@@ -1592,6 +2132,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			};
 		});
 	}
+	conversation.attachments = conversationAttachments;
 
 	try {
 		await setFirestoreDocument({

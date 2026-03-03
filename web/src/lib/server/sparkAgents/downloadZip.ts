@@ -33,24 +33,59 @@ function parseLogTimestamp(key: string): { ms: number; seq: number } | null {
 	return { ms, seq: Number.isFinite(seq) ? seq : 0 };
 }
 
+function parseStreamTimestamp(value: unknown): Date | null {
+	if (value instanceof Date) {
+		return Number.isFinite(value.getTime()) ? value : null;
+	}
+	if (typeof value === 'string') {
+		const date = new Date(value);
+		return Number.isFinite(date.getTime()) ? date : null;
+	}
+	if (typeof value === 'number') {
+		const date = new Date(value);
+		return Number.isFinite(date.getTime()) ? date : null;
+	}
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		return null;
+	}
+	const record = value as Record<string, unknown>;
+	const secondsRaw =
+		typeof record.seconds === 'number'
+			? record.seconds
+			: typeof record._seconds === 'number'
+				? record._seconds
+				: null;
+	const nanosRaw =
+		typeof record.nanos === 'number'
+			? record.nanos
+			: typeof record._nanoseconds === 'number'
+				? record._nanoseconds
+				: 0;
+	if (secondsRaw === null) {
+		return null;
+	}
+	const millis = secondsRaw * 1000 + Math.floor(nanosRaw / 1_000_000);
+	const date = new Date(millis);
+	return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function formatAgentLogText(data: Record<string, unknown> | null): string {
 	if (!data) {
 		return '';
 	}
 	const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
-	if (!rawLines || Array.isArray(rawLines)) {
-		return '';
-	}
 	const entries: Array<{ ms: number; seq: number; line: string }> = [];
-	for (const [key, value] of Object.entries(rawLines as Record<string, unknown>)) {
-		if (typeof value !== 'string') {
-			continue;
+	if (rawLines && !Array.isArray(rawLines)) {
+		for (const [key, value] of Object.entries(rawLines as Record<string, unknown>)) {
+			if (typeof value !== 'string') {
+				continue;
+			}
+			const parsedTs = parseLogTimestamp(key);
+			if (!parsedTs) {
+				continue;
+			}
+			entries.push({ ms: parsedTs.ms, seq: parsedTs.seq, line: value });
 		}
-		const parsedTs = parseLogTimestamp(key);
-		if (!parsedTs) {
-			continue;
-		}
-		entries.push({ ms: parsedTs.ms, seq: parsedTs.seq, line: value });
 	}
 	entries.sort((a, b) => {
 		const diff = a.ms - b.ms;
@@ -59,7 +94,39 @@ function formatAgentLogText(data: Record<string, unknown> | null): string {
 		}
 		return a.seq - b.seq;
 	});
-	return entries.map((entry) => `${new Date(entry.ms).toISOString()} ${entry.line}`).join('\n') + '\n';
+
+	const lines = entries.map((entry) => `${new Date(entry.ms).toISOString()} ${entry.line}`);
+	const stream = data.stream && typeof data.stream === 'object' ? data.stream : null;
+	if (stream && !Array.isArray(stream)) {
+		const streamRecord = stream as Record<string, unknown>;
+		const thoughts =
+			typeof streamRecord.thoughts === 'string' ? streamRecord.thoughts.trimEnd() : '';
+		const assistant =
+			typeof streamRecord.assistant === 'string' ? streamRecord.assistant.trimEnd() : '';
+		const streamUpdatedAt = parseStreamTimestamp(streamRecord.updatedAt);
+		if (thoughts.length > 0 || assistant.length > 0) {
+			lines.push('');
+			lines.push('--- stream snapshot ---');
+			if (streamUpdatedAt) {
+				lines.push(`updatedAt: ${streamUpdatedAt.toISOString()}`);
+			}
+			if (thoughts.length > 0) {
+				lines.push('');
+				lines.push('[thoughts]');
+				lines.push(thoughts);
+			}
+			if (assistant.length > 0) {
+				lines.push('');
+				lines.push('[assistant]');
+				lines.push(assistant);
+			}
+		}
+	}
+
+	if (lines.length === 0) {
+		return '';
+	}
+	return lines.join('\n') + '\n';
 }
 
 function toSafeWorkspaceZipPath(filePath: string): string | null {
@@ -83,7 +150,7 @@ const CRC32_TABLE = (() => {
 	for (let idx = 0; idx < 256; idx += 1) {
 		let crc = idx;
 		for (let bit = 0; bit < 8; bit += 1) {
-			crc = (crc & 1) !== 0 ? (0xedb88320 ^ (crc >>> 1)) : crc >>> 1;
+			crc = (crc & 1) !== 0 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
 		}
 		table[idx] = crc >>> 0;
 	}
@@ -128,6 +195,134 @@ type ZipEntry = {
 	name: string;
 	data: Uint8Array;
 };
+
+type AgentToolTraceCall = {
+	step: number;
+	toolIndex: number;
+	toolName: string;
+	callId?: string;
+	error?: string;
+	input: string;
+	output: string;
+};
+
+type AgentToolTraceStep = {
+	step: number;
+	modelId: string;
+	text: string;
+	toolCallCount: number;
+	toolCalls: AgentToolTraceCall[];
+};
+
+function formatAgentToolTraceText(steps: readonly AgentToolTraceStep[]): string {
+	if (steps.length === 0) {
+		return '';
+	}
+	const lines: string[] = [];
+	lines.push('');
+	lines.push('--- tool trace ---');
+	for (const step of steps) {
+		lines.push(
+			`step=${step.step.toString()} model=${step.modelId} toolCalls=${step.toolCallCount.toString()}`
+		);
+		if (step.text.trim().length > 0) {
+			lines.push('[step_text]');
+			lines.push(step.text);
+		}
+		for (const call of step.toolCalls) {
+			lines.push(
+				[
+					`tool_call step=${call.step.toString()} index=${call.toolIndex.toString()} tool=${call.toolName}`,
+					call.callId ? `callId=${call.callId}` : null,
+					call.error ? `error=${call.error}` : null
+				]
+					.filter((entry): entry is string => Boolean(entry))
+					.join(' ')
+			);
+			lines.push('[input]');
+			lines.push(call.input);
+			lines.push('[output]');
+			lines.push(call.output);
+		}
+	}
+	return lines.join('\n') + '\n';
+}
+
+async function loadAgentToolTrace(args: {
+	serviceAccountJson: string;
+	logDocPath: string;
+}): Promise<AgentToolTraceStep[]> {
+	const stepDocs = await listFirestoreDocuments({
+		serviceAccountJson: args.serviceAccountJson,
+		collectionPath: `${args.logDocPath}/toolTraceSteps`,
+		limit: 1000,
+		orderBy: 'step asc'
+	});
+
+	const steps: AgentToolTraceStep[] = [];
+	for (const stepDoc of stepDocs) {
+		const data = stepDoc.data ?? {};
+		const step = typeof data.step === 'number' ? data.step : Number.NaN;
+		if (!Number.isFinite(step)) {
+			continue;
+		}
+		const modelId = typeof data.modelId === 'string' ? data.modelId : '';
+		const text = typeof data.text === 'string' ? data.text : '';
+		const toolCallCount =
+			typeof data.toolCallCount === 'number' && Number.isFinite(data.toolCallCount)
+				? data.toolCallCount
+				: 0;
+
+		const callDocs = await listFirestoreDocuments({
+			serviceAccountJson: args.serviceAccountJson,
+			collectionPath: `${stepDoc.documentPath}/toolCalls`,
+			limit: 2000,
+			orderBy: 'toolIndex asc'
+		});
+		const toolCalls: AgentToolTraceCall[] = [];
+		for (const callDoc of callDocs) {
+			const callData = callDoc.data ?? {};
+			const toolIndex =
+				typeof callData.toolIndex === 'number' && Number.isFinite(callData.toolIndex)
+					? callData.toolIndex
+					: 0;
+			const toolName =
+				typeof callData.toolName === 'string' && callData.toolName.trim().length > 0
+					? callData.toolName
+					: 'unknown';
+			const callId =
+				typeof callData.callId === 'string' && callData.callId.trim().length > 0
+					? callData.callId
+					: undefined;
+			const error =
+				typeof callData.error === 'string' && callData.error.trim().length > 0
+					? callData.error
+					: undefined;
+			const input = typeof callData.input === 'string' ? callData.input : '';
+			const output = typeof callData.output === 'string' ? callData.output : '';
+			toolCalls.push({
+				step,
+				toolIndex,
+				toolName,
+				...(callId ? { callId } : {}),
+				...(error ? { error } : {}),
+				input,
+				output
+			});
+		}
+
+		steps.push({
+			step,
+			modelId,
+			text,
+			toolCallCount,
+			toolCalls
+		});
+	}
+
+	steps.sort((a, b) => a.step - b.step);
+	return steps;
+}
 
 function buildZip(entries: readonly ZipEntry[]): Uint8Array {
 	const localParts: Uint8Array[] = [];
@@ -259,10 +454,22 @@ export async function buildSparkAgentDownloadZip(args: {
 		serviceAccountJson,
 		documentPath: `${agentDocPath}/logs/log`
 	});
-	const agentLogText = formatAgentLogText(logSnap.exists ? logSnap.data : null);
+	const logDocPath = `${agentDocPath}/logs/log`;
+	const traceSteps = await loadAgentToolTrace({
+		serviceAccountJson,
+		logDocPath
+	}).catch(() => []);
+	const traceText = formatAgentToolTraceText(traceSteps);
+	const agentLogText = `${formatAgentLogText(logSnap.exists ? logSnap.data : null)}${traceText}`;
 
 	const archiveLabel = `spark-agent-${agentId}`;
 	const archiveEntries: ZipEntry[] = [{ name: 'agent.log', data: encodeUtf8(agentLogText) }];
+	if (traceSteps.length > 0) {
+		archiveEntries.push({
+			name: 'tool-trace.json',
+			data: encodeUtf8(`${JSON.stringify(traceSteps, null, 2)}\n`)
+		});
+	}
 	for (const file of workspaceFiles) {
 		const safePath = toSafeWorkspaceZipPath(file.path);
 		if (!safePath) {

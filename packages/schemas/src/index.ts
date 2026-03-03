@@ -9,3 +9,4 @@ export * from "./sessionMedia";
 export * from "./spark";
 export * from "./sparkAgent";
 export * from "./sparkAgentTask";
+export * from "./sparkGrader";
