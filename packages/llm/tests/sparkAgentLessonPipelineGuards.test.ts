@@ -18,10 +18,10 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent lesson pipeline guards", () => {
   it("exposes the expected toolset", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
@@ -58,10 +58,10 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("rejects JSON writes via generate_text", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
@@ -87,10 +87,10 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("accepts common LLM argument shapes for generate_text (string/null coercions)", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
@@ -122,10 +122,10 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("requires outputPath for session drafts during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
@@ -150,10 +150,10 @@ describe("Spark agent lesson pipeline guards", () => {
 
   it("requires outputPath for quiz drafts during lesson runs", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),

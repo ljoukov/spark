@@ -209,7 +209,7 @@ describe("Spark agent tool: generate_json", () => {
 
   it("writes JSON output and includes schema + source in the prompt", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
       const sourcePath = "source.md";
@@ -237,7 +237,7 @@ describe("Spark agent tool: generate_json", () => {
       );
 
       const scheduled: string[] = [];
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: (p) => {
             scheduled.push(p);

@@ -30,10 +30,10 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent tool: publish_lesson guards", () => {
   it("requires session-grade report when enforceLessonPipeline=true", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),
@@ -56,7 +56,7 @@ describe("Spark agent tool: publish_lesson guards", () => {
 
   it("rejects publish when session-grade pass=false", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
       await mkdir(path.join(rootDir, "lesson/feedback"), { recursive: true });
@@ -66,7 +66,7 @@ describe("Spark agent tool: publish_lesson guards", () => {
         { encoding: "utf8" },
       );
 
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: () => {},
           deleteFile: () => Promise.resolve(),

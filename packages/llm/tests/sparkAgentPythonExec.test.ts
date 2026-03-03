@@ -34,14 +34,14 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 describe("Spark agent tool: python_exec", () => {
   it("writes stdout/stderr files and reports ok", async () => {
     await withTempDir(async (rootDir) => {
-      const { buildSparkAgentToolsForTest } =
+      const { buildSparkAgentTools } =
         await import("../src/agent/sparkAgentRunner");
 
       await writeFile(path.join(rootDir, "script.py"), "print('hi')\n", "utf8");
       await writeFile(path.join(rootDir, "in.txt"), "input\n", "utf8");
 
       const scheduled: string[] = [];
-      const tools = buildSparkAgentToolsForTest({
+      const tools = buildSparkAgentTools({
         workspace: {
           scheduleUpdate: (p) => {
             scheduled.push(p);
