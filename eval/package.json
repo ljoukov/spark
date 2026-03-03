@@ -17,6 +17,7 @@
     "test:llm-web-search": "tsx src/tests/testLlmWebSearch.ts",
     "test:llm-openai": "tsx src/tests/testOpenAiApi.ts",
     "bench:pdf-transcription": "tsx src/benchmarks/pdf-transcription/main.ts",
+    "bench:pdf-transcription-agentic": "tsx src/benchmarks/pdf-transcription-agentic/main.ts",
     "test:pdf-transcription": "bun run bench:pdf-transcription",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",

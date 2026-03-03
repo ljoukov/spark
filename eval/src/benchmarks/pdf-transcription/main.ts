@@ -37,7 +37,7 @@ import type {
   StageHandle,
 } from "@spark/llm/utils/concurrency";
 
-import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../../utils/paths";
+import { ensureEvalEnvLoaded } from "../../utils/paths";
 
 ensureEvalEnvLoaded();
 
@@ -49,7 +49,9 @@ const DEFAULT_SOURCE_PDF_PATH = path.join(
 );
 const RESULTS_MARKDOWN_PATH = path.join(BENCHMARK_DIR, "RESULTS.md");
 const REPORT_OUTPUT_DIR = path.join(BENCHMARK_DIR, "output");
+const RUNS_OUTPUT_DIR = path.join(BENCHMARK_DIR, "runs");
 const REPORT_JSON_BASENAME = "benchmark-results.json";
+const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
 const PROBLEM_IDS = ["H1", "H2", "H3"] as const;
 
 type ProblemId = (typeof PROBLEM_IDS)[number];
@@ -1240,8 +1242,27 @@ function configNameForExperiment(options: {
   return `${options.approach.id}-${options.strategy}-${options.coordinateMode}`;
 }
 
-function toReportRelativePath(inputPath: string): string {
-  return path.relative(BENCHMARK_DIR, inputPath).replaceAll("\\", "/");
+function toRepoRelativePath(inputPath: string): string {
+  const absolutePath = path.isAbsolute(inputPath)
+    ? inputPath
+    : path.resolve(BENCHMARK_DIR, inputPath);
+  const relative = path
+    .relative(REPO_ROOT_DIR, absolutePath)
+    .replaceAll("\\", "/");
+  if (relative.length === 0) {
+    return ".";
+  }
+  if (relative.startsWith("..")) {
+    return path.basename(absolutePath);
+  }
+  return relative;
+}
+
+function fromRepoRelativePath(inputPath: string): string {
+  if (path.isAbsolute(inputPath)) {
+    return inputPath;
+  }
+  return path.resolve(REPO_ROOT_DIR, inputPath);
 }
 
 async function runSingleExperiment(options: {
@@ -1358,13 +1379,17 @@ async function runSingleExperiment(options: {
           .filter((item) => item.verdict === "fail")
           .map((item) => `[${item.modelId}] ${item.summary}`)
           .join("; "),
-    runDir: experimentDir,
-    outputMarkdownPath,
-    outputJsonPath,
-    reportOutputDir,
-    reportOutputMarkdownPath,
-    reportDiagramImagePaths,
-    reportSourcePageImagePaths,
+    runDir: toRepoRelativePath(experimentDir),
+    outputMarkdownPath: toRepoRelativePath(outputMarkdownPath),
+    outputJsonPath: toRepoRelativePath(outputJsonPath),
+    reportOutputDir: toRepoRelativePath(reportOutputDir),
+    reportOutputMarkdownPath: toRepoRelativePath(reportOutputMarkdownPath),
+    reportDiagramImagePaths: reportDiagramImagePaths.map((item) =>
+      toRepoRelativePath(item),
+    ),
+    reportSourcePageImagePaths: reportSourcePageImagePaths.map((item) =>
+      toRepoRelativePath(item),
+    ),
     manifests: pipelineResult.manifestPaths,
     pipeline: {
       modelCalls: pipelineResult.pipelineMetrics.length,
@@ -1454,9 +1479,9 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
     lines.push(`### ${item.approachLabel} / ${item.strategy} / ${item.coordinateMode}`);
     lines.push(`- Status: ${item.status.toUpperCase()}`);
     lines.push(`- Reason: ${item.reason}`);
-    lines.push(`- Copied output dir: ${toReportRelativePath(item.reportOutputDir)}`);
+    lines.push(`- Copied output dir: ${item.reportOutputDir}`);
     lines.push(`- Run dir: ${item.runDir}`);
-    lines.push(`- Output markdown: ${toReportRelativePath(item.reportOutputMarkdownPath)}`);
+    lines.push(`- Output markdown: ${item.reportOutputMarkdownPath}`);
     for (const verdict of item.judging.verdicts) {
       lines.push(
         `- Judge ${verdict.modelId}: ${verdict.verdict.toUpperCase()} (${formatMs(verdict.metrics.elapsedMs)}, ${formatUsd(verdict.metrics.costUsd)}) - ${verdict.summary}`,
@@ -1465,7 +1490,10 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
         lines.push(`- Issues: ${verdict.issues.join(" | ")}`);
       }
     }
-    const transcription = await readFile(item.reportOutputMarkdownPath, "utf8").catch(() => "");
+    const transcription = await readFile(
+      fromRepoRelativePath(item.reportOutputMarkdownPath),
+      "utf8",
+    ).catch(() => "");
     lines.push("");
     lines.push("#### Transcription");
     if (transcription.trim().length === 0) {
@@ -1482,7 +1510,7 @@ async function toMarkdownReport(report: BenchmarkReport): Promise<string> {
     } else {
       for (const diagramPath of item.reportDiagramImagePaths) {
         const alt = path.basename(diagramPath);
-        lines.push(`![${alt}](${toReportRelativePath(diagramPath)})`);
+        lines.push(`![${alt}](${diagramPath})`);
       }
     }
     lines.push("");
@@ -1497,12 +1525,7 @@ async function main(): Promise<void> {
   logStep(`Source PDF: ${cli.sourcePdfPath}`);
 
   const runId = new Date().toISOString().replace(/[:.]/gu, "-");
-  const runRoot = path.join(
-    WORKSPACE_PATHS.dataRoot,
-    "benchmarks",
-    "pdf-transcription",
-    runId,
-  );
+  const runRoot = path.join(RUNS_OUTPUT_DIR, runId);
   await mkdir(runRoot, { recursive: true });
   await rm(REPORT_OUTPUT_DIR, { recursive: true, force: true });
   await mkdir(REPORT_OUTPUT_DIR, { recursive: true });
@@ -1548,13 +1571,14 @@ async function main(): Promise<void> {
           coordinateMode,
           status: "fail",
           reason,
-          runDir: experimentDir,
-          outputMarkdownPath: path.join(outputDir, "transcription-with-diagrams.md"),
-          outputJsonPath,
-          reportOutputDir,
-          reportOutputMarkdownPath: path.join(
-            reportOutputDir,
-            "transcription-with-diagrams.md",
+          runDir: toRepoRelativePath(experimentDir),
+          outputMarkdownPath: toRepoRelativePath(
+            path.join(outputDir, "transcription-with-diagrams.md"),
+          ),
+          outputJsonPath: toRepoRelativePath(outputJsonPath),
+          reportOutputDir: toRepoRelativePath(reportOutputDir),
+          reportOutputMarkdownPath: toRepoRelativePath(
+            path.join(reportOutputDir, "transcription-with-diagrams.md"),
           ),
           reportDiagramImagePaths: [],
           reportSourcePageImagePaths: [],
@@ -1590,8 +1614,8 @@ async function main(): Promise<void> {
   const reportJsonPath = path.join(runRoot, REPORT_JSON_BASENAME);
   const report: BenchmarkReport = {
     generatedAt: new Date().toISOString(),
-    sourcePdfPath: cli.sourcePdfPath,
-    reportJsonPath,
+    sourcePdfPath: toRepoRelativePath(cli.sourcePdfPath),
+    reportJsonPath: toRepoRelativePath(reportJsonPath),
     experiments,
   };
   await writeFile(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -1600,9 +1624,9 @@ async function main(): Promise<void> {
   await writeFile(RESULTS_MARKDOWN_PATH, markdown, "utf8");
 
   logStep(`Benchmark complete.`);
-  logStep(`JSON report: ${reportJsonPath}`);
-  logStep(`Markdown report: ${RESULTS_MARKDOWN_PATH}`);
-  logStep(`Copied outputs: ${REPORT_OUTPUT_DIR}`);
+  logStep(`JSON report: ${toRepoRelativePath(reportJsonPath)}`);
+  logStep(`Markdown report: ${toRepoRelativePath(RESULTS_MARKDOWN_PATH)}`);
+  logStep(`Copied outputs: ${toRepoRelativePath(REPORT_OUTPUT_DIR)}`);
 }
 
 void main().catch((error: unknown) => {

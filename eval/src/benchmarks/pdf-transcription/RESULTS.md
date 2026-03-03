@@ -1,8 +1,8 @@
 # PDF Transcription Benchmark Results
 
 Generated at: 2026-03-02T17:03:07.129Z
-Source PDF: /Users/redacted-user/projects/spark/eval/src/benchmarks/pdf-transcription/data/hamilton-2017-q.pdf
-JSON report: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/benchmark-results.json
+Source PDF: eval/src/benchmarks/pdf-transcription/data/hamilton-2017-q.pdf
+JSON report: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/benchmark-results.json
 
 Output copies are stored under `output/<config-name>/`.
 
@@ -33,7 +33,7 @@ Output copies are stored under `output/<config-name>/`.
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are not faithful to the source: they are cropped/incomplete and omit important parts of the figures and labels needed to solve the problems.
 - Copied output dir: output/pdf-gemini-flash-bulk-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-norm
 - Output markdown: output/pdf-gemini-flash-bulk-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (91.16s, $0.0099) - The transcription is a faithful representation of the source document for all three problems.
 - Judge chatgpt-gpt-5.3-codex: FAIL (10.97s, $0.0111) - The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are not faithful to the source: they are cropped/incomplete and omit important parts of the figures and labels needed to solve the problems.
@@ -75,7 +75,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The transcription fails because two of the three diagrams are severely cropped, rendering the corresponding problems unsolvable. The diagram for H2 is missing the destination point B, and the diagram for H3 is missing points A and B.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is largely accurate, but the extracted diagrams are not materially faithful for H2 and H3 because key parts are cropped/missing.
 - Copied output dir: output/pdf-gemini-flash-bulk-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-flash-bulk-int1000
 - Output markdown: output/pdf-gemini-flash-bulk-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (134.27s, $0.0179) - The transcription fails because two of the three diagrams are severely cropped, rendering the corresponding problems unsolvable. The diagram for H2 is missing the destination point B, and the diagram for H3 is missing points A and B.
 - Issues: The diagram for question H2 is incomplete. It is cropped and is missing the right side of the network, including the destination point B. | The diagram for question H3 is incomplete. It is cropped and is missing the vertices A and B of the larger square.
@@ -117,7 +117,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The H1–H3 question text is largely accurate, but at least one extracted diagram is materially incomplete compared with the source, so fidelity is insufficient.
 - Copied output dir: output/pdf-gemini-flash-individual-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-individual-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-flash-individual-norm
 - Output markdown: output/pdf-gemini-flash-individual-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (56.58s, $0.0129) - The transcription faithfully reproduces the text, mathematical notation, and diagrams for questions H1, H2, and H3 from the source document.
 - Judge chatgpt-gpt-5.3-codex: FAIL (10.56s, $0.0119) - The H1–H3 question text is largely accurate, but at least one extracted diagram is materially incomplete compared with the source, so fidelity is insufficient.
@@ -160,7 +160,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The transcription is not materially faithful because the diagrams for problems H2 and H3 are critically cropped, removing essential information needed to solve the problems. The diagram for H2 is missing the destination point 'B' and half of the network. The diagram for H3 is missing labels for key vertices 'A', 'B', and 'E'.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is largely accurate, but the extracted diagrams are materially incomplete/cropped compared with the source page, which makes the transcription not fully faithful.
 - Copied output dir: output/pdf-gemini-flash-individual-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-flash-individual-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-flash-individual-int1000
 - Output markdown: output/pdf-gemini-flash-individual-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (27.11s, $0.0156) - The transcription is not materially faithful because the diagrams for problems H2 and H3 are critically cropped, removing essential information needed to solve the problems. The diagram for H2 is missing the destination point 'B' and half of the network. The diagram for H3 is missing labels for key vertices 'A', 'B', and 'E'.
 - Issues: The diagram for H2 is incomplete. The right side of the network, including the destination point 'B', has been cropped out. | The diagram for H3 is missing the labels for vertices A, B, and E, which are referenced in the problem text.
@@ -207,7 +207,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The text transcription is accurate, but the diagrams provided for questions H2 and H3 are severely cropped and incomplete, rendering the problems unsolvable from the provided transcription. The H2 diagram is missing point B and most of the network. The H3 diagram is missing points A and B.; [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is largely accurate, but the included diagrams are materially incomplete/cropped and do not faithfully represent the source figures.
 - Copied output dir: output/pdf-gemini-pro-bulk-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-norm
 - Output markdown: output/pdf-gemini-pro-bulk-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (43.16s, $0.0163) - The text transcription is accurate, but the diagrams provided for questions H2 and H3 are severely cropped and incomplete, rendering the problems unsolvable from the provided transcription. The H2 diagram is missing point B and most of the network. The H3 diagram is missing points A and B.
 - Issues: The diagram for H2 is critically incomplete; point 'B' and a large part of the network are cropped out. | The diagram for H3 is critically incomplete; points 'A' and 'B' are cropped out.
@@ -252,7 +252,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The text for all problems has been accurately transcribed. However, the diagrams provided for problems H2 and H3 are severely cropped and incomplete. They are missing key labels and parts of the figures mentioned in the problem descriptions (e.g., point B in H2, points A and B in H3), rendering the problems unsolvable from the information provided.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is largely accurate, but the extracted diagrams are materially incomplete/cropped and therefore not faithful to the source page.
 - Copied output dir: output/pdf-gemini-pro-bulk-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-pro-bulk-int1000
 - Output markdown: output/pdf-gemini-pro-bulk-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (55.23s, $0.0159) - The text for all problems has been accurately transcribed. However, the diagrams provided for problems H2 and H3 are severely cropped and incomplete. They are missing key labels and parts of the figures mentioned in the problem descriptions (e.g., point B in H2, points A and B in H3), rendering the problems unsolvable from the information provided.
 - Issues: The diagram for problem H2 is incomplete; it is missing point 'B' and the right side of the network. | The diagram for problem H3 is incomplete; it is missing points 'A' and 'B' and significant portions of the square ABCD.
@@ -297,7 +297,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The text transcription is accurate, but the diagrams provided for questions H2 and H3 are incomplete. Key labels for points A and B are missing, rendering the diagrams insufficient to solve the problems.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is largely faithful, but the extracted diagrams are materially incomplete/cropped, so the transcription is not fully faithful to the source.
 - Copied output dir: output/pdf-gemini-pro-individual-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-individual-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-pro-individual-norm
 - Output markdown: output/pdf-gemini-pro-individual-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (13.39s, $0.0163) - The text transcription is accurate, but the diagrams provided for questions H2 and H3 are incomplete. Key labels for points A and B are missing, rendering the diagrams insufficient to solve the problems.
 - Issues: In the diagram for H2, the endpoint 'B' is not visible. | In the diagram for H3, the points 'A' and 'B' are not visible.
@@ -342,7 +342,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The text for all problems has been transcribed accurately. However, the diagrams for problems H2 and H3 are severely cropped, omitting essential information required to understand and solve the problems. The diagram for H2 is missing the destination point B and half of the network. The diagram for H3 is missing points A and B, which are part of the main square ABCD.; [chatgpt-gpt-5.3-codex] The text for H1–H3 is transcribed accurately, but the extracted diagrams are not materially faithful for all questions.
 - Copied output dir: output/pdf-gemini-pro-individual-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/pdf-gemini-pro-individual-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/pdf-gemini-pro-individual-int1000
 - Output markdown: output/pdf-gemini-pro-individual-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (61.73s, $0.0211) - The text for all problems has been transcribed accurately. However, the diagrams for problems H2 and H3 are severely cropped, omitting essential information required to understand and solve the problems. The diagram for H2 is missing the destination point B and half of the network. The diagram for H3 is missing points A and B, which are part of the main square ABCD.
 - Issues: The diagram for H2 is incomplete. It is cropped and is missing the right half of the network, including the destination point 'B'. | The diagram for H3 is incomplete. It is cropped and is missing the top and right portions of the figure, including points 'A' and 'B'.
@@ -385,7 +385,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are incorrect and do not match the source question diagrams.
 - Copied output dir: output/images-chatgpt-5-3-codex-bulk-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-norm
 - Output markdown: output/images-chatgpt-5-3-codex-bulk-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (48.40s, $0.0117) - The transcription is a faithful and accurate representation of the first three problems from the provided PDF. The text, mathematical notation, and diagrams all match the source document.
 - Judge chatgpt-gpt-5.3-codex: FAIL (7.63s, $0.0098) - The transcribed text for H1–H3 is materially accurate, but the extracted diagrams are incorrect and do not match the source question diagrams.
@@ -432,7 +432,7 @@ What is the length of $AB$?
 - Status: PASS
 - Reason: All judges passed
 - Copied output dir: output/images-chatgpt-5-3-codex-bulk-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-bulk-int1000
 - Output markdown: output/images-chatgpt-5-3-codex-bulk-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (79.90s, $0.0125) - The transcription is a faithful representation of the first three problems (H1, H2, H3) from the source document. All text, numerical values, and mathematical notations are accurate.
 - Judge chatgpt-gpt-5.3-codex: PASS (5.72s, $0.0093) - The transcription is materially faithful to the source for H1–H3, including the key statements, numerical values, and question prompts. The extracted diagrams correspond to the original figures.
@@ -478,7 +478,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The transcription text for H1–H3 is materially accurate, but the extracted diagrams are not faithful: only H1’s diagram is correct, while H2 and H3 diagrams are missing/incorrect (wrong image crops).
 - Copied output dir: output/images-chatgpt-5-3-codex-individual-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-norm
 - Output markdown: output/images-chatgpt-5-3-codex-individual-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (61.98s, $0.0112) - The transcription is a faithful representation of the original document for the specified problems (H1, H2, H3), including all text, mathematical notation, and diagrams.
 - Judge chatgpt-gpt-5.3-codex: FAIL (6.56s, $0.0105) - The transcription text for H1–H3 is materially accurate, but the extracted diagrams are not faithful: only H1’s diagram is correct, while H2 and H3 diagrams are missing/incorrect (wrong image crops).
@@ -526,7 +526,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is accurate, but the source page contains additional problems (H4–H6) and content that are missing, so the transcription is not materially faithful to the full page.
 - Copied output dir: output/images-chatgpt-5-3-codex-individual-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-chatgpt-5-3-codex-individual-int1000
 - Output markdown: output/images-chatgpt-5-3-codex-individual-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (70.73s, $0.0167) - The transcription of the three problems (H1, H2, H3) is a faithful reproduction of the source document. All text, mathematical notation, and diagrams are correct.
 - Judge chatgpt-gpt-5.3-codex: FAIL (10.57s, $0.0123) - The transcribed text for H1–H3 is accurate, but the source page contains additional problems (H4–H6) and content that are missing, so the transcription is not materially faithful to the full page.
@@ -574,7 +574,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The transcription of the text for all three problems is accurate. However, the diagrams for problems H2 and H3 are severely cropped and incomplete, making them unusable. The H2 diagram is missing its lower half and the crucial labels 'A' and 'B'. The H3 diagram is cropped, obscuring vertices B and C and the shading that identifies the trapezium BCGF.; [chatgpt-gpt-5.3-codex] The problem text for H1–H3 is largely accurate, but the extracted diagrams are not faithfully transcribed: H2 and H3 images are incomplete/mis-cropped, and H1 includes unrelated content from the next question.
 - Copied output dir: output/images-gpt-5-2-bulk-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-norm
 - Output markdown: output/images-gpt-5-2-bulk-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (65.97s, $0.0271) - The transcription of the text for all three problems is accurate. However, the diagrams for problems H2 and H3 are severely cropped and incomplete, making them unusable. The H2 diagram is missing its lower half and the crucial labels 'A' and 'B'. The H3 diagram is cropped, obscuring vertices B and C and the shading that identifies the trapezium BCGF.
 - Issues: The diagram for problem H2 is incomplete. It shows only the top two triangles of the network, while the original diagram has four. The start point 'A' and end point 'B' are also missing. | The diagram for problem H3 is incomplete. It is cropped on the top and right sides, partially or completely cutting off vertices B and C, and obscuring the shading of the trapezium BCGF mentioned in the problem description.
@@ -622,7 +622,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is largely faithful to source page 3, but the extracted diagrams are incorrect: the linked diagram images do not show the H1/H2/H3 question figures from the source and instead appear to be unrelated page crops.
 - Copied output dir: output/images-gpt-5-2-bulk-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-gpt-5-2-bulk-int1000
 - Output markdown: output/images-gpt-5-2-bulk-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (58.57s, $0.0119) - The transcription accurately reproduces the text and mathematical content of the first three problems (H1, H2, H3) from the source PDF. The diagrams are also correct.
 - Judge chatgpt-gpt-5.3-codex: FAIL (7.55s, $0.0109) - The transcribed text for H1–H3 is largely faithful to source page 3, but the extracted diagrams are incorrect: the linked diagram images do not show the H1/H2/H3 question figures from the source and instead appear to be unrelated page crops.
@@ -669,7 +669,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [gemini-2.5-pro] The text for the problems is transcribed correctly. However, the diagrams provided for problems H2 and H3 are poorly cropped and incomplete, making them unusable for solving the problems. The H2 diagram is almost completely missing, and the H3 diagram is cut off, obscuring essential parts of the figure.; [chatgpt-gpt-5.3-codex] The transcribed text for H1–H3 is largely accurate, but the extracted diagrams are not faithful to the source and include incorrect/cropped images, which is a material fidelity issue.
 - Copied output dir: output/images-gpt-5-2-individual-norm
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-norm
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-norm
 - Output markdown: output/images-gpt-5-2-individual-norm/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: FAIL (136.28s, $0.0205) - The text for the problems is transcribed correctly. However, the diagrams provided for problems H2 and H3 are poorly cropped and incomplete, making them unusable for solving the problems. The H2 diagram is almost completely missing, and the H3 diagram is cut off, obscuring essential parts of the figure.
 - Issues: The diagram for H2 is incorrect. It's a badly cropped image that doesn't show the network graph mentioned in the problem. | The diagram for H3 is incomplete. It's cropped, so key points like A, B, and C are not visible.
@@ -717,7 +717,7 @@ What is the length of $AB$?
 - Status: FAIL
 - Reason: [chatgpt-gpt-5.3-codex] The H1–H3 question text is largely accurate, but the extracted diagrams are not faithful to the source and appear to be unrelated cropped regions. Since these problems depend on correct figures, this is a material fidelity failure.
 - Copied output dir: output/images-gpt-5-2-individual-int1000
-- Run dir: /Users/redacted-user/projects/spark/data/benchmarks/pdf-transcription/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-int1000
+- Run dir: eval/src/benchmarks/pdf-transcription/runs/2026-03-02T16-55-09-084Z/images-gpt-5-2-individual-int1000
 - Output markdown: output/images-gpt-5-2-individual-int1000/transcription-with-diagrams.md
 - Judge gemini-2.5-pro: PASS (75.74s, $0.0144) - The transcription is a perfect match for the first three problems (H1, H2, H3) from the source PDF. All text, mathematical values, and diagrams are correct.
 - Judge chatgpt-gpt-5.3-codex: FAIL (7.18s, $0.0099) - The H1–H3 question text is largely accurate, but the extracted diagrams are not faithful to the source and appear to be unrelated cropped regions. Since these problems depend on correct figures, this is a material fidelity failure.
