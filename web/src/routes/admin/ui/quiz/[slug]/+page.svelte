@@ -102,12 +102,7 @@
 	}
 
 	function appendThinking(current: string, delta: string): string {
-		const next = `${current}${delta}`;
-		const lines = next.split(/\r?\n/u);
-		if (lines.length <= 4) {
-			return next;
-		}
-		return lines.slice(-4).join('\n');
+		return `${current}${delta}`;
 	}
 
 	async function requestTypeAnswerGradeStream(
