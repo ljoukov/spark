@@ -66,6 +66,7 @@ import {
   renderPdfPagesBgra,
 } from "../utils/pdfium";
 import type { OpenAiReasoningEffort } from "../utils/openai-llm";
+import { getSharp } from "../utils/sharp";
 import type {
   JobProgressReporter,
   LlmUsageChunk,
@@ -73,12 +74,22 @@ import type {
   ModelCallHandle,
   StageHandle,
 } from "../utils/concurrency";
-import { PNG } from "pngjs";
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
+const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+] as const;
+const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPE_SET = new Set<string>(
+  SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES,
+);
 
 type TrackedSubmodelCallSummary = {
   readonly modelId: string;
@@ -851,6 +862,12 @@ function extensionForContentType(contentType: string): string {
   if (normalized === "image/gif") {
     return ".gif";
   }
+  if (normalized === "image/heic") {
+    return ".heic";
+  }
+  if (normalized === "image/heif") {
+    return ".heif";
+  }
   if (normalized === "application/pdf") {
     return ".pdf";
   }
@@ -1335,6 +1352,12 @@ function resolveContentType(filePath: string): string | undefined {
   if (ext === ".gif") {
     return "image/gif";
   }
+  if (ext === ".heic") {
+    return "image/heic";
+  }
+  if (ext === ".heif") {
+    return "image/heif";
+  }
   if (ext === ".webp") {
     return "image/webp";
   }
@@ -1458,30 +1481,61 @@ function toCropPixelsFrom1000(options: {
   return { left, top, right, bottom };
 }
 
-function cropPngBuffer(options: {
+function resolveImageMimeTypeFromSharpFormat(options: {
+  format: string | undefined;
+}): string | undefined {
+  if (typeof options.format !== "string" || options.format.trim().length === 0) {
+    return undefined;
+  }
+  const normalized = options.format.trim().toLowerCase();
+  if (normalized === "jpeg" || normalized === "jpg") {
+    return "image/jpeg";
+  }
+  if (normalized === "png") {
+    return "image/png";
+  }
+  if (normalized === "webp") {
+    return "image/webp";
+  }
+  if (normalized === "gif") {
+    return "image/gif";
+  }
+  if (normalized === "heic") {
+    return "image/heic";
+  }
+  if (normalized === "heif") {
+    return "image/heif";
+  }
+  return undefined;
+}
+
+function isSupportedCropImageMimeType(contentType: string | undefined): boolean {
+  if (typeof contentType !== "string" || contentType.trim().length === 0) {
+    return false;
+  }
+  const normalized = contentType.trim().toLowerCase();
+  return SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPE_SET.has(normalized);
+}
+
+async function cropImageToPngBuffer(options: {
   source: Buffer;
   left: number;
   top: number;
   right: number;
   bottom: number;
-}): Buffer {
-  const decoded = PNG.sync.read(options.source);
-  const width = decoded.width;
-  const height = decoded.height;
-  const left = Math.max(0, Math.min(width - 1, options.left));
-  const top = Math.max(0, Math.min(height - 1, options.top));
-  const right = Math.max(left + 1, Math.min(width, options.right));
-  const bottom = Math.max(top + 1, Math.min(height, options.bottom));
-  const cropWidth = right - left;
-  const cropHeight = bottom - top;
-
-  const cropped = new PNG({ width: cropWidth, height: cropHeight });
-  for (let row = 0; row < cropHeight; row += 1) {
-    const srcOffset = ((top + row) * width + left) * 4;
-    const dstOffset = row * cropWidth * 4;
-    decoded.data.copy(cropped.data, dstOffset, srcOffset, srcOffset + cropWidth * 4);
-  }
-  return PNG.sync.write(cropped);
+}): Promise<Buffer> {
+  const cropWidth = Math.max(1, options.right - options.left);
+  const cropHeight = Math.max(1, options.bottom - options.top);
+  const sharp = getSharp();
+  return await sharp(options.source)
+    .extract({
+      left: options.left,
+      top: options.top,
+      width: cropWidth,
+      height: cropHeight,
+    })
+    .png()
+    .toBuffer();
 }
 
 async function ensureDir(dirPath: string): Promise<void> {
@@ -5547,7 +5601,8 @@ function buildAgentTools(options: {
     }),
     crop_image: tool({
       description: [
-        "Crop a PNG image from the workspace using bbox1000 (int coords) or bboxNorm.",
+        "Crop a workspace image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using bbox1000 (int coords) or bboxNorm.",
+        "The cropped output is written as PNG.",
         "For a deliberate full-page copy, set fullImage=true and omit bbox fields.",
         "Use this to iteratively refine diagram crops from page images.",
       ].join("\n"),
@@ -5629,18 +5684,37 @@ function buildAgentTools(options: {
       execute: async ({ sourcePath, outputPath, fullImage, bbox1000, bboxNorm }) => {
         const resolvedSourcePath = resolveWorkspacePath(rootDir, sourcePath);
         const sourceBytes = await readFile(resolvedSourcePath);
-        const sourceMime = resolveContentType(sourcePath);
-        if (sourceMime !== "image/png") {
+        const sharp = getSharp();
+        const sourceMetadata = await sharp(sourceBytes).metadata().catch((error) => {
           throw new Error(
-            `crop_image currently supports PNG only. Received ${sourceMime ?? "unknown"} for "${sourcePath}".`,
+            `crop_image could not decode "${sourcePath}" as an image: ${errorAsString(error)}`,
+          );
+        });
+        const sourceWidth = sourceMetadata.width;
+        const sourceHeight = sourceMetadata.height;
+        if (
+          typeof sourceWidth !== "number" ||
+          typeof sourceHeight !== "number" ||
+          sourceWidth <= 0 ||
+          sourceHeight <= 0
+        ) {
+          throw new Error(
+            `crop_image could not read dimensions for "${sourcePath}".`,
           );
         }
-        const decoded = PNG.sync.read(sourceBytes);
+        const sourceMime =
+          resolveImageMimeTypeFromSharpFormat({ format: sourceMetadata.format }) ??
+          resolveContentType(sourcePath);
+        if (!isSupportedCropImageMimeType(sourceMime)) {
+          throw new Error(
+            `crop_image supports ${SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES.join(", ")}. Received ${sourceMime ?? "unknown"} for "${sourcePath}".`,
+          );
+        }
         const pixels = (() => {
           if (bbox1000 !== undefined) {
             return toCropPixelsFrom1000({
-              width: decoded.width,
-              height: decoded.height,
+              width: sourceWidth,
+              height: sourceHeight,
               left: bbox1000.left,
               top: bbox1000.top,
               right: bbox1000.right,
@@ -5649,8 +5723,8 @@ function buildAgentTools(options: {
           }
           if (bboxNorm !== undefined) {
             return toCropPixelsFromNorm({
-              width: decoded.width,
-              height: decoded.height,
+              width: sourceWidth,
+              height: sourceHeight,
               left: bboxNorm.left,
               top: bboxNorm.top,
               widthNorm: bboxNorm.width,
@@ -5661,15 +5735,15 @@ function buildAgentTools(options: {
             return {
               left: 0,
               top: 0,
-              right: decoded.width,
-              bottom: decoded.height,
+              right: sourceWidth,
+              bottom: sourceHeight,
             };
           }
           throw new Error(
             "crop_image received no crop bounds. Provide bbox1000/bboxNorm or set fullImage=true.",
           );
         })();
-        const croppedBytes = cropPngBuffer({
+        const croppedBytes = await cropImageToPngBuffer({
           source: sourceBytes,
           left: pixels.left,
           top: pixels.top,
@@ -5684,8 +5758,8 @@ function buildAgentTools(options: {
           status: "written",
           sourcePath,
           outputPath,
-          sourceWidth: decoded.width,
-          sourceHeight: decoded.height,
+          sourceWidth,
+          sourceHeight,
           cropWidth: pixels.right - pixels.left,
           cropHeight: pixels.bottom - pixels.top,
           bboxPixels: pixels,

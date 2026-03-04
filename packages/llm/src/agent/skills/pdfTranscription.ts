@@ -423,7 +423,8 @@ export function applyPdfTranscriptionSkillTools(options: {
 
   const strictCropImageTool = tool({
     description: [
-      "Crop a PNG image using required bbox1000 integer coordinates.",
+      "Crop an image (JPG/PNG/WEBP/GIF/HEIC/HEIF) using required bbox1000 integer coordinates.",
+      "The cropped output is written as PNG.",
       "Always provide bbox1000; do not call this tool without bbox values.",
     ].join("\n"),
     inputSchema: z
@@ -454,7 +455,8 @@ export function applyPdfTranscriptionSkillTools(options: {
 
   const drawGridOverlayTool = tool({
     description: [
-      "Draw a coordinate grid on top of a PNG image to help estimate crop coordinates.",
+      "Draw a coordinate grid on top of an image (JPG/PNG/WEBP/GIF/HEIC/HEIF) to help estimate crop coordinates.",
+      "The grid output is written as PNG.",
       "Use this only for planning; keep final diagram crops grid-free.",
     ].join("\n"),
     inputSchema: z
@@ -514,7 +516,8 @@ export function applyPdfTranscriptionSkillTools(options: {
 
   const trimImageTool = tool({
     description: [
-      "Content-aware trim for PNGs: removes near-background margins and keeps a small border.",
+      "Content-aware trim for images (JPG/PNG/WEBP/GIF/HEIC/HEIF): removes near-background margins and keeps a small border.",
+      "The trimmed output is written as PNG.",
       "Use after crop_image to tighten diagram bounds while preserving labels.",
     ].join("\n"),
     inputSchema: z
