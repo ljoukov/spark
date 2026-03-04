@@ -1,4 +1,4 @@
-import { marked } from 'marked';
+import { marked, type TokenizerAndRendererExtension } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -36,6 +36,10 @@ const LANGUAGE_LABELS = new Map<string, string>([
 	['cpp', 'c++']
 ]);
 
+const INLINE_PAREN_MATH_RULE = /^\\\(((?:\\.|[^\\\n])+?)\\\)/;
+const INLINE_BRACKET_MATH_RULE = /^\\\[(((?:\\.|[^\\\n])+?))\\\]/;
+const BLOCK_BRACKET_MATH_RULE = /^\\\[\n((?:\\[^]|[^\\])+?)\n\\\](?:\n|$)/;
+
 marked.setOptions({ breaks: true, gfm: true });
 marked.use(
 	markedKatex({
@@ -44,6 +48,9 @@ marked.use(
 		nonStandard: true
 	})
 );
+marked.use({
+	extensions: [createInlineBackslashMathExtension(), createBlockBackslashMathExtension()]
+});
 
 function escapeHtml(value: string): string {
 	return value
@@ -62,6 +69,100 @@ function resolveLanguageLabel(raw: string, normalized: string): string {
 }
 
 type CodeSpanMath = { expr: string; displayMode: boolean };
+type BackslashMathToken = {
+	type: 'inlineBackslashMath' | 'blockBackslashMath';
+	raw: string;
+	text: string;
+	displayMode: boolean;
+};
+
+function renderKatex(expr: string, displayMode: boolean): string {
+	return katex.renderToString(expr, {
+		displayMode,
+		throwOnError: false
+	});
+}
+
+function createInlineBackslashMathExtension(): TokenizerAndRendererExtension {
+	return {
+		name: 'inlineBackslashMath',
+		level: 'inline',
+		start(src) {
+			const parenIndex = src.indexOf('\\(');
+			const bracketIndex = src.indexOf('\\[');
+			if (parenIndex === -1) {
+				if (bracketIndex === -1) {
+					return;
+				}
+				return bracketIndex;
+			}
+			if (bracketIndex === -1) {
+				return parenIndex;
+			}
+			return Math.min(parenIndex, bracketIndex);
+		},
+		tokenizer(src) {
+			const parenMatch = src.match(INLINE_PAREN_MATH_RULE);
+			if (parenMatch) {
+				const text = parenMatch[1]?.trim() ?? '';
+				if (text.length === 0) {
+					return;
+				}
+				return {
+					type: 'inlineBackslashMath',
+					raw: parenMatch[0],
+					text,
+					displayMode: false
+				} as BackslashMathToken;
+			}
+
+			const bracketMatch = src.match(INLINE_BRACKET_MATH_RULE);
+			if (bracketMatch) {
+				const text = bracketMatch[1]?.trim() ?? '';
+				if (text.length === 0) {
+					return;
+				}
+				return {
+					type: 'inlineBackslashMath',
+					raw: bracketMatch[0],
+					text,
+					displayMode: true
+				} as BackslashMathToken;
+			}
+		},
+		renderer(token) {
+			const backslashMathToken = token as BackslashMathToken;
+			return renderKatex(backslashMathToken.text, backslashMathToken.displayMode);
+		}
+	};
+}
+
+function createBlockBackslashMathExtension(): TokenizerAndRendererExtension {
+	return {
+		name: 'blockBackslashMath',
+		level: 'block',
+		tokenizer(src) {
+			const match = src.match(BLOCK_BRACKET_MATH_RULE);
+			if (!match) {
+				return;
+			}
+			const text = match[1]?.trim() ?? '';
+			if (text.length === 0) {
+				return;
+			}
+			return {
+				type: 'blockBackslashMath',
+				raw: match[0],
+				text,
+				displayMode: true
+			} as BackslashMathToken;
+		},
+		renderer(token) {
+			const backslashMathToken = token as BackslashMathToken;
+			return `${renderKatex(backslashMathToken.text, backslashMathToken.displayMode)}\n`;
+		}
+	};
+}
 
 function parseCodeSpanMath(value: string): CodeSpanMath | null {
 	const trimmed = value.trim();
@@ -80,9 +181,25 @@ function parseCodeSpanMath(value: string): CodeSpanMath | null {
 		return { expr, displayMode: true };
 	}
 
+	if (trimmed.startsWith('\\[') && trimmed.endsWith('\\]') && trimmed.length > 4) {
+		const expr = trimmed.slice(2, -2).trim();
+		if (expr.length === 0) {
+			return null;
+		}
+		return { expr, displayMode: true };
+	}
+
 	if (trimmed.startsWith('$') && trimmed.endsWith('$') && trimmed.length > 2) {
 		const expr = trimmed.slice(1, -1).trim();
 		if (expr.length === 0 || expr.includes('$')) {
+			return null;
+		}
+		return { expr, displayMode: false };
+	}
+
+	if (trimmed.startsWith('\\(') && trimmed.endsWith('\\)') && trimmed.length > 4) {
+		const expr = trimmed.slice(2, -2).trim();
+		if (expr.length === 0) {
 			return null;
 		}
 		return { expr, displayMode: false };
@@ -96,10 +213,7 @@ renderer.codespan = (token) => {
 	const code = typeof token.text === 'string' ? token.text : '';
 	const math = parseCodeSpanMath(code);
 	if (math) {
-		return katex.renderToString(math.expr, {
-			displayMode: math.displayMode,
-			throwOnError: false
-		});
+		return renderKatex(math.expr, math.displayMode);
 	}
 	return `<code>${escapeHtml(code)}</code>`;
 };
