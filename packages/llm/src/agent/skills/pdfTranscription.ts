@@ -94,7 +94,7 @@ const PDF_REFERENCE_PROMPT = [
 
 const PDF_REFERENCE_PROMPT_GEMINI = [
   PDF_REFERENCE_PROMPT,
-  "For formulas/equations, use embedded LaTeX: inline '$...$', display '$$...$$'.",
+  "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'.",
 ].join("\n");
 
 type RgbaColor = {
