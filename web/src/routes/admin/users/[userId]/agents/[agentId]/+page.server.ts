@@ -1,5 +1,10 @@
 import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
 import {
+	buildWorkspaceFilesCollectionPath,
+	encodeWorkspaceFileId,
+	resolveWorkspaceFilePathFromFirestoreDocument
+} from '@spark/llm';
+import {
 	SparkAgentRunLogSchema,
 	SparkAgentStateSchema,
 	SparkAgentWorkspaceFileSchema,
@@ -31,14 +36,6 @@ function toIso(value: Date | undefined): string | null {
 	return value.toISOString();
 }
 
-function decodeFileId(value: string): string {
-	try {
-		return decodeURIComponent(value);
-	} catch {
-		return value;
-	}
-}
-
 function parseLogTimestamp(key: string): Date | null {
 	const match = /^t(\d{13})_\d+$/.exec(key);
 	if (!match) {
@@ -49,11 +46,6 @@ function parseLogTimestamp(key: string): Date | null {
 		return null;
 	}
 	return new Date(ms);
-}
-
-function docIdFromPath(documentPath: string): string {
-	const parts = documentPath.split('/').filter(Boolean);
-	return parts[parts.length - 1] ?? documentPath;
 }
 
 function serializeAgent(agent: SparkAgentState): {
@@ -95,7 +87,7 @@ function serializeFiles(files: SparkAgentWorkspaceFile[]): Array<{
 }> {
 	return files.map((file) => ({
 		path: file.path,
-		fileId: encodeURIComponent(file.path),
+		fileId: encodeWorkspaceFileId(file.path),
 		createdAt: file.createdAt.toISOString(),
 		updatedAt: file.updatedAt.toISOString(),
 		sizeBytes: typeof file.sizeBytes === 'number' ? file.sizeBytes : null,
@@ -164,7 +156,10 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	const filesDocs = await listFirestoreDocuments({
 		serviceAccountJson,
-		collectionPath: `users/${userId}/workspace/${agent.workspaceId}/files`,
+		collectionPath: buildWorkspaceFilesCollectionPath({
+			userId,
+			workspaceId: agent.workspaceId
+		}),
 		limit: 200,
 		orderBy: 'path asc'
 	});
@@ -174,10 +169,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		const data = fileDoc.data ?? {};
 		const payload = {
 			...data,
-			path:
-				typeof data.path === 'string' && data.path.trim().length > 0
-					? data.path.trim()
-					: decodeFileId(docIdFromPath(fileDoc.documentPath))
+			path: resolveWorkspaceFilePathFromFirestoreDocument({
+				documentPath: fileDoc.documentPath,
+				storedPath: data.path
+			})
 		};
 		const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
 		if (!parsed.success) {

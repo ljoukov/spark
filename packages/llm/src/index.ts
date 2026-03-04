@@ -8,6 +8,7 @@ export * from "./code/sessionArtifacts";
 export * from "./code/problemValidation";
 export * from "./code/welcomeTemplates";
 export * from "./agent/sparkAgentRunner";
+export * from "./agent/workspaceFileStore";
 export * from "./agent/skills/pdfTranscription";
 export * from "./utils/env";
 export * from "./utils/testUser";

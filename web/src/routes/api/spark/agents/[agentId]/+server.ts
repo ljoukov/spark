@@ -5,6 +5,10 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
 import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
 import {
+	buildWorkspaceFilesCollectionPath,
+	resolveWorkspaceFilePathFromFirestoreDocument
+} from '@spark/llm';
+import {
 	SparkAgentStateSchema,
 	SparkAgentRunLogSchema,
 	SparkAgentWorkspaceFileSchema,
@@ -25,14 +29,6 @@ function requireServiceAccountJson(): string {
 	return value;
 }
 
-function decodeFileId(value: string): string {
-	try {
-		return decodeURIComponent(value);
-	} catch {
-		return value;
-	}
-}
-
 function parseLogTimestamp(key: string): Date | null {
 	const match = /^t(\d{13})_\d+$/.exec(key);
 	if (!match) {
@@ -43,11 +39,6 @@ function parseLogTimestamp(key: string): Date | null {
 		return null;
 	}
 	return new Date(ms);
-}
-
-function docIdFromPath(documentPath: string): string {
-	const parts = documentPath.split('/').filter(Boolean);
-	return parts[parts.length - 1] ?? documentPath;
 }
 
 export const GET: RequestHandler = async ({ request, params }) => {
@@ -88,7 +79,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	const agent: SparkAgentState = agentParsed.data;
 	const filesDocs = await listFirestoreDocuments({
 		serviceAccountJson,
-		collectionPath: `users/${userId}/workspace/${agent.workspaceId}/files`,
+		collectionPath: buildWorkspaceFilesCollectionPath({
+			userId,
+			workspaceId: agent.workspaceId
+		}),
 		limit: 200,
 		orderBy: 'path asc'
 	});
@@ -98,10 +92,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		const data = fileDoc.data;
 		const payload = {
 			...data,
-			path:
-				typeof data.path === 'string' && data.path.trim().length > 0
-					? data.path.trim()
-					: decodeFileId(docIdFromPath(fileDoc.documentPath))
+			path: resolveWorkspaceFilePathFromFirestoreDocument({
+				documentPath: fileDoc.documentPath,
+				storedPath: data.path
+			})
 		};
 		const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
 		if (!parsed.success) {

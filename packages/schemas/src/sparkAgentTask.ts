@@ -47,14 +47,31 @@ export const SparkAgentWorkspaceSchema = z.object({
 
 export type SparkAgentWorkspace = z.infer<typeof SparkAgentWorkspaceSchema>;
 
-export const SparkAgentWorkspaceFileSchema = z.object({
+const SparkAgentWorkspaceFileBaseSchema = z.object({
   path: trimmedString,
-  content: z.string(),
   createdAt: FirestoreTimestampSchema,
   updatedAt: FirestoreTimestampSchema,
   sizeBytes: z.number().int().min(0).optional(),
-  contentType: trimmedString.optional(),
 });
+
+export const SparkAgentWorkspaceTextFileSchema =
+  SparkAgentWorkspaceFileBaseSchema.extend({
+    type: z.literal("text").optional(),
+    content: z.string(),
+    contentType: trimmedString.optional(),
+  });
+
+export const SparkAgentWorkspaceStorageLinkSchema =
+  SparkAgentWorkspaceFileBaseSchema.extend({
+    type: z.literal("storage_link"),
+    storagePath: trimmedString,
+    contentType: trimmedString,
+  });
+
+export const SparkAgentWorkspaceFileSchema = z.union([
+  SparkAgentWorkspaceTextFileSchema,
+  SparkAgentWorkspaceStorageLinkSchema,
+]);
 
 export type SparkAgentWorkspaceFile = z.infer<
   typeof SparkAgentWorkspaceFileSchema

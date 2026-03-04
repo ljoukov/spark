@@ -1,6 +1,14 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
-import { createTask, PDF_TRANSCRIPTION_SKILL_TEXT, runToolLoop, tool } from '@spark/llm';
+import {
+	createTask,
+	PDF_TRANSCRIPTION_SKILL_TEXT,
+	resolveWorkspacePathContentType,
+	runToolLoop,
+	tool,
+	upsertWorkspaceStorageLinkFileDoc,
+	upsertWorkspaceTextFileDoc
+} from '@spark/llm';
 import type { LlmContent, LlmContentPart, LlmTextDelta, LlmToolSet } from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -685,8 +693,17 @@ function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
 	return { serviceUrl, apiKey };
 }
 
-function encodeWorkspaceFileId(filePath: string): string {
-	return encodeURIComponent(filePath);
+function sanitizeWorkspaceAttachmentFilename(value: string): string {
+	return value.trim().replace(/[/\\]+/g, '-');
+}
+
+function resolveWorkspaceAttachmentPath(attachment: {
+	id: string;
+	filename?: string;
+}): string {
+	const raw = sanitizeWorkspaceAttachmentFilename(attachment.filename ?? attachment.id);
+	const filename = raw.length > 0 ? raw : attachment.id;
+	return `grader/uploads/${filename}`;
 }
 
 async function writeWorkspaceTextFile(options: {
@@ -697,26 +714,38 @@ async function writeWorkspaceTextFile(options: {
 	content: string;
 	now: Date;
 }): Promise<void> {
-	const lowerPath = options.path.toLowerCase();
-	const contentType = lowerPath.endsWith('.md')
-		? 'text/markdown'
-		: lowerPath.endsWith('.json')
-			? 'application/json'
-			: 'text/plain';
-	const sizeBytes = new TextEncoder().encode(options.content).byteLength;
-	await setFirestoreDocument({
+	await upsertWorkspaceTextFileDoc({
 		serviceAccountJson: options.serviceAccountJson,
-		documentPath: `users/${options.userId}/workspace/${options.workspaceId}/files/${encodeWorkspaceFileId(
-			options.path
-		)}`,
-		data: {
-			path: options.path,
-			content: options.content,
-			contentType,
-			sizeBytes,
-			createdAt: options.now,
-			updatedAt: options.now
-		}
+		userId: options.userId,
+		workspaceId: options.workspaceId,
+		filePath: options.path,
+		content: options.content,
+		contentType: resolveWorkspacePathContentType(options.path),
+		createdAt: options.now,
+		updatedAt: options.now
+	});
+}
+
+async function writeWorkspaceStorageLinkFile(options: {
+	serviceAccountJson: string;
+	userId: string;
+	workspaceId: string;
+	path: string;
+	storagePath: string;
+	contentType: string;
+	sizeBytes: number;
+	now: Date;
+}): Promise<void> {
+	await upsertWorkspaceStorageLinkFileDoc({
+		serviceAccountJson: options.serviceAccountJson,
+		userId: options.userId,
+		workspaceId: options.workspaceId,
+		filePath: options.path,
+		storagePath: options.storagePath,
+		contentType: options.contentType,
+		sizeBytes: options.sizeBytes,
+		createdAt: options.now,
+		updatedAt: options.now
 	});
 }
 
@@ -1630,19 +1659,22 @@ function buildSparkChatTools(options: {
 					const memoryConfig = parseGraderMemoryMarkdown(memory.content);
 					const olympiadKey = memoryConfig.olympiadKey || DEFAULT_GRADER_OLYMPIAD_KEY;
 					const olympiadLabel = memoryConfig.olympiadLabel || DEFAULT_GRADER_OLYMPIAD_LABEL;
-					const runAttachments = attachmentsForMessage
-						.slice(0, GRADER_ATTACHMENT_LIMIT)
-						.map((attachment) => ({
-							id: attachment.id,
-							storagePath: attachment.storagePath,
-							contentType: attachment.contentType,
-							filename: attachment.filename,
-							sizeBytes: attachment.sizeBytes,
-							pageCount: attachment.pageCount
+						const runAttachments = attachmentsForMessage
+							.slice(0, GRADER_ATTACHMENT_LIMIT)
+							.map((attachment) => ({
+								id: attachment.id,
+								storagePath: attachment.storagePath,
+								contentType: attachment.contentType,
+								filename: attachment.filename,
+								sizeBytes: attachment.sizeBytes
+							}));
+						const runWorkspaceAttachments = runAttachments.map((attachment) => ({
+							...attachment,
+							workspacePath: resolveWorkspaceAttachmentPath(attachment)
 						}));
-					await createGraderRun(userId, {
-						id: runId,
-						agentId,
+						await createGraderRun(userId, {
+							id: runId,
+							agentId,
 						workspaceId,
 						conversationId,
 						userPrompt: sourceText?.trim() || input.notes || undefined,
@@ -1740,39 +1772,26 @@ function buildSparkChatTools(options: {
 								path: GRADER_UPLOADS_MANIFEST_PATH,
 								content: JSON.stringify(
 									{
-										attachments: runAttachments.map((attachment) => ({
-											...attachment,
-											workspacePath: `grader/uploads/${(attachment.filename ?? attachment.id).replace(/[/\\]+/g, '-')}`
-										}))
-									},
-									null,
-									2
-								),
-							now
-						}),
-						...runAttachments.map((attachment) =>
-							writeWorkspaceTextFile({
-								serviceAccountJson,
-								userId,
-								workspaceId,
-								path: `grader/uploads/links/${attachment.id}.json`,
-								content: JSON.stringify(
-									{
-										type: 'storage_link',
-										id: attachment.id,
-										storagePath: attachment.storagePath,
-										contentType: attachment.contentType,
-										filename: attachment.filename ?? null,
-										sizeBytes: attachment.sizeBytes,
-										pageCount: attachment.pageCount ?? null
+										attachments: runWorkspaceAttachments
 									},
 									null,
 									2
 								),
 								now
-							})
-						)
-					]);
+							}),
+							...runWorkspaceAttachments.map((attachment) =>
+								writeWorkspaceStorageLinkFile({
+									serviceAccountJson,
+									userId,
+									workspaceId,
+									path: attachment.workspacePath,
+									storagePath: attachment.storagePath,
+									contentType: attachment.contentType,
+									sizeBytes: attachment.sizeBytes,
+									now
+								})
+							)
+						]);
 					await setFirestoreDocument({
 						serviceAccountJson,
 						documentPath: `users/${userId}/agents/${agentId}`,

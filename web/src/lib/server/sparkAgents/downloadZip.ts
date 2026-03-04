@@ -1,57 +1,69 @@
 import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
+import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import {
 	SparkAgentStateSchema,
 	SparkAgentWorkspaceFileSchema,
 	type SparkAgentWorkspaceFile
 } from '@spark/schemas';
+import {
+	buildWorkspaceFilesCollectionPath,
+	isAllowedWorkspaceStoragePath,
+	normalizeStorageObjectName,
+	resolveWorkspaceFilePathFromFirestoreDocument
+} from '@spark/llm';
 
 const textEncoder = new TextEncoder();
 
-function docIdFromPath(documentPath: string): string {
-	const parts = documentPath.split('/').filter(Boolean);
-	return parts[parts.length - 1] ?? documentPath;
-}
-
-function decodeFileId(value: string): string {
-	try {
-		return decodeURIComponent(value);
-	} catch {
-		return value;
+async function decodeWorkspaceFileContent(options: {
+	file: SparkAgentWorkspaceFile;
+	serviceAccountJson: string;
+	bucketName: string;
+	userId: string;
+}): Promise<Uint8Array> {
+	const { file } = options;
+	if (file.type === 'storage_link') {
+		const objectName = normalizeStorageObjectName(file.storagePath);
+		if (
+			objectName.length === 0 ||
+			!isAllowedWorkspaceStoragePath(options.userId, objectName)
+		) {
+			return encodeUtf8(
+				JSON.stringify(
+					{
+						type: 'storage_link',
+						path: file.path,
+						storagePath: file.storagePath,
+						contentType: file.contentType
+					},
+					null,
+					2
+				) + '\n'
+			);
+		}
+		try {
+			const downloaded = await downloadStorageObject({
+				serviceAccountJson: options.serviceAccountJson,
+				bucketName: options.bucketName,
+				objectName
+			});
+			return downloaded.bytes;
+		} catch {
+			return encodeUtf8(
+				JSON.stringify(
+					{
+						type: 'storage_link',
+						path: file.path,
+						storagePath: file.storagePath,
+						contentType: file.contentType
+					},
+					null,
+					2
+				) + '\n'
+			);
+		}
 	}
-}
-
-function isBinaryWorkspaceContentType(contentType: string | undefined): boolean {
-	if (!contentType) {
-		return false;
-	}
-	const normalized = contentType.trim().toLowerCase();
-	if (normalized.startsWith('image/')) {
-		return true;
-	}
-	if (normalized === 'application/pdf') {
-		return true;
-	}
-	return false;
-}
-
-function decodeWorkspaceFileContent(file: SparkAgentWorkspaceFile): Uint8Array {
-	const content = file.content ?? '';
-	if (!isBinaryWorkspaceContentType(file.contentType)) {
-		return encodeUtf8(content);
-	}
-	const match = content.match(/^data:[^;]+;base64,([A-Za-z0-9+/=\s]+)$/u);
-	if (!match) {
-		return encodeUtf8(content);
-	}
-	const encoded = (match[1] ?? '').replace(/\s+/gu, '');
-	if (encoded.length === 0) {
-		return encodeUtf8(content);
-	}
-	try {
-		return Uint8Array.from(Buffer.from(encoded, 'base64'));
-	} catch {
-		return encodeUtf8(content);
-	}
+	return encodeUtf8(file.content);
 }
 
 function parseLogTimestamp(key: string): { ms: number; seq: number } | null {
@@ -448,6 +460,8 @@ export async function buildSparkAgentDownloadZip(args: {
 	agentId: string;
 }): Promise<SparkAgentDownloadZipResult> {
 	const { serviceAccountJson, userId, agentId } = args;
+	const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
+	const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
 
 	const agentDocPath = `users/${userId}/agents/${agentId}`;
 	const agentSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: agentDocPath });
@@ -462,7 +476,10 @@ export async function buildSparkAgentDownloadZip(args: {
 
 	const filesDocs = await listFirestoreDocuments({
 		serviceAccountJson,
-		collectionPath: `users/${userId}/workspace/${agent.workspaceId}/files`,
+		collectionPath: buildWorkspaceFilesCollectionPath({
+			userId,
+			workspaceId: agent.workspaceId
+		}),
 		limit: 1000,
 		orderBy: 'path asc'
 	});
@@ -472,10 +489,10 @@ export async function buildSparkAgentDownloadZip(args: {
 		const data = docSnap.data ?? {};
 		const payload = {
 			...data,
-			path:
-				typeof data.path === 'string' && data.path.trim().length > 0
-					? data.path.trim()
-					: decodeFileId(docIdFromPath(docSnap.documentPath))
+			path: resolveWorkspaceFilePathFromFirestoreDocument({
+				documentPath: docSnap.documentPath,
+				storedPath: data.path
+			})
 		};
 		const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
 		if (!parsed.success) {
@@ -509,9 +526,15 @@ export async function buildSparkAgentDownloadZip(args: {
 		if (!safePath) {
 			continue;
 		}
+		const content = await decodeWorkspaceFileContent({
+			file,
+			serviceAccountJson,
+			bucketName,
+			userId
+		});
 		archiveEntries.push({
 			name: `workspace/${safePath}`,
-			data: decodeWorkspaceFileContent(file)
+			data: content
 		});
 	}
 

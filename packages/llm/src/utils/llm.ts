@@ -213,6 +213,7 @@ export type LlmToolLoopStep = {
 export type LlmToolLoopResult = {
   readonly text: string;
   readonly steps: readonly LlmToolLoopStep[];
+  readonly totalCostUsd: number;
 };
 
 type LlmToolLoopPromptOptions = {
@@ -505,6 +506,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
       text: step.text,
       toolCalls: step.toolCalls,
     })),
+    totalCostUsd: result.totalCostUsd,
   };
 }
 

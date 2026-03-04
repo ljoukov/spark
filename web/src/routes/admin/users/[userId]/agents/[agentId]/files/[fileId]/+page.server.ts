@@ -1,4 +1,8 @@
 import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import {
+	buildWorkspaceFileDocPath,
+	decodeWorkspaceFileId
+} from '@spark/llm';
 import { SparkAgentStateSchema, SparkAgentWorkspaceFileSchema } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
@@ -65,11 +69,14 @@ export const load: PageServerLoad = async ({ params }) => {
 	}
 
 	const workspaceId = agentParsed.data.workspaceId;
-	const filePath = fileId;
-	const encodedFileId = encodeURIComponent(filePath);
+	const filePath = decodeWorkspaceFileId(fileId);
 	const fileSnap = await getFirestoreDocument({
 		serviceAccountJson,
-		documentPath: `users/${userId}/workspace/${workspaceId}/files/${encodedFileId}`
+		documentPath: buildWorkspaceFileDocPath({
+			userId,
+			workspaceId,
+			filePath
+		})
 	});
 
 	if (!fileSnap.exists || !fileSnap.data) {
@@ -118,8 +125,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		fileParseOk: true,
 		workspaceId,
 		file: {
+			type: file.type ?? 'text',
 			path: file.path,
-			content: file.content,
+			content: file.type === 'storage_link' ? null : file.content,
+			storagePath: file.type === 'storage_link' ? file.storagePath : null,
 			contentType: file.contentType ?? null,
 			sizeBytes: typeof file.sizeBytes === 'number' ? file.sizeBytes : null,
 			createdAt: toIso(file.createdAt),

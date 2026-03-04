@@ -6,6 +6,16 @@
 	let { data }: { data: PageData } = $props();
 
 	const file = $derived(data.file);
+	const fileRawHref = $derived.by(() => {
+		if (!file || file.type !== 'storage_link' || !data.workspaceId) {
+			return null;
+		}
+		const params = new URLSearchParams({
+			workspaceId: data.workspaceId,
+			path: file.path
+		});
+		return `/api/spark/agents/workspace-link?${params.toString()}`;
+	});
 
 	function formatInstant(value: string | null): string {
 		if (!value) {
@@ -84,26 +94,45 @@
 			<Card.Description>Read-only view of workspace file contents.</Card.Description>
 		</Card.Header>
 		<Card.Content class="space-y-3">
-			<div class="grid gap-3 md:grid-cols-2">
+				<div class="grid gap-3 md:grid-cols-2">
 				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
 					<p class="text-xs text-muted-foreground">Path</p>
 					<p class="mt-1 font-mono text-xs break-all">{file.path}</p>
 				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Type · Size</p>
-					<p class="mt-1 text-sm">{file.contentType ?? '—'} · {formatBytes(file.sizeBytes)}</p>
-				</div>
-				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
-					<p class="text-xs text-muted-foreground">Created</p>
-					<p class="mt-1 text-sm">{formatInstant(file.createdAt)}</p>
-				</div>
+					<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
+						<p class="text-xs text-muted-foreground">Type · Size</p>
+						<p class="mt-1 text-sm">{file.contentType ?? '—'} · {formatBytes(file.sizeBytes)}</p>
+					</div>
+					<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
+						<p class="text-xs text-muted-foreground">Storage mode</p>
+						<p class="mt-1 text-sm">{file.type === 'storage_link' ? 'storage_link' : 'inline text'}</p>
+					</div>
+					<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
+						<p class="text-xs text-muted-foreground">Storage path</p>
+						<p class="mt-1 font-mono text-xs break-all">{file.storagePath ?? '—'}</p>
+					</div>
+					<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
+						<p class="text-xs text-muted-foreground">Created</p>
+						<p class="mt-1 text-sm">{formatInstant(file.createdAt)}</p>
+					</div>
 				<div class="rounded-lg border border-border/70 bg-muted/20 p-3">
 					<p class="text-xs text-muted-foreground">Updated</p>
 					<p class="mt-1 text-sm">{formatInstant(file.updatedAt)}</p>
 				</div>
 			</div>
 
-			<pre class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-border/70 bg-muted/10 p-4 text-xs text-foreground">{file.content}</pre>
-		</Card.Content>
-	</Card.Root>
-{/if}
+				{#if file.type === 'storage_link'}
+					<div class="rounded-md border border-border/70 bg-muted/10 p-4 text-xs text-foreground">
+						<p class="font-medium">Binary file is stored in Firebase Storage and linked from Firestore.</p>
+						{#if fileRawHref}
+							<p class="mt-2">
+								<a class="underline" href={fileRawHref} target="_blank" rel="noreferrer">Open raw file</a>
+							</p>
+						{/if}
+					</div>
+				{:else}
+					<pre class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-border/70 bg-muted/10 p-4 text-xs text-foreground">{file.content}</pre>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{/if}

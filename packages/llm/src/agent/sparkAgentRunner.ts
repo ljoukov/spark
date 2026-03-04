@@ -22,6 +22,7 @@ import {
   SessionSchema,
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
+  SparkAgentWorkspaceFileSchema,
   type CodeProblem,
   type QuizDefinition,
   type Session,
@@ -60,6 +61,14 @@ import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
 } from "./skills/pdfTranscription";
+import {
+  buildWorkspaceFileDocPath,
+  buildWorkspaceFilesCollectionPath,
+  normalizeStorageObjectName,
+  persistWorkspaceFileFromLocalFs,
+  resolveWorkspaceFilePathFromFirestoreDocument,
+  resolveWorkspacePathContentType,
+} from "./workspaceFileStore";
 import {
   encodeBgraBitmapToPng,
   getPdfPageCount,
@@ -230,9 +239,7 @@ const AGENT_TOOL_LOG_SNIPPET_MAX_CHARS = 1_000;
 const STOP_POLL_INTERVAL_MS = 10_000;
 const AGENT_INLINE_ATTACHMENTS_MAX_COUNT = 24;
 const AGENT_INLINE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
-const WORKSPACE_LINK_DISCOVERY_MAX_DEPTH = 8;
-const WORKSPACE_LINK_DISCOVERY_MAX_FILES = 400;
-const WORKSPACE_LINK_DISCOVERY_MAX_JSON_BYTES = 512 * 1024;
+const ATTACHMENT_DOWNLOAD_CONCURRENCY = 6;
 const WEB_FETCH_TIMEOUT_MS = 20_000;
 const WEB_FETCH_MAX_BYTES = 6 * 1024 * 1024;
 const WEB_FETCH_DEFAULT_MAX_CHARS = 20_000;
@@ -290,6 +297,67 @@ function serializeTraceValue(value: unknown): string {
   } catch (error) {
     return `<<unserializable trace payload: ${errorAsString(error)}>>`;
   }
+}
+
+function redactDataUrlPayload(value: string): string {
+  if (!value.startsWith("data:")) {
+    return value;
+  }
+  const commaIndex = value.indexOf(",");
+  if (commaIndex < 0) {
+    return value;
+  }
+  const prefix = value.slice(0, commaIndex + 1);
+  if (value === `${prefix}...`) {
+    return value;
+  }
+  return `${prefix}...`;
+}
+
+function sanitizeViewImageTraceOutput(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  let changed = false;
+  const sanitizedParts: unknown[] = [];
+  for (const part of value) {
+    if (
+      part !== null &&
+      typeof part === "object" &&
+      !Array.isArray(part) &&
+      "image_url" in part
+    ) {
+      const partRecord = part as Record<string, unknown>;
+      const imageUrl = partRecord.image_url;
+      if (typeof imageUrl === "string") {
+        const redactedImageUrl = redactDataUrlPayload(imageUrl);
+        if (redactedImageUrl !== imageUrl) {
+          changed = true;
+          sanitizedParts.push({
+            ...partRecord,
+            image_url: redactedImageUrl,
+          });
+          continue;
+        }
+      }
+    }
+    sanitizedParts.push(part);
+  }
+  if (!changed) {
+    return value;
+  }
+  return sanitizedParts;
+}
+
+function sanitizeToolTraceValue(options: {
+  toolName: string;
+  direction: "input" | "output";
+  value: unknown;
+}): unknown {
+  if (options.toolName === "view_image" && options.direction === "output") {
+    return sanitizeViewImageTraceOutput(options.value);
+  }
+  return options.value;
 }
 
 function formatToolLogSnippet(value: unknown): string {
@@ -372,8 +440,20 @@ async function persistToolLoopTrace(options: {
 
     for (const [toolIndex, toolCall] of toolCalls.entries()) {
       const callIndex = toolIndex + 1;
-      const input = serializeTraceValue(toolCall.input);
-      const output = serializeTraceValue(toolCall.output);
+      const input = serializeTraceValue(
+        sanitizeToolTraceValue({
+          toolName: toolCall.toolName,
+          direction: "input",
+          value: toolCall.input,
+        }),
+      );
+      const output = serializeTraceValue(
+        sanitizeToolTraceValue({
+          toolName: toolCall.toolName,
+          direction: "output",
+          value: toolCall.output,
+        }),
+      );
       const callId =
         typeof toolCall.callId === "string" && toolCall.callId.trim().length > 0
           ? toolCall.callId
@@ -654,35 +734,6 @@ const AgentAttachmentInputSchema = z.object({
 
 type AgentAttachmentInput = z.infer<typeof AgentAttachmentInputSchema>;
 
-const WorkspaceStorageLinkSchema = z
-  .object({
-    type: z.literal("storage_link"),
-  })
-  .merge(AgentAttachmentInputSchema)
-  .passthrough();
-
-const WorkspaceAttachmentManifestSchema = z
-  .object({
-    attachments: z.array(AgentAttachmentInputSchema).optional(),
-  })
-  .passthrough();
-
-const WorkspaceAttachmentManifestEntryWithLinkPathSchema =
-  AgentAttachmentInputSchema.extend({
-    linkPath: z.preprocess(
-      (value) => parseOptionalString(value),
-      z.string().trim().min(1).optional(),
-    ),
-  });
-
-const WorkspaceAttachmentManifestWithLinksSchema = z
-  .object({
-    attachments: z
-      .array(WorkspaceAttachmentManifestEntryWithLinkPathSchema)
-      .optional(),
-  })
-  .passthrough();
-
 const GraderSummaryProblemSchema = z.object({
   id: z.string().trim().min(1),
   index: z.number().int().min(1),
@@ -710,9 +761,17 @@ const GraderRunSummarySchema = z.object({
 
 type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
 
+function resolveSparkRepoRoot(): string {
+  const currentWorkingDirectory = path.resolve(process.cwd());
+  if (path.basename(currentWorkingDirectory) === "web") {
+    return path.resolve(currentWorkingDirectory, "..");
+  }
+  return currentWorkingDirectory;
+}
+
 function loadAgentEnv(): void {
   loadLocalEnv();
-  const repoRoot = path.resolve(process.cwd());
+  const repoRoot = resolveSparkRepoRoot();
   loadEnvFromFile(path.join(repoRoot, ".env.local"), { override: false });
 }
 
@@ -749,7 +808,7 @@ function resolveAgentWorkspaceRoot(options: {
   runStartedAt: Date;
 }): { rootDir: string; cleanupOnExit: boolean } {
   if (shouldUsePersistentDevWorkspaceRoot()) {
-    const repoRoot = path.resolve(process.cwd());
+    const repoRoot = resolveSparkRepoRoot();
     const timestamp = formatWorkspaceRunTimestamp(options.runStartedAt);
     return {
       rootDir: path.join(repoRoot, "data", "spark-agent", timestamp, options.workspaceId),
@@ -844,101 +903,6 @@ function toResolvedAttachmentInput(
   };
 }
 
-function normalizeStorageObjectName(storagePath: string): string {
-  return storagePath.replace(/^\/+/u, "");
-}
-
-function extensionForContentType(contentType: string): string {
-  const normalized = contentType.trim().toLowerCase();
-  if (normalized === "image/jpeg") {
-    return ".jpg";
-  }
-  if (normalized === "image/png") {
-    return ".png";
-  }
-  if (normalized === "image/webp") {
-    return ".webp";
-  }
-  if (normalized === "image/gif") {
-    return ".gif";
-  }
-  if (normalized === "image/heic") {
-    return ".heic";
-  }
-  if (normalized === "image/heif") {
-    return ".heif";
-  }
-  if (normalized === "application/pdf") {
-    return ".pdf";
-  }
-  return "";
-}
-
-function sanitizeAttachmentFilename(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/[/\\]+/gu, "-")
-    .replace(/\s+/gu, " ");
-  if (normalized.length > 0) {
-    return normalized;
-  }
-  return "attachment";
-}
-
-function resolveAttachmentFilename(attachment: ResolvedAttachmentInput): string {
-  const candidate =
-    typeof attachment.filename === "string" ? attachment.filename.trim() : "";
-  if (candidate.length > 0) {
-    return sanitizeAttachmentFilename(candidate);
-  }
-  const idBase = attachment.id.replace(/[^a-z0-9_-]+/giu, "-").trim();
-  const ext = extensionForContentType(attachment.contentType);
-  if (idBase.length > 0) {
-    if (ext && !idBase.toLowerCase().endsWith(ext)) {
-      return `${idBase}${ext}`;
-    }
-    return idBase;
-  }
-  const fallback = `attachment${ext || ""}`;
-  return fallback;
-}
-
-function resolveMaterializedAttachmentPath(options: {
-  sourcePath: string;
-  attachment: ResolvedAttachmentInput;
-  usedPaths: Set<string>;
-}): string {
-  const sourcePathPosix = options.sourcePath.replace(/\\/gu, "/");
-  let baseDir = path.posix.dirname(sourcePathPosix);
-  if (path.posix.basename(baseDir).toLowerCase() === "links") {
-    baseDir = path.posix.dirname(baseDir);
-  }
-  const filename = resolveAttachmentFilename(options.attachment);
-  let candidatePath = path.posix.join(baseDir, filename);
-  if (!options.usedPaths.has(candidatePath)) {
-    options.usedPaths.add(candidatePath);
-    return candidatePath;
-  }
-  const ext = path.posix.extname(filename);
-  const stem = filename.slice(0, filename.length - ext.length);
-  const suffixBaseRaw = options.attachment.id
-    .replace(/[^a-z0-9_-]+/giu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  const suffixBase = suffixBaseRaw.length > 0 ? suffixBaseRaw.slice(0, 16) : "file";
-  let counter = 1;
-  while (true) {
-    const suffix =
-      counter === 1 ? suffixBase : `${suffixBase}-${counter.toString()}`;
-    candidatePath = path.posix.join(baseDir, `${stem}-${suffix}${ext}`);
-    if (!options.usedPaths.has(candidatePath)) {
-      options.usedPaths.add(candidatePath);
-      return candidatePath;
-    }
-    counter += 1;
-  }
-}
-
 function mergeAttachmentInputs(options: {
   primary: ResolvedAttachmentInput[];
   secondary: ResolvedAttachmentInput[];
@@ -963,73 +927,40 @@ function mergeAttachmentInputs(options: {
   return merged;
 }
 
-async function discoverWorkspaceLinkAttachments(options: {
-  rootDir: string;
-  log?: (line: string) => void;
-}): Promise<ResolvedAttachmentInput[]> {
-  let files: string[] = [];
-  try {
-    files = await listFilesRecursive({
-      rootDir: options.rootDir,
-      maxDepth: WORKSPACE_LINK_DISCOVERY_MAX_DEPTH,
-    });
-  } catch (error) {
-    options.log?.(
-      `warn: unable to scan workspace for storage links: ${errorAsString(error)}`,
-    );
+async function mapWithConcurrency<Item, Result>(options: {
+  items: Item[];
+  concurrency: number;
+  mapper: (item: Item, index: number) => Promise<Result>;
+}): Promise<Result[]> {
+  if (options.items.length === 0) {
     return [];
   }
-  const jsonFiles = files
-    .filter(
-      (entry) => !entry.endsWith("/") && entry.toLowerCase().endsWith(".json"),
-    )
-    .sort()
-    .slice(0, WORKSPACE_LINK_DISCOVERY_MAX_FILES);
-  const discovered: ResolvedAttachmentInput[] = [];
-  for (const relativePath of jsonFiles) {
-    const resolvedPath = resolveWorkspacePath(options.rootDir, relativePath);
-    const fileStats = await stat(resolvedPath).catch(() => undefined);
-    if (!fileStats || !fileStats.isFile()) {
-      continue;
-    }
-    if (
-      fileStats.size <= 0 ||
-      fileStats.size > WORKSPACE_LINK_DISCOVERY_MAX_JSON_BYTES
-    ) {
-      continue;
-    }
-    let text = "";
-    try {
-      text = await readFile(resolvedPath, { encoding: "utf8" });
-    } catch {
-      continue;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      continue;
-    }
-    const directLink = WorkspaceStorageLinkSchema.safeParse(parsed);
-    if (directLink.success) {
-      discovered.push(toResolvedAttachmentInput(directLink.data));
-      continue;
-    }
-    const manifest = WorkspaceAttachmentManifestSchema.safeParse(parsed);
-    if (!manifest.success || !manifest.data.attachments) {
-      continue;
-    }
-    for (const entry of manifest.data.attachments) {
-      discovered.push(toResolvedAttachmentInput(entry));
-    }
-  }
-  const deduped = mergeAttachmentInputs({ primary: discovered, secondary: [] });
-  if (deduped.length > 0) {
-    options.log?.(
-      `attachment_links: discovered ${deduped.length.toString()} storage link attachment(s)`,
+  const requested = Number.isFinite(options.concurrency)
+    ? Math.floor(options.concurrency)
+    : 1;
+  const workerCount = Math.max(1, Math.min(options.items.length, requested));
+  const results = new Array<Result>(options.items.length);
+  let nextIndex = 0;
+  const workers: Promise<void>[] = [];
+  for (let workerIndex = 0; workerIndex < workerCount; workerIndex += 1) {
+    workers.push(
+      (async () => {
+        while (true) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+          if (currentIndex >= options.items.length) {
+            return;
+          }
+          results[currentIndex] = await options.mapper(
+            options.items[currentIndex] as Item,
+            currentIndex,
+          );
+        }
+      })(),
     );
   }
-  return deduped;
+  await Promise.all(workers);
+  return results;
 }
 
 function resolveAttachmentLabel(attachment: ResolvedAttachmentInput): string {
@@ -1048,65 +979,90 @@ async function loadAttachmentParts(options: {
   attachments: ResolvedAttachmentInput[];
   log?: (line: string) => void;
 }): Promise<{ parts: LlmContentPart[]; notes: string[] }> {
+  type AttachmentLoadResult = {
+    part?: LlmContentPart;
+    note?: string;
+    logLine?: string;
+  };
+
   const parts: LlmContentPart[] = [];
   const notes: string[] = [];
-  let index = 0;
-  for (const attachment of options.attachments.slice(
+  const selectedAttachments = options.attachments.slice(
     0,
     AGENT_INLINE_ATTACHMENTS_MAX_COUNT,
-  )) {
-    index += 1;
-    const label = resolveAttachmentLabel(attachment);
-    if (!isUserUploadPath(options.userId, attachment.storagePath)) {
-      const note = `[${index.toString()}] skipped ${label}: disallowed storage path`;
-      notes.push(note);
-      options.log?.(`warn: ${note}`);
-      continue;
+  );
+  const outcomes = await mapWithConcurrency({
+    items: selectedAttachments,
+    concurrency: ATTACHMENT_DOWNLOAD_CONCURRENCY,
+    mapper: async (attachment, attachmentIndex): Promise<AttachmentLoadResult> => {
+      const index = attachmentIndex + 1;
+      const label = resolveAttachmentLabel(attachment);
+      if (!isUserUploadPath(options.userId, attachment.storagePath)) {
+        const note = `[${index.toString()}] skipped ${label}: disallowed storage path`;
+        return {
+          note,
+          logLine: `warn: ${note}`,
+        };
+      }
+      let downloaded:
+        | {
+            bytes: Uint8Array;
+            contentType: string | null;
+          }
+        | undefined;
+      try {
+        downloaded = await downloadStorageObject({
+          serviceAccountJson: options.serviceAccountJson,
+          bucketName: options.bucketName,
+          objectName: attachment.storagePath,
+        });
+      } catch (error) {
+        const note = `[${index.toString()}] skipped ${label}: download failed (${errorAsString(error)})`;
+        return {
+          note,
+          logLine: `warn: ${note}`,
+        };
+      }
+      const bytes = downloaded.bytes;
+      if (bytes.length <= 0) {
+        const note = `[${index.toString()}] skipped ${label}: file is empty`;
+        return {
+          note,
+          logLine: `warn: ${note}`,
+        };
+      }
+      if (bytes.length > AGENT_INLINE_ATTACHMENT_MAX_BYTES) {
+        const note = `[${index.toString()}] skipped ${label}: file too large (${bytes.length.toString()} bytes)`;
+        return {
+          note,
+          logLine: `warn: ${note}`,
+        };
+      }
+      const mimeType =
+        downloaded.contentType && downloaded.contentType.trim().length > 0
+          ? downloaded.contentType
+          : attachment.contentType;
+      const data = Buffer.from(bytes).toString("base64");
+      return {
+        part: {
+          type: "inlineData",
+          data,
+          mimeType,
+        },
+        logLine: `input_attachment: added ${label} mime=${mimeType} bytes=${bytes.length.toString()}`,
+      };
+    },
+  });
+  for (const outcome of outcomes) {
+    if (outcome.note) {
+      notes.push(outcome.note);
     }
-    let downloaded:
-      | {
-          bytes: Uint8Array;
-          contentType: string | null;
-        }
-      | undefined;
-    try {
-      downloaded = await downloadStorageObject({
-        serviceAccountJson: options.serviceAccountJson,
-        bucketName: options.bucketName,
-        objectName: attachment.storagePath,
-      });
-    } catch (error) {
-      const note = `[${index.toString()}] skipped ${label}: download failed (${errorAsString(error)})`;
-      notes.push(note);
-      options.log?.(`warn: ${note}`);
-      continue;
+    if (outcome.part) {
+      parts.push(outcome.part);
     }
-    const bytes = downloaded.bytes;
-    if (bytes.length <= 0) {
-      const note = `[${index.toString()}] skipped ${label}: file is empty`;
-      notes.push(note);
-      options.log?.(`warn: ${note}`);
-      continue;
+    if (outcome.logLine) {
+      options.log?.(outcome.logLine);
     }
-    if (bytes.length > AGENT_INLINE_ATTACHMENT_MAX_BYTES) {
-      const note = `[${index.toString()}] skipped ${label}: file too large (${bytes.length.toString()} bytes)`;
-      notes.push(note);
-      options.log?.(`warn: ${note}`);
-      continue;
-    }
-    const mimeType =
-      downloaded.contentType && downloaded.contentType.trim().length > 0
-        ? downloaded.contentType
-        : attachment.contentType;
-    const data = Buffer.from(bytes).toString("base64");
-    parts.push({
-      type: "inlineData",
-      data,
-      mimeType,
-    });
-    options.log?.(
-      `input_attachment: added ${label} mime=${mimeType} bytes=${bytes.length.toString()}`,
-    );
   }
   return { parts, notes };
 }
@@ -1320,88 +1276,8 @@ function resolveFirestoreDate(value: unknown): Date | undefined {
   return undefined;
 }
 
-function encodeFileId(filePath: string): string {
-  return encodeURIComponent(filePath);
-}
-
-function decodeFileId(fileId: string): string {
-  try {
-    return decodeURIComponent(fileId);
-  } catch {
-    return fileId;
-  }
-}
-
 function resolveContentType(filePath: string): string | undefined {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".md" || ext === ".markdown") {
-    return "text/markdown";
-  }
-  if (ext === ".json") {
-    return "application/json";
-  }
-  if (ext === ".txt") {
-    return "text/plain";
-  }
-  if (ext === ".png") {
-    return "image/png";
-  }
-  if (ext === ".jpg" || ext === ".jpeg") {
-    return "image/jpeg";
-  }
-  if (ext === ".gif") {
-    return "image/gif";
-  }
-  if (ext === ".heic") {
-    return "image/heic";
-  }
-  if (ext === ".heif") {
-    return "image/heif";
-  }
-  if (ext === ".webp") {
-    return "image/webp";
-  }
-  if (ext === ".pdf") {
-    return "application/pdf";
-  }
-  return undefined;
-}
-
-function isBinaryWorkspaceContentType(contentType: string | undefined): boolean {
-  if (typeof contentType !== "string" || contentType.trim().length === 0) {
-    return false;
-  }
-  const normalized = contentType.trim().toLowerCase();
-  if (normalized.startsWith("image/")) {
-    return true;
-  }
-  if (normalized === "application/pdf") {
-    return true;
-  }
-  return false;
-}
-
-function encodeBinaryWorkspaceContent(options: {
-  contentType: string;
-  bytes: Buffer;
-}): string {
-  return `data:${options.contentType};base64,${options.bytes.toString("base64")}`;
-}
-
-function decodeBinaryWorkspaceContent(content: string): Buffer | null {
-  const match = content.match(/^data:[^;]+;base64,([A-Za-z0-9+/=\s]+)$/u);
-  if (!match) {
-    return null;
-  }
-  const encoded = match[1]?.replace(/\s+/gu, "");
-  if (!encoded) {
-    return null;
-  }
-  try {
-    return Buffer.from(encoded, "base64");
-  } catch {
-    return null;
-  }
+  return resolveWorkspacePathContentType(filePath);
 }
 
 function clampToUnit(value: number): number {
@@ -1686,10 +1562,7 @@ class WorkspaceSync {
   private bucketName: string;
   private rootDir: string;
   private fileMeta = new Map<string, WorkspaceFileMeta>();
-  private touchedPaths = new Set<string>();
   private discoveredLinkAttachments: ResolvedAttachmentInput[] = [];
-  private materializedAttachmentPaths = new Set<string>();
-  private materializedAttachmentStoragePaths = new Set<string>();
 
   constructor(options: WorkspaceSyncOptions) {
     this.serviceAccountJson = options.serviceAccountJson;
@@ -1700,11 +1573,18 @@ class WorkspaceSync {
   }
 
   private filesCollectionPath(): string {
-    return `users/${this.userId}/workspace/${this.workspaceId}/files`;
+    return buildWorkspaceFilesCollectionPath({
+      userId: this.userId,
+      workspaceId: this.workspaceId,
+    });
   }
 
   private fileDocPath(filePath: string): string {
-    return `${this.filesCollectionPath()}/${encodeFileId(filePath)}`;
+    return buildWorkspaceFileDocPath({
+      userId: this.userId,
+      workspaceId: this.workspaceId,
+      filePath,
+    });
   }
 
   private ensureMeta(filePath: string): WorkspaceFileMeta {
@@ -1721,49 +1601,11 @@ class WorkspaceSync {
     return created;
   }
 
-  getTouchedPaths(): string[] {
-    return Array.from(this.touchedPaths).sort((a, b) => a.localeCompare(b));
-  }
-
   getDiscoveredLinkAttachments(): ResolvedAttachmentInput[] {
     return mergeAttachmentInputs({
       primary: this.discoveredLinkAttachments,
       secondary: [],
     });
-  }
-
-  async upsertVirtualTextFile(options: {
-    filePath: string;
-    content: string;
-    contentType?: string;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }): Promise<void> {
-    const now = options.updatedAt ?? new Date();
-    const createdAt = options.createdAt ?? now;
-    const payload: Record<string, unknown> = {
-      path: options.filePath,
-      content: options.content,
-      createdAt,
-      updatedAt: now,
-      sizeBytes: Buffer.byteLength(options.content, "utf8"),
-    };
-    if (
-      typeof options.contentType === "string" &&
-      options.contentType.trim().length > 0
-    ) {
-      payload.contentType = options.contentType.trim();
-    }
-    await patchFirestoreDocument({
-      serviceAccountJson: this.serviceAccountJson,
-      documentPath: this.fileDocPath(options.filePath),
-      updates: payload,
-    });
-    const meta = this.ensureMeta(options.filePath);
-    meta.createdAt = createdAt;
-    meta.updatedAt = now;
-    meta.lastWriteAt = now.getTime();
-    meta.pending = false;
   }
 
   private recordDiscoveredLinkAttachment(entry: ResolvedAttachmentInput): void {
@@ -1773,29 +1615,18 @@ class WorkspaceSync {
     });
   }
 
-  private async materializeLinkAttachment(options: {
-    attachment: ResolvedAttachmentInput;
-    sourcePath: string;
+  private async materializeWorkspaceStorageLinkFile(options: {
+    filePath: string;
+    storagePath: string;
+    contentType: string;
+    sizeBytes?: number;
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
-    this.recordDiscoveredLinkAttachment(options.attachment);
-    const storagePath = options.attachment.storagePath.trim();
-    if (
-      storagePath.length === 0 ||
-      this.materializedAttachmentStoragePaths.has(storagePath)
-    ) {
-      return;
-    }
-    const objectName = normalizeStorageObjectName(storagePath);
+    const objectName = normalizeStorageObjectName(options.storagePath);
     if (objectName.length === 0) {
       return;
     }
-    const materializedPath = resolveMaterializedAttachmentPath({
-      sourcePath: options.sourcePath,
-      attachment: options.attachment,
-      usedPaths: this.materializedAttachmentPaths,
-    });
     let downloaded:
       | {
           bytes: Uint8Array;
@@ -1810,15 +1641,29 @@ class WorkspaceSync {
       });
     } catch (error) {
       console.warn(
-        `Failed to materialize link attachment "${storagePath}" in workspace: ${errorAsString(error)}`,
+        `Failed to materialize workspace storage link "${options.storagePath}" for "${options.filePath}": ${errorAsString(error)}`,
       );
       return;
     }
-    const resolvedPath = resolveWorkspacePath(this.rootDir, materializedPath);
+    const resolvedPath = resolveWorkspacePath(this.rootDir, options.filePath);
     await ensureDir(path.dirname(resolvedPath));
     await writeFile(resolvedPath, Buffer.from(downloaded.bytes));
-    this.materializedAttachmentStoragePaths.add(storagePath);
-    const meta = this.ensureMeta(materializedPath);
+    const normalizedPath = options.filePath.replace(/\\/gu, "/");
+    const filename = path.posix.basename(normalizedPath).trim();
+    const attachmentSizeBytes =
+      typeof options.sizeBytes === "number" &&
+      Number.isFinite(options.sizeBytes) &&
+      options.sizeBytes > 0
+        ? Math.floor(options.sizeBytes)
+        : downloaded.bytes.byteLength;
+    this.recordDiscoveredLinkAttachment({
+      id: normalizedPath,
+      storagePath: options.storagePath,
+      contentType: options.contentType,
+      ...(filename.length > 0 ? { filename } : {}),
+      sizeBytes: Math.max(1, attachmentSizeBytes),
+    });
+    const meta = this.ensureMeta(options.filePath);
     meta.createdAt = options.createdAt ?? meta.createdAt;
     meta.updatedAt = options.updatedAt ?? meta.updatedAt;
     meta.lastWriteAt =
@@ -1838,71 +1683,37 @@ class WorkspaceSync {
     for (const doc of docs) {
       const data = doc.data ?? {};
       const rawPath =
-        typeof data.path === "string" && data.path.trim().length > 0
-          ? data.path.trim()
-          : decodeFileId(
-              doc.documentPath.split("/").filter(Boolean).at(-1) ?? "",
-            );
+        resolveWorkspaceFilePathFromFirestoreDocument({
+          documentPath: doc.documentPath,
+          storedPath: data.path,
+        });
       if (!rawPath) {
         continue;
       }
       const content = typeof data.content === "string" ? data.content : "";
-      const contentType =
-        typeof data.contentType === "string" && data.contentType.trim().length > 0
-          ? data.contentType.trim().toLowerCase()
-          : undefined;
       const createdAt = resolveFirestoreDate(data.createdAt);
       const updatedAt = resolveFirestoreDate(data.updatedAt);
-      let parsedJson: unknown | undefined;
+      const parsedWorkspaceFile = SparkAgentWorkspaceFileSchema.safeParse({
+        ...data,
+        path: rawPath,
+      });
       if (
-        (contentType === "application/json" || content.trimStart().startsWith("{")) &&
-        content.trim().length > 0
+        parsedWorkspaceFile.success &&
+        parsedWorkspaceFile.data.type === "storage_link"
       ) {
-        parsedJson = (() => {
-          try {
-            return JSON.parse(content);
-          } catch {
-            return undefined;
-          }
-        })();
-      }
-      if (parsedJson !== undefined) {
-        const directLink = WorkspaceStorageLinkSchema.safeParse(parsedJson);
-        if (directLink.success) {
-          await this.materializeLinkAttachment({
-            attachment: toResolvedAttachmentInput(directLink.data),
-            sourcePath: rawPath,
-            createdAt,
-            updatedAt,
-          });
-          // Do not write link json files to the local workspace filesystem.
-          continue;
-        }
-        const manifestWithLinks =
-          WorkspaceAttachmentManifestWithLinksSchema.safeParse(parsedJson);
-        if (manifestWithLinks.success && manifestWithLinks.data.attachments) {
-          for (const entry of manifestWithLinks.data.attachments) {
-            await this.materializeLinkAttachment({
-              attachment: toResolvedAttachmentInput(entry),
-              sourcePath: entry.linkPath ?? rawPath,
-              createdAt,
-              updatedAt,
-            });
-          }
-        }
+        await this.materializeWorkspaceStorageLinkFile({
+          filePath: rawPath,
+          storagePath: parsedWorkspaceFile.data.storagePath,
+          contentType: parsedWorkspaceFile.data.contentType,
+          sizeBytes: parsedWorkspaceFile.data.sizeBytes,
+          createdAt,
+          updatedAt,
+        });
+        continue;
       }
       const resolved = resolveWorkspacePath(this.rootDir, rawPath);
       await ensureDir(path.dirname(resolved));
-      if (isBinaryWorkspaceContentType(contentType)) {
-        const decoded = decodeBinaryWorkspaceContent(content);
-        if (decoded) {
-          await writeFile(resolved, decoded);
-        } else {
-          await writeFile(resolved, content, { encoding: "utf8" });
-        }
-      } else {
-        await writeFile(resolved, content, { encoding: "utf8" });
-      }
+      await writeFile(resolved, content, { encoding: "utf8" });
       const meta = this.ensureMeta(rawPath);
       meta.createdAt = createdAt ?? meta.createdAt;
       meta.updatedAt = updatedAt ?? meta.updatedAt;
@@ -1916,7 +1727,6 @@ class WorkspaceSync {
     if (meta.disposed) {
       return;
     }
-    this.touchedPaths.add(filePath);
     meta.pending = true;
     if (meta.inFlight) {
       return;
@@ -2066,138 +1876,27 @@ class WorkspaceSync {
       return;
     }
     const resolved = resolveWorkspacePath(this.rootDir, filePath);
-    const contentType = resolveContentType(filePath);
-    let content = "";
-    let sizeBytes = 0;
     try {
-      if (isBinaryWorkspaceContentType(contentType)) {
-        const bytes = await readFile(resolved);
-        content = encodeBinaryWorkspaceContent({
-          contentType: contentType ?? "application/octet-stream",
-          bytes,
-        });
-        sizeBytes = bytes.byteLength;
-      } else {
-        content = await readFile(resolved, { encoding: "utf8" });
-        sizeBytes = Buffer.byteLength(content, "utf8");
-      }
+      const now = new Date();
+      const createdAt = meta.createdAt ?? now;
+      meta.createdAt = createdAt;
+      meta.updatedAt = now;
+      meta.lastWriteAt = Date.now();
+      await persistWorkspaceFileFromLocalFs({
+        serviceAccountJson: this.serviceAccountJson,
+        userId: this.userId,
+        workspaceId: this.workspaceId,
+        filePath,
+        absoluteFilePath: resolved,
+        bucketName: this.bucketName,
+        createdAt,
+        updatedAt: now,
+      });
     } catch (error) {
       throw new Error(
-        `Failed to read workspace file "${filePath}": ${errorAsString(error)}`,
+        `Failed to flush workspace file "${filePath}": ${errorAsString(error)}`,
       );
     }
-    const now = new Date();
-    const createdAt = meta.createdAt ?? now;
-    meta.createdAt = createdAt;
-    meta.updatedAt = now;
-    meta.lastWriteAt = Date.now();
-    const payload: Record<string, unknown> = {
-      path: filePath,
-      content,
-      createdAt,
-      updatedAt: now,
-      sizeBytes,
-    };
-    if (contentType) {
-      payload.contentType = contentType;
-    }
-    await patchFirestoreDocument({
-      serviceAccountJson: this.serviceAccountJson,
-      documentPath: this.fileDocPath(filePath),
-      updates: payload,
-    });
-  }
-}
-
-function resolveWorkspaceLinkPathForImageFile(
-  imagePath: string,
-  linkId: string,
-): string {
-  const normalized = imagePath.replace(/\\/gu, "/");
-  const dir = path.posix.dirname(normalized);
-  return path.posix.join(dir, "links", `${linkId}.json`);
-}
-
-async function publishWorkspaceImageLinks(options: {
-  rootDir: string;
-  workspaceSync: WorkspaceSync;
-  serviceAccountJson: string;
-  bucketName: string;
-  userId: string;
-  log?: (line: string) => void;
-}): Promise<void> {
-  const uniqueTouchedPaths = Array.from(
-    new Set(options.workspaceSync.getTouchedPaths()),
-  );
-  for (const touchedPath of uniqueTouchedPaths) {
-    const contentType = resolveContentType(touchedPath);
-    if (
-      typeof contentType !== "string" ||
-      !contentType.toLowerCase().startsWith("image/")
-    ) {
-      continue;
-    }
-    const resolved = resolveWorkspacePath(options.rootDir, touchedPath);
-    const fileStats = await stat(resolved).catch(() => undefined);
-    if (!fileStats || !fileStats.isFile() || fileStats.size <= 0) {
-      continue;
-    }
-    let bytes: Buffer;
-    try {
-      bytes = await readFile(resolved);
-    } catch (error) {
-      options.log?.(
-        `warn: failed to read generated image "${touchedPath}": ${errorAsString(error)}`,
-      );
-      continue;
-    }
-    if (bytes.length === 0) {
-      continue;
-    }
-    const linkId = createHash("md5").update(bytes).digest("hex");
-    const storagePath = `spark/uploads/${options.userId}/${linkId}`;
-    try {
-      await uploadStorageObject({
-        serviceAccountJson: options.serviceAccountJson,
-        bucketName: options.bucketName,
-        objectName: storagePath,
-        contentType,
-        data: Uint8Array.from(bytes),
-        onlyIfMissing: true,
-      });
-    } catch (error) {
-      options.log?.(
-        `warn: failed to upload generated image "${touchedPath}": ${errorAsString(error)}`,
-      );
-      continue;
-    }
-    const filename = path.posix.basename(touchedPath.replace(/\\/gu, "/"));
-    const linkPath = resolveWorkspaceLinkPathForImageFile(touchedPath, linkId);
-    const linkContent =
-      JSON.stringify(
-        {
-          type: "storage_link",
-          id: linkId,
-          storagePath,
-          contentType,
-          filename,
-          sizeBytes: bytes.length,
-          pageCount: null,
-        },
-        null,
-        2,
-      ) + "\n";
-    await options.workspaceSync
-      .upsertVirtualTextFile({
-        filePath: linkPath,
-        content: linkContent,
-        contentType: "application/json",
-      })
-      .catch((error) => {
-        options.log?.(
-          `warn: failed to write workspace link "${linkPath}": ${errorAsString(error)}`,
-        );
-      });
   }
 }
 
@@ -6379,22 +6078,6 @@ export async function runSparkAgentTask(
     await stopPollInFlight?.catch(() => undefined);
   };
 
-  const publishGeneratedImageLinks = async (): Promise<void> => {
-    if (!workspaceRoot || !workspaceSync) {
-      return;
-    }
-    await publishWorkspaceImageLinks({
-      rootDir: workspaceRoot,
-      workspaceSync,
-      serviceAccountJson,
-      bucketName,
-      userId: options.userId,
-      log: (line) => {
-        logSync?.append(line);
-      },
-    });
-  };
-
   try {
     const agentSnap = await getFirestoreDocument({
       serviceAccountJson,
@@ -6528,6 +6211,11 @@ export async function runSparkAgentTask(
     workspaceRoot = workspaceRootConfig.rootDir;
     cleanupWorkspaceRoot = workspaceRootConfig.cleanupOnExit;
     await ensureDir(workspaceRoot);
+    const workspaceLogLine = [
+      `local_fs_dir=${workspaceRoot}`,
+      `cleanup_on_exit=${cleanupWorkspaceRoot ? "true" : "false"}`,
+    ].join(" ");
+    logSync.append(workspaceLogLine);
     logSync.append(`workspace_root: ${workspaceRoot}`);
     workspaceSync = new WorkspaceSync({
       serviceAccountJson,
@@ -6594,18 +6282,7 @@ export async function runSparkAgentTask(
       .catch([])
       .parse(rawAgentInputAttachments)
       .map((entry) => toResolvedAttachmentInput(entry));
-    const discoveredWorkspaceLinkAttachments =
-      workspaceSync.getDiscoveredLinkAttachments();
-    const scannedWorkspaceLinkAttachments = await discoverWorkspaceLinkAttachments({
-      rootDir: workspaceRoot,
-      log: (line) => {
-        logSync?.append(line);
-      },
-    });
-    const workspaceLinkAttachments = mergeAttachmentInputs({
-      primary: discoveredWorkspaceLinkAttachments,
-      secondary: scannedWorkspaceLinkAttachments,
-    });
+    const workspaceLinkAttachments = workspaceSync.getDiscoveredLinkAttachments();
     const inlineInputAttachments = mergeAttachmentInputs({
       primary: explicitInputAttachments,
       secondary: workspaceLinkAttachments,
@@ -6939,20 +6616,11 @@ export async function runSparkAgentTask(
       ].join(" "),
     );
 
-    await publishGeneratedImageLinks().catch((error) => {
-      logSync?.append(
-        `warn: failed to publish generated image links: ${errorAsString(error)}`,
-      );
-    });
+    await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
   } catch (error) {
     if (error instanceof StopRequestedError) {
       logSync?.append("warn: agent stopped by user request");
-      await publishGeneratedImageLinks().catch((publishError) => {
-        logSync?.append(
-          `warn: failed to publish generated image links: ${errorAsString(publishError)}`,
-        );
-      });
       await workspaceSync?.flushAll().catch(() => undefined);
       await logSync?.flushAll().catch(() => undefined);
       await updateAgentStatus({
@@ -6980,11 +6648,6 @@ export async function runSparkAgentTask(
     const message = errorAsString(error);
     console.error(`[spark-agent:${options.agentId}] failed: ${message}`);
     logSync?.append(`error: ${message}`);
-    await publishGeneratedImageLinks().catch((publishError) => {
-      logSync?.append(
-        `warn: failed to publish generated image links: ${errorAsString(publishError)}`,
-      );
-    });
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
     const statusUpdated = await updateAgentStatus({

@@ -36,13 +36,8 @@
 	};
 
 	type WorkspaceStorageLink = {
-		type: 'storage_link';
-		id: string;
 		storagePath: string;
 		contentType: string;
-		filename?: string | null;
-		sizeBytes?: number | null;
-		pageCount?: number | null;
 	};
 
 	const RUN_LOG_THOUGHTS_KEY = 'stream.thoughts';
@@ -94,38 +89,13 @@
 		selectedFilePath ? (files.find((file) => file.path === selectedFilePath) ?? null) : null
 	);
 	const selectedFileStorageLink = $derived.by(() => {
-		if (!selectedFile || typeof selectedFile.content !== 'string') {
+		if (!selectedFile || selectedFile.type !== 'storage_link') {
 			return null;
 		}
-		const text = selectedFile.content.trim();
-		if (!text.startsWith('{')) {
-			return null;
-		}
-		try {
-			const parsed = JSON.parse(text) as Partial<WorkspaceStorageLink>;
-			if (
-				parsed.type !== 'storage_link' ||
-				typeof parsed.id !== 'string' ||
-				parsed.id.trim().length === 0 ||
-				typeof parsed.storagePath !== 'string' ||
-				parsed.storagePath.trim().length === 0 ||
-				typeof parsed.contentType !== 'string' ||
-				parsed.contentType.trim().length === 0
-			) {
-				return null;
-			}
-			return {
-				type: 'storage_link' as const,
-				id: parsed.id.trim(),
-				storagePath: parsed.storagePath.trim(),
-				contentType: parsed.contentType.trim(),
-				filename: typeof parsed.filename === 'string' ? parsed.filename : null,
-				sizeBytes: typeof parsed.sizeBytes === 'number' ? parsed.sizeBytes : null,
-				pageCount: typeof parsed.pageCount === 'number' ? parsed.pageCount : null
-			};
-		} catch {
-			return null;
-		}
+		return {
+			storagePath: selectedFile.storagePath,
+			contentType: selectedFile.contentType
+		};
 	});
 	const selectedFileIsMarkdown = $derived.by(() => {
 		const path = selectedFile?.path?.toLowerCase() ?? '';
@@ -134,11 +104,6 @@
 	const selectedFileImageSrc = $derived.by(() => {
 		if (!selectedFile) {
 			return null;
-		}
-		const contentType = selectedFile.contentType?.toLowerCase() ?? '';
-		const content = selectedFile.content ?? '';
-		if (contentType.startsWith('image/') && content.startsWith('data:image/')) {
-			return content;
 		}
 		if (
 			selectedFileStorageLink &&
@@ -154,7 +119,12 @@
 		return null;
 	});
 	const selectedFileHtml = $derived(
-		selectedFileIsMarkdown && selectedFile?.content ? renderMarkdown(selectedFile.content) : ''
+		selectedFileIsMarkdown &&
+			selectedFile &&
+			selectedFile.type !== 'storage_link' &&
+			selectedFile.content
+			? renderMarkdown(selectedFile.content)
+			: ''
 	);
 	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
 
@@ -412,6 +382,21 @@
 		if (!browser) {
 			return;
 		}
+		if (file.type === 'storage_link' && selectedAgent?.workspaceId) {
+			const params = new URLSearchParams({
+				workspaceId: selectedAgent.workspaceId,
+				path: file.path
+			});
+			const openedStorageLink = window.open(
+				`/api/spark/agents/workspace-link?${params.toString()}`,
+				'_blank',
+				'noopener,noreferrer'
+			);
+			if (!openedStorageLink) {
+				throw new Error('Popup blocked');
+			}
+			return;
+		}
 		if (selectedFileImageSrc && selectedFile?.path === file.path) {
 			const openedImage = window.open(selectedFileImageSrc, '_blank', 'noopener,noreferrer');
 			if (!openedImage) {
@@ -419,7 +404,7 @@
 			}
 			return;
 		}
-		const content = typeof file.content === 'string' ? file.content : '';
+		const content = file.type === 'storage_link' ? '' : (typeof file.content === 'string' ? file.content : '');
 		const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
 		const url = URL.createObjectURL(blob);
 		const opened = window.open(url, '_blank', 'noopener,noreferrer');
@@ -1201,14 +1186,19 @@
 			<div class="file-dialog__body">
 				{#if selectedFileIsMarkdown}
 					<div class="markdown-preview">{@html selectedFileHtml}</div>
-				{:else if selectedFileImageSrc}
-					<div class="file-image-preview">
-						<img src={selectedFileImageSrc} alt={selectedFile.path} loading="lazy" />
-					</div>
-				{:else}
-					<pre class="file-preview"><code>{selectedFile.content}</code></pre>
-				{/if}
-			</div>
+					{:else if selectedFileImageSrc}
+						<div class="file-image-preview">
+							<img src={selectedFileImageSrc} alt={selectedFile.path} loading="lazy" />
+						</div>
+					{:else if selectedFile.type === 'storage_link'}
+						<div class="file-storage-link-preview">
+							<p>Binary file stored in Firebase Storage (`storage_link`).</p>
+							<p class="file-storage-link-preview__path">{selectedFile.storagePath}</p>
+						</div>
+					{:else}
+						<pre class="file-preview"><code>{selectedFile.content}</code></pre>
+					{/if}
+				</div>
 	</div>
 {/if}
 
@@ -1658,6 +1648,27 @@
 		border-radius: 0.6rem;
 		border: 1px solid rgba(148, 163, 184, 0.35);
 		background: rgba(15, 23, 42, 0.04);
+	}
+
+	.file-storage-link-preview {
+		display: grid;
+		gap: 0.55rem;
+		padding: 0.9rem;
+		border-radius: 0.75rem;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: rgba(148, 163, 184, 0.08);
+	}
+
+	.file-storage-link-preview p {
+		margin: 0;
+	}
+
+	.file-storage-link-preview__path {
+		font-family:
+			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
+		font-size: 0.8rem;
+		overflow-wrap: anywhere;
 	}
 
 	.markdown-preview :global(p) {

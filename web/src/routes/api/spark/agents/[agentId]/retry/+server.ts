@@ -5,7 +5,16 @@ import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
 import { createTask } from '@spark/llm';
-import { SparkAgentStateSchema } from '@spark/schemas';
+import {
+	SparkAgentStateSchema,
+	SparkAgentWorkspaceFileSchema
+} from '@spark/schemas';
+import {
+	buildWorkspaceFilesCollectionPath,
+	resolveWorkspaceFilePathFromFirestoreDocument,
+	upsertWorkspaceStorageLinkFileDoc,
+	upsertWorkspaceTextFileDoc
+} from '@spark/llm';
 import {
 	getFirestoreDocument,
 	listFirestoreDocuments,
@@ -48,23 +57,6 @@ function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
 		throw new Error('TASKS_API_KEY is missing');
 	}
 	return { serviceUrl, apiKey };
-}
-
-function docIdFromPath(documentPath: string): string {
-	const parts = documentPath.split('/').filter(Boolean);
-	return parts[parts.length - 1] ?? documentPath;
-}
-
-function decodeFileId(value: string): string {
-	try {
-		return decodeURIComponent(value);
-	} catch {
-		return value;
-	}
-}
-
-function encodeFileId(path: string): string {
-	return encodeURIComponent(path);
 }
 
 function buildRetryAgentMetadata(sourceData: Record<string, unknown>): Record<string, unknown> {
@@ -153,28 +145,55 @@ export const POST: RequestHandler = async ({ request, params }) => {
 
 	const sourceFiles = await listFirestoreDocuments({
 		serviceAccountJson,
-		collectionPath: `users/${userId}/workspace/${sourceAgent.workspaceId}/files`,
+		collectionPath: buildWorkspaceFilesCollectionPath({
+			userId,
+			workspaceId: sourceAgent.workspaceId
+		}),
 		limit: 1000,
 		orderBy: 'path asc'
 	});
 	let copiedFileCount = 0;
 	for (const sourceFile of sourceFiles) {
 		const data = sourceFile.data ?? {};
-		const path =
-			typeof data.path === 'string' && data.path.trim().length > 0
-				? data.path.trim()
-				: decodeFileId(docIdFromPath(sourceFile.documentPath));
+		const path = resolveWorkspaceFilePathFromFirestoreDocument({
+			documentPath: sourceFile.documentPath,
+			storedPath: data.path
+		});
 		if (path.length === 0) {
 			continue;
 		}
-		await setFirestoreDocument({
-			serviceAccountJson,
-			documentPath: `users/${userId}/workspace/${newWorkspaceId}/files/${encodeFileId(path)}`,
-			data: {
-				...data,
-				path
-			}
+		const parsedSourceFile = SparkAgentWorkspaceFileSchema.safeParse({
+			...data,
+			path
 		});
+		if (!parsedSourceFile.success) {
+			continue;
+		}
+		const sourceWorkspaceFile = parsedSourceFile.data;
+		if (sourceWorkspaceFile.type === 'storage_link') {
+			await upsertWorkspaceStorageLinkFileDoc({
+				serviceAccountJson,
+				userId,
+				workspaceId: newWorkspaceId,
+				filePath: sourceWorkspaceFile.path,
+				storagePath: sourceWorkspaceFile.storagePath,
+				contentType: sourceWorkspaceFile.contentType,
+				sizeBytes: sourceWorkspaceFile.sizeBytes ?? 0,
+				createdAt: sourceWorkspaceFile.createdAt,
+				updatedAt: sourceWorkspaceFile.updatedAt
+			});
+		} else {
+			await upsertWorkspaceTextFileDoc({
+				serviceAccountJson,
+				userId,
+				workspaceId: newWorkspaceId,
+				filePath: sourceWorkspaceFile.path,
+				content: sourceWorkspaceFile.content,
+				contentType: sourceWorkspaceFile.contentType,
+				createdAt: sourceWorkspaceFile.createdAt,
+				updatedAt: sourceWorkspaceFile.updatedAt
+			});
+		}
 		copiedFileCount += 1;
 	}
 

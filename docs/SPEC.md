@@ -271,9 +271,11 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Stop: the `/spark/agents` UI can set `stop_requested = true`. While running, the server polls `stop_requested` every 10 seconds and stops the run by setting `status = "stopped"` (and returns success to Cloud Tasks so it won’t retry).
 - Completion: the agent is expected to call the `done` tool once. If the tool loop ends with a final text response without calling `done`, the server writes the response to `agent-output.md` in the workspace, stores a truncated (≤ 1000 chars) version in `resultSummary`, and marks the run as `done`.
 - Agent workspaces live under `users/{userId}/workspace/{workspaceId}/files/{fileId}`.
-  - Each file doc stores `{ path, content, createdAt, updatedAt, sizeBytes?, contentType? }`.
+  - `fileId` is always `encodeURIComponent(path)` (no directory sub-collections).
+  - Text files are stored inline as `{ path, content, contentType?, createdAt, updatedAt, sizeBytes }`.
+  - Binary files (images/PDFs) are stored as storage links: `{ type: "storage_link", storagePath, contentType, path, createdAt, updatedAt, sizeBytes }`.
   - Workspace file updates are throttled to ≤ 1 write per 10 seconds per file doc.
-  - Storage-link JSON files (`{ "type": "storage_link", "storagePath": "...", ... }`) are treated as first-class runner inputs. The runner resolves links from workspace docs, materializes linked files into local workspace paths (for example `grader/uploads/<filename>`), and injects resolved files into the initial multimodal model context (subject to attachment count/size limits and user-upload path checks).
+  - The runner materializes `storage_link` docs into the local workspace path from the same `path` field and injects resolved files into multimodal model input (subject to attachment count/size limits and user-upload path checks).
 - Agent sub-model LLM debug snapshots (per `generate_text` / `generate_json` tool call) are stored in the workspace as files:
   - `generate_text/turn{N}tool{M}/{prompt|request|response}.txt`
   - `generate_json/turn{N}tool{M}/{prompt|request|response}.txt`
@@ -291,12 +293,12 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Olympiad grading (from `/spark` chat) is implemented as an Agent run:
   - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, copies `grader/memory.md` from the user config, writes `grader/task.md`, and schedules `runAgent`.
   - Attachment selection is conversation-aware (not only the latest message): relevant prior user uploads in the same thread are reused for retries/follow-ups unless replaced.
-  - Selected uploads are written as metadata in `request.json` and `grader/uploads/index.json`, and each upload also gets a storage-link file under `grader/uploads/links/{attachmentId}.json`.
-  - Link files are workspace metadata only; they are not written into the agent's local filesystem layer. Instead, linked uploads are materialized into local paths like `grader/uploads/<filename>` so tools such as `view_image` work directly on file paths.
+  - Selected uploads are written as metadata in `request.json` and `grader/uploads/index.json`; each upload is also represented by a workspace file at `grader/uploads/<filename>` stored as a `storage_link` doc.
+  - During load, linked uploads are materialized into the same local workspace paths (`grader/uploads/<filename>`) so tools such as `view_image` work directly on file paths.
   - The runner resolves these attachments (plus any `inputAttachments` metadata on the agent doc) and injects corresponding images/files into the run-agent model input as inline multimodal parts.
   - The grader agent uses `web_search` to find official references, `pdf_to_images` + `draw_grid_overlay` + `crop_image` + `trim_image` + `view_image` for PDF/image transcription workflows, `extract_pdf_diagrams` for diagram bounding-box manifests when needed, and `web_fetch` only for non-PDF pages; it writes `grader/output/run-summary.json` plus one markdown file per problem under `grader/output/problems/`.
   - Image processing tool inputs are aligned with chat upload image formats (`image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/heic`, `image/heif`); `crop_image`, `draw_grid_overlay`, and `trim_image` write PNG outputs into the workspace.
-  - Image outputs generated during the run are uploaded to Firebase Storage under `spark/uploads/{uid}/{md5}` and a workspace storage-link JSON is written (adjacent `links/{md5}.json`) so retries and UI inspection can resolve the binary asset via link metadata.
+  - Image/PDF outputs generated during runs are uploaded to Firebase Storage under `spark/uploads/{uid}/{md5}` and persisted back to the originating workspace file path as `storage_link` docs.
   - On completion, the runner parses `grader/output/run-summary.json` and patches the grader run document with totals + per-problem summary metadata for `/spark/grader`.
 
 - Prompting and tool-use strategy:

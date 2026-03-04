@@ -5,6 +5,7 @@ import {
 	patchFirestoreDocument,
 	setFirestoreDocument
 } from '$lib/server/gcp/firestoreRest';
+import { buildWorkspaceFileDocPath } from '@spark/llm';
 import { z } from 'zod';
 
 export const DEFAULT_GRADER_OLYMPIAD_KEY = 'hamilton_ukmt' as const;
@@ -313,7 +314,11 @@ export async function getWorkspaceTextFile(
 	}
 	const snapshot = await getFirestoreDocument({
 		serviceAccountJson,
-		documentPath: `users/${userId}/workspace/${workspaceId}/files/${encodeFileId(path)}`
+		documentPath: buildWorkspaceFileDocPath({
+			userId,
+			workspaceId,
+			filePath: path
+		})
 	});
 	if (!snapshot.exists || !snapshot.data) {
 		return null;

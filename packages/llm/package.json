@@ -27,7 +27,7 @@
     "@alcyone-labs/zod-to-json-schema": "^4.0.10",
     "@google/genai": "^1.37.0",
     "@hyzyla/pdfium": "^2.1.12",
-    "@ljoukov/llm": "3.0.14",
+    "@ljoukov/llm": "3.0.15",
     "@spark/schemas": "file:../schemas",
     "firebase-admin": "^13.6.0",
     "google-auth-library": "^10.5.0",
