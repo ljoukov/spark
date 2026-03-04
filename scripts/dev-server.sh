@@ -71,7 +71,7 @@ start_session() {
     return 0
   fi
 
-  local cmd="cd \"${WEB_DIR}\" && VITE_DEV_PORT=${port} VITE_DEV_AUTH_HOST=localhost:${port} bun run dev:https 2>&1 | tee \"${LOG_FILE}\""
+  local cmd="cd \"${WEB_DIR}\" && SPARK_AGENT_LOCAL_WORKSPACE=1 SPARK_AGENT_LOCAL_WORKSPACE_BASE_DIR=../data VITE_DEV_PORT=${port} VITE_DEV_AUTH_HOST=localhost:${port} bun run dev:https 2>&1 | tee \"${LOG_FILE}\""
   tmux new-session -d -s "${SESSION_NAME}" "${cmd}"
 
   echo "Started ${SESSION_NAME}"

@@ -808,10 +808,21 @@ function resolveAgentWorkspaceRoot(options: {
   runStartedAt: Date;
 }): { rootDir: string; cleanupOnExit: boolean } {
   if (shouldUsePersistentDevWorkspaceRoot()) {
-    const repoRoot = resolveSparkRepoRoot();
+    const configuredWorkspaceBaseDir = parseOptionalString(
+      process.env.SPARK_AGENT_LOCAL_WORKSPACE_BASE_DIR,
+    );
+    const workspaceBaseDir =
+      configuredWorkspaceBaseDir !== undefined
+        ? path.resolve(process.cwd(), configuredWorkspaceBaseDir)
+        : path.join(resolveSparkRepoRoot(), "data");
     const timestamp = formatWorkspaceRunTimestamp(options.runStartedAt);
     return {
-      rootDir: path.join(repoRoot, "data", "spark-agent", timestamp, options.workspaceId),
+      rootDir: path.join(
+        workspaceBaseDir,
+        "spark-agent",
+        timestamp,
+        options.workspaceId,
+      ),
       cleanupOnExit: false,
     };
   }
