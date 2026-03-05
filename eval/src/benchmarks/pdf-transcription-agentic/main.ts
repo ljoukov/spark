@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 
+import { Command } from "commander";
 import { z } from "zod";
 import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
@@ -333,64 +334,82 @@ function parseAgentDiagramManifest(input: unknown): z.infer<typeof AgentDiagramM
 }
 
 function parseCliArgs(args: readonly string[]): CliArgs {
-  const raw: {
-    sourcePdfPath?: string;
+  const command = new Command("bench:pdf-transcription-agentic")
+    .description("Run PDF transcription agentic benchmark.")
+    .option("--source-pdf <path>", "source PDF path", DEFAULT_SOURCE_PDF_PATH)
+    .option("--model-id <modelId>", "single model id")
+    .option("--model <modelId>", "alias for --model-id")
+    .option("--models <modelIds>", "comma-separated model ids")
+    .option(
+      "--use-subagents [enabled]",
+      "enable subagents (true/false, 1/0, yes/no, on/off)",
+    )
+    .option("--no-use-subagents", "disable subagents")
+    .option(
+      "--use-reference-text [enabled]",
+      "enable read_pdf_reference_text tool (true/false, 1/0, yes/no, on/off)",
+    )
+    .option("--no-use-reference-text", "disable read_pdf_reference_text tool")
+    .option("--enable-reference-text", "alias for --use-reference-text")
+    .option("--disable-reference-text", "alias for --no-use-reference-text")
+    .option("--reference-text [enabled]", "alias for --use-reference-text");
+  command.parse(args, { from: "user" });
+
+  const options = command.opts<{
+    sourcePdf: string;
     modelId?: string;
+    model?: string;
     models?: string;
-    useSubagents?: string;
-    useReferenceText?: string;
-  } = {};
-  for (const arg of args) {
-    if (arg.startsWith("--source-pdf=")) {
-      raw.sourcePdfPath = arg.slice("--source-pdf=".length).trim();
-      continue;
+    useSubagents?: string | boolean;
+    useReferenceText?: string | boolean;
+    enableReferenceText?: boolean;
+    disableReferenceText?: boolean;
+    referenceText?: string | boolean;
+  }>();
+
+  const useSubagentsRaw =
+    typeof options.useSubagents === "boolean"
+      ? options.useSubagents
+        ? "true"
+        : "false"
+      : options.useSubagents;
+
+  const useReferenceTextRaw = (() => {
+    if (typeof options.referenceText === "boolean") {
+      return options.referenceText ? "true" : "false";
     }
-    if (arg.startsWith("--model-id=")) {
-      raw.modelId = arg.slice("--model-id=".length).trim();
-      continue;
+    if (typeof options.referenceText === "string") {
+      return options.referenceText;
     }
-    if (arg.startsWith("--models=")) {
-      raw.models = arg.slice("--models=".length).trim();
-      continue;
+    if (options.enableReferenceText === true) {
+      return "true";
     }
-    if (arg === "--use-subagents") {
-      raw.useSubagents = "true";
-      continue;
+    if (options.disableReferenceText === true) {
+      return "false";
     }
-    if (arg === "--no-use-subagents") {
-      raw.useSubagents = "false";
-      continue;
+    if (typeof options.useReferenceText === "boolean") {
+      return options.useReferenceText ? "true" : "false";
     }
-    if (arg.startsWith("--use-subagents=")) {
-      raw.useSubagents = arg.slice("--use-subagents=".length).trim();
-      continue;
-    }
-    if (arg === "--use-reference-text" || arg === "--enable-reference-text") {
-      raw.useReferenceText = "true";
-      continue;
-    }
-    if (arg === "--no-use-reference-text" || arg === "--disable-reference-text") {
-      raw.useReferenceText = "false";
-      continue;
-    }
-    if (arg.startsWith("--use-reference-text=")) {
-      raw.useReferenceText = arg.slice("--use-reference-text=".length).trim();
-      continue;
-    }
-    if (arg.startsWith("--reference-text=")) {
-      raw.useReferenceText = arg.slice("--reference-text=".length).trim();
-    }
-  }
+    return options.useReferenceText;
+  })();
 
   const parsed = z
     .object({
-      sourcePdfPath: z.string().trim().min(1).default(DEFAULT_SOURCE_PDF_PATH),
+      sourcePdfPath: z.string().trim().min(1),
       modelId: z.string().trim().min(1).optional(),
+      modelAlias: z.string().trim().min(1).optional(),
       models: z.string().trim().min(1).optional(),
       useSubagents: z.string().trim().min(1).optional(),
       useReferenceText: z.string().trim().min(1).optional(),
     })
-    .parse(raw);
+    .parse({
+      sourcePdfPath: options.sourcePdf,
+      modelId: options.modelId,
+      modelAlias: options.model,
+      models: options.models,
+      useSubagents: useSubagentsRaw,
+      useReferenceText: useReferenceTextRaw,
+    });
 
   const parseBooleanFlag = (
     value: string | undefined,
@@ -433,6 +452,9 @@ function parseCliArgs(args: readonly string[]): CliArgs {
   }
   if (typeof parsed.modelId === "string") {
     modelIds.push(normaliseModelId(parsed.modelId));
+  }
+  if (typeof parsed.modelAlias === "string") {
+    modelIds.push(normaliseModelId(parsed.modelAlias));
   }
   if (modelIds.length === 0) {
     modelIds.push(DEFAULT_AGENT_MODEL_ID);

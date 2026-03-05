@@ -1,12 +1,9 @@
 # Handwriting Transcription Agentic Benchmark
 
-This benchmark runs one or more agentic workflows (in parallel when multiple models are provided) to transcribe student handwriting with iterative ambiguity resolution:
+This benchmark runs one or more agentic workflows (in parallel when multiple models are provided) over an attached file bundle.
 
-- pass 1: call `extract_text` with `documentPaths: [clipboard-1.png]`, plus `supportingPaths` for `hamilton2017-h1-h2.jpg` -> `output/transcription_v1.md`
-- pass 2: verify with `view_image` + `read_file`, then correct ambiguities -> `output/transcription_v2.md`
-- pass 3: add official solutions `hamilton-2017-solutions-p1.jpg` + `hamilton-2017-solutions-p2.jpg` -> `output/transcription_v3.md`
+The agent is expected to infer file roles from content (handwritten student work, problem statements, and optional official solutions), transcribe all files with one `extract_text` call, and produce grading + feedback output. If official solutions are missing, the agent should solve problems itself and use those solutions as reference.
 
-The task enforces a lightweight flow: one `extract_text` pass followed by one verification/cleanup pass (`view_image` handwriting + `view_image` context + `read_file` extraction), with uncertainty markers instead of iterative crop loops.
 The benchmark is agent-only and does not run separate judge models.
 
 ## Run
@@ -35,14 +32,20 @@ Parallel multi-model run:
 bun --cwd=eval run bench:handwriting-transcription-agentic -- --models=chatgpt-gpt-5.3-codex,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
 ```
 
-Optional custom data paths:
+Optional custom data paths (repeat `--file` as needed):
 
 ```bash
 bun --cwd=eval run bench:handwriting-transcription-agentic -- \
-  --handwriting-image=/absolute/path/clipboard.png \
-  --problems-image=/absolute/path/problems.jpg \
-  --solutions-p1-image=/absolute/path/solutions-p1.jpg \
-  --solutions-p2-image=/absolute/path/solutions-p2.jpg
+  --file=/absolute/path/student-work-1.png \
+  --file=/absolute/path/problem-sheet.pdf \
+  --file=/absolute/path/official-solutions.jpg
+```
+
+Or pass a comma-separated list:
+
+```bash
+bun --cwd=eval run bench:handwriting-transcription-agentic -- \
+  --files=/absolute/path/student-work.png,/absolute/path/problems.pdf
 ```
 
 ## Outputs

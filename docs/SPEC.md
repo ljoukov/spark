@@ -292,11 +292,16 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
 - Olympiad grading (from `/spark` chat) is implemented as an Agent run:
   - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, copies `grader/memory.md` from the user config, writes `grader/task.md`, and schedules `runAgent`.
+  - `create_grader` includes `referenceSourcePolicy`:
+    - `uploaded-only`: grading must rely on uploaded/pasted materials; no online search for missing references.
+    - `allow-online-search-when-problems-missing`: online search is allowed only when problem statements are missing or unclear.
   - Attachment selection is conversation-aware (not only the latest message): relevant prior user uploads in the same thread are reused for retries/follow-ups unless replaced.
   - Selected uploads are written as metadata in `request.json` and `grader/uploads/index.json`; each upload is also represented by a workspace file at `grader/uploads/<filename>` stored as a `storage_link` doc.
   - During load, linked uploads are materialized into the same local workspace paths (`grader/uploads/<filename>`) so tools such as `view_image` work directly on file paths.
   - The runner resolves these attachments (plus any `inputAttachments` metadata on the agent doc) and injects corresponding images/files into the run-agent model input as inline multimodal parts.
-  - The grader agent uses `web_search` to find official references, `pdf_to_images` + `draw_grid_overlay` + `crop_image` + `trim_image` + `view_image` for PDF/image transcription workflows, `extract_pdf_diagrams` for diagram bounding-box manifests when needed, and `web_fetch` only for non-PDF pages; it writes `grader/output/run-summary.json` plus one markdown file per problem under `grader/output/problems/`.
+  - The grader agent uses an extraction-first workflow with `extract_text` over uploaded student work/problem statements/official solutions, writing consolidated transcription to `grader/output/transcription.md` before per-problem grading output.
+  - If problem statements are uploaded but official solutions are missing, the grader solves each problem carefully itself and does not search online for solutions.
+  - If online search is allowed by `referenceSourcePolicy`, `web_search` may be used only to fill missing/unclear problem statements or references; `web_fetch` remains non-PDF only.
   - Image processing tool inputs are aligned with chat upload image formats (`image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/heic`, `image/heif`); `crop_image`, `draw_grid_overlay`, and `trim_image` write PNG outputs into the workspace.
   - Image/PDF outputs generated during runs are uploaded to Firebase Storage under `spark/uploads/{uid}/{md5}` and persisted back to the originating workspace file path as `storage_link` docs.
   - On completion, the runner parses `grader/output/run-summary.json` and patches the grader run document with totals + per-problem summary metadata for `/spark/grader`.

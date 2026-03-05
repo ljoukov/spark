@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
+import { Command } from "commander";
 import { z } from "zod";
 import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
@@ -41,26 +42,12 @@ const { toRepoRelativePath, fromRepoRelativePath, sanitizeLogText } =
     benchmarkDir: BENCHMARK_DIR,
     repoRootDir: REPO_ROOT_DIR,
   });
-const DEFAULT_HANDWRITING_IMAGE_PATH = path.join(
-  BENCHMARK_DIR,
-  "data",
-  "clipboard-1.png",
-);
-const DEFAULT_PROBLEMS_IMAGE_PATH = path.join(
-  BENCHMARK_DIR,
-  "data",
-  "hamilton2017-h1-h2.jpg",
-);
-const DEFAULT_SOLUTIONS_P1_IMAGE_PATH = path.join(
-  BENCHMARK_DIR,
-  "data",
-  "hamilton-2017-solutions-p1.jpg",
-);
-const DEFAULT_SOLUTIONS_P2_IMAGE_PATH = path.join(
-  BENCHMARK_DIR,
-  "data",
-  "hamilton-2017-solutions-p2.jpg",
-);
+const DEFAULT_INPUT_FILE_PATHS = [
+  path.join(BENCHMARK_DIR, "data", "clipboard-1.png"),
+  path.join(BENCHMARK_DIR, "data", "hamilton2017-h1-h2.jpg"),
+  path.join(BENCHMARK_DIR, "data", "hamilton-2017-solutions-p1.jpg"),
+  path.join(BENCHMARK_DIR, "data", "hamilton-2017-solutions-p2.jpg"),
+] as const;
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const MAX_STEPS = 160;
@@ -82,14 +69,9 @@ type AgentPathConfig = {
   workspaceDir: string;
   taskPath: string;
   sourceDir: string;
-  handwritingImagePath: string;
-  problemsImagePath: string;
-  solutionsP1ImagePath: string;
-  solutionsP2ImagePath: string;
+  sourceDocuments: SourceDocument[];
   outputDir: string;
-  outputV1Path: string;
-  outputV2Path: string;
-  outputV3Path: string;
+  transcriptionPath: string;
   outputNotesPath: string;
   agentLogPath: string;
   agentMainLogPath: string;
@@ -97,11 +79,15 @@ type AgentPathConfig = {
   summaryJsonPath: string;
 };
 
+type SourceDocument = {
+  inputPath: string;
+  sourceBasename: string;
+  sourcePath: string;
+  sourceRelativePath: string;
+};
+
 type CliArgs = {
-  handwritingImagePath: string;
-  problemsImagePath: string;
-  solutionsP1ImagePath: string;
-  solutionsP2ImagePath: string;
+  filePaths: string[];
   modelIds: LlmTextModelId[];
   useSubagents: boolean;
 };
@@ -114,13 +100,9 @@ type AgenticBenchmarkResult = {
   runDir: string;
   workspaceDir: string;
   taskPath: string;
-  handwritingImagePath: string;
-  problemsImagePath: string;
-  solutionsP1ImagePath: string;
-  solutionsP2ImagePath: string;
-  transcriptionV1Path: string;
-  transcriptionV2Path: string;
-  transcriptionV3Path: string;
+  inputFilePaths: string[];
+  sourceDocumentPaths: string[];
+  transcriptionPath: string;
   notesPath: string;
   inspectionImagePaths: string[];
   agentLogPath: string;
@@ -131,15 +113,18 @@ type AgenticBenchmarkResult = {
     modelCalls: number;
     toolCalls: number;
     toolCallsByName: Record<string, number>;
-    costUsd: number;
+    llmCostUsd: number;
     usage: UsageTotals;
     thoughtsChars: number;
     responseChars: number;
     doneSummary: string | null;
   };
+  toolLlmCostByName: Record<string, number>;
   total: {
     latencyMs: number;
     costUsd: number;
+    agentLlmCostUsd: number;
+    toolLlmCostUsd: number;
   };
 };
 
@@ -150,66 +135,114 @@ type AgenticBenchmarkRunOutcome = {
   error?: string;
 };
 
-function parseCliArgs(args: readonly string[]): CliArgs {
-  const raw: {
-    handwritingImagePath?: string;
-    problemsImagePath?: string;
-    solutionsP1ImagePath?: string;
-    solutionsP2ImagePath?: string;
-    modelId?: string;
-    models?: string;
-    useSubagents?: string;
-  } = {};
-  for (const arg of args) {
-    if (arg.startsWith("--handwriting-image=")) {
-      raw.handwritingImagePath = arg.slice("--handwriting-image=".length).trim();
+function extractToolLlmCostSummary(eventLogRecords: readonly Record<string, unknown>[]): {
+  totalCostUsd: number;
+  byToolName: Record<string, number>;
+} {
+  let totalCostUsd = 0;
+  const byToolName: Record<string, number> = {};
+  for (const record of eventLogRecords) {
+    if (record.type !== "tool_call" || record.phase !== "completed") {
       continue;
     }
-    if (arg.startsWith("--problems-image=")) {
-      raw.problemsImagePath = arg.slice("--problems-image=".length).trim();
+    const toolName =
+      typeof record.toolName === "string" && record.toolName.trim().length > 0
+        ? record.toolName
+        : "unknown";
+    const output =
+      typeof record.output === "object" &&
+      record.output !== null &&
+      !Array.isArray(record.output)
+        ? (record.output as Record<string, unknown>)
+        : null;
+    if (!output) {
       continue;
     }
-    if (arg.startsWith("--solutions-p1-image=")) {
-      raw.solutionsP1ImagePath = arg.slice("--solutions-p1-image=".length).trim();
+    const rawCostUsd = output.costUsd;
+    if (
+      typeof rawCostUsd !== "number" ||
+      !Number.isFinite(rawCostUsd) ||
+      rawCostUsd < 0
+    ) {
       continue;
     }
-    if (arg.startsWith("--solutions-p2-image=")) {
-      raw.solutionsP2ImagePath = arg.slice("--solutions-p2-image=".length).trim();
-      continue;
-    }
-    if (arg.startsWith("--model-id=")) {
-      raw.modelId = arg.slice("--model-id=".length).trim();
-      continue;
-    }
-    if (arg.startsWith("--models=")) {
-      raw.models = arg.slice("--models=".length).trim();
-      continue;
-    }
-    if (arg === "--use-subagents") {
-      raw.useSubagents = "true";
-      continue;
-    }
-    if (arg === "--no-use-subagents") {
-      raw.useSubagents = "false";
-      continue;
-    }
-    if (arg.startsWith("--use-subagents=")) {
-      raw.useSubagents = arg.slice("--use-subagents=".length).trim();
-      continue;
-    }
+    totalCostUsd += rawCostUsd;
+    byToolName[toolName] = (byToolName[toolName] ?? 0) + rawCostUsd;
   }
+  return {
+    totalCostUsd,
+    byToolName,
+  };
+}
+
+function formatToolCostByNameLine(byToolName: Record<string, number>): string {
+  const entries = Object.entries(byToolName).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    return "none";
+  }
+  return entries
+    .map(([toolName, costUsd]) => `${toolName}:${formatUsd(costUsd)}`)
+    .join(",");
+}
+
+function parseCliArgs(args: readonly string[]): CliArgs {
+  const command = new Command("bench:handwriting-transcription-agentic")
+    .description("Run handwriting transcription agentic benchmark.")
+    .option(
+      "--file <path>",
+      "input file path (repeat flag to add more files)",
+      (value: string, previous: string[] | undefined): string[] => {
+        const collected = Array.isArray(previous) ? previous : [];
+        return [...collected, value];
+      },
+    )
+    .option(
+      "--files <paths>",
+      "comma-separated input file paths",
+    )
+    .option("--model-id <modelId>", "single model id")
+    .option("--model <modelId>", "alias for --model-id")
+    .option("--models <modelIds>", "comma-separated model ids")
+    .option(
+      "--use-subagents [enabled]",
+      "enable subagents (true/false, 1/0, yes/no, on/off)",
+    )
+    .option("--no-use-subagents", "disable subagents");
+  command.parse(args, { from: "user" });
+
+  const options = command.opts<{
+    file?: string[];
+    files?: string;
+    modelId?: string;
+    model?: string;
+    models?: string;
+    useSubagents?: string | boolean;
+  }>();
+
+  const useSubagentsRaw =
+    typeof options.useSubagents === "boolean"
+      ? options.useSubagents
+        ? "true"
+        : "false"
+      : options.useSubagents;
 
   const parsed = z
     .object({
-      handwritingImagePath: z.string().trim().min(1).default(DEFAULT_HANDWRITING_IMAGE_PATH),
-      problemsImagePath: z.string().trim().min(1).default(DEFAULT_PROBLEMS_IMAGE_PATH),
-      solutionsP1ImagePath: z.string().trim().min(1).default(DEFAULT_SOLUTIONS_P1_IMAGE_PATH),
-      solutionsP2ImagePath: z.string().trim().min(1).default(DEFAULT_SOLUTIONS_P2_IMAGE_PATH),
+      repeatedFilePaths: z.array(z.string().trim().min(1)).default([]),
+      files: z.string().trim().min(1).optional(),
       modelId: z.string().trim().min(1).optional(),
+      modelAlias: z.string().trim().min(1).optional(),
       models: z.string().trim().min(1).optional(),
       useSubagents: z.string().trim().min(1).optional(),
     })
-    .parse(raw);
+    .parse({
+      repeatedFilePaths: options.file,
+      files: options.files,
+      modelId: options.modelId,
+      modelAlias: options.model,
+      models: options.models,
+      useSubagents: useSubagentsRaw,
+    });
 
   const parseBooleanFlag = (
     value: string | undefined,
@@ -252,26 +285,46 @@ function parseCliArgs(args: readonly string[]): CliArgs {
   if (typeof parsed.modelId === "string") {
     modelIds.push(normaliseModelId(parsed.modelId));
   }
+  if (typeof parsed.modelAlias === "string") {
+    modelIds.push(normaliseModelId(parsed.modelAlias));
+  }
   if (modelIds.length === 0) {
     modelIds.push(DEFAULT_AGENT_MODEL_ID);
   }
 
   const dedupedModelIds = Array.from(new Set(modelIds));
+  const filePaths: string[] = [];
+  for (const filePath of parsed.repeatedFilePaths) {
+    filePaths.push(filePath);
+  }
+  if (typeof parsed.files === "string") {
+    for (const part of parsed.files.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+      filePaths.push(trimmed);
+    }
+  }
+  if (filePaths.length === 0) {
+    for (const filePath of DEFAULT_INPUT_FILE_PATHS) {
+      filePaths.push(filePath);
+    }
+  }
+
   return {
-    handwritingImagePath: parsed.handwritingImagePath,
-    problemsImagePath: parsed.problemsImagePath,
-    solutionsP1ImagePath: parsed.solutionsP1ImagePath,
-    solutionsP2ImagePath: parsed.solutionsP2ImagePath,
+    filePaths: Array.from(new Set(filePaths)),
     modelIds: dedupedModelIds,
-    useSubagents: parseBooleanFlag(parsed.useSubagents, false, "--use-subagents"),
+    useSubagents: parseBooleanFlag(
+      parsed.useSubagents,
+      false,
+      "--use-subagents",
+    ),
   };
 }
 
 async function buildPathConfig(options: {
-  handwritingImagePath: string;
-  problemsImagePath: string;
-  solutionsP1ImagePath: string;
-  solutionsP2ImagePath: string;
+  filePaths: string[];
   modelId: string;
 }): Promise<AgentPathConfig> {
   const modelSlug = toModelSlug(options.modelId);
@@ -280,14 +333,8 @@ async function buildPathConfig(options: {
   const workspaceDir = path.join(runRootDir, "workspace");
   const taskPath = path.join(workspaceDir, "TASK.md");
   const sourceDir = path.join(workspaceDir, "source");
-  const handwritingImagePath = path.join(sourceDir, "clipboard-1.png");
-  const problemsImagePath = path.join(sourceDir, "hamilton2017-h1-h2.jpg");
-  const solutionsP1ImagePath = path.join(sourceDir, "hamilton-2017-solutions-p1.jpg");
-  const solutionsP2ImagePath = path.join(sourceDir, "hamilton-2017-solutions-p2.jpg");
   const outputDir = path.join(workspaceDir, "output");
-  const outputV1Path = path.join(outputDir, "transcription_v1.md");
-  const outputV2Path = path.join(outputDir, "transcription_v2.md");
-  const outputV3Path = path.join(outputDir, "transcription_v3.md");
+  const transcriptionPath = path.join(outputDir, "transcription.md");
   const outputNotesPath = path.join(outputDir, "agent-notes.md");
   const agentLogPath = path.join(runRootDir, "agent.log");
   const agentMainLogPath = path.join(runRootDir, "agent_main.log");
@@ -297,25 +344,35 @@ async function buildPathConfig(options: {
   await rm(runRootDir, { recursive: true, force: true });
   await mkdir(sourceDir, { recursive: true });
   await mkdir(outputDir, { recursive: true });
-  await copyFile(options.handwritingImagePath, handwritingImagePath);
-  await copyFile(options.problemsImagePath, problemsImagePath);
-  await copyFile(options.solutionsP1ImagePath, solutionsP1ImagePath);
-  await copyFile(options.solutionsP2ImagePath, solutionsP2ImagePath);
-  await writeFile(taskPath, `${createAgentTaskDescription()}\n`, "utf8");
+  const sourceDocuments: SourceDocument[] = [];
+  for (const [index, inputPath] of options.filePaths.entries()) {
+    const sourceBasename = `${(index + 1).toString().padStart(2, "0")}-${path.basename(inputPath)}`;
+    const sourcePath = path.join(sourceDir, sourceBasename);
+    const sourceRelativePath = `source/${sourceBasename}`;
+    await copyFile(inputPath, sourcePath);
+    sourceDocuments.push({
+      inputPath,
+      sourceBasename,
+      sourcePath,
+      sourceRelativePath,
+    });
+  }
+  await writeFile(
+    taskPath,
+    `${createAgentTaskDescription({
+      sourceRelativePaths: sourceDocuments.map((item) => item.sourceRelativePath),
+    })}\n`,
+    "utf8",
+  );
 
   return {
     runRootDir,
     workspaceDir,
     taskPath,
     sourceDir,
-    handwritingImagePath,
-    problemsImagePath,
-    solutionsP1ImagePath,
-    solutionsP2ImagePath,
+    sourceDocuments,
     outputDir,
-    outputV1Path,
-    outputV2Path,
-    outputV3Path,
+    transcriptionPath,
     outputNotesPath,
     agentLogPath,
     agentMainLogPath,
@@ -324,17 +381,40 @@ async function buildPathConfig(options: {
   };
 }
 
-function createAgentTaskDescription(): string {
+function createAgentTaskDescription(options: {
+  sourceRelativePaths: string[];
+}): string {
+  const documentPathsJson = JSON.stringify(options.sourceRelativePaths);
+  const sourceList = options.sourceRelativePaths.map((item) => `- \`${item}\``);
   return [
     "# Task",
-    "Transcribe the student handwriting from source/clipboard-1.png.",
+    "Transcribe and evaluate the provided files.",
+    "The file bundle may include handwritten student work, problem statements, and optional official solutions.",
+    "Infer each file's role from its content; do not assume role from filename.",
+    "For each problem the student attempted to solve, produce a nicely formatted markdown report with embedded LaTeX:",
+    "- Problem statement",
+    "- Transcription of student solution",
+    "- Grading of the student solution",
+    "- Line-by-line feedback on the student solution",
+    "- Overall feedback and grading explanation",
+    "If no official solution is available in the attached files, solve the problem yourself first and use your own solution as the grading reference.",
     "",
     "## Required Inputs",
-    "- Handwriting: `source/clipboard-1.png`",
-    "- Problem context: `source/hamilton2017-h1-h2.jpg`",
-    "- Official solutions: `source/hamilton-2017-solutions-p1.jpg` and `source/hamilton-2017-solutions-p2.jpg`",
+    ...sourceList,
     "",
-    "Write benchmark artifacts to these exact paths: `output/transcription_v1.md`, `output/transcription_v2.md`, `output/transcription_v3.md`, and `output/agent-notes.md`.",
+    "## Required extract_text call",
+    "Use a single `extract_text` call to transcribe all target documents.",
+    "Do not use `supportingPaths` for this benchmark because all listed files are transcription targets.",
+    "Use exactly this shape:",
+    `- \`documentPaths: ${documentPathsJson}\``,
+    "- `outputPath: \"output/transcription.md\"`",
+    "- Include `instructions` that keep source-file boundaries clear in the output.",
+    "After this call, use `read_file output/transcription.md` for any edits; do not repeat an identical `extract_text` call.",
+    "",
+    "Include all relevant text from each file and ignore unrelated page clutter.",
+    "",
+    "Write benchmark artifacts to these exact paths: `output/transcription.md` and `output/agent-notes.md`.",
+    "Use `tmp/` for temporary files.",
     "",
     "## Workflow Skill",
     "Use this workflow skill for general transcription behavior:",
@@ -343,30 +423,23 @@ function createAgentTaskDescription(): string {
     HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
     "~~~",
     "",
-    "When complete, call `done` with a concise summary of ambiguity decisions.",
+    "When complete, call `done` with a concise summary of role-inference decisions and ambiguity handling.",
   ].join("\n");
 }
 
 function createAgentPrompt(): string {
-  return [
-    "Read 'TASK.md' from the workspace root.",
-    "Follow it exactly.",
-  ].join("\n");
+  return ["Read 'TASK.md' from the workspace root.", "Follow it exactly."].join(
+    "\n",
+  );
 }
 
 async function runAgenticBenchmark(options: {
-  handwritingImagePath: string;
-  problemsImagePath: string;
-  solutionsP1ImagePath: string;
-  solutionsP2ImagePath: string;
+  filePaths: string[];
   modelId: LlmTextModelId;
   useSubagents: boolean;
 }): Promise<AgenticBenchmarkResult> {
   const paths = await buildPathConfig({
-    handwritingImagePath: options.handwritingImagePath,
-    problemsImagePath: options.problemsImagePath,
-    solutionsP1ImagePath: options.solutionsP1ImagePath,
-    solutionsP2ImagePath: options.solutionsP2ImagePath,
+    filePaths: options.filePaths,
     modelId: options.modelId,
   });
   const logLines: string[] = [];
@@ -374,7 +447,6 @@ async function runAgenticBenchmark(options: {
     "prepare-workspace",
     "resolve-tools",
     "agent-loop",
-    "collect-agent-outputs",
     "write-artifacts",
   ] as const;
 
@@ -387,7 +459,9 @@ async function runAgenticBenchmark(options: {
     runRootDir: paths.runRootDir,
     agentLogPath: paths.agentLogPath,
     useSubagents: options.useSubagents,
-    ...(options.useSubagents ? { agentMainLogPath: paths.agentMainLogPath } : {}),
+    ...(options.useSubagents
+      ? { agentMainLogPath: paths.agentMainLogPath }
+      : {}),
     stageOrder,
     sanitizeLine: sanitizeLogText,
   });
@@ -417,6 +491,7 @@ async function runAgenticBenchmark(options: {
       userId: "benchmark-runner",
       serviceAccountJson: "{}",
       progress: logger.progress,
+      extractTextDebugRootDir: path.join(paths.runRootDir, "debug"),
     });
     const doneTool = tool({
       description: "Finish the run and provide summary.",
@@ -448,7 +523,9 @@ async function runAgenticBenchmark(options: {
       },
     });
     logger.logLine(
-      `exposed tools: ${Object.keys(selectedTools).sort((a, b) => a.localeCompare(b)).join(", ")}`,
+      `exposed tools: ${Object.keys(selectedTools)
+        .sort((a, b) => a.localeCompare(b))
+        .join(", ")}`,
     );
     logger.logStage("done", "resolve-tools");
 
@@ -456,7 +533,9 @@ async function runAgenticBenchmark(options: {
     const startedAt = Date.now();
     logger.logStage("start", "agent-loop");
     if (!isLlmTextModelId(options.modelId)) {
-      throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
+      throw new Error(
+        `Unsupported model id for runAgentLoop: ${options.modelId}`,
+      );
     }
     const toolLoopResult = await runAgentLoop({
       model: options.modelId,
@@ -474,33 +553,15 @@ async function runAgenticBenchmark(options: {
       steering,
       onEvent: logger.onEvent,
     });
-    logger.overrideUsageCostUsd(toolLoopResult.totalCostUsd);
     logger.logStage("done", "agent-loop");
 
-    const afterLoop = logger.snapshot();
+    const agentLlmCostUsd = toolLoopResult.totalCostUsd;
     const agentLatencyMs = Date.now() - startedAt;
     logger.logLine(
-      `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} cost=${formatUsd(afterLoop.usageCostUsd)}`,
+      `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} agentLlmCost=${formatUsd(agentLlmCostUsd)}`,
     );
 
-    logger.logStage("start", "collect-agent-outputs");
     const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
-    const [v1, v2, v3, notes] = await Promise.all([
-      readFile(paths.outputV1Path, "utf8"),
-      readFile(paths.outputV2Path, "utf8"),
-      readFile(paths.outputV3Path, "utf8"),
-      readFile(paths.outputNotesPath, "utf8"),
-    ]);
-    for (const [label, content] of [
-      ["v1", v1],
-      ["v2", v2],
-      ["v3", v3],
-      ["notes", notes],
-    ] as const) {
-      if (content.trim().length === 0) {
-        throw new Error(`Missing required output content in ${label}.`);
-      }
-    }
     const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
     const inspectionImagePaths = workspaceFiles.filter((item) => {
       if (!item.startsWith(outputDirPrefix)) {
@@ -511,41 +572,47 @@ async function runAgenticBenchmark(options: {
     });
     logger.logLine(
       [
-        `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()}`,
-        `v1Chars=${v1.length.toString()}`,
-        `v2Chars=${v2.length.toString()}`,
-        `v3Chars=${v3.length.toString()}`,
-        `notesChars=${notes.length.toString()}`,
+        `workspace_scanned: workspaceFiles=${workspaceFiles.length.toString()}`,
         `inspectionImages=${inspectionImagePaths.length.toString()}`,
       ].join(" "),
     );
-    logger.logStage("done", "collect-agent-outputs");
 
     const overallPass = true;
-    const reason = "Agent run completed and produced all required outputs.";
+    const reason = "Agent run completed.";
 
     const finalSnapshot = logger.snapshot();
-    const agentCostUsd = finalSnapshot.usageCostUsd;
+    const toolLlmCostSummary = extractToolLlmCostSummary(
+      finalSnapshot.eventLogRecords,
+    );
+    const toolLlmCostUsd = toolLlmCostSummary.totalCostUsd;
     const toolCallCount = Object.values(finalSnapshot.toolCallsByName).reduce(
       (sum, count) => sum + count,
       0,
     );
     const totalLatencyMs = agentLatencyMs;
-    const totalCostUsd = agentCostUsd;
+    const totalCostUsd = agentLlmCostUsd + toolLlmCostUsd;
 
     logLines.push(
       `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"}`,
     );
     logLines.push(
-      `agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(agentCostUsd)}`,
+      `agent_latency=${formatMs(agentLatencyMs)} agent_llm_cost=${formatUsd(agentLlmCostUsd)} tool_llm_cost=${formatUsd(toolLlmCostUsd)} total_cost=${formatUsd(totalCostUsd)}`,
+    );
+    logLines.push(
+      `tool_llm_cost_by_name=${formatToolCostByNameLine(toolLlmCostSummary.byToolName)}`,
     );
     logLines.push(`tool_calls=${toolCallCount.toString()}`);
     logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
     logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
     if (options.useSubagents) {
-      logLines.push(`agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`);
+      logLines.push(
+        `agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`,
+      );
       const subagentLogs = finalSnapshot.splitLogPathsCreated
-        .filter((item) => path.basename(item) !== path.basename(paths.agentMainLogPath))
+        .filter(
+          (item) =>
+            path.basename(item) !== path.basename(paths.agentMainLogPath),
+        )
         .map((item) => toRepoRelativePath(item))
         .sort((a, b) => a.localeCompare(b));
       logLines.push(
@@ -569,15 +636,15 @@ async function runAgenticBenchmark(options: {
       runDir: toRepoRelativePath(paths.runRootDir),
       workspaceDir: toRepoRelativePath(paths.workspaceDir),
       taskPath: toRepoRelativePath(paths.taskPath),
-      handwritingImagePath: toRepoRelativePath(paths.handwritingImagePath),
-      problemsImagePath: toRepoRelativePath(paths.problemsImagePath),
-      solutionsP1ImagePath: toRepoRelativePath(paths.solutionsP1ImagePath),
-      solutionsP2ImagePath: toRepoRelativePath(paths.solutionsP2ImagePath),
-      transcriptionV1Path: toRepoRelativePath(paths.outputV1Path),
-      transcriptionV2Path: toRepoRelativePath(paths.outputV2Path),
-      transcriptionV3Path: toRepoRelativePath(paths.outputV3Path),
+      inputFilePaths: options.filePaths,
+      sourceDocumentPaths: paths.sourceDocuments.map((item) =>
+        toRepoRelativePath(item.sourcePath),
+      ),
+      transcriptionPath: toRepoRelativePath(paths.transcriptionPath),
       notesPath: toRepoRelativePath(paths.outputNotesPath),
-      inspectionImagePaths: inspectionImagePaths.map((item) => toRepoRelativePath(item)),
+      inspectionImagePaths: inspectionImagePaths.map((item) =>
+        toRepoRelativePath(item),
+      ),
       agentLogPath: toRepoRelativePath(paths.agentLogPath),
       eventLogPath: toRepoRelativePath(paths.eventLogPath),
       summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
@@ -586,23 +653,34 @@ async function runAgenticBenchmark(options: {
         modelCalls: toolLoopResult.steps.length,
         toolCalls: toolCallCount,
         toolCallsByName: finalSnapshot.toolCallsByName,
-        costUsd: agentCostUsd,
+        llmCostUsd: agentLlmCostUsd,
         usage: finalSnapshot.usageTotals,
         thoughtsChars: finalSnapshot.thoughtChars,
         responseChars: finalSnapshot.responseChars,
         doneSummary: finalSnapshot.doneSummary,
       },
+      toolLlmCostByName: toolLlmCostSummary.byToolName,
       total: {
         latencyMs: totalLatencyMs,
         costUsd: totalCostUsd,
+        agentLlmCostUsd,
+        toolLlmCostUsd,
       },
     };
 
-    await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-    await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
+    await writeFile(
+      paths.summaryJsonPath,
+      `${JSON.stringify(result, null, 2)}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(paths.runRootDir, "run.log"),
+      `${logLines.join("\n")}\n`,
+      "utf8",
+    );
     logger.logStage("done", "write-artifacts");
     logger.logLine(
-      `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} runDir=${result.runDir}`,
+      `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} agentLlmCost=${formatUsd(result.total.agentLlmCostUsd)} toolLlmCost=${formatUsd(result.total.toolLlmCostUsd)} runDir=${result.runDir}`,
     );
 
     return result;
@@ -613,7 +691,9 @@ async function runAgenticBenchmark(options: {
   }
 }
 
-async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Promise<string> {
+async function renderSingleResultsMarkdown(
+  result: AgenticBenchmarkResult,
+): Promise<string> {
   const lines: string[] = [];
   lines.push("# Handwriting Transcription Agentic Benchmark Results");
   lines.push("");
@@ -627,13 +707,9 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
   lines.push(`- Run dir: ${result.runDir}`);
   lines.push(`- Workspace dir: ${result.workspaceDir}`);
   lines.push(`- Task file: ${result.taskPath}`);
-  lines.push(`- Handwriting image: ${result.handwritingImagePath}`);
-  lines.push(`- Problem context image: ${result.problemsImagePath}`);
-  lines.push(`- Solutions image p1: ${result.solutionsP1ImagePath}`);
-  lines.push(`- Solutions image p2: ${result.solutionsP2ImagePath}`);
-  lines.push(`- Transcription v1: ${result.transcriptionV1Path}`);
-  lines.push(`- Transcription v2: ${result.transcriptionV2Path}`);
-  lines.push(`- Transcription v3: ${result.transcriptionV3Path}`);
+  lines.push(`- Source documents: ${result.sourceDocumentPaths.join(", ")}`);
+  lines.push(`- Original input files: ${result.inputFilePaths.join(", ")}`);
+  lines.push(`- Transcription: ${result.transcriptionPath}`);
   lines.push(`- Agent notes: ${result.notesPath}`);
   lines.push(`- Agent log: ${result.agentLogPath}`);
   lines.push(`- Agent event log: ${result.eventLogPath}`);
@@ -642,10 +718,13 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
   lines.push("## Metrics");
   lines.push("");
   lines.push(
-    `- Agent: latency=${formatMs(result.agent.latencyMs)} cost=${formatUsd(result.agent.costUsd)} modelCalls=${result.agent.modelCalls.toString()} toolCalls=${result.agent.toolCalls.toString()}`,
+    `- Agent: latency=${formatMs(result.agent.latencyMs)} llmCost=${formatUsd(result.agent.llmCostUsd)} modelCalls=${result.agent.modelCalls.toString()} toolCalls=${result.agent.toolCalls.toString()}`,
   );
   lines.push(
-    `- Total: latency=${formatMs(result.total.latencyMs)} cost=${formatUsd(result.total.costUsd)}`,
+    `- Tool LLM: cost=${formatUsd(result.total.toolLlmCostUsd)}`,
+  );
+  lines.push(
+    `- Total: latency=${formatMs(result.total.latencyMs)} cost=${formatUsd(result.total.costUsd)} (agent=${formatUsd(result.total.agentLlmCostUsd)} + tools=${formatUsd(result.total.toolLlmCostUsd)})`,
   );
   lines.push(
     `- Agent text chars: thoughts=${result.agent.thoughtsChars.toString()} response=${result.agent.responseChars.toString()}`,
@@ -653,10 +732,23 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
   lines.push("");
   lines.push("### Tool Calls By Name");
   lines.push("");
-  for (const [toolName, count] of Object.entries(result.agent.toolCallsByName).sort((a, b) =>
-    b[1] - a[1],
-  )) {
+  for (const [toolName, count] of Object.entries(
+    result.agent.toolCallsByName,
+  ).sort((a, b) => b[1] - a[1])) {
     lines.push(`- ${toolName}: ${count.toString()}`);
+  }
+  lines.push("");
+  lines.push("### Tool LLM Cost By Name");
+  lines.push("");
+  const toolCostByNameEntries = Object.entries(result.toolLlmCostByName).sort(
+    (a, b) => b[1] - a[1],
+  );
+  if (toolCostByNameEntries.length === 0) {
+    lines.push("_No tool LLM costs recorded._");
+  } else {
+    for (const [toolName, costUsd] of toolCostByNameEntries) {
+      lines.push(`- ${toolName}: ${formatUsd(costUsd)}`);
+    }
   }
   lines.push("");
   lines.push("## Inspection Images");
@@ -671,14 +763,14 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
   }
   lines.push("");
   for (const [label, resultPath] of [
-    ["Transcription v1", result.transcriptionV1Path],
-    ["Transcription v2", result.transcriptionV2Path],
-    ["Transcription v3", result.transcriptionV3Path],
+    ["Transcription", result.transcriptionPath],
     ["Agent Notes", result.notesPath],
   ] as const) {
     lines.push(`## ${label}`);
     lines.push("");
-    const text = await readFile(fromRepoRelativePath(resultPath), "utf8").catch(() => "");
+    const text = await readFile(fromRepoRelativePath(resultPath), "utf8").catch(
+      () => "",
+    );
     if (text.trim().length === 0) {
       lines.push(`_Missing ${label.toLowerCase()} output._`);
     } else {
@@ -694,7 +786,9 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
 async function renderResultsMarkdown(
   outcomes: readonly AgenticBenchmarkRunOutcome[],
 ): Promise<string> {
-  const ordered = [...outcomes].sort((a, b) => a.modelId.localeCompare(b.modelId));
+  const ordered = [...outcomes].sort((a, b) =>
+    a.modelId.localeCompare(b.modelId),
+  );
   if (ordered.length === 1 && ordered[0]?.result) {
     return await renderSingleResultsMarkdown(ordered[0].result);
   }
@@ -727,14 +821,18 @@ async function renderResultsMarkdown(
     if (outcome.result) {
       const single = await renderSingleResultsMarkdown(outcome.result);
       const singleLines = single.trimEnd().split("\n");
-      const bodyStart = singleLines.findIndex((line) => line.startsWith("## Paths"));
+      const bodyStart = singleLines.findIndex((line) =>
+        line.startsWith("## Paths"),
+      );
       if (bodyStart >= 0) {
         lines.push(...singleLines.slice(bodyStart));
       } else {
         lines.push(...singleLines);
       }
     } else {
-      lines.push(`- Subagents: ${outcome.useSubagents ? "ENABLED" : "DISABLED"}`);
+      lines.push(
+        `- Subagents: ${outcome.useSubagents ? "ENABLED" : "DISABLED"}`,
+      );
       lines.push(`- Status: ERROR`);
       lines.push(`- Error: ${outcome.error ?? "unknown error"}`);
       lines.push(
@@ -747,7 +845,9 @@ async function renderResultsMarkdown(
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-function resolveResultsMarkdownPath(outcomes: readonly AgenticBenchmarkRunOutcome[]): string {
+function resolveResultsMarkdownPath(
+  outcomes: readonly AgenticBenchmarkRunOutcome[],
+): string {
   if (outcomes.length === 1 && outcomes[0]?.result) {
     const runDir = fromRepoRelativePath(outcomes[0].result.runDir);
     return path.join(runDir, "RESULTS.md");
@@ -757,12 +857,7 @@ function resolveResultsMarkdownPath(outcomes: readonly AgenticBenchmarkRunOutcom
 
 async function main(): Promise<void> {
   const cli = parseCliArgs(process.argv.slice(2));
-  await Promise.all([
-    assertFileExists(cli.handwritingImagePath),
-    assertFileExists(cli.problemsImagePath),
-    assertFileExists(cli.solutionsP1ImagePath),
-    assertFileExists(cli.solutionsP2ImagePath),
-  ]);
+  await Promise.all(cli.filePaths.map((filePath) => assertFileExists(filePath)));
 
   await mkdir(OUTPUT_ROOT_DIR, { recursive: true });
 
@@ -770,10 +865,7 @@ async function main(): Promise<void> {
     cli.modelIds.map(async (modelId): Promise<AgenticBenchmarkRunOutcome> => {
       try {
         const result = await runAgenticBenchmark({
-          handwritingImagePath: cli.handwritingImagePath,
-          problemsImagePath: cli.problemsImagePath,
-          solutionsP1ImagePath: cli.solutionsP1ImagePath,
-          solutionsP2ImagePath: cli.solutionsP2ImagePath,
+          filePaths: cli.filePaths,
           modelId,
           useSubagents: cli.useSubagents,
         });
@@ -795,7 +887,9 @@ async function main(): Promise<void> {
   const markdown = await renderResultsMarkdown(outcomes);
   const resultsMarkdownPath = resolveResultsMarkdownPath(outcomes);
   await writeFile(resultsMarkdownPath, markdown, "utf8");
-  console.log(`[handwriting-bench] wrote ${toRepoRelativePath(resultsMarkdownPath)}`);
+  console.log(
+    `[handwriting-bench] wrote ${toRepoRelativePath(resultsMarkdownPath)}`,
+  );
 
   const failedCount = outcomes.filter((outcome) => !outcome.result).length;
   if (failedCount > 0) {

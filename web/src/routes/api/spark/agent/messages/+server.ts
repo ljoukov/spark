@@ -1,9 +1,8 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
-	appendToolCallStreamLog,
 	createTask,
-	PDF_TRANSCRIPTION_SKILL_TEXT,
+	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
 	resolveWorkspacePathContentType,
 	runToolLoop,
 	tool,
@@ -615,11 +614,73 @@ type StreamHandlers = {
 	onDelta?: (delta: LlmTextDelta) => void;
 };
 
+const TOOL_LOG_SNIPPET_MAX_CHARS = 220;
+
+function serializeToolLogValue(value: unknown): string {
+	if (typeof value === 'string') {
+		return value;
+	}
+	try {
+		const serialized = JSON.stringify(value);
+		if (typeof serialized === 'string') {
+			return serialized;
+		}
+	} catch {
+		// ignore JSON serialization errors and use the fallback below
+	}
+	return String(value);
+}
+
+function formatToolLogSnippet(value: unknown): string {
+	const compact = serializeToolLogValue(value).replace(/\s+/gu, ' ').trim();
+	if (compact.length === 0) {
+		return '<empty>';
+	}
+	if (compact.length <= TOOL_LOG_SNIPPET_MAX_CHARS) {
+		return compact;
+	}
+	return `${compact.slice(0, TOOL_LOG_SNIPPET_MAX_CHARS)}…`;
+}
+
+function appendSparkChatToolCallLog(options: {
+	event: LlmStreamEvent;
+	append: (line: string) => void;
+}): void {
+	const event = options.event;
+	if (event.type !== 'tool_call') {
+		return;
+	}
+	const callIdSegment =
+		typeof event.callId === 'string' && event.callId.trim().length > 0
+			? ` callId=${event.callId}`
+			: '';
+	const prefix = [
+		`tool_call_${event.phase}:`,
+		`turn=${event.turn.toString()}`,
+		`index=${event.toolIndex.toString()}`,
+		`tool=${event.toolName}${callIdSegment}`
+	].join(' ');
+	if (event.phase === 'started') {
+		options.append(prefix);
+		options.append(`tool_call_input: ${formatToolLogSnippet(event.input)}`);
+		return;
+	}
+	const durationSegment =
+		typeof event.durationMs === 'number' && Number.isFinite(event.durationMs)
+			? ` durationMs=${Math.max(0, Math.round(event.durationMs)).toString()}`
+			: '';
+	options.append(`${prefix} status=${event.error ? 'error' : 'ok'}${durationSegment}`);
+	options.append(`tool_call_output: ${formatToolLogSnippet(event.output)}`);
+	if (typeof event.error === 'string' && event.error.trim().length > 0) {
+		options.append(`tool_call_error: ${event.error.trim()}`);
+	}
+}
+
 function logSparkChatToolLoopEvent(options: {
 	conversationId: string;
 	event: LlmStreamEvent;
 }): void {
-	appendToolCallStreamLog({
+	appendSparkChatToolCallLog({
 		event: options.event,
 		append: (line) => {
 			console.log(`[spark-chat:${options.conversationId}] ${line}`);
@@ -841,6 +902,16 @@ const graderCreateSchema = z
 		olympiad: nullableOptionalString().describe(
 			'Optional olympiad name override for this learner (for example: Hamilton Olympiad by UKMT).'
 		),
+		referenceSourcePolicy: z
+			.enum(['uploaded-only', 'allow-online-search-when-problems-missing'])
+			.optional()
+			.describe(
+				[
+					'Controls whether the grader may search online for missing problem statements/official references.',
+					'- uploaded-only: use uploaded/pasted materials only; do not search online.',
+					'- allow-online-search-when-problems-missing: online search is allowed only when problem statements are missing/unclear.'
+				].join('\n')
+			),
 		notes: nullableOptionalString().describe(
 			'Optional grading focus for this run (for example: focus on proof rigor and notation).'
 		)
@@ -856,6 +927,11 @@ function buildGraderBrief(options: {
 		olympiadLabel: string;
 	};
 }): string {
+	const referenceSourcePolicy = options.input.referenceSourcePolicy ?? 'uploaded-only';
+	const referenceSourcePolicyText =
+		referenceSourcePolicy === 'allow-online-search-when-problems-missing'
+			? 'allow-online-search-when-problems-missing (search online only when problem statements are missing or unclear)'
+			: 'uploaded-only (do not search online; rely on uploaded/pasted materials)';
 	const lines: string[] = [
 		'# Grader request',
 		'',
@@ -870,6 +946,7 @@ function buildGraderBrief(options: {
 	if (options.input.notes) {
 		lines.push('', '## User grading focus', options.input.notes.trim());
 	}
+	lines.push('', '## Reference source policy', `- ${referenceSourcePolicyText}`);
 	if (options.attachments.length > 0) {
 		lines.push('', '## Uploaded work');
 		let index = 0;
@@ -890,9 +967,10 @@ function buildGraderBrief(options: {
 	lines.push(
 		'',
 		'## Objectives',
-		'- Identify olympiad + year/paper from the learner work.',
-		'- Find official paper and mark scheme.',
-		'- Transcribe student work accurately before grading.'
+		'- Identify olympiad + year/paper from uploaded learner materials.',
+		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
+		'- Respect the reference source policy before any online search.',
+		'- If official solutions are missing, solve each problem carefully before grading.'
 	);
 	return lines.join('\n').trim() + '\n';
 }
@@ -909,19 +987,20 @@ function renderGraderTask(options: {
 		.trim();
 	const transcriptionSkillSection = [
 		'',
-		'## PDF transcription workflow (must follow)',
-		'Apply this workflow when transcribing:',
-		"- official paper PDFs (problem statements + diagrams),",
-		"- official solutions / mark-scheme PDFs,",
-		"- student-uploaded PDFs/images.",
+		'## Handwriting transcription workflow (must follow)',
+		'Use this skill for extraction-first transcription of uploaded student work, problem statements, and official solutions.',
 		'',
 		'~~~markdown',
-		PDF_TRANSCRIPTION_SKILL_TEXT,
+		HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
 		'~~~',
+		'',
+		'Grader-specific override:',
+		'- When uploaded files are transcription targets, include them in the same initial `extract_text` call via `documentPaths`.',
+		'- Leave `supportingPaths` unset unless a file is disambiguation-only and is not itself a transcription target.',
 		'',
 		'Run-mode constraints for grader runs:',
 		"- Use main-agent execution only (no subagents).",
-		"- Keep reference-text extraction disabled; rely on page images and direct PDF reading tools.",
+		"- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.",
 	].join('\n');
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
@@ -945,11 +1024,13 @@ function buildGraderAgentPrompt(options: {
 		'- grader/task.md',
 		`- grader/${options.memoryPath}`,
 		'- grader/uploads/index.json',
+		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'',
 		'Deliverables:',
-		`1) Write per-problem markdown files under ${options.problemsDir}/`,
-		`2) Write ${options.summaryPath}`,
-		'3) Call done with olympiad/year and total marks summary'
+		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass',
+		`2) Write per-problem markdown files under ${options.problemsDir}/`,
+		`3) Write ${options.summaryPath}`,
+		'4) Call done with olympiad/year and total marks summary'
 	].join('\n');
 }
 
@@ -1659,6 +1740,8 @@ function buildSparkChatTools(options: {
 				'Start an olympiad grading run from the learner’s uploaded solutions.',
 				'Creates a grader workspace, seeds grader/task.md + grader/memory.md, and launches a background agent.',
 				'Use this when the learner asks to mark/grade olympiad paper solutions.',
+				'Uploads can include student handwriting, problem statements, and optional official solutions/mark schemes.',
+				'Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.',
 				'If uploads are present, they are attached to the grader agent context automatically.',
 				'Returns href and graderRunsHref for navigation.'
 			].join('\n'),

@@ -11,6 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 
+import { Command } from "commander";
 import { z } from "zod";
 
 import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
@@ -357,17 +358,17 @@ async function withRetries<T>(
 }
 
 function parseCliArgs(args: readonly string[]): { sourcePdfPath: string } {
-  const raw: { sourcePdfPath?: string } = {};
-  for (const arg of args) {
-    if (arg.startsWith("--source-pdf=")) {
-      raw.sourcePdfPath = arg.slice("--source-pdf=".length).trim();
-    }
-  }
+  const command = new Command("bench:pdf-transcription")
+    .description("Run non-agentic PDF transcription benchmark.")
+    .option("--source-pdf <path>", "source PDF path", DEFAULT_SOURCE_PDF_PATH);
+  command.parse(args, { from: "user" });
+  const options = command.opts<{ sourcePdf: string }>();
+
   return z
     .object({
-      sourcePdfPath: z.string().trim().min(1).default(DEFAULT_SOURCE_PDF_PATH),
+      sourcePdfPath: z.string().trim().min(1),
     })
-    .parse(raw);
+    .parse({ sourcePdfPath: options.sourcePdf });
 }
 
 async function assertFileExists(inputPath: string): Promise<void> {

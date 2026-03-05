@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
+import { Command } from "commander";
 import { z } from "zod";
 import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
@@ -92,46 +93,51 @@ type BenchmarkResult = {
 };
 
 function parseCliArgs(args: readonly string[]): CliArgs {
-  const raw: {
-    sourceFilePath?: string;
-    modelId?: string;
-    useSubagents?: string;
-  } = {};
+  const command = new Command("bench:text-extraction")
+    .description("Run text extraction benchmark with extract_text tool.")
+    .option(
+      "--source-file <path>",
+      "source file path to extract text from",
+      DEFAULT_SOURCE_FILE_PATH,
+    )
+    .option("--input-file <path>", "alias for --source-file")
+    .option("--model-id <modelId>", "model id for runAgentLoop", DEFAULT_AGENT_MODEL_ID)
+    .option("--model <modelId>", "alias for --model-id")
+    .option(
+      "--use-subagents [enabled]",
+      "enable subagents (true/false, 1/0, yes/no, on/off)",
+    )
+    .option("--no-use-subagents", "disable subagents");
+  command.parse(args, { from: "user" });
 
-  for (const arg of args) {
-    if (arg.startsWith("--input-file=")) {
-      raw.sourceFilePath = arg.slice("--input-file=".length).trim();
-      continue;
-    }
-    if (arg.startsWith("--source-file=")) {
-      raw.sourceFilePath = arg.slice("--source-file=".length).trim();
-      continue;
-    }
-    if (arg.startsWith("--model-id=")) {
-      raw.modelId = arg.slice("--model-id=".length).trim();
-      continue;
-    }
-    if (arg === "--use-subagents") {
-      raw.useSubagents = "true";
-      continue;
-    }
-    if (arg === "--no-use-subagents") {
-      raw.useSubagents = "false";
-      continue;
-    }
-    if (arg.startsWith("--use-subagents=")) {
-      raw.useSubagents = arg.slice("--use-subagents=".length).trim();
-      continue;
-    }
-  }
+  const options = command.opts<{
+    sourceFile: string;
+    inputFile?: string;
+    modelId: string;
+    model?: string;
+    useSubagents?: string | boolean;
+  }>();
+
+  const useSubagentsRaw =
+    typeof options.useSubagents === "boolean"
+      ? options.useSubagents
+        ? "true"
+        : "false"
+      : options.useSubagents;
 
   const parsed = z
     .object({
-      sourceFilePath: z.string().trim().min(1).default(DEFAULT_SOURCE_FILE_PATH),
-      modelId: z.string().trim().min(1).default(DEFAULT_AGENT_MODEL_ID),
+      sourceFilePath: z.string().trim().min(1),
+      modelId: z.string().trim().min(1),
+      modelAlias: z.string().trim().min(1).optional(),
       useSubagents: z.string().trim().min(1).optional(),
     })
-    .parse(raw);
+    .parse({
+      sourceFilePath: options.inputFile ?? options.sourceFile,
+      modelId: options.modelId,
+      modelAlias: options.model,
+      useSubagents: useSubagentsRaw,
+    });
 
   const parseBooleanFlag = (
     value: string | undefined,
@@ -153,7 +159,7 @@ function parseCliArgs(args: readonly string[]): CliArgs {
     );
   };
 
-  const modelId = parsed.modelId.replaceAll("-gtp-", "-gpt-");
+  const modelId = (parsed.modelAlias ?? parsed.modelId).replaceAll("-gtp-", "-gpt-");
   return {
     sourceFilePath: parsed.sourceFilePath,
     modelId,

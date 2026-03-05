@@ -20,26 +20,42 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 
 ## Required workflow
 
-1. Determine the target paper:
-   - infer olympiad, year, and paper title from uploaded work + user request.
-   - if uncertain, write your best guess and explain uncertainty in the grading output.
-2. Collect official references:
-   - use `web_search` to find the paper, marking scheme, and official solutions (if available).
+1. Inventory and classify uploads first:
+   - read `grader/uploads/index.json` and classify each upload as:
+     - student submission target,
+     - problem statement target,
+     - official solution / mark-scheme target.
+   - treat uploaded files as the primary source of truth.
+   - if a file role is uncertain, make your best guess and note uncertainty in the grading output.
+2. Run one extraction-first transcription pass:
+   - use exactly one initial `extract_text` call to transcribe all primary targets.
+   - include all transcription targets in `documentPaths`:
+     - student submission files,
+     - uploaded problem statement files,
+     - uploaded official solution files (if provided).
+   - write to `grader/output/transcription.md`.
+   - in `instructions`, require separate sections for student submissions, problem statements, and official solutions, each with source filenames.
+   - do not pass these target files via `supportingPaths`; they are primary transcription targets.
+   - after this call, read `grader/output/transcription.md` for cleanup and do not repeat an identical call.
+3. Determine paper + references:
+   - infer olympiad, year, and paper title from transcribed problem statements + user request.
+   - check `request.json` input `referenceSourcePolicy` before any online search:
+     - `uploaded-only`: do NOT use `web_search` for missing problems/solutions.
+     - `allow-online-search-when-problems-missing`: online search is allowed only when problem statements are missing or low quality.
    - prefer official UKMT URLs over mirror hosts.
    - for official PDF sources, do NOT use `web_fetch`.
-   - write extraction instructions to `grader/prompts/<name>.md`.
-   - use the PDF transcription workflow for workspace PDFs and diagram-sensitive tasks: `pdf_to_images` -> `draw_grid_overlay` -> `crop_image` -> `trim_image` -> `view_image`.
-   - keep working files under `grader/` and include final diagram file references in outputs.
+   - if you need additional official PDFs/images, include them in `documentPaths` for a follow-up `extract_text` call with clear role instructions.
    - only use `web_fetch` for non-PDF pages (for example thresholds/help pages).
-3. Transcribe precisely:
-   - transcribe each graded problem statement.
-   - transcribe official solution text/steps from official sources before grading.
-   - transcribe the student's solution exactly from uploads before evaluating.
-4. Grade each problem deeply:
-   - compare against official marking guidance.
-   - award marks fairly even when the student's method differs from official solutions, if mathematically correct.
-   - reference paper / mark-scheme / official solution URLs in the grading notes when available.
-5. Write one markdown file per problem under `grader/output/problems/`:
+4. Establish official solution baseline:
+   - if official solutions are available (uploaded or found online), use them.
+   - if problem statements are uploaded but official solutions are missing, do NOT search online for solutions; solve each problem yourself.
+   - if official solutions are unavailable, solve each problem yourself very carefully before grading.
+   - when self-solving, clearly mark this in `## Official solution` as "Derived solution (official solution unavailable)".
+5. Grade each problem deeply:
+   - compare against official guidance when available; otherwise compare against your carefully derived solution.
+   - award marks fairly even when the student's method differs, if mathematically correct.
+   - reference paper / mark-scheme / official solution URLs when available.
+6. Write one markdown file per problem under `grader/output/problems/`:
    - file path pattern: `grader/output/problems/<problem-id>.md`
    - use Markdown with LaTeX math notation (`$...$` and `$$...$$`) when writing mathematics.
    - required section headings (exact):
@@ -50,18 +66,17 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
      - `## Grading`
      - `## Annotation and feedback`
      - `## Overall feedback`
-   - `## Official problem statement` must be the cleaned statement from the official paper source.
-   - `## Official solution` must summarize the official mark-scheme/solution in markdown (with LaTeX where needed), with source URLs.
+   - `## Problem statement` should contain the transcribed statement from the learner-provided context.
+   - `## Official problem statement` should contain the cleaned canonical statement used for grading.
+   - `## Official solution` should summarize official solutions (with URLs) when available, or your derived solution when official solutions are unavailable.
    - in `## Annotation and feedback`, choose line-by-line or statement-by-statement annotation based on what best matches the solution structure, and quote the student text where useful.
-6. Write run summary JSON to `grader/output/run-summary.json` with this shape:
+7. Write run summary JSON to `grader/output/run-summary.json` with this shape:
 
 ```json
 {
 	"olympiad": "string",
 	"year": "string",
 	"paperName": "string",
-	"paperUrl": "string",
-	"markSchemeUrl": "string",
 	"totals": {
 		"awardedMarks": 0,
 		"maxMarks": 0
@@ -80,7 +95,8 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 }
 ```
 
-7. Call `done({summary})` with:
+   - Include `paperUrl` and `markSchemeUrl` only when known.
+8. Call `done({summary})` with:
    - inferred olympiad/year
    - total marks
    - number of problems graded

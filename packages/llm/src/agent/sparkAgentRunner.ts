@@ -32,7 +32,7 @@ import {
 
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
-import { formatMillis } from "../utils/format";
+import { formatByteSize, formatMillis } from "../utils/format";
 import {
   deleteFirestoreDocument,
   getFirestoreDocument,
@@ -89,7 +89,7 @@ const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
 const DEFAULT_EXTRACT_TEXT_MODEL_ID: LlmTextModelId =
-  "gemini-2.5-pro";
+  "gemini-flash-latest";
 const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -1560,6 +1560,238 @@ async function persistLlmLogsFromDebugDirToWorkspace(options: {
   }
 }
 
+type ExtractTextDebugInlineAttachment = {
+  index: number;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  labelText: string | null;
+  bytes: Buffer;
+};
+
+function resolveInlineDataExtension(mimeType: string): string {
+  const normalized = (mimeType.split(";")[0] ?? "").trim().toLowerCase();
+  switch (normalized) {
+    case "image/jpeg": {
+      return "jpg";
+    }
+    case "image/png": {
+      return "png";
+    }
+    case "image/webp": {
+      return "webp";
+    }
+    case "image/gif": {
+      return "gif";
+    }
+    case "image/heic": {
+      return "heic";
+    }
+    case "image/heif": {
+      return "heif";
+    }
+    case "application/pdf": {
+      return "pdf";
+    }
+    case "text/plain": {
+      return "txt";
+    }
+    case "text/markdown": {
+      return "md";
+    }
+    case "application/json": {
+      return "json";
+    }
+  }
+  const slashIndex = normalized.indexOf("/");
+  if (slashIndex >= 0) {
+    const subtype = normalized.slice(slashIndex + 1).split("+")[0] ?? "";
+    const cleaned = subtype.replace(/[^a-z0-9]+/gu, "");
+    if (cleaned.length > 0) {
+      return cleaned;
+    }
+  }
+  return "bin";
+}
+
+function renderExtractTextPromptWithInlineData(options: {
+  parts: readonly LlmContentPart[];
+}): { promptText: string; inlineAttachments: ExtractTextDebugInlineAttachment[] } {
+  const sections: string[] = [];
+  const inlineAttachments: ExtractTextDebugInlineAttachment[] = [];
+  let lastTextLabel: string | null = null;
+  for (const part of options.parts) {
+    if (part.type === "text") {
+      sections.push(part.text);
+      const trimmed = part.text.trim();
+      if (trimmed.length > 0) {
+        const lines = trimmed.split("\n");
+        const lastLine = lines[lines.length - 1];
+        lastTextLabel = typeof lastLine === "string" ? lastLine.trim() : null;
+      } else {
+        lastTextLabel = null;
+      }
+      continue;
+    }
+    const mimeType =
+      typeof part.mimeType === "string" && part.mimeType.trim().length > 0
+        ? part.mimeType.trim().toLowerCase()
+        : "application/octet-stream";
+    const bytes = Buffer.from(part.data, "base64");
+    const nextIndex = inlineAttachments.length + 1;
+    const filename = `inline-data-${nextIndex.toString()}.${resolveInlineDataExtension(mimeType)}`;
+    const labelText =
+      lastTextLabel ?? `Inline data ${nextIndex.toString()} follows as inline data.`;
+    sections.push(
+      [
+        "----------",
+        labelText,
+        `file=${filename} mime=${mimeType} size=${formatByteSize(bytes.length)}`,
+        "----------",
+      ].join("\n"),
+    );
+    inlineAttachments.push({
+      index: nextIndex,
+      filename,
+      mimeType,
+      sizeBytes: bytes.length,
+      labelText: lastTextLabel,
+      bytes,
+    });
+    lastTextLabel = null;
+  }
+  return {
+    promptText: sections.join("\n\n"),
+    inlineAttachments,
+  };
+}
+
+async function persistExtractTextRequestDebugArtifacts(options: {
+  debugRootDir: string;
+  toolIdSegment: string;
+  promptText: string;
+  promptChars: number;
+  modelId: string;
+  outputPath: string;
+  documentPaths: readonly string[];
+  supportingPaths: readonly string[];
+  instructions?: string;
+  supportingInstructions?: string;
+  inlineAttachments: readonly ExtractTextDebugInlineAttachment[];
+}): Promise<void> {
+  const maxBytes = 900_000;
+  const baseDir = path.join(
+    options.debugRootDir,
+    "extract_text",
+    options.toolIdSegment,
+  );
+  await ensureDir(baseDir);
+  await writeFile(
+    path.join(baseDir, "prompt.txt"),
+    capUtf8Text(options.promptText, maxBytes),
+    {
+      encoding: "utf8",
+    },
+  );
+  for (const attachment of options.inlineAttachments) {
+    await writeFile(path.join(baseDir, attachment.filename), attachment.bytes);
+  }
+  const requestMetadata = {
+    capturedAt: new Date().toISOString(),
+    modelId: options.modelId,
+    outputPath: options.outputPath,
+    promptChars: options.promptChars,
+    documentPaths: options.documentPaths,
+    supportingPaths: options.supportingPaths,
+    ...(typeof options.instructions === "string" &&
+    options.instructions.trim().length > 0
+      ? { instructions: options.instructions }
+      : {}),
+    ...(typeof options.supportingInstructions === "string" &&
+    options.supportingInstructions.trim().length > 0
+      ? { supportingInstructions: options.supportingInstructions }
+      : {}),
+    inlineDataFiles: options.inlineAttachments.map((attachment) => ({
+      index: attachment.index,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes,
+      labelText: attachment.labelText,
+    })),
+  };
+  await writeFile(
+    path.join(baseDir, "request.metadata.json"),
+    `${JSON.stringify(requestMetadata, null, 2)}\n`,
+    {
+      encoding: "utf8",
+    },
+  );
+}
+
+async function persistExtractTextResponseDebugArtifacts(options: {
+  debugRootDir: string;
+  toolIdSegment: string;
+  responseText: string;
+  thinkingText: string;
+  modelId: string;
+  modelVersion?: string;
+  elapsedMs?: number;
+  costUsd?: number | null;
+  usageTokens: unknown;
+  thinkingTokens: number | null;
+  streamedResponseChars: number;
+  streamedResponseBytes: number;
+}): Promise<void> {
+  const maxBytes = 900_000;
+  const baseDir = path.join(
+    options.debugRootDir,
+    "extract_text",
+    options.toolIdSegment,
+  );
+  await ensureDir(baseDir);
+  await writeFile(
+    path.join(baseDir, "response.txt"),
+    capUtf8Text(options.responseText, maxBytes),
+    {
+      encoding: "utf8",
+    },
+  );
+  await writeFile(
+    path.join(baseDir, "thinking.txt"),
+    capUtf8Text(options.thinkingText, maxBytes),
+    {
+      encoding: "utf8",
+    },
+  );
+  const responseMetadata = {
+    capturedAt: new Date().toISOString(),
+    modelId: options.modelId,
+    ...(typeof options.modelVersion === "string" &&
+    options.modelVersion.trim().length > 0
+      ? { modelVersion: options.modelVersion }
+      : {}),
+    ...(typeof options.elapsedMs === "number" && Number.isFinite(options.elapsedMs)
+      ? { elapsedMs: options.elapsedMs }
+      : {}),
+    ...(typeof options.costUsd === "number" && Number.isFinite(options.costUsd)
+      ? { costUsd: options.costUsd }
+      : {}),
+    usageTokens: options.usageTokens,
+    thinkingTokens: options.thinkingTokens,
+    thinkingTextChars: options.thinkingText.length,
+    responseTextChars: options.responseText.length,
+    streamedResponseChars: options.streamedResponseChars,
+    streamedResponseBytes: options.streamedResponseBytes,
+  };
+  await writeFile(
+    path.join(baseDir, "response.metadata.json"),
+    `${JSON.stringify(responseMetadata, null, 2)}\n`,
+    {
+      encoding: "utf8",
+    },
+  );
+}
+
 async function listFilesRecursive(options: {
   rootDir: string;
   maxDepth: number;
@@ -2888,6 +3120,7 @@ function buildAgentTools(options: {
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
   debug?: LlmDebugOptions;
+  extractTextDebugRootDir?: string;
 }): LlmToolSet {
   const {
     workspace,
@@ -2898,6 +3131,7 @@ function buildAgentTools(options: {
     enforceLessonPipeline,
     allowPythonExec,
     debug,
+    extractTextDebugRootDir,
   } = options;
 
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
@@ -3682,6 +3916,20 @@ function buildAgentTools(options: {
         ];
       }),
     ];
+    const { promptText: renderedPromptWithInlineData, inlineAttachments } =
+      renderExtractTextPromptWithInlineData({ parts: extractionParts });
+    const primaryDocumentPathsForDebug = primaryDocuments.map(
+      (item) => item.documentPath,
+    );
+    const supportingPathsForDebug = supportingParts.map((item) => item.contextPath);
+    const extractionPromptText = [
+      `documentPaths: ${JSON.stringify(primaryDocumentPathsForDebug)}`,
+      ...(supportingPathsForDebug.length > 0
+        ? [`supportingPaths: ${JSON.stringify(supportingPathsForDebug)}`]
+        : []),
+      "",
+      renderedPromptWithInlineData,
+    ].join("\n\n");
     const promptChars = extractionParts.reduce((sum, part) => {
       if (part.type !== "text") {
         return sum;
@@ -3692,17 +3940,48 @@ function buildAgentTools(options: {
     const toolContext = getCurrentToolCallContext();
     const toolIdSegment = toolContext
       ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
-      : `turn0tool0-${Date.now().toString()}`;
+      : "turn0tool0";
     const extractTextLogPrefix = `[extract_text:${toolIdSegment}]`;
     const logExtractTextProgress = (message: string): void => {
       progress?.log(`${extractTextLogPrefix} ${message}`);
     };
+    logExtractTextProgress(
+      `start docs=${primaryDocuments.length.toString()} supporting=${supportingParts.length.toString()} promptChars=${promptChars.toString()} progress=${progress ? "yes" : "no"} debug=${debug ? "yes" : "no"}`,
+    );
+    const shouldPersistExtractTextDebugArtifacts =
+      typeof extractTextDebugRootDir === "string" &&
+      extractTextDebugRootDir.trim().length > 0;
+    if (shouldPersistExtractTextDebugArtifacts) {
+      await persistExtractTextRequestDebugArtifacts({
+        debugRootDir: extractTextDebugRootDir,
+        toolIdSegment,
+        promptText: extractionPromptText,
+        promptChars,
+        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        outputPath: resolvedOutputPath,
+        documentPaths: primaryDocuments.map((item) => item.documentPath),
+        supportingPaths: supportingParts.map((item) => item.contextPath),
+        ...(typeof instructionText === "string" &&
+        instructionText.trim().length > 0
+          ? { instructions: instructionText }
+          : {}),
+        ...(typeof supportingInstructionText === "string" &&
+        supportingInstructionText.trim().length > 0
+          ? { supportingInstructions: supportingInstructionText }
+          : {}),
+        inlineAttachments,
+      }).catch(() => undefined);
+      logExtractTextProgress(
+        `debug_request_written dir=${path.join("extract_text", toolIdSegment)}`,
+      );
+    }
     const submodelTracker = createAgentSubmodelProgressTracker({
       progress,
       suppressCompletionLogs: true,
     });
     let streamedResponseChars = 0;
     let streamedResponseBytes = 0;
+    let streamedThinkingText = "";
     let responseStreamStarted = false;
     let lastResponseProgressLogAt = 0;
     let lastThinkingTokensLogged: number | null = null;
@@ -3783,7 +4062,17 @@ function buildAgentTools(options: {
       : undefined;
 
     let extractedText = "";
+    let modelCallElapsedMs: number | null = null;
+    const callStartedAt = Date.now();
+    let callHeartbeatTimer: NodeJS.Timeout | undefined;
     try {
+      callHeartbeatTimer = setInterval(() => {
+        const elapsedMs = Date.now() - callStartedAt;
+        logExtractTextProgress(
+          `waiting_for_model elapsedMs=${elapsedMs.toString()} streamStarted=${responseStreamStarted ? "yes" : "no"} chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
+        );
+      }, 15_000);
+      logExtractTextProgress("generate_text_call started");
       extractedText = await generateText({
         modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
         contents: [
@@ -3793,6 +4082,10 @@ function buildAgentTools(options: {
           },
         ],
         onDelta: (delta) => {
+          const thoughtDelta = delta.thoughtDelta;
+          if (typeof thoughtDelta === "string" && thoughtDelta.length > 0) {
+            streamedThinkingText += thoughtDelta;
+          }
           const textDelta = delta.textDelta;
           if (typeof textDelta !== "string" || textDelta.length === 0) {
             return;
@@ -3808,7 +4101,14 @@ function buildAgentTools(options: {
         ...(callDebug ? { debug: callDebug } : {}),
         ...(extractTextProgress ? { progress: extractTextProgress } : {}),
       });
+      logExtractTextProgress(
+        `generate_text_call completed elapsedMs=${(Date.now() - callStartedAt).toString()} extractedChars=${extractedText.length.toString()}`,
+      );
+      modelCallElapsedMs = Date.now() - callStartedAt;
     } finally {
+      if (callHeartbeatTimer) {
+        clearInterval(callHeartbeatTimer);
+      }
       maybeLogResponseStreamProgress({ force: true });
       if (responseStreamStarted) {
         logExtractTextProgress(
@@ -3841,19 +4141,50 @@ function buildAgentTools(options: {
     const truncated = cappedText.length < normalizedText.length;
     const submodelSummary = submodelTracker.getSummary();
     const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
-    if (
+    const finalThinkingTokens =
       typeof finalThinkingTokensRaw === "number" &&
       Number.isFinite(finalThinkingTokensRaw)
+        ? Math.max(0, Math.floor(finalThinkingTokensRaw))
+        : null;
+    if (
+      typeof finalThinkingTokens === "number" &&
+      finalThinkingTokens > 0 &&
+      finalThinkingTokens !== lastThinkingTokensLogged
     ) {
-      const finalThinkingTokens = Math.max(0, Math.floor(finalThinkingTokensRaw));
-      if (
-        finalThinkingTokens > 0 &&
-        finalThinkingTokens !== lastThinkingTokensLogged
-      ) {
-        logExtractTextProgress(
-          `thinking_tokens=${finalThinkingTokens.toString()}`,
-        );
-      }
+      logExtractTextProgress(`thinking_tokens=${finalThinkingTokens.toString()}`);
+    }
+    const responseElapsedMs =
+      typeof submodelSummary?.elapsedMs === "number" &&
+      Number.isFinite(submodelSummary.elapsedMs)
+        ? submodelSummary.elapsedMs
+        : modelCallElapsedMs ?? undefined;
+    if (shouldPersistExtractTextDebugArtifacts) {
+      await persistExtractTextResponseDebugArtifacts({
+        debugRootDir: extractTextDebugRootDir,
+        toolIdSegment,
+        responseText: extractedText,
+        thinkingText: streamedThinkingText,
+        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        ...(typeof submodelSummary?.modelVersion === "string" &&
+        submodelSummary.modelVersion.trim().length > 0
+          ? { modelVersion: submodelSummary.modelVersion }
+          : {}),
+        ...(typeof responseElapsedMs === "number" &&
+        Number.isFinite(responseElapsedMs)
+          ? { elapsedMs: responseElapsedMs }
+          : {}),
+        ...(typeof submodelSummary?.costUsd === "number" &&
+        Number.isFinite(submodelSummary.costUsd)
+          ? { costUsd: submodelSummary.costUsd }
+          : {}),
+        usageTokens: submodelSummary?.usageTokens ?? null,
+        thinkingTokens: finalThinkingTokens,
+        streamedResponseChars,
+        streamedResponseBytes,
+      }).catch(() => undefined);
+      logExtractTextProgress(
+        `debug_response_written dir=${path.join("extract_text", toolIdSegment)}`,
+      );
     }
 
     const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
@@ -6152,11 +6483,27 @@ function buildAgentTools(options: {
             const output = await executeCodexReadFile({
               file_path: entry,
             });
-            const candidate =
-              output && typeof output === "object" && !Array.isArray(output)
-                ? (output as Record<string, unknown>)
-                : null;
-            const content = typeof candidate?.content === "string" ? candidate.content : "";
+            const content = (() => {
+              if (typeof output === "string") {
+                return output;
+              }
+              if (
+                Array.isArray(output) &&
+                output.every((value) => typeof value === "string")
+              ) {
+                return output.join("\n");
+              }
+              if (output && typeof output === "object" && !Array.isArray(output)) {
+                const candidate = output as Record<string, unknown>;
+                if (typeof candidate.content === "string") {
+                  return candidate.content;
+                }
+                if (typeof candidate.text === "string") {
+                  return candidate.text;
+                }
+              }
+              return "";
+            })();
             return {
               path: entry,
               content,
@@ -6271,6 +6618,7 @@ export function buildSparkAgentTools(options: {
   progress?: JobProgressReporter;
   enforceLessonPipeline?: boolean;
   debug?: LlmDebugOptions;
+  extractTextDebugRootDir?: string;
 }): LlmToolSet {
   return stripDeprecatedPdfReadTools(buildAgentTools(options));
 }
