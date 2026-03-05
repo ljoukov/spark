@@ -1928,13 +1928,16 @@
 	<title>Spark AI Agent</title>
 </svelte:head>
 
-<section
-	class={`agent-shell ${messages.length > 0 ? 'has-thread' : ''}`}
-	aria-label="Spark AI Agent chat"
+<svelte:window
 	ondragenter={handleComposerDragEnter}
 	ondragover={handleComposerDragOver}
 	ondragleave={handleComposerDragLeave}
 	ondrop={(event) => void handleComposerDrop(event)}
+/>
+
+<section
+	class={`agent-shell ${messages.length > 0 ? 'has-thread' : ''}`}
+	aria-label="Spark AI Agent chat"
 >
 	<div class="agent-layout">
 		<div class="agent-toolbar">
