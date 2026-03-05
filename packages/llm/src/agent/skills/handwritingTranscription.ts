@@ -53,19 +53,4 @@ Use this workflow for high-fidelity transcription from handwritten image snippet
 - Do not collapse or normalize equations into an equivalent form.
 - Preserve short tokens exactly: times, one-letter variables, coefficients, and units.
 - If only one character is uncertain, keep the rest literal and mark uncertainty on that character only (for example "1[?]:48").
-
-## Final Fidelity Audit
-
-- Before writing the final-stage transcription, re-check high-risk short lines and tokens:
-  - header metadata lines (times, dates, short numeric strings),
-  - dense equation lines with superscripts/operators,
-  - final boxed/circled answers and units.
-- If any audited token is uncertain after the single verification pass, mark it explicitly instead of guessing.
-
-## Completion Checklist
-
-- Produce every output file explicitly required by the task prompt.
-- Ensure ambiguity decisions are documented when the task requests notes.
-- Keep final transcription faithful to the handwriting, with clearly marked uncertainty where needed.
-- Write all required output files before calling done.
 `;
