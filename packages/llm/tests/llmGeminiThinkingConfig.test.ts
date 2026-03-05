@@ -285,6 +285,85 @@ describe("Spark agent tool: generate_json", () => {
   });
 });
 
+describe("Spark agent tool: extract_text", () => {
+  beforeEach(() => {
+    generateContentStreamMock.mockReset();
+  });
+
+  it("uses fixed gemini-2.5-pro and writes markdown output", async () => {
+    await withTempDir(async (rootDir) => {
+      const { buildSparkAgentTools } =
+        await import("../src/agent/sparkAgentRunner");
+
+      const sourcePath = "student.png";
+      const contextPath = "problems.jpg";
+      const outputPath = "transcription.md";
+      await writeFile(
+        path.join(rootDir, sourcePath),
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]),
+      );
+      await writeFile(
+        path.join(rootDir, contextPath),
+        Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+      );
+
+      const scheduled: string[] = [];
+      const tools = buildSparkAgentTools({
+        workspace: {
+          scheduleUpdate: (p) => {
+            scheduled.push(p);
+          },
+          deleteFile: () => Promise.resolve(),
+          moveFile: () => Promise.resolve(),
+        },
+        rootDir,
+        userId: "test-user",
+        serviceAccountJson: "{}",
+        progress: silentProgress,
+      });
+
+      generateContentStreamMock.mockImplementation(() => {
+        return buildSingleChunkStream(
+          ["# Extracted", "", "Answer is \\(x^2 + y^2\\)."].join("\n"),
+        );
+      });
+
+      const extractTextTool = tools.extract_text;
+      requireFunctionTool(extractTextTool);
+
+      const result = await extractTextTool.execute({
+        documentPaths: [sourcePath],
+        outputPath,
+        instructions: "problems H1 and H2 only",
+        supportingPaths: [contextPath],
+        supportingInstructions:
+          "Use supporting documents only for ambiguity resolution.",
+      });
+
+      assertPlainRecord(result, "extract_text result");
+      expect(result.status).toBe("written");
+      expect(scheduled).toContain(outputPath);
+      expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+
+      const request = generateContentStreamMock.mock.calls[0]?.[0];
+      expect(request?.model).toBe("gemini-2.5-pro");
+      const promptSent = extractTextFromGoogleContents(request?.contents);
+      expect(promptSent).toContain("Agent-supplied prompt (PRIMARY documents to transcribe):");
+      expect(promptSent).toContain("Agent-supplied prompt (SUPPORTING documents for disambiguation only):");
+      expect(promptSent).toContain("embedded LaTeX");
+      expect(promptSent).toContain("inline '\\(...\\)', display '\\[...\\]'");
+      expect(promptSent).toContain("problems H1 and H2 only");
+      expect(promptSent).toContain(
+        "Use supporting documents only for ambiguity resolution.",
+      );
+      expect(promptSent).not.toContain(contextPath);
+
+      const written = await readFile(path.join(rootDir, outputPath), "utf8");
+      expect(written).toContain("Answer is \\(x^2 + y^2\\).");
+    });
+  });
+});
+
 describe("Session agent tools: read_file_summary and generate_text", () => {
   beforeEach(() => {
     generateContentStreamMock.mockReset();

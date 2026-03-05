@@ -88,6 +88,8 @@ const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
+const DEFAULT_EXTRACT_TEXT_MODEL_ID: LlmTextModelId =
+  "gemini-2.5-pro";
 const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -245,6 +247,14 @@ const WEB_FETCH_MAX_BYTES = 6 * 1024 * 1024;
 const WEB_FETCH_DEFAULT_MAX_CHARS = 20_000;
 const PDF_EXTRACTION_MAX_BYTES = 16 * 1024 * 1024;
 const PDF_EXTRACTION_DEFAULT_MAX_CHARS = 200_000;
+const EXTRACT_TEXT_MAX_BYTES = 16 * 1024 * 1024;
+const EXTRACT_TEXT_DEFAULT_MAX_CHARS = 200_000;
+const EXTRACT_TEXT_MAX_DOCUMENT_FILES = 12;
+const EXTRACT_TEXT_MAX_CONTEXT_FILES = 8;
+const EXTRACT_TEXT_CONTEXT_TEXT_MAX_CHARS = 20_000;
+const EXTRACT_TEXT_RESPONSE_STREAM_LOG_THROTTLE_MS = 5_000;
+const EXTRACT_TEXT_DEFAULT_SUPPORTING_PROMPT =
+  "Supporting documents are for ambiguity resolution only; do not transcribe them unless explicitly instructed.";
 const PDF_DIAGRAM_DEFAULT_MAX_ITEMS = 32;
 const PDF_DIAGRAM_MAX_ITEMS = 64;
 
@@ -257,6 +267,7 @@ function parseGenerateToolCostUsd(message: string): {
   toolName:
     | "generate_text"
     | "generate_json"
+    | "extract_text"
     | "extract_pdf_text"
     | "read_pdf"
     | "extract_pdf_diagrams";
@@ -266,7 +277,7 @@ function parseGenerateToolCostUsd(message: string): {
     return null;
   }
   const match = message.match(
-    /^tool_result:\s+(generate_text|generate_json|extract_pdf_text|read_pdf|extract_pdf_diagrams)\b.*\bcost=\$([\d,.]+)\b/u,
+    /^tool_result:\s+(generate_text|generate_json|extract_text|extract_pdf_text|read_pdf|extract_pdf_diagrams)\b.*\bcost=\$([\d,.]+)\b/u,
   );
   if (!match) {
     return null;
@@ -274,6 +285,7 @@ function parseGenerateToolCostUsd(message: string): {
   const toolName = match[1] as
     | "generate_text"
     | "generate_json"
+    | "extract_text"
     | "extract_pdf_text"
     | "read_pdf"
     | "extract_pdf_diagrams";
@@ -1502,6 +1514,7 @@ async function persistLlmLogsFromDebugDirToWorkspace(options: {
   toolName:
     | "generate_text"
     | "generate_json"
+    | "extract_text"
     | "extract_pdf_text"
     | "read_pdf"
     | "extract_pdf_diagrams";
@@ -2453,6 +2466,9 @@ function buildAgentSystemPrompt(options?: {
     "- Prefer fewer, larger writes over many tiny edits.",
     "- Use web_search when you need to look up facts or check details.",
     "- Use web_fetch to retrieve NON-PDF source pages/files from URLs discovered via web_search.",
+    "- Use extract_text to transcribe workspace document files (images/PDFs) into markdown with LaTeX formulas.",
+    "- extract_text does not automatically know source filenames/paths; include identifying details inside instructions when needed.",
+    "- For multi-page extraction tasks, you can request explicit page markers in the extracted markdown.",
     "- For PDF transcription, render workspace PDFs with pdf_to_images and inspect page images with view_image.",
     "- Use extract_pdf_diagrams when you need diagram bounding boxes from a PDF.",
     "- Do NOT use web_fetch for PDFs.",
@@ -3219,7 +3235,11 @@ function buildAgentTools(options: {
   });
 
   const resolvePdfPromptText = async (options: {
-    toolName: "extract_pdf_text" | "read_pdf" | "extract_pdf_diagrams";
+    toolName:
+      | "extract_text"
+      | "extract_pdf_text"
+      | "read_pdf"
+      | "extract_pdf_diagrams";
     prompt?: string;
     promptPath?: string;
   }): Promise<string> => {
@@ -3246,7 +3266,11 @@ function buildAgentTools(options: {
   };
 
   const decodePdfBytesFromWorkspace = async (options: {
-    toolName: "extract_pdf_text" | "read_pdf" | "extract_pdf_diagrams";
+    toolName:
+      | "extract_text"
+      | "extract_pdf_text"
+      | "read_pdf"
+      | "extract_pdf_diagrams";
     pdfPath: string;
   }): Promise<{ pdfBytes: Buffer; resolvedPdfPath: string }> => {
     const resolvedPdfPath = options.pdfPath.trim();
@@ -3329,6 +3353,546 @@ function buildAgentTools(options: {
       );
     }
     return { pdfBytes: Buffer.from(pdfBytes), finalUrl, contentType };
+  };
+
+  const resolveExtractTextPrimaryDocumentFromWorkspace = async (options: {
+    documentPath: string;
+  }): Promise<{
+    documentBytes: Buffer;
+    documentPath: string;
+    documentKind: "pdf" | "image";
+    documentMimeType: "application/pdf" | string;
+  }> => {
+    const resolvedDocumentPath = options.documentPath.trim();
+    const documentBytes = await readFile(
+      resolveWorkspacePath(rootDir, resolvedDocumentPath),
+    );
+    if (documentBytes.length === 0) {
+      throw new Error(
+        `extract_text received an empty document file "${resolvedDocumentPath}".`,
+      );
+    }
+    const sourceLooksLikePdf =
+      documentBytes.subarray(0, 5).toString("utf8") === "%PDF-";
+    const sourceContentType = resolveContentType(resolvedDocumentPath);
+    if (sourceLooksLikePdf || sourceContentType === "application/pdf") {
+      const decoded = await decodePdfBytesFromWorkspace({
+        toolName: "extract_text",
+        pdfPath: resolvedDocumentPath,
+      });
+      if (decoded.pdfBytes.length === 0) {
+        throw new Error(
+          `extract_text received an empty PDF "${decoded.resolvedPdfPath}".`,
+        );
+      }
+      if (decoded.pdfBytes.length > EXTRACT_TEXT_MAX_BYTES) {
+        throw new Error(
+          `extract_text PDF is too large (${decoded.pdfBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes).`,
+        );
+      }
+      if (decoded.pdfBytes.subarray(0, 5).toString("utf8") !== "%PDF-") {
+        throw new Error(
+          `extract_text expected PDF bytes in "${decoded.resolvedPdfPath}" (missing %PDF- header).`,
+        );
+      }
+      return {
+        documentBytes: decoded.pdfBytes,
+        documentPath: decoded.resolvedPdfPath,
+        documentKind: "pdf",
+        documentMimeType: "application/pdf",
+      };
+    }
+
+    const sourceMimeFromPath =
+      typeof sourceContentType === "string" && sourceContentType.startsWith("image/")
+        ? sourceContentType
+        : undefined;
+    let sourceMimeType = sourceMimeFromPath;
+    if (!sourceMimeType) {
+      const sharp = getSharp();
+      const metadata = await sharp(documentBytes).metadata().catch((error) => {
+        throw new Error(
+          `extract_text could not decode "${resolvedDocumentPath}" as an image: ${errorAsString(error)}`,
+        );
+      });
+      sourceMimeType = resolveImageMimeTypeFromSharpFormat({
+        format: metadata.format,
+      });
+    }
+
+    if (!isSupportedCropImageMimeType(sourceMimeType)) {
+      throw new Error(
+        `extract_text supports PDF or image files (${SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES.join(", ")}). Received ${sourceMimeType ?? "unknown"} for "${resolvedDocumentPath}".`,
+      );
+    }
+    if (typeof sourceMimeType !== "string") {
+      throw new Error(
+        `extract_text could not resolve image mime type for "${resolvedDocumentPath}".`,
+      );
+    }
+    if (documentBytes.length > EXTRACT_TEXT_MAX_BYTES) {
+      throw new Error(
+        `extract_text image is too large (${documentBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes).`,
+      );
+    }
+    return {
+      documentBytes,
+      documentPath: resolvedDocumentPath,
+      documentKind: "image",
+      documentMimeType: sourceMimeType,
+    };
+  };
+
+  const resolveExtractTextContextPartFromWorkspace = async (options: {
+    contextPath: string;
+  }): Promise<{
+    contextPath: string;
+    contextKind: "pdf" | "image" | "text";
+    bytes?: number;
+    textChars?: number;
+    part: LlmContentPart;
+  }> => {
+    const resolvedContextPath = options.contextPath.trim();
+    const rawBytes = await readFile(
+      resolveWorkspacePath(rootDir, resolvedContextPath),
+    );
+    if (rawBytes.length === 0) {
+      throw new Error(
+        `extract_text received an empty supporting file "${resolvedContextPath}".`,
+      );
+    }
+
+    const contentType = resolveContentType(resolvedContextPath);
+    const isTextContentType =
+      typeof contentType === "string" &&
+      (contentType.startsWith("text/") || contentType === "application/json");
+    if (isTextContentType) {
+      const decoded = rawBytes.toString("utf8").trim();
+      const text = capUtf8Text(
+        decoded,
+        EXTRACT_TEXT_CONTEXT_TEXT_MAX_CHARS * 6,
+      ).slice(0, EXTRACT_TEXT_CONTEXT_TEXT_MAX_CHARS);
+      return {
+        contextPath: resolvedContextPath,
+        contextKind: "text",
+        textChars: text.length,
+        part: {
+          type: "text",
+          text: [
+            "Supporting document text follows:",
+            text.length > 0 ? text : "[empty]",
+          ].join("\n"),
+        },
+      };
+    }
+
+    const looksLikePdf = rawBytes.subarray(0, 5).toString("utf8") === "%PDF-";
+    if (looksLikePdf || contentType === "application/pdf") {
+      const decoded = await decodePdfBytesFromWorkspace({
+        toolName: "extract_text",
+        pdfPath: resolvedContextPath,
+      });
+      if (decoded.pdfBytes.length > EXTRACT_TEXT_MAX_BYTES) {
+        throw new Error(
+          `extract_text supporting PDF is too large (${decoded.pdfBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes): "${decoded.resolvedPdfPath}".`,
+        );
+      }
+      return {
+        contextPath: decoded.resolvedPdfPath,
+        contextKind: "pdf",
+        bytes: decoded.pdfBytes.length,
+        part: {
+          type: "inlineData",
+          data: decoded.pdfBytes.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      };
+    }
+
+    const sourceMimeFromPath =
+      typeof contentType === "string" && contentType.startsWith("image/")
+        ? contentType
+        : undefined;
+    let sourceMimeType = sourceMimeFromPath;
+    if (!sourceMimeType) {
+      const sharp = getSharp();
+      const metadata = await sharp(rawBytes).metadata().catch((error) => {
+        throw new Error(
+          `extract_text could not decode supporting file "${resolvedContextPath}" as an image: ${errorAsString(error)}`,
+        );
+      });
+      sourceMimeType = resolveImageMimeTypeFromSharpFormat({
+        format: metadata.format,
+      });
+    }
+    if (!isSupportedCropImageMimeType(sourceMimeType)) {
+      throw new Error(
+        `extract_text supporting files must be image/pdf/text. Received ${sourceMimeType ?? "unknown"} for "${resolvedContextPath}".`,
+      );
+    }
+    if (typeof sourceMimeType !== "string") {
+      throw new Error(
+        `extract_text could not resolve image mime type for supporting file "${resolvedContextPath}".`,
+      );
+    }
+    if (rawBytes.length > EXTRACT_TEXT_MAX_BYTES) {
+      throw new Error(
+        `extract_text supporting image is too large (${rawBytes.length.toString()} bytes, max ${EXTRACT_TEXT_MAX_BYTES.toString()} bytes): "${resolvedContextPath}".`,
+      );
+    }
+    return {
+      contextPath: resolvedContextPath,
+      contextKind: "image",
+      bytes: rawBytes.length,
+      part: {
+        type: "inlineData",
+        data: rawBytes.toString("base64"),
+        mimeType: sourceMimeType,
+      },
+    };
+  };
+
+  const extractTextToWorkspace = async (options: {
+    documentPaths: readonly string[];
+    outputPath: string;
+    instructions?: string;
+    supportingPaths?: readonly string[];
+    supportingInstructions?: string;
+  }): Promise<Record<string, unknown>> => {
+    const resolvedOutputPath = options.outputPath.trim();
+    if (resolvedOutputPath.endsWith(".json")) {
+      throw new Error(
+        `extract_text cannot write JSON ("${resolvedOutputPath}"). Write markdown (.md) instead.`,
+      );
+    }
+    const normalizedDocumentPaths = Array.from(
+      new Set(
+        options.documentPaths
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      ),
+    );
+    if (normalizedDocumentPaths.length === 0) {
+      throw new Error(
+        [
+          "extract_text requires documentPaths with at least one file path.",
+          "Retry with payload shape:",
+          '{"documentPaths":["source/<file>.png"],"outputPath":"output/<name>.md"}',
+          "Do not retry unchanged arguments.",
+        ].join(" "),
+      );
+    }
+    if (normalizedDocumentPaths.length > EXTRACT_TEXT_MAX_DOCUMENT_FILES) {
+      throw new Error(
+        `extract_text supports at most ${EXTRACT_TEXT_MAX_DOCUMENT_FILES.toString()} documentPaths (got ${normalizedDocumentPaths.length.toString()}).`,
+      );
+    }
+    const primaryDocuments = await Promise.all(
+      normalizedDocumentPaths.map(async (documentPath) =>
+        await resolveExtractTextPrimaryDocumentFromWorkspace({ documentPath }),
+      ),
+    );
+    const primaryDocumentPathSet = new Set(
+      primaryDocuments.map((item) => item.documentPath),
+    );
+    const supportingPaths = Array.from(
+      new Set(
+        (options.supportingPaths ?? [])
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0 && !primaryDocumentPathSet.has(entry)),
+      ),
+    );
+    if (supportingPaths.length > EXTRACT_TEXT_MAX_CONTEXT_FILES) {
+      throw new Error(
+        `extract_text supports at most ${EXTRACT_TEXT_MAX_CONTEXT_FILES.toString()} supportingPaths (got ${supportingPaths.length.toString()}).`,
+      );
+    }
+    const supportingParts = await Promise.all(
+      supportingPaths.map(async (contextPath) =>
+        await resolveExtractTextContextPartFromWorkspace({ contextPath }),
+      ),
+    );
+
+    const instructionText =
+      typeof options.instructions === "string" && options.instructions.trim().length > 0
+        ? options.instructions.trim()
+        : undefined;
+    const supportingInstructionText =
+      typeof options.supportingInstructions === "string" &&
+      options.supportingInstructions.trim().length > 0
+        ? options.supportingInstructions.trim()
+        : undefined;
+    const extractionPrompt = [
+      "Transcribe the PRIMARY attached document files into markdown.",
+      "You do not automatically know attachment filenames or paths unless they are written in text instructions.",
+      "Do not summarize, solve, or rewrite content; preserve source wording and structure.",
+      "Use markdown headings/lists where they match the document layout.",
+      "For formulas/equations, use embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'.",
+      "Mark uncertain characters with short uncertainty markers (for example '[?]') instead of guessing.",
+      "If the agent instructions request page markers for multi-page output, include them exactly as requested.",
+      "Return markdown only.",
+    ].join("\n");
+    const primaryPrompt = [
+      "Agent-supplied prompt (PRIMARY documents to transcribe):",
+      instructionText ?? "Transcribe all visible text from the primary documents.",
+    ].join("\n");
+    const supportingPrompt =
+      supportingParts.length > 0
+        ? [
+            "Agent-supplied prompt (SUPPORTING documents for disambiguation only):",
+            supportingInstructionText ?? EXTRACT_TEXT_DEFAULT_SUPPORTING_PROMPT,
+          ].join("\n")
+        : undefined;
+    const extractionParts: LlmContentPart[] = [
+      { type: "text", text: extractionPrompt },
+      { type: "text", text: primaryPrompt },
+      ...primaryDocuments.flatMap<LlmContentPart>((document, index) => {
+        const label: LlmContentPart = {
+          type: "text",
+          text: `Primary document ${String(index + 1)} (${document.documentKind}) follows as inline data.`,
+        };
+        const payload: LlmContentPart = {
+          type: "inlineData",
+          data: document.documentBytes.toString("base64"),
+          mimeType: document.documentMimeType,
+        };
+        return [label, payload];
+      }),
+      ...(supportingPrompt
+        ? ([{ type: "text", text: supportingPrompt }] as LlmContentPart[])
+        : []),
+      ...supportingParts.flatMap<LlmContentPart>((item, index) => {
+        const label =
+          item.contextKind === "text"
+            ? `Supporting document ${String(index + 1)} (text) follows.`
+            : `Supporting document ${String(index + 1)} (${item.contextKind}) follows as inline data.`;
+        return [
+          { type: "text", text: label } as LlmContentPart,
+          item.part,
+        ];
+      }),
+    ];
+    const promptChars = extractionParts.reduce((sum, part) => {
+      if (part.type !== "text") {
+        return sum;
+      }
+      return sum + part.text.length;
+    }, 0);
+
+    const toolContext = getCurrentToolCallContext();
+    const toolIdSegment = toolContext
+      ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
+      : `turn0tool0-${Date.now().toString()}`;
+    const extractTextLogPrefix = `[extract_text:${toolIdSegment}]`;
+    const logExtractTextProgress = (message: string): void => {
+      progress?.log(`${extractTextLogPrefix} ${message}`);
+    };
+    const submodelTracker = createAgentSubmodelProgressTracker({
+      progress,
+      suppressCompletionLogs: true,
+    });
+    let streamedResponseChars = 0;
+    let streamedResponseBytes = 0;
+    let responseStreamStarted = false;
+    let lastResponseProgressLogAt = 0;
+    let lastThinkingTokensLogged: number | null = null;
+    const maybeLogResponseStreamProgress = (options?: {
+      force?: boolean;
+    }): void => {
+      if (!responseStreamStarted) {
+        return;
+      }
+      const force = options?.force === true;
+      const now = Date.now();
+      if (
+        !force &&
+        now - lastResponseProgressLogAt <
+          EXTRACT_TEXT_RESPONSE_STREAM_LOG_THROTTLE_MS
+      ) {
+        return;
+      }
+      lastResponseProgressLogAt = now;
+      logExtractTextProgress(
+        `response_stream chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
+      );
+    };
+    const trackedProgress = submodelTracker.progress;
+    const extractTextProgress: JobProgressReporter | undefined = trackedProgress
+      ? {
+          log: (message) => {
+            trackedProgress.log(message);
+          },
+          startModelCall: (details) => {
+            return trackedProgress.startModelCall(details);
+          },
+          recordModelUsage: (handle, chunk) => {
+            const nextThinkingTokensRaw = chunk.tokens?.thinkingTokens;
+            if (
+              typeof nextThinkingTokensRaw === "number" &&
+              Number.isFinite(nextThinkingTokensRaw)
+            ) {
+              const nextThinkingTokens = Math.max(
+                0,
+                Math.floor(nextThinkingTokensRaw),
+              );
+              if (
+                nextThinkingTokens > 0 &&
+                nextThinkingTokens !== lastThinkingTokensLogged
+              ) {
+                lastThinkingTokensLogged = nextThinkingTokens;
+                logExtractTextProgress(
+                  `thinking_tokens=${nextThinkingTokens.toString()}`,
+                );
+              }
+            }
+            trackedProgress.recordModelUsage(handle, chunk);
+          },
+          finishModelCall: (handle) => {
+            trackedProgress.finishModelCall(handle);
+          },
+          startStage: (stageName) => trackedProgress.startStage(stageName),
+          finishStage: (handle) => trackedProgress.finishStage(handle),
+          ...(trackedProgress.setActiveStages
+            ? {
+                setActiveStages: (stages: Iterable<string>) =>
+                  trackedProgress.setActiveStages?.(stages),
+              }
+            : {}),
+        }
+      : undefined;
+    const callDebug: LlmDebugOptions | undefined = debug
+      ? {
+          ...debug,
+          subStage: [debug.subStage, "extract_text", toolIdSegment]
+            .filter(
+              (entry): entry is string =>
+                typeof entry === "string" && entry.trim().length > 0,
+            )
+            .join("/"),
+        }
+      : undefined;
+
+    let extractedText = "";
+    try {
+      extractedText = await generateText({
+        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        contents: [
+          {
+            role: "user",
+            parts: extractionParts,
+          },
+        ],
+        onDelta: (delta) => {
+          const textDelta = delta.textDelta;
+          if (typeof textDelta !== "string" || textDelta.length === 0) {
+            return;
+          }
+          if (!responseStreamStarted) {
+            responseStreamStarted = true;
+            logExtractTextProgress("response_stream started");
+          }
+          streamedResponseChars += textDelta.length;
+          streamedResponseBytes += Buffer.byteLength(textDelta, "utf8");
+          maybeLogResponseStreamProgress();
+        },
+        ...(callDebug ? { debug: callDebug } : {}),
+        ...(extractTextProgress ? { progress: extractTextProgress } : {}),
+      });
+    } finally {
+      maybeLogResponseStreamProgress({ force: true });
+      if (responseStreamStarted) {
+        logExtractTextProgress(
+          `response_stream final chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
+        );
+      }
+      if (callDebug) {
+        const debugDir = await resolveLlmDebugAttemptDir({
+          debug: callDebug,
+          attempt: 1,
+          maxAttempts: 1,
+        }).catch(() => null);
+        if (debugDir) {
+          await persistLlmLogsFromDebugDirToWorkspace({
+            rootDir,
+            workspace,
+            toolName: "extract_text",
+            toolIdSegment,
+            debugDir,
+          }).catch(() => undefined);
+        }
+      }
+    }
+
+    const normalizedText = extractedText.trim();
+    const cappedText = capUtf8Text(
+      normalizedText,
+      EXTRACT_TEXT_DEFAULT_MAX_CHARS * 6,
+    ).slice(0, EXTRACT_TEXT_DEFAULT_MAX_CHARS);
+    const truncated = cappedText.length < normalizedText.length;
+    const submodelSummary = submodelTracker.getSummary();
+    const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
+    if (
+      typeof finalThinkingTokensRaw === "number" &&
+      Number.isFinite(finalThinkingTokensRaw)
+    ) {
+      const finalThinkingTokens = Math.max(0, Math.floor(finalThinkingTokensRaw));
+      if (
+        finalThinkingTokens > 0 &&
+        finalThinkingTokens !== lastThinkingTokensLogged
+      ) {
+        logExtractTextProgress(
+          `thinking_tokens=${finalThinkingTokens.toString()}`,
+        );
+      }
+    }
+
+    const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
+    await ensureDir(path.dirname(resolved));
+    await writeFile(resolved, cappedText, { encoding: "utf8" });
+    workspace.scheduleUpdate(resolvedOutputPath);
+    const outputBytes = Buffer.byteLength(cappedText, "utf8");
+
+    return {
+      status: "written",
+      modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+      ...(submodelSummary?.modelVersion
+        ? { modelVersion: submodelSummary.modelVersion }
+        : {}),
+      ...(submodelSummary?.elapsedMs !== undefined
+        ? { elapsedMs: submodelSummary.elapsedMs }
+        : {}),
+      ...(typeof submodelSummary?.costUsd === "number"
+        ? { costUsd: submodelSummary.costUsd }
+        : {}),
+      ...(submodelSummary?.usageTokens
+        ? { usageTokens: submodelSummary.usageTokens }
+        : {}),
+      documentPaths: primaryDocuments.map((item) => item.documentPath),
+      documentFiles: primaryDocuments.length,
+      documentKinds: primaryDocuments.map((item) => item.documentKind),
+      outputPath: resolvedOutputPath,
+      promptChars,
+      textChars: cappedText.length,
+      outputBytes,
+      sourceBytes: primaryDocuments.reduce(
+        (sum, item) => sum + item.documentBytes.length,
+        0,
+      ),
+      supportingPaths: supportingParts.map((item) => item.contextPath),
+      supportingFiles: supportingParts.length,
+      ...(instructionText ? { instructions: instructionText } : {}),
+      ...(supportingInstructionText
+        ? { supportingInstructions: supportingInstructionText }
+        : {}),
+      ...(primaryDocuments.length === 1
+        ? {
+            sourcePath: primaryDocuments[0].documentPath,
+            sourceKind: primaryDocuments[0].documentKind,
+            sourceMimeType: primaryDocuments[0].documentMimeType,
+          }
+        : {}),
+      ...(truncated ? { truncated: true } : {}),
+    };
   };
 
   const PdfDiagramBoxSchema = z
@@ -4939,6 +5503,57 @@ function buildAgentTools(options: {
           base64Chars: base64.length,
           ...(outputPath ? { outputPath } : {}),
         };
+      },
+    }),
+    extract_text: tool({
+      description: [
+        "Extract text from one or more workspace image/PDF documents and write markdown output.",
+        `Always uses ${DEFAULT_EXTRACT_TEXT_MODEL_ID} (model cannot be overridden).`,
+        "Required fields: documentPaths and outputPath.",
+        "Always include documentPaths with 1+ primary transcription target documents.",
+        "Minimal payload example: {\"documentPaths\":[\"source/student-work.png\"],\"outputPath\":\"output/transcription.md\"}",
+        "Do not repeat an identical call for the same documentPaths/outputPath; read the written markdown file and continue from it.",
+        "Use instructions to narrow scope (for example: \"problems H1 and H2 only\").",
+        "Use supportingPaths to add extra context files (images, PDFs, or text documents).",
+        "Use supportingInstructions to explain how supporting documents should be used for disambiguation.",
+        "The model does not know filenames unless you include identifying details in instructions text.",
+        "For multi-page tasks, ask for explicit page markers in instructions when needed.",
+        "For formulas/equations, output embedded LaTeX: inline '\\(...\\)', display '\\[...\\]'.",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          documentPaths: z
+            .array(z.string().trim().min(1))
+            .min(1)
+            .max(EXTRACT_TEXT_MAX_DOCUMENT_FILES),
+          outputPath: z.string().trim().min(1),
+          instructions: z.string().trim().min(1).optional().nullable(),
+          supportingPaths: z
+            .array(z.string().trim().min(1))
+            .max(EXTRACT_TEXT_MAX_CONTEXT_FILES)
+            .optional()
+            .nullable(),
+          supportingInstructions: z.string().trim().min(1).optional().nullable(),
+        })
+        .strict(),
+      execute: async ({
+        documentPaths,
+        outputPath,
+        instructions,
+        supportingPaths,
+        supportingInstructions,
+      }) => {
+        return await extractTextToWorkspace({
+          documentPaths,
+          outputPath,
+          instructions:
+            typeof instructions === "string" ? instructions : undefined,
+          supportingPaths: supportingPaths ?? undefined,
+          supportingInstructions:
+            typeof supportingInstructions === "string"
+              ? supportingInstructions
+              : undefined,
+        });
       },
     }),
     read_pdf: tool({

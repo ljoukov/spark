@@ -1,14 +1,11 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { appendFileSync } from "node:fs";
 import {
   copyFile,
   mkdir,
   readFile,
-  readdir,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
 
@@ -18,7 +15,6 @@ import {
   isLlmTextModelId,
   runAgentLoop,
 } from "@ljoukov/llm";
-import type { AgentTelemetryEvent } from "@ljoukov/llm";
 
 import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
 import {
@@ -26,22 +22,27 @@ import {
   PDF_TRANSCRIPTION_SKILL_TEXT,
 } from "@spark/llm/agent/skills/pdfTranscription";
 import {
-  estimateCallCostUsd,
-  generateText,
+  assertFileExists,
+  createAgenticBenchmarkLogger,
+  createRepoPathHelpers,
+  formatMs,
+  formatUsd,
+  generateTextWithMetrics,
+  listFilesRecursive,
+  toInlineImageParts,
+  toModelSlug,
+  toRunTimestampSlug,
+  toSingleLine,
+  type ModelCallMetrics,
+  type UsageTotals,
+} from "@spark/llm/agent/benchmarks/agenticBenchmark";
+import {
   parseJsonFromLlmText,
   tool,
-  type LlmContent,
   type LlmContentPart,
-  type LlmStreamEvent,
   type LlmTextModelId,
   type LlmToolSet,
 } from "@spark/llm/utils/llm";
-import type {
-  JobProgressReporter,
-  LlmUsageChunk,
-  LlmUsageTokenUpdate,
-  ModelCallHandle,
-} from "@spark/llm/utils/concurrency";
 
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 
@@ -49,6 +50,11 @@ ensureEvalEnvLoaded();
 
 const BENCHMARK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
+const { toRepoRelativePath, fromRepoRelativePath, sanitizeLogText } =
+  createRepoPathHelpers({
+    benchmarkDir: BENCHMARK_DIR,
+    repoRootDir: REPO_ROOT_DIR,
+  });
 const DEFAULT_SOURCE_PDF_PATH = path.join(
   BENCHMARK_DIR,
   "data",
@@ -100,14 +106,6 @@ type CliArgs = {
   useReferenceText: boolean;
 };
 
-type ModelCallMetrics = {
-  modelId: string;
-  modelVersion: string | null;
-  elapsedMs: number;
-  costUsd: number;
-  usageTokens: LlmUsageTokenUpdate | null;
-};
-
 type JudgeVerdict = {
   modelId: LlmTextModelId;
   verdict: "pass" | "fail";
@@ -116,15 +114,6 @@ type JudgeVerdict = {
   metrics: ModelCallMetrics;
 };
 
-type UsageTotals = {
-  promptTokens: number;
-  cachedTokens: number;
-  responseTokens: number;
-  responseImageTokens: number;
-  thinkingTokens: number;
-  totalTokens: number;
-  toolUsePromptTokens: number;
-};
 
 type AgenticBenchmarkResult = {
   generatedAt: string;
@@ -267,11 +256,11 @@ function normaliseProblemManifest(
     let fallbackCropPath: string | undefined;
     for (let index = attempts.length - 1; index >= 0; index -= 1) {
       const attempt = attempts[index];
-      if (typeof attempt?.trimmedPath === "string" && attempt.trimmedPath.length > 0) {
+      if (typeof attempt.trimmedPath === "string" && attempt.trimmedPath.length > 0) {
         fallbackCropPath = attempt.trimmedPath;
         break;
       }
-      if (typeof attempt?.cropPath === "string" && attempt.cropPath.length > 0) {
+      if (typeof attempt.cropPath === "string" && attempt.cropPath.length > 0) {
         fallbackCropPath = attempt.cropPath;
         break;
       }
@@ -285,7 +274,7 @@ function normaliseProblemManifest(
     let attemptReason: string | undefined;
     for (let index = attempts.length - 1; index >= 0; index -= 1) {
       const attempt = attempts[index];
-      if (typeof attempt?.reason === "string" && attempt.reason.length > 0) {
+      if (typeof attempt.reason === "string" && attempt.reason.length > 0) {
         attemptReason = attempt.reason;
         break;
       }
@@ -341,133 +330,6 @@ function parseAgentDiagramManifest(input: unknown): z.infer<typeof AgentDiagramM
   }
 
   throw asObject.error;
-}
-
-function formatMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) {
-    return "n/a";
-  }
-  if (ms < 1000) {
-    return `${Math.round(ms).toString()}ms`;
-  }
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function formatUsd(usd: number): string {
-  if (!Number.isFinite(usd) || usd < 0) {
-    return "$0.0000";
-  }
-  return `$${usd.toFixed(4)}`;
-}
-
-function toRepoRelativePath(inputPath: string): string {
-  const absolutePath = path.isAbsolute(inputPath)
-    ? inputPath
-    : path.resolve(BENCHMARK_DIR, inputPath);
-  const relative = path
-    .relative(REPO_ROOT_DIR, absolutePath)
-    .replaceAll("\\", "/");
-  if (relative.length === 0) {
-    return ".";
-  }
-  if (relative.startsWith("..")) {
-    return path.basename(absolutePath);
-  }
-  return relative;
-}
-
-function fromRepoRelativePath(inputPath: string): string {
-  if (path.isAbsolute(inputPath)) {
-    return inputPath;
-  }
-  return path.resolve(REPO_ROOT_DIR, inputPath);
-}
-
-function sanitizeLogText(input: string): string {
-  const repoRootNormalised = REPO_ROOT_DIR.replaceAll("\\", "/");
-  return input.replaceAll("\\", "/").replaceAll(repoRootNormalised, ".");
-}
-
-function truncateText(input: string, maxChars: number): string {
-  if (input.length <= maxChars) {
-    return input;
-  }
-  return `${input.slice(0, maxChars)}…`;
-}
-
-function redactInlineDataUrls(input: string): string {
-  return input.replaceAll(
-    /(data:[^;,\s"]+;base64,)[^"\s]+/gu,
-    "$1...",
-  );
-}
-
-function serialiseSnippet(value: unknown, maxChars = 500): string {
-  if (typeof value === "string") {
-    return truncateText(redactInlineDataUrls(value).replace(/\s+/gu, " ").trim(), maxChars);
-  }
-  try {
-    const text = JSON.stringify(value);
-    if (typeof text === "string") {
-      return truncateText(redactInlineDataUrls(text).replace(/\s+/gu, " ").trim(), maxChars);
-    }
-    return "<unserializable>";
-  } catch {
-    return "<unserializable>";
-  }
-}
-
-function toSingleLine(input: string): string {
-  return input.replace(/\r?\n/gu, "\\n");
-}
-
-function toModelSlug(modelId: string): string {
-  const slug = modelId
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+/u, "")
-    .replace(/-+$/u, "");
-  if (slug.length === 0) {
-    return "model";
-  }
-  return slug;
-}
-
-function toRunTimestampSlug(): string {
-  return new Date().toISOString().replace(/[:.]/gu, "-");
-}
-
-function shortId(id: string): string {
-  return id.length <= 8 ? id : id.slice(0, 8);
-}
-
-function extractAgentIdFromSpawnOutput(output: unknown): string | null {
-  if (!output || typeof output !== "object" || Array.isArray(output)) {
-    return null;
-  }
-  const record = output as Record<string, unknown>;
-  const directAgentId = record.agent_id;
-  if (typeof directAgentId === "string" && directAgentId.trim().length > 0) {
-    return directAgentId.trim();
-  }
-  const directId = record.id;
-  if (typeof directId === "string" && directId.trim().length > 0) {
-    return directId.trim();
-  }
-  const nestedAgent = record.agent;
-  if (!nestedAgent || typeof nestedAgent !== "object" || Array.isArray(nestedAgent)) {
-    return null;
-  }
-  const nestedRecord = nestedAgent as Record<string, unknown>;
-  const nestedAgentId = nestedRecord.agent_id;
-  if (typeof nestedAgentId === "string" && nestedAgentId.trim().length > 0) {
-    return nestedAgentId.trim();
-  }
-  const nestedId = nestedRecord.id;
-  if (typeof nestedId === "string" && nestedId.trim().length > 0) {
-    return nestedId.trim();
-  }
-  return null;
 }
 
 function parseCliArgs(args: readonly string[]): CliArgs {
@@ -585,89 +447,6 @@ function parseCliArgs(args: readonly string[]): CliArgs {
   };
 }
 
-async function assertFileExists(inputPath: string): Promise<void> {
-  await stat(inputPath).catch(() => {
-    throw new Error(`File not found: ${inputPath}`);
-  });
-}
-
-async function listFilesRecursive(rootDir: string): Promise<string[]> {
-  const output: string[] = [];
-  const visit = async (currentDir: string): Promise<void> => {
-    const entries = await readdir(currentDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolute = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await visit(absolute);
-        continue;
-      }
-      output.push(absolute);
-    }
-  };
-  await visit(rootDir);
-  output.sort((a, b) => a.localeCompare(b));
-  return output;
-}
-
-function sanitiseActorLabel(actor: string): string {
-  const trimmed = actor.trim();
-  if (trimmed.length === 0) {
-    return "main";
-  }
-  return trimmed.replaceAll(/[^a-zA-Z0-9:_-]/gu, "_");
-}
-
-function resolveToolEventActor(event: Extract<LlmStreamEvent, { type: "tool_call" }>): string {
-  const input = event.input;
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return "main";
-  }
-  const record = input as Record<string, unknown>;
-
-  const explicitActorKeys = ["subagentName", "subagent", "agentName", "agent"] as const;
-  for (const key of explicitActorKeys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return sanitiseActorLabel(value);
-    }
-  }
-
-  const idValue = record.id;
-  if (
-    typeof idValue === "string" &&
-    idValue.trim().length > 0 &&
-    (event.toolName === "send_input" ||
-      event.toolName === "wait" ||
-      event.toolName === "close_agent" ||
-      event.toolName === "resume_agent")
-  ) {
-    return `agent:${sanitiseActorLabel(idValue)}`;
-  }
-
-  return "main";
-}
-
-function mergeUsageTokens(
-  current: LlmUsageTokenUpdate | null,
-  next: LlmUsageTokenUpdate | undefined,
-): LlmUsageTokenUpdate | null {
-  if (!next) {
-    return current;
-  }
-  if (!current) {
-    return next;
-  }
-  return {
-    promptTokens: next.promptTokens ?? current.promptTokens,
-    cachedTokens: next.cachedTokens ?? current.cachedTokens,
-    responseTokens: next.responseTokens ?? current.responseTokens,
-    responseImageTokens: next.responseImageTokens ?? current.responseImageTokens,
-    thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
-    totalTokens: next.totalTokens ?? current.totalTokens,
-    toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
-  };
-}
-
 function resolveManifestImagePath(options: {
   workspaceDir: string;
   manifestDir: string;
@@ -687,85 +466,6 @@ function resolveManifestImagePath(options: {
     }
   }
   return null;
-}
-
-async function generateTextWithMetrics(options: {
-  modelId: LlmTextModelId;
-  contents: readonly LlmContent[];
-  responseMimeType?: string;
-  openAiReasoningEffort?: "low" | "medium" | "high";
-}): Promise<{ text: string; metrics: ModelCallMetrics }> {
-  let activeHandle: ModelCallHandle | null = null;
-  let modelVersion: string | null = null;
-  let usageTokens: LlmUsageTokenUpdate | null = null;
-
-  const progress: JobProgressReporter = {
-    log: () => {},
-    startModelCall: () => {
-      const handle = Symbol("judge-model-call");
-      activeHandle = handle;
-      return handle;
-    },
-    recordModelUsage: (handle: ModelCallHandle, chunk: LlmUsageChunk) => {
-      if (activeHandle !== handle) {
-        return;
-      }
-      if (typeof chunk.modelVersion === "string" && chunk.modelVersion.trim().length > 0) {
-        modelVersion = chunk.modelVersion.trim();
-      }
-      usageTokens = mergeUsageTokens(usageTokens, chunk.tokens);
-    },
-    finishModelCall: () => {},
-    startStage: () => Symbol("stage"),
-    finishStage: () => {},
-    setActiveStages: () => {},
-  };
-
-  const startedAt = Date.now();
-  const text = await generateText({
-    modelId: options.modelId,
-    contents: options.contents,
-    ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
-    ...(options.openAiReasoningEffort
-      ? { openAiReasoningEffort: options.openAiReasoningEffort }
-      : {}),
-    progress,
-  });
-  const elapsedMs = Date.now() - startedAt;
-  const usageForCost: LlmUsageTokenUpdate = {};
-  const costUsd = estimateCallCostUsd({
-    modelId: options.modelId,
-    tokens: usageForCost,
-    responseImages: 0,
-  });
-
-  return {
-    text,
-    metrics: {
-      modelId: options.modelId,
-      modelVersion,
-      elapsedMs,
-      costUsd,
-      usageTokens,
-    },
-  };
-}
-
-async function toImageParts(paths: readonly string[]): Promise<LlmContentPart[]> {
-  const parts: LlmContentPart[] = [];
-  for (const [index, imagePath] of paths.entries()) {
-    const data = await readFile(imagePath);
-    parts.push({
-      type: "text",
-      text: `Image ${(index + 1).toString()}: ${path.basename(imagePath)}`,
-    });
-    parts.push({
-      type: "inlineData",
-      mimeType: "image/png",
-      data: data.toString("base64"),
-    });
-  }
-  return parts;
 }
 
 async function runJudge(options: {
@@ -805,8 +505,8 @@ async function runJudge(options: {
     });
   }
 
-  parts.push(...(await toImageParts(options.sourcePageImagePaths)));
-  parts.push(...(await toImageParts(options.diagramImagePaths)));
+  parts.push(...(await toInlineImageParts(options.sourcePageImagePaths)));
+  parts.push(...(await toInlineImageParts(options.diagramImagePaths)));
 
   const { text, metrics } = await generateTextWithMetrics({
     modelId: options.modelId,
@@ -900,28 +600,6 @@ function createAgentPrompt(): string {
   ].join("\n");
 }
 
-function emptyUsageTotals(): UsageTotals {
-  return {
-    promptTokens: 0,
-    cachedTokens: 0,
-    responseTokens: 0,
-    responseImageTokens: 0,
-    thinkingTokens: 0,
-    totalTokens: 0,
-    toolUsePromptTokens: 0,
-  };
-}
-
-function addUsageTotals(target: UsageTotals, next: LlmUsageTokenUpdate): void {
-  target.promptTokens += next.promptTokens ?? 0;
-  target.cachedTokens += next.cachedTokens ?? 0;
-  target.responseTokens += next.responseTokens ?? 0;
-  target.responseImageTokens += next.responseImageTokens ?? 0;
-  target.thinkingTokens += next.thinkingTokens ?? 0;
-  target.totalTokens += next.totalTokens ?? 0;
-  target.toolUsePromptTokens += next.toolUsePromptTokens ?? 0;
-}
-
 async function runAgenticBenchmark(options: {
   sourcePdfPath: string;
   modelId: LlmTextModelId;
@@ -933,14 +611,6 @@ async function runAgenticBenchmark(options: {
     modelId: options.modelId,
   });
   const logLines: string[] = [];
-  const agentLogLines: string[] = [];
-  const eventLogRecords: Array<Record<string, unknown>> = [];
-  const toolCallsByName: Record<string, number> = {};
-  const usageTotals = emptyUsageTotals();
-  let usageCostUsd = 0;
-  let thoughtChars = 0;
-  let responseChars = 0;
-  let doneSummary: string | null = null;
   const stageOrder = [
     "prepare-workspace",
     "resolve-tools",
@@ -949,189 +619,26 @@ async function runAgenticBenchmark(options: {
     "judge-outputs",
     "write-artifacts",
   ] as const;
-  let completedStages = 0;
-  let failedToWriteAgentLog = false;
-  const failedSplitLogPaths = new Set<string>();
-  const bufferedSubagentLogLinesByRunId = new Map<string, string[]>();
-  const subagentRunIdToAgentId = new Map<string, string>();
-  const pendingSubagentRunIds: string[] = [];
-  const pendingSpawnedAgentIds: string[] = [];
-  const splitLogPathsCreated = new Set<string>();
 
   await writeFile(paths.agentLogPath, "", "utf8");
   if (options.useSubagents) {
     await writeFile(paths.agentMainLogPath, "", "utf8");
   }
-
-  const stagePercent = (): string => {
-    const total = stageOrder.length;
-    const value = Math.round((completedStages / total) * 100);
-    return value.toString().padStart(2, "0");
-  };
-
-  const buildAgentPrefix = (actor: string): string =>
-    `[spark-agent:pdf-bench/${sanitiseActorLabel(actor)}]`;
-
-  const resolveSplitLogPath = (actor: string): string | null => {
-    if (!options.useSubagents) {
-      return null;
-    }
-    if (actor === "main") {
-      return paths.agentMainLogPath;
-    }
-    if (actor.startsWith("agent:")) {
-      const rawAgentId = actor.slice("agent:".length).trim();
-      if (rawAgentId.length === 0) {
-        return null;
-      }
-      return path.join(paths.runRootDir, `agent_${sanitiseActorLabel(rawAgentId)}.log`);
-    }
-    return null;
-  };
-
-  const appendSplitLogLine = (actor: string, timestampedLine: string): void => {
-    const splitLogPath = resolveSplitLogPath(actor);
-    if (!splitLogPath) {
-      return;
-    }
-    if (failedSplitLogPaths.has(splitLogPath)) {
-      return;
-    }
-    try {
-      appendFileSync(splitLogPath, `${timestampedLine}\n`, "utf8");
-      splitLogPathsCreated.add(splitLogPath);
-    } catch (error: unknown) {
-      failedSplitLogPaths.add(splitLogPath);
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[pdf-bench] failed to write ${path.basename(splitLogPath)}: ${message}`);
-    }
-  };
-
-  const flushBufferedSubagentLines = (runId: string, agentId: string): void => {
-    const buffered = bufferedSubagentLogLinesByRunId.get(runId);
-    if (!buffered || buffered.length === 0) {
-      return;
-    }
-    const actor = `agent:${agentId}`;
-    for (const line of buffered) {
-      appendSplitLogLine(actor, line);
-    }
-    bufferedSubagentLogLinesByRunId.delete(runId);
-  };
-
-  const tryPairPendingSubagentIds = (): void => {
-    while (pendingSubagentRunIds.length > 0 && pendingSpawnedAgentIds.length > 0) {
-      const runId = pendingSubagentRunIds.shift();
-      const agentId = pendingSpawnedAgentIds.shift();
-      if (!runId || !agentId) {
-        continue;
-      }
-      const safeAgentId = sanitiseActorLabel(agentId);
-      subagentRunIdToAgentId.set(runId, safeAgentId);
-      flushBufferedSubagentLines(runId, safeAgentId);
-      const mappingLine = `subagent_mapping: runId=${runId} agentId=${safeAgentId}`;
-      const mappedLine = `${buildAgentPrefix("main")} ${mappingLine}`;
-      console.log(mappedLine);
-      const timestamped = `${new Date().toISOString()} ${mappedLine}`;
-      agentLogLines.push(timestamped);
-      if (!failedToWriteAgentLog) {
-        try {
-          appendFileSync(paths.agentLogPath, `${timestamped}\n`, "utf8");
-        } catch (error: unknown) {
-          failedToWriteAgentLog = true;
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[pdf-bench] failed to write agent.log: ${message}`);
-        }
-      }
-      appendSplitLogLine("main", timestamped);
-    }
-  };
-
-  const registerPendingSubagentRun = (runId: string): void => {
-    if (subagentRunIdToAgentId.has(runId)) {
-      return;
-    }
-    if (pendingSubagentRunIds.includes(runId)) {
-      return;
-    }
-    pendingSubagentRunIds.push(runId);
-    tryPairPendingSubagentIds();
-  };
-
-  const registerSpawnedAgentId = (agentId: string): void => {
-    const safeAgentId = sanitiseActorLabel(agentId);
-    pendingSpawnedAgentIds.push(safeAgentId);
-    tryPairPendingSubagentIds();
-  };
-
-  const resolveTelemetryActor = (runId: string): string => {
-    const agentId = subagentRunIdToAgentId.get(runId);
-    if (agentId) {
-      return `agent:${agentId}`;
-    }
-    return `subagent-run:${shortId(runId)}`;
-  };
-
-  const trackUnmappedTelemetryLine = (runId: string, timestampedLine: string): void => {
-    if (subagentRunIdToAgentId.has(runId)) {
-      return;
-    }
-    const existing = bufferedSubagentLogLinesByRunId.get(runId) ?? [];
-    existing.push(timestampedLine);
-    bufferedSubagentLogLinesByRunId.set(runId, existing);
-  };
-
-  const logStage = (kind: "start" | "done", stage: (typeof stageOrder)[number]): void => {
-    if (kind === "done") {
-      completedStages = Math.min(stageOrder.length, completedStages + 1);
-    }
-    const line = `[${stagePercent()}%] [pdf-bench] stage:${kind} ${stage}`;
-    console.log(line);
-    const agentLine = `${buildAgentPrefix("main")} stage:${kind} ${stage}`;
-    console.log(agentLine);
-    const timestamped = `${new Date().toISOString()} ${agentLine}`;
-    agentLogLines.push(timestamped);
-    if (!failedToWriteAgentLog) {
-      try {
-        appendFileSync(paths.agentLogPath, `${timestamped}\n`, "utf8");
-      } catch (error: unknown) {
-        failedToWriteAgentLog = true;
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[pdf-bench] failed to write agent.log: ${message}`);
-      }
-    }
-    appendSplitLogLine("main", timestamped);
-  };
-
-  const logAgent = (line: string, actor = "main"): string => {
-    const normalisedLine = `${buildAgentPrefix(actor)} ${sanitizeLogText(line)}`;
-    console.log(normalisedLine);
-    const timestamped = `${new Date().toISOString()} ${normalisedLine}`;
-    agentLogLines.push(timestamped);
-    if (!failedToWriteAgentLog) {
-      try {
-        appendFileSync(paths.agentLogPath, `${timestamped}\n`, "utf8");
-      } catch (error: unknown) {
-        failedToWriteAgentLog = true;
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[pdf-bench] failed to write agent.log: ${message}`);
-      }
-    }
-    appendSplitLogLine(actor, timestamped);
-    return timestamped;
-  };
-
-  const logSubagentTelemetry = (runId: string, line: string): void => {
-    const actor = resolveTelemetryActor(runId);
-    const timestamped = logAgent(line, actor);
-    trackUnmappedTelemetryLine(runId, timestamped);
-  };
+  const logger = createAgenticBenchmarkLogger({
+    benchLabel: "pdf-bench",
+    runRootDir: paths.runRootDir,
+    agentLogPath: paths.agentLogPath,
+    useSubagents: options.useSubagents,
+    ...(options.useSubagents ? { agentMainLogPath: paths.agentMainLogPath } : {}),
+    stageOrder,
+    sanitizeLine: sanitizeLogText,
+  });
 
   try {
-    logAgent(
+    logger.logLine(
       `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} taskPath=${toRepoRelativePath(paths.taskPath)} model=${options.modelId} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
     );
-    logStage("start", "prepare-workspace");
+    logger.logStage("start", "prepare-workspace");
     const workspace = {
       scheduleUpdate: (inputPath: string): void => {
         void inputPath;
@@ -1145,9 +652,9 @@ async function runAgenticBenchmark(options: {
         // This benchmark workspace does not mirror state to an external store.
       },
     };
-    logStage("done", "prepare-workspace");
+    logger.logStage("done", "prepare-workspace");
 
-    logStage("start", "resolve-tools");
+    logger.logStage("start", "resolve-tools");
     const allTools = buildSparkAgentTools({
       workspace,
       rootDir: paths.workspaceDir,
@@ -1185,369 +692,222 @@ async function runAgenticBenchmark(options: {
       },
     });
 
-    logAgent(
+    logger.logLine(
       `exposed tools: ${Object.keys(selectedTools).sort((a, b) => a.localeCompare(b)).join(", ")}`,
     );
-    logStage("done", "resolve-tools");
+    logger.logStage("done", "resolve-tools");
 
-  const steering = createAgentLoopSteeringChannel();
-  const startedAt = Date.now();
-  const onTelemetryEvent = (telemetryEvent: AgentTelemetryEvent): void => {
-    if (telemetryEvent.depth <= 0) {
-      return;
+    const steering = createAgentLoopSteeringChannel();
+    const startedAt = Date.now();
+    logger.logStage("start", "agent-loop");
+    if (!isLlmTextModelId(options.modelId)) {
+      throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
     }
-    registerPendingSubagentRun(telemetryEvent.runId);
-    const modelName =
-      typeof telemetryEvent.model === "string" ? telemetryEvent.model : String(telemetryEvent.model);
-
-    if (telemetryEvent.type === "agent.run.started") {
-      logSubagentTelemetry(
-        telemetryEvent.runId,
-        `subagent_started: runId=${telemetryEvent.runId} parentRunId=${telemetryEvent.parentRunId ?? "n/a"} depth=${telemetryEvent.depth.toString()} model=${modelName}`,
-      );
-      return;
-    }
-
-    if (telemetryEvent.type === "agent.run.completed") {
-      logSubagentTelemetry(
-        telemetryEvent.runId,
-        `subagent_done: runId=${telemetryEvent.runId} success=${telemetryEvent.success ? "true" : "false"} duration=${formatMs(telemetryEvent.durationMs)} steps=${telemetryEvent.stepCount?.toString() ?? "n/a"} toolCalls=${telemetryEvent.toolCallCount?.toString() ?? "n/a"} cost=${formatUsd(telemetryEvent.totalCostUsd ?? 0)}${telemetryEvent.error ? ` error=${toSingleLine(telemetryEvent.error)}` : ""}`,
-      );
-      return;
-    }
-
-    const streamEvent = telemetryEvent.event;
-    if (streamEvent.type !== "tool_call") {
-      return;
-    }
-
-    const inputSnippet = serialiseSnippet(streamEvent.input);
-    if (streamEvent.phase === "started") {
-      logSubagentTelemetry(
-        telemetryEvent.runId,
-        `trace_tool_call: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} input=${inputSnippet}`,
-      );
-      return;
-    }
-
-    const outputSnippet = serialiseSnippet(streamEvent.output);
-    const status = typeof streamEvent.error === "string" ? `error=${streamEvent.error}` : "ok";
-    logSubagentTelemetry(
-      telemetryEvent.runId,
-      `trace_tool_result: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} durationMs=${typeof streamEvent.durationMs === "number" ? streamEvent.durationMs.toString() : "n/a"} ${status} output=${outputSnippet}`,
-    );
-  };
-
-  const onEvent = (event: LlmStreamEvent): void => {
-    const nowIso = new Date().toISOString();
-    if (event.type === "delta") {
-      if (event.channel === "thought") {
-        thoughtChars += event.text.length;
-        logAgent(`thought_delta: ${toSingleLine(event.text)}`, "main");
-      } else {
-        responseChars += event.text.length;
-        logAgent(`response_delta: ${toSingleLine(event.text)}`, "main");
-      }
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        channel: event.channel,
-        text: truncateText(event.text, 300),
-      });
-      return;
-    }
-
-    if (event.type === "usage") {
-      usageCostUsd += event.costUsd;
-      addUsageTotals(usageTotals, event.usage);
-      const modelVersionLabel =
-        typeof event.modelVersion === "string" ? event.modelVersion : "n/a";
-      logAgent(
-        `usage: modelVersion=${modelVersionLabel} cost=${formatUsd(event.costUsd)} tokens=${serialiseSnippet(event.usage, 300)}`,
-        "main",
-      );
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        costUsd: event.costUsd,
-        usage: event.usage,
-        modelVersion: event.modelVersion,
-      });
-      return;
-    }
-
-    if (event.type === "model") {
-      logAgent(`model: ${event.modelVersion}`, "main");
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        modelVersion: event.modelVersion,
-      });
-      return;
-    }
-
-    if (event.type !== "tool_call") {
-      logAgent(`event: ${event.type}`, "main");
-      eventLogRecords.push({ ts: nowIso, type: event.type });
-      return;
-    }
-
-    const actor = resolveToolEventActor(event);
-    const inputSnippet = serialiseSnippet(event.input);
-    const outputSnippet =
-      event.phase === "completed" ? serialiseSnippet(event.output) : undefined;
-    if (event.phase === "started") {
-      logAgent(
-        `trace_tool_call: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} input=${inputSnippet}`,
-        actor,
-      );
-    } else {
-      const status = typeof event.error === "string" ? `error=${event.error}` : "ok";
-      logAgent(
-        `trace_tool_result: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} durationMs=${typeof event.durationMs === "number" ? event.durationMs.toString() : "n/a"} ${status} output=${outputSnippet ?? "<none>"}`,
-        actor,
-      );
-    }
-    if (event.phase === "completed") {
-      toolCallsByName[event.toolName] = (toolCallsByName[event.toolName] ?? 0) + 1;
-      if (event.toolName === "spawn_agent") {
-        const agentId = extractAgentIdFromSpawnOutput(event.output);
-        if (agentId) {
-          registerSpawnedAgentId(agentId);
-        }
-      }
-      if (event.toolName === "done") {
-        const output =
-          event.output && typeof event.output === "object" && !Array.isArray(event.output)
-            ? (event.output as Record<string, unknown>)
-            : null;
-        const summary = output?.summary;
-        if (typeof summary === "string" && summary.trim().length > 0) {
-          doneSummary = summary.trim();
-        }
-      }
-    }
-    eventLogRecords.push({
-      ts: nowIso,
-      type: "tool_call",
-      phase: event.phase,
-      turn: event.turn,
-      toolIndex: event.toolIndex,
-      toolName: event.toolName,
-      input: event.input,
-      ...(event.phase === "completed" ? { output: event.output } : {}),
-      ...(event.phase === "completed" && typeof event.durationMs === "number"
-        ? { durationMs: event.durationMs }
-        : {}),
-      ...(event.phase === "completed" && typeof event.error === "string"
-        ? { error: event.error }
-        : {}),
-    });
-  };
-
-  logStage("start", "agent-loop");
-  if (!isLlmTextModelId(options.modelId)) {
-    throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
-  }
-  const toolLoopResult = await runAgentLoop({
-    model: options.modelId,
-    input: createAgentPrompt(),
-    maxSteps: MAX_STEPS,
-    openAiReasoningEffort: "high",
-    tools: selectedTools,
-    subagents: options.useSubagents ? { promptPattern: "codex" } : false,
-    telemetry: {
-      includeLlmStreamEvents: true,
-      sink: {
-        emit: onTelemetryEvent,
+    const toolLoopResult = await runAgentLoop({
+      model: options.modelId,
+      input: createAgentPrompt(),
+      maxSteps: MAX_STEPS,
+      openAiReasoningEffort: "high",
+      tools: selectedTools,
+      subagents: options.useSubagents ? { promptPattern: "codex" } : false,
+      telemetry: {
+        includeLlmStreamEvents: true,
+        sink: {
+          emit: logger.onTelemetryEvent,
+        },
       },
-    },
-    steering,
-    onEvent,
-  });
-  usageCostUsd =
-    typeof toolLoopResult.totalCostUsd === "number" && Number.isFinite(toolLoopResult.totalCostUsd)
-      ? toolLoopResult.totalCostUsd
-      : usageCostUsd;
-  logStage("done", "agent-loop");
+      steering,
+      onEvent: logger.onEvent,
+    });
+    logger.overrideUsageCostUsd(toolLoopResult.totalCostUsd);
+    logger.logStage("done", "agent-loop");
 
-  const agentLatencyMs = Date.now() - startedAt;
-  logAgent(
-    `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} cost=${formatUsd(usageCostUsd)}`,
-  );
-  logStage("start", "collect-agent-outputs");
-  const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
-  const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
-  const sourcePageImagePaths = workspaceFiles.filter((item) => {
-    if (!item.startsWith(outputDirPrefix)) {
-      return false;
-    }
-    if (item.includes(`${path.sep}diagrams${path.sep}`)) {
-      return false;
-    }
-    if (path.extname(item).toLowerCase() !== ".png") {
-      return false;
-    }
-    return /^page-\d{4}\.png$/u.test(path.basename(item));
-  });
-  const manifestText = await readFile(paths.outputManifestPath, "utf8");
-  const manifest = parseAgentDiagramManifest(JSON.parse(manifestText));
-  const notesText = await readFile(paths.outputNotesPath, "utf8");
-  const referenceText = options.useReferenceText
-    ? await readFile(paths.outputReferenceTextPath, "utf8")
-    : null;
-  const workspaceFileSet = new Set(workspaceFiles.map((item) => path.resolve(item)));
-  const manifestDir = path.dirname(paths.outputManifestPath);
-  const diagramImagePaths = Array.from(
-    new Set(
-      manifest.diagrams
-        .map((item) => {
-          if (typeof item.cropPath !== "string") {
-            return null;
-          }
-          return resolveManifestImagePath({
-            workspaceDir: paths.workspaceDir,
-            manifestDir,
-            rawPath: item.cropPath,
-            workspaceFileSet,
-          });
-        })
-        .filter((item): item is string => item !== null)
-        .filter((item) => path.extname(item).toLowerCase() === ".png"),
-    ),
-  );
-  logAgent(
-    [
-      `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()}`,
-      `sourcePages=${sourcePageImagePaths.length.toString()}`,
-      `diagrams=${diagramImagePaths.length.toString()}`,
-      `manifestEntries=${manifest.diagrams.length.toString()}`,
-      `notesChars=${notesText.length.toString()}`,
-      `referenceChars=${
-        referenceText === null ? "disabled" : referenceText.length.toString()
-      }`,
-    ].join(" "),
-  );
-  logStage("done", "collect-agent-outputs");
-
-  logStage("start", "judge-outputs");
-  const judgingStartedAt = Date.now();
-  const verdicts = await Promise.all(
-    JUDGE_MODEL_IDS.map(async (judgeModelId) => {
-      logAgent(`judge_start: ${judgeModelId}`);
-      return await runJudge({
-        modelId: judgeModelId,
-        sourcePdfPath: paths.sourcePdfPath,
-        sourcePageImagePaths,
-        markdownPath: paths.outputMarkdownPath,
-        diagramImagePaths,
-      });
-    }),
-  );
-  const judgingLatencyMs = Date.now() - judgingStartedAt;
-  const judgingCostUsd = verdicts.reduce((sum, verdict) => sum + verdict.metrics.costUsd, 0);
-  for (const verdict of verdicts) {
-    logAgent(
-      `judge_done: ${verdict.modelId} verdict=${verdict.verdict} latency=${formatMs(verdict.metrics.elapsedMs)} cost=${formatUsd(verdict.metrics.costUsd)} summary=${toSingleLine(verdict.summary)}`,
+    const afterLoop = logger.snapshot();
+    const agentLatencyMs = Date.now() - startedAt;
+    logger.logLine(
+      `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} cost=${formatUsd(afterLoop.usageCostUsd)}`,
     );
-  }
-  logStage("done", "judge-outputs");
+    logger.logStage("start", "collect-agent-outputs");
+    const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
+    const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
+    const sourcePageImagePaths = workspaceFiles.filter((item) => {
+      if (!item.startsWith(outputDirPrefix)) {
+        return false;
+      }
+      if (item.includes(`${path.sep}diagrams${path.sep}`)) {
+        return false;
+      }
+      if (path.extname(item).toLowerCase() !== ".png") {
+        return false;
+      }
+      return /^page-\d{4}\.png$/u.test(path.basename(item));
+    });
+    const manifestText = await readFile(paths.outputManifestPath, "utf8");
+    const manifest = parseAgentDiagramManifest(JSON.parse(manifestText));
+    const notesText = await readFile(paths.outputNotesPath, "utf8");
+    const referenceText = options.useReferenceText
+      ? await readFile(paths.outputReferenceTextPath, "utf8")
+      : null;
+    const workspaceFileSet = new Set(workspaceFiles.map((item) => path.resolve(item)));
+    const manifestDir = path.dirname(paths.outputManifestPath);
+    const diagramImagePaths = Array.from(
+      new Set(
+        manifest.diagrams
+          .map((item) => {
+            if (typeof item.cropPath !== "string") {
+              return null;
+            }
+            return resolveManifestImagePath({
+              workspaceDir: paths.workspaceDir,
+              manifestDir,
+              rawPath: item.cropPath,
+              workspaceFileSet,
+            });
+          })
+          .filter((item): item is string => item !== null)
+          .filter((item) => path.extname(item).toLowerCase() === ".png"),
+      ),
+    );
+    logger.logLine(
+      [
+        `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()}`,
+        `sourcePages=${sourcePageImagePaths.length.toString()}`,
+        `diagrams=${diagramImagePaths.length.toString()}`,
+        `manifestEntries=${manifest.diagrams.length.toString()}`,
+        `notesChars=${notesText.length.toString()}`,
+        `referenceChars=${
+          referenceText === null ? "disabled" : referenceText.length.toString()
+        }`,
+      ].join(" "),
+    );
+    logger.logStage("done", "collect-agent-outputs");
 
-  const overallPass = verdicts.every((item) => item.verdict === "pass");
-  const reason = overallPass
-    ? "All judges passed"
-    : verdicts
-        .filter((item) => item.verdict === "fail")
-        .map((item) => `[${item.modelId}] ${item.summary}`)
-        .join("; ");
+    logger.logStage("start", "judge-outputs");
+    const judgingStartedAt = Date.now();
+    const verdicts = await Promise.all(
+      JUDGE_MODEL_IDS.map(async (judgeModelId) => {
+        logger.logLine(`judge_start: ${judgeModelId}`);
+        return await runJudge({
+          modelId: judgeModelId,
+          sourcePdfPath: paths.sourcePdfPath,
+          sourcePageImagePaths,
+          markdownPath: paths.outputMarkdownPath,
+          diagramImagePaths,
+        });
+      }),
+    );
+    const judgingLatencyMs = Date.now() - judgingStartedAt;
+    const judgingCostUsd = verdicts.reduce((sum, verdict) => sum + verdict.metrics.costUsd, 0);
+    for (const verdict of verdicts) {
+      logger.logLine(
+        `judge_done: ${verdict.modelId} verdict=${verdict.verdict} latency=${formatMs(verdict.metrics.elapsedMs)} cost=${formatUsd(verdict.metrics.costUsd)} summary=${toSingleLine(verdict.summary)}`,
+      );
+    }
+    logger.logStage("done", "judge-outputs");
 
-  const totalLatencyMs = agentLatencyMs + judgingLatencyMs;
-  const totalCostUsd = usageCostUsd + judgingCostUsd;
+    const overallPass = verdicts.every((item) => item.verdict === "pass");
+    const reason = overallPass
+      ? "All judges passed"
+      : verdicts
+          .filter((item) => item.verdict === "fail")
+          .map((item) => `[${item.modelId}] ${item.summary}`)
+          .join("; ");
 
-  logLines.push(
-    `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
-  );
-  logLines.push(`agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(usageCostUsd)}`);
-  logLines.push(
-    `judging_latency=${formatMs(judgingLatencyMs)} judging_cost=${formatUsd(judgingCostUsd)}`,
-  );
-  logLines.push(`tool_calls=${Object.values(toolCallsByName).reduce((sum, n) => sum + n, 0).toString()}`);
-  logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
-  logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
-  if (options.useSubagents) {
-    logLines.push(`agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`);
-    const subagentLogs = Array.from(splitLogPathsCreated)
-      .filter((item) => path.basename(item) !== path.basename(paths.agentMainLogPath))
-      .map((item) => toRepoRelativePath(item))
-      .sort((a, b) => a.localeCompare(b));
+    const finalSnapshot = logger.snapshot();
+    const agentCostUsd = finalSnapshot.usageCostUsd;
+    const toolCallCount = Object.values(finalSnapshot.toolCallsByName).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    const totalLatencyMs = agentLatencyMs + judgingLatencyMs;
+    const totalCostUsd = agentCostUsd + judgingCostUsd;
+
     logLines.push(
-      `agent_subagent_logs=${subagentLogs.length > 0 ? subagentLogs.join(",") : "none"}`,
+      `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
     );
-  }
-  logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
+    logLines.push(
+      `agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(agentCostUsd)}`,
+    );
+    logLines.push(
+      `judging_latency=${formatMs(judgingLatencyMs)} judging_cost=${formatUsd(judgingCostUsd)}`,
+    );
+    logLines.push(`tool_calls=${toolCallCount.toString()}`);
+    logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
+    logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
+    if (options.useSubagents) {
+      logLines.push(`agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`);
+      const subagentLogs = finalSnapshot.splitLogPathsCreated
+        .filter((item) => path.basename(item) !== path.basename(paths.agentMainLogPath))
+        .map((item) => toRepoRelativePath(item))
+        .sort((a, b) => a.localeCompare(b));
+      logLines.push(
+        `agent_subagent_logs=${subagentLogs.length > 0 ? subagentLogs.join(",") : "none"}`,
+      );
+    }
+    logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
 
-  logStage("start", "write-artifacts");
+    logger.logStage("start", "write-artifacts");
 
-  await writeFile(
-    paths.eventLogPath,
-    `${eventLogRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
-    "utf8",
-  );
+    await writeFile(
+      paths.eventLogPath,
+      `${finalSnapshot.eventLogRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
+      "utf8",
+    );
 
-  const result: AgenticBenchmarkResult = {
-    generatedAt: new Date().toISOString(),
-    modelId: options.modelId,
-    status: overallPass ? "pass" : "fail",
-    reason,
-    sourcePdfPath: toRepoRelativePath(paths.sourcePdfPath),
-    runDir: toRepoRelativePath(paths.runRootDir),
-    workspaceDir: toRepoRelativePath(paths.workspaceDir),
-    taskPath: toRepoRelativePath(paths.taskPath),
-    transcriptionPath: toRepoRelativePath(paths.outputMarkdownPath),
-    diagramManifestPath: toRepoRelativePath(paths.outputManifestPath),
-    notesPath: toRepoRelativePath(paths.outputNotesPath),
-    ...(options.useReferenceText
-      ? { referenceTextPath: toRepoRelativePath(paths.outputReferenceTextPath) }
-      : {}),
-    agentLogPath: toRepoRelativePath(paths.agentLogPath),
-    eventLogPath: toRepoRelativePath(paths.eventLogPath),
-    summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
-    sourcePageImagePaths: sourcePageImagePaths.map((item) => toRepoRelativePath(item)),
-    diagramImagePaths: diagramImagePaths.map((item) => toRepoRelativePath(item)),
-    agent: {
-      latencyMs: agentLatencyMs,
-      modelCalls: toolLoopResult.steps.length,
-      toolCalls: Object.values(toolCallsByName).reduce((sum, n) => sum + n, 0),
-      toolCallsByName,
-      costUsd: usageCostUsd,
-      usage: usageTotals,
-      thoughtsChars: thoughtChars,
-      responseChars,
-      doneSummary,
-    },
-    judging: {
-      latencyMs: judgingLatencyMs,
-      modelCalls: verdicts.length,
-      costUsd: judgingCostUsd,
-      verdicts,
-    },
-    total: {
-      latencyMs: totalLatencyMs,
-      costUsd: totalCostUsd,
-    },
-  };
+    const result: AgenticBenchmarkResult = {
+      generatedAt: new Date().toISOString(),
+      modelId: options.modelId,
+      status: overallPass ? "pass" : "fail",
+      reason,
+      sourcePdfPath: toRepoRelativePath(paths.sourcePdfPath),
+      runDir: toRepoRelativePath(paths.runRootDir),
+      workspaceDir: toRepoRelativePath(paths.workspaceDir),
+      taskPath: toRepoRelativePath(paths.taskPath),
+      transcriptionPath: toRepoRelativePath(paths.outputMarkdownPath),
+      diagramManifestPath: toRepoRelativePath(paths.outputManifestPath),
+      notesPath: toRepoRelativePath(paths.outputNotesPath),
+      ...(options.useReferenceText
+        ? { referenceTextPath: toRepoRelativePath(paths.outputReferenceTextPath) }
+        : {}),
+      agentLogPath: toRepoRelativePath(paths.agentLogPath),
+      eventLogPath: toRepoRelativePath(paths.eventLogPath),
+      summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
+      sourcePageImagePaths: sourcePageImagePaths.map((item) => toRepoRelativePath(item)),
+      diagramImagePaths: diagramImagePaths.map((item) => toRepoRelativePath(item)),
+      agent: {
+        latencyMs: agentLatencyMs,
+        modelCalls: toolLoopResult.steps.length,
+        toolCalls: toolCallCount,
+        toolCallsByName: finalSnapshot.toolCallsByName,
+        costUsd: agentCostUsd,
+        usage: finalSnapshot.usageTotals,
+        thoughtsChars: finalSnapshot.thoughtChars,
+        responseChars: finalSnapshot.responseChars,
+        doneSummary: finalSnapshot.doneSummary,
+      },
+      judging: {
+        latencyMs: judgingLatencyMs,
+        modelCalls: verdicts.length,
+        costUsd: judgingCostUsd,
+        verdicts,
+      },
+      total: {
+        latencyMs: totalLatencyMs,
+        costUsd: totalCostUsd,
+      },
+    };
 
-  await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-  await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
-  logStage("done", "write-artifacts");
-  logAgent(
-    `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} runDir=${result.runDir}`,
-  );
+    await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
+    logger.logStage("done", "write-artifacts");
+    logger.logLine(
+      `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} runDir=${result.runDir}`,
+    );
 
     return result;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    logAgent(`error: ${sanitizeLogText(message)}`);
+    logger.logLine(`error: ${sanitizeLogText(message)}`);
     throw error;
   }
 }
