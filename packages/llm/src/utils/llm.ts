@@ -27,6 +27,7 @@ import {
   type LlmImageSize,
   type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
+  type LlmThinkingLevel,
   type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
@@ -308,6 +309,22 @@ const INPUT_ROLE_FROM_CONTENT_ROLE = {
   tool: "assistant",
 } as const satisfies Record<LlmRole, "user" | "assistant" | "system" | "developer">;
 
+const THINKING_LEVEL_FROM_OPENAI_REASONING_EFFORT = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "high",
+} as const satisfies Record<OpenAiReasoningEffort, LlmThinkingLevel>;
+
+function resolveThinkingLevel(
+  openAiReasoningEffort: OpenAiReasoningEffort | undefined,
+): LlmThinkingLevel | undefined {
+  if (openAiReasoningEffort === undefined) {
+    return undefined;
+  }
+  return THINKING_LEVEL_FROM_OPENAI_REASONING_EFFORT[openAiReasoningEffort];
+}
+
 function toInputMessages(contents: readonly LlmContent[]): Array<{
   role: "user" | "assistant" | "system" | "developer";
   content: string | readonly LlmContentPart[];
@@ -349,7 +366,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
     responseMimeType: options.responseMimeType,
     responseJsonSchema: options.responseJsonSchema,
     imageSize: options.imageSize,
-    openAiReasoningEffort: options.openAiReasoningEffort,
+    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
     openAiTextFormat: options.openAiTextFormat,
   });
 
@@ -425,7 +442,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
       maxAttempts,
       ...(options.openAiSchemaName ? { openAiSchemaName: options.openAiSchemaName } : {}),
       ...(options.normalizeJson ? { normalizeJson: options.normalizeJson } : {}),
-      openAiReasoningEffort: options.openAiReasoningEffort,
+      thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
       onEvent: (event) => {
         if (event.type === "delta") {
           if (event.channel === "response") {
@@ -493,7 +510,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     tools: options.tools,
     modelTools: options.modelTools,
     maxSteps: options.maxSteps,
-    openAiReasoningEffort: options.openAiReasoningEffort,
+    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
     steering: options.steering,
     ...(onEvent ? { onEvent } : {}),
   });
