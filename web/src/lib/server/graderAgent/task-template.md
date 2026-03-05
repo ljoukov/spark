@@ -4,7 +4,6 @@ You are grading olympiad-paper solutions.
 
 - Run ID: `{{RUN_ID}}`
 - Workspace ID: `{{WORKSPACE_ID}}`
-- Default olympiad profile: `{{OLYMPIAD_LABEL}}`
 
 ## Inputs
 
@@ -12,8 +11,7 @@ Read these files first:
 
 1. `brief.md`
 2. `request.json`
-3. `grader/memory.md`
-4. `grader/uploads/index.json`
+3. `grader/uploads/index.json`
 
 Uploaded student work (photos/PDFs/text) is also attached in the model context. Treat it as the ground truth for transcription.
 Linked uploads are available in the workspace under `grader/uploads/<filename>`.

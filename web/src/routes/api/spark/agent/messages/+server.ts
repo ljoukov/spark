@@ -26,15 +26,10 @@ import {
 import {
 	DEFAULT_GRADER_OLYMPIAD_KEY,
 	DEFAULT_GRADER_OLYMPIAD_LABEL,
-	GRADER_MEMORY_FILE_PATH,
 	GRADER_PROBLEMS_DIR,
 	GRADER_SUMMARY_PATH,
-	buildDefaultGraderMemoryMarkdown,
 	createGraderRun,
-	parseGraderMemoryMarkdown,
-	patchGraderRun,
-	readOrCreateGraderMemoryFile,
-	saveGraderMemoryFile
+	patchGraderRun
 } from '$lib/server/grader/repo';
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
@@ -780,62 +775,6 @@ function normalizeOlympiadKey(value: string): string {
 	return DEFAULT_GRADER_OLYMPIAD_KEY;
 }
 
-function upsertMarkdownConfigLine(content: string, key: string, value: string): string {
-	const pattern = new RegExp(`^\\s*-\\s*${key}\\s*:\\s*.*$`, 'imu');
-	const replacement = `- ${key}: ${value}`;
-	if (pattern.test(content)) {
-		return content.replace(pattern, replacement);
-	}
-	const trimmed = content.trimEnd();
-	if (trimmed.length === 0) {
-		return `${replacement}\n`;
-	}
-	return `${trimmed}\n${replacement}\n`;
-}
-
-async function resolveGraderMemoryForRun(options: {
-	userId: string;
-	olympiadOverride?: string;
-}): Promise<{
-	path: string;
-	content: string;
-	olympiadKey: string;
-	olympiadLabel: string;
-}> {
-	const current = await readOrCreateGraderMemoryFile(options.userId);
-	const override = options.olympiadOverride?.trim();
-	if (!override || override.length === 0) {
-		return {
-			path: GRADER_MEMORY_FILE_PATH,
-			content: current.content,
-			olympiadKey: current.olympiadKey,
-			olympiadLabel: current.olympiadLabel
-		};
-	}
-	const nextKey = normalizeOlympiadKey(override);
-	let nextContent = current.content;
-	if (nextContent.trim().length === 0) {
-		nextContent = buildDefaultGraderMemoryMarkdown({
-			olympiadKey: nextKey,
-			olympiadLabel: override
-		});
-	} else {
-		nextContent = upsertMarkdownConfigLine(nextContent, 'olympiad_key', nextKey);
-		nextContent = upsertMarkdownConfigLine(nextContent, 'olympiad_label', override);
-	}
-	const saved = await saveGraderMemoryFile(options.userId, {
-		content: nextContent,
-		olympiadKey: nextKey,
-		olympiadLabel: override
-	});
-	return {
-		path: GRADER_MEMORY_FILE_PATH,
-		content: saved.content,
-		olympiadKey: saved.olympiadKey,
-		olympiadLabel: saved.olympiadLabel
-	};
-}
-
 const graderCreateSchema = z
 	.object({
 		olympiad: nullableOptionalString().describe(
@@ -861,26 +800,20 @@ function buildGraderBrief(options: {
 	sourceText?: string;
 	input: z.infer<typeof graderCreateSchema>;
 	attachments: z.infer<typeof attachmentSchema>[];
-	memory: {
-		olympiadKey: string;
-		olympiadLabel: string;
-	};
 }): string {
 	const referenceSourcePolicy = options.input.referenceSourcePolicy ?? 'uploaded-only';
 	const referenceSourcePolicyText =
 		referenceSourcePolicy === 'allow-online-search-when-problems-missing'
 			? 'allow-online-search-when-problems-missing (search online only when problem statements are missing or unclear)'
 			: 'uploaded-only (do not search online; rely on uploaded/pasted materials)';
-	const lines: string[] = [
-		'# Grader request',
-		'',
-		'## Default olympiad profile',
-		`- olympiad_key: ${options.memory.olympiadKey}`,
-		`- olympiad_label: ${options.memory.olympiadLabel}`
-	];
+	const lines: string[] = ['# Grader request'];
 	const rawSource = options.sourceText?.trim();
 	if (rawSource && rawSource.length > 0) {
 		lines.push('', '## Original user message', '```', rawSource, '```');
+	}
+	const olympiadOverride = options.input.olympiad?.trim();
+	if (olympiadOverride && olympiadOverride.length > 0) {
+		lines.push('', '## Requested olympiad override', `- ${olympiadOverride}`);
 	}
 	if (options.input.notes) {
 		lines.push('', '## User grading focus', options.input.notes.trim());
@@ -917,12 +850,10 @@ function buildGraderBrief(options: {
 function renderGraderTask(options: {
 	runId: string;
 	workspaceId: string;
-	olympiadLabel: string;
 }): string {
 	const baseTask = graderTaskTemplate
 		.replaceAll('{{RUN_ID}}', options.runId)
 		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
-		.replaceAll('{{OLYMPIAD_LABEL}}', options.olympiadLabel)
 		.trim();
 	const transcriptionSkillSection = [
 		'',
@@ -947,7 +878,6 @@ function renderGraderTask(options: {
 function buildGraderAgentPrompt(options: {
 	runId: string;
 	workspaceId: string;
-	memoryPath: string;
 	summaryPath: string;
 	problemsDir: string;
 }): string {
@@ -961,7 +891,6 @@ function buildGraderAgentPrompt(options: {
 		'- brief.md',
 		'- request.json',
 		'- grader/task.md',
-		`- grader/${options.memoryPath}`,
 		'- grader/uploads/index.json',
 		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'',
@@ -1677,7 +1606,7 @@ function buildSparkChatTools(options: {
 		create_grader: tool({
 			description: [
 				'Start an olympiad grading run from the learner’s uploaded solutions.',
-				'Creates a grader workspace, seeds grader/task.md + grader/memory.md, and launches a background agent.',
+				'Creates a grader workspace, seeds grader/task.md, and launches a background agent.',
 				'Use this when the learner asks to mark/grade olympiad paper solutions.',
 				'Uploads can include student handwriting, problem statements, and optional official solutions/mark schemes.',
 				'Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.',
@@ -1693,35 +1622,29 @@ function buildSparkChatTools(options: {
 				const now = new Date();
 				let runCreated = false;
 				try {
-					const memory = await resolveGraderMemoryForRun({
-						userId,
-						olympiadOverride: input.olympiad
-					});
-					const memoryConfig = parseGraderMemoryMarkdown(memory.content);
-					const olympiadKey = memoryConfig.olympiadKey || DEFAULT_GRADER_OLYMPIAD_KEY;
-					const olympiadLabel = memoryConfig.olympiadLabel || DEFAULT_GRADER_OLYMPIAD_LABEL;
-						const runAttachments = attachmentsForMessage
-							.slice(0, GRADER_ATTACHMENT_LIMIT)
-							.map((attachment) => ({
-								id: attachment.id,
-								storagePath: attachment.storagePath,
-								contentType: attachment.contentType,
-								filename: attachment.filename,
-								sizeBytes: attachment.sizeBytes
-							}));
-						const runWorkspaceAttachments = runAttachments.map((attachment) => ({
-							...attachment,
-							workspacePath: resolveWorkspaceAttachmentPath(attachment)
+					const olympiadLabel = input.olympiad?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
+					const olympiadKey = normalizeOlympiadKey(olympiadLabel);
+					const runAttachments = attachmentsForMessage
+						.slice(0, GRADER_ATTACHMENT_LIMIT)
+						.map((attachment) => ({
+							id: attachment.id,
+							storagePath: attachment.storagePath,
+							contentType: attachment.contentType,
+							filename: attachment.filename,
+							sizeBytes: attachment.sizeBytes
 						}));
-						await createGraderRun(userId, {
-							id: runId,
-							agentId,
+					const runWorkspaceAttachments = runAttachments.map((attachment) => ({
+						...attachment,
+						workspacePath: resolveWorkspaceAttachmentPath(attachment)
+					}));
+					await createGraderRun(userId, {
+						id: runId,
+						agentId,
 						workspaceId,
 						conversationId,
 						userPrompt: sourceText?.trim() || input.notes || undefined,
 						olympiadKey,
 						olympiadLabel,
-						memoryPath: `grader/${memory.path}`,
 						summaryPath: GRADER_SUMMARY_PATH,
 						problemsDir: GRADER_PROBLEMS_DIR,
 						sourceAttachmentIds: runAttachments.map((attachment) => attachment.id),
@@ -1744,21 +1667,15 @@ function buildSparkChatTools(options: {
 					const brief = buildGraderBrief({
 						sourceText,
 						input,
-						attachments: runAttachments,
-						memory: {
-							olympiadKey,
-							olympiadLabel
-						}
+						attachments: runAttachments
 					});
 					const graderTask = renderGraderTask({
 						runId,
-						workspaceId,
-						olympiadLabel
+						workspaceId
 					});
 					const prompt = buildGraderAgentPrompt({
 						runId,
 						workspaceId,
-						memoryPath: memory.path,
 						summaryPath: GRADER_SUMMARY_PATH,
 						problemsDir: GRADER_PROBLEMS_DIR
 					});
@@ -1802,37 +1719,29 @@ function buildSparkChatTools(options: {
 							serviceAccountJson,
 							userId,
 							workspaceId,
-							path: `grader/${memory.path}`,
-							content: memory.content.trimEnd() + '\n',
+							path: GRADER_UPLOADS_MANIFEST_PATH,
+							content: JSON.stringify(
+								{
+									attachments: runWorkspaceAttachments
+								},
+								null,
+								2
+							),
 							now
 						}),
-							writeWorkspaceTextFile({
+						...runWorkspaceAttachments.map((attachment) =>
+							writeWorkspaceStorageLinkFile({
 								serviceAccountJson,
 								userId,
 								workspaceId,
-								path: GRADER_UPLOADS_MANIFEST_PATH,
-								content: JSON.stringify(
-									{
-										attachments: runWorkspaceAttachments
-									},
-									null,
-									2
-								),
+								path: attachment.workspacePath,
+								storagePath: attachment.storagePath,
+								contentType: attachment.contentType,
+								sizeBytes: attachment.sizeBytes,
 								now
-							}),
-							...runWorkspaceAttachments.map((attachment) =>
-								writeWorkspaceStorageLinkFile({
-									serviceAccountJson,
-									userId,
-									workspaceId,
-									path: attachment.workspacePath,
-									storagePath: attachment.storagePath,
-									contentType: attachment.contentType,
-									sizeBytes: attachment.sizeBytes,
-									now
-								})
-							)
-						]);
+							})
+						)
+					]);
 					await setFirestoreDocument({
 						serviceAccountJson,
 						documentPath: `users/${userId}/agents/${agentId}`,

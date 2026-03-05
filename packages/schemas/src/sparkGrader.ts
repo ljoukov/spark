@@ -67,7 +67,6 @@ export const SparkGraderRunSchema = z.object({
   userPrompt: trimmedString.optional(),
   olympiadKey: trimmedString,
   olympiadLabel: trimmedString,
-  memoryPath: trimmedString,
   summaryPath: trimmedString,
   problemsDir: trimmedString,
   sourceAttachmentIds: z.array(trimmedString).optional(),
@@ -84,16 +83,3 @@ export const SparkGraderRunSchema = z.object({
 });
 
 export type SparkGraderRun = z.infer<typeof SparkGraderRunSchema>;
-
-export const SparkGraderMemoryFileSchema = z.object({
-  path: z.literal("memory.md"),
-  content: z.string(),
-  olympiadKey: trimmedString,
-  olympiadLabel: trimmedString,
-  createdAt: FirestoreTimestampSchema,
-  updatedAt: FirestoreTimestampSchema,
-  sizeBytes: z.number().int().min(0).optional(),
-  contentType: trimmedString.optional(),
-});
-
-export type SparkGraderMemoryFile = z.infer<typeof SparkGraderMemoryFileSchema>;

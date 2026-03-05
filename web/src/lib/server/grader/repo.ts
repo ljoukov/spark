@@ -10,7 +10,6 @@ import { z } from 'zod';
 
 export const DEFAULT_GRADER_OLYMPIAD_KEY = 'hamilton_ukmt' as const;
 export const DEFAULT_GRADER_OLYMPIAD_LABEL = 'Hamilton Olympiad by UKMT' as const;
-export const GRADER_MEMORY_FILE_PATH = 'memory.md' as const;
 export const GRADER_SUMMARY_PATH = 'grader/output/run-summary.json' as const;
 export const GRADER_PROBLEMS_DIR = 'grader/output/problems' as const;
 
@@ -80,7 +79,6 @@ const sparkGraderRunSchema = z.object({
 	userPrompt: trimmedString.optional(),
 	olympiadKey: trimmedString,
 	olympiadLabel: trimmedString,
-	memoryPath: trimmedString,
 	summaryPath: trimmedString,
 	problemsDir: trimmedString,
 	sourceAttachmentIds: z.array(trimmedString).optional(),
@@ -98,29 +96,12 @@ const sparkGraderRunSchema = z.object({
 
 type SparkGraderRun = z.infer<typeof sparkGraderRunSchema>;
 
-const sparkGraderMemoryFileSchema = z.object({
-	path: z.literal('memory.md'),
-	content: z.string(),
-	olympiadKey: trimmedString,
-	olympiadLabel: trimmedString,
-	createdAt: firestoreTimestampSchema,
-	updatedAt: firestoreTimestampSchema,
-	sizeBytes: z.number().int().min(0).optional(),
-	contentType: trimmedString.optional()
-});
-
-type SparkGraderMemoryFile = z.infer<typeof sparkGraderMemoryFileSchema>;
-
 function requireServiceAccountJson(): string {
 	const value = env.GOOGLE_SERVICE_ACCOUNT_JSON;
 	if (!value || value.trim().length === 0) {
 		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
 	}
 	return value;
-}
-
-function encodeFileId(path: string): string {
-	return encodeURIComponent(path);
 }
 
 function docIdFromPath(documentPath: string): string {
@@ -135,102 +116,6 @@ function resolveSparkUserDocPath(userId: string): string {
 
 export function resolveGraderRunDocPath(userId: string, runId: string): string {
 	return `${resolveSparkUserDocPath(userId)}/graderRuns/${runIdSchema.parse(runId)}`;
-}
-
-function resolveGraderMemoryFileDocPath(userId: string): string {
-	return `${resolveSparkUserDocPath(userId)}/graderConfig/config/files/${encodeFileId(GRADER_MEMORY_FILE_PATH)}`;
-}
-
-export function buildDefaultGraderMemoryMarkdown(options?: {
-	olympiadKey?: string;
-	olympiadLabel?: string;
-}): string {
-	const olympiadKey = options?.olympiadKey?.trim() || DEFAULT_GRADER_OLYMPIAD_KEY;
-	const olympiadLabel = options?.olympiadLabel?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
-	return [
-		'# Grader memory',
-		'',
-		'Default olympiad profile for automated paper grading runs.',
-		'',
-		`- olympiad_key: ${olympiadKey}`,
-		`- olympiad_label: ${olympiadLabel}`,
-		'',
-		'If the learner asks for a different olympiad, update this file first.'
-	].join('\n');
-}
-
-export function parseGraderMemoryMarkdown(content: string): {
-	olympiadKey: string;
-	olympiadLabel: string;
-} {
-	const text = content.trim();
-	const keyMatch = text.match(/^\s*-\s*olympiad_key\s*:\s*(.+?)\s*$/imu);
-	const labelMatch = text.match(/^\s*-\s*olympiad_label\s*:\s*(.+?)\s*$/imu);
-	const olympiadKey = keyMatch?.[1]?.trim() || DEFAULT_GRADER_OLYMPIAD_KEY;
-	const olympiadLabel = labelMatch?.[1]?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
-	return { olympiadKey, olympiadLabel };
-}
-
-export async function readOrCreateGraderMemoryFile(userId: string): Promise<SparkGraderMemoryFile> {
-	const serviceAccountJson = requireServiceAccountJson();
-	const documentPath = resolveGraderMemoryFileDocPath(userId);
-	const now = new Date();
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath
-	});
-	if (snapshot.exists && snapshot.data) {
-		const parsed = sparkGraderMemoryFileSchema.safeParse(snapshot.data);
-		if (parsed.success) {
-			return parsed.data;
-		}
-	}
-	const content = buildDefaultGraderMemoryMarkdown();
-	const memoryDoc: SparkGraderMemoryFile = {
-		path: GRADER_MEMORY_FILE_PATH,
-		content,
-		olympiadKey: DEFAULT_GRADER_OLYMPIAD_KEY,
-		olympiadLabel: DEFAULT_GRADER_OLYMPIAD_LABEL,
-		contentType: 'text/markdown',
-		sizeBytes: new TextEncoder().encode(content).byteLength,
-		createdAt: now,
-		updatedAt: now
-	};
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath,
-		data: memoryDoc as unknown as Record<string, unknown>
-	});
-	return memoryDoc;
-}
-
-export async function saveGraderMemoryFile(
-	userId: string,
-	options: {
-		content: string;
-		olympiadKey: string;
-		olympiadLabel: string;
-	}
-): Promise<SparkGraderMemoryFile> {
-	const serviceAccountJson = requireServiceAccountJson();
-	const now = new Date();
-	const content = options.content;
-	const memoryDoc = sparkGraderMemoryFileSchema.parse({
-		path: GRADER_MEMORY_FILE_PATH,
-		content,
-		olympiadKey: options.olympiadKey,
-		olympiadLabel: options.olympiadLabel,
-		contentType: 'text/markdown',
-		sizeBytes: new TextEncoder().encode(content).byteLength,
-		createdAt: now,
-		updatedAt: now
-	});
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath: resolveGraderMemoryFileDocPath(userId),
-		data: memoryDoc as unknown as Record<string, unknown>
-	});
-	return memoryDoc;
 }
 
 export async function createGraderRun(userId: string, run: SparkGraderRun): Promise<void> {
