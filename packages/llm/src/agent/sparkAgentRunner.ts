@@ -7524,6 +7524,8 @@ export async function runSparkAgentTask(
         },
       });
     };
+    const subagents =
+      graderRunId === null ? undefined : { promptPattern: "codex" as const };
     const toolLoopResult = await runToolLoop(
       initialContents
         ? {
@@ -7531,6 +7533,7 @@ export async function runSparkAgentTask(
             contents: initialContents,
             tools,
             modelTools: [{ type: "web-search", mode: "live" }],
+            subagents,
             maxSteps,
             progress,
             openAiReasoningEffort,
@@ -7543,6 +7546,7 @@ export async function runSparkAgentTask(
             prompt,
             tools,
             modelTools: [{ type: "web-search", mode: "live" }],
+            subagents,
             maxSteps,
             progress,
             openAiReasoningEffort,

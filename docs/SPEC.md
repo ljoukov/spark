@@ -300,6 +300,8 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - During load, linked uploads are materialized into the same local workspace paths (`grader/uploads/<filename>`) so tools such as `view_image` work directly on file paths.
   - The runner resolves these attachments (plus any `inputAttachments` metadata on the agent doc) and injects corresponding images/files into the run-agent model input as inline multimodal parts.
   - The grader agent uses an extraction-first workflow with `extract_text` over uploaded student work/problem statements/official solutions, writing consolidated transcription to `grader/output/transcription.md` before per-problem grading output.
+  - Student transcription must be complete and faithful (clean structure allowed), not a summary/retelling; variable names and formulas are preserved verbatim except for obvious spelling cleanup.
+  - Transcription/source gathering stays on the main agent; per-problem solving + assessment then runs with one subagent per problem, and the main agent consolidates final outputs.
   - If problem statements are uploaded but official solutions are missing, the grader solves each problem carefully itself and does not search online for solutions.
   - If online search is allowed by `referenceSourcePolicy`, `web_search` may be used only to fill missing/unclear problem statements or references; `web_fetch` remains non-PDF only.
   - Image processing tool inputs are aligned with chat upload image formats (`image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/heic`, `image/heif`); `crop_image`, `draw_grid_overlay`, and `trim_image` write PNG outputs into the workspace.

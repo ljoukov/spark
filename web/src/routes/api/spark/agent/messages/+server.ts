@@ -841,6 +841,7 @@ function buildGraderBrief(options: {
 		'## Objectives',
 		'- Identify olympiad + year/paper from uploaded learner materials.',
 		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
+		'- For student submissions, keep transcription complete and faithful (clean structure is allowed, retelling is not).',
 		'- Respect the reference source policy before any online search.',
 		'- If official solutions are missing, solve each problem carefully before grading.'
 	);
@@ -867,9 +868,11 @@ function renderGraderTask(options: {
 		'Grader-specific override:',
 		'- When uploaded files are transcription targets, include them in the same initial `extract_text` call via `documentPaths`.',
 		'- Leave `supportingPaths` unset unless a file is disambiguation-only and is not itself a transcription target.',
+		'- Student solution transcription must be complete and faithful: preserve variable names/formulas verbatim, allow only readability cleanup (line breaks/obvious spelling).',
 		'',
 		'Run-mode constraints for grader runs:',
-		"- Use main-agent execution only (no subagents).",
+		"- Keep transcription and source gathering on the main agent only.",
+		"- After transcription, use subagents for per-problem work: exactly 1 subagent per problem for solving/assessment.",
 		"- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.",
 	].join('\n');
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
@@ -895,7 +898,7 @@ function buildGraderAgentPrompt(options: {
 		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'',
 		'Deliverables:',
-		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass',
+		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass (complete, faithful student transcription; not a summary)',
 		`2) Write per-problem markdown files under ${options.problemsDir}/`,
 		`3) Write ${options.summaryPath}`,
 		'4) Call done with olympiad/year and total marks summary'

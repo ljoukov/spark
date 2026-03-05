@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 
 import {
+  type AgentSubagentToolSelection,
   appendMarkdownSourcesSection,
   createToolLoopSteeringChannel as createToolLoopSteeringChannelV2,
   convertGooglePartsToLlmParts as convertGooglePartsToLlmPartsV2,
@@ -14,7 +15,7 @@ import {
   isLlmTextModelId,
   LlmJsonCallError,
   parseJsonFromLlmText,
-  runToolLoop as runToolLoopV2,
+  runAgentLoop as runAgentLoopV2,
   sanitisePartForLogging,
   streamText,
   stripCodexCitationMarkers,
@@ -27,7 +28,6 @@ import {
   type LlmImageSize,
   type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
-  type LlmThinkingLevel,
   type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
@@ -230,6 +230,7 @@ export type LlmToolLoopOptions = {
   readonly modelId: LlmTextModelId;
   readonly tools: LlmToolSet;
   readonly modelTools?: readonly LlmToolConfig[];
+  readonly subagents?: AgentSubagentToolSelection | false;
   readonly maxSteps?: number;
   readonly progress?: JobProgressReporter;
   readonly debug?: LlmDebugOptions;
@@ -309,20 +310,13 @@ const INPUT_ROLE_FROM_CONTENT_ROLE = {
   tool: "assistant",
 } as const satisfies Record<LlmRole, "user" | "assistant" | "system" | "developer">;
 
-const THINKING_LEVEL_FROM_OPENAI_REASONING_EFFORT = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "high",
-} as const satisfies Record<OpenAiReasoningEffort, LlmThinkingLevel>;
-
-function resolveThinkingLevel(
+function resolveOpenAiReasoningEffort(
   openAiReasoningEffort: OpenAiReasoningEffort | undefined,
-): LlmThinkingLevel | undefined {
+): OpenAiReasoningEffort | undefined {
   if (openAiReasoningEffort === undefined) {
     return undefined;
   }
-  return THINKING_LEVEL_FROM_OPENAI_REASONING_EFFORT[openAiReasoningEffort];
+  return openAiReasoningEffort;
 }
 
 function toInputMessages(contents: readonly LlmContent[]): Array<{
@@ -366,7 +360,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
     responseMimeType: options.responseMimeType,
     responseJsonSchema: options.responseJsonSchema,
     imageSize: options.imageSize,
-    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+    openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
     openAiTextFormat: options.openAiTextFormat,
   });
 
@@ -442,7 +436,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
       maxAttempts,
       ...(options.openAiSchemaName ? { openAiSchemaName: options.openAiSchemaName } : {}),
       ...(options.normalizeJson ? { normalizeJson: options.normalizeJson } : {}),
-      thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+      openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
       onEvent: (event) => {
         if (event.type === "delta") {
           if (event.channel === "response") {
@@ -497,22 +491,28 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
       ? options.prompt
       : toInputMessages(options.contents);
   const instructions = "systemPrompt" in options ? options.systemPrompt : undefined;
+  const resolvedModelId = resolveLlmTextModelId(options.modelId);
 
   // We do not currently stream per-step progress into JobProgressReporter; callers
   // still receive onDelta via events, and total usage/cost are available in logs
   // through model output when needed.
   void progress;
 
-  const result = await runToolLoopV2({
-    model: resolveLlmTextModelId(options.modelId),
+  const request = {
+    model: resolvedModelId,
     input,
     ...(instructions ? { instructions } : {}),
     tools: options.tools,
     modelTools: options.modelTools,
     maxSteps: options.maxSteps,
-    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+    openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
     steering: options.steering,
     ...(onEvent ? { onEvent } : {}),
+  };
+
+  const result = await runAgentLoopV2({
+    ...request,
+    ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
   });
 
   return {

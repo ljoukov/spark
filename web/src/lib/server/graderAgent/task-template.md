@@ -33,6 +33,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
      - uploaded official solution files (if provided).
    - write to `grader/output/transcription.md`.
    - in `instructions`, require separate sections for student submissions, problem statements, and official solutions, each with source filenames.
+   - for student submissions, produce complete transcription, not a summary or retelling.
+   - keep student math and variable naming verbatim (do not rename variables, rewrite formulas, or change mathematical expressions).
+   - you may improve readability with line breaks/sectioning and fix obvious spelling mistakes when meaning is unchanged.
+   - ignore unrelated scribbles/doodles that are clearly not part of the solution.
    - do not pass these target files via `supportingPaths`; they are primary transcription targets.
    - after this call, read `grader/output/transcription.md` for cleanup and do not repeat an identical call.
 3. Determine paper + references:
@@ -49,11 +53,19 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - if problem statements are uploaded but official solutions are missing, do NOT search online for solutions; solve each problem yourself.
    - if official solutions are unavailable, solve each problem yourself very carefully before grading.
    - when self-solving, clearly mark this in `## Official solution` as "Derived solution (official solution unavailable)".
-5. Grade each problem deeply:
+5. Use subagents for per-problem solving and assessment:
+   - perform transcription and reference gathering (steps 1-4) with the main agent only.
+   - once references are ready, spawn exactly one subagent per problem.
+   - each subagent must handle one problem only and do both tasks for that problem:
+     - establish/verify the solution baseline (official or derived),
+     - assess the student's solution and draft grading rationale.
+   - do not assign multiple problems to one subagent.
+   - the main agent must consolidate subagent outputs into final files.
+6. Grade each problem deeply:
    - compare against official guidance when available; otherwise compare against your carefully derived solution.
    - award marks fairly even when the student's method differs, if mathematically correct.
    - reference paper / mark-scheme / official solution URLs when available.
-6. Write one markdown file per problem under `grader/output/problems/`:
+7. Write one markdown file per problem under `grader/output/problems/`:
    - file path pattern: `grader/output/problems/<problem-id>.md`
    - use Markdown with LaTeX math notation (`$...$` and `$$...$$`) when writing mathematics.
    - required section headings (exact):
@@ -67,8 +79,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - `## Problem statement` should contain the transcribed statement from the learner-provided context.
    - `## Official problem statement` should contain the cleaned canonical statement used for grading.
    - `## Official solution` should summarize official solutions (with URLs) when available, or your derived solution when official solutions are unavailable.
+   - `## Student solution transcript` must contain the complete student solution transcription for that problem (cleanly structured, but not retold).
+   - in `## Student solution transcript`, preserve student variable names and formulas verbatim; do not rename variables or alter formula text.
    - in `## Annotation and feedback`, choose line-by-line or statement-by-statement annotation based on what best matches the solution structure, and quote the student text where useful.
-7. Write run summary JSON to `grader/output/run-summary.json` with this shape:
+8. Write run summary JSON to `grader/output/run-summary.json` with this shape:
 
 ```json
 {
@@ -94,7 +108,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 ```
 
    - Include `paperUrl` and `markSchemeUrl` only when known.
-8. Call `done({summary})` with:
+9. Call `done({summary})` with:
    - inferred olympiad/year
    - total marks
    - number of problems graded
