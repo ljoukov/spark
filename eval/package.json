@@ -19,6 +19,7 @@
     "bench:pdf-transcription": "tsx src/benchmarks/pdf-transcription/main.ts",
     "bench:pdf-transcription-agentic": "tsx src/benchmarks/pdf-transcription-agentic/main.ts",
     "bench:handwriting-transcription-agentic": "tsx src/benchmarks/handwriting-transcription-agentic/main.ts",
+    "bench:text-extraction": "tsx src/benchmarks/text-extraction/main.ts",
     "test:pdf-transcription": "bun run bench:pdf-transcription",
     "typecheck": "tsc --noEmit",
     "eslint": "eslint \"src/**/*.{ts,tsx}\"",

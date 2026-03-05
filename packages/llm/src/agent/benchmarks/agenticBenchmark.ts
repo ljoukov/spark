@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 
 import type { AgentTelemetryEvent } from "@ljoukov/llm";
+import { appendToolCallStreamLog } from "../sparkAgentRunner";
 
 import {
   estimateCallCostUsd,
@@ -57,6 +58,7 @@ export type AgenticBenchmarkLoggerSnapshot = {
 export type AgenticBenchmarkLogger = {
   logStage: (kind: "start" | "done", stage: string) => void;
   logLine: (line: string, actor?: string) => string;
+  progress: JobProgressReporter;
   onTelemetryEvent: (event: AgentTelemetryEvent) => void;
   onEvent: (event: LlmStreamEvent) => void;
   overrideUsageCostUsd: (value: number) => void;
@@ -606,22 +608,12 @@ export function createAgenticBenchmarkLogger(options: {
     if (streamEvent.type !== "tool_call") {
       return;
     }
-
-    const inputSnippet = serialiseSnippet(streamEvent.input);
-    if (streamEvent.phase === "started") {
-      logSubagentTelemetry(
-        event.runId,
-        `trace_tool_call: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} input=${inputSnippet}`,
-      );
-      return;
-    }
-
-    const outputSnippet = serialiseSnippet(streamEvent.output);
-    const status = typeof streamEvent.error === "string" ? `error=${streamEvent.error}` : "ok";
-    logSubagentTelemetry(
-      event.runId,
-      `trace_tool_result: turn=${streamEvent.turn.toString()} index=${streamEvent.toolIndex.toString()} tool=${streamEvent.toolName} durationMs=${typeof streamEvent.durationMs === "number" ? streamEvent.durationMs.toString() : "n/a"} ${status} output=${outputSnippet}`,
-    );
+    appendToolCallStreamLog({
+      event: streamEvent,
+      append: (line) => {
+        logSubagentTelemetry(event.runId, line);
+      },
+    });
   };
 
   const onEvent = (event: LlmStreamEvent): void => {
@@ -679,21 +671,12 @@ export function createAgenticBenchmarkLogger(options: {
     }
 
     const actor = resolveToolEventActor(event);
-    const inputSnippet = serialiseSnippet(event.input);
-    const outputSnippet =
-      event.phase === "completed" ? serialiseSnippet(event.output) : undefined;
-    if (event.phase === "started") {
-      logLine(
-        `trace_tool_call: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} input=${inputSnippet}`,
-        actor,
-      );
-    } else {
-      const status = typeof event.error === "string" ? `error=${event.error}` : "ok";
-      logLine(
-        `trace_tool_result: turn=${event.turn.toString()} index=${event.toolIndex.toString()} tool=${event.toolName} durationMs=${typeof event.durationMs === "number" ? event.durationMs.toString() : "n/a"} ${status} output=${outputSnippet ?? "<none>"}`,
-        actor,
-      );
-    }
+    appendToolCallStreamLog({
+      event,
+      append: (line) => {
+        logLine(line, actor);
+      },
+    });
     if (event.phase === "completed") {
       toolCallsByName[event.toolName] = (toolCallsByName[event.toolName] ?? 0) + 1;
       if (event.toolName === "spawn_agent") {
@@ -758,9 +741,26 @@ export function createAgenticBenchmarkLogger(options: {
     };
   };
 
+  const progress: JobProgressReporter = {
+    log: (message) => {
+      logLine(message, "main");
+    },
+    startModelCall: (details) => {
+      return Symbol(`agentic-benchmark-model-call:${details.modelId}`);
+    },
+    recordModelUsage: (_handle, _chunk) => {},
+    finishModelCall: (_handle) => {},
+    startStage: (stageName) => {
+      return Symbol(`agentic-benchmark-stage:${stageName}`);
+    },
+    finishStage: (_handle) => {},
+    setActiveStages: (_stages) => {},
+  };
+
   return {
     logStage,
     logLine,
+    progress,
     onTelemetryEvent,
     onEvent,
     overrideUsageCostUsd,

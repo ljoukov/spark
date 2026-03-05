@@ -660,6 +660,7 @@ async function runAgenticBenchmark(options: {
       rootDir: paths.workspaceDir,
       userId: "benchmark-runner",
       serviceAccountJson: "{}",
+      progress: logger.progress,
     });
     const doneTool = tool({
       description: "Finish the run and provide summary.",

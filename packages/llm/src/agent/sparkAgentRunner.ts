@@ -384,7 +384,7 @@ function formatToolLogSnippet(value: unknown): string {
   return `${compact.slice(0, AGENT_TOOL_LOG_SNIPPET_MAX_CHARS)}…`;
 }
 
-function appendToolCallStreamLog(options: {
+export function appendToolCallStreamLog(options: {
   event: LlmStreamEvent;
   append: (line: string) => void;
 }): void {
@@ -403,18 +403,28 @@ function appendToolCallStreamLog(options: {
     `tool=${event.toolName}${callIdSegment}`,
   ].join(" ");
   if (event.phase === "started") {
+    const sanitizedInput = sanitizeToolTraceValue({
+      toolName: event.toolName,
+      direction: "input",
+      value: event.input,
+    });
     options.append(prefix);
-    options.append(`tool_call_input: ${formatToolLogSnippet(event.input)}`);
+    options.append(`tool_call_input: ${formatToolLogSnippet(sanitizedInput)}`);
     return;
   }
   const durationSegment =
     typeof event.durationMs === "number" && Number.isFinite(event.durationMs)
       ? ` durationMs=${Math.max(0, Math.round(event.durationMs)).toString()}`
       : "";
+  const sanitizedOutput = sanitizeToolTraceValue({
+    toolName: event.toolName,
+    direction: "output",
+    value: event.output,
+  });
   options.append(
     `${prefix} status=${event.error ? "error" : "ok"}${durationSegment}`,
   );
-  options.append(`tool_call_output: ${formatToolLogSnippet(event.output)}`);
+  options.append(`tool_call_output: ${formatToolLogSnippet(sanitizedOutput)}`);
   if (typeof event.error === "string" && event.error.trim().length > 0) {
     options.append(`tool_call_error: ${event.error.trim()}`);
   }

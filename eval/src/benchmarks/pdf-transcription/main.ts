@@ -227,6 +227,24 @@ function logStep(message: string): void {
   console.log(`[${percent}%] [pdf-bench] ${message}`);
 }
 
+function createToolProgressReporter(): JobProgressReporter {
+  return {
+    log: (message) => {
+      logStep(message);
+    },
+    startModelCall: ({ modelId }) => {
+      return Symbol(`pdf-bench-tool-model:${modelId}`);
+    },
+    recordModelUsage: (_handle: ModelCallHandle, _chunk: LlmUsageChunk) => {},
+    finishModelCall: (_handle: ModelCallHandle) => {},
+    startStage: (_stageName: string): StageHandle => {
+      return Symbol("pdf-bench-tool-stage");
+    },
+    finishStage: (_handle: StageHandle) => {},
+    setActiveStages: (_stages: Iterable<string>) => {},
+  };
+}
+
 function formatMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) {
     return "n/a";
@@ -943,6 +961,7 @@ async function buildToolHarness(runDir: string): Promise<{
   scheduledUpdates: string[];
 }> {
   const scheduledUpdates: string[] = [];
+  const progress = createToolProgressReporter();
   const tools = buildSparkAgentTools({
     workspace: {
       scheduleUpdate: (inputPath) => {
@@ -962,6 +981,7 @@ async function buildToolHarness(runDir: string): Promise<{
     rootDir: runDir,
     userId: "benchmark-runner",
     serviceAccountJson: "{}",
+    progress,
   });
 
   const readPdfTool = tools.read_pdf;

@@ -1,6 +1,7 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
+	appendToolCallStreamLog,
 	createTask,
 	PDF_TRANSCRIPTION_SKILL_TEXT,
 	resolveWorkspacePathContentType,
@@ -9,7 +10,13 @@ import {
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
-import type { LlmContent, LlmContentPart, LlmTextDelta, LlmToolSet } from '@spark/llm';
+import type {
+	LlmContent,
+	LlmContentPart,
+	LlmStreamEvent,
+	LlmTextDelta,
+	LlmToolSet
+} from '@spark/llm';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
@@ -607,6 +614,18 @@ function buildLlmContents(
 type StreamHandlers = {
 	onDelta?: (delta: LlmTextDelta) => void;
 };
+
+function logSparkChatToolLoopEvent(options: {
+	conversationId: string;
+	event: LlmStreamEvent;
+}): void {
+	appendToolCallStreamLog({
+		event: options.event,
+		append: (line) => {
+			console.log(`[spark-chat:${options.conversationId}] ${line}`);
+		}
+	});
+}
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => {
@@ -1919,6 +1938,12 @@ async function generateAssistantResponse(
 		tools,
 		maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
 		openAiReasoningEffort: OPENAI_REASONING_EFFORT,
+		onEvent: (event) => {
+			logSparkChatToolLoopEvent({
+				conversationId: options.conversationId,
+				event
+			});
+		},
 		onDelta: handlers.onDelta
 	});
 	return normalizeSparkLinks(result.text);
