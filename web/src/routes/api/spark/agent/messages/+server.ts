@@ -1,6 +1,7 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
+	appendToolCallStreamLog,
 	createTask,
 	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
 	resolveWorkspacePathContentType,
@@ -614,73 +615,11 @@ type StreamHandlers = {
 	onDelta?: (delta: LlmTextDelta) => void;
 };
 
-const TOOL_LOG_SNIPPET_MAX_CHARS = 220;
-
-function serializeToolLogValue(value: unknown): string {
-	if (typeof value === 'string') {
-		return value;
-	}
-	try {
-		const serialized = JSON.stringify(value);
-		if (typeof serialized === 'string') {
-			return serialized;
-		}
-	} catch {
-		// ignore JSON serialization errors and use the fallback below
-	}
-	return String(value);
-}
-
-function formatToolLogSnippet(value: unknown): string {
-	const compact = serializeToolLogValue(value).replace(/\s+/gu, ' ').trim();
-	if (compact.length === 0) {
-		return '<empty>';
-	}
-	if (compact.length <= TOOL_LOG_SNIPPET_MAX_CHARS) {
-		return compact;
-	}
-	return `${compact.slice(0, TOOL_LOG_SNIPPET_MAX_CHARS)}…`;
-}
-
-function appendSparkChatToolCallLog(options: {
-	event: LlmStreamEvent;
-	append: (line: string) => void;
-}): void {
-	const event = options.event;
-	if (event.type !== 'tool_call') {
-		return;
-	}
-	const callIdSegment =
-		typeof event.callId === 'string' && event.callId.trim().length > 0
-			? ` callId=${event.callId}`
-			: '';
-	const prefix = [
-		`tool_call_${event.phase}:`,
-		`turn=${event.turn.toString()}`,
-		`index=${event.toolIndex.toString()}`,
-		`tool=${event.toolName}${callIdSegment}`
-	].join(' ');
-	if (event.phase === 'started') {
-		options.append(prefix);
-		options.append(`tool_call_input: ${formatToolLogSnippet(event.input)}`);
-		return;
-	}
-	const durationSegment =
-		typeof event.durationMs === 'number' && Number.isFinite(event.durationMs)
-			? ` durationMs=${Math.max(0, Math.round(event.durationMs)).toString()}`
-			: '';
-	options.append(`${prefix} status=${event.error ? 'error' : 'ok'}${durationSegment}`);
-	options.append(`tool_call_output: ${formatToolLogSnippet(event.output)}`);
-	if (typeof event.error === 'string' && event.error.trim().length > 0) {
-		options.append(`tool_call_error: ${event.error.trim()}`);
-	}
-}
-
 function logSparkChatToolLoopEvent(options: {
 	conversationId: string;
 	event: LlmStreamEvent;
 }): void {
-	appendSparkChatToolCallLog({
+	appendToolCallStreamLog({
 		event: options.event,
 		append: (line) => {
 			console.log(`[spark-chat:${options.conversationId}] ${line}`);

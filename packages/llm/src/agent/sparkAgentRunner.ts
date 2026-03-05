@@ -3133,6 +3133,19 @@ function buildAgentTools(options: {
     debug,
     extractTextDebugRootDir,
   } = options;
+  const resolvedExtractTextDebugRootDir = (() => {
+    const raw =
+      typeof extractTextDebugRootDir === "string"
+        ? extractTextDebugRootDir.trim()
+        : "";
+    if (raw.length === 0) {
+      return path.join(rootDir, "debug");
+    }
+    if (path.isAbsolute(raw)) {
+      return raw;
+    }
+    return path.join(rootDir, raw);
+  })();
 
   const shouldEnforceLessonPipeline = enforceLessonPipeline === true;
   const shouldAllowPythonExec = allowPythonExec ?? true;
@@ -3949,11 +3962,10 @@ function buildAgentTools(options: {
       `start docs=${primaryDocuments.length.toString()} supporting=${supportingParts.length.toString()} promptChars=${promptChars.toString()} progress=${progress ? "yes" : "no"} debug=${debug ? "yes" : "no"}`,
     );
     const shouldPersistExtractTextDebugArtifacts =
-      typeof extractTextDebugRootDir === "string" &&
-      extractTextDebugRootDir.trim().length > 0;
+      resolvedExtractTextDebugRootDir.trim().length > 0;
     if (shouldPersistExtractTextDebugArtifacts) {
       await persistExtractTextRequestDebugArtifacts({
-        debugRootDir: extractTextDebugRootDir,
+        debugRootDir: resolvedExtractTextDebugRootDir,
         toolIdSegment,
         promptText: extractionPromptText,
         promptChars,
@@ -4160,7 +4172,7 @@ function buildAgentTools(options: {
         : modelCallElapsedMs ?? undefined;
     if (shouldPersistExtractTextDebugArtifacts) {
       await persistExtractTextResponseDebugArtifacts({
-        debugRootDir: extractTextDebugRootDir,
+        debugRootDir: resolvedExtractTextDebugRootDir,
         toolIdSegment,
         responseText: extractedText,
         thinkingText: streamedThinkingText,
