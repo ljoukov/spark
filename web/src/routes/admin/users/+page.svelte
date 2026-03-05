@@ -157,24 +157,30 @@
 						</div>
 					</div>
 
-					<div class="flex flex-wrap gap-2">
-						<a
-							href={`/admin/users/${user.uid}`}
-							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-						>
-							Lessons
-						</a>
-						<a
-							href={`/admin/users/${user.uid}/chats`}
-							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-						>
-							Chats
-						</a>
-						<a
-							href={`/admin/users/${user.uid}/agents`}
-							class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-						>
-							Agent runs
+						<div class="flex flex-wrap gap-2">
+							<a
+								href={`/admin/users/${user.uid}`}
+								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+							>
+								Lessons
+							</a>
+							<a
+								href={`/admin/users/${user.uid}/chats`}
+								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+							>
+								Chats
+							</a>
+							<a
+								href={`/admin/users/${user.uid}/graders`}
+								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+							>
+								Graders
+							</a>
+							<a
+								href={`/admin/users/${user.uid}/agents`}
+								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+							>
+								Agent runs
 						</a>
 					</div>
 				</div>
