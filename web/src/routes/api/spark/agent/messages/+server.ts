@@ -841,9 +841,11 @@ function buildGraderBrief(options: {
 		'## Objectives',
 		'- Identify olympiad + year/paper from uploaded learner materials.',
 		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
-		'- For student submissions, keep transcription complete and faithful (clean structure is allowed, retelling is not).',
+		'- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.',
+		'- Preserve the student\'s variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.',
 		'- Respect the reference source policy before any online search.',
-		'- If official solutions are missing, solve each problem carefully before grading.'
+		'- Feedback should be line-by-line against those numbered student statements.',
+		'- If official solutions are missing, solve each problem carefully before grading and match the student\'s level/terminology/methods where reasonable.'
 	);
 	return lines.join('\n').trim() + '\n';
 }
@@ -868,7 +870,10 @@ function renderGraderTask(options: {
 		'Grader-specific override:',
 		'- When uploaded files are transcription targets, include them in the same initial `extract_text` call via `documentPaths`.',
 		'- Leave `supportingPaths` unset unless a file is disambiguation-only and is not itself a transcription target.',
-		'- Student solution transcription must be complete and faithful: preserve variable names/formulas verbatim, allow only readability cleanup (line breaks/obvious spelling).',
+		'- Student solution transcription must be complete and faithful: after extraction, split each problem into a numbered list of student statements/sentences in source order.',
+		'- Preserve student variable names, formulas, terminology, and method choices as closely as possible; allow only numbering, line-break cleanup, and obvious spelling fixes that do not change meaning.',
+		'- Final grading feedback must be line-by-line against that numbered transcript.',
+		'- When official solutions are missing, derived solutions should stay at the student\'s level and reuse their terminology/method style where reasonable.',
 		'',
 		'Run-mode constraints for grader runs:',
 		"- Keep transcription and source gathering on the main agent only.",
@@ -898,10 +903,10 @@ function buildGraderAgentPrompt(options: {
 		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'',
 		'Deliverables:',
-		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass (complete, faithful student transcription; not a summary)',
-		`2) Write per-problem markdown files under ${options.problemsDir}/`,
+		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)',
+		`2) Write per-problem markdown files under ${options.problemsDir}/ with line-by-line feedback keyed to those numbered statements`,
 		`3) Write ${options.summaryPath}`,
-		'4) Call done with olympiad/year and total marks summary'
+		'4) When official solutions are missing, derive solutions at the student\'s level where reasonable and call done with olympiad/year and total marks summary'
 	].join('\n');
 }
 

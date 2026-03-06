@@ -34,8 +34,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - write to `grader/output/transcription.md`.
    - in `instructions`, require separate sections for student submissions, problem statements, and official solutions, each with source filenames.
    - for student submissions, produce complete transcription, not a summary or retelling.
-   - keep student math and variable naming verbatim (do not rename variables, rewrite formulas, or change mathematical expressions).
-   - you may improve readability with line breaks/sectioning and fix obvious spelling mistakes when meaning is unchanged.
+   - after extraction, normalize each student solution into an enumerated list of statements/sentences in source order; each numbered item should capture one clear mathematical step, sentence, or claim.
+   - keep student math, variable naming, terminology, and method choice as verbatim as possible (do not rename variables, rewrite formulas, swap in more advanced methods, or change mathematical expressions).
+   - you may improve readability only by splitting into numbered lines, adding line breaks/sectioning, and fixing obvious spelling mistakes when meaning is unchanged.
+   - do not merge, reorder, or silently omit student steps that are part of the solution.
    - ignore unrelated scribbles/doodles that are clearly not part of the solution.
    - do not pass these target files via `supportingPaths`; they are primary transcription targets.
    - after this call, read `grader/output/transcription.md` for cleanup and do not repeat an identical call.
@@ -52,6 +54,8 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - if official solutions are available (uploaded or found online), use them.
    - if problem statements are uploaded but official solutions are missing, do NOT search online for solutions; solve each problem yourself.
    - if official solutions are unavailable, solve each problem yourself very carefully before grading.
+   - when self-solving, match the student's level where reasonable: prefer their terminology, notation style, and method family so the derived solution is easier for that student to follow.
+   - do not introduce substantially more advanced machinery unless it is necessary for correctness; if you must, say so explicitly.
    - when self-solving, clearly mark this in `## Official solution` as "Derived solution (official solution unavailable)".
 5. Use subagents for per-problem solving and assessment:
    - perform transcription and reference gathering (steps 1-4) with the main agent only.
@@ -64,6 +68,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 6. Grade each problem deeply:
    - compare against official guidance when available; otherwise compare against your carefully derived solution.
    - award marks fairly even when the student's method differs, if mathematically correct.
+   - anchor grading and annotation to the numbered student statements so feedback can be read line-by-line against the transcript.
    - reference paper / mark-scheme / official solution URLs when available.
 7. Write one markdown file per problem under `grader/output/problems/`:
    - file path pattern: `grader/output/problems/<problem-id>.md`
@@ -79,9 +84,12 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - `## Problem statement` should contain the transcribed statement from the learner-provided context.
    - `## Official problem statement` should contain the cleaned canonical statement used for grading.
    - `## Official solution` should summarize official solutions (with URLs) when available, or your derived solution when official solutions are unavailable.
-   - `## Student solution transcript` must contain the complete student solution transcription for that problem (cleanly structured, but not retold).
-   - in `## Student solution transcript`, preserve student variable names and formulas verbatim; do not rename variables or alter formula text.
-   - in `## Annotation and feedback`, choose line-by-line or statement-by-statement annotation based on what best matches the solution structure, and quote the student text where useful.
+   - `## Official solution` should match the student's level, terminology, and method style where reasonable when it is a derived solution rather than an official one.
+   - `## Student solution transcript` must contain the complete student solution transcription for that problem as an enumerated list of statements/sentences in source order (cleanly structured, but not retold).
+   - in `## Student solution transcript`, preserve student variable names, formulas, terminology, and method choices as verbatim as possible; do not rename variables, alter formula text, or rewrite the method into a stronger one.
+   - `## Annotation and feedback` must be line-by-line against the numbered transcript: reference every numbered student line in order and explain whether it is correct, incomplete, unjustified, or irrelevant.
+   - in `## Annotation and feedback`, keep numbering aligned with `## Student solution transcript` and quote the student text where useful.
+   - every numbered student line should receive corresponding feedback, even if the note is brief.
 8. Write run summary JSON to `grader/output/run-summary.json` with this shape:
 
 ```json
@@ -118,3 +126,4 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 - Keep transcriptions faithful to source text.
 - Keep grading explicit and auditable.
 - Keep feedback corrective, specific, and close to the student's attempted logic.
+- When official solutions are unavailable, keep derived solutions and explanations at the student's level whenever reasonable.
