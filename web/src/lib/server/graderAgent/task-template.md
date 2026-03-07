@@ -34,6 +34,9 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - write to `grader/output/transcription.md`.
    - in `instructions`, require separate sections for student submissions, problem statements, and official solutions, each with source filenames.
    - for student submissions, produce complete transcription, not a summary or retelling.
+   - for uploaded problem statements and official solutions, keep the source wording as verbatim as possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.
+   - only fix obvious OCR/layout issues when meaning is unchanged; do NOT paraphrase, summarize, or rewrite problem statements into "cleaned" canonical wording.
+   - if any problem-statement wording remains uncertain after extraction, mark the uncertainty explicitly instead of silently rewriting it.
    - after extraction, normalize each student solution into an enumerated list of statements/sentences in source order; each numbered item should capture one clear mathematical step, sentence, or claim.
    - keep student math, variable naming, terminology, and method choice as verbatim as possible (do not rename variables, rewrite formulas, swap in more advanced methods, or change mathematical expressions).
    - you may improve readability only by splitting into numbered lines, adding line breaks/sectioning, and fixing obvious spelling mistakes when meaning is unchanged.
@@ -82,7 +85,9 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
      - `## Annotation and feedback`
      - `## Overall feedback`
    - `## Problem statement` should contain the transcribed statement from the learner-provided context.
-   - `## Official problem statement` should contain the cleaned canonical statement used for grading.
+   - `## Official problem statement` should contain the official/reference statement used for grading, copied as verbatim as possible from the best available source.
+   - in `## Official problem statement`, preserve numbering, labels, examples, punctuation, variable names, and displayed math; do not paraphrase, standardize notation, rename variables, or add framing text such as "cleaned wording".
+   - in `## Official problem statement`, only apply minimal OCR/layout cleanup that leaves meaning unchanged; if wording is still uncertain, mark the uncertainty explicitly or note it nearby.
    - `## Official solution` should summarize official solutions (with URLs) when available, or your derived solution when official solutions are unavailable.
    - `## Official solution` should match the student's level, terminology, and method style where reasonable when it is a derived solution rather than an official one.
    - `## Student solution transcript` must contain the complete student solution transcription for that problem as an enumerated list of statements/sentences in source order (cleanly structured, but not retold).
