@@ -160,6 +160,25 @@
 		margin-bottom: 0;
 	}
 
+	.markdown-content :global(ul),
+	.markdown-content :global(ol) {
+		margin: 0.5rem 0 0.75rem 1.25rem;
+		padding: 0;
+		list-style-position: outside;
+	}
+
+	.markdown-content :global(ul) {
+		list-style: disc;
+	}
+
+	.markdown-content :global(ol) {
+		list-style: decimal;
+	}
+
+	.markdown-content :global(li + li) {
+		margin-top: 0.35rem;
+	}
+
 	.raw-report {
 		border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
 		border-radius: 1rem;
