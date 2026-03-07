@@ -860,16 +860,14 @@ function buildGraderBrief(options: {
 		"- Preserve the student's variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.",
 		'- Respect the reference source policy before any online search.',
 		'- Feedback should be line-by-line against those numbered student statements.',
-		"- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable."
+		"- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable.",
+		'- The run summary shown in the UI should stay short and student-facing: title + concise markdown summary, with no IDs, file paths, or process-log wording.'
 	);
 	return lines.join('\n').trim() + '\n';
 }
 
-function renderGraderTask(options: { runId: string; workspaceId: string }): string {
-	const baseTask = graderTaskTemplate
-		.replaceAll('{{RUN_ID}}', options.runId)
-		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
-		.trim();
+function renderGraderTask(): string {
+	const baseTask = graderTaskTemplate.trim();
 	const transcriptionSkillSection = [
 		'',
 		'## Handwriting transcription workflow (must follow)',
@@ -897,17 +895,9 @@ function renderGraderTask(options: { runId: string; workspaceId: string }): stri
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
 
-function buildGraderAgentPrompt(options: {
-	runId: string;
-	workspaceId: string;
-	summaryPath: string;
-	problemsDir: string;
-}): string {
+function buildGraderAgentPrompt(options: { summaryPath: string; problemsDir: string }): string {
 	return [
 		'Grade an olympiad student submission from uploaded work and produce structured outputs.',
-		'',
-		`graderRunId: ${options.runId}`,
-		`workspaceId: ${options.workspaceId}`,
 		'',
 		'Read and follow these files first:',
 		'- brief.md',
@@ -916,12 +906,13 @@ function buildGraderAgentPrompt(options: {
 		'- grader/uploads/index.json',
 		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'- Keep official/reference problem statements verbatim where possible; do not rewrite them into cleaned canonical wording.',
+		'- Keep the user-facing run summary concise and free of IDs, paths, and tool/process narration.',
 		'',
 		'Deliverables:',
 		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)',
 		`2) Write per-problem markdown files under ${options.problemsDir}/ with a verbatim-as-possible official/reference problem statement and line-by-line feedback keyed to the numbered student statements`,
-		`3) Write ${options.summaryPath}`,
-		"4) When official solutions are missing, derive solutions at the student's level where reasonable and call done with olympiad/year and total marks summary"
+		`3) Write ${options.summaryPath} including a concise user-facing presentation title and summary markdown`,
+		"4) When official solutions are missing, derive solutions at the student's level where reasonable and call done with that same short user-facing markdown summary"
 	].join('\n');
 }
 
@@ -1692,13 +1683,8 @@ function buildSparkChatTools(options: {
 						input,
 						attachments: runAttachments
 					});
-					const graderTask = renderGraderTask({
-						runId,
-						workspaceId
-					});
+					const graderTask = renderGraderTask();
 					const prompt = buildGraderAgentPrompt({
-						runId,
-						workspaceId,
 						summaryPath: GRADER_SUMMARY_PATH,
 						problemsDir: GRADER_PROBLEMS_DIR
 					});

@@ -2,9 +2,6 @@
 
 You are grading olympiad-paper solutions.
 
-- Run ID: `{{RUN_ID}}`
-- Workspace ID: `{{WORKSPACE_ID}}`
-
 ## Inputs
 
 Read these files first:
@@ -106,6 +103,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 		"awardedMarks": 0,
 		"maxMarks": 0
 	},
+	"presentation": {
+		"title": "string",
+		"summaryMarkdown": "string"
+	},
 	"problems": [
 		{
 			"id": "p1",
@@ -120,11 +121,23 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 }
 ```
 
-   - Include `paperUrl` and `markSchemeUrl` only when known.
+- `presentation.title` is required and should be a concise, user-facing card title.
+- `presentation.title` should adapt to the uploaded scope:
+  - use the actual paper name when confidently identified,
+  - otherwise describe what was graded, for example `Problem 8 submission` or `Problems 2, 5, 7, and 8 submission`.
+- `presentation.summaryMarkdown` is required and should be short Markdown suitable for direct UI rendering:
+  - one short paragraph or 2-3 short bullet points,
+  - focus on what was graded and any important caveats,
+  - do not repeat marks / problems / percent because the UI shows those separately.
+- In both `presentation.title` and `presentation.summaryMarkdown`, do NOT mention:
+  - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
+- Include `paperUrl` and `markSchemeUrl` only when known.
+- Omit `olympiad`, `year`, `paperName`, `paperUrl`, and `markSchemeUrl` when they are unknown; do not fill them with placeholder text such as `Unknown`.
+
 9. Call `done({summary})` with:
-   - inferred olympiad/year
-   - total marks
-   - number of problems graded
+   - the same user-facing Markdown used in `presentation.summaryMarkdown`
+   - no run IDs, file paths, tool names, or process-log wording
+   - no headings; keep it brief enough for a summary card
 
 ## Quality bar
 

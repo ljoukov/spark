@@ -54,6 +54,12 @@ export const load: PageServerLoad = async ({ params }) => {
 						markSchemeUrl: run.paper.markSchemeUrl ?? null
 					}
 				: null,
+			presentation: run.presentation
+				? {
+						title: run.presentation.title ?? null,
+						summaryMarkdown: run.presentation.summaryMarkdown ?? null
+					}
+				: null,
 			totals: run.totals
 				? {
 						awardedMarks: run.totals.awardedMarks,

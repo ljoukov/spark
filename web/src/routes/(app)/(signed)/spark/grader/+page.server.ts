@@ -1,3 +1,4 @@
+import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { listGraderRuns } from '$lib/server/grader/repo';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -11,10 +12,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		runs: runs.map((run) => ({
 			id: run.id,
-			agentId: run.agentId,
-			workspaceId: run.workspaceId,
 			status: run.status,
-			olympiadLabel: run.olympiadLabel,
+			display: buildGraderRunDisplay({
+				status: run.status,
+				paper: run.paper,
+				presentation: run.presentation,
+				totals: run.totals,
+				problems: run.problems,
+				resultSummary: run.resultSummary ?? null
+			}),
 			totals: run.totals
 				? {
 						awardedMarks: run.totals.awardedMarks,
@@ -34,7 +40,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 			createdAt: run.createdAt.toISOString(),
 			updatedAt: run.updatedAt.toISOString(),
 			completedAt: run.completedAt ? run.completedAt.toISOString() : null,
-			resultSummary: run.resultSummary ?? null,
 			error: run.error ?? null
 		}))
 	};

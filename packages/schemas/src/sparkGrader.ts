@@ -59,6 +59,15 @@ export const SparkGraderPaperSchema = z.object({
 
 export type SparkGraderPaper = z.infer<typeof SparkGraderPaperSchema>;
 
+export const SparkGraderPresentationSchema = z.object({
+  title: trimmedString.optional(),
+  summaryMarkdown: trimmedString.optional(),
+});
+
+export type SparkGraderPresentation = z.infer<
+  typeof SparkGraderPresentationSchema
+>;
+
 export const SparkGraderRunSchema = z.object({
   id: trimmedString,
   agentId: trimmedString,
@@ -73,6 +82,7 @@ export const SparkGraderRunSchema = z.object({
   sourceAttachmentCount: z.number().int().min(0).optional(),
   status: SparkGraderRunStatusSchema,
   paper: SparkGraderPaperSchema.optional(),
+  presentation: SparkGraderPresentationSchema.optional(),
   totals: SparkGraderTotalsSchema.optional(),
   problems: z.array(SparkGraderProblemSummarySchema).optional(),
   resultSummary: z.string().trim().optional(),

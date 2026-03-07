@@ -584,12 +584,18 @@ const GraderSummaryProblemSchema = z.object({
   filePath: z.string().trim().min(1),
 });
 
+const GraderRunPresentationSchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  summaryMarkdown: z.string().trim().min(1).optional(),
+});
+
 const GraderRunSummarySchema = z.object({
   olympiad: z.string().trim().min(1).optional(),
   year: z.string().trim().min(1).optional(),
   paperName: z.string().trim().min(1).optional(),
   paperUrl: z.string().trim().min(1).optional(),
   markSchemeUrl: z.string().trim().min(1).optional(),
+  presentation: GraderRunPresentationSchema.optional(),
   totals: z
     .object({
       awardedMarks: z.number().min(0),
@@ -600,6 +606,21 @@ const GraderRunSummarySchema = z.object({
 });
 
 type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
+
+function selectGraderResultSummary(options: {
+  doneSummary?: string;
+  runSummary: GraderRunSummary | null;
+}): string | undefined {
+  const preferred = options.runSummary?.presentation?.summaryMarkdown?.trim();
+  if (preferred && preferred.length > 0) {
+    return preferred;
+  }
+  const fallback = options.doneSummary?.trim();
+  if (fallback && fallback.length > 0) {
+    return fallback;
+  }
+  return undefined;
+}
 
 function resolveSparkRepoRoot(): string {
   const currentWorkingDirectory = path.resolve(process.cwd());
@@ -6959,24 +6980,32 @@ export async function runSparkAgentTask(
         logSync?.setStats(statsTracker.snapshot());
         await workspaceSync?.flushAll();
         await logSync?.flushAll();
+        const runSummary =
+          graderRunId && workspaceRoot
+            ? await readGraderRunSummaryFromWorkspace({
+                rootDir: workspaceRoot,
+                summaryPath: graderSummaryPath,
+                log: (line) => {
+                  logSync?.append(line);
+                },
+              })
+            : null;
+        const resultSummary = selectGraderResultSummary({
+          doneSummary: summary,
+          runSummary,
+        });
         await updateAgentStatus({
           serviceAccountJson,
           agentDocPath,
           status: "done",
-          resultSummary: summary,
+          resultSummary,
         });
         if (graderRunId && workspaceRoot) {
-          const runSummary = await readGraderRunSummaryFromWorkspace({
-            rootDir: workspaceRoot,
-            summaryPath: graderSummaryPath,
-            log: (line) => {
-              logSync?.append(line);
-            },
-          });
           const now = new Date();
           if (runSummary) {
             const totals = summariseGraderTotals(runSummary);
             const paper: Record<string, string> = {};
+            const presentation: Record<string, string> = {};
             if (runSummary.olympiad) {
               paper.olympiad = runSummary.olympiad;
             }
@@ -6992,6 +7021,13 @@ export async function runSparkAgentTask(
             if (runSummary.markSchemeUrl) {
               paper.markSchemeUrl = runSummary.markSchemeUrl;
             }
+            if (runSummary.presentation?.title) {
+              presentation.title = runSummary.presentation.title;
+            }
+            if (runSummary.presentation?.summaryMarkdown) {
+              presentation.summaryMarkdown =
+                runSummary.presentation.summaryMarkdown;
+            }
             await patchGraderRunStatus({
               serviceAccountJson,
               userId: options.userId,
@@ -7000,8 +7036,11 @@ export async function runSparkAgentTask(
                 status: "done",
                 updatedAt: now,
                 completedAt: now,
-                resultSummary: summary,
+                resultSummary,
                 ...(Object.keys(paper).length > 0 ? { paper } : {}),
+                ...(Object.keys(presentation).length > 0
+                  ? { presentation }
+                  : {}),
                 totals,
                 problems: runSummary.problems,
                 summaryPath: graderSummaryPath,
@@ -7021,7 +7060,7 @@ export async function runSparkAgentTask(
                 status: "done",
                 updatedAt: now,
                 completedAt: now,
-                resultSummary: summary,
+                resultSummary,
                 summaryPath: graderSummaryPath,
                 problemsDir: graderProblemsDir,
               },
@@ -7032,7 +7071,7 @@ export async function runSparkAgentTask(
             });
           }
         }
-        return { status: "done", summary };
+        return { status: "done", summary: resultSummary };
       },
     });
 

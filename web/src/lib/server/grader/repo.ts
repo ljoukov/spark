@@ -71,6 +71,11 @@ const sparkGraderPaperSchema = z.object({
 	markSchemeUrl: trimmedString.optional()
 });
 
+const sparkGraderPresentationSchema = z.object({
+	title: trimmedString.optional(),
+	summaryMarkdown: trimmedString.optional()
+});
+
 const sparkGraderRunSchema = z.object({
 	id: trimmedString,
 	agentId: trimmedString,
@@ -85,6 +90,7 @@ const sparkGraderRunSchema = z.object({
 	sourceAttachmentCount: z.number().int().min(0).optional(),
 	status: z.enum(['created', 'executing', 'stopped', 'failed', 'done']),
 	paper: sparkGraderPaperSchema.optional(),
+	presentation: sparkGraderPresentationSchema.optional(),
 	totals: sparkGraderTotalsSchema.optional(),
 	problems: z.array(sparkGraderProblemSummarySchema).optional(),
 	resultSummary: z.string().trim().optional(),

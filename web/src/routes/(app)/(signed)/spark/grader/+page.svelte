@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { renderMarkdown } from '$lib/markdown';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -58,12 +59,18 @@
 						<span class="run-status">{run.status}</span>
 						<span>{formatDate(run.createdAt)}</span>
 					</div>
-					<h2>{run.paper?.paperName ?? run.olympiadLabel}</h2>
-					<p class="run-paper">
-						{run.paper?.year ? `Year ${run.paper.year}` : 'Year pending'} • {run.paper?.olympiad ??
-							run.olympiadLabel}
-					</p>
-					<div class="run-stats">
+					<h2>{run.display.title}</h2>
+					{#if run.display.metaLine}
+						<p class="run-paper">{run.display.metaLine}</p>
+					{/if}
+					{#if run.error}
+						<p class="run-error">{run.error}</p>
+					{:else if run.display.summaryMarkdown}
+						<div class="run-summary markdown-content">
+							{@html renderMarkdown(run.display.summaryMarkdown)}
+						</div>
+					{/if}
+					<div class="run-stats" aria-label="Run totals">
 						<div>
 							<span>Marks</span>
 							<p>
@@ -83,11 +90,6 @@
 							<p>{run.totals ? formatPercent(run.totals.percentage) : '—'}</p>
 						</div>
 					</div>
-					{#if run.error}
-						<p class="run-error">{run.error}</p>
-					{:else if run.resultSummary}
-						<p class="run-summary">{run.resultSummary}</p>
-					{/if}
 				</a>
 			{/each}
 		</div>
@@ -190,20 +192,46 @@
 	}
 
 	.run-status {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.18rem 0.5rem;
+		border-radius: 999px;
 		text-transform: uppercase;
 		font-weight: 700;
 		letter-spacing: 0.06em;
+		background: color-mix(in srgb, var(--border) 70%, transparent);
+		color: color-mix(in srgb, var(--foreground) 74%, transparent);
+	}
+
+	.run-card[data-status='done'] .run-status {
+		background: color-mix(in srgb, #16a34a 16%, transparent);
+		color: color-mix(in srgb, #166534 90%, black 6%);
+	}
+
+	.run-card[data-status='executing'] .run-status {
+		background: color-mix(in srgb, #0ea5e9 16%, transparent);
+		color: color-mix(in srgb, #075985 90%, black 6%);
+	}
+
+	.run-card[data-status='failed'] .run-status {
+		background: color-mix(in srgb, var(--destructive) 14%, transparent);
+		color: color-mix(in srgb, var(--destructive) 82%, black 8%);
+	}
+
+	.run-card[data-status='stopped'] .run-status {
+		background: color-mix(in srgb, #f59e0b 16%, transparent);
+		color: color-mix(in srgb, #92400e 90%, black 6%);
 	}
 
 	.run-card h2 {
 		margin: 0;
-		font-size: 1.05rem;
-		line-height: 1.35;
+		font-size: 1.08rem;
+		line-height: 1.3;
 	}
 
 	.run-paper {
 		margin: 0;
-		font-size: 0.84rem;
+		font-size: 0.82rem;
 		color: color-mix(in srgb, var(--foreground) 70%, transparent);
 	}
 
@@ -230,11 +258,28 @@
 	.run-summary,
 	.run-error {
 		margin: 0;
-		font-size: 0.82rem;
+		font-size: 0.84rem;
 	}
 
 	.run-error {
 		color: color-mix(in srgb, var(--destructive) 75%, black 8%);
+	}
+
+	.markdown-content :global(p) {
+		margin: 0;
+	}
+
+	.markdown-content :global(p + p) {
+		margin-top: 0.55rem;
+	}
+
+	.markdown-content :global(ul) {
+		margin: 0;
+		padding-left: 0;
+	}
+
+	.markdown-content :global(li + li) {
+		margin-top: 0.25rem;
 	}
 
 	@media (max-width: 700px) {

@@ -1,3 +1,4 @@
+import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { getGraderRun } from '$lib/server/grader/repo';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -15,14 +16,18 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	return {
 		run: {
 			id: run.id,
-			agentId: run.agentId,
-			workspaceId: run.workspaceId,
 			status: run.status,
-			olympiadLabel: run.olympiadLabel,
+			display: buildGraderRunDisplay({
+				status: run.status,
+				paper: run.paper,
+				presentation: run.presentation,
+				totals: run.totals,
+				problems: run.problems,
+				resultSummary: run.resultSummary ?? null
+			}),
 			createdAt: run.createdAt.toISOString(),
 			updatedAt: run.updatedAt.toISOString(),
 			completedAt: run.completedAt ? run.completedAt.toISOString() : null,
-			resultSummary: run.resultSummary ?? null,
 			error: run.error ?? null,
 			totals: run.totals
 				? {
