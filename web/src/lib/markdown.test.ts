@@ -26,6 +26,21 @@ test('renders KaTeX display mode for \\[...\\] formulas', () => {
 	expect(html).toContain('class="katex-display"');
 });
 
+test('renders KaTeX display mode for multiline \\[...\\] blocks that start inline', () => {
+	const html = renderMarkdown('For (b): write\n\\[m=T_a+b,\n\\quad 0\\le b\\le a+1.\n\\]');
+	expect(html).toContain('class="katex-display"');
+	expect(html).not.toContain('[m=T_a+b,');
+	expect(html).not.toContain('\\[m=T_a+b,');
+});
+
+test('renders KaTeX display mode for multiline \\[...\\] blocks that end inline', () => {
+	const html = renderMarkdown(
+		'The first terms contribute\n\\[\ny_{T_a}=1^2+2^2+\\cdots+a^2=\\frac{a(a+1)(2a+1)}{6}.\\]'
+	);
+	expect(html).toContain('class="katex-display"');
+	expect(html).not.toContain('\\\\]');
+});
+
 test('renders KaTeX for code spans that contain only \\(...\\) math', () => {
 	const html = renderMarkdown('Use `\\(x^2\\)` for inline math.');
 	expect(html).toContain('class="katex"');

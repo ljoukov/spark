@@ -313,14 +313,47 @@ function normalizeDisplayMathBlocks(markdown: string): string {
 			continue;
 		}
 
-		if (trimmed === '[' || trimmed === '\\[') {
+		const blockMathStartMatch = line.match(/^\s*\\\[(.*)$/u);
+		if (blockMathStartMatch) {
+			const remainder = blockMathStartMatch[1] ?? '';
+			if (remainder.includes('\\]')) {
+				normalized.push(line);
+				continue;
+			}
+			ensureBlankLineBefore();
+			inMathBlock = true;
+			normalized.push('$$');
+			if (remainder.length > 0) {
+				normalized.push(remainder);
+			}
+			continue;
+		}
+
+		if (trimmed === '[') {
 			ensureBlankLineBefore();
 			inMathBlock = true;
 			normalized.push('$$');
 			continue;
 		}
 
-		if (trimmed === ']' || trimmed === '\\]') {
+		const blockMathEndMatch = line.match(/^(.*)\\\]\s*$/u);
+		if (blockMathEndMatch) {
+			if (inMathBlock) {
+				const remainder = blockMathEndMatch[1] ?? '';
+				if (remainder.length > 0) {
+					normalized.push(remainder);
+				}
+				inMathBlock = false;
+				normalized.push('$$');
+				const next = lines[i + 1];
+				ensureBlankLineAfter(next);
+				continue;
+			}
+			normalized.push(line);
+			continue;
+		}
+
+		if (trimmed === ']') {
 			if (inMathBlock) {
 				inMathBlock = false;
 				normalized.push('$$');
