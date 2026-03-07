@@ -9,7 +9,7 @@
       "name": "spark-eval",
       "version": "0.0.0",
       "dependencies": {
-        "@ljoukov/llm": "4.0.3",
+        "@ljoukov/llm": "4.0.4",
         "@spark/llm": "file:../packages/llm",
         "@spark/schemas": "file:../packages/schemas",
         "commander": "^14.0.2",
@@ -48,7 +48,7 @@
       },
       "devDependencies": {
         "@eslint/js": "^9.39.2",
-        "@ljoukov/llm": "4.0.3",
+        "@ljoukov/llm": "4.0.4",
         "@types/node": "^25.0.9",
         "@types/pngjs": "^6.0.5",
         "eslint": "^9.39.2",
@@ -58,7 +58,7 @@
         "vitest": "^4.0.17",
       },
       "peerDependencies": {
-        "@ljoukov/llm": "4.0.3",
+        "@ljoukov/llm": "4.0.4",
       },
     },
     "packages/proto": {
@@ -97,7 +97,7 @@
         "@connectrpc/connect": "^2.1.1",
         "@connectrpc/connect-node": "^2.1.1",
         "@connectrpc/connect-web": "^2.1.1",
-        "@ljoukov/llm": "4.0.3",
+        "@ljoukov/llm": "4.0.4",
         "@spark/llm": "file:../packages/llm",
         "@spark/proto": "file:../packages/proto",
         "@spark/schemas": "file:../packages/schemas",
@@ -476,7 +476,7 @@
 
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
-    "@ljoukov/llm": ["@ljoukov/llm@4.0.3", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google/genai": "^1.44.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.25.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-d89nPL1WB1i4mmdsORyOQGPs6LpJ+3XpKv3ZWO9G6x3AnhJ7N6wEIr3G6AS6TwlgS/KlbvArCMtyPMtbWiuCiQ=="],
+    "@ljoukov/llm": ["@ljoukov/llm@4.0.4", "", { "dependencies": { "@alcyone-labs/zod-to-json-schema": "^4.0.10", "@google/genai": "^1.44.0", "ajv": "^8.18.0", "ajv-formats": "^3.0.1", "google-auth-library": "^10.5.0", "mime": "^4.1.0", "openai": "^6.25.0", "undici": "^7.21.0", "ws": "^8.19.0", "zod": "^4.3.6" } }, "sha512-h8wKSHxFygsE9o8FU9XOzuLbOr0xUxTdF2XOL2TKdxFe9KVmjh5psr4O++opMYqB5DmrgXSIXvLSPQJPKGNFIA=="],
 
     "@lucide/svelte": ["@lucide/svelte@0.562.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-wDMULwtTFN2Sc/TFBm6gfuVCNb4Y5P9LDrwxNnUbV52+IEU7NXZmvxwXoz+vrrpad6Xupq+Hw5eUlqIHEGhouw=="],
 

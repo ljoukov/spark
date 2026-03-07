@@ -3,16 +3,14 @@ import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
 	createTask,
 	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
+	resolveSparkAgentLogsDir,
+	resolveSparkAgentWorkspaceRoot,
 	resolveWorkspacePathContentType,
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
 import { runAgentLoop, tool } from '@ljoukov/llm';
-import type {
-	LlmContentPart,
-	LlmInputMessage,
-	LlmToolSet
-} from '@ljoukov/llm';
+import type { LlmContentPart, LlmInputMessage, LlmToolSet } from '@ljoukov/llm';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
@@ -30,7 +28,7 @@ import {
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
-import os from 'node:os';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -244,6 +242,34 @@ function resolveConversationId(value: string | undefined): string {
 		return value.trim();
 	}
 	return randomUUID();
+}
+
+function normalizeLogPathSegment(value: string): string {
+	const cleaned = value
+		.trim()
+		.replace(/[^a-z0-9._-]+/giu, '-')
+		.replace(/-{2,}/g, '-')
+		.replace(/^-+|-+$/g, '');
+	if (cleaned.length > 0) {
+		return cleaned;
+	}
+	return 'segment';
+}
+
+function resolveSparkChatLogWorkspace(options: { conversationId: string; messageId: string }): {
+	rootDir: string;
+	logsDir: string;
+	cleanupOnExit: boolean;
+} {
+	const workspace = resolveSparkAgentWorkspaceRoot({
+		workspaceId: `chat-${normalizeLogPathSegment(options.conversationId)}-${normalizeLogPathSegment(options.messageId)}`,
+		runStartedAt: new Date()
+	});
+	return {
+		rootDir: workspace.rootDir,
+		logsDir: resolveSparkAgentLogsDir(workspace.rootDir),
+		cleanupOnExit: workspace.cleanupOnExit
+	};
 }
 
 function resolveConversationDoc(
@@ -701,10 +727,7 @@ function sanitizeWorkspaceAttachmentFilename(value: string): string {
 	return value.trim().replace(/[/\\]+/g, '-');
 }
 
-function resolveWorkspaceAttachmentPath(attachment: {
-	id: string;
-	filename?: string;
-}): string {
+function resolveWorkspaceAttachmentPath(attachment: { id: string; filename?: string }): string {
 	const raw = sanitizeWorkspaceAttachmentFilename(attachment.filename ?? attachment.id);
 	const filename = raw.length > 0 ? raw : attachment.id;
 	return `grader/uploads/${filename}`;
@@ -832,18 +855,15 @@ function buildGraderBrief(options: {
 		'- Identify olympiad + year/paper from uploaded learner materials.',
 		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
 		'- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.',
-		'- Preserve the student\'s variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.',
+		"- Preserve the student's variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.",
 		'- Respect the reference source policy before any online search.',
 		'- Feedback should be line-by-line against those numbered student statements.',
-		'- If official solutions are missing, solve each problem carefully before grading and match the student\'s level/terminology/methods where reasonable.'
+		"- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable."
 	);
 	return lines.join('\n').trim() + '\n';
 }
 
-function renderGraderTask(options: {
-	runId: string;
-	workspaceId: string;
-}): string {
+function renderGraderTask(options: { runId: string; workspaceId: string }): string {
 	const baseTask = graderTaskTemplate
 		.replaceAll('{{RUN_ID}}', options.runId)
 		.replaceAll('{{WORKSPACE_ID}}', options.workspaceId)
@@ -863,12 +883,12 @@ function renderGraderTask(options: {
 		'- Student solution transcription must be complete and faithful: after extraction, split each problem into a numbered list of student statements/sentences in source order.',
 		'- Preserve student variable names, formulas, terminology, and method choices as closely as possible; allow only numbering, line-break cleanup, and obvious spelling fixes that do not change meaning.',
 		'- Final grading feedback must be line-by-line against that numbered transcript.',
-		'- When official solutions are missing, derived solutions should stay at the student\'s level and reuse their terminology/method style where reasonable.',
+		"- When official solutions are missing, derived solutions should stay at the student's level and reuse their terminology/method style where reasonable.",
 		'',
 		'Run-mode constraints for grader runs:',
-		"- Keep transcription and source gathering on the main agent only.",
-		"- After transcription, use subagents for per-problem work: exactly 1 subagent per problem for solving/assessment.",
-		"- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.",
+		'- Keep transcription and source gathering on the main agent only.',
+		'- After transcription, use subagents for per-problem work: exactly 1 subagent per problem for solving/assessment.',
+		'- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.'
 	].join('\n');
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
@@ -896,7 +916,7 @@ function buildGraderAgentPrompt(options: {
 		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)',
 		`2) Write per-problem markdown files under ${options.problemsDir}/ with line-by-line feedback keyed to those numbered statements`,
 		`3) Write ${options.summaryPath}`,
-		'4) When official solutions are missing, derive solutions at the student\'s level where reasonable and call done with olympiad/year and total marks summary'
+		"4) When official solutions are missing, derive solutions at the student's level where reasonable and call done with olympiad/year and total marks summary"
 	].join('\n');
 }
 
@@ -1861,39 +1881,45 @@ async function generateAssistantResponse(
 			return `${attachment.contentType}${pageSuffix}`;
 		})
 	});
-	const result = await runAgentLoop({
-		model: MODEL_ID,
-		input,
-		instructions: SYSTEM_PROMPT,
-		tools,
-		maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
-		thinkingLevel: OPENAI_REASONING_EFFORT,
-		logging: {
-			workspaceDir: path.join(
-				os.tmpdir(),
-				'spark-chat-logs',
-				options.conversationId,
-				options.messageId
-			),
-			mirrorToConsole: false,
-			sink: {
-				append: (line) => {
-					console.log(`[spark-chat:${options.conversationId}] ${line}`);
-				}
-			}
-		},
-		onEvent: (event) => {
-			if (event.type !== 'delta') {
-				return;
-			}
-			if (event.channel === 'thought') {
-				handlers.onDelta?.({ thoughtDelta: event.text });
-				return;
-			}
-			handlers.onDelta?.({ textDelta: event.text });
-		},
+	const logWorkspace = resolveSparkChatLogWorkspace({
+		conversationId: options.conversationId,
+		messageId: options.messageId
 	});
-	return normalizeSparkLinks(result.text);
+	try {
+		const result = await runAgentLoop({
+			model: MODEL_ID,
+			input,
+			instructions: SYSTEM_PROMPT,
+			tools,
+			maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
+			thinkingLevel: OPENAI_REASONING_EFFORT,
+			logging: {
+				workspaceDir: logWorkspace.logsDir,
+				callLogsDir: 'llm_calls',
+				mirrorToConsole: false,
+				sink: {
+					append: (line) => {
+						console.log(`[spark-chat:${options.conversationId}] ${line}`);
+					}
+				}
+			},
+			onEvent: (event) => {
+				if (event.type !== 'delta') {
+					return;
+				}
+				if (event.channel === 'thought') {
+					handlers.onDelta?.({ thoughtDelta: event.text });
+					return;
+				}
+				handlers.onDelta?.({ textDelta: event.text });
+			}
+		});
+		return normalizeSparkLinks(result.text);
+	} finally {
+		if (logWorkspace.cleanupOnExit) {
+			await rm(logWorkspace.rootDir, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
 }
 
 async function generateAssistantResponseWithRetries(

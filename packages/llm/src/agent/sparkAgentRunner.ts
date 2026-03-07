@@ -59,7 +59,10 @@ import {
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
-import { downloadStorageObject, uploadStorageObject } from "../utils/gcp/storageRest";
+import {
+  downloadStorageObject,
+  uploadStorageObject,
+} from "../utils/gcp/storageRest";
 import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
@@ -97,8 +100,7 @@ type LlmDebugOptions = {
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
-const DEFAULT_EXTRACT_TEXT_MODEL_ID: LlmTextModelId =
-  "gemini-flash-latest";
+const DEFAULT_EXTRACT_TEXT_MODEL_ID: LlmTextModelId = "gemini-flash-latest";
 const SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -148,38 +150,13 @@ function formatUsdTotal(value: number): string {
   return `$${safeValue.toFixed(2)}`;
 }
 
-function parseGenerateToolCostUsd(message: string): {
-  toolName:
-    | "generate_text"
-    | "generate_json"
-    | "extract_text"
-    | "extract_pdf_text"
-    | "read_pdf"
-    | "extract_pdf_diagrams";
-  costUsd: number;
-} | null {
-  if (!message.startsWith("tool_result:")) {
-    return null;
-  }
-  const match = message.match(
-    /^tool_result:\s+(generate_text|generate_json|extract_text|extract_pdf_text|read_pdf|extract_pdf_diagrams)\b.*\bcost=\$([\d,.]+)\b/u,
-  );
-  if (!match) {
-    return null;
-  }
-  const toolName = match[1] as
-    | "generate_text"
-    | "generate_json"
-    | "extract_text"
-    | "extract_pdf_text"
-    | "read_pdf"
-    | "extract_pdf_diagrams";
-  const costValue = Number.parseFloat(match[2].replace(/,/gu, ""));
-  if (!Number.isFinite(costValue) || costValue < 0) {
-    return null;
-  }
-  return { toolName, costUsd: costValue };
-}
+type ToolLlmCostName =
+  | "generate_text"
+  | "generate_json"
+  | "extract_text"
+  | "extract_pdf_text"
+  | "read_pdf"
+  | "extract_pdf_diagrams";
 
 function serializeTraceValue(value: unknown): string {
   if (typeof value === "string") {
@@ -258,7 +235,10 @@ function sanitizeToolTraceValue(options: {
 }
 
 function formatToolLogSnippet(value: unknown): string {
-  const capped = capUtf8Text(serializeTraceValue(value), AGENT_TOOL_LOG_SNIPPET_MAX_BYTES);
+  const capped = capUtf8Text(
+    serializeTraceValue(value),
+    AGENT_TOOL_LOG_SNIPPET_MAX_BYTES,
+  );
   const compact = capped.replace(/\s+/gu, " ").trim();
   if (compact.length === 0) {
     return "<empty>";
@@ -339,7 +319,6 @@ async function persistToolLoopTrace(options: {
           updatedAt: now,
         },
       });
-
     }
   }
 
@@ -664,7 +643,7 @@ function shouldUsePersistentDevWorkspaceRoot(): boolean {
   return process.env.NODE_ENV !== "production";
 }
 
-function resolveAgentWorkspaceRoot(options: {
+export function resolveSparkAgentWorkspaceRoot(options: {
   workspaceId: string;
   runStartedAt: Date;
 }): { rootDir: string; cleanupOnExit: boolean } {
@@ -688,9 +667,21 @@ function resolveAgentWorkspaceRoot(options: {
     };
   }
   return {
-    rootDir: path.join(os.tmpdir(), "spark-agent-workspaces", options.workspaceId),
+    rootDir: path.join(
+      os.tmpdir(),
+      "spark-agent-workspaces",
+      options.workspaceId,
+    ),
     cleanupOnExit: true,
   };
+}
+
+export function resolveSparkAgentLogsDir(rootDir: string): string {
+  return path.join(rootDir, "logs", "agent");
+}
+
+export function resolveSparkAgentToolCallsDir(rootDir: string): string {
+  return path.join(resolveSparkAgentLogsDir(rootDir), "tool_calls");
 }
 
 function resolveThinkingLevel(
@@ -880,7 +871,10 @@ async function loadAttachmentParts(options: {
   const outcomes = await mapWithConcurrency({
     items: selectedAttachments,
     concurrency: ATTACHMENT_DOWNLOAD_CONCURRENCY,
-    mapper: async (attachment, attachmentIndex): Promise<AttachmentLoadResult> => {
+    mapper: async (
+      attachment,
+      attachmentIndex,
+    ): Promise<AttachmentLoadResult> => {
       const index = attachmentIndex + 1;
       const label = resolveAttachmentLabel(attachment);
       if (!isUserUploadPath(options.userId, attachment.storagePath)) {
@@ -985,7 +979,9 @@ function buildInitialToolLoopInput(options: {
   ];
 }
 
-function buildSingleUserInput(parts: readonly LlmContentPart[]): LlmInputMessage[] {
+function buildSingleUserInput(
+  parts: readonly LlmContentPart[],
+): LlmInputMessage[] {
   return [{ role: "user", content: parts }];
 }
 
@@ -1020,6 +1016,23 @@ function createTrackedSubmodelCallSummary(options: {
     usageTokens: options.result.usage ?? null,
     costUsd: options.result.costUsd,
   };
+}
+
+function recordToolLlmCost(
+  onToolLlmCost:
+    | ((toolName: ToolLlmCostName, costUsd: number) => void)
+    | undefined,
+  toolName: ToolLlmCostName,
+  costUsd: number | null,
+): void {
+  if (
+    typeof costUsd !== "number" ||
+    !Number.isFinite(costUsd) ||
+    costUsd <= 0
+  ) {
+    return;
+  }
+  onToolLlmCost?.(toolName, costUsd);
 }
 
 async function readGraderRunSummaryFromWorkspace(options: {
@@ -1283,7 +1296,10 @@ function toCropPixelsFrom1000(options: {
 function resolveImageMimeTypeFromSharpFormat(options: {
   format: string | undefined;
 }): string | undefined {
-  if (typeof options.format !== "string" || options.format.trim().length === 0) {
+  if (
+    typeof options.format !== "string" ||
+    options.format.trim().length === 0
+  ) {
     return undefined;
   }
   const normalized = options.format.trim().toLowerCase();
@@ -1308,7 +1324,9 @@ function resolveImageMimeTypeFromSharpFormat(options: {
   return undefined;
 }
 
-function isSupportedCropImageMimeType(contentType: string | undefined): boolean {
+function isSupportedCropImageMimeType(
+  contentType: string | undefined,
+): boolean {
   if (typeof contentType !== "string" || contentType.trim().length === 0) {
     return false;
   }
@@ -1416,7 +1434,10 @@ function resolveInlineDataExtension(mimeType: string): string {
 
 function renderExtractTextPromptWithInlineData(options: {
   parts: readonly LlmContentPart[];
-}): { promptText: string; inlineAttachments: ExtractTextDebugInlineAttachment[] } {
+}): {
+  promptText: string;
+  inlineAttachments: ExtractTextDebugInlineAttachment[];
+} {
   const sections: string[] = [];
   const inlineAttachments: ExtractTextDebugInlineAttachment[] = [];
   let lastTextLabel: string | null = null;
@@ -1441,7 +1462,8 @@ function renderExtractTextPromptWithInlineData(options: {
     const nextIndex = inlineAttachments.length + 1;
     const filename = `inline-data-${nextIndex.toString()}.${resolveInlineDataExtension(mimeType)}`;
     const labelText =
-      lastTextLabel ?? `Inline data ${nextIndex.toString()} follows as inline data.`;
+      lastTextLabel ??
+      `Inline data ${nextIndex.toString()} follows as inline data.`;
     sections.push(
       [
         "----------",
@@ -1570,7 +1592,8 @@ async function persistExtractTextResponseDebugArtifacts(options: {
     options.modelVersion.trim().length > 0
       ? { modelVersion: options.modelVersion }
       : {}),
-    ...(typeof options.elapsedMs === "number" && Number.isFinite(options.elapsedMs)
+    ...(typeof options.elapsedMs === "number" &&
+    Number.isFinite(options.elapsedMs)
       ? { elapsedMs: options.elapsedMs }
       : {}),
     ...(typeof options.costUsd === "number" && Number.isFinite(options.costUsd)
@@ -1748,11 +1771,10 @@ class WorkspaceSync {
     }
     for (const doc of docs) {
       const data = doc.data ?? {};
-      const rawPath =
-        resolveWorkspaceFilePathFromFirestoreDocument({
-          documentPath: doc.documentPath,
-          storedPath: data.path,
-        });
+      const rawPath = resolveWorkspaceFilePathFromFirestoreDocument({
+        documentPath: doc.documentPath,
+        storedPath: data.path,
+      });
       if (!rawPath) {
         continue;
       }
@@ -2087,9 +2109,7 @@ class AgentRunStatsTracker {
     this.toolCallsByName.set(toolName, next);
   }
 
-  recordToolCallsFromResult(
-    toolLoopResult: LlmToolLoopResult,
-  ): void {
+  recordToolCallsFromResult(toolLoopResult: LlmToolLoopResult): void {
     if (this.toolCalls > 0) {
       return;
     }
@@ -2287,10 +2307,7 @@ class AgentLogSync {
     if (this.inFlight) {
       await this.inFlight.catch(() => undefined);
     }
-    if (
-      this.pendingLines.size === 0 &&
-      !this.pendingStats
-    ) {
+    if (this.pendingLines.size === 0 && !this.pendingStats) {
       return;
     }
     const now = Date.now();
@@ -2356,11 +2373,7 @@ class AgentLogSync {
     if (this.disposed) {
       return;
     }
-    if (
-      !force &&
-      this.pendingLines.size === 0 &&
-      !this.pendingStats
-    ) {
+    if (!force && this.pendingLines.size === 0 && !this.pendingStats) {
       return;
     }
     if (this.timer) {
@@ -2379,7 +2392,10 @@ class AgentLogSync {
       })
       .finally(() => {
         this.inFlight = undefined;
-        if (!this.disposed && (this.pendingLines.size > 0 || this.pendingStats)) {
+        if (
+          !this.disposed &&
+          (this.pendingLines.size > 0 || this.pendingStats)
+        ) {
           this.scheduleUpdate();
         }
       });
@@ -2873,6 +2889,7 @@ function buildAgentTools(options: {
   userId: string;
   serviceAccountJson: string;
   progress?: JobProgressReporter;
+  onToolLlmCost?: (toolName: ToolLlmCostName, costUsd: number) => void;
   enforceLessonPipeline?: boolean;
   allowPythonExec?: boolean;
   debug?: LlmDebugOptions;
@@ -2884,6 +2901,7 @@ function buildAgentTools(options: {
     userId,
     serviceAccountJson,
     progress,
+    onToolLlmCost,
     enforceLessonPipeline,
     allowPythonExec,
     debug,
@@ -3256,7 +3274,10 @@ function buildAgentTools(options: {
     prompt?: string;
     promptPath?: string;
   }): Promise<string> => {
-    if (typeof options.prompt === "string" && options.prompt.trim().length > 0) {
+    if (
+      typeof options.prompt === "string" &&
+      options.prompt.trim().length > 0
+    ) {
       return options.prompt.trim();
     }
     const resolvedPromptPath = options.promptPath?.trim() ?? "";
@@ -3417,17 +3438,20 @@ function buildAgentTools(options: {
     }
 
     const sourceMimeFromPath =
-      typeof sourceContentType === "string" && sourceContentType.startsWith("image/")
+      typeof sourceContentType === "string" &&
+      sourceContentType.startsWith("image/")
         ? sourceContentType
         : undefined;
     let sourceMimeType = sourceMimeFromPath;
     if (!sourceMimeType) {
       const sharp = getSharp();
-      const metadata = await sharp(documentBytes).metadata().catch((error) => {
-        throw new Error(
-          `extract_text could not decode "${resolvedDocumentPath}" as an image: ${errorAsString(error)}`,
-        );
-      });
+      const metadata = await sharp(documentBytes)
+        .metadata()
+        .catch((error) => {
+          throw new Error(
+            `extract_text could not decode "${resolvedDocumentPath}" as an image: ${errorAsString(error)}`,
+          );
+        });
       sourceMimeType = resolveImageMimeTypeFromSharpFormat({
         format: metadata.format,
       });
@@ -3529,11 +3553,13 @@ function buildAgentTools(options: {
     let sourceMimeType = sourceMimeFromPath;
     if (!sourceMimeType) {
       const sharp = getSharp();
-      const metadata = await sharp(rawBytes).metadata().catch((error) => {
-        throw new Error(
-          `extract_text could not decode supporting file "${resolvedContextPath}" as an image: ${errorAsString(error)}`,
-        );
-      });
+      const metadata = await sharp(rawBytes)
+        .metadata()
+        .catch((error) => {
+          throw new Error(
+            `extract_text could not decode supporting file "${resolvedContextPath}" as an image: ${errorAsString(error)}`,
+          );
+        });
       sourceMimeType = resolveImageMimeTypeFromSharpFormat({
         format: metadata.format,
       });
@@ -3601,8 +3627,11 @@ function buildAgentTools(options: {
       );
     }
     const primaryDocuments = await Promise.all(
-      normalizedDocumentPaths.map(async (documentPath) =>
-        await resolveExtractTextPrimaryDocumentFromWorkspace({ documentPath }),
+      normalizedDocumentPaths.map(
+        async (documentPath) =>
+          await resolveExtractTextPrimaryDocumentFromWorkspace({
+            documentPath,
+          }),
       ),
     );
     const primaryDocumentPathSet = new Set(
@@ -3612,7 +3641,9 @@ function buildAgentTools(options: {
       new Set(
         (options.supportingPaths ?? [])
           .map((entry) => entry.trim())
-          .filter((entry) => entry.length > 0 && !primaryDocumentPathSet.has(entry)),
+          .filter(
+            (entry) => entry.length > 0 && !primaryDocumentPathSet.has(entry),
+          ),
       ),
     );
     if (supportingPaths.length > EXTRACT_TEXT_MAX_CONTEXT_FILES) {
@@ -3621,13 +3652,15 @@ function buildAgentTools(options: {
       );
     }
     const supportingParts = await Promise.all(
-      supportingPaths.map(async (contextPath) =>
-        await resolveExtractTextContextPartFromWorkspace({ contextPath }),
+      supportingPaths.map(
+        async (contextPath) =>
+          await resolveExtractTextContextPartFromWorkspace({ contextPath }),
       ),
     );
 
     const instructionText =
-      typeof options.instructions === "string" && options.instructions.trim().length > 0
+      typeof options.instructions === "string" &&
+      options.instructions.trim().length > 0
         ? options.instructions.trim()
         : undefined;
     const supportingInstructionText =
@@ -3647,7 +3680,8 @@ function buildAgentTools(options: {
     ].join("\n");
     const primaryPrompt = [
       "Agent-supplied prompt (PRIMARY documents to transcribe):",
-      instructionText ?? "Transcribe all visible text from the primary documents.",
+      instructionText ??
+        "Transcribe all visible text from the primary documents.",
     ].join("\n");
     const supportingPrompt =
       supportingParts.length > 0
@@ -3679,10 +3713,7 @@ function buildAgentTools(options: {
           item.contextKind === "text"
             ? `Supporting document ${String(index + 1)} (text) follows.`
             : `Supporting document ${String(index + 1)} (${item.contextKind}) follows as inline data.`;
-        return [
-          { type: "text", text: label } as LlmContentPart,
-          item.part,
-        ];
+        return [{ type: "text", text: label } as LlmContentPart, item.part];
       }),
     ];
     const { promptText: renderedPromptWithInlineData, inlineAttachments } =
@@ -3690,7 +3721,9 @@ function buildAgentTools(options: {
     const primaryDocumentPathsForDebug = primaryDocuments.map(
       (item) => item.documentPath,
     );
-    const supportingPathsForDebug = supportingParts.map((item) => item.contextPath);
+    const supportingPathsForDebug = supportingParts.map(
+      (item) => item.contextPath,
+    );
     const extractionPromptText = [
       `documentPaths: ${JSON.stringify(primaryDocumentPathsForDebug)}`,
       ...(supportingPathsForDebug.length > 0
@@ -3792,6 +3825,11 @@ function buildAgentTools(options: {
           result: llmResult,
         })
       : null;
+    recordToolLlmCost(
+      onToolLlmCost,
+      "extract_text",
+      submodelSummary?.costUsd ?? null,
+    );
     const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
     const finalThinkingTokens =
       typeof finalThinkingTokensRaw === "number" &&
@@ -3803,13 +3841,15 @@ function buildAgentTools(options: {
       finalThinkingTokens > 0 &&
       finalThinkingTokens !== lastThinkingTokensLogged
     ) {
-      logExtractTextProgress(`thinking_tokens=${finalThinkingTokens.toString()}`);
+      logExtractTextProgress(
+        `thinking_tokens=${finalThinkingTokens.toString()}`,
+      );
     }
     const responseElapsedMs =
       typeof submodelSummary?.elapsedMs === "number" &&
       Number.isFinite(submodelSummary.elapsedMs)
         ? submodelSummary.elapsedMs
-        : modelCallElapsedMs ?? undefined;
+        : (modelCallElapsedMs ?? undefined);
     if (shouldPersistExtractTextDebugArtifacts) {
       await persistExtractTextResponseDebugArtifacts({
         debugRootDir: resolvedExtractTextDebugRootDir,
@@ -4010,7 +4050,11 @@ function buildAgentTools(options: {
     }
     const normalizedItems: z.infer<typeof PdfDiagramItemSchema>[] = [];
     for (const [index, rawEntry] of rawDiagrams.entries()) {
-      if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+      if (
+        !rawEntry ||
+        typeof rawEntry !== "object" ||
+        Array.isArray(rawEntry)
+      ) {
         continue;
       }
       const entry = rawEntry as Record<string, unknown>;
@@ -4029,7 +4073,9 @@ function buildAgentTools(options: {
         typeof entry.bboxNorm === "object" &&
         !Array.isArray(entry.bboxNorm)
           ? (entry.bboxNorm as Record<string, unknown>)
-          : entry.bbox && typeof entry.bbox === "object" && !Array.isArray(entry.bbox)
+          : entry.bbox &&
+              typeof entry.bbox === "object" &&
+              !Array.isArray(entry.bbox)
             ? (entry.bbox as Record<string, unknown>)
             : null;
       if (!bboxRaw && !bboxGridRaw) {
@@ -4038,7 +4084,9 @@ function buildAgentTools(options: {
       const left = bboxRaw ? toFiniteNumber(bboxRaw.left ?? bboxRaw.x) : null;
       const top = bboxRaw ? toFiniteNumber(bboxRaw.top ?? bboxRaw.y) : null;
       const width = bboxRaw ? toFiniteNumber(bboxRaw.width ?? bboxRaw.w) : null;
-      const height = bboxRaw ? toFiniteNumber(bboxRaw.height ?? bboxRaw.h) : null;
+      const height = bboxRaw
+        ? toFiniteNumber(bboxRaw.height ?? bboxRaw.h)
+        : null;
       const page = toFiniteNumber(
         entry.page ?? entry.pageNumber ?? entry.page_number,
       );
@@ -4054,14 +4102,12 @@ function buildAgentTools(options: {
       const label = toTrimmedString(entry.label);
       const description = toTrimmedString(entry.description);
       const confidence = toFiniteNumber(entry.confidence);
-      let normalizedBbox:
-        | {
-            left: number;
-            top: number;
-            width: number;
-            height: number;
-          }
-        | null = null;
+      let normalizedBbox: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      } | null = null;
       let bbox1000:
         | {
             left: number;
@@ -4078,10 +4124,14 @@ function buildAgentTools(options: {
         const heightGrid = toFiniteInteger(bboxGridRaw.height ?? bboxGridRaw.h);
         const rightGrid =
           toFiniteInteger(bboxGridRaw.right ?? bboxGridRaw.x1) ??
-          (leftGrid !== null && widthGrid !== null ? leftGrid + widthGrid : null);
+          (leftGrid !== null && widthGrid !== null
+            ? leftGrid + widthGrid
+            : null);
         const bottomGrid =
           toFiniteInteger(bboxGridRaw.bottom ?? bboxGridRaw.y1) ??
-          (topGrid !== null && heightGrid !== null ? topGrid + heightGrid : null);
+          (topGrid !== null && heightGrid !== null
+            ? topGrid + heightGrid
+            : null);
 
         if (
           leftGrid !== null &&
@@ -4111,7 +4161,12 @@ function buildAgentTools(options: {
       }
 
       if (normalizedBbox === null) {
-        if (left === null || top === null || width === null || height === null) {
+        if (
+          left === null ||
+          top === null ||
+          width === null ||
+          height === null
+        ) {
           continue;
         }
         normalizedBbox = {
@@ -4228,6 +4283,7 @@ function buildAgentTools(options: {
       startedAt: callStartedAt,
       result: llmResult,
     });
+    recordToolLlmCost(onToolLlmCost, options.toolName, submodelSummary.costUsd);
 
     const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
     await ensureDir(path.dirname(resolved));
@@ -4374,6 +4430,11 @@ function buildAgentTools(options: {
       startedAt: callStartedAt,
       result: llmResult,
     });
+    recordToolLlmCost(
+      onToolLlmCost,
+      "extract_pdf_diagrams",
+      submodelSummary.costUsd,
+    );
     const outputBytes = Buffer.byteLength(formatted, "utf8");
 
     return {
@@ -4412,7 +4473,9 @@ function buildAgentTools(options: {
   ): LlmToolSet[string] => {
     const candidate = (filesystemToolSet as LlmToolSet)[toolName];
     if (!candidate) {
-      throw new Error(`Missing filesystem tool "${toolName}" in @ljoukov/llm toolset.`);
+      throw new Error(
+        `Missing filesystem tool "${toolName}" in @ljoukov/llm toolset.`,
+      );
     }
     return candidate;
   };
@@ -4423,9 +4486,9 @@ function buildAgentTools(options: {
     offset?: number | null;
     limit?: number | null;
   }): Promise<unknown> => {
-    return await (codexReadFileTool as { execute: (value: unknown) => Promise<unknown> }).execute(
-      input,
-    );
+    return await (
+      codexReadFileTool as { execute: (value: unknown) => Promise<unknown> }
+    ).execute(input);
   };
 
   const tools: LlmToolSet = {
@@ -5037,6 +5100,11 @@ function buildAgentTools(options: {
           startedAt: callStartedAt,
           result: llmResult,
         });
+        recordToolLlmCost(
+          onToolLlmCost,
+          "generate_text",
+          submodelSummary.costUsd,
+        );
 
         const formatted = llmResult.text;
         const gradePass = (() => {
@@ -5171,6 +5239,11 @@ function buildAgentTools(options: {
           startedAt: callStartedAt,
           result: llmResult,
         });
+        recordToolLlmCost(
+          onToolLlmCost,
+          "generate_json",
+          submodelSummary.costUsd,
+        );
 
         let parsed: unknown;
         try {
@@ -5339,9 +5412,9 @@ function buildAgentTools(options: {
         `Always uses ${DEFAULT_EXTRACT_TEXT_MODEL_ID} (model cannot be overridden).`,
         "Required fields: documentPaths and outputPath.",
         "Always include documentPaths with 1+ primary transcription target documents.",
-        "Minimal payload example: {\"documentPaths\":[\"source/student-work.png\"],\"outputPath\":\"output/transcription.md\"}",
+        'Minimal payload example: {"documentPaths":["source/student-work.png"],"outputPath":"output/transcription.md"}',
         "Do not repeat an identical call for the same documentPaths/outputPath; read the written markdown file and continue from it.",
-        "Use instructions to narrow scope (for example: \"problems H1 and H2 only\").",
+        'Use instructions to narrow scope (for example: "problems H1 and H2 only").',
         "Use supportingPaths to add extra context files (images, PDFs, or text documents).",
         "Use supportingInstructions to explain how supporting documents should be used for disambiguation.",
         "The model does not know filenames unless you include identifying details in instructions text.",
@@ -5361,7 +5434,12 @@ function buildAgentTools(options: {
             .max(EXTRACT_TEXT_MAX_CONTEXT_FILES)
             .optional()
             .nullable(),
-          supportingInstructions: z.string().trim().min(1).optional().nullable(),
+          supportingInstructions: z
+            .string()
+            .trim()
+            .min(1)
+            .optional()
+            .nullable(),
         })
         .strict(),
       execute: async ({
@@ -5408,9 +5486,11 @@ function buildAgentTools(options: {
         })
         .strict()
         .superRefine((value, context) => {
-          const hasUrl = typeof value.url === "string" && value.url.trim().length > 0;
+          const hasUrl =
+            typeof value.url === "string" && value.url.trim().length > 0;
           const hasPdfPath =
-            typeof value.pdfPath === "string" && value.pdfPath.trim().length > 0;
+            typeof value.pdfPath === "string" &&
+            value.pdfPath.trim().length > 0;
           const hasPrompt =
             typeof value.prompt === "string" && value.prompt.trim().length > 0;
           const hasPromptPath =
@@ -5426,7 +5506,8 @@ function buildAgentTools(options: {
           if (hasPrompt && hasPromptPath) {
             context.addIssue({
               code: z.ZodIssueCode.custom,
-              message: "read_pdf expects either prompt or promptPath, not both.",
+              message:
+                "read_pdf expects either prompt or promptPath, not both.",
               path: ["prompt"],
             });
           }
@@ -5438,7 +5519,15 @@ function buildAgentTools(options: {
             });
           }
         }),
-      execute: async ({ url, pdfPath, prompt, promptPath, outputPath, maxChars, modelId }) => {
+      execute: async ({
+        url,
+        pdfPath,
+        prompt,
+        promptPath,
+        outputPath,
+        maxChars,
+        modelId,
+      }) => {
         const promptText = await resolvePdfPromptText({
           toolName: "read_pdf",
           prompt,
@@ -5499,13 +5588,20 @@ function buildAgentTools(options: {
           promptPath: z.string().trim().min(1).optional(),
           outputPath: z.string().trim().min(1),
           modelId: z.string().trim().min(1).optional(),
-          maxDiagrams: z.number().int().min(1).max(PDF_DIAGRAM_MAX_ITEMS).optional(),
+          maxDiagrams: z
+            .number()
+            .int()
+            .min(1)
+            .max(PDF_DIAGRAM_MAX_ITEMS)
+            .optional(),
         })
         .strict()
         .superRefine((value, context) => {
-          const hasUrl = typeof value.url === "string" && value.url.trim().length > 0;
+          const hasUrl =
+            typeof value.url === "string" && value.url.trim().length > 0;
           const hasPdfPath =
-            typeof value.pdfPath === "string" && value.pdfPath.trim().length > 0;
+            typeof value.pdfPath === "string" &&
+            value.pdfPath.trim().length > 0;
           const hasPrompt =
             typeof value.prompt === "string" && value.prompt.trim().length > 0;
           const hasPromptPath =
@@ -5530,7 +5626,8 @@ function buildAgentTools(options: {
           if (!hasPrompt && !hasPromptPath) {
             context.addIssue({
               code: z.ZodIssueCode.custom,
-              message: "extract_pdf_diagrams requires either prompt or promptPath.",
+              message:
+                "extract_pdf_diagrams requires either prompt or promptPath.",
               path: ["prompt"],
             });
           }
@@ -5629,7 +5726,13 @@ function buildAgentTools(options: {
             });
           }
         }),
-      execute: async ({ pdfPath, prompt, promptPath, outputPath, maxChars }) => {
+      execute: async ({
+        pdfPath,
+        prompt,
+        promptPath,
+        outputPath,
+        maxChars,
+      }) => {
         const promptText = await resolvePdfPromptText({
           toolName: "extract_pdf_text",
           prompt,
@@ -5669,22 +5772,25 @@ function buildAgentTools(options: {
             },
             z.array(z.number().int().min(1)).max(200).optional(),
           ),
-          scale: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              return value;
-            },
-            z.number().min(0.5).max(6).optional(),
-          ),
+          scale: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            return value;
+          }, z.number().min(0.5).max(6).optional()),
           filenamePrefix: z.preprocess(
             (value) => parseOptionalString(value),
             z.string().trim().min(1).optional(),
           ),
         })
         .strict(),
-      execute: async ({ pdfPath, outputDir, pageNumbers, scale, filenamePrefix }) => {
+      execute: async ({
+        pdfPath,
+        outputDir,
+        pageNumbers,
+        scale,
+        filenamePrefix,
+      }) => {
         const decoded = await decodePdfBytesFromWorkspace({
           toolName: "read_pdf",
           pdfPath,
@@ -5696,7 +5802,9 @@ function buildAgentTools(options: {
             ? [...new Set(pageNumbers)].sort((a, b) => a - b)
             : Array.from({ length: pageCount }, (_, index) => index + 1);
         if (requestedPages.length === 0) {
-          throw new Error("pdf_to_images requires at least one page to render.");
+          throw new Error(
+            "pdf_to_images requires at least one page to render.",
+          );
         }
         for (const pageNumber of requestedPages) {
           if (pageNumber > pageCount) {
@@ -5710,11 +5818,16 @@ function buildAgentTools(options: {
           pageNumbers: requestedPages,
           scale,
         });
-        const normalizedOutputDir = outputDir.replace(/\\/g, "/").replace(/\/+$/u, "");
+        const normalizedOutputDir = outputDir
+          .replace(/\\/g, "/")
+          .replace(/\/+$/u, "");
         if (normalizedOutputDir.length === 0) {
           throw new Error("outputDir must not be empty.");
         }
-        const prefix = (filenamePrefix ?? "page").replace(/[^a-z0-9_-]+/giu, "-");
+        const prefix = (filenamePrefix ?? "page").replace(
+          /[^a-z0-9_-]+/giu,
+          "-",
+        );
         const written: Array<{
           page: number;
           path: string;
@@ -5763,15 +5876,12 @@ function buildAgentTools(options: {
         .object({
           sourcePath: z.string().trim().min(1),
           outputPath: z.string().trim().min(1),
-          fullImage: z.preprocess(
-            (value) => {
-              if (value === null || value === undefined) {
-                return undefined;
-              }
-              return value;
-            },
-            z.boolean().optional(),
-          ),
+          fullImage: z.preprocess((value) => {
+            if (value === null || value === undefined) {
+              return undefined;
+            }
+            return value;
+          }, z.boolean().optional()),
           bbox1000: z.preprocess(
             (value) => {
               if (value === null || value === undefined) {
@@ -5813,7 +5923,8 @@ function buildAgentTools(options: {
           if (has1000 && hasNorm) {
             context.addIssue({
               code: z.ZodIssueCode.custom,
-              message: "crop_image expects at most one of bbox1000 or bboxNorm.",
+              message:
+                "crop_image expects at most one of bbox1000 or bboxNorm.",
               path: ["bbox1000"],
             });
           }
@@ -5834,15 +5945,23 @@ function buildAgentTools(options: {
             });
           }
         }),
-      execute: async ({ sourcePath, outputPath, fullImage, bbox1000, bboxNorm }) => {
+      execute: async ({
+        sourcePath,
+        outputPath,
+        fullImage,
+        bbox1000,
+        bboxNorm,
+      }) => {
         const resolvedSourcePath = resolveWorkspacePath(rootDir, sourcePath);
         const sourceBytes = await readFile(resolvedSourcePath);
         const sharp = getSharp();
-        const sourceMetadata = await sharp(sourceBytes).metadata().catch((error) => {
-          throw new Error(
-            `crop_image could not decode "${sourcePath}" as an image: ${errorAsString(error)}`,
-          );
-        });
+        const sourceMetadata = await sharp(sourceBytes)
+          .metadata()
+          .catch((error) => {
+            throw new Error(
+              `crop_image could not decode "${sourcePath}" as an image: ${errorAsString(error)}`,
+            );
+          });
         const sourceWidth = sourceMetadata.width;
         const sourceHeight = sourceMetadata.height;
         if (
@@ -5856,8 +5975,9 @@ function buildAgentTools(options: {
           );
         }
         const sourceMime =
-          resolveImageMimeTypeFromSharpFormat({ format: sourceMetadata.format }) ??
-          resolveContentType(sourcePath);
+          resolveImageMimeTypeFromSharpFormat({
+            format: sourceMetadata.format,
+          }) ?? resolveContentType(sourcePath);
         if (!isSupportedCropImageMimeType(sourceMime)) {
           throw new Error(
             `crop_image supports ${SUPPORTED_CROP_IMAGE_INPUT_MIME_TYPES.join(", ")}. Received ${sourceMime ?? "unknown"} for "${sourcePath}".`,
@@ -5980,7 +6100,11 @@ function buildAgentTools(options: {
               ) {
                 return output.join("\n");
               }
-              if (output && typeof output === "object" && !Array.isArray(output)) {
+              if (
+                output &&
+                typeof output === "object" &&
+                !Array.isArray(output)
+              ) {
                 const candidate = output as Record<string, unknown>;
                 if (typeof candidate.content === "string") {
                   return candidate.content;
@@ -6103,6 +6227,7 @@ export function buildSparkAgentTools(options: {
   userId: string;
   serviceAccountJson: string;
   progress?: JobProgressReporter;
+  onToolLlmCost?: (toolName: ToolLlmCostName, costUsd: number) => void;
   enforceLessonPipeline?: boolean;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
@@ -6161,6 +6286,7 @@ export async function runSparkLessonAgentLocal(options: {
       progress,
       enforceLessonPipeline: true,
       debug: options.debug,
+      extractTextDebugRootDir: resolveSparkAgentToolCallsDir(options.rootDir),
     }),
   );
 
@@ -6262,7 +6388,8 @@ export async function runSparkLessonAgentLocal(options: {
     maxSteps,
     ...(thinkingLevel ? { thinkingLevel } : {}),
     logging: {
-      workspaceDir: path.join(options.rootDir, ".agent-run"),
+      workspaceDir: resolveSparkAgentLogsDir(options.rootDir),
+      callLogsDir: "llm_calls",
       mirrorToConsole: false,
     },
   });
@@ -6526,6 +6653,7 @@ export async function runSparkAgentTask(
   });
   let generateTextCostUsd = 0;
   let generateJsonCostUsd = 0;
+  let extractTextCostUsd = 0;
   let pdfToolCostUsd = 0;
 
   let prompt = "";
@@ -6677,7 +6805,7 @@ export async function runSparkAgentTask(
       `start: workspaceId=${options.workspaceId} modelId=${toolLoopModelId}`,
     );
 
-    const workspaceRootConfig = resolveAgentWorkspaceRoot({
+    const workspaceRootConfig = resolveSparkAgentWorkspaceRoot({
       workspaceId: options.workspaceId,
       runStartedAt: new Date(),
     });
@@ -6755,7 +6883,8 @@ export async function runSparkAgentTask(
       .catch([])
       .parse(rawAgentInputAttachments)
       .map((entry) => toResolvedAttachmentInput(entry));
-    const workspaceLinkAttachments = workspaceSync.getDiscoveredLinkAttachments();
+    const workspaceLinkAttachments =
+      workspaceSync.getDiscoveredLinkAttachments();
     const inlineInputAttachments = mergeAttachmentInputs({
       primary: explicitInputAttachments,
       secondary: workspaceLinkAttachments,
@@ -6772,16 +6901,6 @@ export async function runSparkAgentTask(
     const progress: JobProgressReporter = {
       log: (message) => {
         throwIfStopRequested();
-        const toolCost = parseGenerateToolCostUsd(message);
-        if (toolCost) {
-          if (toolCost.toolName === "generate_text") {
-            generateTextCostUsd += toolCost.costUsd;
-          } else if (toolCost.toolName === "generate_json") {
-            generateJsonCostUsd += toolCost.costUsd;
-          } else {
-            pdfToolCostUsd += toolCost.costUsd;
-          }
-        }
         logSync?.append(message);
         statsTracker.parseLogLine(message);
         logSync?.setStats(statsTracker.snapshot());
@@ -6925,9 +7044,25 @@ export async function runSparkAgentTask(
           userId: options.userId,
           serviceAccountJson,
           progress,
+          onToolLlmCost: (toolName, costUsd) => {
+            if (toolName === "generate_text") {
+              generateTextCostUsd += costUsd;
+              return;
+            }
+            if (toolName === "generate_json") {
+              generateJsonCostUsd += costUsd;
+              return;
+            }
+            if (toolName === "extract_text") {
+              extractTextCostUsd += costUsd;
+              return;
+            }
+            pdfToolCostUsd += costUsd;
+          },
           enforceLessonPipeline: isLessonRun,
           allowPythonExec: graderRunId === null,
           debug: llmDebug,
+          extractTextDebugRootDir: resolveSparkAgentToolCallsDir(workspaceRoot),
         }),
       ),
       done: doneTool,
@@ -6944,9 +7079,7 @@ export async function runSparkAgentTask(
             },
           });
 
-    progress.log(
-      `exposed tools: ${Object.keys(tools).sort().join(", ")}`,
-    );
+    progress.log(`exposed tools: ${Object.keys(tools).sort().join(", ")}`);
 
     await pollStopRequested();
     if (stopRequested) {
@@ -6990,7 +7123,8 @@ export async function runSparkAgentTask(
       maxSteps,
       ...(thinkingLevel ? { thinkingLevel } : {}),
       logging: {
-        workspaceDir: path.join(workspaceRoot, ".agent-run"),
+        workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
+        callLogsDir: "llm_calls",
         mirrorToConsole: false,
         sink: {
           append: (line: string) => {
@@ -7064,8 +7198,10 @@ export async function runSparkAgentTask(
       [
         "run_summary:",
         `agent_llm=${formatUsdTotal(totals.modelCostUsd)}`,
+        `tool_llm=${formatUsdTotal(totals.toolCostUsd)}`,
         `generate_text=${formatUsdTotal(generateTextCostUsd)}`,
         `generate_json=${formatUsdTotal(generateJsonCostUsd)}`,
+        `extract_text=${formatUsdTotal(extractTextCostUsd)}`,
         `pdf_tools=${formatUsdTotal(pdfToolCostUsd)}`,
         `wallclock=${formatMillis(Date.now() - toolLoopStartedAt)}`,
       ].join(" "),
