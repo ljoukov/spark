@@ -1,31 +1,22 @@
 import path from "node:path";
-import { appendFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 
-import type { AgentTelemetryEvent } from "@ljoukov/llm";
-import { appendToolCallStreamLog } from "../sparkAgentRunner";
-
 import {
-  estimateCallCostUsd,
   generateText,
-  type LlmContent,
   type LlmContentPart,
-  type LlmStreamEvent,
+  type LlmInputMessage,
+  type LlmThinkingLevel,
   type LlmTextModelId,
-} from "../../utils/llm";
-import type {
-  JobProgressReporter,
-  LlmUsageChunk,
-  LlmUsageTokenUpdate,
-  ModelCallHandle,
-} from "../../utils/concurrency";
+  type LlmToolLoopResult,
+  type LlmUsageTokens,
+} from "@ljoukov/llm";
 
 export type ModelCallMetrics = {
   modelId: string;
   modelVersion: string | null;
   elapsedMs: number;
   costUsd: number;
-  usageTokens: LlmUsageTokenUpdate | null;
+  usageTokens: LlmUsageTokens | null;
 };
 
 export type UsageTotals = {
@@ -38,31 +29,22 @@ export type UsageTotals = {
   toolUsePromptTokens: number;
 };
 
+export type ToolLoopSummary = {
+  usageTotals: UsageTotals;
+  toolCallsByName: Record<string, number>;
+  modelCalls: number;
+  toolCalls: number;
+  doneSummary: string | null;
+  thoughtsChars: number;
+  responseChars: number;
+  agentCostUsd: number;
+  toolLlmCostUsd: number;
+};
+
 export type RepoPathHelpers = {
   toRepoRelativePath: (inputPath: string) => string;
   fromRepoRelativePath: (inputPath: string) => string;
   sanitizeLogText: (input: string) => string;
-};
-
-export type AgenticBenchmarkLoggerSnapshot = {
-  usageTotals: UsageTotals;
-  usageCostUsd: number;
-  thoughtChars: number;
-  responseChars: number;
-  doneSummary: string | null;
-  toolCallsByName: Record<string, number>;
-  eventLogRecords: Array<Record<string, unknown>>;
-  splitLogPathsCreated: string[];
-};
-
-export type AgenticBenchmarkLogger = {
-  logStage: (kind: "start" | "done", stage: string) => void;
-  logLine: (line: string, actor?: string) => string;
-  progress: JobProgressReporter;
-  onTelemetryEvent: (event: AgentTelemetryEvent) => void;
-  onEvent: (event: LlmStreamEvent) => void;
-  overrideUsageCostUsd: (value: number) => void;
-  snapshot: () => AgenticBenchmarkLoggerSnapshot;
 };
 
 export function formatMs(ms: number): string {
@@ -165,106 +147,6 @@ export async function listFilesRecursive(rootDir: string): Promise<string[]> {
   return output;
 }
 
-function truncateText(input: string, maxChars: number): string {
-  if (input.length <= maxChars) {
-    return input;
-  }
-  return `${input.slice(0, maxChars)}…`;
-}
-
-function redactInlineDataUrls(input: string): string {
-  return input.replaceAll(
-    /(data:[^;,\s"]+;base64,)[^"\s]+/gu,
-    "$1...",
-  );
-}
-
-function serialiseSnippet(value: unknown, maxChars = 500): string {
-  if (typeof value === "string") {
-    return truncateText(redactInlineDataUrls(value).replace(/\s+/gu, " ").trim(), maxChars);
-  }
-  try {
-    const text = JSON.stringify(value);
-    if (typeof text === "string") {
-      return truncateText(redactInlineDataUrls(text).replace(/\s+/gu, " ").trim(), maxChars);
-    }
-    return "<unserializable>";
-  } catch {
-    return "<unserializable>";
-  }
-}
-
-function sanitiseActorLabel(actor: string): string {
-  const trimmed = actor.trim();
-  if (trimmed.length === 0) {
-    return "main";
-  }
-  return trimmed.replaceAll(/[^a-zA-Z0-9:_-]/gu, "_");
-}
-
-function resolveToolEventActor(event: Extract<LlmStreamEvent, { type: "tool_call" }>): string {
-  const input = event.input;
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return "main";
-  }
-  const record = input as Record<string, unknown>;
-
-  const explicitActorKeys = ["subagentName", "subagent", "agentName", "agent"] as const;
-  for (const key of explicitActorKeys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return sanitiseActorLabel(value);
-    }
-  }
-
-  const idValue = record.id;
-  if (
-    typeof idValue === "string" &&
-    idValue.trim().length > 0 &&
-    (event.toolName === "send_input" ||
-      event.toolName === "wait" ||
-      event.toolName === "close_agent" ||
-      event.toolName === "resume_agent")
-  ) {
-    return `agent:${sanitiseActorLabel(idValue)}`;
-  }
-
-  return "main";
-}
-
-function shortId(id: string): string {
-  return id.length <= 8 ? id : id.slice(0, 8);
-}
-
-function extractAgentIdFromSpawnOutput(output: unknown): string | null {
-  if (!output || typeof output !== "object" || Array.isArray(output)) {
-    return null;
-  }
-  const record = output as Record<string, unknown>;
-  const directAgentId = record.agent_id;
-  if (typeof directAgentId === "string" && directAgentId.trim().length > 0) {
-    return directAgentId.trim();
-  }
-  const directId = record.id;
-  if (typeof directId === "string" && directId.trim().length > 0) {
-    return directId.trim();
-  }
-  const nestedAgent = record.agent;
-  if (!nestedAgent || typeof nestedAgent !== "object" || Array.isArray(nestedAgent)) {
-    return null;
-  }
-  const nestedRecord = nestedAgent as Record<string, unknown>;
-  const nestedAgentId = nestedRecord.agent_id;
-  if (typeof nestedAgentId === "string" && nestedAgentId.trim().length > 0) {
-    return nestedAgentId.trim();
-  }
-  const nestedId = nestedRecord.id;
-  if (typeof nestedId === "string" && nestedId.trim().length > 0) {
-    return nestedId.trim();
-  }
-  return null;
-}
-
 export function emptyUsageTotals(): UsageTotals {
   return {
     promptTokens: 0,
@@ -277,7 +159,10 @@ export function emptyUsageTotals(): UsageTotals {
   };
 }
 
-function addUsageTotals(target: UsageTotals, next: LlmUsageTokenUpdate): void {
+function addUsageTotals(
+  target: UsageTotals,
+  next: LlmUsageTokens,
+): void {
   target.promptTokens += next.promptTokens ?? 0;
   target.cachedTokens += next.cachedTokens ?? 0;
   target.responseTokens += next.responseTokens ?? 0;
@@ -287,84 +172,106 @@ function addUsageTotals(target: UsageTotals, next: LlmUsageTokenUpdate): void {
   target.toolUsePromptTokens += next.toolUsePromptTokens ?? 0;
 }
 
-function mergeUsageTokens(
-  current: LlmUsageTokenUpdate | null,
-  next: LlmUsageTokenUpdate | undefined,
-): LlmUsageTokenUpdate | null {
-  if (!next) {
-    return current;
+export function summarizeToolLoopResult(result: LlmToolLoopResult): ToolLoopSummary {
+  const usageTotals = emptyUsageTotals();
+  const toolCallsByName: Record<string, number> = {};
+  let doneSummary: string | null = null;
+  let toolLlmCostUsd = 0;
+
+  for (const step of result.steps) {
+    if (step.usage) {
+      addUsageTotals(usageTotals, step.usage);
+    }
+    for (const toolCall of step.toolCalls) {
+      toolCallsByName[toolCall.toolName] = (toolCallsByName[toolCall.toolName] ?? 0) + 1;
+      if (toolCall.toolName === "done") {
+        const outputRecord =
+          toolCall.output && typeof toolCall.output === "object" && !Array.isArray(toolCall.output)
+            ? (toolCall.output as Record<string, unknown>)
+            : null;
+        const summary = outputRecord?.summary;
+        if (typeof summary === "string" && summary.trim().length > 0) {
+          doneSummary = summary.trim();
+        }
+      }
+      const outputRecord =
+        toolCall.output && typeof toolCall.output === "object" && !Array.isArray(toolCall.output)
+          ? (toolCall.output as Record<string, unknown>)
+          : null;
+      const rawToolCost = outputRecord?.costUsd;
+      if (typeof rawToolCost === "number" && Number.isFinite(rawToolCost) && rawToolCost >= 0) {
+        toolLlmCostUsd += rawToolCost;
+      }
+    }
   }
-  if (!current) {
-    return next;
-  }
+
+  const toolCalls = Object.values(toolCallsByName).reduce((sum, count) => sum + count, 0);
   return {
-    promptTokens: next.promptTokens ?? current.promptTokens,
-    cachedTokens: next.cachedTokens ?? current.cachedTokens,
-    responseTokens: next.responseTokens ?? current.responseTokens,
-    responseImageTokens: next.responseImageTokens ?? current.responseImageTokens,
-    thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
-    totalTokens: next.totalTokens ?? current.totalTokens,
-    toolUsePromptTokens: next.toolUsePromptTokens ?? current.toolUsePromptTokens,
+    usageTotals,
+    toolCallsByName,
+    modelCalls: result.steps.length,
+    toolCalls,
+    doneSummary,
+    thoughtsChars: result.thoughts.length,
+    responseChars: result.text.length,
+    agentCostUsd: result.totalCostUsd,
+    toolLlmCostUsd,
   };
+}
+
+export function toToolLoopEventLogRecords(result: LlmToolLoopResult): Array<Record<string, unknown>> {
+  const records: Array<Record<string, unknown>> = [];
+  for (const step of result.steps) {
+    records.push({
+      type: "model_step",
+      step: step.step,
+      modelVersion: step.modelVersion,
+      costUsd: step.costUsd,
+      usage: step.usage ?? null,
+      textChars: step.text?.length ?? 0,
+      thoughtChars: step.thoughts?.length ?? 0,
+      toolCalls: step.toolCalls.length,
+      timing: step.timing ?? null,
+    });
+    for (const [toolIndex, toolCall] of step.toolCalls.entries()) {
+      records.push({
+        type: "tool_call",
+        step: step.step,
+        toolIndex,
+        toolName: toolCall.toolName,
+        callId: toolCall.callId,
+        input: toolCall.input,
+        output: toolCall.output,
+        ...(typeof toolCall.error === "string" ? { error: toolCall.error } : {}),
+      });
+    }
+  }
+  return records;
 }
 
 export async function generateTextWithMetrics(options: {
   modelId: LlmTextModelId;
-  contents: readonly LlmContent[];
+  input: readonly LlmInputMessage[];
   responseMimeType?: string;
-  openAiReasoningEffort?: "low" | "medium" | "high";
+  thinkingLevel?: LlmThinkingLevel;
 }): Promise<{ text: string; metrics: ModelCallMetrics }> {
-  let activeHandle: ModelCallHandle | null = null;
-  let modelVersion: string | null = null;
-  let usageTokens: LlmUsageTokenUpdate | null = null;
-
-  const progress: JobProgressReporter = {
-    log: () => {},
-    startModelCall: () => {
-      const handle = Symbol("agentic-benchmark-model-call");
-      activeHandle = handle;
-      return handle;
-    },
-    recordModelUsage: (handle: ModelCallHandle, chunk: LlmUsageChunk) => {
-      if (activeHandle !== handle) {
-        return;
-      }
-      if (typeof chunk.modelVersion === "string" && chunk.modelVersion.trim().length > 0) {
-        modelVersion = chunk.modelVersion.trim();
-      }
-      usageTokens = mergeUsageTokens(usageTokens, chunk.tokens);
-    },
-    finishModelCall: () => {},
-    startStage: () => Symbol("stage"),
-    finishStage: () => {},
-    setActiveStages: () => {},
-  };
-
   const startedAt = Date.now();
-  const text = await generateText({
-    modelId: options.modelId,
-    contents: options.contents,
+  const result = await generateText({
+    model: options.modelId,
+    input: options.input,
     ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
-    ...(options.openAiReasoningEffort
-      ? { openAiReasoningEffort: options.openAiReasoningEffort }
-      : {}),
-    progress,
+    ...(options.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
   });
   const elapsedMs = Date.now() - startedAt;
-  const costUsd = estimateCallCostUsd({
-    modelId: options.modelId,
-    tokens: usageTokens ?? {},
-    responseImages: 0,
-  });
 
   return {
-    text,
+    text: result.text,
     metrics: {
       modelId: options.modelId,
-      modelVersion,
+      modelVersion: result.modelVersion,
       elapsedMs,
-      costUsd,
-      usageTokens,
+      costUsd: result.costUsd,
+      usageTokens: result.usage ?? null,
     },
   };
 }
@@ -404,366 +311,4 @@ export async function toInlineImageParts(paths: readonly string[]): Promise<LlmC
     });
   }
   return parts;
-}
-
-export function createAgenticBenchmarkLogger(options: {
-  benchLabel: string;
-  runRootDir: string;
-  agentLogPath: string;
-  useSubagents: boolean;
-  agentMainLogPath?: string;
-  stageOrder: readonly string[];
-  sanitizeLine?: (input: string) => string;
-}): AgenticBenchmarkLogger {
-  const sanitizeLine = options.sanitizeLine ?? ((input: string): string => input);
-  const usageTotals = emptyUsageTotals();
-  let usageCostUsd = 0;
-  let thoughtChars = 0;
-  let responseChars = 0;
-  let doneSummary: string | null = null;
-  const eventLogRecords: Array<Record<string, unknown>> = [];
-  const toolCallsByName: Record<string, number> = {};
-  let completedStages = 0;
-  let failedToWriteAgentLog = false;
-  const failedSplitLogPaths = new Set<string>();
-  const bufferedSubagentLogLinesByRunId = new Map<string, string[]>();
-  const subagentRunIdToAgentId = new Map<string, string>();
-  const pendingSubagentRunIds: string[] = [];
-  const pendingSpawnedAgentIds: string[] = [];
-  const splitLogPathsCreated = new Set<string>();
-
-  const buildAgentPrefix = (actor: string): string => {
-    return `[spark-agent:${options.benchLabel}/${sanitiseActorLabel(actor)}]`;
-  };
-
-  const appendLine = (line: string): void => {
-    if (failedToWriteAgentLog) {
-      return;
-    }
-    try {
-      appendFileSync(options.agentLogPath, `${line}\n`, "utf8");
-    } catch (error: unknown) {
-      failedToWriteAgentLog = true;
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[${options.benchLabel}] failed to write agent.log: ${message}`);
-    }
-  };
-
-  const resolveSplitLogPath = (actor: string): string | null => {
-    if (!options.useSubagents) {
-      return null;
-    }
-    if (actor === "main") {
-      return options.agentMainLogPath ?? null;
-    }
-    if (actor.startsWith("agent:")) {
-      const rawAgentId = actor.slice("agent:".length).trim();
-      if (rawAgentId.length === 0) {
-        return null;
-      }
-      return path.join(options.runRootDir, `agent_${sanitiseActorLabel(rawAgentId)}.log`);
-    }
-    return null;
-  };
-
-  const appendSplitLogLine = (actor: string, timestampedLine: string): void => {
-    const splitLogPath = resolveSplitLogPath(actor);
-    if (!splitLogPath) {
-      return;
-    }
-    if (failedSplitLogPaths.has(splitLogPath)) {
-      return;
-    }
-    try {
-      appendFileSync(splitLogPath, `${timestampedLine}\n`, "utf8");
-      splitLogPathsCreated.add(splitLogPath);
-    } catch (error: unknown) {
-      failedSplitLogPaths.add(splitLogPath);
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[${options.benchLabel}] failed to write ${path.basename(splitLogPath)}: ${message}`,
-      );
-    }
-  };
-
-  const flushBufferedSubagentLines = (runId: string, agentId: string): void => {
-    const buffered = bufferedSubagentLogLinesByRunId.get(runId);
-    if (!buffered || buffered.length === 0) {
-      return;
-    }
-    const actor = `agent:${agentId}`;
-    for (const line of buffered) {
-      appendSplitLogLine(actor, line);
-    }
-    bufferedSubagentLogLinesByRunId.delete(runId);
-  };
-
-  const tryPairPendingSubagentIds = (): void => {
-    while (pendingSubagentRunIds.length > 0 && pendingSpawnedAgentIds.length > 0) {
-      const runId = pendingSubagentRunIds.shift();
-      const agentId = pendingSpawnedAgentIds.shift();
-      if (!runId || !agentId) {
-        continue;
-      }
-      const safeAgentId = sanitiseActorLabel(agentId);
-      subagentRunIdToAgentId.set(runId, safeAgentId);
-      flushBufferedSubagentLines(runId, safeAgentId);
-      const mappingLine = `subagent_mapping: runId=${runId} agentId=${safeAgentId}`;
-      const mappedLine = `${buildAgentPrefix("main")} ${mappingLine}`;
-      console.log(mappedLine);
-      const timestamped = `${new Date().toISOString()} ${mappedLine}`;
-      appendLine(timestamped);
-      appendSplitLogLine("main", timestamped);
-    }
-  };
-
-  const registerPendingSubagentRun = (runId: string): void => {
-    if (subagentRunIdToAgentId.has(runId)) {
-      return;
-    }
-    if (pendingSubagentRunIds.includes(runId)) {
-      return;
-    }
-    pendingSubagentRunIds.push(runId);
-    tryPairPendingSubagentIds();
-  };
-
-  const registerSpawnedAgentId = (agentId: string): void => {
-    const safeAgentId = sanitiseActorLabel(agentId);
-    pendingSpawnedAgentIds.push(safeAgentId);
-    tryPairPendingSubagentIds();
-  };
-
-  const resolveTelemetryActor = (runId: string): string => {
-    const agentId = subagentRunIdToAgentId.get(runId);
-    if (agentId) {
-      return `agent:${agentId}`;
-    }
-    return `subagent-run:${shortId(runId)}`;
-  };
-
-  const trackUnmappedTelemetryLine = (runId: string, timestampedLine: string): void => {
-    if (subagentRunIdToAgentId.has(runId)) {
-      return;
-    }
-    const existing = bufferedSubagentLogLinesByRunId.get(runId) ?? [];
-    existing.push(timestampedLine);
-    bufferedSubagentLogLinesByRunId.set(runId, existing);
-  };
-
-  const logLine = (line: string, actor = "main"): string => {
-    const normalisedLine = `${buildAgentPrefix(actor)} ${sanitizeLine(line)}`;
-    console.log(normalisedLine);
-    const timestamped = `${new Date().toISOString()} ${normalisedLine}`;
-    appendLine(timestamped);
-    appendSplitLogLine(actor, timestamped);
-    return timestamped;
-  };
-
-  const logSubagentTelemetry = (runId: string, line: string): void => {
-    const actor = resolveTelemetryActor(runId);
-    const timestamped = logLine(line, actor);
-    trackUnmappedTelemetryLine(runId, timestamped);
-  };
-
-  const logStage = (kind: "start" | "done", stage: string): void => {
-    if (kind === "done") {
-      completedStages = Math.min(options.stageOrder.length, completedStages + 1);
-    }
-    const stageCount = Math.max(1, options.stageOrder.length);
-    const value = Math.round((completedStages / stageCount) * 100);
-    const line = `[${value.toString().padStart(2, "0")}%] [${options.benchLabel}] stage:${kind} ${stage}`;
-    console.log(line);
-    const agentLine = `${buildAgentPrefix("main")} stage:${kind} ${stage}`;
-    console.log(agentLine);
-    const timestamped = `${new Date().toISOString()} ${agentLine}`;
-    appendLine(timestamped);
-    appendSplitLogLine("main", timestamped);
-  };
-
-  const onTelemetryEvent = (event: AgentTelemetryEvent): void => {
-    if (event.depth <= 0) {
-      return;
-    }
-    registerPendingSubagentRun(event.runId);
-    const modelName = typeof event.model === "string" ? event.model : String(event.model);
-
-    if (event.type === "agent.run.started") {
-      logSubagentTelemetry(
-        event.runId,
-        `subagent_started: runId=${event.runId} parentRunId=${event.parentRunId ?? "n/a"} depth=${event.depth.toString()} model=${modelName}`,
-      );
-      return;
-    }
-
-    if (event.type === "agent.run.completed") {
-      logSubagentTelemetry(
-        event.runId,
-        `subagent_done: runId=${event.runId} success=${event.success ? "true" : "false"} duration=${formatMs(event.durationMs)} steps=${event.stepCount?.toString() ?? "n/a"} toolCalls=${event.toolCallCount?.toString() ?? "n/a"} cost=${formatUsd(event.totalCostUsd ?? 0)}${event.error ? ` error=${toSingleLine(event.error)}` : ""}`,
-      );
-      return;
-    }
-
-    const streamEvent = event.event;
-    if (streamEvent.type !== "tool_call") {
-      return;
-    }
-    appendToolCallStreamLog({
-      event: streamEvent,
-      append: (line) => {
-        logSubagentTelemetry(event.runId, line);
-      },
-    });
-  };
-
-  const onEvent = (event: LlmStreamEvent): void => {
-    const nowIso = new Date().toISOString();
-    if (event.type === "delta") {
-      if (event.channel === "thought") {
-        thoughtChars += event.text.length;
-        logLine(`thought_delta: ${toSingleLine(event.text)}`, "main");
-      } else {
-        responseChars += event.text.length;
-        logLine(`response_delta: ${toSingleLine(event.text)}`, "main");
-      }
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        channel: event.channel,
-        text: truncateText(event.text, 300),
-      });
-      return;
-    }
-
-    if (event.type === "usage") {
-      usageCostUsd += event.costUsd;
-      addUsageTotals(usageTotals, event.usage);
-      const modelVersionLabel =
-        typeof event.modelVersion === "string" ? event.modelVersion : "n/a";
-      logLine(
-        `usage: modelVersion=${modelVersionLabel} cost=${formatUsd(event.costUsd)} tokens=${serialiseSnippet(event.usage, 300)}`,
-        "main",
-      );
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        costUsd: event.costUsd,
-        usage: event.usage,
-        modelVersion: event.modelVersion,
-      });
-      return;
-    }
-
-    if (event.type === "model") {
-      logLine(`model: ${event.modelVersion}`, "main");
-      eventLogRecords.push({
-        ts: nowIso,
-        type: event.type,
-        modelVersion: event.modelVersion,
-      });
-      return;
-    }
-
-    if (event.type !== "tool_call") {
-      logLine(`event: ${event.type}`, "main");
-      eventLogRecords.push({ ts: nowIso, type: event.type });
-      return;
-    }
-
-    const actor = resolveToolEventActor(event);
-    appendToolCallStreamLog({
-      event,
-      append: (line) => {
-        logLine(line, actor);
-      },
-    });
-    if (event.phase === "completed") {
-      toolCallsByName[event.toolName] = (toolCallsByName[event.toolName] ?? 0) + 1;
-      if (event.toolName === "spawn_agent") {
-        const agentId = extractAgentIdFromSpawnOutput(event.output);
-        if (agentId) {
-          registerSpawnedAgentId(agentId);
-        }
-      }
-      if (event.toolName === "done") {
-        const output =
-          event.output && typeof event.output === "object" && !Array.isArray(event.output)
-            ? (event.output as Record<string, unknown>)
-            : null;
-        const summary = output?.summary;
-        if (typeof summary === "string" && summary.trim().length > 0) {
-          doneSummary = summary.trim();
-        }
-      }
-    }
-    eventLogRecords.push({
-      ts: nowIso,
-      type: "tool_call",
-      phase: event.phase,
-      turn: event.turn,
-      toolIndex: event.toolIndex,
-      toolName: event.toolName,
-      input: event.input,
-      ...(event.phase === "completed" ? { output: event.output } : {}),
-      ...(event.phase === "completed" && typeof event.durationMs === "number"
-        ? { durationMs: event.durationMs }
-        : {}),
-      ...(event.phase === "completed" && typeof event.error === "string"
-        ? { error: event.error }
-        : {}),
-    });
-  };
-
-  const overrideUsageCostUsd = (value: number): void => {
-    if (Number.isFinite(value) && value >= 0) {
-      usageCostUsd = value;
-    }
-  };
-
-  const snapshot = (): AgenticBenchmarkLoggerSnapshot => {
-    return {
-      usageTotals: {
-        promptTokens: usageTotals.promptTokens,
-        cachedTokens: usageTotals.cachedTokens,
-        responseTokens: usageTotals.responseTokens,
-        responseImageTokens: usageTotals.responseImageTokens,
-        thinkingTokens: usageTotals.thinkingTokens,
-        totalTokens: usageTotals.totalTokens,
-        toolUsePromptTokens: usageTotals.toolUsePromptTokens,
-      },
-      usageCostUsd,
-      thoughtChars,
-      responseChars,
-      doneSummary,
-      toolCallsByName: { ...toolCallsByName },
-      eventLogRecords: [...eventLogRecords],
-      splitLogPathsCreated: Array.from(splitLogPathsCreated),
-    };
-  };
-
-  const progress: JobProgressReporter = {
-    log: (message) => {
-      logLine(message, "main");
-    },
-    startModelCall: (details) => {
-      return Symbol(`agentic-benchmark-model-call:${details.modelId}`);
-    },
-    recordModelUsage: (_handle, _chunk) => {},
-    finishModelCall: (_handle) => {},
-    startStage: (stageName) => {
-      return Symbol(`agentic-benchmark-stage:${stageName}`);
-    },
-    finishStage: (_handle) => {},
-    setActiveStages: (_stages) => {},
-  };
-
-  return {
-    logStage,
-    logLine,
-    progress,
-    onTelemetryEvent,
-    onEvent,
-    overrideUsageCostUsd,
-    snapshot,
-  };
 }

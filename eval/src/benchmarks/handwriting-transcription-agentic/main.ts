@@ -9,6 +9,10 @@ import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
   isLlmTextModelId,
   runAgentLoop,
+  tool,
+  type LlmTextModelId,
+  type LlmToolLoopResult,
+  type LlmToolSet,
 } from "@ljoukov/llm";
 
 import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
@@ -16,20 +20,16 @@ import { applyPdfTranscriptionSkillTools } from "@spark/llm/agent/skills/pdfTran
 import { HANDWRITING_TRANSCRIPTION_SKILL_TEXT } from "@spark/llm/agent/skills/handwritingTranscription";
 import {
   assertFileExists,
-  createAgenticBenchmarkLogger,
   createRepoPathHelpers,
   formatMs,
   formatUsd,
   listFilesRecursive,
+  summarizeToolLoopResult,
+  toToolLoopEventLogRecords,
   toModelSlug,
   toRunTimestampSlug,
   type UsageTotals,
 } from "@spark/llm/agent/benchmarks/agenticBenchmark";
-import {
-  tool,
-  type LlmTextModelId,
-  type LlmToolSet,
-} from "@spark/llm/utils/llm";
 
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 
@@ -74,7 +74,7 @@ type AgentPathConfig = {
   transcriptionPath: string;
   outputNotesPath: string;
   agentLogPath: string;
-  agentMainLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
 };
@@ -106,6 +106,7 @@ type AgenticBenchmarkResult = {
   notesPath: string;
   inspectionImagePaths: string[];
   agentLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
   agent: {
@@ -135,39 +136,32 @@ type AgenticBenchmarkRunOutcome = {
   error?: string;
 };
 
-function extractToolLlmCostSummary(eventLogRecords: readonly Record<string, unknown>[]): {
+function extractToolLlmCostSummary(toolLoopResult: LlmToolLoopResult): {
   totalCostUsd: number;
   byToolName: Record<string, number>;
 } {
   let totalCostUsd = 0;
   const byToolName: Record<string, number> = {};
-  for (const record of eventLogRecords) {
-    if (record.type !== "tool_call" || record.phase !== "completed") {
-      continue;
+  for (const step of toolLoopResult.steps) {
+    for (const toolCall of step.toolCalls) {
+      const output =
+        toolCall.output && typeof toolCall.output === "object" && !Array.isArray(toolCall.output)
+          ? (toolCall.output as Record<string, unknown>)
+          : null;
+      if (!output) {
+        continue;
+      }
+      const rawCostUsd = output.costUsd;
+      if (
+        typeof rawCostUsd !== "number" ||
+        !Number.isFinite(rawCostUsd) ||
+        rawCostUsd < 0
+      ) {
+        continue;
+      }
+      totalCostUsd += rawCostUsd;
+      byToolName[toolCall.toolName] = (byToolName[toolCall.toolName] ?? 0) + rawCostUsd;
     }
-    const toolName =
-      typeof record.toolName === "string" && record.toolName.trim().length > 0
-        ? record.toolName
-        : "unknown";
-    const output =
-      typeof record.output === "object" &&
-      record.output !== null &&
-      !Array.isArray(record.output)
-        ? (record.output as Record<string, unknown>)
-        : null;
-    if (!output) {
-      continue;
-    }
-    const rawCostUsd = output.costUsd;
-    if (
-      typeof rawCostUsd !== "number" ||
-      !Number.isFinite(rawCostUsd) ||
-      rawCostUsd < 0
-    ) {
-      continue;
-    }
-    totalCostUsd += rawCostUsd;
-    byToolName[toolName] = (byToolName[toolName] ?? 0) + rawCostUsd;
   }
   return {
     totalCostUsd,
@@ -269,7 +263,11 @@ function parseCliArgs(args: readonly string[]): CliArgs {
     if (trimmed.length === 0) {
       throw new Error("Model id cannot be empty.");
     }
-    return trimmed.replaceAll("-gtp-", "-gpt-");
+    const corrected = trimmed.replaceAll("-gtp-", "-gpt-");
+    if (!isLlmTextModelId(corrected)) {
+      throw new Error(`Unsupported model id: ${corrected}`);
+    }
+    return corrected;
   };
 
   const modelIds: LlmTextModelId[] = [];
@@ -336,8 +334,8 @@ async function buildPathConfig(options: {
   const outputDir = path.join(workspaceDir, "output");
   const transcriptionPath = path.join(outputDir, "transcription.md");
   const outputNotesPath = path.join(outputDir, "agent-notes.md");
-  const agentLogPath = path.join(runRootDir, "agent.log");
-  const agentMainLogPath = path.join(runRootDir, "agent_main.log");
+  const agentLogPath = path.join(workspaceDir, "agent.log");
+  const llmLogsDir = path.join(runRootDir, "logs");
   const eventLogPath = path.join(runRootDir, "agent-log.jsonl");
   const summaryJsonPath = path.join(runRootDir, "summary.json");
 
@@ -375,7 +373,7 @@ async function buildPathConfig(options: {
     transcriptionPath,
     outputNotesPath,
     agentLogPath,
-    agentMainLogPath,
+    llmLogsDir,
     eventLogPath,
     summaryJsonPath,
   };
@@ -443,252 +441,172 @@ async function runAgenticBenchmark(options: {
     modelId: options.modelId,
   });
   const logLines: string[] = [];
-  const stageOrder = [
-    "prepare-workspace",
-    "resolve-tools",
-    "agent-loop",
-    "write-artifacts",
-  ] as const;
-
-  await writeFile(paths.agentLogPath, "", "utf8");
-  if (options.useSubagents) {
-    await writeFile(paths.agentMainLogPath, "", "utf8");
+  const workspace = {
+    scheduleUpdate: (inputPath: string): void => {
+      void inputPath;
+    },
+    deleteFile: async (): Promise<void> => {
+      // Filesystem deletion already happened inside buildSparkAgentTools.
+    },
+    moveFile: async (): Promise<void> => {
+      // Filesystem move already happened inside buildSparkAgentTools.
+    },
+  };
+  const allTools = buildSparkAgentTools({
+    workspace,
+    rootDir: paths.workspaceDir,
+    userId: "benchmark-runner",
+    serviceAccountJson: "{}",
+    extractTextDebugRootDir: path.join(paths.runRootDir, "debug"),
+  });
+  const doneTool = tool({
+    description: "Finish the run and provide summary.",
+    inputSchema: z.object({
+      summary: z.string().trim().min(1),
+    }),
+    execute: ({ summary }) => {
+      return { status: "done", summary };
+    },
+  });
+  const allToolsWithDone: LlmToolSet = {
+    ...allTools,
+    done: doneTool,
+  };
+  const selectedToolsBase: LlmToolSet = {};
+  for (const toolName of REQUIRED_TOOL_NAMES) {
+    const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
+    if (!candidate) {
+      throw new Error(`Required tool missing: ${toolName}`);
+    }
+    (selectedToolsBase as Record<string, unknown>)[toolName] = candidate;
   }
-  const logger = createAgenticBenchmarkLogger({
-    benchLabel: "handwriting-bench",
-    runRootDir: paths.runRootDir,
-    agentLogPath: paths.agentLogPath,
-    useSubagents: options.useSubagents,
-    ...(options.useSubagents
-      ? { agentMainLogPath: paths.agentMainLogPath }
-      : {}),
-    stageOrder,
-    sanitizeLine: sanitizeLogText,
+  const selectedTools = applyPdfTranscriptionSkillTools({
+    tools: selectedToolsBase,
+    rootDir: paths.workspaceDir,
+    includeReferenceTextTool: false,
+    onFileWritten: (outputPath) => {
+      workspace.scheduleUpdate(outputPath);
+    },
   });
 
-  try {
-    logger.logLine(
-      `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} taskPath=${toRepoRelativePath(paths.taskPath)} model=${options.modelId} useSubagents=${options.useSubagents ? "true" : "false"}`,
+  const steering = createAgentLoopSteeringChannel();
+  const startedAt = Date.now();
+  if (!isLlmTextModelId(options.modelId)) {
+    throw new Error(
+      `Unsupported model id for runAgentLoop: ${options.modelId}`,
     );
-    logger.logStage("start", "prepare-workspace");
-    const workspace = {
-      scheduleUpdate: (inputPath: string): void => {
-        void inputPath;
-      },
-      deleteFile: async (): Promise<void> => {
-        // Filesystem deletion already happened inside buildSparkAgentTools.
-      },
-      moveFile: async (): Promise<void> => {
-        // Filesystem move already happened inside buildSparkAgentTools.
-      },
-    };
-    logger.logStage("done", "prepare-workspace");
-
-    logger.logStage("start", "resolve-tools");
-    const allTools = buildSparkAgentTools({
-      workspace,
-      rootDir: paths.workspaceDir,
-      userId: "benchmark-runner",
-      serviceAccountJson: "{}",
-      progress: logger.progress,
-      extractTextDebugRootDir: path.join(paths.runRootDir, "debug"),
-    });
-    const doneTool = tool({
-      description: "Finish the run and provide summary.",
-      inputSchema: z.object({
-        summary: z.string().trim().min(1),
-      }),
-      execute: ({ summary }) => {
-        return { status: "done", summary };
-      },
-    });
-    const allToolsWithDone: LlmToolSet = {
-      ...allTools,
-      done: doneTool,
-    };
-    const selectedToolsBase: LlmToolSet = {};
-    for (const toolName of REQUIRED_TOOL_NAMES) {
-      const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
-      if (!candidate) {
-        throw new Error(`Required tool missing: ${toolName}`);
-      }
-      (selectedToolsBase as Record<string, unknown>)[toolName] = candidate;
-    }
-    const selectedTools = applyPdfTranscriptionSkillTools({
-      tools: selectedToolsBase,
-      rootDir: paths.workspaceDir,
-      includeReferenceTextTool: false,
-      onFileWritten: (outputPath) => {
-        workspace.scheduleUpdate(outputPath);
-      },
-    });
-    logger.logLine(
-      `exposed tools: ${Object.keys(selectedTools)
-        .sort((a, b) => a.localeCompare(b))
-        .join(", ")}`,
-    );
-    logger.logStage("done", "resolve-tools");
-
-    const steering = createAgentLoopSteeringChannel();
-    const startedAt = Date.now();
-    logger.logStage("start", "agent-loop");
-    if (!isLlmTextModelId(options.modelId)) {
-      throw new Error(
-        `Unsupported model id for runAgentLoop: ${options.modelId}`,
-      );
-    }
-    const toolLoopResult = await runAgentLoop({
-      model: options.modelId,
-      input: createAgentPrompt(),
-      maxSteps: MAX_STEPS,
-      openAiReasoningEffort: "high",
-      tools: selectedTools,
-      subagents: options.useSubagents ? { promptPattern: "codex" } : false,
-      telemetry: {
-        includeLlmStreamEvents: true,
-        sink: {
-          emit: logger.onTelemetryEvent,
-        },
-      },
-      steering,
-      onEvent: logger.onEvent,
-    });
-    logger.logStage("done", "agent-loop");
-
-    const agentLlmCostUsd = toolLoopResult.totalCostUsd;
-    const agentLatencyMs = Date.now() - startedAt;
-    logger.logLine(
-      `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} agentLlmCost=${formatUsd(agentLlmCostUsd)}`,
-    );
-
-    const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
-    const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
-    const inspectionImagePaths = workspaceFiles.filter((item) => {
-      if (!item.startsWith(outputDirPrefix)) {
-        return false;
-      }
-      const extension = path.extname(item).toLowerCase();
-      return [".png", ".jpg", ".jpeg", ".webp"].includes(extension);
-    });
-    logger.logLine(
-      [
-        `workspace_scanned: workspaceFiles=${workspaceFiles.length.toString()}`,
-        `inspectionImages=${inspectionImagePaths.length.toString()}`,
-      ].join(" "),
-    );
-
-    const overallPass = true;
-    const reason = "Agent run completed.";
-
-    const finalSnapshot = logger.snapshot();
-    const toolLlmCostSummary = extractToolLlmCostSummary(
-      finalSnapshot.eventLogRecords,
-    );
-    const toolLlmCostUsd = toolLlmCostSummary.totalCostUsd;
-    const toolCallCount = Object.values(finalSnapshot.toolCallsByName).reduce(
-      (sum, count) => sum + count,
-      0,
-    );
-    const totalLatencyMs = agentLatencyMs;
-    const totalCostUsd = agentLlmCostUsd + toolLlmCostUsd;
-
-    logLines.push(
-      `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"}`,
-    );
-    logLines.push(
-      `agent_latency=${formatMs(agentLatencyMs)} agent_llm_cost=${formatUsd(agentLlmCostUsd)} tool_llm_cost=${formatUsd(toolLlmCostUsd)} total_cost=${formatUsd(totalCostUsd)}`,
-    );
-    logLines.push(
-      `tool_llm_cost_by_name=${formatToolCostByNameLine(toolLlmCostSummary.byToolName)}`,
-    );
-    logLines.push(`tool_calls=${toolCallCount.toString()}`);
-    logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
-    logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
-    if (options.useSubagents) {
-      logLines.push(
-        `agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`,
-      );
-      const subagentLogs = finalSnapshot.splitLogPathsCreated
-        .filter(
-          (item) =>
-            path.basename(item) !== path.basename(paths.agentMainLogPath),
-        )
-        .map((item) => toRepoRelativePath(item))
-        .sort((a, b) => a.localeCompare(b));
-      logLines.push(
-        `agent_subagent_logs=${subagentLogs.length > 0 ? subagentLogs.join(",") : "none"}`,
-      );
-    }
-    logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
-
-    logger.logStage("start", "write-artifacts");
-    await writeFile(
-      paths.eventLogPath,
-      `${finalSnapshot.eventLogRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
-      "utf8",
-    );
-
-    const result: AgenticBenchmarkResult = {
-      generatedAt: new Date().toISOString(),
-      modelId: options.modelId,
-      status: overallPass ? "pass" : "fail",
-      reason,
-      runDir: toRepoRelativePath(paths.runRootDir),
-      workspaceDir: toRepoRelativePath(paths.workspaceDir),
-      taskPath: toRepoRelativePath(paths.taskPath),
-      inputFilePaths: options.filePaths,
-      sourceDocumentPaths: paths.sourceDocuments.map((item) =>
-        toRepoRelativePath(item.sourcePath),
-      ),
-      transcriptionPath: toRepoRelativePath(paths.transcriptionPath),
-      notesPath: toRepoRelativePath(paths.outputNotesPath),
-      inspectionImagePaths: inspectionImagePaths.map((item) =>
-        toRepoRelativePath(item),
-      ),
-      agentLogPath: toRepoRelativePath(paths.agentLogPath),
-      eventLogPath: toRepoRelativePath(paths.eventLogPath),
-      summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
-      agent: {
-        latencyMs: agentLatencyMs,
-        modelCalls: toolLoopResult.steps.length,
-        toolCalls: toolCallCount,
-        toolCallsByName: finalSnapshot.toolCallsByName,
-        llmCostUsd: agentLlmCostUsd,
-        usage: finalSnapshot.usageTotals,
-        thoughtsChars: finalSnapshot.thoughtChars,
-        responseChars: finalSnapshot.responseChars,
-        doneSummary: finalSnapshot.doneSummary,
-      },
-      toolLlmCostByName: toolLlmCostSummary.byToolName,
-      total: {
-        latencyMs: totalLatencyMs,
-        costUsd: totalCostUsd,
-        agentLlmCostUsd,
-        toolLlmCostUsd,
-      },
-    };
-
-    await writeFile(
-      paths.summaryJsonPath,
-      `${JSON.stringify(result, null, 2)}\n`,
-      "utf8",
-    );
-    await writeFile(
-      path.join(paths.runRootDir, "run.log"),
-      `${logLines.join("\n")}\n`,
-      "utf8",
-    );
-    logger.logStage("done", "write-artifacts");
-    logger.logLine(
-      `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} agentLlmCost=${formatUsd(result.total.agentLlmCostUsd)} toolLlmCost=${formatUsd(result.total.toolLlmCostUsd)} runDir=${result.runDir}`,
-    );
-
-    return result;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.logLine(`error: ${sanitizeLogText(message)}`);
-    throw error;
   }
+  const thinkingLevel =
+    options.modelId.startsWith("chatgpt-") || options.modelId.startsWith("gpt-")
+      ? ("high" as const)
+      : undefined;
+  const toolLoopResult = await runAgentLoop({
+    model: options.modelId,
+    input: createAgentPrompt(),
+    maxSteps: MAX_STEPS,
+    ...(thinkingLevel ? { thinkingLevel } : {}),
+    tools: selectedTools,
+    subagents: options.useSubagents ? { promptPattern: "codex" } : false,
+    logging: {
+      workspaceDir: paths.workspaceDir,
+    },
+    steering,
+  });
+
+  const agentLatencyMs = Date.now() - startedAt;
+  const summary = summarizeToolLoopResult(toolLoopResult);
+  const toolLlmCostSummary = extractToolLlmCostSummary(toolLoopResult);
+  const toolLlmCostUsd = toolLlmCostSummary.totalCostUsd;
+  const totalLatencyMs = agentLatencyMs;
+  const totalCostUsd = summary.agentCostUsd + toolLlmCostUsd;
+
+  const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
+  const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
+  const inspectionImagePaths = workspaceFiles.filter((item) => {
+    if (!item.startsWith(outputDirPrefix)) {
+      return false;
+    }
+    const extension = path.extname(item).toLowerCase();
+    return [".png", ".jpg", ".jpeg", ".webp"].includes(extension);
+  });
+
+  const overallPass = true;
+  const reason = "Agent run completed.";
+
+  logLines.push(
+    `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"}`,
+  );
+  logLines.push(
+    `agent_latency=${formatMs(agentLatencyMs)} agent_llm_cost=${formatUsd(summary.agentCostUsd)} tool_llm_cost=${formatUsd(toolLlmCostUsd)} total_cost=${formatUsd(totalCostUsd)}`,
+  );
+  logLines.push(
+    `tool_llm_cost_by_name=${formatToolCostByNameLine(toolLlmCostSummary.byToolName)}`,
+  );
+  logLines.push(`tool_calls=${summary.toolCalls.toString()}`);
+  logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
+  logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
+  logLines.push(`llm_logs_dir=${toRepoRelativePath(paths.llmLogsDir)}`);
+  logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
+
+  await writeFile(
+    paths.eventLogPath,
+    `${toToolLoopEventLogRecords(toolLoopResult).map((record) => JSON.stringify(record)).join("\n")}\n`,
+    "utf8",
+  );
+
+  const result: AgenticBenchmarkResult = {
+    generatedAt: new Date().toISOString(),
+    modelId: options.modelId,
+    status: overallPass ? "pass" : "fail",
+    reason,
+    runDir: toRepoRelativePath(paths.runRootDir),
+    workspaceDir: toRepoRelativePath(paths.workspaceDir),
+    taskPath: toRepoRelativePath(paths.taskPath),
+    inputFilePaths: options.filePaths,
+    sourceDocumentPaths: paths.sourceDocuments.map((item) =>
+      toRepoRelativePath(item.sourcePath),
+    ),
+    transcriptionPath: toRepoRelativePath(paths.transcriptionPath),
+    notesPath: toRepoRelativePath(paths.outputNotesPath),
+    inspectionImagePaths: inspectionImagePaths.map((item) =>
+      toRepoRelativePath(item),
+    ),
+    agentLogPath: toRepoRelativePath(paths.agentLogPath),
+    llmLogsDir: toRepoRelativePath(paths.llmLogsDir),
+    eventLogPath: toRepoRelativePath(paths.eventLogPath),
+    summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
+    agent: {
+      latencyMs: agentLatencyMs,
+      modelCalls: summary.modelCalls,
+      toolCalls: summary.toolCalls,
+      toolCallsByName: summary.toolCallsByName,
+      llmCostUsd: summary.agentCostUsd,
+      usage: summary.usageTotals,
+      thoughtsChars: summary.thoughtsChars,
+      responseChars: summary.responseChars,
+      doneSummary: summary.doneSummary,
+    },
+    toolLlmCostByName: toolLlmCostSummary.byToolName,
+    total: {
+      latencyMs: totalLatencyMs,
+      costUsd: totalCostUsd,
+      agentLlmCostUsd: summary.agentCostUsd,
+      toolLlmCostUsd,
+    },
+  };
+
+  await writeFile(
+    paths.summaryJsonPath,
+    `${JSON.stringify(result, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(paths.runRootDir, "run.log"),
+    `${logLines.join("\n")}\n`,
+    "utf8",
+  );
+
+  return result;
 }
 
 async function renderSingleResultsMarkdown(
@@ -712,6 +630,7 @@ async function renderSingleResultsMarkdown(
   lines.push(`- Transcription: ${result.transcriptionPath}`);
   lines.push(`- Agent notes: ${result.notesPath}`);
   lines.push(`- Agent log: ${result.agentLogPath}`);
+  lines.push(`- Native LLM logs dir: ${result.llmLogsDir}`);
   lines.push(`- Agent event log: ${result.eventLogPath}`);
   lines.push(`- Summary JSON: ${result.summaryJsonPath}`);
   lines.push("");

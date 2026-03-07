@@ -15,7 +15,25 @@ import {
 
 import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
-import { createFilesystemToolSetForModel } from "@ljoukov/llm";
+import {
+  createFilesystemToolSetForModel,
+  estimateCallCostUsd,
+  generateText,
+  getCurrentToolCallContext,
+  isLlmTextModelId,
+  parseJsonFromLlmText,
+  runAgentLoop,
+  tool,
+  type LlmContentPart,
+  type LlmInputMessage,
+  type LlmTextModelId,
+  type LlmTextResult,
+  type LlmThinkingLevel,
+  type LlmToolConfig,
+  type LlmToolLoopResult,
+  type LlmToolSet,
+  type LlmUsageTokens,
+} from "@ljoukov/llm";
 import {
   CodeProblemSchema,
   QuizDefinitionSchema,
@@ -43,21 +61,6 @@ import {
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import { downloadStorageObject, uploadStorageObject } from "../utils/gcp/storageRest";
 import {
-  estimateCallCostUsd,
-  generateText,
-  getCurrentToolCallContext,
-  parseJsonFromLlmText,
-  runToolLoop,
-  tool,
-  type LlmContent,
-  type LlmContentPart,
-  type LlmStreamEvent,
-  type LlmTextModelId,
-  type LlmToolConfig,
-  type LlmDebugOptions,
-  type LlmToolSet,
-} from "../utils/llm";
-import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
 } from "./skills/pdfTranscription";
@@ -74,7 +77,6 @@ import {
   getPdfPageCount,
   renderPdfPagesBgra,
 } from "../utils/pdfium";
-import type { OpenAiReasoningEffort } from "../utils/openai-llm";
 import { getSharp } from "../utils/sharp";
 import type {
   JobProgressReporter,
@@ -85,6 +87,13 @@ import type {
 } from "../utils/concurrency";
 
 const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+
+type LlmDebugOptions = {
+  readonly rootDir: string;
+  readonly stage?: string;
+  readonly subStage?: string;
+  readonly enabled?: boolean;
+};
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_LESSON_MAX_STEPS = 1000;
 const DEFAULT_PDF_EXTRACTION_MODEL_ID: LlmTextModelId = "gemini-2.5-pro";
@@ -109,133 +118,9 @@ type TrackedSubmodelCallSummary = {
   readonly usageTokens: LlmUsageTokenUpdate | null;
   readonly costUsd: number | null;
 };
-
-function mergeUsageTokens(
-  current: LlmUsageTokenUpdate | undefined,
-  next: LlmUsageTokenUpdate | undefined,
-): LlmUsageTokenUpdate | undefined {
-  if (!next) {
-    return current;
-  }
-  if (!current) {
-    return next;
-  }
-  return {
-    promptTokens: next.promptTokens ?? current.promptTokens,
-    cachedTokens: next.cachedTokens ?? current.cachedTokens,
-    responseTokens: next.responseTokens ?? current.responseTokens,
-    responseImageTokens:
-      next.responseImageTokens ?? current.responseImageTokens,
-    thinkingTokens: next.thinkingTokens ?? current.thinkingTokens,
-    totalTokens: next.totalTokens ?? current.totalTokens,
-    toolUsePromptTokens:
-      next.toolUsePromptTokens ?? current.toolUsePromptTokens,
-  };
-}
-
-function createAgentSubmodelProgressTracker(options: {
-  progress?: JobProgressReporter;
-  suppressCompletionLogs?: boolean;
-}): {
-  progress?: JobProgressReporter;
-  getSummary: () => TrackedSubmodelCallSummary | null;
-} {
-  if (!options.progress) {
-    return { progress: undefined, getSummary: () => null };
-  }
-
-  const parent = options.progress;
-  const active = new Map<
-    ModelCallHandle,
-    {
-      startedAt: number;
-      modelId: string;
-      modelVersion: string | null;
-      usageTokens: LlmUsageTokenUpdate | undefined;
-      requestImageSize?: string;
-    }
-  >();
-  let lastSummary: TrackedSubmodelCallSummary | null = null;
-
-  const shouldSuppressCompletionLogs = options.suppressCompletionLogs === true;
-  const completionLogPattern = /^\[[^\]]+\]\s+completed model\s+/u;
-
-  const trackedProgress: JobProgressReporter = {
-    log: (message) => {
-      if (shouldSuppressCompletionLogs && completionLogPattern.test(message)) {
-        return;
-      }
-      parent.log(message);
-    },
-    startModelCall: (details) => {
-      const handle = parent.startModelCall(details);
-      active.set(handle, {
-        startedAt: Date.now(),
-        modelId: details.modelId,
-        modelVersion: null,
-        usageTokens: undefined,
-        requestImageSize: details.imageSize,
-      });
-      return handle;
-    },
-    recordModelUsage: (handle, chunk) => {
-      const state = active.get(handle);
-      if (state) {
-        if (
-          typeof chunk.modelVersion === "string" &&
-          chunk.modelVersion.trim().length > 0
-        ) {
-          state.modelVersion = chunk.modelVersion.trim();
-        }
-        state.usageTokens = mergeUsageTokens(state.usageTokens, chunk.tokens);
-      }
-      parent.recordModelUsage(handle, chunk);
-    },
-    finishModelCall: (handle) => {
-      const state = active.get(handle);
-      active.delete(handle);
-      parent.finishModelCall(handle);
-      if (!state) {
-        return;
-      }
-      const elapsedMs = Date.now() - state.startedAt;
-      const modelVersion = state.modelVersion ?? state.modelId;
-      const usageTokens = state.usageTokens ?? null;
-      const costUsd =
-        usageTokens !== null
-          ? estimateCallCostUsd({
-              modelId: modelVersion,
-              tokens: usageTokens,
-              responseImages: 0,
-              imageSize: state.requestImageSize,
-            })
-          : null;
-      lastSummary = {
-        modelId: state.modelId,
-        modelVersion,
-        elapsedMs,
-        usageTokens,
-        costUsd,
-      };
-    },
-    startStage: (stageName) => parent.startStage(stageName),
-    finishStage: (handle) => parent.finishStage(handle),
-  };
-
-  if (parent.setActiveStages) {
-    trackedProgress.setActiveStages = (stages) =>
-      parent.setActiveStages?.(stages);
-  }
-
-  return {
-    progress: trackedProgress,
-    getSummary: () => lastSummary,
-  };
-}
 const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
-const AGENT_STREAM_MAX_CHARS = 20_000;
 const AGENT_TOOL_LOG_SNIPPET_MAX_BYTES = 4 * 1024;
 const AGENT_TOOL_LOG_SNIPPET_MAX_CHARS = 1_000;
 const STOP_POLL_INTERVAL_MS = 10_000;
@@ -384,57 +269,11 @@ function formatToolLogSnippet(value: unknown): string {
   return `${compact.slice(0, AGENT_TOOL_LOG_SNIPPET_MAX_CHARS)}…`;
 }
 
-export function appendToolCallStreamLog(options: {
-  event: LlmStreamEvent;
-  append: (line: string) => void;
-}): void {
-  const event = options.event;
-  if (event.type !== "tool_call") {
-    return;
-  }
-  const callIdSegment =
-    typeof event.callId === "string" && event.callId.trim().length > 0
-      ? ` callId=${event.callId}`
-      : "";
-  const prefix = [
-    `tool_call_${event.phase}:`,
-    `turn=${event.turn.toString()}`,
-    `index=${event.toolIndex.toString()}`,
-    `tool=${event.toolName}${callIdSegment}`,
-  ].join(" ");
-  if (event.phase === "started") {
-    const sanitizedInput = sanitizeToolTraceValue({
-      toolName: event.toolName,
-      direction: "input",
-      value: event.input,
-    });
-    options.append(prefix);
-    options.append(`tool_call_input: ${formatToolLogSnippet(sanitizedInput)}`);
-    return;
-  }
-  const durationSegment =
-    typeof event.durationMs === "number" && Number.isFinite(event.durationMs)
-      ? ` durationMs=${Math.max(0, Math.round(event.durationMs)).toString()}`
-      : "";
-  const sanitizedOutput = sanitizeToolTraceValue({
-    toolName: event.toolName,
-    direction: "output",
-    value: event.output,
-  });
-  options.append(
-    `${prefix} status=${event.error ? "error" : "ok"}${durationSegment}`,
-  );
-  options.append(`tool_call_output: ${formatToolLogSnippet(sanitizedOutput)}`);
-  if (typeof event.error === "string" && event.error.trim().length > 0) {
-    options.append(`tool_call_error: ${event.error.trim()}`);
-  }
-}
-
 async function persistToolLoopTrace(options: {
   serviceAccountJson: string;
   userId: string;
   agentId: string;
-  toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>;
+  toolLoopResult: LlmToolLoopResult;
   consolePrefix: string;
 }): Promise<{ stepCount: number; toolCallCount: number }> {
   const logDocPath = `users/${options.userId}/agents/${options.agentId}/logs/log`;
@@ -452,7 +291,7 @@ async function persistToolLoopTrace(options: {
       documentPath: stepDocPath,
       data: {
         step: step.step,
-        modelId: step.modelId,
+        modelId: step.modelVersion,
         text: stepText,
         toolCallCount: toolCalls.length,
         createdAt: now,
@@ -854,16 +693,30 @@ function resolveAgentWorkspaceRoot(options: {
   };
 }
 
-function resolveOpenAiReasoningEffort(
+function resolveThinkingLevel(
   modelId: LlmTextModelId,
-): OpenAiReasoningEffort | undefined {
+): LlmThinkingLevel | undefined {
   if (modelId.includes("gpt-5.3-codex")) {
-    return "xhigh";
+    return "high";
   }
   if (modelId.includes("gpt-5.2")) {
     return "medium";
   }
   return undefined;
+}
+
+function resolveTextModelId(
+  value: string | undefined,
+  fallback: LlmTextModelId,
+): LlmTextModelId {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (isLlmTextModelId(trimmed)) {
+    return trimmed;
+  }
+  throw new Error(`Unsupported model id: ${value}`);
 }
 
 function resolveWorkspacePath(
@@ -1100,12 +953,12 @@ async function loadAttachmentParts(options: {
   return { parts, notes };
 }
 
-function buildInitialToolLoopContents(options: {
+function buildInitialToolLoopInput(options: {
   systemPrompt: string;
   prompt: string;
   inlineParts: LlmContentPart[];
   notes: string[];
-}): LlmContent[] {
+}): LlmInputMessage[] {
   const userParts: LlmContentPart[] = [{ type: "text", text: options.prompt }];
   if (options.notes.length > 0) {
     userParts.push({
@@ -1123,13 +976,50 @@ function buildInitialToolLoopContents(options: {
   return [
     {
       role: "system",
-      parts: [{ type: "text", text: options.systemPrompt }],
+      content: [{ type: "text", text: options.systemPrompt }],
     },
     {
       role: "user",
-      parts: userParts,
+      content: userParts,
     },
   ];
+}
+
+function buildSingleUserInput(parts: readonly LlmContentPart[]): LlmInputMessage[] {
+  return [{ role: "user", content: parts }];
+}
+
+function recordLlmTextResult(options: {
+  progress?: JobProgressReporter;
+  modelId: string;
+  result: Pick<LlmTextResult, "modelVersion" | "usage">;
+}): void {
+  if (!options.progress) {
+    return;
+  }
+  const handle = options.progress.startModelCall({
+    modelId: options.modelId,
+    uploadBytes: 0,
+  });
+  options.progress.recordModelUsage(handle, {
+    modelVersion: options.result.modelVersion,
+    ...(options.result.usage ? { tokens: options.result.usage } : {}),
+  });
+  options.progress.finishModelCall(handle);
+}
+
+function createTrackedSubmodelCallSummary(options: {
+  modelId: string;
+  startedAt: number;
+  result: Pick<LlmTextResult, "modelVersion" | "usage" | "costUsd">;
+}): TrackedSubmodelCallSummary {
+  return {
+    modelId: options.modelId,
+    modelVersion: options.result.modelVersion,
+    elapsedMs: Date.now() - options.startedAt,
+    usageTokens: options.result.usage ?? null,
+    costUsd: options.result.costUsd,
+  };
 }
 
 async function readGraderRunSummaryFromWorkspace(options: {
@@ -1451,15 +1341,6 @@ async function ensureDir(dirPath: string): Promise<void> {
   await mkdir(dirPath, { recursive: true });
 }
 
-function normaliseDebugPathSegment(value: string): string {
-  const cleaned = value
-    .trim()
-    .replace(/[^a-z0-9\-_/]+/gi, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^[-_/]+|[-_/]+$/g, "");
-  return cleaned.length > 0 ? cleaned : "segment";
-}
-
 function capUtf8Text(value: string, maxBytes: number): string {
   if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
     return "";
@@ -1477,87 +1358,6 @@ function capUtf8Text(value: string, maxBytes: number): string {
     slice = value.slice(0, end);
   }
   return slice + marker;
-}
-
-async function resolveLlmDebugAttemptDir(options: {
-  debug: LlmDebugOptions;
-  attempt: number;
-  maxAttempts: number;
-}): Promise<string | null> {
-  const attemptSegment = normaliseDebugPathSegment(
-    `attempt-${String(options.attempt).padStart(2, "0")}-of-${String(options.maxAttempts).padStart(2, "0")}`,
-  );
-  const stageSegment = normaliseDebugPathSegment(options.debug.stage ?? "llm");
-  const segments = [options.debug.rootDir, "stages", stageSegment];
-  if (options.debug.subStage) {
-    segments.push(normaliseDebugPathSegment(options.debug.subStage));
-  }
-  segments.push(attemptSegment);
-  const basePath = path.join(...segments);
-  const exists = await stat(basePath)
-    .then((entry) => entry.isDirectory())
-    .catch(() => false);
-  if (exists) {
-    return basePath;
-  }
-  const parent = path.dirname(basePath);
-  const basename = path.basename(basePath);
-  const entries = await readdir(parent, { withFileTypes: true }).catch(
-    () => [],
-  );
-  const candidates = entries
-    .filter(
-      (entry) =>
-        entry.isDirectory() && entry.name.startsWith(`${basename}-run-`),
-    )
-    .map((entry) => entry.name)
-    .sort();
-  if (candidates.length === 0) {
-    return null;
-  }
-  return path.join(parent, candidates[candidates.length - 1] ?? "");
-}
-
-async function persistLlmLogsFromDebugDirToWorkspace(options: {
-  rootDir: string;
-  workspace: SparkAgentWorkspace;
-  toolName:
-    | "generate_text"
-    | "generate_json"
-    | "extract_text"
-    | "extract_pdf_text"
-    | "read_pdf"
-    | "extract_pdf_diagrams";
-  toolIdSegment: string;
-  debugDir: string;
-}): Promise<void> {
-  const maxBytes = 900_000;
-  const targets: Array<{
-    name: "prompt" | "request" | "response";
-    filename: string;
-  }> = [
-    { name: "prompt", filename: "prompt.txt" },
-    { name: "request", filename: "request.txt" },
-    { name: "response", filename: "response.txt" },
-  ];
-
-  for (const target of targets) {
-    const sourcePath = path.join(options.debugDir, target.filename);
-    let content: string;
-    try {
-      content = await readFile(sourcePath, { encoding: "utf8" });
-    } catch {
-      continue;
-    }
-
-    const relativePath = `${options.toolName}/${options.toolIdSegment}/${target.filename}`;
-    const resolvedPath = resolveWorkspacePath(options.rootDir, relativePath);
-    await ensureDir(path.dirname(resolvedPath));
-    await writeFile(resolvedPath, capUtf8Text(content, maxBytes), {
-      encoding: "utf8",
-    });
-    options.workspace.scheduleUpdate(relativePath);
-  }
 }
 
 type ExtractTextDebugInlineAttachment = {
@@ -2266,6 +2066,21 @@ class AgentRunStatsTracker {
     this.callInfo.delete(handle);
   }
 
+  recordCompletedModelCall(details: {
+    modelId: string;
+    modelVersion?: string;
+    usage?: LlmUsageTokens;
+  }): void {
+    const handle = this.startModelCall({ modelId: details.modelId });
+    if (details.modelVersion || details.usage) {
+      this.recordModelUsage(handle, {
+        ...(details.modelVersion ? { modelVersion: details.modelVersion } : {}),
+        ...(details.usage ? { tokens: details.usage } : {}),
+      });
+    }
+    this.finishModelCall(handle);
+  }
+
   recordToolCall(toolName: string): void {
     this.toolCalls += 1;
     const next = (this.toolCallsByName.get(toolName) ?? 0) + 1;
@@ -2273,7 +2088,7 @@ class AgentRunStatsTracker {
   }
 
   recordToolCallsFromResult(
-    toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>,
+    toolLoopResult: LlmToolLoopResult,
   ): void {
     if (this.toolCalls > 0) {
       return;
@@ -2420,9 +2235,6 @@ class AgentLogSync {
   private lastWriteAt = 0;
   private pendingLines = new Map<string, string>();
   private pendingStats: AgentRunStatsSnapshot | null = null;
-  private streamAssistant = "";
-  private streamThoughts = "";
-  private streamDirty = false;
   private timer: NodeJS.Timeout | undefined;
   private inFlight: Promise<void> | undefined;
   private disposed = false;
@@ -2467,41 +2279,6 @@ class AgentLogSync {
     this.scheduleUpdate();
   }
 
-  appendAssistantDelta(delta: string): void {
-    if (this.disposed) {
-      return;
-    }
-    if (!delta) {
-      return;
-    }
-    const next = this.streamAssistant + delta;
-    this.streamAssistant =
-      next.length > AGENT_STREAM_MAX_CHARS
-        ? next.slice(next.length - AGENT_STREAM_MAX_CHARS)
-        : next;
-    this.streamDirty = true;
-    this.scheduleUpdate();
-  }
-
-  appendThoughtDelta(delta: string): void {
-    if (this.disposed) {
-      return;
-    }
-    if (!delta) {
-      return;
-    }
-    if (this.mirrorToConsole) {
-      console.log(`${this.consolePrefix}thought_delta: ${delta}`);
-    }
-    const next = this.streamThoughts + delta;
-    this.streamThoughts =
-      next.length > AGENT_STREAM_MAX_CHARS
-        ? next.slice(next.length - AGENT_STREAM_MAX_CHARS)
-        : next;
-    this.streamDirty = true;
-    this.scheduleUpdate();
-  }
-
   async flushAll(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -2512,8 +2289,7 @@ class AgentLogSync {
     }
     if (
       this.pendingLines.size === 0 &&
-      !this.pendingStats &&
-      !this.streamDirty
+      !this.pendingStats
     ) {
       return;
     }
@@ -2583,8 +2359,7 @@ class AgentLogSync {
     if (
       !force &&
       this.pendingLines.size === 0 &&
-      !this.pendingStats &&
-      !this.streamDirty
+      !this.pendingStats
     ) {
       return;
     }
@@ -2604,10 +2379,7 @@ class AgentLogSync {
       })
       .finally(() => {
         this.inFlight = undefined;
-        if (
-          !this.disposed &&
-          (this.pendingLines.size > 0 || this.pendingStats || this.streamDirty)
-        ) {
+        if (!this.disposed && (this.pendingLines.size > 0 || this.pendingStats)) {
           this.scheduleUpdate();
         }
       });
@@ -2621,14 +2393,10 @@ class AgentLogSync {
     }
     const linesEntries = Array.from(this.pendingLines.entries());
     const stats = this.pendingStats;
-    const streamDirty = this.streamDirty;
-    const streamAssistant = this.streamAssistant;
-    const streamThoughts = this.streamThoughts;
     this.pendingLines.clear();
     this.pendingStats = null;
-    this.streamDirty = false;
 
-    if (linesEntries.length === 0 && !stats && !streamDirty) {
+    if (linesEntries.length === 0 && !stats) {
       return;
     }
 
@@ -2652,15 +2420,6 @@ class AgentLogSync {
     if (stats) {
       payload.stats = stats;
     }
-    if (streamDirty) {
-      payload["stream.updatedAt"] = now;
-      if (streamAssistant.length > 0) {
-        payload["stream.assistant"] = streamAssistant;
-      }
-      if (streamThoughts.length > 0) {
-        payload["stream.thoughts"] = streamThoughts;
-      }
-    }
 
     try {
       await patchFirestoreDocument({
@@ -2677,9 +2436,6 @@ class AgentLogSync {
       }
       if (!this.pendingStats && stats) {
         this.pendingStats = stats;
-      }
-      if (streamDirty) {
-        this.streamDirty = true;
       }
       throw error;
     }
@@ -3987,92 +3743,9 @@ function buildAgentTools(options: {
         `debug_request_written dir=${path.join("extract_text", toolIdSegment)}`,
       );
     }
-    const submodelTracker = createAgentSubmodelProgressTracker({
-      progress,
-      suppressCompletionLogs: true,
-    });
-    let streamedResponseChars = 0;
-    let streamedResponseBytes = 0;
     let streamedThinkingText = "";
-    let responseStreamStarted = false;
-    let lastResponseProgressLogAt = 0;
     let lastThinkingTokensLogged: number | null = null;
-    const maybeLogResponseStreamProgress = (options?: {
-      force?: boolean;
-    }): void => {
-      if (!responseStreamStarted) {
-        return;
-      }
-      const force = options?.force === true;
-      const now = Date.now();
-      if (
-        !force &&
-        now - lastResponseProgressLogAt <
-          EXTRACT_TEXT_RESPONSE_STREAM_LOG_THROTTLE_MS
-      ) {
-        return;
-      }
-      lastResponseProgressLogAt = now;
-      logExtractTextProgress(
-        `response_stream chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
-      );
-    };
-    const trackedProgress = submodelTracker.progress;
-    const extractTextProgress: JobProgressReporter | undefined = trackedProgress
-      ? {
-          log: (message) => {
-            trackedProgress.log(message);
-          },
-          startModelCall: (details) => {
-            return trackedProgress.startModelCall(details);
-          },
-          recordModelUsage: (handle, chunk) => {
-            const nextThinkingTokensRaw = chunk.tokens?.thinkingTokens;
-            if (
-              typeof nextThinkingTokensRaw === "number" &&
-              Number.isFinite(nextThinkingTokensRaw)
-            ) {
-              const nextThinkingTokens = Math.max(
-                0,
-                Math.floor(nextThinkingTokensRaw),
-              );
-              if (
-                nextThinkingTokens > 0 &&
-                nextThinkingTokens !== lastThinkingTokensLogged
-              ) {
-                lastThinkingTokensLogged = nextThinkingTokens;
-                logExtractTextProgress(
-                  `thinking_tokens=${nextThinkingTokens.toString()}`,
-                );
-              }
-            }
-            trackedProgress.recordModelUsage(handle, chunk);
-          },
-          finishModelCall: (handle) => {
-            trackedProgress.finishModelCall(handle);
-          },
-          startStage: (stageName) => trackedProgress.startStage(stageName),
-          finishStage: (handle) => trackedProgress.finishStage(handle),
-          ...(trackedProgress.setActiveStages
-            ? {
-                setActiveStages: (stages: Iterable<string>) =>
-                  trackedProgress.setActiveStages?.(stages),
-              }
-            : {}),
-        }
-      : undefined;
-    const callDebug: LlmDebugOptions | undefined = debug
-      ? {
-          ...debug,
-          subStage: [debug.subStage, "extract_text", toolIdSegment]
-            .filter(
-              (entry): entry is string =>
-                typeof entry === "string" && entry.trim().length > 0,
-            )
-            .join("/"),
-        }
-      : undefined;
-
+    let llmResult: LlmTextResult | null = null;
     let extractedText = "";
     let modelCallElapsedMs: number | null = null;
     const callStartedAt = Date.now();
@@ -4081,38 +3754,21 @@ function buildAgentTools(options: {
       callHeartbeatTimer = setInterval(() => {
         const elapsedMs = Date.now() - callStartedAt;
         logExtractTextProgress(
-          `waiting_for_model elapsedMs=${elapsedMs.toString()} streamStarted=${responseStreamStarted ? "yes" : "no"} chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
+          `waiting_for_model elapsedMs=${elapsedMs.toString()}`,
         );
       }, 15_000);
       logExtractTextProgress("generate_text_call started");
-      extractedText = await generateText({
-        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
-        contents: [
-          {
-            role: "user",
-            parts: extractionParts,
-          },
-        ],
-        onDelta: (delta) => {
-          const thoughtDelta = delta.thoughtDelta;
-          if (typeof thoughtDelta === "string" && thoughtDelta.length > 0) {
-            streamedThinkingText += thoughtDelta;
-          }
-          const textDelta = delta.textDelta;
-          if (typeof textDelta !== "string" || textDelta.length === 0) {
-            return;
-          }
-          if (!responseStreamStarted) {
-            responseStreamStarted = true;
-            logExtractTextProgress("response_stream started");
-          }
-          streamedResponseChars += textDelta.length;
-          streamedResponseBytes += Buffer.byteLength(textDelta, "utf8");
-          maybeLogResponseStreamProgress();
-        },
-        ...(callDebug ? { debug: callDebug } : {}),
-        ...(extractTextProgress ? { progress: extractTextProgress } : {}),
+      llmResult = await generateText({
+        model: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        input: buildSingleUserInput(extractionParts),
       });
+      recordLlmTextResult({
+        progress,
+        modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+        result: llmResult,
+      });
+      streamedThinkingText = llmResult.thoughts;
+      extractedText = llmResult.text;
       logExtractTextProgress(
         `generate_text_call completed elapsedMs=${(Date.now() - callStartedAt).toString()} extractedChars=${extractedText.length.toString()}`,
       );
@@ -4120,28 +3776,6 @@ function buildAgentTools(options: {
     } finally {
       if (callHeartbeatTimer) {
         clearInterval(callHeartbeatTimer);
-      }
-      maybeLogResponseStreamProgress({ force: true });
-      if (responseStreamStarted) {
-        logExtractTextProgress(
-          `response_stream final chars=${streamedResponseChars.toString()} bytes=${streamedResponseBytes.toString()}`,
-        );
-      }
-      if (callDebug) {
-        const debugDir = await resolveLlmDebugAttemptDir({
-          debug: callDebug,
-          attempt: 1,
-          maxAttempts: 1,
-        }).catch(() => null);
-        if (debugDir) {
-          await persistLlmLogsFromDebugDirToWorkspace({
-            rootDir,
-            workspace,
-            toolName: "extract_text",
-            toolIdSegment,
-            debugDir,
-          }).catch(() => undefined);
-        }
       }
     }
 
@@ -4151,7 +3785,13 @@ function buildAgentTools(options: {
       EXTRACT_TEXT_DEFAULT_MAX_CHARS * 6,
     ).slice(0, EXTRACT_TEXT_DEFAULT_MAX_CHARS);
     const truncated = cappedText.length < normalizedText.length;
-    const submodelSummary = submodelTracker.getSummary();
+    const submodelSummary = llmResult
+      ? createTrackedSubmodelCallSummary({
+          modelId: DEFAULT_EXTRACT_TEXT_MODEL_ID,
+          startedAt: callStartedAt,
+          result: llmResult,
+        })
+      : null;
     const finalThinkingTokensRaw = submodelSummary?.usageTokens?.thinkingTokens;
     const finalThinkingTokens =
       typeof finalThinkingTokensRaw === "number" &&
@@ -4191,8 +3831,8 @@ function buildAgentTools(options: {
           : {}),
         usageTokens: submodelSummary?.usageTokens ?? null,
         thinkingTokens: finalThinkingTokens,
-        streamedResponseChars,
-        streamedResponseBytes,
+        streamedResponseChars: extractedText.length,
+        streamedResponseBytes: Buffer.byteLength(extractedText, "utf8"),
       }).catch(() => undefined);
       logExtractTextProgress(
         `debug_response_written dir=${path.join("extract_text", toolIdSegment)}`,
@@ -4543,11 +4183,11 @@ function buildAgentTools(options: {
       );
     }
 
-    const resolvedModelId: LlmTextModelId =
-      typeof options.modelId === "string" && options.modelId.trim().length > 0
-        ? options.modelId.trim()
-        : DEFAULT_PDF_EXTRACTION_MODEL_ID;
-    const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+    const resolvedModelId = resolveTextModelId(
+      options.modelId,
+      DEFAULT_PDF_EXTRACTION_MODEL_ID,
+    );
+    const thinkingLevel = resolveThinkingLevel(resolvedModelId);
     const extractionPrompt = [
       "Extract text from the attached PDF.",
       "Follow the user instructions exactly.",
@@ -4556,69 +4196,25 @@ function buildAgentTools(options: {
       "Instructions:",
       options.promptText,
     ].join("\n");
-
-    const submodelTracker = createAgentSubmodelProgressTracker({
-      progress,
-      suppressCompletionLogs: true,
+    const callStartedAt = Date.now();
+    const llmResult = await generateText({
+      model: resolvedModelId,
+      input: buildSingleUserInput([
+        { type: "text", text: extractionPrompt },
+        {
+          type: "inlineData",
+          data: pdfBytes.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      ]),
+      ...(thinkingLevel ? { thinkingLevel } : {}),
     });
-
-    const toolContext = getCurrentToolCallContext();
-    const toolIdSegment = toolContext
-      ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
-      : `turn0tool0-${Date.now().toString()}`;
-    const callDebug: LlmDebugOptions | undefined = debug
-      ? {
-          ...debug,
-          subStage: [debug.subStage, options.toolName, toolIdSegment]
-            .filter(
-              (entry): entry is string =>
-                typeof entry === "string" && entry.trim().length > 0,
-            )
-            .join("/"),
-        }
-      : undefined;
-
-    let extractedText = "";
-    try {
-      extractedText = await generateText({
-        modelId: resolvedModelId,
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { type: "text", text: extractionPrompt },
-              {
-                type: "inlineData",
-                data: pdfBytes.toString("base64"),
-                mimeType: "application/pdf",
-              },
-            ],
-          },
-        ],
-        ...(callDebug ? { debug: callDebug } : {}),
-        ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
-        ...(resolvedReasoningEffort
-          ? { openAiReasoningEffort: resolvedReasoningEffort }
-          : {}),
-      });
-    } finally {
-      if (callDebug) {
-        const debugDir = await resolveLlmDebugAttemptDir({
-          debug: callDebug,
-          attempt: 1,
-          maxAttempts: 1,
-        }).catch(() => null);
-        if (debugDir) {
-          await persistLlmLogsFromDebugDirToWorkspace({
-            rootDir,
-            workspace,
-            toolName: options.toolName,
-            toolIdSegment,
-            debugDir,
-          }).catch(() => undefined);
-        }
-      }
-    }
+    recordLlmTextResult({
+      progress,
+      modelId: resolvedModelId,
+      result: llmResult,
+    });
+    const extractedText = llmResult.text;
 
     const safeMaxChars = options.maxChars ?? PDF_EXTRACTION_DEFAULT_MAX_CHARS;
     const normalizedText = extractedText.trim();
@@ -4627,7 +4223,11 @@ function buildAgentTools(options: {
       safeMaxChars,
     );
     const truncated = cappedText.length < normalizedText.length;
-    const submodelSummary = submodelTracker.getSummary();
+    const submodelSummary = createTrackedSubmodelCallSummary({
+      modelId: resolvedModelId,
+      startedAt: callStartedAt,
+      result: llmResult,
+    });
 
     const resolved = resolveWorkspacePath(rootDir, resolvedOutputPath);
     await ensureDir(path.dirname(resolved));
@@ -4697,11 +4297,11 @@ function buildAgentTools(options: {
         options.maxDiagrams ?? PDF_DIAGRAM_DEFAULT_MAX_ITEMS,
       ),
     );
-    const resolvedModelId: LlmTextModelId =
-      typeof options.modelId === "string" && options.modelId.trim().length > 0
-        ? options.modelId.trim()
-        : DEFAULT_PDF_EXTRACTION_MODEL_ID;
-    const resolvedReasoningEffort = resolveOpenAiReasoningEffort(resolvedModelId);
+    const resolvedModelId = resolveTextModelId(
+      options.modelId,
+      DEFAULT_PDF_EXTRACTION_MODEL_ID,
+    );
+    const thinkingLevel = resolveThinkingLevel(resolvedModelId);
     const extractionPrompt = [
       "Extract diagram bounding boxes from the attached PDF.",
       "Return JSON only.",
@@ -4734,69 +4334,26 @@ function buildAgentTools(options: {
       options.promptText,
     ].join("\n");
 
-    const submodelTracker = createAgentSubmodelProgressTracker({
-      progress,
-      suppressCompletionLogs: true,
+    const callStartedAt = Date.now();
+    const llmResult = await generateText({
+      model: resolvedModelId,
+      input: buildSingleUserInput([
+        { type: "text", text: extractionPrompt },
+        {
+          type: "inlineData",
+          data: pdfBytes.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      ]),
+      ...(thinkingLevel ? { thinkingLevel } : {}),
+      responseMimeType: "application/json",
     });
-
-    const toolContext = getCurrentToolCallContext();
-    const toolIdSegment = toolContext
-      ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
-      : `turn0tool0-${Date.now().toString()}`;
-    const callDebug: LlmDebugOptions | undefined = debug
-      ? {
-          ...debug,
-          subStage: [debug.subStage, options.toolName, toolIdSegment]
-            .filter(
-              (entry): entry is string =>
-                typeof entry === "string" && entry.trim().length > 0,
-            )
-            .join("/"),
-        }
-      : undefined;
-
-    let rawText = "";
-    try {
-      rawText = await generateText({
-        modelId: resolvedModelId,
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { type: "text", text: extractionPrompt },
-              {
-                type: "inlineData",
-                data: pdfBytes.toString("base64"),
-                mimeType: "application/pdf",
-              },
-            ],
-          },
-        ],
-        ...(callDebug ? { debug: callDebug } : {}),
-        ...(submodelTracker.progress ? { progress: submodelTracker.progress } : {}),
-        ...(resolvedReasoningEffort
-          ? { openAiReasoningEffort: resolvedReasoningEffort }
-          : {}),
-        responseMimeType: "application/json",
-      });
-    } finally {
-      if (callDebug) {
-        const debugDir = await resolveLlmDebugAttemptDir({
-          debug: callDebug,
-          attempt: 1,
-          maxAttempts: 1,
-        }).catch(() => null);
-        if (debugDir) {
-          await persistLlmLogsFromDebugDirToWorkspace({
-            rootDir,
-            workspace,
-            toolName: options.toolName,
-            toolIdSegment,
-            debugDir,
-          }).catch(() => undefined);
-        }
-      }
-    }
+    recordLlmTextResult({
+      progress,
+      modelId: resolvedModelId,
+      result: llmResult,
+    });
+    const rawText = llmResult.text;
 
     let parsedRaw: unknown;
     try {
@@ -4812,7 +4369,11 @@ function buildAgentTools(options: {
     await ensureDir(path.dirname(resolved));
     await writeFile(resolved, formatted, { encoding: "utf8" });
     workspace.scheduleUpdate(resolvedOutputPath);
-    const submodelSummary = submodelTracker.getSummary();
+    const submodelSummary = createTrackedSubmodelCallSummary({
+      modelId: resolvedModelId,
+      startedAt: callStartedAt,
+      result: llmResult,
+    });
     const outputBytes = Buffer.byteLength(formatted, "utf8");
 
     return {
@@ -5227,8 +4788,7 @@ function buildAgentTools(options: {
         outputMode,
       }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const resolvedReasoningEffort =
-          resolveOpenAiReasoningEffort(resolvedModelId);
+        const thinkingLevel = resolveThinkingLevel(resolvedModelId);
 
         const resolvedPromptPath = promptPath.trim();
         const resolvedOutputPath = outputPath.trim();
@@ -5460,67 +5020,25 @@ function buildAgentTools(options: {
           toolConfigs.push({ type: toolType });
         }
 
-        const submodelTracker = createAgentSubmodelProgressTracker({
+        const callStartedAt = Date.now();
+        const llmResult = await generateText({
+          model: resolvedModelId,
+          input: buildSingleUserInput([{ type: "text", text: promptText }]),
+          ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        });
+        recordLlmTextResult({
           progress,
-          suppressCompletionLogs: true,
+          modelId: resolvedModelId,
+          result: llmResult,
+        });
+        const submodelSummary = createTrackedSubmodelCallSummary({
+          modelId: resolvedModelId,
+          startedAt: callStartedAt,
+          result: llmResult,
         });
 
-        const toolContext = getCurrentToolCallContext();
-        const toolIdSegment = toolContext
-          ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
-          : `turn0tool0-${Date.now().toString()}`;
-        const callDebug: LlmDebugOptions | undefined = debug
-          ? {
-              ...debug,
-              subStage: [debug.subStage, "generate_text", toolIdSegment]
-                .filter(
-                  (entry): entry is string =>
-                    typeof entry === "string" && entry.trim().length > 0,
-                )
-                .join("/"),
-            }
-          : undefined;
-
-        let text = "";
-        try {
-          text = await generateText({
-            modelId: resolvedModelId,
-            contents: [
-              {
-                role: "user",
-                parts: [{ type: "text", text: promptText }],
-              },
-            ],
-            ...(callDebug ? { debug: callDebug } : {}),
-            ...(toolConfigs.length > 0 ? { tools: toolConfigs } : {}),
-            ...(submodelTracker.progress
-              ? { progress: submodelTracker.progress }
-              : {}),
-            ...(resolvedReasoningEffort
-              ? { openAiReasoningEffort: resolvedReasoningEffort }
-              : {}),
-          });
-        } finally {
-          if (callDebug) {
-            const debugDir = await resolveLlmDebugAttemptDir({
-              debug: callDebug,
-              attempt: 1,
-              maxAttempts: 1,
-            }).catch(() => null);
-            if (debugDir) {
-              await persistLlmLogsFromDebugDirToWorkspace({
-                rootDir,
-                workspace,
-                toolName: "generate_text",
-                toolIdSegment,
-                debugDir,
-              }).catch(() => undefined);
-            }
-          }
-        }
-        const submodelSummary = submodelTracker.getSummary();
-
-        const formatted = text;
+        const formatted = llmResult.text;
         const gradePass = (() => {
           const match = formatted.match(
             /(?:^|\n)\s*pass\s*:\s*(true|false)\s*(?:\n|$)/iu,
@@ -5602,8 +5120,7 @@ function buildAgentTools(options: {
         .strict(),
       execute: async ({ sourcePath, schemaPath, outputPath }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const resolvedReasoningEffort =
-          resolveOpenAiReasoningEffort(resolvedModelId);
+        const thinkingLevel = resolveThinkingLevel(resolvedModelId);
 
         const resolvedSourcePath = sourcePath.trim();
         const resolvedSchemaPath = schemaPath.trim();
@@ -5637,69 +5154,27 @@ function buildAgentTools(options: {
           sourceText.trimEnd(),
         ].join("\n");
 
-        const submodelTracker = createAgentSubmodelProgressTracker({
-          progress,
-          suppressCompletionLogs: true,
+        const callStartedAt = Date.now();
+        const llmResult = await generateText({
+          model: resolvedModelId,
+          input: buildSingleUserInput([{ type: "text", text: promptText }]),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+          responseMimeType: "application/json",
         });
-
-        const toolContext = getCurrentToolCallContext();
-        const toolIdSegment = toolContext
-          ? `turn${toolContext.turn}tool${toolContext.toolIndex}`
-          : `turn0tool0-${Date.now().toString()}`;
-        const callDebug: LlmDebugOptions | undefined = debug
-          ? {
-              ...debug,
-              subStage: [debug.subStage, "generate_json", toolIdSegment]
-                .filter(
-                  (entry): entry is string =>
-                    typeof entry === "string" && entry.trim().length > 0,
-                )
-                .join("/"),
-            }
-          : undefined;
-
-        let text = "";
-        try {
-          text = await generateText({
-            modelId: resolvedModelId,
-            contents: [
-              {
-                role: "user",
-                parts: [{ type: "text", text: promptText }],
-              },
-            ],
-            ...(callDebug ? { debug: callDebug } : {}),
-            ...(submodelTracker.progress
-              ? { progress: submodelTracker.progress }
-              : {}),
-            ...(resolvedReasoningEffort
-              ? { openAiReasoningEffort: resolvedReasoningEffort }
-              : {}),
-            responseMimeType: "application/json",
-          });
-        } finally {
-          if (callDebug) {
-            const debugDir = await resolveLlmDebugAttemptDir({
-              debug: callDebug,
-              attempt: 1,
-              maxAttempts: 1,
-            }).catch(() => null);
-            if (debugDir) {
-              await persistLlmLogsFromDebugDirToWorkspace({
-                rootDir,
-                workspace,
-                toolName: "generate_json",
-                toolIdSegment,
-                debugDir,
-              }).catch(() => undefined);
-            }
-          }
-        }
-        const submodelSummary = submodelTracker.getSummary();
+        recordLlmTextResult({
+          progress,
+          modelId: resolvedModelId,
+          result: llmResult,
+        });
+        const submodelSummary = createTrackedSubmodelCallSummary({
+          modelId: resolvedModelId,
+          startedAt: callStartedAt,
+          result: llmResult,
+        });
 
         let parsed: unknown;
         try {
-          parsed = parseJsonFromLlmText(text);
+          parsed = parseJsonFromLlmText(llmResult.text);
         } catch (error) {
           throw new Error(
             `generate_json returned invalid JSON: ${errorAsString(error)}`,
@@ -6644,7 +6119,7 @@ export async function runSparkLessonAgentLocal(options: {
   progress?: JobProgressReporter;
   debug?: LlmDebugOptions;
 }): Promise<{
-  readonly toolLoopResult: Awaited<ReturnType<typeof runToolLoop>>;
+  readonly toolLoopResult: LlmToolLoopResult;
   readonly publishResult: {
     status: "published";
     sessionId: string;
@@ -6660,7 +6135,7 @@ export async function runSparkLessonAgentLocal(options: {
 }> {
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const maxSteps = options.maxSteps ?? DEFAULT_LESSON_MAX_STEPS;
-  const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+  const thinkingLevel = resolveThinkingLevel(modelId);
   const progress = options.progress;
 
   const workspace: SparkAgentWorkspace = {
@@ -6774,10 +6249,10 @@ export async function runSparkLessonAgentLocal(options: {
     },
   });
 
-  const toolLoopResult = await runToolLoop({
-    modelId,
-    systemPrompt: buildAgentSystemPrompt(),
-    prompt: options.prompt,
+  const toolLoopResult = await runAgentLoop({
+    model: modelId,
+    instructions: buildAgentSystemPrompt(),
+    input: options.prompt,
     tools: {
       ...baseTools,
       publish_lesson,
@@ -6785,9 +6260,11 @@ export async function runSparkLessonAgentLocal(options: {
     },
     modelTools: [{ type: "web-search", mode: "live" }],
     maxSteps,
-    ...(options.debug ? { debug: options.debug } : {}),
-    ...(progress ? { progress } : {}),
-    ...(openAiReasoningEffort ? { openAiReasoningEffort } : {}),
+    ...(thinkingLevel ? { thinkingLevel } : {}),
+    logging: {
+      workspaceDir: path.join(options.rootDir, ".agent-run"),
+      mirrorToConsole: false,
+    },
   });
 
   if (!doneCalled) {
@@ -7291,7 +6768,7 @@ export async function runSparkAgentTask(
     const maxSteps =
       options.maxSteps ??
       (isLessonRun ? DEFAULT_LESSON_MAX_STEPS : DEFAULT_MAX_STEPS);
-    const openAiReasoningEffort = resolveOpenAiReasoningEffort(modelId);
+    const thinkingLevel = resolveThinkingLevel(modelId);
     const progress: JobProgressReporter = {
       log: (message) => {
         throwIfStopRequested();
@@ -7480,7 +6957,7 @@ export async function runSparkAgentTask(
     const agentSystemPrompt = buildAgentSystemPrompt({
       includePdfTranscriptionSkill: graderRunId !== null,
     });
-    let initialContents: LlmContent[] | null = null;
+    let initialInput: LlmInputMessage[] | null = null;
     if (inlineInputAttachments.length > 0) {
       const loaded = await loadAttachmentParts({
         serviceAccountJson,
@@ -7492,7 +6969,7 @@ export async function runSparkAgentTask(
         },
       });
       if (loaded.parts.length > 0 || loaded.notes.length > 0) {
-        initialContents = buildInitialToolLoopContents({
+        initialInput = buildInitialToolLoopInput({
           systemPrompt: agentSystemPrompt,
           prompt,
           inlineParts: loaded.parts,
@@ -7502,58 +6979,36 @@ export async function runSparkAgentTask(
     }
 
     const toolLoopStartedAt = Date.now();
-    const onToolLoopDelta = (delta: {
-      thoughtDelta?: string;
-      textDelta?: string;
-    }): void => {
-      if (delta.thoughtDelta) {
-        logSync?.appendThoughtDelta(delta.thoughtDelta);
-      }
-      if (delta.textDelta) {
-        logSync?.appendAssistantDelta(delta.textDelta);
-      }
-    };
-    const onToolLoopEvent = (event: LlmStreamEvent): void => {
-      if (!logSync) {
-        return;
-      }
-      appendToolCallStreamLog({
-        event,
-        append: (line) => {
-          logSync?.append(line);
-        },
-      });
-    };
-    const subagents =
-      graderRunId === null ? undefined : { promptPattern: "codex" as const };
-    const toolLoopResult = await runToolLoop(
-      initialContents
-        ? {
-            modelId,
-            contents: initialContents,
-            tools,
-            modelTools: [{ type: "web-search", mode: "live" }],
-            subagents,
-            maxSteps,
-            progress,
-            openAiReasoningEffort,
-            onDelta: onToolLoopDelta,
-            onEvent: onToolLoopEvent,
-          }
-        : {
-            modelId,
-            systemPrompt: agentSystemPrompt,
-            prompt,
-            tools,
-            modelTools: [{ type: "web-search", mode: "live" }],
-            subagents,
-            maxSteps,
-            progress,
-            openAiReasoningEffort,
-            onDelta: onToolLoopDelta,
-            onEvent: onToolLoopEvent,
+    const toolLoopResult = await runAgentLoop({
+      model: modelId,
+      input: initialInput ?? prompt,
+      ...(initialInput ? {} : { instructions: agentSystemPrompt }),
+      tools,
+      modelTools: [{ type: "web-search", mode: "live" }],
+      subagents:
+        graderRunId === null ? undefined : { promptPattern: "codex" as const },
+      maxSteps,
+      ...(thinkingLevel ? { thinkingLevel } : {}),
+      logging: {
+        workspaceDir: path.join(workspaceRoot, ".agent-run"),
+        mirrorToConsole: false,
+        sink: {
+          append: (line: string) => {
+            logSync?.append(line);
           },
-    );
+          flush: async () => {
+            await logSync?.flushAll();
+          },
+        },
+      },
+    });
+    for (const step of toolLoopResult.steps) {
+      statsTracker.recordCompletedModelCall({
+        modelId,
+        modelVersion: step.modelVersion,
+        usage: step.usage,
+      });
+    }
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
 

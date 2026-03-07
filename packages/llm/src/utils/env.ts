@@ -9,6 +9,7 @@ export function loadLocalEnv(): void {
   }
   const envPath = path.join(process.cwd(), ".env.local");
   loadEnvFromFile(envPath, { override: false });
+  applyDefaultLlmTransportEnv();
   envLoaded = true;
 }
 
@@ -70,4 +71,12 @@ function parseEnvLine(line: string): [string, string] | null {
     value = value.trim();
   }
   return [key, value];
+}
+
+function applyDefaultLlmTransportEnv(): void {
+  // ChatGPT Responses WebSocket transport can hang before the first event in this repo's
+  // runtime environments, so default to SSE unless the operator explicitly overrides it.
+  if (process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE === undefined) {
+    process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE = "off";
+  }
 }

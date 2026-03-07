@@ -1,22 +1,18 @@
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
-	appendToolCallStreamLog,
 	createTask,
 	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
 	resolveWorkspacePathContentType,
-	runToolLoop,
-	tool,
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
+import { runAgentLoop, tool } from '@ljoukov/llm';
 import type {
-	LlmContent,
 	LlmContentPart,
-	LlmStreamEvent,
-	LlmTextDelta,
+	LlmInputMessage,
 	LlmToolSet
-} from '@spark/llm';
+} from '@ljoukov/llm';
 import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
@@ -34,6 +30,8 @@ import {
 import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
 import {
 	getFirestoreDocument,
@@ -155,11 +153,15 @@ type ConversationInit = {
 const SYSTEM_PROMPT = sparkChatSystemPrompt.trim();
 const MAX_ERROR_LOG_DEPTH = 100;
 
-const ROLE_TO_LLM: Record<SparkAgentMessage['role'], LlmContent['role']> = {
+type SparkChatDelta = {
+	thoughtDelta?: string;
+	textDelta?: string;
+};
+
+const ROLE_TO_LLM: Record<Exclude<SparkAgentMessage['role'], 'tool'>, LlmInputMessage['role']> = {
 	user: 'user',
-	assistant: 'model',
-	system: 'system',
-	tool: 'tool'
+	assistant: 'assistant',
+	system: 'system'
 };
 
 function serializeErrorContext(value: unknown, depth: number, seen: WeakSet<object>): unknown {
@@ -571,11 +573,11 @@ async function downloadAttachmentParts(
 	}));
 }
 
-function buildLlmContents(
+function buildLlmInputMessages(
 	messages: SparkAgentMessage[],
 	options?: { attachmentMessageId?: string; attachmentParts?: LlmContentPart[] }
-): LlmContent[] {
-	const contents: LlmContent[] = [{ role: 'user', parts: [{ type: 'text', text: SYSTEM_PROMPT }] }];
+): LlmInputMessage[] {
+	const input: LlmInputMessage[] = [];
 	const start = Math.max(0, messages.length - MAX_HISTORY_MESSAGES);
 	for (let i = start; i < messages.length; i += 1) {
 		const message = messages[i];
@@ -588,7 +590,7 @@ function buildLlmContents(
 			options?.attachmentMessageId === message.id &&
 			options.attachmentParts &&
 			options.attachmentParts.length > 0;
-		if (!text && !hasAttachmentParts) {
+		if (message.role === 'tool' || (!text && !hasAttachmentParts)) {
 			continue;
 		}
 		const parts: LlmContentPart[] = [];
@@ -598,29 +600,17 @@ function buildLlmContents(
 		if (text) {
 			parts.push({ type: 'text', text });
 		}
-		contents.push({
+		input.push({
 			role: ROLE_TO_LLM[message.role],
-			parts
+			content: parts
 		});
 	}
-	return contents;
+	return input;
 }
 
 type StreamHandlers = {
-	onDelta?: (delta: LlmTextDelta) => void;
+	onDelta?: (delta: SparkChatDelta) => void;
 };
-
-function logSparkChatToolLoopEvent(options: {
-	conversationId: string;
-	event: LlmStreamEvent;
-}): void {
-	appendToolCallStreamLog({
-		event: options.event,
-		append: (line) => {
-			console.log(`[spark-chat:${options.conversationId}] ${line}`);
-		}
-	});
-}
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => {
@@ -1832,7 +1822,7 @@ async function generateAssistantResponse(
 		},
 		options.attachments
 	);
-	const contents = buildLlmContents(conversation.messages, {
+	const input = buildLlmInputMessages(conversation.messages, {
 		attachmentMessageId: options.messageId,
 		attachmentParts
 	});
@@ -1871,19 +1861,37 @@ async function generateAssistantResponse(
 			return `${attachment.contentType}${pageSuffix}`;
 		})
 	});
-	const result = await runToolLoop({
-		modelId: MODEL_ID,
-		contents,
+	const result = await runAgentLoop({
+		model: MODEL_ID,
+		input,
+		instructions: SYSTEM_PROMPT,
 		tools,
 		maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
-		openAiReasoningEffort: OPENAI_REASONING_EFFORT,
-		onEvent: (event) => {
-			logSparkChatToolLoopEvent({
-				conversationId: options.conversationId,
-				event
-			});
+		thinkingLevel: OPENAI_REASONING_EFFORT,
+		logging: {
+			workspaceDir: path.join(
+				os.tmpdir(),
+				'spark-chat-logs',
+				options.conversationId,
+				options.messageId
+			),
+			mirrorToConsole: false,
+			sink: {
+				append: (line) => {
+					console.log(`[spark-chat:${options.conversationId}] ${line}`);
+				}
+			}
 		},
-		onDelta: handlers.onDelta
+		onEvent: (event) => {
+			if (event.type !== 'delta') {
+				return;
+			}
+			if (event.channel === 'thought') {
+				handlers.onDelta?.({ thoughtDelta: event.text });
+				return;
+			}
+			handlers.onDelta?.({ textDelta: event.text });
+		},
 	});
 	return normalizeSparkLinks(result.text);
 }
@@ -1984,7 +1992,7 @@ function normalizeSparkLinks(text: string): string {
 
 async function streamFallbackText(
 	text: string,
-	onDelta: (delta: LlmTextDelta) => void
+	onDelta: (delta: SparkChatDelta) => void
 ): Promise<void> {
 	const chunks = text.split(/(\s+)/u);
 	for (const chunk of chunks) {
@@ -2208,7 +2216,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		};
 
-		const handleDelta = (delta: LlmTextDelta): void => {
+		const handleDelta = (delta: SparkChatDelta): void => {
 			if (delta.thoughtDelta) {
 				sendEvent?.({ event: 'thought', data: delta.thoughtDelta });
 			}

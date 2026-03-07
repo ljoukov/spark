@@ -1,9 +1,8 @@
 import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
+import { tool, type LlmToolSet } from "@ljoukov/llm";
 import { z } from "zod";
-
-import { tool, type LlmToolSet } from "../../utils/llm";
 import { getSharp } from "../../utils/sharp";
 
 export const PDF_TRANSCRIPTION_SKILL_TEXT = `\

@@ -9,20 +9,23 @@ import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
   isLlmTextModelId,
   runAgentLoop,
+  tool,
+  type LlmTextModelId,
+  type LlmToolSet,
 } from "@ljoukov/llm";
 
 import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
 import {
   assertFileExists,
-  createAgenticBenchmarkLogger,
   createRepoPathHelpers,
   formatMs,
   formatUsd,
+  summarizeToolLoopResult,
+  toToolLoopEventLogRecords,
   toModelSlug,
   toRunTimestampSlug,
   type UsageTotals,
 } from "@spark/llm/agent/benchmarks/agenticBenchmark";
-import { tool, type LlmTextModelId, type LlmToolSet } from "@spark/llm/utils/llm";
 
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 
@@ -30,7 +33,7 @@ ensureEvalEnvLoaded();
 
 const BENCHMARK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
-const { toRepoRelativePath, sanitizeLogText } = createRepoPathHelpers({
+const { toRepoRelativePath } = createRepoPathHelpers({
   benchmarkDir: BENCHMARK_DIR,
   repoRootDir: REPO_ROOT_DIR,
 });
@@ -57,7 +60,7 @@ type BenchmarkPathConfig = {
   outputWorkspacePath: string;
   taskPath: string;
   agentLogPath: string;
-  agentMainLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
   resultsMarkdownPath: string;
@@ -77,6 +80,7 @@ type BenchmarkResult = {
   outputChars: number;
   outputText: string;
   agentLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
   agent: {
@@ -160,6 +164,9 @@ function parseCliArgs(args: readonly string[]): CliArgs {
   };
 
   const modelId = (parsed.modelAlias ?? parsed.modelId).replaceAll("-gtp-", "-gpt-");
+  if (!isLlmTextModelId(modelId)) {
+    throw new Error(`Unsupported model id: ${modelId}`);
+  }
   return {
     sourceFilePath: parsed.sourceFilePath,
     modelId,
@@ -210,8 +217,8 @@ async function buildPathConfig(options: {
   const sourceWorkspacePath = path.join(sourceDir, sourceBaseName);
   const outputWorkspacePath = path.join(outputDir, "extracted.md");
   const taskPath = path.join(workspaceDir, "TASK.md");
-  const agentLogPath = path.join(runRootDir, "agent.log");
-  const agentMainLogPath = path.join(runRootDir, "agent_main.log");
+  const agentLogPath = path.join(workspaceDir, "agent.log");
+  const llmLogsDir = path.join(runRootDir, "logs");
   const eventLogPath = path.join(runRootDir, "agent-log.jsonl");
   const summaryJsonPath = path.join(runRootDir, "summary.json");
   const resultsMarkdownPath = path.join(runRootDir, "RESULTS.md");
@@ -237,7 +244,7 @@ async function buildPathConfig(options: {
     outputWorkspacePath,
     taskPath,
     agentLogPath,
-    agentMainLogPath,
+    llmLogsDir,
     eventLogPath,
     summaryJsonPath,
     resultsMarkdownPath,
@@ -253,32 +260,6 @@ async function runBenchmark(options: {
     sourceFilePath: options.sourceFilePath,
     modelId: options.modelId,
   });
-  const stageOrder = [
-    "prepare-workspace",
-    "resolve-tools",
-    "agent-loop",
-    "collect-agent-outputs",
-    "write-artifacts",
-  ] as const;
-  await writeFile(paths.agentLogPath, "", "utf8");
-  if (options.useSubagents) {
-    await writeFile(paths.agentMainLogPath, "", "utf8");
-  }
-
-  const logger = createAgenticBenchmarkLogger({
-    benchLabel: "text-extract-bench",
-    runRootDir: paths.runRootDir,
-    agentLogPath: paths.agentLogPath,
-    useSubagents: options.useSubagents,
-    ...(options.useSubagents ? { agentMainLogPath: paths.agentMainLogPath } : {}),
-    stageOrder,
-    sanitizeLine: sanitizeLogText,
-  });
-
-  logger.logLine(
-    `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} source=${paths.sourceRelativePath} output=${paths.outputRelativePath} model=${options.modelId} useSubagents=${options.useSubagents ? "true" : "false"}`,
-  );
-  logger.logStage("start", "prepare-workspace");
   const workspace = {
     scheduleUpdate: (inputPath: string): void => {
       void inputPath;
@@ -290,15 +271,11 @@ async function runBenchmark(options: {
       // Filesystem move already happened inside buildSparkAgentTools.
     },
   };
-  logger.logStage("done", "prepare-workspace");
-
-  logger.logStage("start", "resolve-tools");
   const allTools = buildSparkAgentTools({
     workspace,
     rootDir: paths.workspaceDir,
     userId: "benchmark-runner",
     serviceAccountJson: "{}",
-    progress: logger.progress,
   });
   const doneTool = tool({
     description: "Finish the run and provide summary.",
@@ -321,55 +298,39 @@ async function runBenchmark(options: {
     }
     (selectedTools as Record<string, unknown>)[toolName] = candidate;
   }
-  logger.logLine(`exposed tools: ${Object.keys(selectedTools).sort().join(", ")}`);
-  logger.logStage("done", "resolve-tools");
 
   const steering = createAgentLoopSteeringChannel();
   const startedAt = Date.now();
-  logger.logStage("start", "agent-loop");
   if (!isLlmTextModelId(options.modelId)) {
     throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
   }
+  const thinkingLevel =
+    options.modelId.startsWith("chatgpt-") || options.modelId.startsWith("gpt-")
+      ? ("high" as const)
+      : undefined;
   const toolLoopResult = await runAgentLoop({
     model: options.modelId,
     input: createAgentPrompt(),
     maxSteps: MAX_STEPS,
-    openAiReasoningEffort: "high",
+    ...(thinkingLevel ? { thinkingLevel } : {}),
     tools: selectedTools,
     subagents: options.useSubagents ? { promptPattern: "codex" } : false,
-    telemetry: {
-      includeLlmStreamEvents: true,
-      sink: {
-        emit: logger.onTelemetryEvent,
-      },
+    logging: {
+      workspaceDir: paths.workspaceDir,
     },
     steering,
-    onEvent: logger.onEvent,
   });
-  logger.overrideUsageCostUsd(toolLoopResult.totalCostUsd);
-  logger.logStage("done", "agent-loop");
   const agentLatencyMs = Date.now() - startedAt;
+  const summary = summarizeToolLoopResult(toolLoopResult);
 
-  logger.logStage("start", "collect-agent-outputs");
   const outputText = await readFile(paths.outputWorkspacePath, "utf8");
   if (outputText.trim().length === 0) {
     throw new Error(`Output file is empty: ${paths.outputRelativePath}`);
   }
-  logger.logLine(
-    `output_collected: chars=${outputText.length.toString()} path=${paths.outputRelativePath}`,
-  );
-  logger.logStage("done", "collect-agent-outputs");
-
-  logger.logStage("start", "write-artifacts");
-  const snapshot = logger.snapshot();
-  const toolCallCount = Object.values(snapshot.toolCallsByName).reduce(
-    (sum, count) => sum + count,
-    0,
-  );
 
   await writeFile(
     paths.eventLogPath,
-    `${snapshot.eventLogRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
+    `${toToolLoopEventLogRecords(toolLoopResult).map((record) => JSON.stringify(record)).join("\n")}\n`,
     "utf8",
   );
 
@@ -387,26 +348,23 @@ async function runBenchmark(options: {
     outputChars: outputText.length,
     outputText,
     agentLogPath: toRepoRelativePath(paths.agentLogPath),
+    llmLogsDir: toRepoRelativePath(paths.llmLogsDir),
     eventLogPath: toRepoRelativePath(paths.eventLogPath),
     summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
     agent: {
       latencyMs: agentLatencyMs,
-      modelCalls: toolLoopResult.steps.length,
-      toolCalls: toolCallCount,
-      toolCallsByName: snapshot.toolCallsByName,
-      costUsd: snapshot.usageCostUsd,
-      usage: snapshot.usageTotals,
-      thoughtsChars: snapshot.thoughtChars,
-      responseChars: snapshot.responseChars,
-      doneSummary: snapshot.doneSummary,
+      modelCalls: summary.modelCalls,
+      toolCalls: summary.toolCalls,
+      toolCallsByName: summary.toolCallsByName,
+      costUsd: summary.agentCostUsd,
+      usage: summary.usageTotals,
+      thoughtsChars: summary.thoughtsChars,
+      responseChars: summary.responseChars,
+      doneSummary: summary.doneSummary,
     },
   };
 
   await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-  logger.logStage("done", "write-artifacts");
-  logger.logLine(
-    `done: status=${result.status} latency=${formatMs(result.agent.latencyMs)} cost=${formatUsd(result.agent.costUsd)} runDir=${result.runDir}`,
-  );
 
   const resultsMarkdown = [
     "# Text Extraction Benchmark Results",
@@ -425,6 +383,7 @@ async function runBenchmark(options: {
     `- Task file: ${result.taskPath}`,
     `- Output file: ${result.outputPath}`,
     `- Agent log: ${result.agentLogPath}`,
+    `- Native LLM logs dir: ${result.llmLogsDir}`,
     `- Event log: ${result.eventLogPath}`,
     `- Summary JSON: ${result.summaryJsonPath}`,
     "",
@@ -463,6 +422,7 @@ async function main(): Promise<void> {
       `runDir=${result.runDir}`,
       `output=${result.outputPath}`,
       `agentLog=${result.agentLogPath}`,
+      `llmLogs=${result.llmLogsDir}`,
       `eventLog=${result.eventLogPath}`,
     ].join(" "),
   );

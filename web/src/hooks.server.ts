@@ -12,6 +12,10 @@ if (typeof process !== 'undefined' && typeof process.on === 'function') {
 	});
 }
 
+if (process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE === undefined) {
+	process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE = 'off';
+}
+
 export const handle = (async ({ event, resolve }) => {
 	// Initialize app user locals to a known state
 	event.locals.appUser = null;

@@ -14,7 +14,12 @@ import { z } from "zod";
 import {
   createToolLoopSteeringChannel as createAgentLoopSteeringChannel,
   isLlmTextModelId,
+  parseJsonFromLlmText,
   runAgentLoop,
+  tool,
+  type LlmContentPart,
+  type LlmTextModelId,
+  type LlmToolSet,
 } from "@ljoukov/llm";
 
 import { buildSparkAgentTools } from "@spark/llm/agent/sparkAgentRunner";
@@ -24,26 +29,19 @@ import {
 } from "@spark/llm/agent/skills/pdfTranscription";
 import {
   assertFileExists,
-  createAgenticBenchmarkLogger,
   createRepoPathHelpers,
   formatMs,
   formatUsd,
   generateTextWithMetrics,
   listFilesRecursive,
+  summarizeToolLoopResult,
+  toToolLoopEventLogRecords,
   toInlineImageParts,
   toModelSlug,
   toRunTimestampSlug,
-  toSingleLine,
   type ModelCallMetrics,
   type UsageTotals,
 } from "@spark/llm/agent/benchmarks/agenticBenchmark";
-import {
-  parseJsonFromLlmText,
-  tool,
-  type LlmContentPart,
-  type LlmTextModelId,
-  type LlmToolSet,
-} from "@spark/llm/utils/llm";
 
 import { ensureEvalEnvLoaded } from "../../utils/paths";
 
@@ -73,7 +71,6 @@ const REQUIRED_TOOL_NAMES = [
   "list_files",
   "read_file",
   "read_files",
-  "read_pdf",
   "view_image",
   "write_file",
   "move_file",
@@ -95,7 +92,7 @@ type AgentPathConfig = {
   outputNotesPath: string;
   outputReferenceTextPath: string;
   agentLogPath: string;
-  agentMainLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
 };
@@ -130,6 +127,7 @@ type AgenticBenchmarkResult = {
   notesPath: string;
   referenceTextPath?: string;
   agentLogPath: string;
+  llmLogsDir: string;
   eventLogPath: string;
   summaryJsonPath: string;
   sourcePageImagePaths: string[];
@@ -437,6 +435,9 @@ function parseCliArgs(args: readonly string[]): CliArgs {
       throw new Error("Model id cannot be empty.");
     }
     const corrected = trimmed.replaceAll("-gtp-", "-gpt-");
+    if (!isLlmTextModelId(corrected)) {
+      throw new Error(`Unsupported model id: ${corrected}`);
+    }
     return corrected;
   };
 
@@ -532,10 +533,10 @@ async function runJudge(options: {
 
   const { text, metrics } = await generateTextWithMetrics({
     modelId: options.modelId,
-    contents: [{ role: "user", parts }],
+    input: [{ role: "user", content: parts }],
     responseMimeType: "application/json",
     ...(options.modelId.startsWith("chatgpt-")
-      ? { openAiReasoningEffort: "low" as const }
+      ? { thinkingLevel: "low" as const }
       : {}),
   });
 
@@ -566,8 +567,8 @@ async function buildPathConfig(options: {
   const outputManifestPath = path.join(outputDir, "diagram-manifest.json");
   const outputNotesPath = path.join(outputDir, "agent-notes.md");
   const outputReferenceTextPath = path.join(outputDir, "reference", "pdf-text.md");
-  const agentLogPath = path.join(runRootDir, "agent.log");
-  const agentMainLogPath = path.join(runRootDir, "agent_main.log");
+  const agentLogPath = path.join(workspaceDir, "agent.log");
+  const llmLogsDir = path.join(runRootDir, "logs");
   const eventLogPath = path.join(runRootDir, "agent-log.jsonl");
   const summaryJsonPath = path.join(runRootDir, "summary.json");
 
@@ -593,7 +594,7 @@ async function buildPathConfig(options: {
     outputNotesPath,
     outputReferenceTextPath,
     agentLogPath,
-    agentMainLogPath,
+    llmLogsDir,
     eventLogPath,
     summaryJsonPath,
   };
@@ -633,306 +634,216 @@ async function runAgenticBenchmark(options: {
     modelId: options.modelId,
   });
   const logLines: string[] = [];
-  const stageOrder = [
-    "prepare-workspace",
-    "resolve-tools",
-    "agent-loop",
-    "collect-agent-outputs",
-    "judge-outputs",
-    "write-artifacts",
-  ] as const;
-
-  await writeFile(paths.agentLogPath, "", "utf8");
-  if (options.useSubagents) {
-    await writeFile(paths.agentMainLogPath, "", "utf8");
+  const workspace = {
+    scheduleUpdate: (inputPath: string): void => {
+      void inputPath;
+    },
+    deleteFile: async (): Promise<void> => {
+      // Filesystem deletion already happened inside buildSparkAgentTools.
+      // This benchmark workspace does not mirror state to an external store.
+    },
+    moveFile: async (): Promise<void> => {
+      // Filesystem move already happened inside buildSparkAgentTools.
+      // This benchmark workspace does not mirror state to an external store.
+    },
+  };
+  const allTools = buildSparkAgentTools({
+    workspace,
+    rootDir: paths.workspaceDir,
+    userId: "benchmark-runner",
+    serviceAccountJson: "{}",
+  });
+  const doneTool = tool({
+    description: "Finish the run and provide summary.",
+    inputSchema: z.object({
+      summary: z.string().trim().min(1),
+    }),
+    execute: ({ summary }) => {
+      return { status: "done", summary };
+    },
+  });
+  const allToolsWithDone: LlmToolSet = {
+    ...allTools,
+    done: doneTool,
+  };
+  const selectedToolsBase: LlmToolSet = {};
+  for (const toolName of REQUIRED_TOOL_NAMES) {
+    const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
+    if (!candidate) {
+      throw new Error(`Required tool missing: ${toolName}`);
+    }
+    (selectedToolsBase as Record<string, unknown>)[toolName] = candidate;
   }
-  const logger = createAgenticBenchmarkLogger({
-    benchLabel: "pdf-bench",
-    runRootDir: paths.runRootDir,
-    agentLogPath: paths.agentLogPath,
-    useSubagents: options.useSubagents,
-    ...(options.useSubagents ? { agentMainLogPath: paths.agentMainLogPath } : {}),
-    stageOrder,
-    sanitizeLine: sanitizeLogText,
+  const selectedTools = applyPdfTranscriptionSkillTools({
+    tools: selectedToolsBase,
+    rootDir: paths.workspaceDir,
+    includeReferenceTextTool: options.useReferenceText,
+    targetProblemIds: TARGET_PROBLEM_IDS,
+    onFileWritten: (outputPath) => {
+      workspace.scheduleUpdate(outputPath);
+    },
   });
 
-  try {
-    logger.logLine(
-      `start: workspaceDir=${toRepoRelativePath(paths.workspaceDir)} taskPath=${toRepoRelativePath(paths.taskPath)} model=${options.modelId} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
-    );
-    logger.logStage("start", "prepare-workspace");
-    const workspace = {
-      scheduleUpdate: (inputPath: string): void => {
-        void inputPath;
-      },
-      deleteFile: async (): Promise<void> => {
-        // Filesystem deletion already happened inside buildSparkAgentTools.
-        // This benchmark workspace does not mirror state to an external store.
-      },
-      moveFile: async (): Promise<void> => {
-        // Filesystem move already happened inside buildSparkAgentTools.
-        // This benchmark workspace does not mirror state to an external store.
-      },
-    };
-    logger.logStage("done", "prepare-workspace");
-
-    logger.logStage("start", "resolve-tools");
-    const allTools = buildSparkAgentTools({
-      workspace,
-      rootDir: paths.workspaceDir,
-      userId: "benchmark-runner",
-      serviceAccountJson: "{}",
-      progress: logger.progress,
-    });
-    const doneTool = tool({
-      description: "Finish the run and provide summary.",
-      inputSchema: z.object({
-        summary: z.string().trim().min(1),
-      }),
-      execute: ({ summary }) => {
-        return { status: "done", summary };
-      },
-    });
-    const allToolsWithDone: LlmToolSet = {
-      ...allTools,
-      done: doneTool,
-    };
-    const selectedToolsBase: LlmToolSet = {};
-    for (const toolName of REQUIRED_TOOL_NAMES) {
-      const candidate = (allToolsWithDone as Record<string, unknown>)[toolName];
-      if (!candidate) {
-        throw new Error(`Required tool missing: ${toolName}`);
-      }
-      (selectedToolsBase as Record<string, unknown>)[toolName] = candidate;
-    }
-    const selectedTools = applyPdfTranscriptionSkillTools({
-      tools: selectedToolsBase,
-      rootDir: paths.workspaceDir,
-      includeReferenceTextTool: options.useReferenceText,
-      targetProblemIds: TARGET_PROBLEM_IDS,
-      onFileWritten: (outputPath) => {
-        workspace.scheduleUpdate(outputPath);
-      },
-    });
-
-    logger.logLine(
-      `exposed tools: ${Object.keys(selectedTools).sort((a, b) => a.localeCompare(b)).join(", ")}`,
-    );
-    logger.logStage("done", "resolve-tools");
-
-    const steering = createAgentLoopSteeringChannel();
-    const startedAt = Date.now();
-    logger.logStage("start", "agent-loop");
-    if (!isLlmTextModelId(options.modelId)) {
-      throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
-    }
-    const toolLoopResult = await runAgentLoop({
-      model: options.modelId,
-      input: createAgentPrompt(),
-      maxSteps: MAX_STEPS,
-      openAiReasoningEffort: "high",
-      tools: selectedTools,
-      subagents: options.useSubagents ? { promptPattern: "codex" } : false,
-      telemetry: {
-        includeLlmStreamEvents: true,
-        sink: {
-          emit: logger.onTelemetryEvent,
-        },
-      },
-      steering,
-      onEvent: logger.onEvent,
-    });
-    logger.overrideUsageCostUsd(toolLoopResult.totalCostUsd);
-    logger.logStage("done", "agent-loop");
-
-    const afterLoop = logger.snapshot();
-    const agentLatencyMs = Date.now() - startedAt;
-    logger.logLine(
-      `agent_loop_done: steps=${toolLoopResult.steps.length.toString()} latency=${formatMs(agentLatencyMs)} cost=${formatUsd(afterLoop.usageCostUsd)}`,
-    );
-    logger.logStage("start", "collect-agent-outputs");
-    const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
-    const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
-    const sourcePageImagePaths = workspaceFiles.filter((item) => {
-      if (!item.startsWith(outputDirPrefix)) {
-        return false;
-      }
-      if (item.includes(`${path.sep}diagrams${path.sep}`)) {
-        return false;
-      }
-      if (path.extname(item).toLowerCase() !== ".png") {
-        return false;
-      }
-      return /^page-\d{4}\.png$/u.test(path.basename(item));
-    });
-    const manifestText = await readFile(paths.outputManifestPath, "utf8");
-    const manifest = parseAgentDiagramManifest(JSON.parse(manifestText));
-    const notesText = await readFile(paths.outputNotesPath, "utf8");
-    const referenceText = options.useReferenceText
-      ? await readFile(paths.outputReferenceTextPath, "utf8")
-      : null;
-    const workspaceFileSet = new Set(workspaceFiles.map((item) => path.resolve(item)));
-    const manifestDir = path.dirname(paths.outputManifestPath);
-    const diagramImagePaths = Array.from(
-      new Set(
-        manifest.diagrams
-          .map((item) => {
-            if (typeof item.cropPath !== "string") {
-              return null;
-            }
-            return resolveManifestImagePath({
-              workspaceDir: paths.workspaceDir,
-              manifestDir,
-              rawPath: item.cropPath,
-              workspaceFileSet,
-            });
-          })
-          .filter((item): item is string => item !== null)
-          .filter((item) => path.extname(item).toLowerCase() === ".png"),
-      ),
-    );
-    logger.logLine(
-      [
-        `outputs_collected: workspaceFiles=${workspaceFiles.length.toString()}`,
-        `sourcePages=${sourcePageImagePaths.length.toString()}`,
-        `diagrams=${diagramImagePaths.length.toString()}`,
-        `manifestEntries=${manifest.diagrams.length.toString()}`,
-        `notesChars=${notesText.length.toString()}`,
-        `referenceChars=${
-          referenceText === null ? "disabled" : referenceText.length.toString()
-        }`,
-      ].join(" "),
-    );
-    logger.logStage("done", "collect-agent-outputs");
-
-    logger.logStage("start", "judge-outputs");
-    const judgingStartedAt = Date.now();
-    const verdicts = await Promise.all(
-      JUDGE_MODEL_IDS.map(async (judgeModelId) => {
-        logger.logLine(`judge_start: ${judgeModelId}`);
-        return await runJudge({
-          modelId: judgeModelId,
-          sourcePdfPath: paths.sourcePdfPath,
-          sourcePageImagePaths,
-          markdownPath: paths.outputMarkdownPath,
-          diagramImagePaths,
-        });
-      }),
-    );
-    const judgingLatencyMs = Date.now() - judgingStartedAt;
-    const judgingCostUsd = verdicts.reduce((sum, verdict) => sum + verdict.metrics.costUsd, 0);
-    for (const verdict of verdicts) {
-      logger.logLine(
-        `judge_done: ${verdict.modelId} verdict=${verdict.verdict} latency=${formatMs(verdict.metrics.elapsedMs)} cost=${formatUsd(verdict.metrics.costUsd)} summary=${toSingleLine(verdict.summary)}`,
-      );
-    }
-    logger.logStage("done", "judge-outputs");
-
-    const overallPass = verdicts.every((item) => item.verdict === "pass");
-    const reason = overallPass
-      ? "All judges passed"
-      : verdicts
-          .filter((item) => item.verdict === "fail")
-          .map((item) => `[${item.modelId}] ${item.summary}`)
-          .join("; ");
-
-    const finalSnapshot = logger.snapshot();
-    const agentCostUsd = finalSnapshot.usageCostUsd;
-    const toolCallCount = Object.values(finalSnapshot.toolCallsByName).reduce(
-      (sum, count) => sum + count,
-      0,
-    );
-    const totalLatencyMs = agentLatencyMs + judgingLatencyMs;
-    const totalCostUsd = agentCostUsd + judgingCostUsd;
-
-    logLines.push(
-      `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
-    );
-    logLines.push(
-      `agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(agentCostUsd)}`,
-    );
-    logLines.push(
-      `judging_latency=${formatMs(judgingLatencyMs)} judging_cost=${formatUsd(judgingCostUsd)}`,
-    );
-    logLines.push(`tool_calls=${toolCallCount.toString()}`);
-    logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
-    logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
-    if (options.useSubagents) {
-      logLines.push(`agent_main_log=${toRepoRelativePath(paths.agentMainLogPath)}`);
-      const subagentLogs = finalSnapshot.splitLogPathsCreated
-        .filter((item) => path.basename(item) !== path.basename(paths.agentMainLogPath))
-        .map((item) => toRepoRelativePath(item))
-        .sort((a, b) => a.localeCompare(b));
-      logLines.push(
-        `agent_subagent_logs=${subagentLogs.length > 0 ? subagentLogs.join(",") : "none"}`,
-      );
-    }
-    logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
-
-    logger.logStage("start", "write-artifacts");
-
-    await writeFile(
-      paths.eventLogPath,
-      `${finalSnapshot.eventLogRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
-      "utf8",
-    );
-
-    const result: AgenticBenchmarkResult = {
-      generatedAt: new Date().toISOString(),
-      modelId: options.modelId,
-      status: overallPass ? "pass" : "fail",
-      reason,
-      sourcePdfPath: toRepoRelativePath(paths.sourcePdfPath),
-      runDir: toRepoRelativePath(paths.runRootDir),
-      workspaceDir: toRepoRelativePath(paths.workspaceDir),
-      taskPath: toRepoRelativePath(paths.taskPath),
-      transcriptionPath: toRepoRelativePath(paths.outputMarkdownPath),
-      diagramManifestPath: toRepoRelativePath(paths.outputManifestPath),
-      notesPath: toRepoRelativePath(paths.outputNotesPath),
-      ...(options.useReferenceText
-        ? { referenceTextPath: toRepoRelativePath(paths.outputReferenceTextPath) }
-        : {}),
-      agentLogPath: toRepoRelativePath(paths.agentLogPath),
-      eventLogPath: toRepoRelativePath(paths.eventLogPath),
-      summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
-      sourcePageImagePaths: sourcePageImagePaths.map((item) => toRepoRelativePath(item)),
-      diagramImagePaths: diagramImagePaths.map((item) => toRepoRelativePath(item)),
-      agent: {
-        latencyMs: agentLatencyMs,
-        modelCalls: toolLoopResult.steps.length,
-        toolCalls: toolCallCount,
-        toolCallsByName: finalSnapshot.toolCallsByName,
-        costUsd: agentCostUsd,
-        usage: finalSnapshot.usageTotals,
-        thoughtsChars: finalSnapshot.thoughtChars,
-        responseChars: finalSnapshot.responseChars,
-        doneSummary: finalSnapshot.doneSummary,
-      },
-      judging: {
-        latencyMs: judgingLatencyMs,
-        modelCalls: verdicts.length,
-        costUsd: judgingCostUsd,
-        verdicts,
-      },
-      total: {
-        latencyMs: totalLatencyMs,
-        costUsd: totalCostUsd,
-      },
-    };
-
-    await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-    await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
-    logger.logStage("done", "write-artifacts");
-    logger.logLine(
-      `done: status=${result.status} totalLatency=${formatMs(result.total.latencyMs)} totalCost=${formatUsd(result.total.costUsd)} runDir=${result.runDir}`,
-    );
-
-    return result;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.logLine(`error: ${sanitizeLogText(message)}`);
-    throw error;
+  const steering = createAgentLoopSteeringChannel();
+  const startedAt = Date.now();
+  if (!isLlmTextModelId(options.modelId)) {
+    throw new Error(`Unsupported model id for runAgentLoop: ${options.modelId}`);
   }
+  const thinkingLevel =
+    options.modelId.startsWith("chatgpt-") || options.modelId.startsWith("gpt-")
+      ? ("high" as const)
+      : undefined;
+  const toolLoopResult = await runAgentLoop({
+    model: options.modelId,
+    input: createAgentPrompt(),
+    maxSteps: MAX_STEPS,
+    ...(thinkingLevel ? { thinkingLevel } : {}),
+    tools: selectedTools,
+    subagents: options.useSubagents ? { promptPattern: "codex" } : false,
+    logging: {
+      workspaceDir: paths.workspaceDir,
+    },
+    steering,
+  });
+  const agentSummary = summarizeToolLoopResult(toolLoopResult);
+  const agentLatencyMs = Date.now() - startedAt;
+  const workspaceFiles = await listFilesRecursive(paths.workspaceDir);
+  const outputDirPrefix = `${path.resolve(paths.outputDir)}${path.sep}`;
+  const sourcePageImagePaths = workspaceFiles.filter((item) => {
+    if (!item.startsWith(outputDirPrefix)) {
+      return false;
+    }
+    if (item.includes(`${path.sep}diagrams${path.sep}`)) {
+      return false;
+    }
+    if (path.extname(item).toLowerCase() !== ".png") {
+      return false;
+    }
+    return /^page-\d{4}\.png$/u.test(path.basename(item));
+  });
+  const manifestText = await readFile(paths.outputManifestPath, "utf8");
+  const manifest = parseAgentDiagramManifest(JSON.parse(manifestText));
+  const notesText = await readFile(paths.outputNotesPath, "utf8");
+  const referenceText = options.useReferenceText
+    ? await readFile(paths.outputReferenceTextPath, "utf8")
+    : null;
+  const workspaceFileSet = new Set(workspaceFiles.map((item) => path.resolve(item)));
+  const manifestDir = path.dirname(paths.outputManifestPath);
+  const diagramImagePaths = Array.from(
+    new Set(
+      manifest.diagrams
+        .map((item) => {
+          if (typeof item.cropPath !== "string") {
+            return null;
+          }
+          return resolveManifestImagePath({
+            workspaceDir: paths.workspaceDir,
+            manifestDir,
+            rawPath: item.cropPath,
+            workspaceFileSet,
+          });
+        })
+        .filter((item): item is string => item !== null)
+        .filter((item) => path.extname(item).toLowerCase() === ".png"),
+    ),
+  );
+  const judgingStartedAt = Date.now();
+  const verdicts = await Promise.all(
+    JUDGE_MODEL_IDS.map(async (judgeModelId) => {
+      return await runJudge({
+        modelId: judgeModelId,
+        sourcePdfPath: paths.sourcePdfPath,
+        sourcePageImagePaths,
+        markdownPath: paths.outputMarkdownPath,
+        diagramImagePaths,
+      });
+    }),
+  );
+  const judgingLatencyMs = Date.now() - judgingStartedAt;
+  const judgingCostUsd = verdicts.reduce((sum, verdict) => sum + verdict.metrics.costUsd, 0);
+  const overallPass = verdicts.every((item) => item.verdict === "pass");
+  const reason = overallPass
+    ? "All judges passed"
+    : verdicts
+        .filter((item) => item.verdict === "fail")
+        .map((item) => `[${item.modelId}] ${item.summary}`)
+        .join("; ");
+  const totalLatencyMs = agentLatencyMs + judgingLatencyMs;
+  const totalCostUsd = agentSummary.agentCostUsd + judgingCostUsd;
+
+  logLines.push(
+    `model=${options.modelId} maxSteps=${MAX_STEPS.toString()} useSubagents=${options.useSubagents ? "true" : "false"} useReferenceText=${options.useReferenceText ? "true" : "false"}`,
+  );
+  logLines.push(
+    `agent_latency=${formatMs(agentLatencyMs)} agent_cost=${formatUsd(agentSummary.agentCostUsd)}`,
+  );
+  logLines.push(
+    `judging_latency=${formatMs(judgingLatencyMs)} judging_cost=${formatUsd(judgingCostUsd)}`,
+  );
+  logLines.push(`tool_calls=${agentSummary.toolCalls.toString()}`);
+  logLines.push(`workspace_files=${workspaceFiles.length.toString()}`);
+  logLines.push(`agent_log=${toRepoRelativePath(paths.agentLogPath)}`);
+  logLines.push(`llm_logs_dir=${toRepoRelativePath(paths.llmLogsDir)}`);
+  logLines.push(`event_log=${toRepoRelativePath(paths.eventLogPath)}`);
+  logLines.push(`notes_chars=${notesText.length.toString()}`);
+  logLines.push(
+    `reference_chars=${referenceText === null ? "disabled" : referenceText.length.toString()}`,
+  );
+
+  await writeFile(
+    paths.eventLogPath,
+    `${toToolLoopEventLogRecords(toolLoopResult).map((record) => JSON.stringify(record)).join("\n")}\n`,
+    "utf8",
+  );
+
+  const result: AgenticBenchmarkResult = {
+    generatedAt: new Date().toISOString(),
+    modelId: options.modelId,
+    status: overallPass ? "pass" : "fail",
+    reason,
+    sourcePdfPath: toRepoRelativePath(paths.sourcePdfPath),
+    runDir: toRepoRelativePath(paths.runRootDir),
+    workspaceDir: toRepoRelativePath(paths.workspaceDir),
+    taskPath: toRepoRelativePath(paths.taskPath),
+    transcriptionPath: toRepoRelativePath(paths.outputMarkdownPath),
+    diagramManifestPath: toRepoRelativePath(paths.outputManifestPath),
+    notesPath: toRepoRelativePath(paths.outputNotesPath),
+    ...(options.useReferenceText
+      ? { referenceTextPath: toRepoRelativePath(paths.outputReferenceTextPath) }
+      : {}),
+    agentLogPath: toRepoRelativePath(paths.agentLogPath),
+    llmLogsDir: toRepoRelativePath(paths.llmLogsDir),
+    eventLogPath: toRepoRelativePath(paths.eventLogPath),
+    summaryJsonPath: toRepoRelativePath(paths.summaryJsonPath),
+    sourcePageImagePaths: sourcePageImagePaths.map((item) => toRepoRelativePath(item)),
+    diagramImagePaths: diagramImagePaths.map((item) => toRepoRelativePath(item)),
+    agent: {
+      latencyMs: agentLatencyMs,
+      modelCalls: agentSummary.modelCalls,
+      toolCalls: agentSummary.toolCalls,
+      toolCallsByName: agentSummary.toolCallsByName,
+      costUsd: agentSummary.agentCostUsd,
+      usage: agentSummary.usageTotals,
+      thoughtsChars: agentSummary.thoughtsChars,
+      responseChars: agentSummary.responseChars,
+      doneSummary: agentSummary.doneSummary,
+    },
+    judging: {
+      latencyMs: judgingLatencyMs,
+      modelCalls: verdicts.length,
+      costUsd: judgingCostUsd,
+      verdicts,
+    },
+    total: {
+      latencyMs: totalLatencyMs,
+      costUsd: totalCostUsd,
+    },
+  };
+
+  await writeFile(paths.summaryJsonPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  await writeFile(path.join(paths.runRootDir, "run.log"), `${logLines.join("\n")}\n`, "utf8");
+
+  return result;
 }
 
 async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Promise<string> {
@@ -957,6 +868,7 @@ async function renderSingleResultsMarkdown(result: AgenticBenchmarkResult): Prom
     lines.push(`- PDF reference text: ${result.referenceTextPath}`);
   }
   lines.push(`- Agent log: ${result.agentLogPath}`);
+  lines.push(`- Native LLM logs dir: ${result.llmLogsDir}`);
   lines.push(`- Agent event log: ${result.eventLogPath}`);
   lines.push(`- Summary JSON: ${result.summaryJsonPath}`);
   lines.push("");

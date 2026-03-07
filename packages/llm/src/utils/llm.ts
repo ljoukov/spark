@@ -28,6 +28,7 @@ import {
   type LlmImageSize,
   type LlmModelId as LlmModelIdV2,
   type LlmStreamEvent,
+  type LlmThinkingLevel,
   type LlmTextModelId as LlmTextModelIdV2,
   type LlmToolCallContext,
   type LlmToolConfig,
@@ -310,11 +311,14 @@ const INPUT_ROLE_FROM_CONTENT_ROLE = {
   tool: "assistant",
 } as const satisfies Record<LlmRole, "user" | "assistant" | "system" | "developer">;
 
-function resolveOpenAiReasoningEffort(
+function resolveThinkingLevel(
   openAiReasoningEffort: OpenAiReasoningEffort | undefined,
-): OpenAiReasoningEffort | undefined {
+): LlmThinkingLevel | undefined {
   if (openAiReasoningEffort === undefined) {
     return undefined;
+  }
+  if (openAiReasoningEffort === "xhigh") {
+    return "high";
   }
   return openAiReasoningEffort;
 }
@@ -360,7 +364,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
     responseMimeType: options.responseMimeType,
     responseJsonSchema: options.responseJsonSchema,
     imageSize: options.imageSize,
-    openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
+    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
     openAiTextFormat: options.openAiTextFormat,
   });
 
@@ -436,7 +440,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
       maxAttempts,
       ...(options.openAiSchemaName ? { openAiSchemaName: options.openAiSchemaName } : {}),
       ...(options.normalizeJson ? { normalizeJson: options.normalizeJson } : {}),
-      openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
+      thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
       onEvent: (event) => {
         if (event.type === "delta") {
           if (event.channel === "response") {
@@ -505,7 +509,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     tools: options.tools,
     modelTools: options.modelTools,
     maxSteps: options.maxSteps,
-    openAiReasoningEffort: resolveOpenAiReasoningEffort(options.openAiReasoningEffort),
+    thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
     steering: options.steering,
     ...(onEvent ? { onEvent } : {}),
   };

@@ -7,10 +7,9 @@ import {
   runToolLoop,
   tool,
   type LlmDebugOptions,
-  type LlmTextModelId,
-  type LlmToolLoopResult,
   type LlmToolSet,
 } from "@spark/llm/utils/llm";
+import type { LlmTextModelId, LlmToolLoopResult } from "@ljoukov/llm";
 import {
   QuizDefinitionSchema,
   SessionSchema,
