@@ -42,8 +42,6 @@
 		contentType: string;
 	};
 
-	const RUN_LOG_THOUGHTS_KEY = 'stream.thoughts';
-
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? null);
@@ -194,10 +192,9 @@
 		next: SparkAgentRunLog['lines'],
 		stream?: SparkAgentRunLog['stream']
 	): RunLogLineView[] {
-		const thoughts = typeof stream?.thoughts === 'string' ? stream.thoughts.trim() : '';
-		const hasThoughts = thoughts.length > 0;
-		const expectedLength = next.length + (hasThoughts ? 1 : 0);
-		if (next.length === 0 && !hasThoughts) {
+		void stream;
+		const expectedLength = next.length;
+		if (next.length === 0) {
 			return [];
 		}
 
@@ -209,19 +206,6 @@
 				if (!prevEntry || prevEntry.key !== nextEntry.key || prevEntry.line !== nextEntry.line) {
 					isSame = false;
 					break;
-				}
-			}
-			if (isSame && hasThoughts) {
-				const thoughtsEntry = prev[next.length];
-				const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
-				const thoughtTimestampLabel = formatTimestamp(thoughtTimestamp);
-				if (
-					!thoughtsEntry ||
-					thoughtsEntry.key !== RUN_LOG_THOUGHTS_KEY ||
-					thoughtsEntry.line !== thoughts ||
-					thoughtsEntry.timestampLabel !== thoughtTimestampLabel
-				) {
-					isSame = false;
 				}
 			}
 			if (isSame) {
@@ -245,14 +229,6 @@
 				key: entry.key,
 				timestampLabel: formatTimestamp(entry.timestamp),
 				line: entry.line
-			});
-		}
-		if (hasThoughts) {
-			const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
-			nextView.push({
-				key: RUN_LOG_THOUGHTS_KEY,
-				timestampLabel: formatTimestamp(thoughtTimestamp),
-				line: thoughts
 			});
 		}
 		return nextView;
@@ -748,65 +724,69 @@
 		<div class="agent-run-shell">
 			<section class="agents-detail__card">
 				<div class="agents-detail__header">
-					<div>
-						<p class="agents-detail__eyebrow">Agent status</p>
-						<h2>{agent.prompt}</h2>
-					</div>
-					<div class="agents-detail__header-actions">
-						<Button
-							variant="ghost"
-							size="sm"
-							onclick={() => {
-								const prompt = agent?.prompt;
-								if (!prompt) {
-									return;
-								}
-								void copyPrompt(prompt);
-							}}
-						>
-							{copySuccess ? 'Copied' : 'Copy prompt'}
-						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							disabled={downloadSubmitting}
-							onclick={() => {
-								void downloadRunZip();
-							}}
-						>
-							{downloadSubmitting ? 'Downloading…' : 'Download zip'}
-						</Button>
-						{#if showStopButton}
+					<div class="agents-detail__header-top">
+						<p class="agents-detail__eyebrow">Prompt</p>
+						<div class="agents-detail__header-actions">
 							<Button
-								variant="destructive"
+								variant="ghost"
 								size="sm"
-								disabled={stopSubmitting}
 								onclick={() => {
-									void requestStop();
+									const prompt = agent?.prompt;
+									if (!prompt) {
+										return;
+									}
+									void copyPrompt(prompt);
 								}}
 							>
-								{stopSubmitting ? 'Stopping…' : 'Stop'}
+								{copySuccess ? 'Copied' : 'Copy prompt'}
 							</Button>
-						{/if}
-						{#if showRetryButton}
 							<Button
-								variant="secondary"
+								variant="ghost"
 								size="sm"
-								disabled={retrySubmitting}
+								disabled={downloadSubmitting}
 								onclick={() => {
-									void retryAgent();
+									void downloadRunZip();
 								}}
 							>
-								{retrySubmitting ? 'Retrying…' : 'Retry'}
+								{downloadSubmitting ? 'Downloading…' : 'Download zip'}
 							</Button>
-						{/if}
-						{#if showStopRequestedBadge}
-							<span class="status-pill status-pill--stopped">stop requested</span>
-						{/if}
-						<span class={`status-pill status-pill--${agent.status}`}>
-							{agent.status}
-						</span>
+							<span class={`status-pill status-pill--${agent.status}`}>
+								{agent.status}
+							</span>
+						</div>
 					</div>
+					<p class="agents-detail__prompt">{agent.prompt}</p>
+					{#if showStopButton || showRetryButton || showStopRequestedBadge}
+						<div class="agents-detail__header-secondary-actions">
+							{#if showStopButton}
+								<Button
+									variant="destructive"
+									size="sm"
+									disabled={stopSubmitting}
+									onclick={() => {
+										void requestStop();
+									}}
+								>
+									{stopSubmitting ? 'Stopping…' : 'Stop'}
+								</Button>
+							{/if}
+							{#if showRetryButton}
+								<Button
+									variant="secondary"
+									size="sm"
+									disabled={retrySubmitting}
+									onclick={() => {
+										void retryAgent();
+									}}
+								>
+									{retrySubmitting ? 'Retrying…' : 'Retry'}
+								</Button>
+							{/if}
+							{#if showStopRequestedBadge}
+								<span class="status-pill status-pill--stopped">stop requested</span>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				<div class="agents-detail__meta">
@@ -979,7 +959,7 @@
 							{#each runLogLines as entry (entry.key)}
 								<div class="agents-run__log-line">
 									<span class="agents-run__log-ts">{entry.timestampLabel}</span>
-									<span class="agents-run__log-msg">{entry.line}</span>
+									<pre class="agents-run__log-msg">{entry.line}</pre>
 								</div>
 							{/each}
 						</div>
@@ -1165,15 +1145,20 @@
 
 	.agents-detail__header {
 		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: flex-start;
-		flex-wrap: wrap;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
 
-	.agents-detail__header > div:first-child {
+	.agents-detail__header-top {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
 		min-width: 0;
-		flex: 1 1 20rem;
+	}
+
+	.agents-detail__header-top .agents-detail__eyebrow {
+		margin-right: auto;
 	}
 
 	.agents-detail__header-actions {
@@ -1184,10 +1169,17 @@
 		justify-content: flex-end;
 	}
 
-	.agents-detail__header h2 {
+	.agents-detail__header-secondary-actions {
+		display: inline-flex;
+		gap: 0.5rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.agents-detail__prompt {
 		margin: 0;
-		font-size: 1.3rem;
-		line-height: 1.35;
+		font-size: 1rem;
+		line-height: 1.55;
 		word-break: break-word;
 	}
 
@@ -1481,6 +1473,7 @@
 	}
 
 	.agents-run__log-msg {
+		margin: 0;
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
