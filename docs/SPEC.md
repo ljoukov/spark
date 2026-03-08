@@ -223,10 +223,13 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Location: `us-central1`.
 - The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
 - For debugging, `runAgent` tasks also include `userId`, `agentId`, and `workspaceId` as query params on the target URL (in addition to `type=runAgent`).
+- The same Bearer token also protects `GET /api/internal/tasks/info`, which returns the task runner's embedded build metadata (`buildId`, `builtAt`, platform, commit/branch, and provider-specific build identifiers when available).
+- Build metadata is generated during `web` builds and embedded into the server bundle. Every build gets a fresh `buildId` plus a `builtAt` timestamp; provider commit/build identifiers are sourced from Vercel/Cloudflare env vars directly and from Cloud Build via Docker build args so Cloud Run images retain provenance after the Docker boundary.
 
 ### Admin UI
 
 - `/admin/tasks` exposes manual task triggers for operators. Controls include a "Run task" button that enqueues the `helloWorld` task (expects to see `Hello World` in the server logs) and a "Generate welcome session" form that accepts a topic string and queues `generateWelcomeSession` to publish a new template under `spark-admin/templates/sessions`.
+- `/admin/tasks` also shows the current admin UI build metadata and a "Retrieve build info" button that synchronously fetches `/api/internal/tasks/info` from the configured task service, then renders the task runner build details and whether they match the UI build.
 
 ### 3.1 Data Flow
 

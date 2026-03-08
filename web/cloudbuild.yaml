@@ -18,7 +18,15 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     script: |
       # Build from the monorepo root so workspaces under packages/* are available
-      docker build -t ${_IMAGE_NAME} -f web/Dockerfile .
+      docker build \
+        --build-arg BUILD_TARGET=gcp \
+        --build-arg BUILD_GIT_COMMIT_SHA=${COMMIT_SHA} \
+        --build-arg BUILD_GIT_BRANCH=${BRANCH_NAME} \
+        --build-arg BUILD_PROVIDER_BUILD_ID=${BUILD_ID} \
+        --build-arg BUILD_PROVIDER_REVISION=${SHORT_SHA} \
+        -t ${_IMAGE_NAME} \
+        -f web/Dockerfile \
+        .
     automapSubstitutions: true
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '$_IMAGE_NAME']

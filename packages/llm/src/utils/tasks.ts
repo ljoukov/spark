@@ -80,6 +80,8 @@ const CLOUD_TASKS_SCOPE = [
 
 const DEFAULT_LOCATION = "us-central1"; // per instruction
 const DEFAULT_QUEUE = "spark-tasks";
+export const TASKS_HANDLER_PATH = "/api/internal/tasks";
+export const TASKS_INFO_PATH = "/api/internal/tasks/info";
 
 function base64EncodeUrlSafe(bytes: Uint8Array): string {
   // URL-safe base64 encoding: '+' -> '-', '/' -> '_', keep '=' padding
@@ -121,6 +123,138 @@ function formatFetchError(error: unknown): string {
   return String(error);
 }
 
+function normalizeLocalServiceUrl(url: URL): void {
+  if (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "0.0.0.0"
+  ) {
+    if (url.hostname === "127.0.0.1" || url.hostname === "0.0.0.0") {
+      url.hostname = "localhost";
+    }
+    if (!url.port) {
+      const vitePort = readEnvVar("VITE_DEV_PORT").trim();
+      const envPort = readEnvVar("PORT").trim();
+      if (vitePort && /^[0-9]+$/.test(vitePort)) {
+        url.port = vitePort;
+      } else if (envPort && /^[0-9]+$/.test(envPort)) {
+        url.port = envPort;
+      } else {
+        url.port = "8081";
+      }
+    }
+  }
+}
+
+export function resolveTaskServiceUrl(
+  serviceUrl: string,
+  options: {
+    pathname?: string;
+    query?: Record<string, string | undefined>;
+  } = {},
+): string {
+  let resolvedUrl: URL;
+  try {
+    resolvedUrl = new URL(serviceUrl);
+  } catch (error) {
+    throw new Error(
+      `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
+    );
+  }
+
+  normalizeLocalServiceUrl(resolvedUrl);
+
+  const targetPath = options.pathname ?? TASKS_HANDLER_PATH;
+  const currentPath = resolvedUrl.pathname.replace(/\/+$/, "") || "/";
+  if (currentPath === "/" || currentPath === TASKS_HANDLER_PATH) {
+    resolvedUrl.pathname = targetPath;
+  } else if (currentPath.startsWith(`${TASKS_HANDLER_PATH}/`)) {
+    resolvedUrl.pathname = targetPath;
+  }
+
+  if (options.query) {
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value === undefined || value.length === 0) {
+        resolvedUrl.searchParams.delete(key);
+      } else {
+        resolvedUrl.searchParams.set(key, value);
+      }
+    }
+  }
+
+  return resolvedUrl.toString();
+}
+
+async function buildTaskServiceRequestInit(options: {
+  url: string;
+  apiKey: string;
+  method: string;
+  body?: string;
+}): Promise<RequestInit & { dispatcher?: unknown }> {
+  const init: RequestInit & { dispatcher?: unknown } = {
+    method: options.method,
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json",
+    },
+  };
+
+  if (options.body !== undefined) {
+    init.body = options.body;
+  }
+
+  try {
+    const parsedUrl = new URL(options.url);
+    if (isNodeRuntime() && parsedUrl.protocol === "https:" && isLocalUrl(options.url)) {
+      const undici = await import("undici");
+      init.dispatcher = new undici.Agent({
+        connect: { rejectUnauthorized: false },
+      });
+    }
+  } catch (error) {
+    console.warn(
+      `Task service dispatcher setup failed: ${formatFetchError(error)}`,
+    );
+  }
+
+  return init;
+}
+
+export async function fetchTaskService(
+  options: {
+    serviceUrl?: string;
+    apiKey?: string;
+    pathname?: string;
+    method?: "GET" | "POST";
+    body?: string;
+    query?: Record<string, string | undefined>;
+  } = {},
+): Promise<Response> {
+  const serviceUrl = options.serviceUrl ?? readEnvVar("TASKS_SERVICE_URL");
+  if (!serviceUrl) {
+    throw new Error(
+      "TASKS_SERVICE_URL is not configured. Set env or pass serviceUrl.",
+    );
+  }
+
+  const apiKey = options.apiKey ?? readEnvVar("TASKS_API_KEY");
+  if (!apiKey) {
+    throw new Error("TASKS_API_KEY is not configured. Set env or pass apiKey.");
+  }
+
+  const url = resolveTaskServiceUrl(serviceUrl, {
+    pathname: options.pathname,
+    query: options.query,
+  });
+  const init = await buildTaskServiceRequestInit({
+    url,
+    apiKey,
+    method: options.method ?? "GET",
+    body: options.body,
+  });
+  return await fetch(url, init);
+}
+
 export async function createTask(
   task: Task,
   options: {
@@ -149,69 +283,28 @@ export async function createTask(
     options.queue ?? (envQueue.trim().length > 0 ? envQueue : DEFAULT_QUEUE);
 
   if (isLocalUrl(serviceUrl)) {
-    // Local development: emulate Cloud Tasks by fire-and-forget scheduling.
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
     const body = JSON.stringify(task);
-    let postUrl = serviceUrl;
-    try {
-      const u = new URL(serviceUrl);
-      if (u.hostname === "127.0.0.1" || u.hostname === "0.0.0.0") {
-        u.hostname = "localhost";
-      }
-      // Allow local dev callers to omit the port and reuse the Vite HTTPS port.
-      if (!u.port) {
-        const vitePort = readEnvVar("VITE_DEV_PORT").trim();
-        const envPort = readEnvVar("PORT").trim();
-        if (vitePort && /^[0-9]+$/.test(vitePort)) {
-          u.port = vitePort;
-        } else if (envPort && /^[0-9]+$/.test(envPort)) {
-          u.port = envPort;
-        } else {
-          u.port = "8081";
-        }
-      }
-      if (u.pathname === "/") {
-        u.pathname = "/api/internal/tasks";
-      }
-      u.searchParams.set("type", task.type);
-      if (task.type === "runAgent") {
-        u.searchParams.set("userId", task.runAgent.userId);
-        u.searchParams.set("agentId", task.runAgent.agentId);
-        u.searchParams.set("workspaceId", task.runAgent.workspaceId);
-      }
-      postUrl = u.toString();
-    } catch (error) {
-      throw new Error(
-        `Failed to resolve tasks service URL "${serviceUrl}": ${(error as Error).message}`,
-      );
-    }
+    const postUrl = resolveTaskServiceUrl(serviceUrl, {
+      pathname: TASKS_HANDLER_PATH,
+      query:
+        task.type === "runAgent"
+          ? {
+              type: task.type,
+              userId: task.runAgent.userId,
+              agentId: task.runAgent.agentId,
+              workspaceId: task.runAgent.workspaceId,
+            }
+          : { type: task.type },
+    });
     console.warn(`Starting a local task: ${postUrl}`);
     void (async () => {
-      type NodeFetchInit = RequestInit & { dispatcher?: unknown };
-      const init: NodeFetchInit = {
-        method: "POST",
-        headers,
-        body,
-      };
-
       try {
-        const u = new URL(postUrl);
-        if (isNodeRuntime() && u.protocol === "https:") {
-          const undici = await import("undici");
-          init.dispatcher = new undici.Agent({
-            connect: { rejectUnauthorized: false },
-          });
-        }
-      } catch (error) {
-        console.warn(
-          `Local task dispatcher setup failed: ${formatFetchError(error)}`,
-        );
-      }
-
-      try {
+        const init = await buildTaskServiceRequestInit({
+          url: postUrl,
+          apiKey,
+          method: "POST",
+          body,
+        });
         const resp = await fetch(postUrl, init);
         const text = await resp.text().catch(() => "");
         if (!resp.ok) {
@@ -241,9 +334,8 @@ export async function createTask(
 
   const handlerUrl = new URL(serviceUrl);
   // If only origin (no path), default to internal tasks handler path
-  if (handlerUrl.pathname === "/") {
-    handlerUrl.pathname = "/api/internal/tasks";
-  }
+  handlerUrl.pathname =
+    handlerUrl.pathname === "/" ? TASKS_HANDLER_PATH : handlerUrl.pathname;
   handlerUrl.searchParams.set("type", task.type);
   if (task.type === "runAgent") {
     handlerUrl.searchParams.set("userId", task.runAgent.userId);

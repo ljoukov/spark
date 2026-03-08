@@ -23,6 +23,12 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1.3.8 AS build
 WORKDIR /workspace
 
+ARG BUILD_TARGET=""
+ARG BUILD_GIT_COMMIT_SHA=""
+ARG BUILD_GIT_BRANCH=""
+ARG BUILD_PROVIDER_BUILD_ID=""
+ARG BUILD_PROVIDER_REVISION=""
+
 # Bring in sources for workspaces and the web app
 COPY packages ./packages
 COPY proto ./proto
@@ -37,6 +43,11 @@ COPY --from=deps /workspace/node_modules ./node_modules
 
 # Ensure adapter-auto picks Node in CI images (matches existing behavior)
 ENV GCP_BUILDPACKS="make-sveltekit-adapter-auto-use-node"
+ENV BUILD_TARGET="${BUILD_TARGET}"
+ENV BUILD_GIT_COMMIT_SHA="${BUILD_GIT_COMMIT_SHA}"
+ENV BUILD_GIT_BRANCH="${BUILD_GIT_BRANCH}"
+ENV BUILD_PROVIDER_BUILD_ID="${BUILD_PROVIDER_BUILD_ID}"
+ENV BUILD_PROVIDER_REVISION="${BUILD_PROVIDER_REVISION}"
 
 # Prepare and build only the web workspace
 RUN bun --cwd=web run prepare

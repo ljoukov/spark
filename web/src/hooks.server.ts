@@ -21,17 +21,19 @@ export const handle = (async ({ event, resolve }) => {
 	event.locals.appUser = null;
 	const pathname = event.url.pathname;
 	const internalTasksPrefix = '/api/internal/tasks';
+	const internalTasksInfoPath = '/api/internal/tasks/info';
 	const isInternalTasksRoute =
 		pathname === internalTasksPrefix || pathname.startsWith(`${internalTasksPrefix}/`);
 
 	if (isInternalTasksRoute) {
-		if (event.request.method !== 'POST') {
+		const allowedMethod = pathname === internalTasksInfoPath ? 'GET' : 'POST';
+		if (event.request.method !== allowedMethod) {
 			return json(
 				{ error: 'method_not_allowed' },
 				{
 					status: 405,
 					headers: {
-						Allow: 'POST'
+						Allow: allowedMethod
 					}
 				}
 			);
