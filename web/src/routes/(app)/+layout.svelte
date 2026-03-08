@@ -6,11 +6,11 @@
 	import { themePreference, type ThemePreference } from '$lib/stores/themePreference';
 	import { startIdTokenCookieSync } from '$lib/auth/tokenCookie';
 
-	injectAnalytics({ mode: dev ? 'development' : 'production' });
-
 	let { children } = $props();
 
 	onMount(() => {
+		injectAnalytics({ mode: dev ? 'development' : 'production' });
+
 		let stopAutoSync: (() => void) | null = null;
 		let stopTokenSync: (() => void) | null = null;
 		const unsubscribe = themePreference.subscribe((preference: ThemePreference) => {
