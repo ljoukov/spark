@@ -1,43 +1,8 @@
 import { getGraderRun, getWorkspaceTextFile } from '$lib/server/grader/repo';
+import { parseGraderProblemReport } from '$lib/server/grader/problemReport';
+import { findTutorSessionForGraderProblem } from '$lib/server/tutorSessions/repo';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-
-function extractSection(markdown: string, heading: string): string | null {
-	const normalized = markdown.replace(/\r\n?/g, '\n');
-	const lines = normalized.split('\n');
-	const headingLower = heading.trim().toLowerCase();
-	let startIndex: number | null = null;
-
-	for (let index = 0; index < lines.length; index += 1) {
-		const line = lines[index]?.trim();
-		if (!line?.startsWith('## ')) {
-			continue;
-		}
-		const title = line.slice(3).trim().toLowerCase();
-		if (title === headingLower) {
-			startIndex = index + 1;
-			break;
-		}
-	}
-	if (startIndex === null) {
-		return null;
-	}
-
-	let endIndex = lines.length;
-	for (let index = startIndex; index < lines.length; index += 1) {
-		const line = lines[index]?.trim();
-		if (line?.startsWith('## ')) {
-			endIndex = index;
-			break;
-		}
-	}
-
-	const text = lines.slice(startIndex, endIndex).join('\n').trim();
-	if (text.length === 0) {
-		return null;
-	}
-	return text;
-}
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	const user = locals.appUser;
@@ -56,6 +21,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!markdown) {
 		throw error(404, 'Problem report file not found');
 	}
+	const sections = parseGraderProblemReport(markdown);
+	const tutorSession = await findTutorSessionForGraderProblem({
+		userId: user.uid,
+		runId: run.id,
+		problemId: problem.id
+	});
 	return {
 		run: {
 			id: run.id,
@@ -71,15 +42,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			verdict: problem.verdict ?? null,
 			filePath: problem.filePath
 		},
+		tutorSession: tutorSession
+			? {
+					id: tutorSession.id,
+					status: tutorSession.status
+				}
+			: null,
 		sections: {
-			statement: extractSection(markdown, 'Problem statement'),
-			officialStatement: extractSection(markdown, 'Official problem statement'),
-			officialSolution: extractSection(markdown, 'Official solution'),
-			transcript: extractSection(markdown, 'Student solution transcript'),
-			grading: extractSection(markdown, 'Grading'),
-			annotations: extractSection(markdown, 'Annotation and feedback'),
-			overall: extractSection(markdown, 'Overall feedback'),
-			raw: markdown
+			...sections
 		}
 	};
 };

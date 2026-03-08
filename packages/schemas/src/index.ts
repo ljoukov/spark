@@ -10,3 +10,4 @@ export * from "./spark";
 export * from "./sparkAgent";
 export * from "./sparkAgentTask";
 export * from "./sparkGrader";
+export * from "./sparkTutorSession";

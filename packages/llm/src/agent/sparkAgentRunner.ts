@@ -41,12 +41,16 @@ import {
   SessionSchema,
   SessionMediaDocSchema,
   SparkAgentStateTimelineSchema,
+  SparkTutorComposerStateSchema,
+  SparkTutorHistoryEntrySchema,
+  SparkTutorScreenStateSchema,
   SparkAgentWorkspaceFileSchema,
   type CodeProblem,
   type QuizDefinition,
   type Session,
   type SessionMediaDoc,
   type SparkAgentStateTimeline,
+  type SparkTutorComposerState,
 } from "@spark/schemas";
 
 import { errorAsString } from "../utils/error";
@@ -145,6 +149,17 @@ const EXTRACT_TEXT_DEFAULT_SUPPORTING_PROMPT =
   "Supporting documents are for ambiguity resolution only; do not transcribe them unless explicitly instructed.";
 const PDF_DIAGRAM_DEFAULT_MAX_ITEMS = 32;
 const PDF_DIAGRAM_MAX_ITEMS = 64;
+const TUTOR_CONTEXT_PROBLEM_PATH = "context/problem.md";
+const TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH = "context/official-solution.md";
+const TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH = "context/student-transcript.md";
+const TUTOR_CONTEXT_GRADING_PATH = "context/grading.md";
+const TUTOR_CONTEXT_ANNOTATIONS_PATH = "context/annotations.md";
+const TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH = "context/overall-feedback.md";
+const TUTOR_UI_TOP_PANEL_PATH = "ui/tutor.md";
+const TUTOR_UI_INLINE_FEEDBACK_PATH = "ui/inline-feedback.md";
+const TUTOR_STATE_SESSION_PATH = "state/session.json";
+const TUTOR_STATE_COMPOSER_PATH = "state/composer.json";
+const TUTOR_HISTORY_TURNS_PATH = "history/turns.jsonl";
 
 function formatUsdTotal(value: number): string {
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -1150,6 +1165,270 @@ async function patchGraderRunStatus(options: {
   });
 }
 
+function resolveTutorSessionDocPath(userId: string, sessionId: string): string {
+  return `spark/${userId}/tutorSessions/${sessionId}`;
+}
+
+async function readWorkspaceTextFileIfExists(options: {
+  rootDir: string;
+  filePath: string;
+}): Promise<string | null> {
+  try {
+    return await readFile(
+      resolveWorkspacePath(options.rootDir, options.filePath),
+      {
+        encoding: "utf8",
+      },
+    );
+  } catch {
+    return null;
+  }
+}
+
+function buildTutorComposerState(
+  overrides: Partial<SparkTutorComposerState> = {},
+): SparkTutorComposerState {
+  return SparkTutorComposerStateSchema.parse({
+    placeholder: "Write your next thought here.",
+    disabled: false,
+    submitLabel: "Send",
+    allowConfidence: true,
+    confidenceLabel: "How sure are you?",
+    hintButtons: [
+      {
+        id: "nudge",
+        label: "Need a nudge",
+        kind: "hint",
+        hintLevel: "nudge",
+      },
+      {
+        id: "pointer",
+        label: "Need a pointer",
+        kind: "hint",
+        hintLevel: "pointer",
+      },
+    ],
+    ...overrides,
+  });
+}
+
+function stringifyJsonFile(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function firstNonEmptyLine(markdown: string): string | undefined {
+  for (const line of markdown.split(/\r?\n/gu)) {
+    const trimmed = line
+      .replace(/^[#>*\-\d.\s]+/gu, "")
+      .replace(/[*_`]/gu, "")
+      .trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return undefined;
+}
+
+function formatTutorHistoryForPrompt(historyText: string | null): string {
+  const trimmed = historyText?.trim();
+  if (!trimmed) {
+    return "No committed turns yet.";
+  }
+  const lines = trimmed.split(/\r?\n/gu);
+  const rendered: string[] = [];
+  for (const line of lines) {
+    if (line.trim().length === 0) {
+      continue;
+    }
+    try {
+      const entry = SparkTutorHistoryEntrySchema.parse(JSON.parse(line));
+      const label =
+        entry.role === "assistant"
+          ? "Tutor"
+          : entry.kind === "hint_request"
+            ? "Student hint request"
+            : "Student";
+      const metaParts: string[] = [];
+      if (entry.confidence) {
+        metaParts.push(`confidence=${entry.confidence}`);
+      }
+      if (entry.hintLevel) {
+        metaParts.push(`hint=${entry.hintLevel}`);
+      }
+      const meta = metaParts.length > 0 ? ` (${metaParts.join(", ")})` : "";
+      rendered.push(`${label}${meta}: ${entry.text}`);
+    } catch {
+      rendered.push(line);
+    }
+  }
+  return rendered.join("\n");
+}
+
+async function writeTutorWorkspaceTextFile(options: {
+  rootDir: string;
+  workspaceSync: WorkspaceSync | undefined;
+  filePath: string;
+  content: string;
+}): Promise<void> {
+  const absolutePath = resolveWorkspacePath(options.rootDir, options.filePath);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, options.content, { encoding: "utf8" });
+  options.workspaceSync?.scheduleUpdate(options.filePath);
+}
+
+async function appendTutorHistoryEntryFile(options: {
+  rootDir: string;
+  workspaceSync: WorkspaceSync | undefined;
+  entry: unknown;
+}): Promise<void> {
+  const parsed = SparkTutorHistoryEntrySchema.parse(options.entry);
+  const existing =
+    (await readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_HISTORY_TURNS_PATH,
+    })) ?? "";
+  const trimmed = existing.trimEnd();
+  const line = JSON.stringify(parsed);
+  const next = trimmed.length > 0 ? `${trimmed}\n${line}\n` : `${line}\n`;
+  await writeTutorWorkspaceTextFile({
+    rootDir: options.rootDir,
+    workspaceSync: options.workspaceSync,
+    filePath: TUTOR_HISTORY_TURNS_PATH,
+    content: next,
+  });
+}
+
+type TutorWorkspaceSnapshot = {
+  problem: string;
+  officialSolution: string;
+  transcript: string;
+  grading: string;
+  annotations: string;
+  overallFeedback: string;
+  tutorMarkdown: string;
+  historyText: string;
+};
+
+async function readTutorWorkspaceSnapshot(options: {
+  rootDir: string;
+}): Promise<TutorWorkspaceSnapshot> {
+  const [
+    problem,
+    officialSolution,
+    transcript,
+    grading,
+    annotations,
+    overallFeedback,
+    tutorMarkdown,
+    historyText,
+  ] = await Promise.all([
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_PROBLEM_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_STUDENT_TRANSCRIPT_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_GRADING_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_ANNOTATIONS_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_UI_TOP_PANEL_PATH,
+    }),
+    readWorkspaceTextFileIfExists({
+      rootDir: options.rootDir,
+      filePath: TUTOR_HISTORY_TURNS_PATH,
+    }),
+  ]);
+  return {
+    problem: problem ?? "",
+    officialSolution: officialSolution ?? "",
+    transcript: transcript ?? "",
+    grading: grading ?? "",
+    annotations: annotations ?? "",
+    overallFeedback: overallFeedback ?? "",
+    tutorMarkdown: tutorMarkdown ?? "",
+    historyText: historyText ?? "",
+  };
+}
+
+function buildTutorTurnPrompt(options: {
+  sessionTitle: string;
+  action: "initial" | "reply" | "hint";
+  sourceLabel: string;
+  snapshot: TutorWorkspaceSnapshot;
+  studentText?: string;
+  studentConfidence?: string;
+  hintLevel?: string;
+}): string {
+  const actionLines = (() => {
+    if (options.action === "initial") {
+      return [
+        "This is the first tutor turn.",
+        "Open by naming one thing the student did well and one critical gap to focus on.",
+      ];
+    }
+    if (options.action === "hint") {
+      return [
+        `The student explicitly requested a hint (${options.hintLevel ?? "nudge"}).`,
+        "Give only the requested level of help and keep the student doing the work.",
+      ];
+    }
+    return [
+      `Latest student reply: ${options.studentText ?? ""}`,
+      options.studentConfidence
+        ? `Student confidence: ${options.studentConfidence}`
+        : "Student confidence: not provided",
+    ];
+  })();
+
+  return [
+    `Session: ${options.sessionTitle}`,
+    `Source: ${options.sourceLabel}`,
+    `Turn action: ${options.action}`,
+    ...actionLines,
+    "",
+    "Current tutor panel:",
+    options.snapshot.tutorMarkdown || "(empty)",
+    "",
+    "Problem:",
+    options.snapshot.problem || "(missing)",
+    "",
+    "Official solution baseline:",
+    options.snapshot.officialSolution || "(missing)",
+    "",
+    "Original student transcript:",
+    options.snapshot.transcript || "(missing)",
+    "",
+    "Grading summary:",
+    options.snapshot.grading || "(missing)",
+    "",
+    "Annotation and feedback:",
+    options.snapshot.annotations || "(missing)",
+    "",
+    "Overall feedback:",
+    options.snapshot.overallFeedback || "(missing)",
+    "",
+    "Committed session history:",
+    formatTutorHistoryForPrompt(options.snapshot.historyText),
+  ].join("\n");
+}
+
 function decodeHtmlToText(input: string): string {
   return input
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
@@ -2082,7 +2361,8 @@ class AgentRunStatsTracker {
     costBucket?: "model" | "tool";
   }): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("agent-model-call");
-    const costBucket = details.costBucket ?? this.resolveCostBucket(details.modelId);
+    const costBucket =
+      details.costBucket ?? this.resolveCostBucket(details.modelId);
     this.modelCalls += 1;
     this.modelsUsed.add(details.modelId);
     this.callInfo.set(handle, {
@@ -6811,6 +7091,16 @@ export async function runSparkAgentTask(
   let graderRunId: string | null = null;
   let graderSummaryPath = "grader/output/run-summary.json";
   let graderProblemsDir = "grader/output/problems";
+  let tutorSessionId: string | null = null;
+  let tutorAction: "initial" | "reply" | "hint" | null = null;
+  let tutorStudentText: string | null = null;
+  let tutorConfidence: string | null = null;
+  let tutorHintLevel: string | null = null;
+  let tutorSessionTitle = "Tutor session";
+  let tutorSourceLabel = "graded problem";
+  let tutorDraftRevision = 0;
+  let tutorFocusLabel: string | null = null;
+  let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
 
   let stopRequested = false;
   let stopPollTimer: NodeJS.Timeout | undefined;
@@ -6858,6 +7148,39 @@ export async function runSparkAgentTask(
     if (rawProblemsDir.length > 0) {
       graderProblemsDir = rawProblemsDir;
     }
+    const rawTutorSessionId =
+      typeof agentData.tutorSessionId === "string"
+        ? agentData.tutorSessionId.trim()
+        : "";
+    if (rawTutorSessionId.length > 0) {
+      tutorSessionId = rawTutorSessionId;
+    }
+    const rawTutorAction =
+      typeof agentData.tutorAction === "string"
+        ? agentData.tutorAction.trim()
+        : "";
+    if (
+      rawTutorAction === "initial" ||
+      rawTutorAction === "reply" ||
+      rawTutorAction === "hint"
+    ) {
+      tutorAction = rawTutorAction;
+    }
+    tutorStudentText =
+      typeof agentData.tutorStudentText === "string" &&
+      agentData.tutorStudentText.trim().length > 0
+        ? agentData.tutorStudentText.trim()
+        : null;
+    tutorConfidence =
+      typeof agentData.tutorConfidence === "string" &&
+      agentData.tutorConfidence.trim().length > 0
+        ? agentData.tutorConfidence.trim()
+        : null;
+    tutorHintLevel =
+      typeof agentData.tutorHintLevel === "string" &&
+      agentData.tutorHintLevel.trim().length > 0
+        ? agentData.tutorHintLevel.trim()
+        : null;
     const currentStatus =
       typeof agentData.status === "string" ? agentData.status.trim() : "";
     if (
@@ -6938,6 +7261,20 @@ export async function runSparkAgentTask(
         },
       }).catch(() => undefined);
     }
+    if (tutorSessionId) {
+      await patchFirestoreDocument({
+        serviceAccountJson,
+        documentPath: resolveTutorSessionDocPath(
+          options.userId,
+          tutorSessionId,
+        ),
+        updates: {
+          status: "responding",
+          activeTurnAgentId: options.agentId,
+          updatedAt: new Date(),
+        },
+      }).catch(() => undefined);
+    }
 
     logSync = new AgentLogSync({
       serviceAccountJson,
@@ -6973,6 +7310,48 @@ export async function runSparkAgentTask(
       rootDir: workspaceRoot,
     });
     await workspaceSync.load();
+    if (tutorSessionId) {
+      const tutorSessionSnap = await getFirestoreDocument({
+        serviceAccountJson,
+        documentPath: resolveTutorSessionDocPath(
+          options.userId,
+          tutorSessionId,
+        ),
+      });
+      const tutorSessionData = tutorSessionSnap.data ?? {};
+      if (
+        typeof tutorSessionData.title === "string" &&
+        tutorSessionData.title.trim().length > 0
+      ) {
+        tutorSessionTitle = tutorSessionData.title.trim();
+      }
+      if (
+        typeof tutorSessionData.focusLabel === "string" &&
+        tutorSessionData.focusLabel.trim().length > 0
+      ) {
+        tutorFocusLabel = tutorSessionData.focusLabel.trim();
+      }
+      if (typeof tutorSessionData.latestDraftRevision === "number") {
+        tutorDraftRevision = Math.max(0, tutorSessionData.latestDraftRevision);
+      }
+      const source =
+        tutorSessionData.source &&
+        typeof tutorSessionData.source === "object" &&
+        !Array.isArray(tutorSessionData.source)
+          ? (tutorSessionData.source as Record<string, unknown>)
+          : null;
+      if (
+        source &&
+        source.kind === "grader-problem" &&
+        typeof source.problemIndex === "number" &&
+        typeof source.problemTitle === "string"
+      ) {
+        tutorSourceLabel = `Problem ${source.problemIndex.toString()}: ${source.problemTitle}`;
+      }
+      tutorSnapshot = await readTutorWorkspaceSnapshot({
+        rootDir: workspaceRoot,
+      });
+    }
 
     const pollStopRequested = async (): Promise<void> => {
       if (stopRequested || stopPollInFlight) {
@@ -7201,48 +7580,246 @@ export async function runSparkAgentTask(
       },
     });
 
-    const baseTools: LlmToolSet = {
-      ...stripDeprecatedPdfReadTools(
-        buildAgentTools({
-          workspace: workspaceSync,
-          rootDir: workspaceRoot,
-          userId: options.userId,
-          serviceAccountJson,
-          progress,
-          onToolLlmCost: (toolName, costUsd) => {
-            if (toolName === "generate_text") {
-              generateTextCostUsd += costUsd;
-              return;
-            }
-            if (toolName === "generate_json") {
-              generateJsonCostUsd += costUsd;
-              return;
-            }
-            if (toolName === "extract_text") {
-              extractTextCostUsd += costUsd;
-              return;
-            }
-            pdfToolCostUsd += costUsd;
-          },
-          enforceLessonPipeline: isLessonRun,
-          allowPythonExec: graderRunId === null,
-          debug: llmDebug,
-          extractTextDebugRootDir: resolveSparkAgentToolCallsDir(workspaceRoot),
-        }),
-      ),
-      done: doneTool,
-    };
-    const tools =
-      graderRunId === null
-        ? baseTools
-        : applyPdfTranscriptionSkillTools({
-            tools: baseTools,
+    const wait_for_student_input = tool({
+      description:
+        "Update the tutor screen with the next coaching turn, enable the composer, and pause for the student's next reply. Call done() immediately after this tool.",
+      inputSchema: z
+        .object({
+          tutorMarkdown: z.string().trim().min(1),
+          focusLabel: z.string().trim().min(1).optional(),
+          composerPlaceholder: z.string().trim().min(1).optional(),
+          askForConfidence: z.boolean().optional(),
+          preview: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({
+        tutorMarkdown,
+        focusLabel,
+        composerPlaceholder,
+        askForConfidence,
+        preview,
+      }) => {
+        if (!tutorSessionId || !workspaceRoot) {
+          throw new Error(
+            "wait_for_student_input is only available for tutor sessions.",
+          );
+        }
+        const now = new Date();
+        const resolvedFocusLabel =
+          parseOptionalString(focusLabel) ?? tutorFocusLabel ?? undefined;
+        const resolvedPreview =
+          parseOptionalString(preview) ??
+          firstNonEmptyLine(tutorMarkdown) ??
+          "Tutor turn ready.";
+        const composerState = buildTutorComposerState({
+          placeholder:
+            parseOptionalString(composerPlaceholder) ??
+            "Write your next thought here.",
+          disabled: false,
+          allowConfidence: askForConfidence ?? true,
+        });
+        const screenState = SparkTutorScreenStateSchema.parse({
+          status: "awaiting_student",
+          title: tutorSessionTitle,
+          ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
+          draftRevision: tutorDraftRevision,
+          updatedAt: now.toISOString(),
+        });
+        await Promise.all([
+          writeTutorWorkspaceTextFile({
             rootDir: workspaceRoot,
-            includeReferenceTextTool: false,
-            onFileWritten: (outputPath) => {
-              workspaceSync?.scheduleUpdate(outputPath);
+            workspaceSync,
+            filePath: TUTOR_UI_TOP_PANEL_PATH,
+            content: tutorMarkdown,
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_UI_INLINE_FEEDBACK_PATH,
+            content: "",
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_SESSION_PATH,
+            content: stringifyJsonFile(screenState),
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_COMPOSER_PATH,
+            content: stringifyJsonFile(composerState),
+          }),
+          appendTutorHistoryEntryFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            entry: {
+              role: "assistant",
+              kind: "full_turn",
+              text: tutorMarkdown,
+              createdAt: now.toISOString(),
             },
-          });
+          }),
+          patchFirestoreDocument({
+            serviceAccountJson,
+            documentPath: resolveTutorSessionDocPath(
+              options.userId,
+              tutorSessionId,
+            ),
+            updates: {
+              status: "awaiting_student",
+              preview: resolvedPreview,
+              updatedAt: now,
+              activeTurnAgentId: options.agentId,
+              ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
+            },
+          }),
+        ]);
+        tutorFocusLabel = resolvedFocusLabel ?? tutorFocusLabel;
+        return { status: "awaiting_student", preview: resolvedPreview };
+      },
+    });
+
+    const complete_tutor_session = tool({
+      description:
+        "Write the final tutor screen, disable the composer, and mark the session complete. Call done() immediately after this tool.",
+      inputSchema: z
+        .object({
+          tutorMarkdown: z.string().trim().min(1),
+          focusLabel: z.string().trim().min(1).optional(),
+          preview: z.string().trim().min(1).optional(),
+        })
+        .strict(),
+      execute: async ({ tutorMarkdown, focusLabel, preview }) => {
+        if (!tutorSessionId || !workspaceRoot) {
+          throw new Error(
+            "complete_tutor_session is only available for tutor sessions.",
+          );
+        }
+        const now = new Date();
+        const resolvedFocusLabel =
+          parseOptionalString(focusLabel) ?? tutorFocusLabel ?? undefined;
+        const resolvedPreview =
+          parseOptionalString(preview) ??
+          firstNonEmptyLine(tutorMarkdown) ??
+          "Tutor session complete.";
+        const composerState = buildTutorComposerState({
+          placeholder: "This tutor session is complete.",
+          disabled: true,
+        });
+        const screenState = SparkTutorScreenStateSchema.parse({
+          status: "completed",
+          title: tutorSessionTitle,
+          ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
+          draftRevision: 0,
+          updatedAt: now.toISOString(),
+        });
+        await Promise.all([
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_UI_TOP_PANEL_PATH,
+            content: tutorMarkdown,
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_UI_INLINE_FEEDBACK_PATH,
+            content: "",
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_SESSION_PATH,
+            content: stringifyJsonFile(screenState),
+          }),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_COMPOSER_PATH,
+            content: stringifyJsonFile(composerState),
+          }),
+          appendTutorHistoryEntryFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            entry: {
+              role: "assistant",
+              kind: "full_turn",
+              text: tutorMarkdown,
+              createdAt: now.toISOString(),
+            },
+          }),
+          patchFirestoreDocument({
+            serviceAccountJson,
+            documentPath: resolveTutorSessionDocPath(
+              options.userId,
+              tutorSessionId,
+            ),
+            updates: {
+              status: "completed",
+              preview: resolvedPreview,
+              updatedAt: now,
+              completedAt: now,
+              activeTurnAgentId: options.agentId,
+              ...(resolvedFocusLabel ? { focusLabel: resolvedFocusLabel } : {}),
+            },
+          }),
+        ]);
+        tutorFocusLabel = resolvedFocusLabel ?? tutorFocusLabel;
+        return { status: "completed", preview: resolvedPreview };
+      },
+    });
+
+    const tools: LlmToolSet = tutorSessionId
+      ? {
+          wait_for_student_input,
+          complete_tutor_session,
+          done: doneTool,
+        }
+      : (() => {
+          const baseTools: LlmToolSet = {
+            ...stripDeprecatedPdfReadTools(
+              buildAgentTools({
+                workspace: workspaceSync,
+                rootDir: workspaceRoot,
+                userId: options.userId,
+                serviceAccountJson,
+                progress,
+                onToolLlmCost: (toolName, costUsd) => {
+                  if (toolName === "generate_text") {
+                    generateTextCostUsd += costUsd;
+                    return;
+                  }
+                  if (toolName === "generate_json") {
+                    generateJsonCostUsd += costUsd;
+                    return;
+                  }
+                  if (toolName === "extract_text") {
+                    extractTextCostUsd += costUsd;
+                    return;
+                  }
+                  pdfToolCostUsd += costUsd;
+                },
+                enforceLessonPipeline: isLessonRun,
+                allowPythonExec: graderRunId === null,
+                debug: llmDebug,
+                extractTextDebugRootDir:
+                  resolveSparkAgentToolCallsDir(workspaceRoot),
+              }),
+            ),
+            done: doneTool,
+          };
+          return graderRunId === null
+            ? baseTools
+            : applyPdfTranscriptionSkillTools({
+                tools: baseTools,
+                rootDir: workspaceRoot,
+                includeReferenceTextTool: false,
+                onFileWritten: (outputPath) => {
+                  workspaceSync?.scheduleUpdate(outputPath);
+                },
+              });
+        })();
 
     progress.log(`exposed tools: ${Object.keys(tools).sort().join(", ")}`);
 
@@ -7252,11 +7829,47 @@ export async function runSparkAgentTask(
     }
     startStopPolling();
 
-    const agentSystemPrompt = buildAgentSystemPrompt({
-      includePdfTranscriptionSkill: graderRunId !== null,
-    });
+    const agentSystemPrompt = tutorSessionId
+      ? [
+          "You are Spark's experimental maths tutor screen.",
+          "This is not a running chat transcript. The UI shows one current tutor response at the top and one student composer below it.",
+          "Work from the graded report and the student's level. Focus on the most important next gap rather than rewriting the whole solution.",
+          "Keep the student doing the thinking. Do not give away a full solution unless absolutely necessary.",
+          "When the turn is ready, call either wait_for_student_input or complete_tutor_session.",
+          "After calling one of those tools, immediately call done with a short summary.",
+          "Do not use markdown headings unless they help readability. Prefer concise paragraphs or short bullet points.",
+        ].join("\n")
+      : buildAgentSystemPrompt({
+          includePdfTranscriptionSkill: graderRunId !== null,
+        });
     let initialInput: LlmInputMessage[] | null = null;
-    if (inlineInputAttachments.length > 0) {
+    if (tutorSessionId && tutorAction && tutorSnapshot) {
+      initialInput = [
+        {
+          role: "system",
+          content: [{ type: "text", text: agentSystemPrompt }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: buildTutorTurnPrompt({
+                sessionTitle: tutorSessionTitle,
+                action: tutorAction,
+                sourceLabel: tutorSourceLabel,
+                snapshot: tutorSnapshot,
+                ...(tutorStudentText ? { studentText: tutorStudentText } : {}),
+                ...(tutorConfidence
+                  ? { studentConfidence: tutorConfidence }
+                  : {}),
+                ...(tutorHintLevel ? { hintLevel: tutorHintLevel } : {}),
+              }),
+            },
+          ],
+        },
+      ];
+    } else if (inlineInputAttachments.length > 0) {
       const loaded = await loadAttachmentParts({
         serviceAccountJson,
         bucketName,
@@ -7291,9 +7904,11 @@ export async function runSparkAgentTask(
           input: initialInput ?? prompt,
           ...(initialInput ? {} : { instructions: agentSystemPrompt }),
           tools,
-          modelTools: [{ type: "web-search", mode: "live" }],
+          ...(tutorSessionId
+            ? {}
+            : { modelTools: [{ type: "web-search", mode: "live" }] }),
           subagents:
-            graderRunId === null
+            tutorSessionId || graderRunId === null
               ? undefined
               : { promptPattern: "codex" as const },
           maxSteps,
@@ -7350,7 +7965,12 @@ export async function runSparkAgentTask(
         "warn: model returned a final response without calling done; auto-completing run",
       );
 
-      if (responseText.length > 0 && workspaceRoot) {
+      if (tutorSessionId && responseText.length > 0) {
+        await wait_for_student_input.execute({
+          tutorMarkdown: responseText,
+          ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
+        });
+      } else if (responseText.length > 0 && workspaceRoot) {
         const outputPath = "agent-output.md";
         try {
           await writeFile(path.join(workspaceRoot, outputPath), responseText, {
@@ -7409,6 +8029,48 @@ export async function runSparkAgentTask(
           },
         }).catch(() => undefined);
       }
+      if (tutorSessionId && workspaceRoot) {
+        const now = new Date();
+        await Promise.all([
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_SESSION_PATH,
+            content: stringifyJsonFile(
+              SparkTutorScreenStateSchema.parse({
+                status: "failed",
+                title: tutorSessionTitle,
+                ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
+                draftRevision: tutorDraftRevision,
+                updatedAt: now.toISOString(),
+              }),
+            ),
+          }).catch(() => undefined),
+          writeTutorWorkspaceTextFile({
+            rootDir: workspaceRoot,
+            workspaceSync,
+            filePath: TUTOR_STATE_COMPOSER_PATH,
+            content: stringifyJsonFile(
+              buildTutorComposerState({
+                placeholder: "This tutor turn was stopped. You can try again.",
+                disabled: false,
+              }),
+            ),
+          }).catch(() => undefined),
+          patchFirestoreDocument({
+            serviceAccountJson,
+            documentPath: resolveTutorSessionDocPath(
+              options.userId,
+              tutorSessionId,
+            ),
+            updates: {
+              status: "failed",
+              error: "Stopped by user.",
+              updatedAt: now,
+            },
+          }).catch(() => undefined),
+        ]);
+      }
       return;
     }
 
@@ -7445,6 +8107,48 @@ export async function runSparkAgentTask(
           error: message,
         },
       }).catch(() => undefined);
+    }
+    if (tutorSessionId && workspaceRoot) {
+      const now = new Date();
+      await Promise.all([
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_SESSION_PATH,
+          content: stringifyJsonFile(
+            SparkTutorScreenStateSchema.parse({
+              status: "failed",
+              title: tutorSessionTitle,
+              ...(tutorFocusLabel ? { focusLabel: tutorFocusLabel } : {}),
+              draftRevision: tutorDraftRevision,
+              updatedAt: now.toISOString(),
+            }),
+          ),
+        }).catch(() => undefined),
+        writeTutorWorkspaceTextFile({
+          rootDir: workspaceRoot,
+          workspaceSync,
+          filePath: TUTOR_STATE_COMPOSER_PATH,
+          content: stringifyJsonFile(
+            buildTutorComposerState({
+              placeholder: "That tutor turn failed. You can try sending again.",
+              disabled: false,
+            }),
+          ),
+        }).catch(() => undefined),
+        patchFirestoreDocument({
+          serviceAccountJson,
+          documentPath: resolveTutorSessionDocPath(
+            options.userId,
+            tutorSessionId,
+          ),
+          updates: {
+            status: "failed",
+            error: message,
+            updatedAt: now,
+          },
+        }).catch(() => undefined),
+      ]);
     }
     return;
   } finally {

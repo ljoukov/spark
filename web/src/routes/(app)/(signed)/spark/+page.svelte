@@ -1836,13 +1836,7 @@
 		const normalizedUserId: string = activeUserId;
 		const normalizedConversationId: string = activeConversationId;
 		const db = getFirestore(getFirebaseApp());
-		const ref = doc(
-			db,
-			normalizedUserId,
-			'client',
-			'conversations',
-			normalizedConversationId
-		);
+		const ref = doc(db, normalizedUserId, 'client', 'conversations', normalizedConversationId);
 		let stop: Unsubscribe | null = null;
 		stop = onSnapshot(
 			ref,
@@ -1868,12 +1862,15 @@
 					});
 				}
 				if (rawMessageCount > 0 && normalized.conversation.messages.length === 0) {
-					console.warn('Spark AI Agent conversation payload dropped all messages after normalization', {
-						conversationId: normalizedConversationId,
-						fromCache: snap.metadata.fromCache,
-						hasPendingWrites: snap.metadata.hasPendingWrites,
-						rawMessageCount
-					});
+					console.warn(
+						'Spark AI Agent conversation payload dropped all messages after normalization',
+						{
+							conversationId: normalizedConversationId,
+							fromCache: snap.metadata.fromCache,
+							hasPendingWrites: snap.metadata.hasPendingWrites,
+							rawMessageCount
+						}
+					);
 					rejectedConversationId = normalizedConversationId;
 					resetConversation(
 						'Spark could not load that conversation, so you were redirected to a new chat.'
@@ -2033,6 +2030,7 @@
 			</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
 			<Button variant="ghost" size="sm" href="/spark/grader">Grader</Button>
+			<Button variant="ghost" size="sm" href="/spark/sessions">Tutor sessions</Button>
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 
@@ -2171,9 +2169,9 @@
 				</div>
 			{/if}
 
-				<div class="agent-composer" bind:this={composerRef}>
-					<div class="composer-stack">
-						<div class="composer-card">
+			<div class="agent-composer" bind:this={composerRef}>
+				<div class="composer-stack">
+					<div class="composer-card">
 						<input
 							class="sr-only"
 							type="file"
@@ -2275,8 +2273,8 @@
 								{attachmentError}
 							</div>
 						{/if}
-							<div class={`composer-field ${isComposerExpanded ? 'is-expanded' : ''}`}>
-								<DropdownMenu.Root>
+						<div class={`composer-field ${isComposerExpanded ? 'is-expanded' : ''}`}>
+							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
 									class="composer-btn composer-attach composer-leading"
 									type="button"
@@ -2371,48 +2369,53 @@
 						</div>
 					</div>
 				</div>
-					{#if isFileDragActive}
+				{#if isFileDragActive}
+					<div
+						class="screen-drop-overlay"
+						aria-hidden="true"
+						in:fade={{ duration: 140 }}
+						out:fade={{ duration: 120 }}
+					>
 						<div
-							class="screen-drop-overlay"
-							aria-hidden="true"
-							in:fade={{ duration: 140 }}
-							out:fade={{ duration: 120 }}
+							class="screen-drop-panel"
+							in:fly={{ y: 32, duration: 220, easing: cubicInOut }}
+							out:fly={{ y: 32, duration: 170, easing: cubicInOut }}
 						>
-							<div
-								class="screen-drop-panel"
-								in:fly={{ y: 32, duration: 220, easing: cubicInOut }}
-								out:fly={{ y: 32, duration: 170, easing: cubicInOut }}
-							>
-								<div class="screen-drop-panel__cards">
-									<div class="screen-drop-card screen-drop-card--code">
-										<Code2 class="screen-drop-card__icon" />
-									</div>
-									<div class="screen-drop-card screen-drop-card--image">
-										<ImageIcon class="screen-drop-card__icon" />
-									</div>
-									<div class="screen-drop-card screen-drop-card--doc">
-										<FileText class="screen-drop-card__icon" />
-									</div>
+							<div class="screen-drop-panel__cards">
+								<div class="screen-drop-card screen-drop-card--code">
+									<Code2 class="screen-drop-card__icon" />
 								</div>
-								<div class="screen-drop-panel__arrow-wrap" aria-hidden="true">
-									<svg class="screen-drop-panel__arrow" viewBox="0 0 28 44" fill="none">
-										<path d="M14 4V30" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" />
-										<path
-											d="M6 23L14 32L22 23"
-											stroke="currentColor"
-											stroke-width="2.8"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										/>
-									</svg>
+								<div class="screen-drop-card screen-drop-card--image">
+									<ImageIcon class="screen-drop-card__icon" />
 								</div>
-								<p class="screen-drop-panel__title">Add anything</p>
-								<p class="screen-drop-panel__subtitle">
-									Drop documents and images here to add to Spark
-								</p>
+								<div class="screen-drop-card screen-drop-card--doc">
+									<FileText class="screen-drop-card__icon" />
+								</div>
 							</div>
+							<div class="screen-drop-panel__arrow-wrap" aria-hidden="true">
+								<svg class="screen-drop-panel__arrow" viewBox="0 0 28 44" fill="none">
+									<path
+										d="M14 4V30"
+										stroke="currentColor"
+										stroke-width="2.8"
+										stroke-linecap="round"
+									/>
+									<path
+										d="M6 23L14 32L22 23"
+										stroke="currentColor"
+										stroke-width="2.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</div>
+							<p class="screen-drop-panel__title">Add anything</p>
+							<p class="screen-drop-panel__subtitle">
+								Drop documents and images here to add to Spark
+							</p>
 						</div>
-					{/if}
+					</div>
+				{/if}
 			</div>
 			<div
 				class={`attachment-tooltip ${tooltipState.visible ? 'is-visible' : ''}`}
@@ -2465,13 +2468,13 @@
 		--code-text: var(--text-primary, var(--foreground));
 		--code-muted: var(--text-secondary, rgba(30, 41, 59, 0.7));
 		--code-keyword: #2563eb;
-			--code-string: #16a34a;
-			--code-number: #ea580c;
-			--code-function: #0f766e;
-			--code-type: #b45309;
-			--drop-panel-bg-solid: rgb(252 253 255 / 0.98);
-			--drop-panel-border: rgba(148, 163, 184, 0.3);
-		}
+		--code-string: #16a34a;
+		--code-number: #ea580c;
+		--code-function: #0f766e;
+		--code-type: #b45309;
+		--drop-panel-bg-solid: rgb(252 253 255 / 0.98);
+		--drop-panel-border: rgba(148, 163, 184, 0.3);
+	}
 
 	.agent-shell.has-thread {
 		padding-top: clamp(1rem, 2.5vw, 1.6rem);
@@ -2493,13 +2496,13 @@
 		--code-text: rgba(226, 232, 240, 0.98);
 		--code-muted: rgba(148, 163, 184, 0.8);
 		--code-keyword: #60a5fa;
-			--code-string: #4ade80;
-			--code-number: #fb923c;
-			--code-function: #2dd4bf;
-			--code-type: #fbbf24;
-			--drop-panel-bg-solid: rgb(9 16 33 / 0.97);
-			--drop-panel-border: rgba(148, 163, 184, 0.34);
-		}
+		--code-string: #4ade80;
+		--code-number: #fb923c;
+		--code-function: #2dd4bf;
+		--code-type: #fbbf24;
+		--drop-panel-bg-solid: rgb(9 16 33 / 0.97);
+		--drop-panel-border: rgba(148, 163, 184, 0.34);
+	}
 
 	.agent-layout {
 		display: flex;
@@ -3217,11 +3220,11 @@
 		}
 	}
 
-		.composer-card {
-			padding: 0.625rem;
-			border-radius: 1.75rem;
-			border: 1px solid var(--chat-border);
-			background: var(--chat-surface);
+	.composer-card {
+		padding: 0.625rem;
+		border-radius: 1.75rem;
+		border: 1px solid var(--chat-border);
+		background: var(--chat-surface);
 		backdrop-filter: blur(16px);
 		box-shadow:
 			0 18px 45px -32px rgba(15, 23, 42, 0.35),
@@ -3230,8 +3233,8 @@
 		flex-direction: column;
 		gap: 0.6rem;
 		overflow: clip;
-			background-clip: padding-box;
-		}
+		background-clip: padding-box;
+	}
 
 	.composer-card:focus-within {
 		border-color: color-mix(in srgb, var(--text-secondary, rgba(30, 41, 59, 0.6)) 40%, transparent);
@@ -3241,143 +3244,143 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.55);
 	}
 
-		.composer-field {
-			display: grid;
-			grid-template-columns: auto minmax(0, 1fr) auto;
-			grid-template-areas: 'leading input trailing';
-			align-items: center;
-			gap: 0.6rem;
-		}
+	.composer-field {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-areas: 'leading input trailing';
+		align-items: center;
+		gap: 0.6rem;
+	}
 
-		.screen-drop-overlay {
-			position: fixed;
-			inset: 0;
-			z-index: 140;
-			display: grid;
-			place-items: center;
-			padding: clamp(1rem, 4vw, 3rem);
-			background:
-				radial-gradient(
-					closest-side at 12% 20%,
-					color-mix(in srgb, var(--blob-gold) 60%, transparent) 0%,
-					transparent 72%
-				),
-				radial-gradient(
-					closest-side at 78% 18%,
-					color-mix(in srgb, var(--blob-pink) 55%, transparent) 0%,
-					transparent 74%
-				),
-				radial-gradient(
-					closest-side at 30% 74%,
-					color-mix(in srgb, var(--blob-blue) 58%, transparent) 0%,
-					transparent 76%
-				),
-				radial-gradient(
-					closest-side at 82% 70%,
-					color-mix(in srgb, var(--blob-yellow-soft) 54%, transparent) 0%,
-					transparent 80%
-				),
-				color-mix(in srgb, var(--app-surface) 22%, transparent);
-			backdrop-filter: blur(4px);
-			pointer-events: none;
-		}
+	.screen-drop-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 140;
+		display: grid;
+		place-items: center;
+		padding: clamp(1rem, 4vw, 3rem);
+		background:
+			radial-gradient(
+				closest-side at 12% 20%,
+				color-mix(in srgb, var(--blob-gold) 60%, transparent) 0%,
+				transparent 72%
+			),
+			radial-gradient(
+				closest-side at 78% 18%,
+				color-mix(in srgb, var(--blob-pink) 55%, transparent) 0%,
+				transparent 74%
+			),
+			radial-gradient(
+				closest-side at 30% 74%,
+				color-mix(in srgb, var(--blob-blue) 58%, transparent) 0%,
+				transparent 76%
+			),
+			radial-gradient(
+				closest-side at 82% 70%,
+				color-mix(in srgb, var(--blob-yellow-soft) 54%, transparent) 0%,
+				transparent 80%
+			),
+			color-mix(in srgb, var(--app-surface) 22%, transparent);
+		backdrop-filter: blur(4px);
+		pointer-events: none;
+	}
 
-		.screen-drop-panel {
-			width: min(92vw, 48.75rem);
-			padding: clamp(1.6rem, 3vw, 2.4rem) clamp(1.2rem, 3vw, 2rem);
-			border-radius: 1.5rem;
-			border: 1px dashed var(--drop-panel-border);
-			background: var(--drop-panel-bg-solid);
-			box-shadow: var(--app-content-shadow-secondary);
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			gap: 0.8rem;
-			text-align: center;
-		}
+	.screen-drop-panel {
+		width: min(92vw, 48.75rem);
+		padding: clamp(1.6rem, 3vw, 2.4rem) clamp(1.2rem, 3vw, 2rem);
+		border-radius: 1.5rem;
+		border: 1px dashed var(--drop-panel-border);
+		background: var(--drop-panel-bg-solid);
+		box-shadow: var(--app-content-shadow-secondary);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.8rem;
+		text-align: center;
+	}
 
-		.screen-drop-panel__cards {
-			display: flex;
-			align-items: flex-end;
-			justify-content: center;
-			gap: clamp(0.55rem, 2vw, 1.1rem);
-			margin-top: 0.55rem;
-			margin-bottom: 0.35rem;
-		}
+	.screen-drop-panel__cards {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		gap: clamp(0.55rem, 2vw, 1.1rem);
+		margin-top: 0.55rem;
+		margin-bottom: 0.35rem;
+	}
 
-		.screen-drop-card {
-			width: clamp(3.4rem, 6vw, 4.2rem);
-			aspect-ratio: 4 / 5;
-			border-radius: 0.9rem;
-			display: grid;
-			place-items: center;
-			color: #fff;
-			box-shadow: 0 16px 28px -18px rgba(15, 23, 42, 0.48);
-		}
+	.screen-drop-card {
+		width: clamp(3.4rem, 6vw, 4.2rem);
+		aspect-ratio: 4 / 5;
+		border-radius: 0.9rem;
+		display: grid;
+		place-items: center;
+		color: #fff;
+		box-shadow: 0 16px 28px -18px rgba(15, 23, 42, 0.48);
+	}
 
-		.screen-drop-card--code {
-			transform: rotate(-11deg) translateY(0.35rem);
-			background: linear-gradient(150deg, #f43f5e 0%, #e11d48 100%);
-		}
+	.screen-drop-card--code {
+		transform: rotate(-11deg) translateY(0.35rem);
+		background: linear-gradient(150deg, #f43f5e 0%, #e11d48 100%);
+	}
 
-		.screen-drop-card--image {
-			transform: translateY(-0.28rem);
-			background: linear-gradient(150deg, #3b82f6 0%, #4f46e5 100%);
-		}
+	.screen-drop-card--image {
+		transform: translateY(-0.28rem);
+		background: linear-gradient(150deg, #3b82f6 0%, #4f46e5 100%);
+	}
 
-		.screen-drop-card--doc {
-			transform: rotate(11deg) translateY(0.35rem);
-			background: linear-gradient(150deg, #f59e0b 0%, #d97706 100%);
-		}
+	.screen-drop-card--doc {
+		transform: rotate(11deg) translateY(0.35rem);
+		background: linear-gradient(150deg, #f59e0b 0%, #d97706 100%);
+	}
 
-		.screen-drop-card__icon {
-			width: clamp(2.25rem, 4.2vw, 2.75rem);
-			height: clamp(2.25rem, 4.2vw, 2.75rem);
-		}
+	.screen-drop-card__icon {
+		width: clamp(2.25rem, 4.2vw, 2.75rem);
+		height: clamp(2.25rem, 4.2vw, 2.75rem);
+	}
 
-		.screen-drop-panel__arrow-wrap {
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			color: var(--text-secondary, rgba(100, 116, 139, 0.85));
-			opacity: 0.95;
-			animation: drop-arrow-bob 1.9s ease-in-out infinite;
-		}
+	.screen-drop-panel__arrow-wrap {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-secondary, rgba(100, 116, 139, 0.85));
+		opacity: 0.95;
+		animation: drop-arrow-bob 1.9s ease-in-out infinite;
+	}
 
-		.screen-drop-panel__arrow {
-			width: clamp(2.6rem, 5.2vw, 3.4rem);
-			height: clamp(2.8rem, 5.8vw, 3.7rem);
-			color: currentColor;
-		}
+	.screen-drop-panel__arrow {
+		width: clamp(2.6rem, 5.2vw, 3.4rem);
+		height: clamp(2.8rem, 5.8vw, 3.7rem);
+		color: currentColor;
+	}
 
-		.screen-drop-panel__title {
-			margin: 0;
-			font-size: 1.35rem;
-			font-weight: 700;
-			line-height: 1.25;
-			color: var(--text-primary, var(--foreground));
-		}
+	.screen-drop-panel__title {
+		margin: 0;
+		font-size: 1.35rem;
+		font-weight: 700;
+		line-height: 1.25;
+		color: var(--text-primary, var(--foreground));
+	}
 
-		.screen-drop-panel__subtitle {
-			margin: 0;
-			font-size: 1rem;
-			font-weight: 400;
-			color: var(--text-secondary, rgba(30, 41, 59, 0.7));
-		}
+	.screen-drop-panel__subtitle {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 400;
+		color: var(--text-secondary, rgba(30, 41, 59, 0.7));
+	}
 
-		@keyframes drop-arrow-bob {
-			0%,
-			100% {
-				transform: translateY(0);
-				opacity: 0.8;
-			}
-			50% {
-				transform: translateY(0.36rem);
-				opacity: 1;
-			}
+	@keyframes drop-arrow-bob {
+		0%,
+		100% {
+			transform: translateY(0);
+			opacity: 0.8;
 		}
+		50% {
+			transform: translateY(0.36rem);
+			opacity: 1;
+		}
+	}
 
 	.composer-input {
 		grid-area: input;

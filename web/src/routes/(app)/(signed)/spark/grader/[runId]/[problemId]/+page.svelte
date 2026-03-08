@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { renderMarkdown } from '$lib/markdown';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+	let tutorSessionBusy = $state(false);
+	let tutorSessionError = $state<string | null>(null);
 
 	const sectionItems = $derived([
 		{
@@ -41,6 +44,42 @@
 			value: data.sections.overall
 		}
 	]);
+
+	async function startTutorSession(): Promise<void> {
+		if (tutorSessionBusy) {
+			return;
+		}
+		tutorSessionBusy = true;
+		tutorSessionError = null;
+		try {
+			const response = await fetch('/api/spark/sessions', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					source: {
+						kind: 'grader-problem',
+						runId: data.run.id,
+						problemId: data.problem.id
+					}
+				})
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				href?: string;
+				error?: string;
+			} | null;
+			if (!response.ok || !payload?.href) {
+				tutorSessionError = payload?.error ?? 'Unable to start the tutor session.';
+				return;
+			}
+			await goto(payload.href);
+		} catch {
+			tutorSessionError = 'Unable to start the tutor session.';
+		} finally {
+			tutorSessionBusy = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -64,8 +103,19 @@
 		<div class="links">
 			<a href={`/spark/grader/${data.run.id}`}>Back to run</a>
 			<a href="/spark/grader">All runs</a>
+			{#if data.tutorSession}
+				<a href={`/spark/sessions/${data.tutorSession.id}`}>Open tutor session</a>
+			{:else}
+				<button type="button" onclick={startTutorSession} disabled={tutorSessionBusy}>
+					{tutorSessionBusy ? 'Starting tutor…' : 'Start tutor session'}
+				</button>
+			{/if}
 		</div>
 	</header>
+
+	{#if tutorSessionError}
+		<p class="action-error" role="alert">{tutorSessionError}</p>
+	{/if}
 
 	{#each sectionItems as section (section.key)}
 		<section class="problem-section">
@@ -136,6 +186,29 @@
 		color: inherit;
 		font-weight: 600;
 		background: color-mix(in srgb, var(--card) 95%, transparent);
+	}
+
+	.links button {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.42rem 0.7rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+		color: inherit;
+		font-weight: 600;
+		background: color-mix(in srgb, var(--card) 95%, transparent);
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.links button:disabled {
+		opacity: 0.6;
+		cursor: wait;
+	}
+
+	.action-error {
+		margin: 0;
+		color: #b91c1c;
 	}
 
 	.problem-section {
