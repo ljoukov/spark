@@ -77,6 +77,30 @@ export const SparkAgentToolResultSchema = z.object({
 
 export type SparkAgentToolResult = z.infer<typeof SparkAgentToolResultSchema>;
 
+const SparkAgentLessonRunCardSchema = z.object({
+  kind: z.literal("lesson"),
+  sessionId: trimmedString,
+  href: trimmedString,
+  listHref: trimmedString,
+  title: trimmedString.optional(),
+});
+
+const SparkAgentGraderRunCardSchema = z.object({
+  kind: z.literal("grader"),
+  runId: trimmedString,
+  href: trimmedString,
+  listHref: trimmedString,
+  title: trimmedString.optional(),
+  sourceAttachmentCount: z.number().int().min(0).optional(),
+});
+
+export const SparkAgentRunCardSchema = z.discriminatedUnion("kind", [
+  SparkAgentLessonRunCardSchema,
+  SparkAgentGraderRunCardSchema,
+]);
+
+export type SparkAgentRunCard = z.infer<typeof SparkAgentRunCardSchema>;
+
 const SparkAgentTextPartSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
@@ -102,12 +126,18 @@ const SparkAgentToolResultPartSchema = z.object({
   toolResult: SparkAgentToolResultSchema,
 });
 
+const SparkAgentRunCardPartSchema = z.object({
+  type: z.literal("agent_run"),
+  runCard: SparkAgentRunCardSchema,
+});
+
 export const SparkAgentContentPartSchema = z.union([
   SparkAgentTextPartSchema,
   SparkAgentImagePartSchema,
   SparkAgentFilePartSchema,
   SparkAgentToolCallPartSchema,
   SparkAgentToolResultPartSchema,
+  SparkAgentRunCardPartSchema,
 ]);
 
 export type SparkAgentContentPart = z.infer<typeof SparkAgentContentPartSchema>;

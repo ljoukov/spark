@@ -258,6 +258,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - Conversations live under `/{userId}/client/conversations/{conversationId}` (client-safe read path; server writes only).
 - Each conversation document stores an append-only `messages` array (OpenAI Response-style with `content[]` parts).
+- Assistant messages may include `agent_run` content parts for lesson/grader launches. These parts drive live chat cards that subscribe to the corresponding Firestore session/run document instead of exposing raw tool payloads in prose.
 - Conversation documents include `attachments[]` entries with `{ id, storagePath, contentType, filename?, sizeBytes, status, createdAt, updatedAt, messageId? }`, where status ∈ `uploading | attaching | attached | failed`.
 - Streaming writes to Firestore are throttled to at most one update every 500 ms; the SSE stream is used for immediate UI updates.
 
@@ -287,11 +288,13 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
     - Materials/links to incorporate
     - Duration is not a primary input; the UI/agent can infer an approximate duration from the plan shape + question counts.
   - Server creates a new session stub under `spark/{userId}/sessions/{sessionId}` with `status = generating`.
+  - As soon as `create_lesson` succeeds, the `/spark` chat appends a live lesson card to the assistant message. The card links to `/spark/lesson/{sessionId}` and subscribes to the session/state docs so it can show `creating -> ready/in_progress/completed/error` without printing internal IDs.
   - Server writes `brief.md`, `request.json`, plus `lesson/task.md` + `lesson/schema/*` into the workspace and schedules a `runAgent` task.
   - The agent follows `lesson/task.md`, authors Firestore-ready JSON under `lesson/output/` (`session.json`, `quiz/*.json`, `code/*.json`, optional `media/*.json`), then calls `publish_lesson` with a `sessionPath`.
   - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
 - Olympiad grading (from `/spark` chat) is implemented as an Agent run:
   - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, writes `grader/task.md` plus upload manifests, and schedules `runAgent`.
+  - As soon as `create_grader` succeeds, the `/spark` chat appends a live grader card to the assistant message. The card links to `/spark/grader/{runId}` and subscribes to the grader run doc so it can show `queued -> grading -> ready/failed/stopped` while the run executes.
   - `create_grader` includes `referenceSourcePolicy`:
     - `uploaded-only`: grading must rely on uploaded/pasted materials; no online search for missing references.
     - `allow-online-search-when-problems-missing`: online search is allowed only when problem statements are missing or unclear.
@@ -389,8 +392,8 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Shared design system built with TailwindCSS (compiled for the Edge Runtime) or UnoCSS.
 - Edge-friendly server load functions fetch Firestore user metadata for portal pages.
 - Signed-in experiences live under `/(app)/(signed)` with a shared shell (user avatar menu showing display name + email/guest label and a copy button that copies `Name`/`Email`/`UserID` lines to the clipboard (omitting missing fields), theme picker, Firebase auth sync) reused by `/spark` and `/spark/lesson`.
-- `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`), Grader runs (`/spark/grader`), and Agents (`/spark/agents`).
-- `/spark/grader` lists olympiad grading runs launched from chat. Each run card uses a concise user-facing title, a compact stats line (marks / problems / percent), and rendered Markdown summary text instead of raw process logs or machine identifiers. Opening a run (`/spark/grader/{runId}`) shows the same presentation summary plus totals, source links, and per-problem grading rows; opening a problem (`/spark/grader/{runId}/{problemId}`) shows the generated markdown sections for problem statement, official problem statement, official solution, a numbered student transcript, grading notes, line-by-line annotations keyed to that transcript, and overall feedback.
+- `/spark` is the signed-in home for the Spark AI Agent chat and includes quick links to Lessons (`/spark/lessons`), Grader runs (`/spark/grader`), and Agents (`/spark/agents`). When chat launches lesson creation or olympiad grading, the assistant message renders a live status card in-thread instead of dumping raw tool-call machine data; the card links directly to the lesson/run plus the corresponding list page and updates from Firestore while the background run is still executing.
+- `/spark/grader` lists olympiad grading runs launched from chat. Each run card uses a concise user-facing title, a compact stats line (marks / problems / percent), and rendered Markdown summary text instead of raw process logs or machine identifiers. Opening a run (`/spark/grader/{runId}`) shows the same presentation summary plus totals, paper metadata/source links, and per-problem grading rows; opening a problem (`/spark/grader/{runId}/{problemId}`) shows the generated markdown sections for problem statement, official problem statement, official solution, a numbered student transcript, grading notes, line-by-line annotations keyed to that transcript, and overall feedback.
 - `/spark/agents` lists running/completed agent runs, lets users create a new agent prompt, and shows the selected run details:
   - Agent ID, workspace ID, timestamps, status timeline, and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
   - Failed runs show a Retry button in the run header; retrying creates a new agent run with the same prompt and retry-safe metadata, copies the prior workspace files into a new workspace, and starts a fresh task.

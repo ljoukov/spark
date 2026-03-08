@@ -23,12 +23,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Your existing spark paths
-    match /spark/{userId}/{docId=*} {
-      allow read: if isOwner(userId);
-    }
-
-    match /spark/{userId}/docs/{docId=**} {
+    // Spark user-scoped docs and subcollections (sessions, graderRuns, docs, etc.)
+    match /spark/{userId}/{docId=**} {
       allow read: if isOwner(userId);
     }
 

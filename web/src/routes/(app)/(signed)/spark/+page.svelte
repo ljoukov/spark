@@ -16,6 +16,7 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import AgentRunCard from '$lib/components/spark/chat/AgentRunCard.svelte';
 	import { ChatInput } from '$lib/components/chat/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -24,6 +25,7 @@
 	import {
 		SparkAgentAttachmentSchema,
 		SparkAgentConversationSchema,
+		type SparkAgentRunCard,
 		type SparkAgentFile,
 		type SparkAgentAttachment,
 		type SparkAgentAttachmentStatus,
@@ -561,6 +563,16 @@
 			}
 			if (part.type === 'file') {
 				result.push({ kind: 'file', file: part.file });
+			}
+		}
+		return result;
+	}
+
+	function resolveMessageRunCards(message: SparkAgentMessage): SparkAgentRunCard[] {
+		const result: SparkAgentRunCard[] = [];
+		for (const part of message.content) {
+			if (part.type === 'agent_run') {
+				result.push(part.runCard);
 			}
 		}
 		return result;
@@ -1984,6 +1996,7 @@
 									? chatStreamAssistantMessageId === message.id
 									: message.id === messages[messages.length - 1]?.id)}
 							{@const messageAttachments = resolveMessageAttachments(message)}
+							{@const messageRunCards = resolveMessageRunCards(message)}
 							<div
 								class={`agent-message ${message.role === 'user' ? 'is-user' : 'is-agent'}`}
 								data-message-id={message.id}
@@ -2032,6 +2045,15 @@
 								{/if}
 								{#if message.role === 'assistant'}
 									<div class="message-bubble">
+										{#if messageRunCards.length > 0}
+											<div class="message-run-cards">
+												{#each messageRunCards as runCard}
+													{#if userId}
+														<AgentRunCard {userId} {runCard} />
+													{/if}
+												{/each}
+											</div>
+										{/if}
 										{#if thinkingText}
 											<div class="message-thinking">
 												<p class="message-thinking__label">Thinking...</p>
@@ -2042,7 +2064,7 @@
 										{/if}
 										{#if messageHtml}
 											<div class="message-markdown markdown">{@html messageHtml}</div>
-										{:else if !thinkingText}
+										{:else if !thinkingText && messageRunCards.length === 0}
 											{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
 												<p class="message-placeholder message-status">
 													<span class="message-status__spinner" aria-hidden="true"></span>
@@ -2526,6 +2548,12 @@
 		line-height: 1.7;
 		font-size: 1rem;
 		color: var(--text-primary, var(--foreground));
+	}
+
+	.message-run-cards {
+		display: grid;
+		gap: 0.75rem;
+		margin-bottom: 0.8rem;
 	}
 
 	.message-markdown {

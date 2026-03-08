@@ -11,6 +11,12 @@
 			cta: 'Open'
 		},
 		{
+			title: 'Chat UI',
+			description: 'Preview grader cards, thinking blocks, and markdown-rich assistant replies.',
+			href: '/admin/ui/chat',
+			cta: 'Open'
+		},
+		{
 			title: 'Spark chat stream',
 			description: 'Preview the /spark chat loading + thinking states.',
 			href: '/admin/ui/spark-stream',

@@ -1,6 +1,6 @@
 # Grader task
 
-You are grading olympiad-paper solutions.
+You are grading student uploaded work and related reference documents.
 
 ## Inputs
 

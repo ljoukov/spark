@@ -238,6 +238,19 @@
 									</p>
 									<pre class="mt-2 overflow-x-auto rounded-md bg-muted/40 p-3 text-xs text-foreground">{prettyJson(part.toolResult.outputJson)}</pre>
 								</div>
+							{:else if part.type === 'agent_run'}
+								<div class="rounded-lg border border-border/70 bg-muted/10 p-3">
+									<p class="text-xs font-semibold text-foreground">
+										Run card: {part.runCard.kind}
+									</p>
+									<p class="mt-1 text-sm text-foreground">
+										{part.runCard.title ?? part.runCard.href}
+									</p>
+									<div class="mt-2 flex flex-wrap gap-3 text-xs">
+										<a href={part.runCard.href} class="text-primary underline">Open</a>
+										<a href={part.runCard.listHref} class="text-primary underline">List</a>
+									</div>
+								</div>
 							{/if}
 						{/each}
 					</div>
@@ -246,4 +259,3 @@
 		</Card.Content>
 	</Card.Root>
 {/if}
-

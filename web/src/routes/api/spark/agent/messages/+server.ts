@@ -15,6 +15,7 @@ import {
 	SparkAgentAttachmentSchema,
 	type SparkAgentAttachment,
 	type SparkAgentContentPart,
+	type SparkAgentRunCard,
 	type SparkAgentMessage
 } from '@spark/schemas';
 import {
@@ -515,21 +516,81 @@ function normalizeMessage(raw: unknown, fallback: Date): SparkAgentMessage | nul
 	};
 }
 
-function updateAssistantMessage(
+function findMessageIndex(conversation: ConversationDoc, messageId: string): number {
+	for (let i = conversation.messages.length - 1; i >= 0; i -= 1) {
+		const message = conversation.messages[i];
+		if (message && message.id === messageId) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+function resolveRunCardKey(card: SparkAgentRunCard): string {
+	if (card.kind === 'lesson') {
+		return `lesson:${card.sessionId}`;
+	}
+	return `grader:${card.runId}`;
+}
+
+function updateAssistantMessageText(
 	conversation: ConversationDoc,
 	messageId: string,
 	text: string
 ): void {
-	for (let i = conversation.messages.length - 1; i >= 0; i -= 1) {
-		const message = conversation.messages[i];
-		if (message && message.id === messageId) {
-			conversation.messages[i] = {
-				...message,
-				content: [{ type: 'text', text }]
-			};
-			return;
-		}
+	const messageIndex = findMessageIndex(conversation, messageId);
+	if (messageIndex < 0) {
+		return;
 	}
+	const message = conversation.messages[messageIndex];
+	if (!message) {
+		return;
+	}
+	const nonTextParts = message.content.filter((part) => part.type !== 'text');
+	const nextContent =
+		text.trim().length > 0
+			? [...nonTextParts, { type: 'text', text } satisfies SparkAgentContentPart]
+			: nonTextParts;
+	conversation.messages[messageIndex] = {
+		...message,
+		content: nextContent
+	};
+}
+
+function upsertAssistantRunCard(
+	conversation: ConversationDoc,
+	messageId: string,
+	runCard: SparkAgentRunCard
+): void {
+	const messageIndex = findMessageIndex(conversation, messageId);
+	if (messageIndex < 0) {
+		return;
+	}
+	const message = conversation.messages[messageIndex];
+	if (!message) {
+		return;
+	}
+	const nextPart = { type: 'agent_run', runCard } satisfies SparkAgentContentPart;
+	const targetKey = resolveRunCardKey(runCard);
+	const withoutMatching = message.content.filter((part) => {
+		if (part.type !== 'agent_run') {
+			return true;
+		}
+		return resolveRunCardKey(part.runCard) !== targetKey;
+	});
+	const textIndex = withoutMatching.findIndex((part) => part.type === 'text');
+	const nextContent =
+		textIndex < 0
+			? [...withoutMatching, nextPart]
+			: [
+					...withoutMatching.slice(0, textIndex),
+					nextPart,
+					...withoutMatching.slice(textIndex)
+				];
+	conversation.messages[messageIndex] = {
+		...message,
+		content: nextContent
+	};
 }
 
 function extractTextParts(parts: SparkAgentContentPart[]): string {
@@ -546,6 +607,8 @@ function extractTextParts(parts: SparkAgentContentPart[]): string {
 			case 'tool_call':
 				break;
 			case 'tool_result':
+				break;
+			case 'agent_run':
 				break;
 		}
 	}
@@ -636,6 +699,7 @@ function buildLlmInputMessages(
 
 type StreamHandlers = {
 	onDelta?: (delta: SparkChatDelta) => void;
+	onRunCard?: (runCard: SparkAgentRunCard) => Promise<void> | void;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -852,7 +916,7 @@ function buildGraderBrief(options: {
 	lines.push(
 		'',
 		'## Objectives',
-		'- Identify olympiad + year/paper from uploaded learner materials.',
+		'- Identify the paper/exam context, year, and title from uploaded learner materials when possible.',
 		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
 		'- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.',
 		'- For problem statements and official solutions, keep source wording as verbatim as possible; do not rewrite them into cleaned canonical statements.',
@@ -895,9 +959,12 @@ function renderGraderTask(): string {
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
 
-function buildGraderAgentPrompt(options: { summaryPath: string; problemsDir: string }): string {
+function buildGraderAgentPrompt(options: {
+	summaryPath: string;
+	problemsDir: string;
+}): string {
 	return [
-		'Grade an olympiad student submission from uploaded work and produce structured outputs.',
+		'Grade and process student uploaded work and related documents such as problem statements and official solutions.',
 		'',
 		'Read and follow these files first:',
 		'- brief.md',
@@ -1197,6 +1264,7 @@ function buildSparkChatTools(options: {
 	attachmentsForMessage: z.infer<typeof attachmentSchema>[];
 	requiresAttachmentContext?: boolean;
 	attachmentLabels?: string[];
+	onRunCard?: (runCard: SparkAgentRunCard) => Promise<void> | void;
 }): LlmToolSet {
 	const {
 		userId,
@@ -1205,7 +1273,8 @@ function buildSparkChatTools(options: {
 		conversationId,
 		attachmentsForMessage,
 		requiresAttachmentContext = false,
-		attachmentLabels = []
+		attachmentLabels = [],
+		onRunCard
 	} = options;
 	return {
 		list_lessons: tool({
@@ -1589,13 +1658,30 @@ function buildSparkChatTools(options: {
 						}
 					);
 
+					const runCard: SparkAgentRunCard = {
+						kind: 'lesson',
+						sessionId,
+						title: (input.title ?? input.topic).trim(),
+						href: `/spark/lesson/${sessionId}`,
+						listHref: '/spark/lessons'
+					};
+					if (onRunCard) {
+						try {
+							await onRunCard(runCard);
+						} catch (error) {
+							console.warn('Unable to append lesson run card to chat conversation', {
+								userId,
+								sessionId,
+								error: serializeErrorForLog(error)
+							});
+						}
+					}
+
 					return {
 						status: 'started',
-						sessionId,
-						agentId,
-						workspaceId,
-						href: `/spark/lesson/${sessionId}`,
-						lessonsHref: '/spark/lessons'
+						title: runCard.title ?? null,
+						href: runCard.href,
+						lessonsHref: runCard.listHref
 					};
 				} catch (error) {
 					console.error('Spark lesson creation tool failed', {
@@ -1704,9 +1790,7 @@ function buildSparkChatTools(options: {
 							path: 'request.json',
 							content: JSON.stringify(
 								{
-									runId,
 									createdAt: now.toISOString(),
-									conversationId: conversationId ?? null,
 									sourceText: sourceText ?? null,
 									input,
 									attachments: runAttachments
@@ -1780,13 +1864,31 @@ function buildSparkChatTools(options: {
 							serviceAccountJson
 						}
 					);
+
+					const runCard: SparkAgentRunCard = {
+						kind: 'grader',
+						runId,
+						title: olympiadLabel,
+						sourceAttachmentCount: runAttachments.length,
+						href: `/spark/grader/${runId}`,
+						listHref: '/spark/grader'
+					};
+					if (onRunCard) {
+						try {
+							await onRunCard(runCard);
+						} catch (error) {
+							console.warn('Unable to append grader run card to chat conversation', {
+								userId,
+								runId,
+								error: serializeErrorForLog(error)
+							});
+						}
+					}
 					return {
 						status: 'started',
-						runId,
-						agentId,
-						workspaceId,
-						href: `/spark/grader/${runId}`,
-						graderRunsHref: '/spark/grader'
+						title: runCard.title ?? null,
+						href: runCard.href,
+						graderRunsHref: runCard.listHref
 					};
 				} catch (error) {
 					console.error('Spark grader creation tool failed', {
@@ -1870,7 +1972,8 @@ async function generateAssistantResponse(
 					? ` (${attachment.pageCount.toString()} pages)`
 					: '';
 			return `${attachment.contentType}${pageSuffix}`;
-		})
+		}),
+		onRunCard: handlers.onRunCard
 	});
 	const logWorkspace = resolveSparkChatLogWorkspace({
 		conversationId: options.conversationId,
@@ -1927,7 +2030,7 @@ async function generateAssistantResponseWithRetries(
 ): Promise<string> {
 	let lastError: unknown;
 	for (let attempt = 1; attempt <= GENERATION_MAX_ATTEMPTS; attempt += 1) {
-		let emittedDelta = false;
+		let emittedVisibleOutput = false;
 		try {
 			return await generateAssistantResponse(
 				conversation,
@@ -1945,9 +2048,13 @@ async function generateAssistantResponseWithRetries(
 							(typeof delta.textDelta === 'string' && delta.textDelta.length > 0) ||
 							(typeof delta.thoughtDelta === 'string' && delta.thoughtDelta.length > 0)
 						) {
-							emittedDelta = true;
+							emittedVisibleOutput = true;
 						}
 						handlers.onDelta?.(delta);
+					},
+					onRunCard: async (runCard) => {
+						emittedVisibleOutput = true;
+						await handlers.onRunCard?.(runCard);
 					}
 				}
 			);
@@ -1955,7 +2062,7 @@ async function generateAssistantResponseWithRetries(
 			lastError = error;
 			const statusCode = resolveErrorStatusCode(error);
 			const retryable = isRetryableGenerationError(error);
-			const canRetry = retryable && !emittedDelta && attempt < GENERATION_MAX_ATTEMPTS;
+			const canRetry = retryable && !emittedVisibleOutput && attempt < GENERATION_MAX_ATTEMPTS;
 			console.warn('[spark-chat] generation attempt failed', {
 				userId: options.userId,
 				conversationId: options.conversationId,
@@ -1964,7 +2071,7 @@ async function generateAssistantResponseWithRetries(
 				maxAttempts: GENERATION_MAX_ATTEMPTS,
 				statusCode,
 				retryable,
-				emittedDelta,
+				emittedVisibleOutput,
 				willRetry: canRetry,
 				error: serializeErrorForLog(error)
 			});
@@ -2197,6 +2304,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		let lastUpdate = 0;
 		let pendingFlush: NodeJS.Timeout | null = null;
 		let flushInFlight = false;
+		let pendingFollowUpFlush = false;
+		let pendingFollowUpForce = false;
 
 		const flushUpdate = async (force: boolean): Promise<void> => {
 			const nowTimestampValue = new Date();
@@ -2211,11 +2320,13 @@ export const POST: RequestHandler = async ({ request }) => {
 				return;
 			}
 			if (flushInFlight) {
+				pendingFollowUpFlush = true;
+				pendingFollowUpForce = pendingFollowUpForce || force;
 				return;
 			}
 			flushInFlight = true;
 			try {
-				updateAssistantMessage(conversation, assistantMessageId, assistantText);
+				updateAssistantMessageText(conversation, assistantMessageId, assistantText);
 				conversation.updatedAt = nowTimestampValue;
 				conversation.lastMessageAt = nowTimestampValue;
 				await patchFirestoreDocument({
@@ -2230,6 +2341,12 @@ export const POST: RequestHandler = async ({ request }) => {
 				lastUpdate = Date.now();
 			} finally {
 				flushInFlight = false;
+				if (pendingFollowUpFlush) {
+					const nextForce = pendingFollowUpForce;
+					pendingFollowUpFlush = false;
+					pendingFollowUpForce = false;
+					void flushUpdate(nextForce);
+				}
 			}
 		};
 
@@ -2262,7 +2379,13 @@ export const POST: RequestHandler = async ({ request }) => {
 						messageId,
 						attachments: attachmentForMessage
 					},
-					{ onDelta: handleDelta }
+					{
+						onDelta: handleDelta,
+						onRunCard: async (runCard) => {
+							upsertAssistantRunCard(conversation, assistantMessageId, runCard);
+							await flushUpdate(true);
+						}
+					}
 				);
 			}
 			await flushUpdate(true);
