@@ -26,7 +26,8 @@
 	import { streamSse } from '$lib/client/sse';
 	import {
 		SparkAgentAttachmentSchema,
-		SparkAgentConversationSchema,
+		hasSparkAgentConversationNormalizationIssues,
+		normalizeSparkAgentConversation,
 		type SparkAgentRunCard,
 		type SparkAgentFile,
 		type SparkAgentAttachment,
@@ -102,6 +103,7 @@
 	let clipboardAttachmentCounter = $state(0);
 	let fileDragDepth = $state(0);
 	let lastAttachmentConversationId = $state<string | null>(null);
+	let rejectedConversationId = $state<string | null>(null);
 	const pendingRemovalByLocalId = new Set<string>();
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
 	const ignoredFingerprintsByConversation = new Map<string, Set<string>>();
@@ -822,7 +824,7 @@
 		window.localStorage.setItem(key, nextId);
 	}
 
-	function resetConversation(): void {
+	function resetConversation(nextError: string | null = null): void {
 		const previousConversationId = conversationId;
 		setConversationId(null);
 		conversation = null;
@@ -830,7 +832,7 @@
 		streamingThoughtsByMessageId = {};
 		chatStreamPhase = 'idle';
 		chatStreamAssistantMessageId = null;
-		error = null;
+		error = nextError;
 		attachmentError = null;
 		fileDragDepth = 0;
 		draft = '';
@@ -1789,33 +1791,58 @@
 				stopAuth();
 			});
 		}
-		if (userId) {
-			const requestedConversationId =
-				pageSnapshot.current?.url.searchParams.get('conversationId')?.trim() ?? '';
-			if (requestedConversationId.length > 0) {
-				setConversationId(requestedConversationId);
-			} else {
-				const stored = window.localStorage.getItem(resolveConversationStorageKey(userId));
-				if (stored && stored.trim().length > 0) {
-					conversationId = stored.trim();
-				}
-			}
-		}
 		return () => {
 			window.removeEventListener('keydown', handleKeydown);
 		};
 	});
 
 	$effect(() => {
+		if (!browser || !userId) {
+			return;
+		}
+		const requestedConversationId =
+			pageSnapshot.current?.url.searchParams.get('conversationId')?.trim() ?? '';
+		if (requestedConversationId.length > 0) {
+			if (requestedConversationId === rejectedConversationId) {
+				return;
+			}
+			if (conversationId !== requestedConversationId) {
+				setConversationId(requestedConversationId);
+			}
+			return;
+		}
+		if (rejectedConversationId) {
+			rejectedConversationId = null;
+		}
+		if (conversationId) {
+			return;
+		}
+		const stored = window.localStorage.getItem(resolveConversationStorageKey(userId));
+		if (stored && stored.trim().length > 0) {
+			conversationId = stored.trim();
+		}
+	});
+
+	$effect(() => {
 		if (!browser) {
 			return;
 		}
-		if (!userId || !conversationId || !authReady) {
+		const activeUserId = userId;
+		const activeConversationId = conversationId;
+		if (!activeUserId || !activeConversationId || !authReady) {
 			conversation = null;
 			return;
 		}
+		const normalizedUserId: string = activeUserId;
+		const normalizedConversationId: string = activeConversationId;
 		const db = getFirestore(getFirebaseApp());
-		const ref = doc(db, userId, 'client', 'conversations', conversationId);
+		const ref = doc(
+			db,
+			normalizedUserId,
+			'client',
+			'conversations',
+			normalizedConversationId
+		);
 		let stop: Unsubscribe | null = null;
 		stop = onSnapshot(
 			ref,
@@ -1824,14 +1851,35 @@
 					conversation = null;
 					return;
 				}
-				const parsed = SparkAgentConversationSchema.safeParse(snap.data());
-				if (!parsed.success) {
-					console.warn('Invalid Spark AI Agent conversation payload', parsed.error.flatten());
+				const rawConversation = snap.data() ?? {};
+				const rawMessageCount = Array.isArray(rawConversation.messages)
+					? rawConversation.messages.length
+					: 0;
+				const normalized = normalizeSparkAgentConversation(rawConversation, {
+					conversationId: normalizedConversationId,
+					fallbackParticipantId: normalizedUserId
+				});
+				if (hasSparkAgentConversationNormalizationIssues(normalized.issues)) {
+					console.warn('Normalized Spark AI Agent conversation payload', {
+						conversationId: normalizedConversationId,
+						issues: normalized.issues
+					});
+				}
+				if (rawMessageCount > 0 && normalized.conversation.messages.length === 0) {
+					console.warn('Spark AI Agent conversation payload dropped all messages after normalization', {
+						conversationId: normalizedConversationId,
+						rawMessageCount
+					});
+					rejectedConversationId = normalizedConversationId;
+					resetConversation(
+						'Spark could not load that conversation, so you were redirected to a new chat.'
+					);
 					return;
 				}
-				conversation = parsed.data;
-				reconcileStreaming(parsed.data);
-				reconcileStreamingThoughts(parsed.data);
+				error = null;
+				conversation = normalized.conversation;
+				reconcileStreaming(normalized.conversation);
+				reconcileStreamingThoughts(normalized.conversation);
 			},
 			(snapError) => {
 				console.warn('Firestore subscription failed', snapError);
@@ -1976,7 +2024,7 @@
 >
 	<div class="agent-layout">
 		<div class="agent-toolbar">
-			<Button variant="outline" size="sm" onclick={resetConversation} disabled={sending}>
+			<Button variant="outline" size="sm" onclick={() => resetConversation()} disabled={sending}>
 				New chat
 			</Button>
 			<Button variant="ghost" size="sm" href="/spark/lessons">Lessons</Button>
