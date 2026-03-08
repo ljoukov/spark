@@ -163,7 +163,7 @@ const TUTOR_HISTORY_TURNS_PATH = "history/turns.jsonl";
 
 function formatUsdTotal(value: number): string {
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
-  return `$${safeValue.toFixed(2)}`;
+  return `$${safeValue.toFixed(4)}`;
 }
 
 type ToolLlmCostName =
