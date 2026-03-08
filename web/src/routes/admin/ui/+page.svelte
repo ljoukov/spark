@@ -12,7 +12,7 @@
 		},
 		{
 			title: 'Chat UI',
-			description: 'Preview grader cards, thinking blocks, and markdown-rich assistant replies.',
+			description: 'Preview task cards, thinking blocks, and markdown-rich assistant replies.',
 			href: '/admin/ui/chat',
 			cta: 'Open'
 		},

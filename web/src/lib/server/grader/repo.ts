@@ -8,8 +8,8 @@ import {
 import { buildWorkspaceFileDocPath } from '@spark/llm';
 import { z } from 'zod';
 
-export const DEFAULT_GRADER_OLYMPIAD_KEY = 'hamilton_ukmt' as const;
-export const DEFAULT_GRADER_OLYMPIAD_LABEL = 'Hamilton Olympiad by UKMT' as const;
+export const DEFAULT_GRADER_OLYMPIAD_KEY = 'uploaded_work' as const;
+export const DEFAULT_GRADER_OLYMPIAD_LABEL = 'Uploaded work' as const;
 export const GRADER_SUMMARY_PATH = 'grader/output/run-summary.json' as const;
 export const GRADER_PROBLEMS_DIR = 'grader/output/problems' as const;
 

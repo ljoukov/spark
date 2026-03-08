@@ -1,5 +1,5 @@
 <script lang="ts">
-	import AgentRunCard from '$lib/components/spark/chat/AgentRunCard.svelte';
+	import TaskCard from '$lib/components/spark/chat/TaskCard.svelte';
 	import { renderMarkdown } from '$lib/markdown';
 	import type { ChatPreviewMessage } from './types';
 
@@ -45,7 +45,7 @@
 		{#if message.role === 'assistant' && message.runCards && message.runCards.length > 0}
 			<div class="message-run-cards">
 				{#each message.runCards as item, index (index)}
-					<AgentRunCard userId="" runCard={item.runCard} preview={item.preview} />
+					<TaskCard userId="" runCard={item.runCard} preview={item.preview} />
 				{/each}
 			</div>
 		{/if}

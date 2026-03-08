@@ -20,19 +20,21 @@
 		}
 	];
 
+	const now = Date.now();
+
 	const graderRunCard = {
 		kind: 'grader',
-		runId: 'preview-hamilton-2024-p8',
-		href: '/spark/grader/preview-hamilton-2024-p8',
+		runId: 'preview-uploaded-work-p8',
+		href: '/spark/grader/preview-uploaded-work-p8',
 		listHref: '/spark/grader',
-		title: 'Hamilton Olympiad by UKMT',
+		title: 'Uploaded work',
 		sourceAttachmentCount: 2
 	} as const;
 
 	const scenarios = [
 		{
 			id: 'grader-queued',
-			title: 'Grader card appears immediately',
+			title: 'Task card appears immediately',
 			description:
 				'The assistant reply is already a run card as soon as `create_grader` succeeds, without relying on fallback markdown.',
 			messages: [
@@ -51,9 +53,10 @@
 							preview: {
 								kind: 'grader',
 								status: 'created',
-								title: 'Hamilton Olympiad by UKMT',
+								title: 'Uploaded work',
 								subtitle: 'Problem 8 • Uploaded-only references',
 								meta: '2 uploads attached',
+								startedAt: new Date(now - 5_000),
 								summary: 'Preparing the grader workspace and attaching the uploaded documents.'
 							}
 						}
@@ -63,9 +66,9 @@
 		},
 		{
 			id: 'grader-running',
-			title: 'Running grader with live status',
+			title: 'Running task with live status',
 			description:
-				'The same card stays in-thread while the background agent is executing, with an explicit status and spinner.',
+				'The same card stays in-thread while the background agent is executing, with explicit status, spinner, and elapsed age.',
 			messages: [
 				{
 					id: 'running-user',
@@ -82,21 +85,22 @@
 							preview: {
 								kind: 'grader',
 								status: 'executing',
-								title: 'Hamilton Olympiad 2024',
+								title: 'Problem 8 submission',
 								subtitle: 'Problem 8 • Uploaded-only references',
 								meta: '2 uploads attached',
+								startedAt: new Date(now - 72_000),
 								summary:
 									'Grading uploaded documents, transcribing the student work, and compiling line-by-line feedback.'
 							}
 						}
 					],
-					text: 'I’m grading the uploaded work now. The run card above should stay live until the report is ready.'
+					text: 'I’m grading the uploaded work now. The task card above should stay live until the report is ready.'
 				}
 			]
 		},
 		{
 			id: 'grader-ready',
-			title: 'Completed grader run',
+			title: 'Completed task',
 			description:
 				'Once the run finishes, the same card flips into a ready state and can show totals directly in chat.',
 			messages: [
@@ -115,8 +119,8 @@
 							preview: {
 								kind: 'grader',
 								status: 'done',
-								title: 'Hamilton Olympiad 2024',
-								subtitle: 'Year 2024 • Hamilton Olympiad by UKMT',
+								title: 'Problem 8 submission',
+								subtitle: 'Year 2024 • Problem 8',
 								meta: '60% scored',
 								summary:
 									'6/10 marks across 2 problems, with the main loss coming from an unsupported step in part (b).',
@@ -129,13 +133,13 @@
 							}
 						}
 					],
-					text: 'The report is ready. Open the grader run for the full transcript and line-by-line annotations.'
+					text: 'The report is ready. Open the task for the full transcript and line-by-line annotations.'
 				}
 			]
 		},
 		{
 			id: 'grader-failed',
-			title: 'Failed grader run',
+			title: 'Failed task',
 			description:
 				'Failure should still render as a chat card so the user sees status and the direct link to inspect the run.',
 			messages: [
@@ -154,7 +158,7 @@
 							preview: {
 								kind: 'grader',
 								status: 'failed',
-								title: 'Hamilton Olympiad by UKMT',
+								title: 'Uploaded work',
 								subtitle: 'Problem 8 • Uploaded-only references',
 								meta: '2 uploads attached',
 								summary:
@@ -230,7 +234,7 @@
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Chat UI previews</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
 				Static chat transcripts for debugging the assistant renderer without launching real agent runs.
-				These scenarios intentionally cover grader cards, streamed thinking, LaTeX, and Markdown
+				These scenarios intentionally cover task cards, streamed thinking, LaTeX, and Markdown
 				tables.
 			</p>
 		</div>

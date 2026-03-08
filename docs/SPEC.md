@@ -288,13 +288,15 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
     - Materials/links to incorporate
     - Duration is not a primary input; the UI/agent can infer an approximate duration from the plan shape + question counts.
   - Server creates a new session stub under `spark/{userId}/sessions/{sessionId}` with `status = generating`.
-  - As soon as `create_lesson` succeeds, the `/spark` chat appends a live lesson card to the assistant message. The card links to `/spark/lesson/{sessionId}` and subscribes to the session/state docs so it can show `creating -> ready/in_progress/completed/error` without printing internal IDs.
+  - As soon as `create_lesson` succeeds, the `/spark` chat appends a live in-thread task card to the assistant message. The card subscribes to the session/state docs, shows live status (plus elapsed age while active), and links to `/spark/lesson/{sessionId}` via a primary `Open` action without printing internal IDs in assistant markdown.
+  - The `create_lesson` tool result shown to the model is intentionally minimal (`status = started`); navigation data stays in the chat card path rather than being restated in assistant markdown.
   - Server writes `brief.md`, `request.json`, plus `lesson/task.md` + `lesson/schema/*` into the workspace and schedules a `runAgent` task.
   - The agent follows `lesson/task.md`, authors Firestore-ready JSON under `lesson/output/` (`session.json`, `quiz/*.json`, `code/*.json`, optional `media/*.json`), then calls `publish_lesson` with a `sessionPath`.
   - `publish_lesson` validates the JSON with Zod and publishes it into the user’s session collections, setting `status = ready` (or `status = error` on failure).
 - Olympiad grading (from `/spark` chat) is implemented as an Agent run:
   - The chat tool `create_grader` creates `spark/{uid}/graderRuns/{runId}`, provisions a workspace, writes `grader/task.md` plus upload manifests, and schedules `runAgent`.
-  - As soon as `create_grader` succeeds, the `/spark` chat appends a live grader card to the assistant message. The card links to `/spark/grader/{runId}` and subscribes to the grader run doc so it can show `queued -> grading -> ready/failed/stopped` while the run executes.
+  - As soon as `create_grader` succeeds, the `/spark` chat appends a live in-thread task card to the assistant message. The card subscribes to the grader run doc, shows `queued -> grading -> ready/failed/stopped` plus elapsed age while active, and links to `/spark/grader/{runId}` via a primary `Open` action.
+  - The `create_grader` tool result shown to the model is intentionally minimal (`status = started`); run/list URLs stay in the chat card path rather than being restated in assistant markdown.
   - `create_grader` includes `referenceSourcePolicy`:
     - `uploaded-only`: grading must rely on uploaded/pasted materials; no online search for missing references.
     - `allow-online-search-when-problems-missing`: online search is allowed only when problem statements are missing or unclear.

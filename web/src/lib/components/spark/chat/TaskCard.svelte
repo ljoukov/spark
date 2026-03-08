@@ -13,7 +13,8 @@
 		type SparkAgentRunCard,
 		type SparkGraderRun
 	} from '@spark/schemas';
-	import type { AgentRunCardPreview } from './agentRunCardPreview';
+	import { formatRelativeAge } from '$lib/utils/relativeAge';
+	import type { TaskCardPreview } from './taskCardPreview';
 
 	let {
 		userId = '',
@@ -22,13 +23,14 @@
 	}: {
 		userId?: string;
 		runCard: SparkAgentRunCard;
-		preview?: AgentRunCardPreview | null;
+		preview?: TaskCardPreview | null;
 	} = $props();
 
 	let lesson = $state<Session | null>(null);
 	let lessonState = $state<SessionState | null>(null);
 	let graderRun = $state<SparkGraderRun | null>(null);
 	let liveStatusError = $state<string | null>(null);
+	let relativeAgeNow = $state(Date.now());
 
 	function deriveLessonStatus(
 		session: Session | null,
@@ -161,12 +163,35 @@
 		return graderStatus === 'created' || graderStatus === 'executing';
 	});
 
+	const startedAt = $derived.by(() => {
+		if (previewState?.startedAt !== undefined) {
+			return previewState.startedAt ?? null;
+		}
+		if (runCard.kind === 'lesson') {
+			return lessonStatus === 'generating' ? lesson?.createdAt ?? null : null;
+		}
+		return graderStatus === 'created' || graderStatus === 'executing'
+			? graderRun?.createdAt ?? null
+			: null;
+	});
+
+	const activeAgeLabel = $derived.by(() => {
+		if (!startedAt) {
+			return null;
+		}
+		return formatRelativeAge(startedAt, { now: relativeAgeNow });
+	});
+
 	const title = $derived.by(() => {
 		if (previewState?.title !== undefined) {
 			return previewState.title;
 		}
 		if (runCard.kind === 'lesson') {
 			return lesson?.title ?? runCard.title ?? 'New lesson';
+		}
+		const presentationTitle = graderRun?.presentation?.title?.trim();
+		if (presentationTitle && presentationTitle.length > 0) {
+			return presentationTitle;
 		}
 		const paperName = graderRun?.paper?.paperName?.trim();
 		if (paperName && paperName.length > 0) {
@@ -176,7 +201,15 @@
 		if (olympiadName && olympiadName.length > 0) {
 			return olympiadName;
 		}
-		return graderRun?.olympiadLabel ?? runCard.title ?? 'Grader run';
+		const storedTitle = graderRun?.olympiadLabel?.trim();
+		if (storedTitle && storedTitle.length > 0) {
+			return storedTitle;
+		}
+		const launchTitle = runCard.title?.trim();
+		if (launchTitle && launchTitle.length > 0) {
+			return launchTitle;
+		}
+		return 'Grading task';
 	});
 
 	const subtitle = $derived.by(() => {
@@ -196,11 +229,15 @@
 		if (paperYear && paperYear.length > 0) {
 			parts.push(`Year ${paperYear}`);
 		}
-		const olympiad = graderRun?.paper?.olympiad?.trim() ?? graderRun?.olympiadLabel ?? runCard.title;
+		const olympiad = graderRun?.paper?.olympiad?.trim();
 		if (olympiad && olympiad.length > 0) {
 			parts.push(olympiad);
 		}
-		return parts.length > 0 ? parts.join(' • ') : null;
+		if (parts.length === 0) {
+			return null;
+		}
+		const nextSubtitle = parts.join(' • ');
+		return nextSubtitle === title ? null : nextSubtitle;
 	});
 
 	const summary = $derived.by(() => {
@@ -280,12 +317,25 @@
 	);
 
 	const primaryLabel = $derived.by(() =>
-		runCard.kind === 'lesson' ? 'Open lesson' : 'Open grader run'
+		'Open'
 	);
 
-	const secondaryLabel = $derived.by(() =>
-		runCard.kind === 'lesson' ? 'All lessons' : 'All grader runs'
+	const secondaryHref = $derived.by(() =>
+		runCard.kind === 'lesson' ? runCard.listHref : null
 	);
+
+	onMount(() => {
+		if (!browser) {
+			return;
+		}
+		relativeAgeNow = Date.now();
+		const intervalId = window.setInterval(() => {
+			relativeAgeNow = Date.now();
+		}, 5000);
+		return () => {
+			window.clearInterval(intervalId);
+		};
+	});
 
 	onMount(() => {
 		if (!browser || previewState || userId.trim().length === 0) {
@@ -390,12 +440,15 @@
 	</div>
 
 	<div class="agent-run-card__copy">
-		<p class="agent-run-card__eyebrow">{runCard.kind === 'lesson' ? 'Lesson' : 'Grader run'}</p>
+		<p class="agent-run-card__eyebrow">{runCard.kind === 'lesson' ? 'Lesson task' : 'Grading task'}</p>
 		<h3>{title}</h3>
 		{#if subtitle}
 			<p class="agent-run-card__subtitle">{subtitle}</p>
 		{/if}
 		<p class="agent-run-card__summary">{summary}</p>
+		{#if activeAgeLabel}
+			<p class="agent-run-card__age">Started {activeAgeLabel}</p>
+		{/if}
 
 		{#if runCard.kind === 'lesson' && lessonProgress.total > 0}
 			<div class="agent-run-card__progress">
@@ -431,7 +484,9 @@
 
 	<div class="agent-run-card__actions">
 		<a class="agent-run-card__button is-primary" href={runCard.href}>{primaryLabel}</a>
-		<a class="agent-run-card__button" href={runCard.listHref}>{secondaryLabel}</a>
+		{#if secondaryHref}
+			<a class="agent-run-card__button" href={secondaryHref}>All lessons</a>
+		{/if}
 	</div>
 </article>
 
@@ -518,6 +573,7 @@
 
 	.agent-run-card__subtitle,
 	.agent-run-card__summary,
+	.agent-run-card__age,
 	.agent-run-card__warning {
 		margin: 0;
 		font-size: 0.86rem;
@@ -530,6 +586,10 @@
 
 	.agent-run-card__summary {
 		color: color-mix(in srgb, var(--foreground) 80%, transparent);
+	}
+
+	.agent-run-card__age {
+		color: color-mix(in srgb, var(--foreground) 62%, transparent);
 	}
 
 	.agent-run-card__warning {

@@ -1,5 +1,5 @@
 import type { SparkAgentRunCard } from '@spark/schemas';
-import type { AgentRunCardPreview } from '$lib/components/spark/chat/agentRunCardPreview';
+import type { TaskCardPreview } from '$lib/components/spark/chat/taskCardPreview';
 
 export type ChatPreviewAttachment = {
 	id: string;
@@ -10,7 +10,7 @@ export type ChatPreviewAttachment = {
 
 export type ChatPreviewRunCard = {
 	runCard: SparkAgentRunCard;
-	preview: AgentRunCardPreview;
+	preview: TaskCardPreview;
 };
 
 export type ChatPreviewMessage = {
@@ -29,4 +29,3 @@ export type ChatPreviewScenario = {
 	description: string;
 	messages: ChatPreviewMessage[];
 };
-

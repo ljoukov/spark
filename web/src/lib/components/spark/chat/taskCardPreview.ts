@@ -1,14 +1,15 @@
 import type { SessionStatus, SparkGraderRunStatus } from '@spark/schemas';
 
-type AgentRunCardPreviewBase = {
+type TaskCardPreviewBase = {
 	title?: string;
 	subtitle?: string | null;
 	summary?: string | null;
 	meta?: string | null;
+	startedAt?: Date | null;
 	liveStatusError?: boolean;
 };
 
-export type AgentRunCardLessonPreview = AgentRunCardPreviewBase & {
+export type TaskCardLessonPreview = TaskCardPreviewBase & {
 	kind: 'lesson';
 	status: SessionStatus;
 	progress?: {
@@ -17,7 +18,7 @@ export type AgentRunCardLessonPreview = AgentRunCardPreviewBase & {
 	} | null;
 };
 
-export type AgentRunCardGraderPreview = AgentRunCardPreviewBase & {
+export type TaskCardGraderPreview = TaskCardPreviewBase & {
 	kind: 'grader';
 	status: SparkGraderRunStatus;
 	totals?: {
@@ -28,4 +29,4 @@ export type AgentRunCardGraderPreview = AgentRunCardPreviewBase & {
 	} | null;
 };
 
-export type AgentRunCardPreview = AgentRunCardLessonPreview | AgentRunCardGraderPreview;
+export type TaskCardPreview = TaskCardLessonPreview | TaskCardGraderPreview;

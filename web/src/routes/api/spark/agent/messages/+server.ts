@@ -855,7 +855,7 @@ function normalizeOlympiadKey(value: string): string {
 const graderCreateSchema = z
 	.object({
 		olympiad: nullableOptionalString().describe(
-			'Optional olympiad name override for this learner (for example: Hamilton Olympiad by UKMT).'
+			'Optional display title override for this grading run (for example: BMO1 2024 Q5).'
 		),
 		referenceSourcePolicy: z
 			.enum(['uploaded-only', 'allow-online-search-when-problems-missing'])
@@ -1344,9 +1344,7 @@ function buildSparkChatTools(options: {
 				'',
 				'Plan shape:',
 				'- Provide plan.items; the array length sets the number of plan items.',
-				'- For quiz items, you can set quiz.questionCount and/or quiz.questionKinds (counts per kind).',
-				'',
-				'Returns href and lessonsHref for navigation.'
+				'- For quiz items, you can set quiz.questionCount and/or quiz.questionKinds (counts per kind).'
 			].join('\n'),
 			inputSchema: lessonCreateSchema,
 			execute: async (input) => {
@@ -1678,10 +1676,7 @@ function buildSparkChatTools(options: {
 					}
 
 					return {
-						status: 'started',
-						title: runCard.title ?? null,
-						href: runCard.href,
-						lessonsHref: runCard.listHref
+						status: 'started'
 					};
 				} catch (error) {
 					console.error('Spark lesson creation tool failed', {
@@ -1710,8 +1705,7 @@ function buildSparkChatTools(options: {
 				'Use this when the learner asks to mark/grade olympiad paper solutions.',
 				'Uploads can include student handwriting, problem statements, and optional official solutions/mark schemes.',
 				'Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.',
-				'If uploads are present, they are attached to the grader agent context automatically.',
-				'Returns href and graderRunsHref for navigation.'
+				'If uploads are present, they are attached to the grader agent context automatically.'
 			].join('\n'),
 			inputSchema: graderCreateSchema,
 			execute: async (input) => {
@@ -1885,10 +1879,7 @@ function buildSparkChatTools(options: {
 						}
 					}
 					return {
-						status: 'started',
-						title: runCard.title ?? null,
-						href: runCard.href,
-						graderRunsHref: runCard.listHref
+						status: 'started'
 					};
 				} catch (error) {
 					console.error('Spark grader creation tool failed', {

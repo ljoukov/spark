@@ -248,7 +248,9 @@
 									</p>
 									<div class="mt-2 flex flex-wrap gap-3 text-xs">
 										<a href={part.runCard.href} class="text-primary underline">Open</a>
-										<a href={part.runCard.listHref} class="text-primary underline">List</a>
+										{#if part.runCard.kind === 'lesson'}
+											<a href={part.runCard.listHref} class="text-primary underline">List</a>
+										{/if}
 									</div>
 								</div>
 							{/if}

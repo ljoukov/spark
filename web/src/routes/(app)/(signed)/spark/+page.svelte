@@ -18,7 +18,7 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
-	import AgentRunCard from '$lib/components/spark/chat/AgentRunCard.svelte';
+	import TaskCard from '$lib/components/spark/chat/TaskCard.svelte';
 	import { ChatInput } from '$lib/components/chat/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -2072,7 +2072,7 @@
 											<div class="message-run-cards">
 												{#each messageRunCards as runCard}
 													{#if userId}
-														<AgentRunCard {userId} {runCard} />
+														<TaskCard {userId} {runCard} />
 													{/if}
 												{/each}
 											</div>
