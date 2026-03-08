@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				: null,
 			paper: run.paper
 				? {
-						olympiad: run.paper.olympiad ?? null,
+						contextLabel: run.paper.contextLabel ?? null,
 						year: run.paper.year ?? null,
 						paperName: run.paper.paperName ?? null,
 						paperUrl: run.paper.paperUrl ?? null,

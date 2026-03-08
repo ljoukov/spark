@@ -605,21 +605,29 @@ const GraderRunPresentationSchema = z.object({
   summaryMarkdown: z.string().trim().min(1).optional(),
 });
 
-const GraderRunSummarySchema = z.object({
-  olympiad: z.string().trim().min(1).optional(),
-  year: z.string().trim().min(1).optional(),
-  paperName: z.string().trim().min(1).optional(),
-  paperUrl: z.string().trim().min(1).optional(),
-  markSchemeUrl: z.string().trim().min(1).optional(),
-  presentation: GraderRunPresentationSchema.optional(),
-  totals: z
-    .object({
-      awardedMarks: z.number().min(0),
-      maxMarks: z.number().min(0),
-    })
-    .optional(),
-  problems: z.array(GraderSummaryProblemSchema).min(1),
-});
+const GraderRunSummarySchema = z
+  .object({
+    contextLabel: z.string().trim().min(1).optional(),
+    olympiad: z.string().trim().min(1).optional(),
+    year: z.string().trim().min(1).optional(),
+    paperName: z.string().trim().min(1).optional(),
+    paperUrl: z.string().trim().min(1).optional(),
+    markSchemeUrl: z.string().trim().min(1).optional(),
+    presentation: GraderRunPresentationSchema.optional(),
+    totals: z
+      .object({
+        awardedMarks: z.number().min(0),
+        maxMarks: z.number().min(0),
+      })
+      .optional(),
+    problems: z.array(GraderSummaryProblemSchema).min(1),
+  })
+  .transform(({ contextLabel, olympiad, ...rest }) => ({
+    ...rest,
+    ...(contextLabel ?? olympiad
+      ? { contextLabel: contextLabel ?? olympiad }
+      : {}),
+  }));
 
 type GraderRunSummary = z.infer<typeof GraderRunSummarySchema>;
 
@@ -7511,8 +7519,8 @@ export async function runSparkAgentTask(
             const totals = summariseGraderTotals(runSummary);
             const paper: Record<string, string> = {};
             const presentation: Record<string, string> = {};
-            if (runSummary.olympiad) {
-              paper.olympiad = runSummary.olympiad;
+            if (runSummary.contextLabel) {
+              paper.contextLabel = runSummary.contextLabel;
             }
             if (runSummary.year) {
               paper.year = runSummary.year;

@@ -197,9 +197,9 @@
 		if (paperName && paperName.length > 0) {
 			return paperName;
 		}
-		const olympiadName = graderRun?.paper?.olympiad?.trim();
-		if (olympiadName && olympiadName.length > 0) {
-			return olympiadName;
+		const contextLabel = graderRun?.paper?.contextLabel?.trim();
+		if (contextLabel && contextLabel.length > 0) {
+			return contextLabel;
 		}
 		const storedTitle = graderRun?.olympiadLabel?.trim();
 		if (storedTitle && storedTitle.length > 0) {
@@ -229,9 +229,9 @@
 		if (paperYear && paperYear.length > 0) {
 			parts.push(`Year ${paperYear}`);
 		}
-		const olympiad = graderRun?.paper?.olympiad?.trim();
-		if (olympiad && olympiad.length > 0) {
-			parts.push(olympiad);
+		const contextLabel = graderRun?.paper?.contextLabel?.trim();
+		if (contextLabel && contextLabel.length > 0) {
+			parts.push(contextLabel);
 		}
 		if (parts.length === 0) {
 			return null;

@@ -93,7 +93,7 @@
 						</div>
 
 						<p class="text-sm font-semibold text-foreground">
-							{run.paper?.paperName ?? run.olympiadLabel}
+							{run.paper?.paperName ?? run.paper?.contextLabel ?? run.olympiadLabel}
 						</p>
 
 						<div class="grid gap-x-6 gap-y-1 text-xs text-muted-foreground md:grid-cols-2">

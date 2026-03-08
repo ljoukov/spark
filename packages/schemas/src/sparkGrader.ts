@@ -49,13 +49,19 @@ export type SparkGraderProblemSummary = z.infer<
   typeof SparkGraderProblemSummarySchema
 >;
 
-export const SparkGraderPaperSchema = z.object({
-  olympiad: trimmedString.optional(),
-  year: trimmedString.optional(),
-  paperName: trimmedString.optional(),
-  paperUrl: trimmedString.optional(),
-  markSchemeUrl: trimmedString.optional(),
-});
+export const SparkGraderPaperSchema = z
+  .object({
+    contextLabel: trimmedString.optional(),
+    olympiad: trimmedString.optional(),
+    year: trimmedString.optional(),
+    paperName: trimmedString.optional(),
+    paperUrl: trimmedString.optional(),
+    markSchemeUrl: trimmedString.optional(),
+  })
+  .transform(({ contextLabel, olympiad, ...rest }) => ({
+    ...rest,
+    ...(contextLabel ?? olympiad ? { contextLabel: contextLabel ?? olympiad } : {}),
+  }));
 
 export type SparkGraderPaper = z.infer<typeof SparkGraderPaperSchema>;
 

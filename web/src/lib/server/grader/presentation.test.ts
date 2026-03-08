@@ -7,7 +7,7 @@ describe('buildGraderRunDisplay', () => {
 		const display = buildGraderRunDisplay({
 			status: 'done',
 			paper: {
-				olympiad: 'Hamilton Olympiad',
+				contextLabel: 'Hamilton Olympiad',
 				year: '2017',
 				paperName: 'Hamilton Olympiad 2017'
 			},
@@ -32,7 +32,7 @@ describe('buildGraderRunDisplay', () => {
 		const display = buildGraderRunDisplay({
 			status: 'done',
 			paper: {
-				olympiad: 'Unknown (not identifiable from uploaded materials only)',
+				contextLabel: 'Unknown (not identifiable from uploaded materials only)',
 				year: 'Unknown',
 				paperName: 'Unknown paper (uploaded excerpt contains Problem 8 only)'
 			},
@@ -73,5 +73,15 @@ describe('buildGraderRunDisplay', () => {
 		expect(display.title).toBe('Problems 1-8 submission');
 		expect(display.summaryMarkdown).toContain('Problems 1-8');
 		expect(display.summaryMarkdown).toContain('5 of 8 problems');
+	});
+
+	it('uses a neutral fallback title when no paper context is known', () => {
+		const display = buildGraderRunDisplay({
+			status: 'created'
+		});
+
+		expect(display.title).toBe('Uploaded submission');
+		expect(display.metaLine).toBeNull();
+		expect(display.summaryMarkdown).toBe('Waiting for grading to start.');
 	});
 });

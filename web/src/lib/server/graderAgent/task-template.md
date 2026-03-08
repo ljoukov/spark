@@ -42,7 +42,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - do not pass these target files via `supportingPaths`; they are primary transcription targets.
    - after this call, read `grader/output/transcription.md` for cleanup and do not repeat an identical call.
 3. Determine paper + references:
-   - infer olympiad, year, and paper title from transcribed problem statements + user request.
+   - infer the paper, assignment, or document context, year, and source title from transcribed problem statements + user request.
    - check `request.json` input `referenceSourcePolicy` before any online search:
      - `uploaded-only`: do NOT use `web_search` for missing problems/solutions.
      - `allow-online-search-when-problems-missing`: online search is allowed only when problem statements are missing or low quality.
@@ -96,7 +96,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 
 ```json
 {
-	"olympiad": "string",
+	"contextLabel": "string",
 	"year": "string",
 	"paperName": "string",
 	"totals": {
@@ -125,6 +125,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 - `presentation.title` should adapt to the uploaded scope:
   - use the actual paper name when confidently identified,
   - otherwise describe what was graded, for example `Problem 8 submission` or `Problems 2, 5, 7, and 8 submission`.
+- Base `presentation.title` on the uploaded content and identified source context rather than a generic subject label.
 - `presentation.summaryMarkdown` is required and should be short Markdown suitable for direct UI rendering:
   - one short paragraph or 2-3 short bullet points,
   - focus on what was graded and any important caveats,
@@ -132,7 +133,7 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
 - In both `presentation.title` and `presentation.summaryMarkdown`, do NOT mention:
   - run IDs, workspace IDs, file paths, tool names, source-policy labels, or implementation/process details.
 - Include `paperUrl` and `markSchemeUrl` only when known.
-- Omit `olympiad`, `year`, `paperName`, `paperUrl`, and `markSchemeUrl` when they are unknown; do not fill them with placeholder text such as `Unknown`.
+- Omit `contextLabel`, `year`, `paperName`, `paperUrl`, and `markSchemeUrl` when they are unknown; do not fill them with placeholder text such as `Unknown`.
 
 9. Call `done({summary})` with:
    - the same user-facing Markdown used in `presentation.summaryMarkdown`

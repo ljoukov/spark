@@ -37,7 +37,7 @@
 <section class="grader-runs-page">
 	<header class="grader-runs-header">
 		<div>
-			<p class="eyebrow">Olympiad grading</p>
+			<p class="eyebrow">Submission grading</p>
 			<h1>Grader runs</h1>
 			<p class="subtitle">
 				Open a run to inspect totals, per-problem marks, transcripts, and feedback.
@@ -49,7 +49,7 @@
 	{#if data.runs.length === 0}
 		<div class="empty-state">
 			<h2>No grader runs yet</h2>
-			<p>Start a run from chat by uploading solutions and asking Spark to grade the paper.</p>
+			<p>Start a run from chat by uploading work and asking Spark to grade it.</p>
 		</div>
 	{:else}
 		<div class="runs-grid">

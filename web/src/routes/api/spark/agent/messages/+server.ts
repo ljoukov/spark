@@ -19,8 +19,8 @@ import {
 	type SparkAgentMessage
 } from '@spark/schemas';
 import {
-	DEFAULT_GRADER_OLYMPIAD_KEY,
-	DEFAULT_GRADER_OLYMPIAD_LABEL,
+	DEFAULT_GRADER_RUN_KEY,
+	DEFAULT_GRADER_RUN_LABEL,
 	GRADER_PROBLEMS_DIR,
 	GRADER_SUMMARY_PATH,
 	createGraderRun,
@@ -840,7 +840,7 @@ async function writeWorkspaceStorageLinkFile(options: {
 	});
 }
 
-function normalizeOlympiadKey(value: string): string {
+function normalizeGraderTitleKey(value: string): string {
 	const normalized = value
 		.trim()
 		.toLowerCase()
@@ -849,13 +849,13 @@ function normalizeOlympiadKey(value: string): string {
 	if (normalized.length > 0) {
 		return normalized.slice(0, 64);
 	}
-	return DEFAULT_GRADER_OLYMPIAD_KEY;
+	return DEFAULT_GRADER_RUN_KEY;
 }
 
 const graderCreateSchema = z
 	.object({
-		olympiad: nullableOptionalString().describe(
-			'Optional display title override for this grading run (for example: BMO1 2024 Q5).'
+		title: nullableOptionalString().describe(
+			'Optional short run title override. Set this only when the uploaded or pasted materials already make a concise content-based title clear (for example: GCSE English Language Paper 1 or BMO1 2024 Q5).'
 		),
 		referenceSourcePolicy: z
 			.enum(['uploaded-only', 'allow-online-search-when-problems-missing'])
@@ -888,9 +888,9 @@ function buildGraderBrief(options: {
 	if (rawSource && rawSource.length > 0) {
 		lines.push('', '## Original user message', '```', rawSource, '```');
 	}
-	const olympiadOverride = options.input.olympiad?.trim();
-	if (olympiadOverride && olympiadOverride.length > 0) {
-		lines.push('', '## Requested olympiad override', `- ${olympiadOverride}`);
+	const titleOverride = options.input.title?.trim();
+	if (titleOverride && titleOverride.length > 0) {
+		lines.push('', '## Requested title override', `- ${titleOverride}`);
 	}
 	if (options.input.notes) {
 		lines.push('', '## User grading focus', options.input.notes.trim());
@@ -916,7 +916,7 @@ function buildGraderBrief(options: {
 	lines.push(
 		'',
 		'## Objectives',
-		'- Identify the paper/exam context, year, and title from uploaded learner materials when possible.',
+		'- Identify the paper, assignment, or document context, year, and title from uploaded learner materials when possible.',
 		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
 		'- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.',
 		'- For problem statements and official solutions, keep source wording as verbatim as possible; do not rewrite them into cleaned canonical statements.',
@@ -925,7 +925,8 @@ function buildGraderBrief(options: {
 		'- Respect the reference source policy before any online search.',
 		'- Feedback should be line-by-line against those numbered student statements.',
 		"- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable.",
-		'- The run summary shown in the UI should stay short and student-facing: title + concise markdown summary, with no IDs, file paths, or process-log wording.'
+		'- The run summary shown in the UI should stay short and student-facing: title + concise markdown summary, with no IDs, file paths, or process-log wording.',
+		'- Base the run title on the uploaded content and identified source context; if the source cannot be identified, describe the graded scope neutrally.'
 	);
 	return lines.join('\n').trim() + '\n';
 }
@@ -973,12 +974,12 @@ function buildGraderAgentPrompt(options: {
 		'- grader/uploads/index.json',
 		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
 		'- Keep official/reference problem statements verbatim where possible; do not rewrite them into cleaned canonical wording.',
-		'- Keep the user-facing run summary concise and free of IDs, paths, and tool/process narration.',
+		'- Keep the user-facing run summary concise, derived from the uploaded content, and free of IDs, paths, and tool/process narration.',
 		'',
 		'Deliverables:',
 		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)',
 		`2) Write per-problem markdown files under ${options.problemsDir}/ with a verbatim-as-possible official/reference problem statement and line-by-line feedback keyed to the numbered student statements`,
-		`3) Write ${options.summaryPath} including a concise user-facing presentation title and summary markdown`,
+		`3) Write ${options.summaryPath} including a concise user-facing presentation title and summary markdown derived from the uploaded content`,
 		"4) When official solutions are missing, derive solutions at the student's level where reasonable and call done with that same short user-facing markdown summary"
 	].join('\n');
 }
@@ -1700,11 +1701,12 @@ function buildSparkChatTools(options: {
 		}),
 		create_grader: tool({
 			description: [
-				'Start an olympiad grading run from the learner’s uploaded solutions.',
+				'Start a grading run from the learner’s uploaded work.',
 				'Creates a grader workspace, seeds grader/task.md, and launches a background agent.',
-				'Use this when the learner asks to mark/grade olympiad paper solutions.',
-				'Uploads can include student handwriting, problem statements, and optional official solutions/mark schemes.',
+				'Use this when the learner asks to mark or grade uploaded answers, submissions, scripts, or related reference documents.',
+				'Uploads can include student handwriting, problem statements, answer booklets, rubrics, and optional official solutions/mark schemes.',
 				'Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.',
+				'If the uploaded or pasted materials already make a concise run title clear, pass it via title; otherwise omit it and let the grader derive the final title from the content.',
 				'If uploads are present, they are attached to the grader agent context automatically.'
 			].join('\n'),
 			inputSchema: graderCreateSchema,
@@ -1716,8 +1718,8 @@ function buildSparkChatTools(options: {
 				const now = new Date();
 				let runCreated = false;
 				try {
-					const olympiadLabel = input.olympiad?.trim() || DEFAULT_GRADER_OLYMPIAD_LABEL;
-					const olympiadKey = normalizeOlympiadKey(olympiadLabel);
+					const launchTitle = input.title?.trim() || DEFAULT_GRADER_RUN_LABEL;
+					const launchTitleKey = normalizeGraderTitleKey(launchTitle);
 					const runAttachments = attachmentsForMessage
 						.slice(0, GRADER_ATTACHMENT_LIMIT)
 						.map((attachment) => ({
@@ -1737,8 +1739,8 @@ function buildSparkChatTools(options: {
 						workspaceId,
 						conversationId,
 						userPrompt: sourceText?.trim() || input.notes || undefined,
-						olympiadKey,
-						olympiadLabel,
+						olympiadKey: launchTitleKey,
+						olympiadLabel: launchTitle,
 						summaryPath: GRADER_SUMMARY_PATH,
 						problemsDir: GRADER_PROBLEMS_DIR,
 						sourceAttachmentIds: runAttachments.map((attachment) => attachment.id),
@@ -1862,7 +1864,7 @@ function buildSparkChatTools(options: {
 					const runCard: SparkAgentRunCard = {
 						kind: 'grader',
 						runId,
-						title: olympiadLabel,
+						title: launchTitle,
 						sourceAttachmentCount: runAttachments.length,
 						href: `/spark/grader/${runId}`,
 						listHref: '/spark/grader'

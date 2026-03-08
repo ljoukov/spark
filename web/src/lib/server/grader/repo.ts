@@ -8,8 +8,8 @@ import {
 import { buildWorkspaceFileDocPath } from '@spark/llm';
 import { z } from 'zod';
 
-export const DEFAULT_GRADER_OLYMPIAD_KEY = 'uploaded_work' as const;
-export const DEFAULT_GRADER_OLYMPIAD_LABEL = 'Uploaded work' as const;
+export const DEFAULT_GRADER_RUN_KEY = 'uploaded_work' as const;
+export const DEFAULT_GRADER_RUN_LABEL = 'Uploaded work' as const;
 export const GRADER_SUMMARY_PATH = 'grader/output/run-summary.json' as const;
 export const GRADER_PROBLEMS_DIR = 'grader/output/problems' as const;
 
@@ -63,13 +63,19 @@ const sparkGraderProblemSummarySchema = z.object({
 	filePath: trimmedString
 });
 
-const sparkGraderPaperSchema = z.object({
-	olympiad: trimmedString.optional(),
-	year: trimmedString.optional(),
-	paperName: trimmedString.optional(),
-	paperUrl: trimmedString.optional(),
-	markSchemeUrl: trimmedString.optional()
-});
+const sparkGraderPaperSchema = z
+	.object({
+		contextLabel: trimmedString.optional(),
+		olympiad: trimmedString.optional(),
+		year: trimmedString.optional(),
+		paperName: trimmedString.optional(),
+		paperUrl: trimmedString.optional(),
+		markSchemeUrl: trimmedString.optional()
+	})
+	.transform(({ contextLabel, olympiad, ...rest }) => ({
+		...rest,
+		...(contextLabel ?? olympiad ? { contextLabel: contextLabel ?? olympiad } : {})
+	}));
 
 const sparkGraderPresentationSchema = z.object({
 	title: trimmedString.optional(),

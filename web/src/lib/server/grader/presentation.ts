@@ -1,5 +1,5 @@
 type GraderRunPaperInput = {
-	olympiad?: string | null;
+	contextLabel?: string | null;
 	year?: string | null;
 	paperName?: string | null;
 };
@@ -117,7 +117,7 @@ function buildFallbackTitle(options: {
 	if (options.problemCount > 1) {
 		return `${options.problemCount.toString()}-problem submission`;
 	}
-	return 'Olympiad submission';
+	return 'Uploaded submission';
 }
 
 function buildMetaLine(options: {
@@ -125,8 +125,8 @@ function buildMetaLine(options: {
 	paper?: GraderRunPaperInput | null;
 }): string | null {
 	const year = getMeaningfulText(options.paper?.year);
-	const olympiad = getMeaningfulText(options.paper?.olympiad);
-	const parts = [year, olympiad].filter((value): value is string => value !== null);
+	const contextLabel = getMeaningfulText(options.paper?.contextLabel);
+	const parts = [year, contextLabel].filter((value): value is string => value !== null);
 	if (parts.length === 0) {
 		return null;
 	}
@@ -181,7 +181,7 @@ function buildFallbackSummary(options: {
 	if (
 		(options.problemCount > 0 || options.indices.length > 0 || options.status === 'done') &&
 		!getMeaningfulText(options.paper?.paperName) &&
-		!getMeaningfulText(options.paper?.olympiad)
+		!getMeaningfulText(options.paper?.contextLabel)
 	) {
 		notes.push('The paper could not be confidently identified from the uploaded materials alone.');
 	}

@@ -40,7 +40,7 @@
 <section class="grader-run-page">
 	<header class="grader-run-header">
 		<div>
-			<p class="eyebrow">Olympiad grading</p>
+			<p class="eyebrow">Submission grading</p>
 			<h1>{data.run.display.title}</h1>
 			{#if data.run.display.metaLine}
 				<p class="subtitle">{data.run.display.metaLine}</p>
