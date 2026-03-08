@@ -26,6 +26,7 @@ import {
   tool,
   type LlmContentPart,
   type LlmInputMessage,
+  type LlmStreamEvent,
   type LlmTextModelId,
   type LlmTextResult,
   type LlmThinkingLevel,
@@ -2076,9 +2077,12 @@ class AgentRunStatsTracker {
     return "tool";
   }
 
-  startModelCall(details: { modelId: string }): ModelCallHandle {
+  startModelCall(details: {
+    modelId: string;
+    costBucket?: "model" | "tool";
+  }): ModelCallHandle {
     const handle: ModelCallHandle = Symbol("agent-model-call");
-    const costBucket = this.resolveCostBucket(details.modelId);
+    const costBucket = details.costBucket ?? this.resolveCostBucket(details.modelId);
     this.modelCalls += 1;
     this.modelsUsed.add(details.modelId);
     this.callInfo.set(handle, {
@@ -2100,9 +2104,15 @@ class AgentRunStatsTracker {
       this.modelsUsed.add(chunk.modelVersion);
     }
     if (!chunk.tokens) {
+      if (typeof chunk.costUsd === "number" && Number.isFinite(chunk.costUsd)) {
+        this.applyCostUpdate(state, Math.max(0, chunk.costUsd));
+      }
       return;
     }
-    this.applyTokenUpdate(state, chunk.tokens);
+    this.applyTokenUpdate(state, {
+      tokens: chunk.tokens,
+      ...(typeof chunk.costUsd === "number" ? { costUsd: chunk.costUsd } : {}),
+    });
   }
 
   finishModelCall(handle: ModelCallHandle): void {
@@ -2113,12 +2123,24 @@ class AgentRunStatsTracker {
     modelId: string;
     modelVersion?: string;
     usage?: LlmUsageTokens;
+    costUsd?: number;
+    costBucket?: "model" | "tool";
   }): void {
-    const handle = this.startModelCall({ modelId: details.modelId });
-    if (details.modelVersion || details.usage) {
+    const handle = this.startModelCall({
+      modelId: details.modelId,
+      ...(details.costBucket ? { costBucket: details.costBucket } : {}),
+    });
+    if (
+      details.modelVersion ||
+      details.usage ||
+      typeof details.costUsd === "number"
+    ) {
       this.recordModelUsage(handle, {
         ...(details.modelVersion ? { modelVersion: details.modelVersion } : {}),
         ...(details.usage ? { tokens: details.usage } : {}),
+        ...(typeof details.costUsd === "number"
+          ? { costUsd: details.costUsd }
+          : {}),
       });
     }
     this.finishModelCall(handle);
@@ -2131,30 +2153,20 @@ class AgentRunStatsTracker {
   }
 
   recordToolCallsFromResult(toolLoopResult: LlmToolLoopResult): void {
-    if (this.toolCalls > 0) {
-      return;
-    }
+    const resultToolCallsByName = new Map<string, number>();
     for (const step of toolLoopResult.steps) {
       for (const toolCall of step.toolCalls) {
-        this.recordToolCall(toolCall.toolName);
+        const next = (resultToolCallsByName.get(toolCall.toolName) ?? 0) + 1;
+        resultToolCallsByName.set(toolCall.toolName, next);
       }
     }
-  }
-
-  parseLogLine(message: string): void {
-    const prefix = "tool:";
-    if (!message.startsWith(prefix)) {
-      return;
+    for (const [toolName, resultCount] of resultToolCallsByName.entries()) {
+      const existingCount = this.toolCallsByName.get(toolName) ?? 0;
+      const missingCount = Math.max(0, resultCount - existingCount);
+      for (let index = 0; index < missingCount; index += 1) {
+        this.recordToolCall(toolName);
+      }
     }
-    const rest = message.slice(prefix.length).trim();
-    if (!rest) {
-      return;
-    }
-    const toolName = rest.split(/\s+/)[0]?.trim();
-    if (!toolName) {
-      return;
-    }
-    this.recordToolCall(toolName);
   }
 
   snapshot(): AgentRunStatsSnapshot {
@@ -2191,8 +2203,12 @@ class AgentRunStatsTracker {
       appliedCostUsd: number;
       costBucket: "model" | "tool";
     },
-    tokens: LlmUsageTokenUpdate,
+    update: {
+      tokens: LlmUsageTokenUpdate;
+      costUsd?: number;
+    },
   ): void {
+    const tokens = update.tokens;
     const previous = state.tokens;
     const next: CallTokenState = {
       promptTokens: resolveUsageNumber(tokens.promptTokens),
@@ -2239,11 +2255,32 @@ class AgentRunStatsTracker {
     this.tokens.toolUsePromptTokens += toolUseDelta;
 
     state.tokens = next;
-    const callCostUsd = estimateCallCostUsd({
+    const estimatedCostUsd = estimateCallCostUsd({
       modelId: state.modelVersion ?? state.modelId,
       tokens,
       responseImages: 0,
     });
+    const reportedCostUsd =
+      typeof update.costUsd === "number" && Number.isFinite(update.costUsd)
+        ? Math.max(0, update.costUsd)
+        : undefined;
+    const callCostUsd =
+      reportedCostUsd !== undefined
+        ? Math.max(estimatedCostUsd, reportedCostUsd)
+        : estimatedCostUsd;
+    this.applyCostUpdate(state, callCostUsd);
+  }
+
+  private applyCostUpdate(
+    state: {
+      modelId: string;
+      modelVersion?: string;
+      tokens: CallTokenState;
+      appliedCostUsd: number;
+      costBucket: "model" | "tool";
+    },
+    callCostUsd: number,
+  ): void {
     const costDelta = Math.max(0, callCostUsd - state.appliedCostUsd);
     if (costDelta > 0) {
       if (state.costBucket === "tool") {
@@ -2254,6 +2291,95 @@ class AgentRunStatsTracker {
       state.appliedCostUsd = callCostUsd;
     }
   }
+}
+
+function createToolLoopStatsEventBridge(options: {
+  tracker: AgentRunStatsTracker;
+  modelId: string;
+  flush: () => void;
+}): {
+  onEvent(event: LlmStreamEvent): void;
+  finish(): void;
+} {
+  let activeHandle: ModelCallHandle | null = null;
+
+  const ensureActiveHandle = (): ModelCallHandle => {
+    if (activeHandle) {
+      return activeHandle;
+    }
+    activeHandle = options.tracker.startModelCall({
+      modelId: options.modelId,
+      costBucket: "model",
+    });
+    return activeHandle;
+  };
+
+  const finishActiveHandle = (): void => {
+    if (!activeHandle) {
+      return;
+    }
+    options.tracker.finishModelCall(activeHandle);
+    activeHandle = null;
+  };
+
+  return {
+    onEvent(event) {
+      switch (event.type) {
+        case "delta": {
+          const handle = ensureActiveHandle();
+          if (event.channel === "response") {
+            options.tracker.recordModelUsage(handle, {
+              response: { textCharsDelta: event.text.length },
+            });
+          } else {
+            options.tracker.recordModelUsage(handle, {
+              thinking: { textCharsDelta: event.text.length },
+            });
+          }
+          options.flush();
+          return;
+        }
+        case "model": {
+          const handle = ensureActiveHandle();
+          options.tracker.recordModelUsage(handle, {
+            modelVersion: event.modelVersion,
+          });
+          options.flush();
+          return;
+        }
+        case "usage": {
+          const handle = ensureActiveHandle();
+          options.tracker.recordModelUsage(handle, {
+            modelVersion: event.modelVersion,
+            tokens: event.usage,
+            costUsd: event.costUsd,
+          });
+          options.flush();
+          return;
+        }
+        case "blocked": {
+          finishActiveHandle();
+          options.flush();
+          return;
+        }
+        case "tool_call": {
+          if (event.phase === "started" && !activeHandle) {
+            ensureActiveHandle();
+          }
+          finishActiveHandle();
+          if (event.phase === "started") {
+            options.tracker.recordToolCall(event.toolName);
+          }
+          options.flush();
+          return;
+        }
+      }
+    },
+    finish() {
+      finishActiveHandle();
+      options.flush();
+    },
+  };
 }
 
 type AgentLogSyncOptions = {
@@ -6923,13 +7049,13 @@ export async function runSparkAgentTask(
       log: (message) => {
         throwIfStopRequested();
         logSync?.append(message);
-        statsTracker.parseLogLine(message);
         logSync?.setStats(statsTracker.snapshot());
       },
       startModelCall: (details) => {
         throwIfStopRequested();
         const handle = statsTracker.startModelCall({
           modelId: details.modelId,
+          costBucket: "tool",
         });
         logSync?.setStats(statsTracker.snapshot());
         return handle;
@@ -7151,37 +7277,48 @@ export async function runSparkAgentTask(
     }
 
     const toolLoopStartedAt = Date.now();
-    const toolLoopResult = await runAgentLoop({
-      model: modelId,
-      input: initialInput ?? prompt,
-      ...(initialInput ? {} : { instructions: agentSystemPrompt }),
-      tools,
-      modelTools: [{ type: "web-search", mode: "live" }],
-      subagents:
-        graderRunId === null ? undefined : { promptPattern: "codex" as const },
-      maxSteps,
-      ...(thinkingLevel ? { thinkingLevel } : {}),
-      logging: {
-        workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
-        callLogsDir: "llm_calls",
-        mirrorToConsole: false,
-        sink: {
-          append: (line: string) => {
-            logSync?.append(line);
-          },
-          flush: async () => {
-            await logSync?.flushAll();
-          },
-        },
+    const toolLoopEventBridge = createToolLoopStatsEventBridge({
+      tracker: statsTracker,
+      modelId,
+      flush: () => {
+        logSync?.setStats(statsTracker.snapshot());
       },
     });
-    for (const step of toolLoopResult.steps) {
-      statsTracker.recordCompletedModelCall({
-        modelId,
-        modelVersion: step.modelVersion,
-        usage: step.usage,
-      });
-    }
+    const toolLoopResult = await (async (): Promise<LlmToolLoopResult> => {
+      try {
+        return await runAgentLoop({
+          model: modelId,
+          input: initialInput ?? prompt,
+          ...(initialInput ? {} : { instructions: agentSystemPrompt }),
+          tools,
+          modelTools: [{ type: "web-search", mode: "live" }],
+          subagents:
+            graderRunId === null
+              ? undefined
+              : { promptPattern: "codex" as const },
+          maxSteps,
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+          onEvent: (event) => {
+            toolLoopEventBridge.onEvent(event);
+          },
+          logging: {
+            workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
+            callLogsDir: "llm_calls",
+            mirrorToConsole: false,
+            sink: {
+              append: (line: string) => {
+                logSync?.append(line);
+              },
+              flush: async () => {
+                await logSync?.flushAll();
+              },
+            },
+          },
+        });
+      } finally {
+        toolLoopEventBridge.finish();
+      }
+    })();
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
 

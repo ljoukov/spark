@@ -26,6 +26,7 @@ export type LlmUsageTokenUpdate = {
 
 export type LlmUsageChunk = {
   readonly modelVersion?: string;
+  readonly costUsd?: number;
   readonly prompt?: {
     readonly textChars?: number;
     readonly imageCount?: number;
