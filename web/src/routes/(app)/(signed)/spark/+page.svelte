@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { replaceState } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { getContext, onMount } from 'svelte';
 	import { cubicInOut } from 'svelte/easing';
 	import { fade, fly } from 'svelte/transition';
@@ -72,6 +74,7 @@
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
+	const pageSnapshot = fromStore(page);
 	const user = $derived(userSnapshot?.current ?? data.user ?? null);
 	const userId = $derived(user?.uid ?? null);
 
@@ -793,6 +796,20 @@
 		conversationId = nextId;
 		if (!browser) {
 			return;
+		}
+		const currentPage = pageSnapshot.current;
+		if (currentPage) {
+			const currentValue = currentPage.url.searchParams.get('conversationId')?.trim() ?? '';
+			const normalizedCurrentValue = currentValue.length > 0 ? currentValue : null;
+			if (normalizedCurrentValue !== nextId) {
+				const url = new URL(currentPage.url);
+				if (nextId) {
+					url.searchParams.set('conversationId', nextId);
+				} else {
+					url.searchParams.delete('conversationId');
+				}
+				replaceState(url, currentPage.state);
+			}
 		}
 		if (!userId) {
 			return;
@@ -1773,9 +1790,15 @@
 			});
 		}
 		if (userId) {
-			const stored = window.localStorage.getItem(resolveConversationStorageKey(userId));
-			if (stored && stored.trim().length > 0) {
-				conversationId = stored.trim();
+			const requestedConversationId =
+				pageSnapshot.current?.url.searchParams.get('conversationId')?.trim() ?? '';
+			if (requestedConversationId.length > 0) {
+				setConversationId(requestedConversationId);
+			} else {
+				const stored = window.localStorage.getItem(resolveConversationStorageKey(userId));
+				if (stored && stored.trim().length > 0) {
+					conversationId = stored.trim();
+				}
 			}
 		}
 		return () => {

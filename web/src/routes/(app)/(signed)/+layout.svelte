@@ -414,6 +414,14 @@
 						<DropdownMenu.Item
 							class="app-user-menu__link"
 							onSelect={() => {
+								void goto('/spark/chats');
+							}}
+						>
+							Chats
+						</DropdownMenu.Item>
+						<DropdownMenu.Item
+							class="app-user-menu__link"
+							onSelect={() => {
 								void goto('/spark/lessons');
 							}}
 						>
