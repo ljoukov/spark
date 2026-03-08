@@ -112,7 +112,25 @@
 			? renderMarkdown(selectedFile.content)
 			: ''
 	);
+	const promptHtml = $derived.by(() => {
+		if (!agent) {
+			return '';
+		}
+		return renderMarkdown(agent.prompt);
+	});
+	const resultSummaryHtml = $derived.by(() => {
+		if (!agent?.resultSummary) {
+			return '';
+		}
+		return renderMarkdown(agent.resultSummary);
+	});
 	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
+	const runDurationLabel = $derived.by(() => {
+		if (!agent) {
+			return null;
+		}
+		return formatDuration(agent.createdAt, agent.updatedAt);
+	});
 	const showStopButton = $derived.by(() => {
 		if (!runId || !agent) {
 			return false;
@@ -162,6 +180,30 @@
 			dateStyle: 'medium',
 			timeStyle: 'short'
 		});
+	}
+
+	function formatDuration(start: Date | undefined, end: Date | undefined): string | null {
+		if (!start || !end) {
+			return null;
+		}
+		const durationMs = Math.max(0, end.getTime() - start.getTime());
+		const totalSeconds = Math.round(durationMs / 1000);
+		if (totalSeconds < 60) {
+			return `${totalSeconds}s`;
+		}
+		if (totalSeconds < 60 * 60) {
+			const minutes = Math.floor(totalSeconds / 60);
+			const seconds = totalSeconds % 60;
+			return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+		}
+		if (totalSeconds < 60 * 60 * 24) {
+			const hours = Math.floor(totalSeconds / (60 * 60));
+			const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+			return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+		}
+		const days = Math.floor(totalSeconds / (60 * 60 * 24));
+		const hours = Math.floor((totalSeconds % (60 * 60 * 24)) / (60 * 60));
+		return `${days}d ${hours}h`;
 	}
 
 	function formatSize(bytes?: number): string {
@@ -755,7 +797,9 @@
 							</span>
 						</div>
 					</div>
-					<p class="agents-detail__prompt">{agent.prompt}</p>
+					<div class="agents-detail__prompt markdown">
+						{@html promptHtml}
+					</div>
 					{#if showStopButton || showRetryButton || showStopRequestedBadge}
 						<div class="agents-detail__header-secondary-actions">
 							{#if showStopButton}
@@ -804,14 +848,21 @@
 					</div>
 					<div>
 						<span>Updated</span>
-						<p>{formatTimestamp(agent.updatedAt)}</p>
+						<p>
+							{formatTimestamp(agent.updatedAt)}
+							{#if runDurationLabel}
+								<span class="agents-detail__duration"> · Duration {runDurationLabel}</span>
+							{/if}
+						</p>
 					</div>
 				</div>
 
 				{#if agent.resultSummary}
 					<div class="agents-detail__summary">
 						<p class="agents-detail__eyebrow">Summary</p>
-						<p>{agent.resultSummary}</p>
+						<div class="agents-detail__summary-body markdown">
+							{@html resultSummaryHtml}
+						</div>
 					</div>
 				{/if}
 				{#if agent.error}
@@ -1175,12 +1226,15 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
-
 	.agents-detail__prompt {
 		margin: 0;
 		font-size: 1rem;
 		line-height: 1.55;
 		word-break: break-word;
+	}
+
+	.agents-detail__duration {
+		color: rgba(100, 116, 139, 0.8);
 	}
 
 	.agents-detail__meta {
@@ -1217,6 +1271,62 @@
 	.agents-detail__error {
 		background: rgba(248, 113, 113, 0.12);
 		color: rgba(185, 28, 28, 0.9);
+	}
+
+	.agents-detail__summary-body {
+		margin-top: 0.45rem;
+	}
+
+	.agents-detail__prompt :global(:first-child),
+	.agents-detail__summary-body :global(:first-child) {
+		margin-top: 0;
+	}
+
+	.agents-detail__prompt :global(:last-child),
+	.agents-detail__summary-body :global(:last-child) {
+		margin-bottom: 0;
+	}
+
+	.agents-detail__prompt :global(p),
+	.agents-detail__summary-body :global(p) {
+		margin: 0 0 0.55rem;
+	}
+
+	.agents-detail__prompt :global(ul),
+	.agents-detail__prompt :global(ol),
+	.agents-detail__summary-body :global(ul),
+	.agents-detail__summary-body :global(ol) {
+		margin: 0.45rem 0 0.75rem 1.25rem;
+		padding: 0;
+	}
+
+	.agents-detail__prompt :global(li + li),
+	.agents-detail__summary-body :global(li + li) {
+		margin-top: 0.3rem;
+	}
+
+	.agents-detail__prompt :global(:not(pre) > code),
+	.agents-detail__summary-body :global(:not(pre) > code) {
+		padding: 0.08rem 0.3rem;
+		border-radius: 0.35rem;
+		background: rgba(148, 163, 184, 0.18);
+		font-size: 0.92em;
+	}
+
+	.agents-detail__prompt :global(pre),
+	.agents-detail__summary-body :global(pre) {
+		margin: 0.55rem 0 0.75rem;
+		padding: 0.75rem 0.85rem;
+		border-radius: 0.8rem;
+		background: rgba(15, 23, 42, 0.92);
+		color: rgba(226, 232, 240, 0.96);
+		overflow-x: auto;
+	}
+
+	.agents-detail__prompt :global(pre code),
+	.agents-detail__summary-body :global(pre code) {
+		padding: 0;
+		background: transparent;
 	}
 
 	.agents-detail__timeline ul {
