@@ -1,554 +1,189 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { onMount, tick } from 'svelte';
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import {
 		collection,
-		doc,
 		getFirestore,
-		limit,
+		limit as queryLimit,
 		onSnapshot,
 		orderBy,
-		query,
-		type Unsubscribe
+		query
 	} from 'firebase/firestore';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { renderMarkdown } from '$lib/markdown';
-	import { formatRelativeAge } from '$lib/utils/relativeAge';
-	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
-	import {
-		SparkAgentRunLogSchema,
-		SparkAgentStateSchema,
-		SparkAgentWorkspaceFileSchema,
-		type SparkAgentRunLog,
-		type SparkAgentRunStats,
-		type SparkAgentState,
-		type SparkAgentWorkspaceFile
-	} from '@spark/schemas';
+	import { SparkAgentStateSchema, type SparkAgentState } from '@spark/schemas';
+	import { getFirebaseApp } from '$lib/utils/firebaseClient';
 
 	type ClientUser = { uid: string } | null;
-
-	type RunLogLineView = {
-		key: string;
-		timestampLabel: string;
-		line: string;
+	type RunFilter = 'All' | 'Running' | 'Queued' | 'Done' | 'Failed' | 'Stopped';
+	type RunSectionKey = 'today' | 'yesterday' | 'last7Days' | 'last30Days' | 'older';
+	type RunListItem = {
+		id: string;
+		prompt: string;
+		preview: string;
+		status: SparkAgentState['status'];
+		createdAt: string;
+		updatedAt: string;
+		workspaceId: string;
+		stopRequested: boolean;
 	};
 
-	type WorkspaceStorageLink = {
-		storagePath: string;
-		contentType: string;
-	};
-
-	const RUN_LOG_THOUGHTS_KEY = 'stream.thoughts';
+	const RUN_LIST_LIMIT = 50;
+	const FILTERS: RunFilter[] = ['All', 'Running', 'Queued', 'Done', 'Failed', 'Stopped'];
+	const SECTION_ORDER: Array<{ key: RunSectionKey; label: string }> = [
+		{ key: 'today', label: 'Today' },
+		{ key: 'yesterday', label: 'Yesterday' },
+		{ key: 'last7Days', label: 'Last 7 days' },
+		{ key: 'last30Days', label: 'Last 30 days' },
+		{ key: 'older', label: 'Older' }
+	];
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
 	const user = $derived(userSnapshot?.current ?? null);
 	const userId = $derived(user?.uid ?? null);
 
-	let agents = $state<SparkAgentState[]>([]);
-	let selectedAgentId = $state<string | null>(null);
-	let selectedAgentDetail = $state<SparkAgentState | null>(null);
-	let files = $state<SparkAgentWorkspaceFile[]>([]);
-	let runLog = $state<SparkAgentRunLog | null>(null);
-	let selectedFilePath = $state<string | null>(null);
-	let createPrompt = $state('');
-	let createWorkspaceId = $state('');
-	let creating = $state(false);
-	let createError = $state<string | null>(null);
-	let createSuccess = $state<string | null>(null);
-	let loadError = $state<string | null>(null);
-	let copySuccess = $state(false);
-	let stopSubmitting = $state(false);
-	let stopError = $state<string | null>(null);
-	let stopSuccess = $state<string | null>(null);
-	let retrySubmitting = $state(false);
-	let retryError = $state<string | null>(null);
-	let retrySuccess = $state<string | null>(null);
-	let downloadSubmitting = $state(false);
-	let downloadError = $state<string | null>(null);
-	let fileDialogOpen = $state(false);
+	let agentRuns = $state<RunListItem[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
+	let filter = $state<RunFilter>('All');
+	let search = $state('');
 	let authReady = $state(false);
-	let runLogFollow = $state(true);
-	let runLogLines = $state<RunLogLineView[]>([]);
 
-	let runLogScrollEl = $state<HTMLDivElement | null>(null);
-	let runLogScrollFrame: number | null = null;
-
-	const selectedAgent = $derived.by(() => {
-		if (selectedAgentDetail && selectedAgentDetail.id === selectedAgentId) {
-			return selectedAgentDetail;
+	function resolveRunPreview(run: SparkAgentState): string {
+		if (run.error && run.error.trim().length > 0) {
+			return run.error.trim();
 		}
-		if (selectedAgentId) {
-			return agents.find((agent) => agent.id === selectedAgentId) ?? null;
+		if (run.resultSummary && run.resultSummary.trim().length > 0) {
+			return run.resultSummary.trim();
 		}
-		return null;
-	});
-	const selectedFile = $derived(
-		selectedFilePath ? (files.find((file) => file.path === selectedFilePath) ?? null) : null
-	);
-	const selectedFileStorageLink = $derived.by(() => {
-		if (!selectedFile || selectedFile.type !== 'storage_link') {
-			return null;
+		if (run.status === 'created') {
+			return `Queued in workspace ${run.workspaceId}.`;
 		}
-		return {
-			storagePath: selectedFile.storagePath,
-			contentType: selectedFile.contentType
-		};
-	});
-	const selectedFileIsMarkdown = $derived.by(() => {
-		const path = selectedFile?.path?.toLowerCase() ?? '';
-		return path.endsWith('.md') || path.endsWith('.markdown');
-	});
-	const selectedFileImageSrc = $derived.by(() => {
-		if (!selectedFile) {
-			return null;
+		if (run.status === 'executing') {
+			return `Running in workspace ${run.workspaceId}.`;
 		}
-		if (
-			selectedFileStorageLink &&
-			selectedFileStorageLink.contentType.toLowerCase().startsWith('image/') &&
-			selectedAgent?.workspaceId
-		) {
-			const params = new URLSearchParams({
-				workspaceId: selectedAgent.workspaceId,
-				path: selectedFile.path
-			});
-			return `/api/spark/agents/workspace-link?${params.toString()}`;
+		if (run.status === 'done') {
+			return `Completed in workspace ${run.workspaceId}.`;
 		}
-		return null;
-	});
-	const selectedFileHtml = $derived(
-		selectedFileIsMarkdown &&
-			selectedFile &&
-			selectedFile.type !== 'storage_link' &&
-			selectedFile.content
-			? renderMarkdown(selectedFile.content)
-			: ''
-	);
-	const runStats = $derived<SparkAgentRunStats | null>(runLog?.stats ?? null);
-
-	function formatUsd(value: number | undefined): string {
-		if (typeof value !== 'number' || Number.isNaN(value)) {
-			return '—';
+		if (run.status === 'stopped') {
+			return 'Stopped by user.';
 		}
-		return `$${value.toFixed(4)}`;
+		return `Failed in workspace ${run.workspaceId}.`;
 	}
 
-	function formatInt(value: number | undefined): string {
-		if (typeof value !== 'number' || Number.isNaN(value)) {
-			return '—';
-		}
-		return Intl.NumberFormat('en-US').format(Math.floor(value));
-	}
-
-	function formatTimestamp(value: Date | undefined): string {
-		if (!value) {
-			return '—';
-		}
-		return value.toLocaleString('en-GB', {
-			dateStyle: 'medium',
-			timeStyle: 'short'
-		});
-	}
-
-	function formatSize(bytes?: number): string {
-		if (typeof bytes !== 'number' || Number.isNaN(bytes)) {
-			return '—';
-		}
-		if (bytes < 1024) {
-			return `${bytes} B`;
-		}
-		const kb = bytes / 1024;
-		if (kb < 1024) {
-			return `${kb.toFixed(1)} KB`;
-		}
-		const mb = kb / 1024;
-		return `${mb.toFixed(1)} MB`;
-	}
-
-	function decodeFileId(value: string): string {
-		try {
-			return decodeURIComponent(value);
-		} catch {
-			return value;
-		}
-	}
-
-	function toRunLogLineView(
-		prev: RunLogLineView[],
-		next: SparkAgentRunLog['lines'],
-		stream?: SparkAgentRunLog['stream']
-	): RunLogLineView[] {
-		const thoughts = typeof stream?.thoughts === 'string' ? stream.thoughts.trim() : '';
-		const hasThoughts = thoughts.length > 0;
-		const expectedLength = next.length + (hasThoughts ? 1 : 0);
-		if (next.length === 0 && !hasThoughts) {
-			return [];
-		}
-
-		if (prev.length === expectedLength) {
-			let isSame = true;
-			for (let idx = 0; idx < next.length; idx += 1) {
-				const prevEntry = prev[idx];
-				const nextEntry = next[idx];
-				if (!prevEntry || prevEntry.key !== nextEntry.key || prevEntry.line !== nextEntry.line) {
-					isSame = false;
-					break;
-				}
-			}
-			if (isSame && hasThoughts) {
-				const thoughtsEntry = prev[next.length];
-				const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
-				const thoughtTimestampLabel = formatTimestamp(thoughtTimestamp);
-				if (
-					!thoughtsEntry ||
-					thoughtsEntry.key !== RUN_LOG_THOUGHTS_KEY ||
-					thoughtsEntry.line !== thoughts ||
-					thoughtsEntry.timestampLabel !== thoughtTimestampLabel
-				) {
-					isSame = false;
-				}
-			}
-			if (isSame) {
-				return prev;
-			}
-		}
-
-		const prevByKey = new Map<string, RunLogLineView>();
-		for (const entry of prev) {
-			prevByKey.set(entry.key, entry);
-		}
-
-		const nextView: RunLogLineView[] = [];
-		for (const entry of next) {
-			const existing = prevByKey.get(entry.key);
-			if (existing && existing.line === entry.line) {
-				nextView.push(existing);
-				continue;
-			}
-			nextView.push({
-				key: entry.key,
-				timestampLabel: formatTimestamp(entry.timestamp),
-				line: entry.line
-			});
-		}
-		if (hasThoughts) {
-			const thoughtTimestamp = stream?.updatedAt ?? next[next.length - 1]?.timestamp;
-			nextView.push({
-				key: RUN_LOG_THOUGHTS_KEY,
-				timestampLabel: formatTimestamp(thoughtTimestamp),
-				line: thoughts
-			});
-		}
-		return nextView;
-	}
-
-	function isNearLogBottom(el: HTMLDivElement): boolean {
-		const thresholdPx = 24;
-		return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx;
-	}
-
-	function handleRunLogScroll(): void {
-		const el = runLogScrollEl;
-		if (!el) {
-			return;
-		}
-		runLogFollow = isNearLogBottom(el);
-	}
-
-	function scheduleScrollRunLogToBottom(): void {
-		if (!browser) {
-			return;
-		}
-		const el = runLogScrollEl;
-		if (!el) {
-			return;
-		}
-		if (runLogScrollFrame !== null) {
-			cancelAnimationFrame(runLogScrollFrame);
-		}
-		runLogScrollFrame = requestAnimationFrame(() => {
-			runLogScrollFrame = null;
-			el.scrollTop = el.scrollHeight;
-		});
-	}
-
-	function parseLogTimestamp(key: string): Date | null {
-		const match = /^t(\d{13})_\d+$/.exec(key);
-		if (!match) {
-			return null;
-		}
-		const ms = Number.parseInt(match[1] ?? '', 10);
-		if (!Number.isFinite(ms)) {
-			return null;
-		}
-		return new Date(ms);
-	}
-
-	function parseRunLogDoc(data: Record<string, unknown>): SparkAgentRunLog | null {
-		const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
-		const entries: Array<{ key: string; timestamp: Date; line: string }> = [];
-		if (rawLines && !Array.isArray(rawLines)) {
-			for (const [key, value] of Object.entries(rawLines as Record<string, unknown>)) {
-				if (typeof value !== 'string') {
-					continue;
-				}
-				const timestamp = parseLogTimestamp(key) ?? null;
-				if (!timestamp) {
-					continue;
-				}
-				entries.push({ key, timestamp, line: value });
-			}
-		}
-		entries.sort((a, b) => {
-			const diff = a.timestamp.getTime() - b.timestamp.getTime();
-			if (diff !== 0) {
-				return diff;
-			}
-			if (a.key < b.key) {
-				return -1;
-			}
-			if (a.key > b.key) {
-				return 1;
-			}
-			return 0;
-		});
-		const limitedEntries = entries.slice(-2000);
-		const payload: Record<string, unknown> = {
-			lines: limitedEntries
-		};
-		if (data.updatedAt !== undefined) {
-			payload.updatedAt = data.updatedAt;
-		}
-		if (data.stats && typeof data.stats === 'object') {
-			payload.stats = data.stats;
-		}
-		if (data.stream && typeof data.stream === 'object') {
-			payload.stream = data.stream;
-		}
-		const parsed = SparkAgentRunLogSchema.safeParse(payload);
+	function parseRunListItem(documentId: string, value: unknown): RunListItem | null {
+		const record = value && typeof value === 'object' ? value : {};
+		const parsed = SparkAgentStateSchema.safeParse({ id: documentId, ...record });
 		if (!parsed.success) {
 			return null;
 		}
-		return parsed.data;
+		return {
+			id: parsed.data.id,
+			prompt: parsed.data.prompt,
+			preview: resolveRunPreview(parsed.data),
+			status: parsed.data.status,
+			createdAt: parsed.data.createdAt.toISOString(),
+			updatedAt: parsed.data.updatedAt.toISOString(),
+			workspaceId: parsed.data.workspaceId,
+			stopRequested: parsed.data.stop_requested === true
+		};
 	}
 
-	async function copyPrompt(text: string): Promise<void> {
-		if (!browser) {
-			return;
+	function resolveSortInstant(run: RunListItem): Date | null {
+		const timestamp = new Date(run.updatedAt || run.createdAt);
+		if (Number.isNaN(timestamp.getTime())) {
+			return null;
 		}
-		copySuccess = false;
-		try {
-			await navigator.clipboard.writeText(text);
-			copySuccess = true;
-			window.setTimeout(() => {
-				copySuccess = false;
-			}, 2000);
-		} catch (error) {
-			console.warn('Failed to copy prompt', error);
-		}
+		return timestamp;
 	}
 
-	async function openFileRaw(file: SparkAgentWorkspaceFile): Promise<void> {
-		if (!browser) {
-			return;
+	function resolveSectionKey(run: RunListItem): RunSectionKey {
+		const timestamp = resolveSortInstant(run);
+		if (!timestamp) {
+			return 'older';
 		}
-		if (file.type === 'storage_link' && selectedAgent?.workspaceId) {
-			const params = new URLSearchParams({
-				workspaceId: selectedAgent.workspaceId,
-				path: file.path
-			});
-			const openedStorageLink = window.open(
-				`/api/spark/agents/workspace-link?${params.toString()}`,
-				'_blank',
-				'noopener,noreferrer'
-			);
-			if (!openedStorageLink) {
-				throw new Error('Popup blocked');
-			}
-			return;
+
+		const startOfToday = new Date();
+		startOfToday.setHours(0, 0, 0, 0);
+		const startOfYesterday = new Date(startOfToday);
+		startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+		const startOfLast7Days = new Date(startOfToday);
+		startOfLast7Days.setDate(startOfLast7Days.getDate() - 7);
+		const startOfLast30Days = new Date(startOfToday);
+		startOfLast30Days.setDate(startOfLast30Days.getDate() - 30);
+
+		if (timestamp >= startOfToday) {
+			return 'today';
 		}
-		if (selectedFileImageSrc && selectedFile?.path === file.path) {
-			const openedImage = window.open(selectedFileImageSrc, '_blank', 'noopener,noreferrer');
-			if (!openedImage) {
-				throw new Error('Popup blocked');
-			}
-			return;
+		if (timestamp >= startOfYesterday) {
+			return 'yesterday';
 		}
-		const content = file.type === 'storage_link' ? '' : (typeof file.content === 'string' ? file.content : '');
-		const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-		const url = URL.createObjectURL(blob);
-		const opened = window.open(url, '_blank', 'noopener,noreferrer');
-		if (!opened) {
-			URL.revokeObjectURL(url);
-			throw new Error('Popup blocked');
+		if (timestamp >= startOfLast7Days) {
+			return 'last7Days';
 		}
-		window.setTimeout(() => {
-			URL.revokeObjectURL(url);
-		}, 60_000);
+		if (timestamp >= startOfLast30Days) {
+			return 'last30Days';
+		}
+		return 'older';
 	}
 
-	async function createAgent(): Promise<void> {
-		if (createPrompt.trim().length === 0 || creating) {
-			return;
+	function formatRelativeDate(value: string): string {
+		const timestamp = new Date(value);
+		if (Number.isNaN(timestamp.getTime())) {
+			return value;
 		}
-		createError = null;
-		createSuccess = null;
-		creating = true;
-		try {
-			const response = await fetch('/api/spark/agents', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					prompt: createPrompt.trim(),
-					workspaceId: createWorkspaceId.trim() || undefined
-				})
-			});
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? 'creation_failed');
-			}
-			const payload = await response.json();
-			if (payload?.agentId) {
-				selectedAgentId = payload.agentId;
-				selectedAgentDetail = null;
-				createPrompt = '';
-				createWorkspaceId = '';
-				createSuccess = 'Agent created and queued.';
-				loadError = null;
-			}
-		} catch (error) {
-			createError = error instanceof Error ? error.message : 'Unable to create agent right now.';
-		} finally {
-			creating = false;
+		const diff = Date.now() - timestamp.getTime();
+		const minutes = Math.floor(diff / 60_000);
+		const hours = Math.floor(diff / 3_600_000);
+
+		if (minutes < 1) {
+			return 'just now';
 		}
+		if (minutes < 60) {
+			return `${minutes.toString()}m ago`;
+		}
+		if (hours < 24) {
+			return `${hours.toString()}h ago`;
+		}
+		if (hours < 48) {
+			return 'Yesterday';
+		}
+		return timestamp.toLocaleDateString(undefined, {
+			day: 'numeric',
+			month: 'short'
+		});
 	}
 
-	const showStopButton = $derived.by(() => {
-		if (!selectedAgentId || !selectedAgent) {
-			return false;
+	function formatRunMeta(run: RunListItem): string {
+		const parts = [`Workspace ${run.workspaceId}`, `Run ${run.id.slice(0, 8)}`];
+		if (run.stopRequested && (run.status === 'created' || run.status === 'executing')) {
+			parts.push('Stop requested');
 		}
-		if (selectedAgent.stop_requested) {
-			return false;
-		}
-		return selectedAgent.status === 'created' || selectedAgent.status === 'executing';
-	});
-
-	const showStopRequestedBadge = $derived.by(() => {
-		if (!selectedAgentId || !selectedAgent) {
-			return false;
-		}
-		if (selectedAgent.status !== 'created' && selectedAgent.status !== 'executing') {
-			return false;
-		}
-		return selectedAgent.stop_requested === true;
-	});
-
-	const canRequestStop = $derived.by(() => showStopButton && !stopSubmitting);
-
-	const showRetryButton = $derived.by(() => {
-		if (!selectedAgentId || !selectedAgent) {
-			return false;
-		}
-		return selectedAgent.status === 'failed';
-	});
-
-	const canRetry = $derived.by(() => showRetryButton && !retrySubmitting);
-
-	async function downloadRunZip(): Promise<void> {
-		if (!browser) {
-			return;
-		}
-		if (!selectedAgentId || downloadSubmitting) {
-			return;
-		}
-		downloadSubmitting = true;
-		downloadError = null;
-		try {
-			const response = await fetch(`/api/spark/agents/${selectedAgentId}/download`, {
-				method: 'GET'
-			});
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? payload?.message ?? 'download_failed');
-			}
-			const blob = await response.blob();
-			const url = URL.createObjectURL(blob);
-			const link = document.createElement('a');
-			link.href = url;
-			link.download = `spark-agent-${selectedAgentId}.zip`;
-			document.body.appendChild(link);
-			link.click();
-			link.remove();
-			window.setTimeout(() => {
-				URL.revokeObjectURL(url);
-			}, 60_000);
-		} catch (error) {
-			downloadError = error instanceof Error ? error.message : 'Unable to download zip right now.';
-		} finally {
-			downloadSubmitting = false;
-		}
+		return parts.join(' · ');
 	}
 
-	async function requestStop(): Promise<void> {
-		if (!selectedAgentId || !canRequestStop) {
-			return;
+	function matchesFilter(run: RunListItem, nextFilter: RunFilter): boolean {
+		if (nextFilter === 'All') {
+			return true;
 		}
-		stopError = null;
-		stopSuccess = null;
-		stopSubmitting = true;
-		try {
-			const response = await fetch(`/api/spark/agents/${selectedAgentId}/stop`, {
-				method: 'POST'
-			});
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? payload?.message ?? 'stop_failed');
-			}
-			stopSuccess = 'Stop requested.';
-			window.setTimeout(() => {
-				stopSuccess = null;
-			}, 2500);
-		} catch (error) {
-			stopError = error instanceof Error ? error.message : 'Unable to stop this agent right now.';
-		} finally {
-			stopSubmitting = false;
+		if (nextFilter === 'Running') {
+			return run.status === 'executing';
 		}
+		if (nextFilter === 'Queued') {
+			return run.status === 'created';
+		}
+		if (nextFilter === 'Done') {
+			return run.status === 'done';
+		}
+		if (nextFilter === 'Failed') {
+			return run.status === 'failed';
+		}
+		return run.status === 'stopped';
 	}
 
-	async function retryAgent(): Promise<void> {
-		if (!selectedAgentId || !canRetry) {
-			return;
-		}
-		retryError = null;
-		retrySuccess = null;
-		retrySubmitting = true;
-		try {
-			const response = await fetch(`/api/spark/agents/${selectedAgentId}/retry`, {
-				method: 'POST'
-			});
-			if (!response.ok) {
-				const payload = await response.json().catch(() => null);
-				throw new Error(payload?.error ?? payload?.message ?? 'retry_failed');
-			}
-			const payload = await response.json().catch(() => null);
-			if (payload && typeof payload.agentId === 'string' && payload.agentId.trim().length > 0) {
-				selectedAgentId = payload.agentId;
-				selectedAgentDetail = null;
-			}
-			retrySuccess = 'Retry started.';
-			window.setTimeout(() => {
-				retrySuccess = null;
-			}, 2500);
-		} catch (error) {
-			retryError = error instanceof Error ? error.message : 'Unable to retry this agent right now.';
-		} finally {
-			retrySubmitting = false;
-		}
+	function resolveRunHref(runId: string): string {
+		return `/spark/agents/${encodeURIComponent(runId)}`;
 	}
 
 	onMount(() => {
@@ -568,1247 +203,527 @@
 				authReady = true;
 				stopAuth();
 			});
-		} catch (error) {
-			console.warn('Failed to initialize Spark Agents auth guard', error);
+		} catch (authError) {
+			console.warn('Failed to initialize Spark Agents auth guard', authError);
 		}
 	});
 
-	$effect(() => {
-		if (!browser) {
-			return;
-		}
-		if (!userId || !authReady) {
-			agents = [];
-			loadError = null;
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const agentsRef = collection(db, 'users', userId, 'agents');
-		const agentsQuery = query(agentsRef, orderBy('createdAt', 'desc'), limit(50));
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			agentsQuery,
-			(snap) => {
-				const next: SparkAgentState[] = [];
-				for (const docSnap of snap.docs) {
-					const parsed = SparkAgentStateSchema.safeParse({ id: docSnap.id, ...docSnap.data() });
-					if (!parsed.success) {
-						continue;
-					}
-					next.push(parsed.data);
-				}
-				agents = next;
-				loadError = null;
-			},
-			(error) => {
-				console.warn('Firestore subscription failed', error);
-				loadError = 'Unable to load Spark Agents right now.';
+	const visibleRuns = $derived.by(() => {
+		const needle = search.trim().toLowerCase();
+		return agentRuns.filter((run) => {
+			if (!matchesFilter(run, filter)) {
+				return false;
 			}
-		);
-		return () => {
-			stop?.();
-		};
-	});
-
-	$effect(() => {
-		if (!browser) {
-			return;
-		}
-		if (!userId || !selectedAgentId || !authReady) {
-			selectedAgentDetail = null;
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const agentRef = doc(db, 'users', userId, 'agents', selectedAgentId);
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			agentRef,
-			(snap) => {
-				if (!snap.exists()) {
-					selectedAgentDetail = null;
-					return;
-				}
-				const parsed = SparkAgentStateSchema.safeParse({ id: snap.id, ...snap.data() });
-				if (!parsed.success) {
-					console.warn('Invalid Spark Agent payload', parsed.error.flatten());
-					return;
-				}
-				selectedAgentDetail = parsed.data;
-				loadError = null;
-			},
-			(error) => {
-				console.warn('Firestore subscription failed', error);
-				loadError = 'Unable to load Spark Agent details right now.';
+			if (needle.length === 0) {
+				return true;
 			}
-		);
-		return () => {
-			stop?.();
-		};
-	});
-
-	$effect(() => {
-		if (!browser) {
-			return;
-		}
-		const workspaceId = selectedAgent?.workspaceId ?? null;
-		if (!userId || !workspaceId || !authReady) {
-			files = [];
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
-		const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			filesQuery,
-			(snap) => {
-				const next: SparkAgentWorkspaceFile[] = [];
-				for (const docSnap of snap.docs) {
-					const data = docSnap.data();
-					const payload = {
-						...data,
-						path:
-							typeof data.path === 'string' && data.path.trim().length > 0
-								? data.path.trim()
-								: decodeFileId(docSnap.id)
-					};
-					const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
-					if (!parsed.success) {
-						continue;
-					}
-					next.push(parsed.data);
-				}
-				files = next;
-				loadError = null;
-			},
-			(error) => {
-				console.warn('Firestore subscription failed', error);
-				loadError = 'Unable to load Spark Agent workspace right now.';
-			}
-		);
-		return () => {
-			stop?.();
-		};
-	});
-
-	$effect(() => {
-		if (!browser) {
-			return;
-		}
-		if (!userId || !selectedAgentId || !authReady) {
-			runLog = null;
-			runLogLines = [];
-			runLogFollow = true;
-			return;
-		}
-		const db = getFirestore(getFirebaseApp());
-		const ref = doc(db, 'users', userId, 'agents', selectedAgentId, 'logs', 'log');
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			ref,
-			(snap) => {
-				if (!snap.exists()) {
-					runLog = null;
-					runLogLines = [];
-					return;
-				}
-				const data = (snap.data() ?? {}) as Record<string, unknown>;
-				const parsed = parseRunLogDoc(data);
-				runLog = parsed;
-				runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? [], parsed?.stream);
-				loadError = null;
-			},
-			(error) => {
-				console.warn('Firestore subscription failed', error);
-				loadError = 'Unable to load Spark Agent logs right now.';
-			}
-		);
-		return () => {
-			stop?.();
-		};
-	});
-
-	$effect(() => {
-		if (agents.length === 0) {
-			selectedAgentId = null;
-			selectedAgentDetail = null;
-			return;
-		}
-		if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) {
-			return;
-		}
-		selectedAgentId = agents[0]?.id ?? null;
-	});
-
-	$effect(() => {
-		if (!selectedAgentId) {
-			selectedAgentDetail = null;
-			files = [];
-			runLog = null;
-			runLogLines = [];
-			runLogFollow = true;
-			stopError = null;
-			stopSuccess = null;
-			retryError = null;
-			retrySuccess = null;
-			downloadError = null;
-			return;
-		}
-		selectedAgentDetail = null;
-		files = [];
-		runLog = null;
-		runLogLines = [];
-		runLogFollow = true;
-		stopError = null;
-		stopSuccess = null;
-		retryError = null;
-		retrySuccess = null;
-		downloadError = null;
-	});
-
-	let lastRunLogLineCount = 0;
-	let lastRunLogFollow = true;
-	$effect(() => {
-		if (!browser) {
-			return;
-		}
-		const lineCount = runLogLines.length;
-		const follow = runLogFollow;
-		const shouldScroll =
-			follow && (follow !== lastRunLogFollow || lineCount !== lastRunLogLineCount);
-		lastRunLogLineCount = lineCount;
-		lastRunLogFollow = follow;
-
-		if (!shouldScroll || lineCount === 0) {
-			return;
-		}
-
-		void tick().then(() => {
-			scheduleScrollRunLogToBottom();
+			return (
+				run.prompt.toLowerCase().includes(needle) ||
+				run.preview.toLowerCase().includes(needle) ||
+				run.workspaceId.toLowerCase().includes(needle) ||
+				run.id.toLowerCase().includes(needle)
+			);
 		});
 	});
 
+	const sections = $derived.by(() => {
+		const grouped = new Map<RunSectionKey, RunListItem[]>();
+		for (const section of SECTION_ORDER) {
+			grouped.set(section.key, []);
+		}
+		for (const run of visibleRuns) {
+			grouped.get(resolveSectionKey(run))?.push(run);
+		}
+		return SECTION_ORDER.map((section) => ({
+			...section,
+			items: grouped.get(section.key) ?? []
+		})).filter((section) => section.items.length > 0);
+	});
+
 	$effect(() => {
-		if (selectedFilePath && files.some((file) => file.path === selectedFilePath)) {
+		if (!browser) {
 			return;
 		}
-		if (!selectedFilePath || files.length === 0) {
-			selectedFilePath = null;
-			fileDialogOpen = false;
+		if (!userId) {
+			agentRuns = [];
+			loading = false;
+			error = null;
+			return;
 		}
+		if (!authReady) {
+			agentRuns = [];
+			loading = true;
+			error = null;
+			return;
+		}
+
+		loading = true;
+		error = null;
+
+		const db = getFirestore(getFirebaseApp());
+		const runsQuery = query(
+			collection(db, 'users', userId, 'agents'),
+			orderBy('updatedAt', 'desc'),
+			queryLimit(RUN_LIST_LIMIT)
+		);
+		const stop = onSnapshot(
+			runsQuery,
+			(snapshot) => {
+				const nextRuns: RunListItem[] = [];
+				for (const document of snapshot.docs) {
+					const nextRun = parseRunListItem(document.id, document.data());
+					if (!nextRun) {
+						continue;
+					}
+					nextRuns.push(nextRun);
+				}
+				agentRuns = nextRuns;
+				loading = false;
+			},
+			(snapshotError) => {
+				console.warn('Failed to load Spark agent runs', snapshotError);
+				error = 'Spark could not load your agent runs right now.';
+				loading = false;
+			}
+		);
+
+		return () => {
+			stop();
+		};
 	});
 </script>
 
 <svelte:head>
-	<title>Spark Agents</title>
+	<title>Spark · Agents</title>
 </svelte:head>
 
 <section class="agents-page">
-	<header class="agents-hero">
-		<div class="agents-hero__copy">
-			<p class="agents-hero__eyebrow">Spark AI Agent</p>
-			<h1>Track every autonomous run</h1>
+	<div class="toolbar">
+		<label class="search-field">
+			<svg class="search-field__icon" viewBox="0 0 24 24" aria-hidden="true">
+				<circle cx="11" cy="11" r="7"></circle>
+				<path d="M20 20L16.65 16.65"></path>
+			</svg>
+			<input
+				type="search"
+				value={search}
+				placeholder="Search agent runs..."
+				aria-label="Search agent runs"
+				oninput={(event) => {
+					search = (event.currentTarget as HTMLInputElement).value;
+				}}
+			/>
+		</label>
+
+		<div class="filters" role="tablist" aria-label="Agent run status">
+			{#each FILTERS as option}
+				<button
+					type="button"
+					class="filter-pill"
+					data-active={filter === option}
+					onclick={() => {
+						filter = option;
+					}}
+				>
+					{option}
+				</button>
+			{/each}
+		</div>
+	</div>
+
+	{#if loading}
+		<div class="state-card">
+			<h2>Loading agent runs...</h2>
+			<p>Pulling the latest run activity from Firestore.</p>
+		</div>
+	{:else if error}
+		<div class="state-card state-card--error" role="alert">
+			<h2>Couldn&apos;t load agent runs</h2>
+			<p>{error}</p>
+		</div>
+	{:else if visibleRuns.length === 0}
+		<div class="state-card">
+			<h2>{agentRuns.length === 0 ? 'No agent runs yet' : 'No agent runs found'}</h2>
 			<p>
-				Launch a new Spark Agent, watch its status update live, and inspect the workspace files it
-				produces.
+				{agentRuns.length === 0
+					? 'Runs launched from Spark will appear here once they start syncing.'
+					: 'Try another search or filter to narrow the list.'}
 			</p>
 		</div>
-		<div class="agents-hero__card">
-			<label class="agents-hero__label" for="agent-prompt">New agent prompt</label>
-			<textarea
-				id="agent-prompt"
-				class="agents-hero__textarea"
-				rows="4"
-				placeholder="Describe the task you want the agent to complete..."
-				bind:value={createPrompt}
-			></textarea>
-			<label class="agents-hero__label" for="agent-workspace"> Workspace ID (optional) </label>
-			<input
-				id="agent-workspace"
-				class="agents-hero__input"
-				type="text"
-				placeholder="Use existing workspace or leave empty"
-				bind:value={createWorkspaceId}
-			/>
-			<div class="agents-hero__actions">
-				<Button onclick={createAgent} disabled={!userId || !createPrompt.trim() || creating}>
-					{creating ? 'Creating…' : 'Create agent'}
-				</Button>
-				{#if createSuccess}
-					<span class="agents-hero__success">{createSuccess}</span>
-				{/if}
-				{#if createError}
-					<span class="agents-hero__error">{createError}</span>
-				{/if}
-			</div>
-		</div>
-	</header>
+	{:else}
+		<div class="sections">
+			{#each sections as section (section.key)}
+				<section class="run-section" aria-labelledby={`agent-section-${section.key}`}>
+					<header class="run-section__header">
+						<span id={`agent-section-${section.key}`}>{section.label}</span>
+						<div class="run-section__rule" aria-hidden="true"></div>
+						<span>{section.items.length} run{section.items.length === 1 ? '' : 's'}</span>
+					</header>
 
-	{#if loadError}
-		<div class="agents-load-error" role="alert">{loadError}</div>
-	{/if}
-
-	<div class="agents-grid">
-		<section class="agents-list">
-			<h2>Runs</h2>
-			{#if agents.length === 0}
-				<p class="agents-empty">No agents yet. Create one to get started.</p>
-			{:else}
-				<ul>
-					{#each agents as agent}
-						<li>
-							<button
-								class={`agents-list__item ${agent.id === selectedAgentId ? 'is-active' : ''}`}
-								onclick={() => {
-									selectedAgentId = agent.id;
-								}}
-							>
-								<div>
-									<p class="agents-list__prompt">{agent.prompt}</p>
-									<p class="agents-list__meta">
-										<span class={`status-pill status-pill--${agent.status}`}>{agent.status}</span>
-										<span>{formatTimestamp(agent.createdAt)}</span>
-									</p>
+					<div class="run-group">
+						{#each section.items as run, index (run.id)}
+							<a class="run-row" href={resolveRunHref(run.id)} data-status={run.status}>
+								<div class="run-row__icon" data-status={run.status} aria-hidden="true">
+									{#if run.status === 'done'}
+										<svg viewBox="0 0 24 24">
+											<path d="M5 13L9 17L19 7"></path>
+										</svg>
+									{:else if run.status === 'executing'}
+										<svg viewBox="0 0 24 24">
+											<path d="M8 5V19L19 12Z"></path>
+										</svg>
+									{:else if run.status === 'stopped'}
+										<svg viewBox="0 0 24 24">
+											<path d="M7 7H17V17H7Z"></path>
+										</svg>
+									{:else if run.status === 'failed'}
+										<svg viewBox="0 0 24 24">
+											<path d="M7 7L17 17"></path>
+											<path d="M17 7L7 17"></path>
+										</svg>
+									{:else}
+										<svg viewBox="0 0 24 24">
+											<circle cx="12" cy="12" r="8"></circle>
+											<path d="M12 8V12L15 14"></path>
+										</svg>
+									{/if}
 								</div>
-								<span class="agents-list__chevron">›</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</section>
 
-		<section class="agents-detail">
-			{#if !selectedAgent}
-				<div class="agents-empty agents-detail__empty">Select an agent to see details.</div>
-			{:else}
-				<div class="agents-detail__card">
-					<div class="agents-detail__header">
-						<div>
-							<p class="agents-detail__eyebrow">Agent status</p>
-							<h2>{selectedAgent.prompt}</h2>
-						</div>
-						<div class="agents-detail__header-actions">
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => {
-									void copyPrompt(selectedAgent.prompt);
-								}}
-							>
-								{copySuccess ? 'Copied' : 'Copy prompt'}
-							</Button>
-							<Button
-								variant="ghost"
-								size="sm"
-								disabled={downloadSubmitting}
-								onclick={() => {
-									void downloadRunZip();
-								}}
-							>
-								{downloadSubmitting ? 'Downloading…' : 'Download zip'}
-							</Button>
-							{#if showStopButton}
-								<Button
-									variant="destructive"
-									size="sm"
-									disabled={stopSubmitting}
-									onclick={() => {
-										void requestStop();
-									}}
-								>
-									{stopSubmitting ? 'Stopping…' : 'Stop'}
-								</Button>
-							{/if}
-							{#if showRetryButton}
-								<Button
-									variant="secondary"
-									size="sm"
-									disabled={retrySubmitting}
-									onclick={() => {
-										void retryAgent();
-									}}
-								>
-									{retrySubmitting ? 'Retrying…' : 'Retry'}
-								</Button>
-							{/if}
-							{#if showStopRequestedBadge}
-								<span class="status-pill status-pill--stopped">stop requested</span>
-							{/if}
-							<span class={`status-pill status-pill--${selectedAgent.status}`}>
-								{selectedAgent.status}
-							</span>
-						</div>
-					</div>
-					<div class="agents-detail__meta">
-						<div>
-							<span>Agent ID</span>
-							<p>{selectedAgent.id}</p>
-						</div>
-						<div>
-							<span>Workspace</span>
-							<p>{selectedAgent.workspaceId}</p>
-						</div>
-						<div>
-							<span>Created</span>
-							<p>{formatTimestamp(selectedAgent.createdAt)}</p>
-						</div>
-						<div>
-							<span>Updated</span>
-							<p>{formatTimestamp(selectedAgent.updatedAt)}</p>
-						</div>
-					</div>
-					{#if selectedAgent.resultSummary}
-						<div class="agents-detail__summary">
-							<p class="agents-detail__eyebrow">Summary</p>
-							<p>{selectedAgent.resultSummary}</p>
-						</div>
-					{/if}
-					{#if selectedAgent.error}
-						<div class="agents-detail__error">
-							<p class="agents-detail__eyebrow">Error</p>
-							<p>{selectedAgent.error}</p>
-						</div>
-					{/if}
-					{#if stopError}
-						<div class="agents-detail__error">
-							<p class="agents-detail__eyebrow">Stop request</p>
-							<p>{stopError}</p>
-						</div>
-					{/if}
-					{#if stopSuccess}
-						<div class="agents-detail__summary">
-							<p class="agents-detail__eyebrow">Stop request</p>
-							<p>{stopSuccess}</p>
-						</div>
-					{/if}
-					{#if retryError}
-						<div class="agents-detail__error">
-							<p class="agents-detail__eyebrow">Retry</p>
-							<p>{retryError}</p>
-						</div>
-					{/if}
-					{#if retrySuccess}
-						<div class="agents-detail__summary">
-							<p class="agents-detail__eyebrow">Retry</p>
-							<p>{retrySuccess}</p>
-						</div>
-					{/if}
-					{#if downloadError}
-						<div class="agents-detail__error">
-							<p class="agents-detail__eyebrow">Download</p>
-							<p>{downloadError}</p>
-						</div>
-					{/if}
-					<div class="agents-detail__timeline">
-						<p class="agents-detail__eyebrow">Timeline</p>
-						<ul>
-							{#each selectedAgent.statesTimeline as entry}
-								<li>
-									<span class={`status-dot status-dot--${entry.state}`}></span>
-									<span>{entry.state}</span>
-									<span class="agents-detail__timestamp">{formatTimestamp(entry.timestamp)}</span>
-								</li>
-							{/each}
-						</ul>
-					</div>
-				</div>
+								<div class="run-row__body">
+									<div class="run-row__topline">
+										<div class="run-row__titlewrap">
+											<h2>{run.prompt}</h2>
+											<span class="run-status-pill" data-status={run.status}>{run.status}</span>
+											{#if run.stopRequested && (run.status === 'created' || run.status === 'executing')}
+												<span class="run-stop-pill">Stop requested</span>
+											{/if}
+										</div>
+										<span class="run-row__date">{formatRelativeDate(run.updatedAt)}</span>
+									</div>
 
-				<div class="agents-workspace">
-					<div class="agents-workspace__files">
-						<h3>Workspace files</h3>
-						{#if files.length === 0}
-							<p class="agents-empty">No files synced yet.</p>
-						{:else}
-							<ul>
-								{#each files as file}
-									<li>
-										<button
-											class={`file-item ${file.path === selectedFilePath ? 'is-active' : ''}`}
-											onclick={() => {
-												selectedFilePath = file.path;
-												fileDialogOpen = true;
-											}}
-										>
-											<span class="file-item__path">{file.path}</span>
-											<span class="file-item__meta">
-												<span>{formatSize(file.sizeBytes)}</span>
-												<span>{formatRelativeAge(file.updatedAt)}</span>
-											</span>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
-				</div>
-
-				<section class="agents-run">
-					<h3>Run stats</h3>
-					{#if runStats}
-						<div class="agents-run__stats">
-							<div>
-								<span class="agents-run__label">Model cost</span>
-								<p class="agents-run__value">{formatUsd(runStats.modelCostUsd)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Tools cost</span>
-								<p class="agents-run__value">{formatUsd(runStats.toolCostUsd)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Total cost</span>
-								<p class="agents-run__value">{formatUsd(runStats.totalCostUsd)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Model calls</span>
-								<p class="agents-run__value">{formatInt(runStats.modelCalls)}</p>
-							</div>
-							<div class="agents-run__wide">
-								<span class="agents-run__label">Models</span>
-								<p class="agents-run__value">{runStats.modelsUsed.join(', ')}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Tool calls</span>
-								<p class="agents-run__value">{formatInt(runStats.toolCalls)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Total tokens</span>
-								<p class="agents-run__value">{formatInt(runStats.tokens.totalTokens)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Prompt tokens</span>
-								<p class="agents-run__value">{formatInt(runStats.tokens.promptTokens)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Thinking tokens</span>
-								<p class="agents-run__value">{formatInt(runStats.tokens.thinkingTokens)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Output tokens</span>
-								<p class="agents-run__value">{formatInt(runStats.tokens.responseTokens)}</p>
-							</div>
-							<div>
-								<span class="agents-run__label">Cached tokens</span>
-								<p class="agents-run__value">{formatInt(runStats.tokens.cachedTokens)}</p>
-							</div>
-						</div>
-					{:else}
-						<p class="agents-empty">Stats will appear once the agent starts running.</p>
-					{/if}
-
-					<h3>Run log</h3>
-					{#if runLog && runLogLines.length > 0}
-						<div
-							class="agents-run__log"
-							aria-label="Agent run log"
-							bind:this={runLogScrollEl}
-							onscroll={handleRunLogScroll}
-						>
-							{#each runLogLines as entry (entry.key)}
-								<div class="agents-run__log-line">
-									<span class="agents-run__log-ts">{entry.timestampLabel}</span>
-									<span class="agents-run__log-msg">{entry.line}</span>
+									<p class="run-row__preview">{run.preview}</p>
+									<p class="run-row__meta">{formatRunMeta(run)}</p>
 								</div>
-							{/each}
-						</div>
-					{:else}
-						<p class="agents-empty">No logs yet.</p>
-					{/if}
+							</a>
+
+							{#if index < section.items.length - 1}
+								<div class="run-row__divider" aria-hidden="true"></div>
+							{/if}
+						{/each}
+					</div>
 				</section>
-			{/if}
-		</section>
-	</div>
+			{/each}
+		</div>
+	{/if}
 </section>
-
-{#if fileDialogOpen && selectedFile}
-	<button
-		class="file-dialog__backdrop"
-		type="button"
-		aria-label="Close file dialog"
-		onclick={() => {
-			fileDialogOpen = false;
-		}}
-	></button>
-	<div class="file-dialog" role="dialog" aria-modal="true">
-		<header class="file-dialog__header">
-			<div>
-				<p class="file-dialog__label">Workspace file</p>
-				<h3>{selectedFile.path}</h3>
-			</div>
-			<div class="file-dialog__actions">
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={() => {
-						void openFileRaw(selectedFile);
-					}}
-				>
-					Raw
-				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={() => {
-						fileDialogOpen = false;
-					}}
-				>
-					×
-				</Button>
-			</div>
-		</header>
-			<div class="file-dialog__body">
-				{#if selectedFileIsMarkdown}
-					<div class="markdown-preview">{@html selectedFileHtml}</div>
-					{:else if selectedFileImageSrc}
-						<div class="file-image-preview">
-							<img src={selectedFileImageSrc} alt={selectedFile.path} loading="lazy" />
-						</div>
-					{:else if selectedFile.type === 'storage_link'}
-						<div class="file-storage-link-preview">
-							<p>Binary file stored in Firebase Storage (`storage_link`).</p>
-							<p class="file-storage-link-preview__path">{selectedFile.storagePath}</p>
-						</div>
-					{:else}
-						<pre class="file-preview"><code>{selectedFile.content}</code></pre>
-					{/if}
-				</div>
-	</div>
-{/if}
 
 <style lang="postcss">
 	.agents-page {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(1.5rem, 3vw, 2.5rem);
-		padding: clamp(1.5rem, 3vw, 2.5rem) 0 2.5rem;
-		max-width: min(80rem, 92vw);
-		margin: 0 auto;
+		gap: 1.75rem;
+		width: min(48rem, 92vw);
+		margin: 0 auto clamp(2.5rem, 5vw, 4rem);
+		padding-top: clamp(1.8rem, 3vw, 2.75rem);
 	}
 
-	.agents-hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-		gap: clamp(1.5rem, 3vw, 2.4rem);
-		align-items: stretch;
-		padding: clamp(1.5rem, 2.6vw, 2.4rem);
-		border-radius: clamp(1.4rem, 2vw, 2.1rem);
-		background:
-			radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 55%),
-			linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.85));
-		color: #f8fafc;
-		border: 1px solid rgba(148, 163, 184, 0.2);
-		box-shadow: 0 30px 80px -55px rgba(15, 23, 42, 0.8);
-	}
-
-	.agents-hero__copy h1 {
-		margin: 0 0 0.6rem;
-		font-size: clamp(2rem, 3.4vw, 2.8rem);
-		font-weight: 650;
-	}
-
-	.agents-hero__copy p {
-		margin: 0;
-		line-height: 1.6;
-		color: rgba(248, 250, 252, 0.86);
-	}
-
-	.agents-hero__eyebrow {
-		margin: 0 0 0.6rem;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.16em;
-		color: rgba(148, 163, 184, 0.9);
-	}
-
-	.agents-hero__card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		background: rgba(15, 23, 42, 0.7);
-		border-radius: 1.2rem;
-		padding: 1.2rem;
-		border: 1px solid rgba(148, 163, 184, 0.2);
-	}
-
-	.agents-hero__label {
-		font-size: 0.85rem;
-		color: rgba(226, 232, 240, 0.8);
-	}
-
-	.agents-hero__textarea {
-		min-height: 6.5rem;
-		border-radius: 0.9rem;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		padding: 0.8rem 0.9rem;
-		background: rgba(15, 23, 42, 0.4);
-		color: #f8fafc;
-		font-size: 0.95rem;
-		line-height: 1.5;
-	}
-
-	.agents-hero__textarea:focus {
-		outline: none;
-		border-color: rgba(56, 189, 248, 0.6);
-		box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
-	}
-
-	.agents-hero__input {
-		border-radius: 0.9rem;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		padding: 0.7rem 0.9rem;
-		background: rgba(15, 23, 42, 0.4);
-		color: #f8fafc;
-		font-size: 0.92rem;
-	}
-
-	.agents-hero__input:focus {
-		outline: none;
-		border-color: rgba(56, 189, 248, 0.6);
-		box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
-	}
-
-	.agents-hero__actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-		align-items: center;
-	}
-
-	.agents-hero__success {
-		font-size: 0.85rem;
-		color: rgba(134, 239, 172, 0.9);
-	}
-
-	.agents-hero__error {
-		font-size: 0.85rem;
-		color: rgba(248, 113, 113, 0.9);
-	}
-
-	.agents-load-error {
-		border-radius: 1rem;
-		padding: 0.9rem 1rem;
-		border: 1px solid rgba(248, 113, 113, 0.35);
-		background: rgba(248, 113, 113, 0.12);
-		color: rgba(185, 28, 28, 0.92);
-		font-size: 0.9rem;
-	}
-
-	:global([data-theme='dark'] .agents-load-error),
-	:global(:root:not([data-theme='light']) .agents-load-error) {
-		background: rgba(248, 113, 113, 0.18);
-		color: rgba(254, 226, 226, 0.9);
-	}
-
-	.agents-grid {
-		display: grid;
-		grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
-		gap: clamp(1.2rem, 2.5vw, 2rem);
-	}
-
-	.agents-list,
-	.agents-detail {
-		background: var(--app-panel-bg, rgba(255, 255, 255, 0.85));
-		border-radius: 1.2rem;
-		padding: 1.2rem;
-		border: 1px solid rgba(148, 163, 184, 0.2);
-		box-shadow: 0 18px 40px -35px rgba(15, 23, 42, 0.35);
-	}
-
-	:global([data-theme='dark'] .agents-list),
-	:global([data-theme='dark'] .agents-detail),
-	:global(:root:not([data-theme='light']) .agents-list),
-	:global(:root:not([data-theme='light']) .agents-detail) {
-		background: rgba(15, 23, 42, 0.7);
-		border-color: rgba(148, 163, 184, 0.3);
-	}
-
-	.agents-list h2 {
-		margin: 0 0 1rem;
-		font-size: 1.1rem;
-	}
-
-	.agents-list ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-	}
-
-	.agents-list__item {
-		width: 100%;
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: center;
-		text-align: left;
-		background: rgba(148, 163, 184, 0.08);
-		border: 1px solid transparent;
-		padding: 0.8rem 0.9rem;
-		border-radius: 0.9rem;
-		cursor: pointer;
-		transition:
-			border-color 0.2s ease,
-			transform 0.2s ease;
-	}
-
-	.agents-list__item:hover {
-		border-color: rgba(56, 189, 248, 0.5);
-		transform: translateY(-1px);
-	}
-
-	.agents-list__item.is-active {
-		border-color: rgba(56, 189, 248, 0.7);
-		background: rgba(56, 189, 248, 0.15);
-	}
-
-	.agents-list__prompt {
-		margin: 0 0 0.35rem;
-		font-weight: 600;
-		line-height: 1.4;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-
-	.agents-list__meta {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-		font-size: 0.8rem;
-		color: rgba(100, 116, 139, 0.9);
-	}
-
-	:global([data-theme='dark'] .agents-list__meta),
-	:global(:root:not([data-theme='light']) .agents-list__meta) {
-		color: rgba(226, 232, 240, 0.7);
-	}
-
-	.agents-list__chevron {
-		font-size: 1.4rem;
-		color: rgba(100, 116, 139, 0.6);
-	}
-
-	.agents-detail__card {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-		padding-bottom: 1.2rem;
-		margin-bottom: 1.2rem;
-	}
-
-	.agents-detail__header {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		align-items: flex-start;
-		flex-wrap: wrap;
-	}
-
-	.agents-detail__header > div:first-child {
-		min-width: 0;
-		flex: 1 1 18rem;
-	}
-
-	.agents-detail__header-actions {
-		display: inline-flex;
-		gap: 0.5rem;
-		align-items: center;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-
-	.agents-detail__header h2 {
-		margin: 0;
-		font-size: 1.3rem;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-
-	.agents-detail__meta {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-		gap: 0.8rem;
-		font-size: 0.85rem;
-		color: rgba(100, 116, 139, 0.9);
-	}
-
-	.agents-detail__meta p {
-		margin: 0.15rem 0 0;
-		color: inherit;
-		font-weight: 600;
-	}
-
-	.agents-detail__eyebrow {
-		margin: 0;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: rgba(100, 116, 139, 0.7);
-	}
-
-	.agents-detail__summary,
-	.agents-detail__error,
-	.agents-detail__timeline {
-		padding: 0.75rem;
-		border-radius: 0.9rem;
-		background: rgba(148, 163, 184, 0.08);
-	}
-
-	.agents-detail__error {
-		background: rgba(248, 113, 113, 0.12);
-		color: rgba(185, 28, 28, 0.9);
-	}
-
-	.agents-detail__timeline ul {
-		list-style: none;
-		padding: 0;
-		margin: 0.6rem 0 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-
-	.agents-detail__timeline li {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.85rem;
-	}
-
-	.agents-detail__timestamp {
-		margin-left: auto;
-		color: rgba(100, 116, 139, 0.7);
-		font-size: 0.78rem;
-	}
-
-	.status-pill {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.2rem 0.55rem;
-		border-radius: 999px;
-		font-size: 0.7rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-	}
-
-	.status-pill--created {
-		background: rgba(148, 163, 184, 0.2);
-		color: rgba(71, 85, 105, 0.8);
-	}
-
-	.status-pill--executing {
-		background: rgba(56, 189, 248, 0.2);
-		color: rgba(14, 116, 144, 0.9);
-	}
-
-	.status-pill--done {
-		background: rgba(34, 197, 94, 0.2);
-		color: rgba(21, 128, 61, 0.9);
-	}
-
-	.status-pill--stopped {
-		background: rgba(245, 158, 11, 0.2);
-		color: rgba(180, 83, 9, 0.95);
-	}
-
-	.status-pill--failed {
-		background: rgba(248, 113, 113, 0.2);
-		color: rgba(185, 28, 28, 0.9);
-	}
-
-	.status-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 999px;
-		background: rgba(148, 163, 184, 0.7);
-	}
-
-	.status-dot--executing {
-		background: rgba(56, 189, 248, 0.9);
-	}
-
-	.status-dot--done {
-		background: rgba(34, 197, 94, 0.9);
-	}
-
-	.status-dot--stopped {
-		background: rgba(245, 158, 11, 0.9);
-	}
-
-	.status-dot--failed {
-		background: rgba(248, 113, 113, 0.9);
-	}
-
-	.agents-workspace {
-		display: block;
-	}
-
-	.agents-workspace__files h3 {
-		margin: 0 0 0.8rem;
-		font-size: 1rem;
-	}
-
-	.agents-workspace__files ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-	}
-
-	.file-item {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.6rem 0.7rem;
-		border-radius: 0.7rem;
-		background: rgba(148, 163, 184, 0.08);
-		border: 1px solid transparent;
-		cursor: pointer;
-		font-size: 0.82rem;
-		align-items: center;
-	}
-
-	.file-item__path {
-		font-weight: 600;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.file-item__meta {
-		display: inline-flex;
-		gap: 0.6rem;
-		color: rgba(100, 116, 139, 0.8);
-		font-size: 0.75rem;
-	}
-
-	:global([data-theme='dark'] .file-item__meta),
-	:global(:root:not([data-theme='light']) .file-item__meta) {
-		color: rgba(226, 232, 240, 0.7);
-	}
-
-	.file-item.is-active {
-		border-color: rgba(56, 189, 248, 0.6);
-		background: rgba(56, 189, 248, 0.12);
-	}
-
-	.file-preview {
-		white-space: pre-wrap;
-		font-family:
-			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
-		font-size: 0.85rem;
-	}
-
-	.file-image-preview {
-		display: flex;
-		justify-content: center;
-		align-items: flex-start;
-	}
-
-	.file-image-preview img {
-		display: block;
-		max-width: 100%;
-		max-height: min(70vh, 48rem);
-		border-radius: 0.6rem;
-		border: 1px solid rgba(148, 163, 184, 0.35);
-		background: rgba(15, 23, 42, 0.04);
-	}
-
-	.file-storage-link-preview {
-		display: grid;
-		gap: 0.55rem;
-		padding: 0.9rem;
-		border-radius: 0.75rem;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: rgba(148, 163, 184, 0.08);
-	}
-
-	.file-storage-link-preview p {
-		margin: 0;
-	}
-
-	.file-storage-link-preview__path {
-		font-family:
-			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
-		font-size: 0.8rem;
-		overflow-wrap: anywhere;
-	}
-
-	.markdown-preview :global(p) {
-		margin: 0 0 0.85rem;
-	}
-
-	.agents-empty {
-		margin: 0;
-		color: rgba(100, 116, 139, 0.8);
-		font-size: 0.9rem;
-	}
-
-	.agents-detail__empty {
-		padding: 2rem;
-		text-align: center;
-	}
-
-	.agents-run {
-		margin-top: 1.4rem;
+	.toolbar {
 		display: flex;
 		flex-direction: column;
 		gap: 0.9rem;
 	}
 
-	.agents-run h3 {
-		margin: 0;
-		font-size: 1rem;
-	}
-
-	.agents-run__stats {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: 0.8rem;
-		padding: 0.85rem;
-		border-radius: 1rem;
-		background: rgba(148, 163, 184, 0.08);
-		border: 1px solid rgba(148, 163, 184, 0.18);
-	}
-
-	.agents-run__label {
+	.search-field {
+		position: relative;
 		display: block;
-		font-size: 0.72rem;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: rgba(100, 116, 139, 0.7);
 	}
 
-	.agents-run__value {
-		margin: 0.3rem 0 0;
-		font-weight: 650;
+	.search-field__icon {
+		position: absolute;
+		left: 1rem;
+		top: 50%;
+		width: 1rem;
+		height: 1rem;
+		transform: translateY(-50%);
+		fill: none;
+		stroke: color-mix(in srgb, var(--foreground) 36%, transparent);
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		pointer-events: none;
 	}
 
-	.agents-run__wide {
-		grid-column: 1 / -1;
-	}
-
-	.agents-run__log {
-		padding: 0.85rem;
+	.search-field input {
+		width: 100%;
+		padding: 0.95rem 1rem 0.95rem 2.85rem;
 		border-radius: 1rem;
-		border: 1px solid rgba(148, 163, 184, 0.18);
-		background: rgba(15, 23, 42, 0.04);
-		max-height: 22rem;
-		overflow: auto;
-		font-family:
-			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
-		font-size: 0.82rem;
-		line-height: 1.4;
+		border: 1.5px solid color-mix(in srgb, var(--border) 88%, transparent);
+		background: color-mix(in srgb, var(--card) 78%, rgba(255, 255, 255, 0.56));
+		backdrop-filter: blur(12px);
+		font-size: 0.96rem;
+		color: var(--foreground);
+		transition:
+			border-color 140ms ease,
+			box-shadow 140ms ease,
+			background-color 140ms ease;
 	}
 
-	:global([data-theme='dark'] .agents-run__log),
-	:global(:root:not([data-theme='light']) .agents-run__log) {
-		background: rgba(15, 23, 42, 0.6);
-		border-color: rgba(148, 163, 184, 0.3);
+	.search-field input::placeholder {
+		color: color-mix(in srgb, var(--foreground) 36%, transparent);
 	}
 
-	.agents-run__log-line {
-		display: grid;
-		grid-template-columns: 10.5rem 1fr;
-		gap: 0.75rem;
-		padding: 0.15rem 0;
+	.search-field input:focus {
+		outline: none;
+		border-color: color-mix(in srgb, #d97706 76%, var(--border));
+		box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.12);
 	}
 
-	.agents-run__log-ts {
-		color: rgba(100, 116, 139, 0.7);
-		font-size: 0.72rem;
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
 	}
 
-	.agents-run__log-msg {
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-	.file-dialog__backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.6);
-		z-index: 50;
-		border: none;
-		padding: 0;
+	.filter-pill {
+		padding: 0.55rem 1rem;
+		border-radius: 999px;
+		border: 1.5px solid color-mix(in srgb, var(--border) 90%, transparent);
+		background: color-mix(in srgb, var(--card) 74%, rgba(255, 255, 255, 0.46));
+		color: color-mix(in srgb, var(--foreground) 58%, transparent);
+		font-size: 0.92rem;
+		font-weight: 500;
 		cursor: pointer;
+		transition:
+			border-color 120ms ease,
+			background-color 120ms ease,
+			color 120ms ease;
 	}
 
-	.file-dialog {
-		position: fixed;
-		inset: clamp(1rem, 4vw, 2.5rem);
-		background: var(--app-panel-bg, rgba(255, 255, 255, 0.96));
-		border-radius: 1.4rem;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		box-shadow: 0 30px 90px -50px rgba(15, 23, 42, 0.7);
-		z-index: 60;
+	.filter-pill:hover {
+		background: color-mix(in srgb, var(--card) 84%, rgba(255, 255, 255, 0.6));
+	}
+
+	.filter-pill[data-active='true'] {
+		border-color: color-mix(in srgb, #d97706 70%, transparent);
+		background: rgba(254, 243, 199, 0.7);
+		color: color-mix(in srgb, #b45309 92%, black 6%);
+		font-weight: 700;
+	}
+
+	.sections {
 		display: flex;
 		flex-direction: column;
+		gap: 1.7rem;
+	}
+
+	.run-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.8rem;
+	}
+
+	.run-section__header {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 0.9rem;
+		font-size: 0.76rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: color-mix(in srgb, var(--foreground) 30%, transparent);
+	}
+
+	.run-section__rule {
+		height: 1px;
+		background: color-mix(in srgb, var(--border) 84%, transparent);
+	}
+
+	.run-group,
+	.state-card {
+		border-radius: 1.5rem;
+		border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+		background: color-mix(in srgb, var(--card) 82%, rgba(255, 255, 255, 0.56));
+		backdrop-filter: blur(14px);
 		overflow: hidden;
 	}
 
-	:global([data-theme='dark'] .file-dialog),
-	:global(:root:not([data-theme='light']) .file-dialog) {
-		background: rgba(15, 23, 42, 0.95);
-		border-color: rgba(148, 163, 184, 0.3);
+	.state-card {
+		padding: 1.25rem 1.35rem;
 	}
 
-	.file-dialog__header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 1rem 1.2rem;
-		border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-		gap: 1rem;
-	}
-
-	.file-dialog__header h3 {
-		margin: 0.2rem 0 0;
-		font-size: 1.1rem;
-	}
-
-	.file-dialog__label {
+	.state-card h2 {
 		margin: 0;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: rgba(100, 116, 139, 0.7);
+		font-size: 1.05rem;
 	}
 
-	.file-dialog__body {
-		padding: 1.2rem;
-		overflow: auto;
+	.state-card p {
+		margin: 0.45rem 0 0;
+		color: color-mix(in srgb, var(--foreground) 56%, transparent);
 	}
 
-	.file-dialog__actions {
+	.state-card--error {
+		border-color: color-mix(in srgb, var(--destructive) 36%, var(--border));
+		background: color-mix(in srgb, var(--destructive) 8%, var(--card));
+	}
+
+	.run-row {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+		padding: 1.05rem 1.15rem;
+		text-decoration: none;
+		color: inherit;
+		transition: background-color 140ms ease;
+	}
+
+	.run-row:hover {
+		background: color-mix(in srgb, var(--foreground) 2%, transparent);
+	}
+
+	.run-row__icon {
+		display: grid;
+		place-items: center;
+		width: 3rem;
+		height: 3rem;
+		flex-shrink: 0;
+		border-radius: 1rem;
+		background: var(--status-bg);
+		color: var(--status-fg);
+		margin-top: 0.1rem;
+	}
+
+	.run-row__icon svg {
+		width: 1.15rem;
+		height: 1.15rem;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2.3;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.run-row__icon[data-status='executing'] svg,
+	.run-row__icon[data-status='stopped'] svg {
+		fill: currentColor;
+		stroke: none;
+	}
+
+	.run-row__body {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.run-row__topline {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.8rem;
+	}
+
+	.run-row__titlewrap {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+
+	.run-row__titlewrap h2 {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 650;
+		line-height: 1.25;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		word-break: break-word;
+	}
+
+	.run-status-pill,
+	.run-stop-pill {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.25rem;
+		padding: 0.22rem 0.65rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
 	}
 
-	@media (max-width: 900px) {
-		.agents-hero {
-			grid-template-columns: 1fr;
-		}
+	.run-status-pill {
+		background: var(--status-bg);
+		color: var(--status-fg);
+	}
 
-		.agents-grid {
-			grid-template-columns: 1fr;
-		}
+	.run-stop-pill {
+		background: rgba(245, 158, 11, 0.16);
+		color: #b45309;
+	}
 
-		.agents-run__log-line {
-			grid-template-columns: 1fr;
-			gap: 0.15rem;
+	.run-row__date {
+		flex-shrink: 0;
+		font-size: 0.86rem;
+		color: color-mix(in srgb, var(--foreground) 38%, transparent);
+	}
+
+	.run-row__preview {
+		margin: 0;
+		font-size: 0.95rem;
+		line-height: 1.45;
+		color: color-mix(in srgb, var(--foreground) 58%, transparent);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.run-row__meta {
+		margin: 0.15rem 0 0;
+		font-size: 0.84rem;
+		color: color-mix(in srgb, var(--foreground) 40%, transparent);
+	}
+
+	.run-row__divider {
+		height: 1px;
+		margin: 0 1.15rem;
+		background: color-mix(in srgb, var(--foreground) 4%, transparent);
+	}
+
+	.run-row[data-status='created'] {
+		--status-fg: #6b7280;
+		--status-bg: rgba(107, 114, 128, 0.12);
+	}
+
+	.run-row[data-status='executing'] {
+		--status-fg: #1d4ed8;
+		--status-bg: rgba(59, 130, 246, 0.16);
+	}
+
+	.run-row[data-status='done'] {
+		--status-fg: #166534;
+		--status-bg: rgba(34, 197, 94, 0.18);
+	}
+
+	.run-row[data-status='failed'] {
+		--status-fg: #b91c1c;
+		--status-bg: rgba(239, 68, 68, 0.14);
+	}
+
+	.run-row[data-status='stopped'] {
+		--status-fg: #b45309;
+		--status-bg: rgba(245, 158, 11, 0.18);
+	}
+
+	@media (max-width: 720px) {
+		.run-row__topline {
+			flex-direction: column;
+			align-items: flex-start;
 		}
 	}
 </style>
