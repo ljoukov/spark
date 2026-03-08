@@ -49,7 +49,7 @@ const DEFAULT_INPUT_FILE_PATHS = [
   path.join(BENCHMARK_DIR, "data", "hamilton-2017-solutions-p2.jpg"),
 ] as const;
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const MAX_STEPS = 160;
 const REQUIRED_TOOL_NAMES = [
   "list_files",

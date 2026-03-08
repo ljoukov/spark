@@ -29,7 +29,7 @@ bun --cwd=eval run bench:handwriting-transcription-agentic -- --model-id=gemini-
 Parallel multi-model run:
 
 ```bash
-bun --cwd=eval run bench:handwriting-transcription-agentic -- --models=chatgpt-gpt-5.3-codex,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
+bun --cwd=eval run bench:handwriting-transcription-agentic -- --models=chatgpt-gpt-5.4,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
 ```
 
 Optional custom data paths (repeat `--file` as needed):

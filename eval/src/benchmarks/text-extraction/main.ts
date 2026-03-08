@@ -39,7 +39,7 @@ const { toRepoRelativePath } = createRepoPathHelpers({
 });
 const DEFAULT_SOURCE_FILE_PATH = path.join(BENCHMARK_DIR, "data", "clipboard-1.png");
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const MAX_STEPS = 40;
 const REQUIRED_TOOL_NAMES = ["list_files", "read_file", "extract_text", "done"] as const;
 

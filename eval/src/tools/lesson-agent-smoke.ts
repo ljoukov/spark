@@ -553,12 +553,12 @@ function parseCliOptions(argv: readonly string[]): CliOptions {
     .option(
       "--chat-model <id>",
       "Chat model ID for the routing tool loop",
-      "chatgpt-gpt-5.3-codex",
+      "chatgpt-gpt-5.4",
     )
     .option(
       "--agent-model <id>",
       "Agent model ID for the lesson-generation tool loop",
-      "chatgpt-gpt-5.3-codex",
+      "chatgpt-gpt-5.4",
     )
     .option(
       "--chat-max-steps <number>",

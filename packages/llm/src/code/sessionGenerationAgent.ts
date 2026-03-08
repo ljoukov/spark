@@ -38,7 +38,7 @@ import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const DEFAULT_MAX_STEPS = 1000;
 const DEFAULT_STORY_PLAN_ITEM_ID = "story";
 const SUPPORTED_BRIEF_EXTENSIONS = [".txt", ".md", ".markdown"] as const;

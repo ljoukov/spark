@@ -60,7 +60,7 @@ const DEFAULT_SOURCE_PDF_PATH = path.join(
   "hamilton-2017-q.pdf",
 );
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const JUDGE_MODEL_IDS = [
   "gemini-2.5-pro",
   "chatgpt-gpt-5.3-codex",

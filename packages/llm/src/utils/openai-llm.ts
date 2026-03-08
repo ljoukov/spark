@@ -6,9 +6,12 @@ const MAX_PARALLEL_REQUESTS = 3;
 const MIN_INTERVAL_BETWEEN_START_MS = 200;
 const START_JITTER_MS = 200;
 
-export const OPENAI_MODEL_IDS = ["gpt-5.2", "gpt-5.3-codex"] as const;
+export const OPENAI_MODEL_IDS = ["gpt-5.4", "gpt-5.3-codex", "gpt-5.2"] as const;
 
-export const CHATGPT_ONLY_MODEL_IDS = ["gpt-5.1-codex-mini"] as const;
+export const CHATGPT_ONLY_MODEL_IDS = [
+  "gpt-5.4-fast",
+  "gpt-5.1-codex-mini",
+] as const;
 
 export type OpenAiModelId = (typeof OPENAI_MODEL_IDS)[number];
 
@@ -44,6 +47,24 @@ const OPENAI_GPT_52_PRICING: OpenAiPricing = {
   inputRate: 1.75 / 1_000_000,
   cachedRate: 0.175 / 1_000_000,
   outputRate: 14 / 1_000_000,
+};
+
+const OPENAI_GPT_54_PRICING: OpenAiPricing = {
+  inputRate: 2.5 / 1_000_000,
+  cachedRate: 0.25 / 1_000_000,
+  outputRate: 15 / 1_000_000,
+};
+
+const OPENAI_GPT_54_PRIORITY_PRICING: OpenAiPricing = {
+  inputRate: 5 / 1_000_000,
+  cachedRate: 0.5 / 1_000_000,
+  outputRate: 30 / 1_000_000,
+};
+
+const OPENAI_GPT_53_CODEX_PRICING: OpenAiPricing = {
+  inputRate: 1.25 / 1_000_000,
+  cachedRate: 0.125 / 1_000_000,
+  outputRate: 10 / 1_000_000,
 };
 
 const OPENAI_GPT_51_CODEX_MINI_PRICING: OpenAiPricing = {
@@ -99,7 +120,16 @@ export function resolveOpenAiModelVariant(
 }
 
 export function getOpenAiPricing(modelId: string): OpenAiPricing | undefined {
-  if (modelId.includes("gpt-5.2") || modelId.includes("gpt-5.3-codex")) {
+  if (modelId.includes("gpt-5.4-fast")) {
+    return OPENAI_GPT_54_PRIORITY_PRICING;
+  }
+  if (modelId.includes("gpt-5.4")) {
+    return OPENAI_GPT_54_PRICING;
+  }
+  if (modelId.includes("gpt-5.3-codex")) {
+    return OPENAI_GPT_53_CODEX_PRICING;
+  }
+  if (modelId.includes("gpt-5.2")) {
     return OPENAI_GPT_52_PRICING;
   }
   if (modelId.includes("gpt-5.1-codex-mini")) {

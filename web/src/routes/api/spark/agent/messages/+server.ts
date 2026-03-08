@@ -69,7 +69,7 @@ import graderTaskTemplate from '$lib/server/graderAgent/task-template.md?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
-const MODEL_ID = 'chatgpt-gpt-5.3-codex' as const;
+const MODEL_ID = 'chatgpt-gpt-5.4' as const;
 const OPENAI_REASONING_EFFORT = 'medium' as const;
 const SPARK_AGENT_MAX_TOOL_STEPS = 256;
 const GENERATION_MAX_ATTEMPTS = 3;

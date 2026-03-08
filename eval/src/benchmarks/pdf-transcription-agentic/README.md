@@ -4,7 +4,7 @@ This is a separate benchmark from `pdf-transcription` (the multi-model compariso
 
 It runs one or more agentic workflows (in parallel when multiple models are provided) using:
 
-- default model: `chatgpt-gpt-5.3-codex`
+- default model: `chatgpt-gpt-5.4`
 - production tools from `@spark/llm/agent/sparkAgentRunner`
 - required extraction/crop tools: `pdf_to_images`, `read_pdf`, `crop_image`, `trim_image`, `draw_grid_overlay`, and `view_image`
 - optional reference-text tool (enabled by default): `extract_pdf_reference_text`
@@ -46,7 +46,7 @@ bun --cwd=eval run bench:pdf-transcription-agentic -- --model-id=gemini-2.5-pro
 Parallel multi-model run:
 
 ```bash
-bun --cwd=eval run bench:pdf-transcription-agentic -- --models=chatgpt-gpt-5.3-codex,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
+bun --cwd=eval run bench:pdf-transcription-agentic -- --models=chatgpt-gpt-5.4,chatgpt-gpt-5.3-codex-spark,gemini-2.5-pro,gemini-flash-latest
 ```
 
 Optional custom PDF:

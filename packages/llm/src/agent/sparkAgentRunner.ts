@@ -90,7 +90,7 @@ import type {
   StageHandle,
 } from "../utils/concurrency";
 
-const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_AGENT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 
 type LlmDebugOptions = {
   readonly rootDir: string;
@@ -121,7 +121,7 @@ type TrackedSubmodelCallSummary = {
   readonly usageTokens: LlmUsageTokenUpdate | null;
   readonly costUsd: number | null;
 };
-const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.3-codex";
+const DEFAULT_GENERATE_TEXT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
 const WORKSPACE_UPDATE_THROTTLE_MS = 10_000;
 const AGENT_LOG_THROTTLE_MS = 2_000;
 const AGENT_TOOL_LOG_SNIPPET_MAX_BYTES = 4 * 1024;
@@ -709,7 +709,7 @@ export function resolveSparkAgentToolCallsDir(rootDir: string): string {
 function resolveThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
-  if (modelId.includes("gpt-5.3-codex")) {
+  if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex")) {
     return "high";
   }
   if (modelId.includes("gpt-5.2")) {
