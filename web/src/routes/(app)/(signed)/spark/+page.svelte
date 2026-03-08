@@ -1862,12 +1862,16 @@
 				if (hasSparkAgentConversationNormalizationIssues(normalized.issues)) {
 					console.warn('Normalized Spark AI Agent conversation payload', {
 						conversationId: normalizedConversationId,
+						fromCache: snap.metadata.fromCache,
+						hasPendingWrites: snap.metadata.hasPendingWrites,
 						issues: normalized.issues
 					});
 				}
 				if (rawMessageCount > 0 && normalized.conversation.messages.length === 0) {
 					console.warn('Spark AI Agent conversation payload dropped all messages after normalization', {
 						conversationId: normalizedConversationId,
+						fromCache: snap.metadata.fromCache,
+						hasPendingWrites: snap.metadata.hasPendingWrites,
 						rawMessageCount
 					});
 					rejectedConversationId = normalizedConversationId;
