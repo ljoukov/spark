@@ -10,7 +10,7 @@
     "eval"
   ],
   "scripts": {
-    "postinstall": "node ./scripts/prune-duplicate-llm-copies.mjs && bun --cwd=web run prepare || true",
+    "postinstall": "bun --cwd=web run prepare || true",
     "format": "bash scripts/format-swift.sh",
     "generate": "bun --cwd=proto run generate",
     "repo:format": "bun --cwd=eval run format && bun --cwd=web run format && bun --cwd=packages/llm run format && bun --cwd=packages/schemas run format && bun --cwd=packages/proto run format && bun run format",

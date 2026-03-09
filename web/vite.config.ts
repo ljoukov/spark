@@ -63,9 +63,6 @@ export default defineConfig({
 			allow: [path.resolve(__dirname, '..')]
 		}
 	},
-	resolve: {
-		preserveSymlinks: true
-	},
 
 	worker: {
 		format: 'es'

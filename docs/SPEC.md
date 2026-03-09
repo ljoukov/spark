@@ -3,7 +3,9 @@
 ## 0) Monorepo Layout & Tooling Assumptions
 
 - JS/TS tooling uses Bun:
+  - Spark uses Bun workspaces with isolated installs (`bunfig.toml`).
   - Install deps at repo root with `bun install` (lockfile: `bun.lock`, config: `bunfig.toml`).
+  - Do not run workspace-level installs such as `bun --cwd=web install`; use the root install to refresh the whole workspace graph.
   - Run workspace scripts via `bun run ...` (see root `package.json`).
 - `proto/` — Protocol Buffer definitions for mobile APIs (CheckMate first).
   - Run `bun run generate` to emit TypeScript protos into `packages/proto/src/gen` and Swift protos into `CheckMate/proto`.

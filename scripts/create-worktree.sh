@@ -73,7 +73,5 @@ copy_env_file "web/.env.local"
 # Ensure dev dependencies are present even if the caller exported NODE_ENV=production.
 export NODE_ENV=development
 bun install --frozen-lockfile
-bun --cwd=web install
-bun --cwd=eval install
 
 echo "Spark worktree ready at $target_path"

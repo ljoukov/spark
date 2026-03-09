@@ -4,7 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "postinstall": "node ../scripts/prune-duplicate-llm-copies.mjs",
     "quiz:prepare-input": "tsx src/quiz/eval/prepare-input.ts",
     "quiz:generate": "tsx src/quiz/generateQuiz.ts",
     "code:import": "tsx src/code/import-problems.ts",
@@ -36,8 +35,8 @@
   },
   "dependencies": {
     "@ljoukov/llm": "4.0.9",
-    "@spark/llm": "file:../packages/llm",
-    "@spark/schemas": "file:../packages/schemas",
+    "@spark/llm": "workspace:*",
+    "@spark/schemas": "workspace:*",
     "commander": "^14.0.2",
     "pyodide": "^0.29.1",
     "sharp": "^0.34.5"

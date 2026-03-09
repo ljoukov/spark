@@ -28,7 +28,7 @@
 
 - Spark-specific architecture, workflows, prompts, validation order, and operational runbooks belong here or in repo docs, not in global Codex memory.
 - When current Spark behavior matters, inspect the checked-out code, `docs/SPEC.md`, and lockfiles instead of relying on memory from another checkout or prior run.
-- After editing shared workspace packages or schemas consumed by `web` or `eval`, reinstall the consumer workspace before validation so linked dependencies are fresh (`bun --cwd=web install` and `bun --cwd=eval install` when relevant).
+- Spark uses Bun workspaces with `workspace:*` links and isolated installs. Run `bun install` only at the repo root when manifests or the lockfile change; do not run workspace-level installs such as `bun --cwd=web install`.
 - Treat Spark and `@ljoukov/llm` as jointly evolved: breaking `@ljoukov/llm` API changes are acceptable when Spark is updated in the same rollout and dependent docs/tests stay in sync.
 - For grader/reference-material handling, preserve official statements verbatim except for minimal OCR/layout cleanup, and keep task templates, prompt builders, and `docs/SPEC.md` aligned when that contract changes.
 

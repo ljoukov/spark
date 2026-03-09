@@ -33,8 +33,9 @@ const localFallbackBuildInfo: BuildInfo = {
 };
 
 export function getCurrentBuildInfo(): BuildInfo {
+	const embeddedInfo = embeddedBuildInfo as BuildInfo;
 	const embeddedOrFallback =
-		embeddedBuildInfo.buildId === 'uninitialised-build-info' ? localFallbackBuildInfo : embeddedBuildInfo;
+		embeddedInfo.buildId === 'uninitialised-build-info' ? localFallbackBuildInfo : embeddedInfo;
 	return BuildInfoSchema.parse({
 		...embeddedOrFallback,
 		providerBuildId:
