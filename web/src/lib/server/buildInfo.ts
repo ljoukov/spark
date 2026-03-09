@@ -4,7 +4,7 @@ import { env } from '$env/dynamic/private';
 
 export const BuildInfoSchema = z.object({
 	buildId: z.string().min(1),
-	builtAt: z.string().datetime({ offset: true }),
+	builtAt: z.iso.datetime({ offset: true }),
 	platform: z.string().min(1),
 	gitCommitSha: z.string().min(1).nullable(),
 	gitBranch: z.string().min(1).nullable(),

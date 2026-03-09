@@ -32,7 +32,6 @@ import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import path from 'node:path';
 import { z } from 'zod';
 import {
 	getFirestoreDocument,
