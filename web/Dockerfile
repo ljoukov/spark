@@ -9,11 +9,13 @@ WORKDIR /workspace
 
 # Copy manifests first for better layer caching
 COPY package.json bun.lock bunfig.toml ./
+COPY scripts/prune-duplicate-llm-copies.mjs scripts/prune-duplicate-llm-copies.mjs
 COPY proto/package.json proto/package.json
 COPY web/package.json web/package.json
 COPY eval/package.json eval/package.json
 COPY packages/schemas/package.json packages/schemas/package.json
 COPY packages/llm/package.json packages/llm/package.json
+COPY packages/llm/scripts/prune-local-llm-copy.mjs packages/llm/scripts/prune-local-llm-copy.mjs
 COPY packages/proto/package.json packages/proto/package.json
 
 # Install workspace dependencies (root has no deps)
