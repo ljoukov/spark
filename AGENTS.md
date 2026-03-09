@@ -14,6 +14,7 @@
 - This repo has no required submodules.
 - Eval assets and generated artifacts belong under the gitignored `data/` workspace.
 - All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
+- Use `scripts/create-worktree.sh` to create and bootstrap Spark worktrees. It can copy `.env.local` files from `SPARK_ENV_SOURCE` when set and refresh Bun installs in the new checkout.
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 - Push semantics: if a user asks to "push" without naming a remote/branch, treat it as push to `origin/main`. Only push to another branch when the user explicitly names that branch.
 - Long-lived processes should run in the background (e.g. `nohup … &`) with logs redirected to a file. tmux is optional and not required.
@@ -22,6 +23,24 @@
 
 - Keep large local inputs/outputs under `data/` (for example `data/quiz/downloads`, `data/quiz/eval-input`, `data/quiz/eval-output`, `data/code/synthetic`).
 - `data/` is intentionally ignored by git. Do not commit licensed or generated datasets into the repository.
+
+## Durable Repo Knowledge
+
+- Spark-specific architecture, workflows, prompts, validation order, and operational runbooks belong here or in repo docs, not in global Codex memory.
+- When current Spark behavior matters, inspect the checked-out code, `docs/SPEC.md`, and lockfiles instead of relying on memory from another checkout or prior run.
+- After editing shared workspace packages or schemas consumed by `web` or `eval`, reinstall the consumer workspace before validation so linked dependencies are fresh (`bun --cwd=web install` and `bun --cwd=eval install` when relevant).
+- Treat Spark and `@ljoukov/llm` as jointly evolved: breaking `@ljoukov/llm` API changes are acceptable when Spark is updated in the same rollout and dependent docs/tests stay in sync.
+- For grader/reference-material handling, preserve official statements verbatim except for minimal OCR/layout cleanup, and keep task templates, prompt builders, and `docs/SPEC.md` aligned when that contract changes.
+
+## Spark Agent Workspaces
+
+- Durable Spark-specific agent/workspace conventions belong here in `AGENTS.md`, not in global Codex memory.
+- In local dev, Spark background agents and chat log workspaces should use the standard Spark workspace root under `data/spark-agent/<timestamp>/<workspaceId>` via `SPARK_AGENT_LOCAL_WORKSPACE=1` and `SPARK_AGENT_LOCAL_WORKSPACE_BASE_DIR`.
+- Spark creates the workspace root and most top-level workspace files/directories (`brief.md`, `request.json`, `grader/**`, `lesson/**`, tutor `context/**`/`ui/**`/`state/**`, and `.spark-agent-replay/**` when enabled).
+- `@ljoukov/llm` is responsible for nested logging artifacts only after Spark passes `logging.workspaceDir`: expect `<workspace>/logs/agent/agent.log` and `<workspace>/logs/agent/llm_calls/**`.
+- Spark-owned tool debug artifacts should continue to live under `<workspace>/logs/agent/tool_calls/**`.
+- The direct chat route uses the same workspace-root helper with a synthetic workspace id like `chat-<conversationId>-<messageId>`; in local dev its logs should still land under the standard `data/spark-agent/...` tree.
+- Tutor draft inline-feedback generation currently updates the tutor workspace in Firestore but does not configure local `runAgentLoop` file logging; do not assume it writes `logs/agent/**`.
 
 For details, read `docs/SPEC.md`.
 
