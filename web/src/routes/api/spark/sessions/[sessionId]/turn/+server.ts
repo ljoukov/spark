@@ -157,8 +157,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		serviceAccountJson,
 		userId,
 		session,
-		reviewState: workspace.reviewState,
-		draftRevision: session.latestDraftRevision
+		reviewState: workspace.reviewState
 	});
 	if (recovered) {
 		console.warn('Recovered stale tutor review state before handling reply', {
@@ -226,7 +225,6 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			content: stringifyJson(
 				buildTutorScreenState({
 					session: respondingSession,
-					draftRevision: session.latestDraftRevision,
 					focusLabel: currentThread.label
 				})
 			),
@@ -379,7 +377,6 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			content: stringifyJson(
 				buildTutorScreenState({
 					session: nextSession,
-					draftRevision: session.latestDraftRevision,
 					focusLabel: nextSession.focusLabel ?? null
 				})
 			),

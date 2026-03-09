@@ -106,7 +106,6 @@ export const load: PageServerLoad = async ({ params }) => {
 			focusLabel: session.focusLabel ?? null,
 			activeTurnAgentId: session.activeTurnAgentId ?? null,
 			graderAgentId: graderRunsById.get(session.source.runId) ?? null,
-			latestDraftRevision: session.latestDraftRevision ?? 0,
 			source: {
 				kind: session.source.kind,
 				runId: session.source.runId,

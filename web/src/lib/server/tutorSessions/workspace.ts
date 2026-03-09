@@ -25,7 +25,6 @@ export const TUTOR_CONTEXT_ANNOTATIONS_PATH = 'context/annotations.md' as const;
 export const TUTOR_CONTEXT_OVERALL_FEEDBACK_PATH = 'context/overall-feedback.md' as const;
 
 export const TUTOR_UI_TOP_PANEL_PATH = 'ui/tutor.md' as const;
-export const TUTOR_UI_INLINE_FEEDBACK_PATH = 'ui/inline-feedback.md' as const;
 export const TUTOR_STATE_SESSION_PATH = 'state/session.json' as const;
 export const TUTOR_STATE_COMPOSER_PATH = 'state/composer.json' as const;
 export const TUTOR_STATE_REVIEW_PATH = 'state/review.json' as const;
@@ -64,14 +63,12 @@ export function buildTutorComposerState(
 
 export function buildTutorScreenState(options: {
 	session: SparkTutorSession;
-	draftRevision?: number;
 	focusLabel?: string | null;
 }): SparkTutorScreenState {
 	return SparkTutorScreenStateSchema.parse({
 		status: options.session.status,
 		title: options.session.title,
 		...(options.focusLabel ? { focusLabel: options.focusLabel } : {}),
-		...(typeof options.draftRevision === 'number' ? { draftRevision: options.draftRevision } : {}),
 		updatedAt: options.session.updatedAt.toISOString()
 	});
 }
@@ -202,14 +199,6 @@ export async function seedTutorWorkspace(options: {
 			serviceAccountJson: options.serviceAccountJson,
 			userId: options.userId,
 			workspaceId: options.workspaceId,
-			filePath: TUTOR_UI_INLINE_FEEDBACK_PATH,
-			content: '',
-			now: options.now
-		}),
-		writeTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
 			filePath: TUTOR_STATE_SESSION_PATH,
 			content: stringifyJson(initialScreenState),
 			now: options.now
@@ -280,7 +269,6 @@ export async function readTutorWorkspaceState(options: {
 	session: SparkTutorSession;
 }): Promise<{
 	tutorMarkdown: string;
-	inlineFeedbackMarkdown: string;
 	screenState: SparkTutorScreenState;
 	composerState: SparkTutorComposerState;
 	reviewState: SparkTutorReviewState;
@@ -295,7 +283,6 @@ export async function readTutorWorkspaceState(options: {
 }> {
 	const [
 		tutorMarkdown,
-		inlineFeedbackMarkdown,
 		sessionStateRaw,
 		composerStateRaw,
 		reviewStateRaw,
@@ -311,12 +298,6 @@ export async function readTutorWorkspaceState(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_UI_TOP_PANEL_PATH
-		}),
-		readTutorWorkspaceTextFile({
-			serviceAccountJson: options.serviceAccountJson,
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: TUTOR_UI_INLINE_FEEDBACK_PATH
 		}),
 		readTutorWorkspaceTextFile({
 			serviceAccountJson: options.serviceAccountJson,
@@ -376,7 +357,6 @@ export async function readTutorWorkspaceState(options: {
 
 	return {
 		tutorMarkdown: tutorMarkdown ?? 'Preparing your tutor session...',
-		inlineFeedbackMarkdown: inlineFeedbackMarkdown ?? '',
 		screenState: parseJsonWithSchema(
 			sessionStateRaw,
 			(value) => SparkTutorScreenStateSchema.parse(value),

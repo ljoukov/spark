@@ -121,7 +121,6 @@ export async function recoverTutorSessionIfStale(options: {
 	userId: string;
 	session: SparkTutorSession;
 	reviewState: SparkTutorReviewState;
-	draftRevision?: number;
 }): Promise<null | {
 	session: SparkTutorSession;
 	reviewState: SparkTutorReviewState;
@@ -160,7 +159,6 @@ export async function recoverTutorSessionIfStale(options: {
 	};
 	const screenState = buildTutorScreenState({
 		session: nextSession,
-		draftRevision: options.draftRevision,
 		focusLabel: nextSession.focusLabel ?? null
 	});
 	const composerState = buildRecoveryComposerState({

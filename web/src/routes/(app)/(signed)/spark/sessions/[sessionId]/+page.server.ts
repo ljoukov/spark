@@ -31,8 +31,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		serviceAccountJson: requireTutorServiceAccountJson(),
 		userId: user.uid,
 		session,
-		reviewState: workspace.reviewState,
-		draftRevision: session.latestDraftRevision
+		reviewState: workspace.reviewState
 	});
 	if (recovered) {
 		session = recovered.session;
@@ -65,12 +64,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			},
 			createdAt: session.createdAt.toISOString(),
 			updatedAt: session.updatedAt.toISOString(),
-			latestDraftRevision: session.latestDraftRevision ?? 0,
 			error: session.error ?? null
 		},
 		initialWorkspace: {
 			tutorMarkdown: workspace.tutorMarkdown,
-			inlineFeedbackMarkdown: workspace.inlineFeedbackMarkdown,
 			screenState: workspace.screenState,
 			composerState: workspace.composerState,
 			reviewState: workspace.reviewState,

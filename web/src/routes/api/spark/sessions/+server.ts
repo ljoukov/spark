@@ -110,7 +110,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		},
 		title,
 		preview: buildTutorReviewPreview(reviewState),
-		latestDraftRevision: 0,
 		...(buildTutorReviewFocusLabel(reviewState)
 			? { focusLabel: buildTutorReviewFocusLabel(reviewState) }
 			: {}),
