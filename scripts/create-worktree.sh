@@ -2,8 +2,17 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <worktree-path> [branch-name]" >&2
+  echo "Usage: $0 [--bootstrap-only] <worktree-path> [branch-name]" >&2
 }
+
+bootstrap_only=0
+
+case "${1:-}" in
+  --bootstrap-only)
+    bootstrap_only=1
+    shift
+    ;;
+esac
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
   usage
@@ -24,30 +33,37 @@ repo_root="$(git rev-parse --show-toplevel)"
 target_path="$1"
 branch_name="${2:-}"
 
-if [ -e "$target_path" ]; then
-  echo "Target path already exists: $target_path" >&2
-  exit 1
-fi
-
 cd "$repo_root"
 
-if [ -n "$branch_name" ]; then
-  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
-    git worktree add "$target_path" "$branch_name"
-  else
-    case "$branch_name" in
-      l-*)
-        ;;
-      *)
-        echo "New branch names must use the l- prefix: $branch_name" >&2
-        exit 1
-        ;;
-    esac
-
-    git worktree add -b "$branch_name" "$target_path" origin/main
+if [ "$bootstrap_only" -eq 0 ]; then
+  if [ -e "$target_path" ]; then
+    echo "Target path already exists: $target_path" >&2
+    exit 1
   fi
-else
-  git worktree add --detach "$target_path" origin/main
+
+  git fetch origin
+
+  if [ -n "$branch_name" ]; then
+    if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+      git worktree add "$target_path" "$branch_name"
+    else
+      case "$branch_name" in
+        l-*)
+          ;;
+        *)
+          echo "New branch names must use the l- prefix: $branch_name" >&2
+          exit 1
+          ;;
+      esac
+
+      git worktree add -b "$branch_name" "$target_path" origin/main
+    fi
+  else
+    git worktree add --detach "$target_path" origin/main
+  fi
+elif [ -n "$branch_name" ]; then
+  echo "Branch name is not supported with --bootstrap-only." >&2
+  exit 1
 fi
 
 cd "$target_path"
@@ -69,6 +85,11 @@ copy_env_file() {
 copy_env_file ".env.local"
 copy_env_file "eval/.env.local"
 copy_env_file "web/.env.local"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "bun is required but was not found in PATH." >&2
+  exit 1
+fi
 
 # Ensure dev dependencies are present even if the caller exported NODE_ENV=production.
 export NODE_ENV=development

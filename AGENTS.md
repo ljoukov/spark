@@ -14,7 +14,7 @@
 - This repo has no required submodules.
 - Eval assets and generated artifacts belong under the gitignored `data/` workspace.
 - All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
-- Use `scripts/create-worktree.sh` to create and bootstrap Spark worktrees. It can copy `.env.local` files from `SPARK_ENV_SOURCE` when set and refresh Bun installs in the new checkout.
+- Use `scripts/create-worktree.sh` to create Spark worktrees. Pass `--bootstrap-only` when the worktree already exists but still needs env-file copies and the root Bun install. The bootstrap copies `.env.local`, `eval/.env.local`, and `web/.env.local` from `SPARK_ENV_SOURCE` (default `$HOME/projects/spark`) when present.
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 - Push semantics: if a user asks to "push" without naming a remote/branch, treat it as push to `origin/main`. Only push to another branch when the user explicitly names that branch.
 - Long-lived processes should run in the background (e.g. `nohup … &`) with logs redirected to a file. tmux is optional and not required.
