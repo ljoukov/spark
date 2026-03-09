@@ -1,23 +1,18 @@
 import type { App, ServiceAccount } from "firebase-admin/app";
 import type { Firestore } from "firebase-admin/firestore";
-import type { Storage } from "firebase-admin/storage";
 
 import { parseGoogleServiceAccountJson } from "./gcp/googleAccessToken";
 import { assertNodeRuntime } from "./runtime";
 
 type FirebaseAdminAppModule = typeof import("firebase-admin/app");
 type FirebaseAdminFirestoreModule = typeof import("firebase-admin/firestore");
-type FirebaseAdminStorageModule = typeof import("firebase-admin/storage");
 
 let cachedAppPromise: Promise<App> | null = null;
 let cachedAppKey: string | null = null;
 let cachedFirestorePromise: Promise<Firestore> | null = null;
-let cachedStoragePromise: Promise<Storage> | null = null;
 
 let cachedAppModulePromise: Promise<FirebaseAdminAppModule> | null = null;
 let cachedFirestoreModulePromise: Promise<FirebaseAdminFirestoreModule> | null =
-  null;
-let cachedStorageModulePromise: Promise<FirebaseAdminStorageModule> | null =
   null;
 
 function parseServiceAccount(
@@ -38,13 +33,6 @@ function toFirebaseServiceAccount(serviceAccountJson: string): ServiceAccount {
     clientEmail: sa.clientEmail,
     privateKey: sa.privateKey,
   };
-}
-
-export function resolveFirebaseStorageBucketName(
-  serviceAccountJson: string,
-): string {
-  const sa = parseServiceAccount(serviceAccountJson);
-  return `${sa.projectId}.firebasestorage.app`;
 }
 
 function sanitizeAppNameSegment(value: string): string {
@@ -73,17 +61,6 @@ async function loadFirebaseAdminFirestoreModule(): Promise<FirebaseAdminFirestor
   return cachedFirestoreModulePromise;
 }
 
-async function loadFirebaseAdminStorageModule(): Promise<FirebaseAdminStorageModule> {
-  assertNodeRuntime("Firebase Admin SDK");
-
-  if (!cachedStorageModulePromise) {
-    cachedStorageModulePromise = import(
-      /* @vite-ignore */ "firebase-admin/storage"
-    ) as Promise<FirebaseAdminStorageModule>;
-  }
-  return cachedStorageModulePromise;
-}
-
 export async function getFirebaseAdminApp(options: {
   serviceAccountJson: string;
 }): Promise<App> {
@@ -96,10 +73,6 @@ export async function getFirebaseAdminApp(options: {
 
   const promise = (async (): Promise<App> => {
     const { cert, getApp, initializeApp } = await loadFirebaseAdminAppModule();
-
-    const bucketName = resolveFirebaseStorageBucketName(
-      options.serviceAccountJson,
-    );
     const appName = `spark-${sanitizeAppNameSegment(appKey)}`;
 
     let app: App | null = null;
@@ -119,7 +92,6 @@ export async function getFirebaseAdminApp(options: {
             toFirebaseServiceAccount(options.serviceAccountJson),
           ),
           projectId: sa.projectId,
-          storageBucket: bucketName,
         },
         appName,
       );
@@ -131,7 +103,6 @@ export async function getFirebaseAdminApp(options: {
   cachedAppPromise = promise;
   cachedAppKey = appKey;
   cachedFirestorePromise = null;
-  cachedStoragePromise = null;
   return promise;
 }
 
@@ -158,27 +129,6 @@ export async function getFirebaseAdminFirestore(options: {
   })();
 
   cachedFirestorePromise = promise;
-  return promise;
-}
-
-export async function getFirebaseAdminStorage(options: {
-  serviceAccountJson: string;
-}): Promise<Storage> {
-  assertNodeRuntime("Storage Admin SDK");
-
-  const appKey = serviceAccountToAppKey(options.serviceAccountJson);
-  if (cachedStoragePromise && cachedAppKey === appKey) {
-    return cachedStoragePromise;
-  }
-
-  const appPromise = getFirebaseAdminApp(options);
-  const promise = (async (): Promise<Storage> => {
-    const app = await appPromise;
-    const { getStorage } = await loadFirebaseAdminStorageModule();
-    return getStorage(app);
-  })();
-
-  cachedStoragePromise = promise;
   return promise;
 }
 
