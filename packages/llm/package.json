@@ -38,11 +38,11 @@
     "zod": "^4.3.5"
   },
   "peerDependencies": {
-    "@ljoukov/llm": "4.0.7"
+    "@ljoukov/llm": "4.0.9"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@ljoukov/llm": "4.0.7",
+    "@ljoukov/llm": "4.0.9",
     "@types/node": "^25.0.9",
     "@types/pngjs": "^6.0.5",
     "eslint": "^9.39.2",
