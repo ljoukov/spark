@@ -28,6 +28,10 @@ import {
   buildSparkGraderAgentPrompt,
 } from "./graderAgentPrompt";
 import {
+  SparkGraderRequestPayloadSchema,
+  resolveSparkGraderModelTools,
+} from "./sparkChatShared";
+import {
   SPARK_AGENT_REPLAY_DIR,
   SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
   readSparkAgentReplayManifest,
@@ -227,6 +231,17 @@ async function loadLocalGraderAttachmentParts(options: {
   return { parts, notes, usedPaths };
 }
 
+async function loadLocalGraderRequestPayload(options: {
+  workspaceDir: string;
+}) {
+  const requestPath = path.join(options.workspaceDir, "request.json");
+  if (!(await pathExists(requestPath))) {
+    return null;
+  }
+  const raw = await readFile(requestPath, { encoding: "utf8" });
+  return SparkGraderRequestPayloadSchema.parse(JSON.parse(raw));
+}
+
 function resolveReplayPrompt(options: {
   manifest: SparkAgentReplayManifest | null;
 }): string {
@@ -329,12 +344,13 @@ export type SparkGraderReplayRunResult = {
   thinkingLevel: LlmThinkingLevel | null;
   maxSteps: number;
   useSubagents: boolean;
+  disableExtractTextTool: boolean;
   usedInlineAttachmentPaths: string[];
   agentLogPath: string;
   llmLogsDir: string;
 };
 
-export async function runSparkGraderReplayLocal(options: {
+export async function runSparkGraderLocal(options: {
   workspaceDir: string;
   prompt: string;
   systemPrompt?: string;
@@ -342,6 +358,7 @@ export async function runSparkGraderReplayLocal(options: {
   thinkingLevel?: LlmThinkingLevel;
   maxSteps?: number;
   useSubagents?: boolean;
+  disableExtractTextTool?: boolean;
   userId?: string;
 }): Promise<SparkGraderReplayRunResult> {
   const systemPrompt =
@@ -354,6 +371,7 @@ export async function runSparkGraderReplayLocal(options: {
     resolveSparkAgentThinkingLevel(options.modelId) ??
     null;
   const useSubagents = options.useSubagents ?? true;
+  const disableExtractTextTool = options.disableExtractTextTool ?? false;
 
   const workspace: SparkAgentWorkspace = {
     scheduleUpdate: () => {},
@@ -378,7 +396,7 @@ export async function runSparkGraderReplayLocal(options: {
     },
   };
 
-  const baseTools = buildSparkAgentTools({
+  const fullBaseTools = buildSparkAgentTools({
     workspace,
     rootDir: options.workspaceDir,
     userId: options.userId ?? "local-grader-replay",
@@ -388,6 +406,11 @@ export async function runSparkGraderReplayLocal(options: {
       options.workspaceDir,
     ),
   });
+  const { extract_text: _extractTextTool, ...baseToolsWithoutExtractText } =
+    fullBaseTools;
+  const baseTools = disableExtractTextTool
+    ? baseToolsWithoutExtractText
+    : fullBaseTools;
 
   let doneSummary: string | null = null;
   let doneCalled = false;
@@ -419,11 +442,27 @@ export async function runSparkGraderReplayLocal(options: {
   const attachments = await loadLocalGraderAttachmentParts({
     workspaceDir: options.workspaceDir,
   });
+  const requestPayload = await loadLocalGraderRequestPayload({
+    workspaceDir: options.workspaceDir,
+  });
+  const modelTools = resolveSparkGraderModelTools({
+    input: requestPayload?.input,
+  });
+  const prompt = disableExtractTextTool
+    ? [
+        options.prompt.trim(),
+        "",
+        "Run constraint:",
+        "- The `extract_text` tool is unavailable in this replay.",
+        "- Do not call `extract_text`.",
+        "- Use the remaining workspace tools, including `view_image`, to inspect the uploaded documents.",
+      ].join("\n")
+    : options.prompt;
   const initialInput =
     attachments.parts.length > 0 || attachments.notes.length > 0
       ? buildReplayInitialInput({
           systemPrompt,
-          prompt: options.prompt,
+          prompt,
           inlineParts: attachments.parts,
           notes: attachments.notes,
         })
@@ -431,10 +470,10 @@ export async function runSparkGraderReplayLocal(options: {
 
   const toolLoopResult = await runAgentLoop({
     model: options.modelId,
-    input: initialInput ?? options.prompt,
+    input: initialInput ?? prompt,
     ...(initialInput ? {} : { instructions: systemPrompt }),
     tools,
-    modelTools: [{ type: "web-search", mode: "live" }],
+    ...(modelTools ? { modelTools } : {}),
     ...(useSubagents ? { subagents: { promptPattern: "codex" as const } } : {}),
     maxSteps,
     ...(thinkingLevel ? { thinkingLevel } : {}),
@@ -466,14 +505,29 @@ export async function runSparkGraderReplayLocal(options: {
   return {
     toolLoopResult,
     doneSummary,
-    prompt: options.prompt,
+    prompt,
     systemPrompt,
     modelId: options.modelId,
     thinkingLevel,
     maxSteps,
     useSubagents,
+    disableExtractTextTool,
     usedInlineAttachmentPaths: attachments.usedPaths,
     agentLogPath: path.join(logsDir, "agent.log"),
     llmLogsDir: path.join(logsDir, "llm_calls"),
   };
+}
+
+export async function runSparkGraderReplayLocal(options: {
+  workspaceDir: string;
+  prompt: string;
+  systemPrompt?: string;
+  modelId: LlmTextModelId;
+  thinkingLevel?: LlmThinkingLevel;
+  maxSteps?: number;
+  useSubagents?: boolean;
+  disableExtractTextTool?: boolean;
+  userId?: string;
+}): Promise<SparkGraderReplayRunResult> {
+  return await runSparkGraderLocal(options);
 }

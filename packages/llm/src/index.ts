@@ -10,6 +10,8 @@ export * from "./code/welcomeTemplates";
 export * from "./agent/sparkAgentRunner";
 export * from "./agent/sparkAgentReplay";
 export * from "./agent/sparkAgentReplayArtifacts";
+export * from "./agent/sparkChatShared";
+export * from "./agent/sparkGraderLocalRun";
 export * from "./agent/graderAgentPrompt";
 export * from "./agent/workspaceFileStore";
 export * from "./agent/benchmarks/agenticBenchmark";

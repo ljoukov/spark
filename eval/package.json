@@ -12,6 +12,7 @@
     "tools:pdf-to-json": "tsx src/tools/pdf-to-json.ts",
     "tools:say": "tsx src/tools/say.ts",
     "tools:lesson-agent-smoke": "tsx src/tools/lesson-agent-smoke.ts",
+    "tools:spark-chat-grader-local": "tsx src/tools/spark-chat-grader-local.ts",
     "auth:chatgpt": "tsx src/tools/chatgpt-login.ts",
     "test:llm": "tsx src/tests/testLlmApi.ts",
     "test:llm-web-search": "tsx src/tests/testLlmWebSearch.ts",
@@ -34,7 +35,7 @@
     "session:story": "tsx src/code/generateTestStory.ts"
   },
   "dependencies": {
-    "@ljoukov/llm": "4.0.9",
+    "@ljoukov/llm": "4.0.11",
     "@spark/llm": "workspace:*",
     "@spark/schemas": "workspace:*",
     "commander": "^14.0.2",

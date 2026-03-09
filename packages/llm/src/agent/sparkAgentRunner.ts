@@ -72,6 +72,10 @@ import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
 } from "./skills/pdfTranscription";
+import {
+  SparkGraderRequestPayloadSchema,
+  resolveSparkGraderModelTools,
+} from "./sparkChatShared";
 import { captureSparkAgentReplayState } from "./sparkAgentReplayArtifacts";
 import {
   buildWorkspaceFileDocPath,
@@ -161,6 +165,19 @@ const TUTOR_UI_INLINE_FEEDBACK_PATH = "ui/inline-feedback.md";
 const TUTOR_STATE_SESSION_PATH = "state/session.json";
 const TUTOR_STATE_COMPOSER_PATH = "state/composer.json";
 const TUTOR_HISTORY_TURNS_PATH = "history/turns.jsonl";
+
+async function loadSparkGraderRequestPayloadFromWorkspace(rootDir: string) {
+  const requestPath = path.join(rootDir, "request.json");
+  try {
+    const raw = await readFile(requestPath, { encoding: "utf8" });
+    return SparkGraderRequestPayloadSchema.parse(JSON.parse(raw));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
 
 function formatUsdTotal(value: number): string {
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -673,7 +690,8 @@ function selectGraderResultSummary(options: {
 
 function resolveSparkRepoRoot(): string {
   const currentWorkingDirectory = path.resolve(process.cwd());
-  if (path.basename(currentWorkingDirectory) === "web") {
+  const currentBaseName = path.basename(currentWorkingDirectory);
+  if (currentBaseName === "web" || currentBaseName === "eval") {
     return path.resolve(currentWorkingDirectory, "..");
   }
   return currentWorkingDirectory;
@@ -7956,6 +7974,13 @@ export async function runSparkAgentTask(
         logSync?.setStats(statsTracker.snapshot());
       },
     });
+    const graderRequestPayload =
+      graderRunId && workspaceRoot
+        ? await loadSparkGraderRequestPayloadFromWorkspace(workspaceRoot)
+        : null;
+    const graderModelTools = resolveSparkGraderModelTools({
+      input: graderRequestPayload?.input,
+    });
     const toolLoopResult = await (async (): Promise<LlmToolLoopResult> => {
       try {
         return await runAgentLoop({
@@ -7965,7 +7990,11 @@ export async function runSparkAgentTask(
           tools,
           ...(tutorSessionId
             ? {}
-            : { modelTools: [{ type: "web-search", mode: "live" }] }),
+            : graderRunId === null
+              ? { modelTools: [{ type: "web-search", mode: "live" }] }
+              : graderModelTools
+                ? { modelTools: graderModelTools }
+                : {}),
           subagents:
             tutorSessionId || graderRunId === null
               ? undefined

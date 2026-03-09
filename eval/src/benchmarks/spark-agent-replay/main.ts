@@ -41,6 +41,7 @@ type CliArgs = {
   thinking: "auto" | "none" | "low" | "medium" | "high";
   useSubagents?: boolean;
   maxSteps?: number;
+  disableExtractTextTool: boolean;
   outputRootDir: string;
 };
 
@@ -64,6 +65,7 @@ type BenchmarkResult = {
     thinkingLevel: "low" | "medium" | "high" | null;
     useSubagents: boolean;
     maxSteps: number;
+    disableExtractTextTool: boolean;
   };
   sourceDefaults: {
     modelId: string | null;
@@ -106,6 +108,11 @@ function parseCliArgs(args: readonly string[]): CliArgs {
     .option("--no-use-subagents", "disable subagents")
     .option("--max-steps <count>", "override max tool steps")
     .option(
+      "--disable-extract-text",
+      "remove the extract_text tool from the replay run",
+      false,
+    )
+    .option(
       "--output-root <path>",
       "override benchmark output root",
       OUTPUT_ROOT_DIR,
@@ -118,6 +125,7 @@ function parseCliArgs(args: readonly string[]): CliArgs {
     thinking?: string;
     useSubagents?: boolean | string;
     maxSteps?: string;
+    disableExtractText?: boolean;
     outputRoot?: string;
   }>();
 
@@ -143,6 +151,7 @@ function parseCliArgs(args: readonly string[]): CliArgs {
           }
           return parsedCount;
         }),
+      disableExtractTextTool: z.boolean().default(false),
       outputRootDir: z.string().trim().min(1).default(OUTPUT_ROOT_DIR),
     })
     .parse({
@@ -150,6 +159,7 @@ function parseCliArgs(args: readonly string[]): CliArgs {
       modelId: options.modelId,
       thinking: options.thinking,
       maxSteps: options.maxSteps,
+      disableExtractTextTool: options.disableExtractText,
       outputRootDir: options.outputRoot,
     });
 
@@ -216,9 +226,16 @@ function resolveReplayThinkingLevel(input: {
   return resolveSparkAgentThinkingLevel(input.chosenModelId) ?? null;
 }
 
+function resolveSourceRunDir(runPath: string): string {
+  if (path.isAbsolute(runPath)) {
+    return runPath;
+  }
+  return path.resolve(REPO_ROOT_DIR, runPath);
+}
+
 async function main(): Promise<void> {
   const cli = parseCliArgs(process.argv.slice(2));
-  const sourceRunDir = path.resolve(process.cwd(), cli.runPath);
+  const sourceRunDir = resolveSourceRunDir(cli.runPath);
   const sourceManifest = await readSparkAgentReplayManifest(sourceRunDir);
 
   const modelId = resolveReplayModelId({
@@ -261,6 +278,7 @@ async function main(): Promise<void> {
     ...(thinkingLevel ? { thinkingLevel } : {}),
     maxSteps: cli.maxSteps ?? prepared.sourceMaxSteps ?? DEFAULT_MAX_STEPS,
     useSubagents: cli.useSubagents ?? prepared.sourceUseSubagents ?? true,
+    disableExtractTextTool: cli.disableExtractTextTool,
   });
 
   const workspaceFiles = await listFilesRecursive(workspaceDir);
@@ -304,6 +322,7 @@ async function main(): Promise<void> {
       thinkingLevel,
       useSubagents: result.useSubagents,
       maxSteps: result.maxSteps,
+      disableExtractTextTool: result.disableExtractTextTool,
     },
     sourceDefaults: {
       modelId: prepared.sourceModelId,
@@ -339,6 +358,7 @@ async function main(): Promise<void> {
     `- Thinking: ${thinkingLevel ?? "none"}`,
     `- Subagents: ${result.useSubagents ? "on" : "off"}`,
     `- Max steps: ${result.maxSteps.toString()}`,
+    `- Extract text: ${result.disableExtractTextTool ? "off" : "on"}`,
     `- Model calls: ${toolLoopSummary.modelCalls.toString()}`,
     `- Tool calls: ${toolLoopSummary.toolCalls.toString()}`,
     `- Agent cost: ${formatUsd(toolLoopSummary.agentCostUsd)}`,

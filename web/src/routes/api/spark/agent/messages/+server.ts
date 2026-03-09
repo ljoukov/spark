@@ -2,17 +2,18 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
 	createTask,
-	buildSparkGraderAgentPrompt,
-	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
+	createSparkChatCreateGraderTool,
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
+	runSparkChatAgentLoop,
 	SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 	isNodeRuntime,
 	resolveWorkspacePathContentType,
+	type SparkChatAttachmentInput,
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
-import { runAgentLoop, tool } from '@ljoukov/llm';
+import { tool } from '@ljoukov/llm';
 import type { LlmContentPart, LlmInputMessage, LlmToolSet } from '@ljoukov/llm';
 import {
 	SparkAgentAttachmentSchema,
@@ -22,8 +23,6 @@ import {
 	type SparkAgentMessage
 } from '@spark/schemas';
 import {
-	DEFAULT_GRADER_RUN_KEY,
-	DEFAULT_GRADER_RUN_LABEL,
 	GRADER_PROBLEMS_DIR,
 	GRADER_SUMMARY_PATH,
 	createGraderRun,
@@ -71,9 +70,6 @@ import graderTaskTemplate from '$lib/server/graderAgent/task-template.md?raw';
 
 const MIN_UPDATE_INTERVAL_MS = 500;
 const MAX_HISTORY_MESSAGES = 20;
-const MODEL_ID = 'chatgpt-gpt-5.4' as const;
-const OPENAI_REASONING_EFFORT = 'medium' as const;
-const SPARK_AGENT_MAX_TOOL_STEPS = 256;
 const GENERATION_MAX_ATTEMPTS = 3;
 const GENERATION_RETRY_BASE_DELAY_MS = 800;
 const GENERATION_RETRY_MAX_DELAY_MS = 4_000;
@@ -784,16 +780,6 @@ function requireTasksEnv(): { serviceUrl: string; apiKey: string } {
 	return { serviceUrl, apiKey };
 }
 
-function sanitizeWorkspaceAttachmentFilename(value: string): string {
-	return value.trim().replace(/[/\\]+/g, '-');
-}
-
-function resolveWorkspaceAttachmentPath(attachment: { id: string; filename?: string }): string {
-	const raw = sanitizeWorkspaceAttachmentFilename(attachment.filename ?? attachment.id);
-	const filename = raw.length > 0 ? raw : attachment.id;
-	return `grader/uploads/${filename}`;
-}
-
 async function writeWorkspaceTextFile(options: {
 	serviceAccountJson: string;
 	userId: string;
@@ -835,126 +821,6 @@ async function writeWorkspaceStorageLinkFile(options: {
 		createdAt: options.now,
 		updatedAt: options.now
 	});
-}
-
-function normalizeGraderTitleKey(value: string): string {
-	const normalized = value
-		.trim()
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/gu, '_')
-		.replace(/^_+|_+$/gu, '');
-	if (normalized.length > 0) {
-		return normalized.slice(0, 64);
-	}
-	return DEFAULT_GRADER_RUN_KEY;
-}
-
-const graderCreateSchema = z
-	.object({
-		title: nullableOptionalString().describe(
-			'Optional short run title override. Set this only when the uploaded or pasted materials already make a concise content-based title clear (for example: GCSE English Language Paper 1 or BMO1 2024 Q5).'
-		),
-		referenceSourcePolicy: z
-			.enum(['uploaded-only', 'allow-online-search-when-problems-missing'])
-			.optional()
-			.describe(
-				[
-					'Controls whether the grader may search online for missing problem statements/official references.',
-					'- uploaded-only: use uploaded/pasted materials only; do not search online.',
-					'- allow-online-search-when-problems-missing: online search is allowed only when problem statements are missing/unclear.'
-				].join('\n')
-			),
-		notes: nullableOptionalString().describe(
-			'Optional grading focus for this run (for example: focus on proof rigor and notation).'
-		)
-	})
-	.strict();
-
-function buildGraderBrief(options: {
-	sourceText?: string;
-	input: z.infer<typeof graderCreateSchema>;
-	attachments: z.infer<typeof attachmentSchema>[];
-}): string {
-	const referenceSourcePolicy = options.input.referenceSourcePolicy ?? 'uploaded-only';
-	const referenceSourcePolicyText =
-		referenceSourcePolicy === 'allow-online-search-when-problems-missing'
-			? 'allow-online-search-when-problems-missing (search online only when problem statements are missing or unclear)'
-			: 'uploaded-only (do not search online; rely on uploaded/pasted materials)';
-	const lines: string[] = ['# Grader request'];
-	const rawSource = options.sourceText?.trim();
-	if (rawSource && rawSource.length > 0) {
-		lines.push('', '## Original user message', '```', rawSource, '```');
-	}
-	const titleOverride = options.input.title?.trim();
-	if (titleOverride && titleOverride.length > 0) {
-		lines.push('', '## Requested title override', `- ${titleOverride}`);
-	}
-	if (options.input.notes) {
-		lines.push('', '## User grading focus', options.input.notes.trim());
-	}
-	lines.push('', '## Reference source policy', `- ${referenceSourcePolicyText}`);
-	if (options.attachments.length > 0) {
-		lines.push('', '## Uploaded work');
-		let index = 0;
-		for (const attachment of options.attachments) {
-			index += 1;
-			const label = attachment.filename?.trim() || attachment.id;
-			const pages =
-				typeof attachment.pageCount === 'number' && attachment.pageCount > 0
-					? `, pages=${attachment.pageCount.toString()}`
-					: '';
-			lines.push(
-				`- ${index}. ${label} (${attachment.contentType}, size=${attachment.sizeBytes.toString()}${pages})`
-			);
-		}
-	} else {
-		lines.push('', '## Uploaded work', '- No attachments were included for this run.');
-	}
-	lines.push(
-		'',
-		'## Objectives',
-		'- Identify the paper, assignment, or document context, year, and title from uploaded learner materials when possible.',
-		'- Transcribe student work, problem statements, and any official solutions from uploads first.',
-		'- For student submissions, keep transcription complete and faithful, then rewrite each problem into a numbered list of student statements/sentences in source order without retelling.',
-		'- For problem statements and official solutions, keep source wording as verbatim as possible; do not rewrite them into cleaned canonical statements.',
-		'- Only apply minimal OCR/layout cleanup when meaning is unchanged, and mark uncertainty explicitly instead of paraphrasing.',
-		"- Preserve the student's variable names, formulas, terminology, and method choice as closely as possible while doing that cleanup.",
-		'- Respect the reference source policy before any online search.',
-		'- Feedback should be line-by-line against those numbered student statements.',
-		"- If official solutions are missing, solve each problem carefully before grading and match the student's level/terminology/methods where reasonable.",
-		'- The run summary shown in the UI should stay short and student-facing: title + concise markdown summary, with no IDs, file paths, or process-log wording.',
-		'- Base the run title on the uploaded content and identified source context; if the source cannot be identified, describe the graded scope neutrally.'
-	);
-	return lines.join('\n').trim() + '\n';
-}
-
-function renderGraderTask(): string {
-	const baseTask = graderTaskTemplate.trim();
-	const transcriptionSkillSection = [
-		'',
-		'## Handwriting transcription workflow (must follow)',
-		'Use this skill for extraction-first transcription of uploaded student work, problem statements, and official solutions.',
-		'',
-		'~~~markdown',
-		HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
-		'~~~',
-		'',
-		'Grader-specific override:',
-		'- When uploaded files are transcription targets, include them in the same initial `extract_text` call via `documentPaths`.',
-		'- Leave `supportingPaths` unset unless a file is disambiguation-only and is not itself a transcription target.',
-		'- Problem statements and official solutions must keep source wording verbatim where possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.',
-		'- Do not rewrite problem statements into cleaned/canonical wording; allow only minimal OCR/layout cleanup that keeps meaning unchanged, and mark any remaining uncertainty explicitly.',
-		'- Student solution transcription must be complete and faithful: after extraction, split each problem into a numbered list of student statements/sentences in source order.',
-		'- Preserve student variable names, formulas, terminology, and method choices as closely as possible; allow only numbering, line-break cleanup, and obvious spelling fixes that do not change meaning.',
-		'- Final grading feedback must be line-by-line against that numbered transcript.',
-		"- When official solutions are missing, derived solutions should stay at the student's level and reuse their terminology/method style where reasonable.",
-		'',
-		'Run-mode constraints for grader runs:',
-		'- Keep transcription and source gathering on the main agent only.',
-		'- After transcription, use subagents for per-problem work: exactly 1 subagent per problem for solving/assessment.',
-		'- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.'
-	].join('\n');
-	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
 }
 
 const quizQuestionKindSchema = z
@@ -1250,6 +1116,16 @@ function buildSparkChatTools(options: {
 		attachmentLabels = [],
 		onRunCard
 	} = options;
+	const graderAttachmentsForMessage: SparkChatAttachmentInput[] = attachmentsForMessage
+		.slice(0, GRADER_ATTACHMENT_LIMIT)
+		.map((attachment) => ({
+			id: attachment.id,
+			storagePath: attachment.storagePath,
+			contentType: attachment.contentType,
+			filename: attachment.filename,
+			sizeBytes: attachment.sizeBytes,
+			pageCount: attachment.pageCount
+		}));
 	return {
 		list_lessons: tool({
 			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
@@ -1672,160 +1548,116 @@ function buildSparkChatTools(options: {
 				}
 			}
 		}),
-		create_grader: tool({
-			description: [
-				'Start a grading run from the learner’s uploaded work.',
-				'Creates a grader workspace, seeds grader/task.md, and launches a background agent.',
-				'Use this when the learner asks to mark or grade uploaded answers, submissions, scripts, or related reference documents.',
-				'Uploads can include student handwriting, problem statements, answer booklets, rubrics, and optional official solutions/mark schemes.',
-				'Set referenceSourcePolicy based on learner confirmation: uploaded-only by default; allow online search only when the learner explicitly approves and problems are missing.',
-				'If the uploaded or pasted materials already make a concise run title clear, pass it via title; otherwise omit it and let the grader derive the final title from the content.',
-				'If uploads are present, they are attached to the grader agent context automatically.'
-			].join('\n'),
-			inputSchema: graderCreateSchema,
-			execute: async (input) => {
+		create_grader: createSparkChatCreateGraderTool({
+			sourceText,
+			conversationId,
+			attachmentsForMessage: graderAttachmentsForMessage,
+			graderTaskTemplate: graderTaskTemplate,
+			launch: async ({ input, plan }) => {
 				const tasksEnv = requireTasksEnv();
-				const runId = randomUUID();
-				const workspaceId = randomUUID();
-				const agentId = randomUUID();
-				const now = new Date();
 				let runCreated = false;
 				try {
-					const launchTitle = input.title?.trim() || DEFAULT_GRADER_RUN_LABEL;
-					const launchTitleKey = normalizeGraderTitleKey(launchTitle);
-					const runAttachments = attachmentsForMessage
-						.slice(0, GRADER_ATTACHMENT_LIMIT)
-						.map((attachment) => ({
-							id: attachment.id,
-							storagePath: attachment.storagePath,
-							contentType: attachment.contentType,
-							filename: attachment.filename,
-							sizeBytes: attachment.sizeBytes
-						}));
-					const runWorkspaceAttachments = runAttachments.map((attachment) => ({
-						...attachment,
-						workspacePath: resolveWorkspaceAttachmentPath(attachment)
-					}));
 					await createGraderRun(userId, {
-						id: runId,
-						agentId,
-						workspaceId,
+						id: plan.runId,
+						agentId: plan.agentId,
+						workspaceId: plan.workspaceId,
 						conversationId,
 						userPrompt: sourceText?.trim() || input.notes || undefined,
-						olympiadKey: launchTitleKey,
-						olympiadLabel: launchTitle,
-						summaryPath: GRADER_SUMMARY_PATH,
-						problemsDir: GRADER_PROBLEMS_DIR,
-						sourceAttachmentIds: runAttachments.map((attachment) => attachment.id),
-						sourceAttachmentCount: runAttachments.length,
+						olympiadKey: plan.launchTitleKey,
+						olympiadLabel: plan.launchTitle,
+						summaryPath: plan.summaryPath,
+						problemsDir: plan.problemsDir,
+						sourceAttachmentIds: plan.runAttachments.map((attachment) => attachment.id),
+						sourceAttachmentCount: plan.runAttachments.length,
 						status: 'created',
-						createdAt: now,
-						updatedAt: now
+						createdAt: plan.createdAt,
+						updatedAt: plan.createdAt
 					});
 					runCreated = true;
 					await setFirestoreDocument({
 						serviceAccountJson,
-						documentPath: `users/${userId}/workspace/${workspaceId}`,
+						documentPath: `users/${userId}/workspace/${plan.workspaceId}`,
 						data: {
-							id: workspaceId,
-							agentId,
-							createdAt: now,
-							updatedAt: now
+							id: plan.workspaceId,
+							agentId: plan.agentId,
+							createdAt: plan.createdAt,
+							updatedAt: plan.createdAt
 						}
-					});
-					const brief = buildGraderBrief({
-						sourceText,
-						input,
-						attachments: runAttachments
-					});
-					const graderTask = renderGraderTask();
-					const prompt = buildSparkGraderAgentPrompt({
-						summaryPath: GRADER_SUMMARY_PATH,
-						problemsDir: GRADER_PROBLEMS_DIR
 					});
 					await Promise.all([
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
-							workspaceId,
+							workspaceId: plan.workspaceId,
 							path: 'brief.md',
-							content: brief,
-							now
+							content: plan.brief,
+							now: plan.createdAt
 						}),
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
-							workspaceId,
+							workspaceId: plan.workspaceId,
 							path: 'request.json',
-							content: JSON.stringify(
-								{
-									createdAt: now.toISOString(),
-									sourceText: sourceText ?? null,
-									input,
-									attachments: runAttachments
-								},
-								null,
-								2
-							),
-							now
+							content: JSON.stringify(plan.requestPayload, null, 2),
+							now: plan.createdAt
 						}),
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
-							workspaceId,
+							workspaceId: plan.workspaceId,
 							path: 'grader/task.md',
-							content: graderTask,
-							now
+							content: plan.graderTask,
+							now: plan.createdAt
 						}),
 						writeWorkspaceTextFile({
 							serviceAccountJson,
 							userId,
-							workspaceId,
+							workspaceId: plan.workspaceId,
 							path: SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 							content: JSON.stringify(
 								{
-									attachments: runWorkspaceAttachments
+									attachments: plan.runWorkspaceAttachments
 								},
 								null,
 								2
 							),
-							now
+							now: plan.createdAt
 						}),
-						...runWorkspaceAttachments.map((attachment) =>
+						...plan.runWorkspaceAttachments.map((attachment) =>
 							writeWorkspaceStorageLinkFile({
 								serviceAccountJson,
 								userId,
-								workspaceId,
+								workspaceId: plan.workspaceId,
 								path: attachment.workspacePath,
-								storagePath: attachment.storagePath,
+								storagePath: attachment.storagePath ?? '',
 								contentType: attachment.contentType,
 								sizeBytes: attachment.sizeBytes,
-								now
+								now: plan.createdAt
 							})
 						)
 					]);
 					await setFirestoreDocument({
 						serviceAccountJson,
-						documentPath: `users/${userId}/agents/${agentId}`,
+						documentPath: `users/${userId}/agents/${plan.agentId}`,
 						data: {
-							id: agentId,
-							prompt,
+							id: plan.agentId,
+							prompt: plan.prompt,
 							status: 'created',
-							workspaceId,
-							graderRunId: runId,
-							graderSummaryPath: GRADER_SUMMARY_PATH,
-							graderProblemsDir: GRADER_PROBLEMS_DIR,
-							inputAttachments: runAttachments,
-							graderInputAttachments: runAttachments,
-							createdAt: now,
-							updatedAt: now,
-							statesTimeline: [{ state: 'created', timestamp: now }]
+							workspaceId: plan.workspaceId,
+							graderRunId: plan.runId,
+							graderSummaryPath: plan.summaryPath,
+							graderProblemsDir: plan.problemsDir,
+							inputAttachments: plan.runAttachments,
+							graderInputAttachments: plan.runAttachments,
+							createdAt: plan.createdAt,
+							updatedAt: plan.createdAt,
+							statesTimeline: [{ state: 'created', timestamp: plan.createdAt }]
 						}
 					});
 					await createTask(
 						{
 							type: 'runAgent',
-							runAgent: { userId, agentId, workspaceId }
+							runAgent: { userId, agentId: plan.agentId, workspaceId: plan.workspaceId }
 						},
 						{
 							serviceUrl: tasksEnv.serviceUrl,
@@ -1836,10 +1668,10 @@ function buildSparkChatTools(options: {
 
 					const runCard: SparkAgentRunCard = {
 						kind: 'grader',
-						runId,
-						title: launchTitle,
-						sourceAttachmentCount: runAttachments.length,
-						href: `/spark/grader/${runId}`,
+						runId: plan.runId,
+						title: plan.launchTitle,
+						sourceAttachmentCount: plan.runAttachments.length,
+						href: `/spark/grader/${plan.runId}`,
 						listHref: '/spark/grader'
 					};
 					if (onRunCard) {
@@ -1848,18 +1680,16 @@ function buildSparkChatTools(options: {
 						} catch (error) {
 							console.warn('Unable to append grader run card to chat conversation', {
 								userId,
-								runId,
+								runId: plan.runId,
 								error: serializeErrorForLog(error)
 							});
 						}
 					}
-					return {
-						status: 'started'
-					};
+					return { status: 'started' as const };
 				} catch (error) {
 					console.error('Spark grader creation tool failed', {
 						userId,
-						runId,
+						runId: plan.runId,
 						error: serializeErrorForLog(error)
 					});
 					if (runCreated) {
@@ -1867,7 +1697,7 @@ function buildSparkChatTools(options: {
 							error instanceof Error && error.message.trim().length > 0
 								? error.message.trim()
 								: 'Failed to start grader run.';
-						await patchGraderRun(userId, runId, {
+						await patchGraderRun(userId, plan.runId, {
 							status: 'failed',
 							updatedAt: new Date(),
 							completedAt: new Date(),
@@ -1947,13 +1777,10 @@ async function generateAssistantResponse(
 	});
 	const canUseFilesystemLogging = isNodeRuntime();
 	try {
-		const result = await runAgentLoop({
-			model: MODEL_ID,
+		const result = await runSparkChatAgentLoop({
 			input,
 			instructions: SYSTEM_PROMPT,
 			tools,
-			maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
-			thinkingLevel: OPENAI_REASONING_EFFORT,
 			...(canUseFilesystemLogging
 				? {
 						logging: {
