@@ -1,8 +1,8 @@
-import { clientFirebaseConfig } from '$lib/config/firebase';
+import { firebaseClientBaseConfig } from '$lib/config/firebase';
 import { createRemoteJWKSet, customFetch, jwtVerify } from 'jose';
 import { z } from 'zod';
 
-const PROJECT_ID = clientFirebaseConfig.projectId; // From firebase config
+const PROJECT_ID = firebaseClientBaseConfig.projectId; // From firebase config
 const ISSUER = `https://securetoken.google.com/${PROJECT_ID}`;
 const JWKS_URL = new URL(
 	'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'

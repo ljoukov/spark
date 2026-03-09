@@ -1,4 +1,4 @@
-import { clientFirebaseConfig } from '$lib/config/firebase';
+import { getClientFirebaseConfig } from '$lib/config/firebase';
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
 	getAuth,
@@ -15,7 +15,7 @@ let app: FirebaseApp | undefined;
 
 export function getFirebaseApp(): FirebaseApp {
 	if (!app) {
-		app = getApps().length ? getApps()[0]! : initializeApp(clientFirebaseConfig);
+		app = getApps().length ? getApps()[0]! : initializeApp(getClientFirebaseConfig());
 	}
 	return app;
 }
