@@ -5,13 +5,17 @@ import {
 	patchFirestoreDocument,
 	setFirestoreDocument
 } from '$lib/server/gcp/firestoreRest';
-import { buildWorkspaceFileDocPath } from '@spark/llm';
+import {
+	buildWorkspaceFileDocPath,
+	SPARK_GRADER_PROBLEMS_DIR,
+	SPARK_GRADER_SUMMARY_PATH
+} from '@spark/llm';
 import { z } from 'zod';
 
 export const DEFAULT_GRADER_RUN_KEY = 'uploaded_work' as const;
 export const DEFAULT_GRADER_RUN_LABEL = 'Uploaded work' as const;
-export const GRADER_SUMMARY_PATH = 'grader/output/run-summary.json' as const;
-export const GRADER_PROBLEMS_DIR = 'grader/output/problems' as const;
+export const GRADER_SUMMARY_PATH = SPARK_GRADER_SUMMARY_PATH;
+export const GRADER_PROBLEMS_DIR = SPARK_GRADER_PROBLEMS_DIR;
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const runIdSchema = z.string().trim().min(1, 'runId is required');
@@ -74,7 +78,7 @@ const sparkGraderPaperSchema = z
 	})
 	.transform(({ contextLabel, olympiad, ...rest }) => ({
 		...rest,
-		...(contextLabel ?? olympiad ? { contextLabel: contextLabel ?? olympiad } : {})
+		...((contextLabel ?? olympiad) ? { contextLabel: contextLabel ?? olympiad } : {})
 	}));
 
 const sparkGraderPresentationSchema = z.object({

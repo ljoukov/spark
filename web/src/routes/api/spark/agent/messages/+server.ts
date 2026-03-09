@@ -2,9 +2,11 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createSseStream, sseResponse } from '$lib/server/utils/sse';
 import {
 	createTask,
+	buildSparkGraderAgentPrompt,
 	HANDWRITING_TRANSCRIPTION_SKILL_TEXT,
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
+	SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 	resolveWorkspacePathContentType,
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
@@ -104,7 +106,6 @@ const FALLBACK_RESPONSE = [
 	'Want me to tailor this to your exam board and weak topics?'
 ].join('\n');
 const GRADER_ATTACHMENT_LIMIT = 24;
-const GRADER_UPLOADS_MANIFEST_PATH = 'grader/uploads/index.json';
 
 const attachmentSchema = z.object({
 	id: z.string().trim().min(1, 'id is required'),
@@ -582,11 +583,7 @@ function upsertAssistantRunCard(
 	const nextContent =
 		textIndex < 0
 			? [...withoutMatching, nextPart]
-			: [
-					...withoutMatching.slice(0, textIndex),
-					nextPart,
-					...withoutMatching.slice(textIndex)
-				];
+			: [...withoutMatching.slice(0, textIndex), nextPart, ...withoutMatching.slice(textIndex)];
 	conversation.messages[messageIndex] = {
 		...message,
 		content: nextContent
@@ -958,30 +955,6 @@ function renderGraderTask(): string {
 		'- Keep reference-text extraction disabled; rely on explicit `extract_text` instructions and direct source fidelity.'
 	].join('\n');
 	return `${baseTask}${transcriptionSkillSection}`.trim().concat('\n');
-}
-
-function buildGraderAgentPrompt(options: {
-	summaryPath: string;
-	problemsDir: string;
-}): string {
-	return [
-		'Grade and process student uploaded work and related documents such as problem statements and official solutions.',
-		'',
-		'Read and follow these files first:',
-		'- brief.md',
-		'- request.json',
-		'- grader/task.md',
-		'- grader/uploads/index.json',
-		'- Respect request.json input.referenceSourcePolicy for online-search permissions.',
-		'- Keep official/reference problem statements verbatim where possible; do not rewrite them into cleaned canonical wording.',
-		'- Keep the user-facing run summary concise, derived from the uploaded content, and free of IDs, paths, and tool/process narration.',
-		'',
-		'Deliverables:',
-		'1) Write `grader/output/transcription.md` from a transcription-first extraction pass, then normalize student work into numbered statements/sentences (not a summary)',
-		`2) Write per-problem markdown files under ${options.problemsDir}/ with a verbatim-as-possible official/reference problem statement and line-by-line feedback keyed to the numbered student statements`,
-		`3) Write ${options.summaryPath} including a concise user-facing presentation title and summary markdown derived from the uploaded content`,
-		"4) When official solutions are missing, derive solutions at the student's level where reasonable and call done with that same short user-facing markdown summary"
-	].join('\n');
 }
 
 const quizQuestionKindSchema = z
@@ -1766,7 +1739,7 @@ function buildSparkChatTools(options: {
 						attachments: runAttachments
 					});
 					const graderTask = renderGraderTask();
-					const prompt = buildGraderAgentPrompt({
+					const prompt = buildSparkGraderAgentPrompt({
 						summaryPath: GRADER_SUMMARY_PATH,
 						problemsDir: GRADER_PROBLEMS_DIR
 					});
@@ -1808,7 +1781,7 @@ function buildSparkChatTools(options: {
 							serviceAccountJson,
 							userId,
 							workspaceId,
-							path: GRADER_UPLOADS_MANIFEST_PATH,
+							path: SPARK_GRADER_UPLOADS_MANIFEST_PATH,
 							content: JSON.stringify(
 								{
 									attachments: runWorkspaceAttachments

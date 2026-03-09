@@ -72,6 +72,7 @@ import {
   applyPdfTranscriptionSkillTools,
   PDF_TRANSCRIPTION_SKILL_TEXT,
 } from "./skills/pdfTranscription";
+import { captureSparkAgentReplayState } from "./sparkAgentReplayArtifacts";
 import {
   buildWorkspaceFileDocPath,
   buildWorkspaceFilesCollectionPath,
@@ -624,7 +625,7 @@ const GraderRunSummarySchema = z
   })
   .transform(({ contextLabel, olympiad, ...rest }) => ({
     ...rest,
-    ...(contextLabel ?? olympiad
+    ...((contextLabel ?? olympiad)
       ? { contextLabel: contextLabel ?? olympiad }
       : {}),
   }));
@@ -729,7 +730,7 @@ export function resolveSparkAgentToolCallsDir(rootDir: string): string {
   return path.join(resolveSparkAgentLogsDir(rootDir), "tool_calls");
 }
 
-function resolveThinkingLevel(
+export function resolveSparkAgentThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
   if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex")) {
@@ -2900,7 +2901,7 @@ function stripDeprecatedPdfReadTools(tools: LlmToolSet): LlmToolSet {
   return nextTools;
 }
 
-function buildAgentSystemPrompt(options?: {
+export function buildSparkAgentSystemPrompt(options?: {
   includePdfTranscriptionSkill?: boolean;
 }): string {
   const lines = [
@@ -4677,7 +4678,7 @@ function buildAgentTools(options: {
       options.modelId,
       DEFAULT_PDF_EXTRACTION_MODEL_ID,
     );
-    const thinkingLevel = resolveThinkingLevel(resolvedModelId);
+    const thinkingLevel = resolveSparkAgentThinkingLevel(resolvedModelId);
     const extractionPrompt = [
       "Extract text from the attached PDF.",
       "Follow the user instructions exactly.",
@@ -4792,7 +4793,7 @@ function buildAgentTools(options: {
       options.modelId,
       DEFAULT_PDF_EXTRACTION_MODEL_ID,
     );
-    const thinkingLevel = resolveThinkingLevel(resolvedModelId);
+    const thinkingLevel = resolveSparkAgentThinkingLevel(resolvedModelId);
     const extractionPrompt = [
       "Extract diagram bounding boxes from the attached PDF.",
       "Return JSON only.",
@@ -5286,7 +5287,7 @@ function buildAgentTools(options: {
         outputMode,
       }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const thinkingLevel = resolveThinkingLevel(resolvedModelId);
+        const thinkingLevel = resolveSparkAgentThinkingLevel(resolvedModelId);
 
         const resolvedPromptPath = promptPath.trim();
         const resolvedOutputPath = outputPath.trim();
@@ -5623,7 +5624,7 @@ function buildAgentTools(options: {
         .strict(),
       execute: async ({ sourcePath, schemaPath, outputPath }) => {
         const resolvedModelId: LlmTextModelId = DEFAULT_GENERATE_TEXT_MODEL_ID;
-        const thinkingLevel = resolveThinkingLevel(resolvedModelId);
+        const thinkingLevel = resolveSparkAgentThinkingLevel(resolvedModelId);
 
         const resolvedSourcePath = sourcePath.trim();
         const resolvedSchemaPath = schemaPath.trim();
@@ -6664,6 +6665,7 @@ export function buildSparkAgentTools(options: {
   progress?: JobProgressReporter;
   onToolLlmCost?: (toolName: ToolLlmCostName, costUsd: number) => void;
   enforceLessonPipeline?: boolean;
+  allowPythonExec?: boolean;
   debug?: LlmDebugOptions;
   extractTextDebugRootDir?: string;
 }): LlmToolSet {
@@ -6695,7 +6697,7 @@ export async function runSparkLessonAgentLocal(options: {
 }> {
   const modelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const maxSteps = options.maxSteps ?? DEFAULT_LESSON_MAX_STEPS;
-  const thinkingLevel = resolveThinkingLevel(modelId);
+  const thinkingLevel = resolveSparkAgentThinkingLevel(modelId);
   const progress = options.progress;
 
   const workspace: SparkAgentWorkspace = {
@@ -6812,7 +6814,7 @@ export async function runSparkLessonAgentLocal(options: {
 
   const toolLoopResult = await runAgentLoop({
     model: modelId,
-    instructions: buildAgentSystemPrompt(),
+    instructions: buildSparkAgentSystemPrompt(),
     input: options.prompt,
     tools: {
       ...baseTools,
@@ -7431,7 +7433,7 @@ export async function runSparkAgentTask(
     const maxSteps =
       options.maxSteps ??
       (isLessonRun ? DEFAULT_LESSON_MAX_STEPS : DEFAULT_MAX_STEPS);
-    const thinkingLevel = resolveThinkingLevel(modelId);
+    const thinkingLevel = resolveSparkAgentThinkingLevel(modelId);
     const progress: JobProgressReporter = {
       log: (message) => {
         throwIfStopRequested();
@@ -7847,9 +7849,34 @@ export async function runSparkAgentTask(
           "After calling one of those tools, immediately call done with a short summary.",
           "Do not use markdown headings unless they help readability. Prefer concise paragraphs or short bullet points.",
         ].join("\n")
-      : buildAgentSystemPrompt({
+      : buildSparkAgentSystemPrompt({
           includePdfTranscriptionSkill: graderRunId !== null,
         });
+    if (graderRunId && workspaceRoot) {
+      try {
+        await captureSparkAgentReplayState({
+          rootDir: workspaceRoot,
+          agentKind: "grader",
+          prompt,
+          systemPrompt: agentSystemPrompt,
+          modelId,
+          thinkingLevel,
+          maxSteps,
+          useSubagents: true,
+          grader: {
+            summaryPath: graderSummaryPath,
+            problemsDir: graderProblemsDir,
+          },
+        });
+        logSync?.append(
+          "replay: captured manifest + initial workspace snapshot",
+        );
+      } catch (error) {
+        logSync?.append(
+          `warn: failed to capture replay artifacts: ${errorAsString(error)}`,
+        );
+      }
+    }
     let initialInput: LlmInputMessage[] | null = null;
     if (tutorSessionId && tutorAction && tutorSnapshot) {
       initialInput = [
