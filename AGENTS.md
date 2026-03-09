@@ -29,6 +29,7 @@
 - Spark-specific architecture, workflows, prompts, validation order, and operational runbooks belong here or in repo docs, not in global Codex memory.
 - When current Spark behavior matters, inspect the checked-out code, `docs/SPEC.md`, and lockfiles instead of relying on memory from another checkout or prior run.
 - Spark uses Bun workspaces with `workspace:*` links and isolated installs. Run `bun install` only at the repo root when manifests or the lockfile change; do not run workspace-level installs such as `bun --cwd=web install`.
+- Cloud Run deploys should use immutable image refs (for example `${BUILD_ID}` tags or digests). Reusing a static Artifact Registry tag can leave Cloud Run pinned to a stale digest even when Cloud Build reports success.
 - Treat Spark and `@ljoukov/llm` as jointly evolved: breaking `@ljoukov/llm` API changes are acceptable when Spark is updated in the same rollout and dependent docs/tests stay in sync.
 - For grader/reference-material handling, preserve official statements verbatim except for minimal OCR/layout cleanup, and keep task templates, prompt builders, and `docs/SPEC.md` aligned when that contract changes.
 

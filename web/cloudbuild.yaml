@@ -6,7 +6,7 @@ substitutions:
   _REGION: us-central1
   _PROJECT_ID: pic2toon
   _AR_REPO: pic2toon-docker-repo
-  _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}-image:tag1
+  _IMAGE_NAME: ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}-image:${BUILD_ID}
 steps:
   - name: python:slim
     entrypoint: echo
