@@ -102,3 +102,14 @@ Model policy examples
   graphs to catch these early.
 - `npm run all-tests` runs lint, check, test, and build sequentially. Codex is encouraged to run it for larger changes before
   submitting work.
+- For macOS deployment debugging on Apple silicon, Apple `container` is an acceptable Docker replacement for testing the
+  Cloud Run image locally. Use this only on macOS 26+ hosts with Apple `container` available.
+- Apple `container` Cloud Run smoke path: `container system start`, optionally `container builder start --cpus 8 --memory 16g`,
+  then `container build -f web/Dockerfile -t spark-web-local .`, then
+  `container run --name spark-web-local-test --detach --rm -e PORT=8080 -p 8080:8080 spark-web-local`, then
+  `curl http://127.0.0.1:8080`. Cleanup: `container stop spark-web-local-test` and `container builder stop`.
+- Local Apple `container` builds use `web/.env.local` directly. In Cloud Build, the same file is produced by
+  `web/write_dotenv.py` from Secret Manager before the Docker build starts, so local Cloud Run image testing should reuse
+  `web/.env.local` rather than trying to emulate Secret Manager inside the container.
+- Expect the first Apple `container` build/run to be much slower than the Docker equivalent because it bootstraps the kernel,
+  BuildKit VM, init image, and local snapshot import. Use it for deployment-specific investigation, not for routine web dev.
