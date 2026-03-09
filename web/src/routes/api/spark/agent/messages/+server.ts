@@ -7,6 +7,7 @@ import {
 	resolveSparkAgentLogsDir,
 	resolveSparkAgentWorkspaceRoot,
 	SPARK_GRADER_UPLOADS_MANIFEST_PATH,
+	isNodeRuntime,
 	resolveWorkspacePathContentType,
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
@@ -1944,6 +1945,7 @@ async function generateAssistantResponse(
 		conversationId: options.conversationId,
 		messageId: options.messageId
 	});
+	const canUseFilesystemLogging = isNodeRuntime();
 	try {
 		const result = await runAgentLoop({
 			model: MODEL_ID,
@@ -1952,16 +1954,20 @@ async function generateAssistantResponse(
 			tools,
 			maxSteps: SPARK_AGENT_MAX_TOOL_STEPS,
 			thinkingLevel: OPENAI_REASONING_EFFORT,
-			logging: {
-				workspaceDir: logWorkspace.logsDir,
-				callLogsDir: 'llm_calls',
-				mirrorToConsole: false,
-				sink: {
-					append: (line) => {
-						console.log(`[spark-chat:${options.conversationId}] ${line}`);
+			...(canUseFilesystemLogging
+				? {
+						logging: {
+							workspaceDir: logWorkspace.logsDir,
+							callLogsDir: 'llm_calls',
+							mirrorToConsole: false,
+							sink: {
+								append: (line) => {
+									console.log(`[spark-chat:${options.conversationId}] ${line}`);
+								}
+							}
+						}
 					}
-				}
-			},
+				: { logging: false }),
 			onEvent: (event) => {
 				if (event.type !== 'delta') {
 					return;
@@ -1975,7 +1981,7 @@ async function generateAssistantResponse(
 		});
 		return normalizeSparkLinks(result.text);
 	} finally {
-		if (logWorkspace.cleanupOnExit) {
+		if (canUseFilesystemLogging && logWorkspace.cleanupOnExit) {
 			await rm(logWorkspace.rootDir, { recursive: true, force: true }).catch(() => undefined);
 		}
 	}

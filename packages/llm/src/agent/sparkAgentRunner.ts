@@ -360,10 +360,28 @@ type MutableGlobal = Omit<typeof globalThis, "location" | "self"> & {
   self?: typeof globalThis;
 };
 
-const require = createRequire(import.meta.url);
-const PYODIDE_PACKAGE_JSON_PATH = require.resolve("pyodide/package.json");
-const PYODIDE_BASE_DIR = path.dirname(PYODIDE_PACKAGE_JSON_PATH);
-const LOCAL_PYODIDE_INDEX_URL = path.join(PYODIDE_BASE_DIR, path.sep);
+let cachedLocalPyodideIndexUrl: string | null | undefined;
+
+function getLocalPyodideIndexUrl(): string | null {
+  if (cachedLocalPyodideIndexUrl !== undefined) {
+    return cachedLocalPyodideIndexUrl;
+  }
+  try {
+    const moduleUrl = import.meta.url;
+    if (!moduleUrl) {
+      cachedLocalPyodideIndexUrl = null;
+      return cachedLocalPyodideIndexUrl;
+    }
+    const require = createRequire(moduleUrl);
+    const packageJsonPath = require.resolve("pyodide/package.json");
+    const baseDir = path.dirname(packageJsonPath);
+    cachedLocalPyodideIndexUrl = path.join(baseDir, path.sep);
+    return cachedLocalPyodideIndexUrl;
+  } catch {
+    cachedLocalPyodideIndexUrl = null;
+    return cachedLocalPyodideIndexUrl;
+  }
+}
 
 function resolvePyodideIndexUrl(explicit?: string): string {
   const fromEnv =
@@ -402,11 +420,17 @@ function resolvePyodideIndexUrl(explicit?: string): string {
     return `${trimmed}${path.sep}`;
   };
 
+  const localIndexUrl = getLocalPyodideIndexUrl();
   if (!raw) {
-    return LOCAL_PYODIDE_INDEX_URL;
+    if (localIndexUrl) {
+      return localIndexUrl;
+    }
+    throw new Error(
+      "Pyodide local runtime is unavailable in this environment. Set PYODIDE_INDEX_URL to a local filesystem path before using python_exec.",
+    );
   }
 
-  return normalise(raw) ?? LOCAL_PYODIDE_INDEX_URL;
+  return normalise(raw) ?? localIndexUrl ?? raw;
 }
 
 function ensurePyodideEnvironment(indexURL: string): void {
