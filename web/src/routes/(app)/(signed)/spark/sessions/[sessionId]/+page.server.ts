@@ -1,7 +1,8 @@
-import { error, redirect } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-import { getTutorSession } from '$lib/server/tutorSessions/repo';
+import { getTutorSession, listTutorSessions } from '$lib/server/tutorSessions/repo';
+import { recoverTutorSessionIfStale } from '$lib/server/tutorSessions/recovery';
 import { readTutorWorkspaceState } from '$lib/server/tutorSessions/workspace';
 import { requireTutorServiceAccountJson } from '$lib/server/tutorSessions/service';
 
@@ -11,17 +12,37 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		throw redirect(302, '/login');
 	}
 
-	const session = await getTutorSession(user.uid, params.sessionId);
+	let session = await getTutorSession(user.uid, params.sessionId);
 	if (!session) {
-		throw error(404, 'Tutor session not found');
+		const fallback = (await listTutorSessions(user.uid, 1))[0] ?? null;
+		if (fallback && fallback.id !== params.sessionId) {
+			throw redirect(302, `/spark/sessions/${fallback.id}`);
+		}
+		throw redirect(302, '/spark/sessions');
 	}
 
-	const workspace = await readTutorWorkspaceState({
+	let workspace = await readTutorWorkspaceState({
 		serviceAccountJson: requireTutorServiceAccountJson(),
 		userId: user.uid,
 		workspaceId: session.workspaceId,
 		session
 	});
+	const recovered = await recoverTutorSessionIfStale({
+		serviceAccountJson: requireTutorServiceAccountJson(),
+		userId: user.uid,
+		session,
+		reviewState: workspace.reviewState,
+		draftRevision: session.latestDraftRevision
+	});
+	if (recovered) {
+		session = recovered.session;
+		workspace = {
+			...workspace,
+			screenState: recovered.screenState,
+			composerState: recovered.composerState,
+			reviewState: recovered.reviewState
+		};
+	}
 
 	return {
 		session: {
@@ -39,7 +60,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				verdict: session.source.verdict ?? null,
 				awardedMarks:
 					typeof session.source.awardedMarks === 'number' ? session.source.awardedMarks : null,
-				maxMarks: typeof session.source.maxMarks === 'number' ? session.source.maxMarks : null
+				maxMarks:
+					typeof session.source.maxMarks === 'number' ? session.source.maxMarks : null
 			},
 			createdAt: session.createdAt.toISOString(),
 			updatedAt: session.updatedAt.toISOString(),
@@ -51,6 +73,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			inlineFeedbackMarkdown: workspace.inlineFeedbackMarkdown,
 			screenState: workspace.screenState,
 			composerState: workspace.composerState,
+			reviewState: workspace.reviewState,
 			context: workspace.context
 		}
 	};

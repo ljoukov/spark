@@ -1,5 +1,6 @@
 import { buildGraderRunDisplay } from '$lib/server/grader/presentation';
 import { getGraderRun } from '$lib/server/grader/repo';
+import { listTutorSessions } from '$lib/server/tutorSessions/repo';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -13,6 +14,16 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		throw error(404, 'Grader run not found');
 	}
 	const problems = [...(run.problems ?? [])].sort((a, b) => a.index - b.index);
+	const tutorSessions = (await listTutorSessions(user.uid, 200)).filter(
+		(session) => session.source.kind === 'grader-problem' && session.source.runId === run.id
+	);
+	const tutorSessionsByProblemId = new Map(
+		tutorSessions.map((session) => [session.source.problemId, session])
+	);
+	const resolvedTutorProblems = problems.filter((problem) => {
+		const session = tutorSessionsByProblemId.get(problem.id);
+		return session?.status === 'completed';
+	}).length;
 	return {
 		run: {
 			id: run.id,
@@ -46,7 +57,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 						paperUrl: run.paper.paperUrl ?? null,
 						markSchemeUrl: run.paper.markSchemeUrl ?? null
 					}
-				: null
+				: null,
+			tutorReview: {
+				resolvedProblems: resolvedTutorProblems,
+				totalProblems: problems.length,
+				allResolved: problems.length > 0 && resolvedTutorProblems === problems.length
+			}
 		},
 		problems: problems.map((problem) => ({
 			id: problem.id,
@@ -55,7 +71,17 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			awardedMarks: typeof problem.awardedMarks === 'number' ? problem.awardedMarks : null,
 			maxMarks: typeof problem.maxMarks === 'number' ? problem.maxMarks : null,
 			verdict: problem.verdict ?? null,
-			filePath: problem.filePath
+			filePath: problem.filePath,
+			tutorSession: (() => {
+				const session = tutorSessionsByProblemId.get(problem.id);
+				if (!session) {
+					return null;
+				}
+				return {
+					id: session.id,
+					status: session.status
+				};
+			})()
 		}))
 	};
 };

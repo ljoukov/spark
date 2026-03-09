@@ -27,7 +27,7 @@ export function resolveTutorSessionDocPath(userId: string, sessionId: string): s
 	return `spark/${trimmedString.parse(userId)}/tutorSessions/${trimmedString.parse(sessionId)}`;
 }
 
-function tutorSessionsCollectionPath(userId: string): string {
+export function resolveTutorSessionsCollectionPath(userId: string): string {
 	return `spark/${trimmedString.parse(userId)}/tutorSessions`;
 }
 
@@ -75,7 +75,7 @@ export async function getTutorSession(
 export async function listTutorSessions(userId: string, limit = 100): Promise<SparkTutorSession[]> {
 	const docs = await listFirestoreDocuments({
 		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: tutorSessionsCollectionPath(userId),
+		collectionPath: resolveTutorSessionsCollectionPath(userId),
 		limit,
 		orderBy: 'updatedAt desc'
 	});

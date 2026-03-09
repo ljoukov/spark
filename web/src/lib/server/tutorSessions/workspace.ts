@@ -1,15 +1,21 @@
 import {
 	SparkTutorComposerStateSchema,
 	SparkTutorHistoryEntrySchema,
+	SparkTutorReviewStateSchema,
 	SparkTutorScreenStateSchema,
 	type SparkTutorComposerState,
 	type SparkTutorHistoryEntry,
+	type SparkTutorReviewState,
 	type SparkTutorScreenState,
 	type SparkTutorSession
 } from '@spark/schemas';
 import { buildWorkspaceFileDocPath, upsertWorkspaceTextFileDoc } from '@spark/llm';
 import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import type { GraderProblemReportSections } from '$lib/server/grader/problemReport';
+import {
+	buildEmptyTutorReviewState,
+	buildInitialTutorReviewState,
+} from '$lib/server/tutorSessions/reviewState';
 
 export const TUTOR_CONTEXT_PROBLEM_PATH = 'context/problem.md' as const;
 export const TUTOR_CONTEXT_OFFICIAL_SOLUTION_PATH = 'context/official-solution.md' as const;
@@ -22,6 +28,7 @@ export const TUTOR_UI_TOP_PANEL_PATH = 'ui/tutor.md' as const;
 export const TUTOR_UI_INLINE_FEEDBACK_PATH = 'ui/inline-feedback.md' as const;
 export const TUTOR_STATE_SESSION_PATH = 'state/session.json' as const;
 export const TUTOR_STATE_COMPOSER_PATH = 'state/composer.json' as const;
+export const TUTOR_STATE_REVIEW_PATH = 'state/review.json' as const;
 export const TUTOR_HISTORY_TURNS_PATH = 'history/turns.jsonl' as const;
 
 function stringifyJson(value: unknown): string {
@@ -124,8 +131,14 @@ export async function seedTutorWorkspace(options: {
 		session: options.session
 	});
 	const initialComposerState = buildTutorComposerState({
-		placeholder: 'Spark is preparing your tutor session...',
-		disabled: true
+		placeholder: 'Reply to a comment thread.',
+		disabled: options.session.status !== 'awaiting_student',
+		allowConfidence: false,
+		hintButtons: []
+	});
+	const initialReviewState = buildInitialTutorReviewState({
+		sections: options.sections,
+		now: options.now
 	});
 
 	await Promise.all([
@@ -182,7 +195,7 @@ export async function seedTutorWorkspace(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_UI_TOP_PANEL_PATH,
-			content: 'Preparing your tutor session...\n',
+			content: 'Reply on each review thread until every comment is resolved.\n',
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -207,6 +220,14 @@ export async function seedTutorWorkspace(options: {
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_STATE_COMPOSER_PATH,
 			content: stringifyJson(initialComposerState),
+			now: options.now
+		}),
+		writeTutorWorkspaceTextFile({
+			serviceAccountJson: options.serviceAccountJson,
+			userId: options.userId,
+			workspaceId: options.workspaceId,
+			filePath: TUTOR_STATE_REVIEW_PATH,
+			content: stringifyJson(initialReviewState),
 			now: options.now
 		}),
 		writeTutorWorkspaceTextFile({
@@ -262,6 +283,7 @@ export async function readTutorWorkspaceState(options: {
 	inlineFeedbackMarkdown: string;
 	screenState: SparkTutorScreenState;
 	composerState: SparkTutorComposerState;
+	reviewState: SparkTutorReviewState;
 	context: {
 		problem: string;
 		officialSolution: string;
@@ -276,6 +298,7 @@ export async function readTutorWorkspaceState(options: {
 		inlineFeedbackMarkdown,
 		sessionStateRaw,
 		composerStateRaw,
+		reviewStateRaw,
 		problem,
 		officialSolution,
 		transcript,
@@ -306,6 +329,12 @@ export async function readTutorWorkspaceState(options: {
 			userId: options.userId,
 			workspaceId: options.workspaceId,
 			filePath: TUTOR_STATE_COMPOSER_PATH
+		}),
+		readTutorWorkspaceTextFile({
+			serviceAccountJson: options.serviceAccountJson,
+			userId: options.userId,
+			workspaceId: options.workspaceId,
+			filePath: TUTOR_STATE_REVIEW_PATH
 		}),
 		readTutorWorkspaceTextFile({
 			serviceAccountJson: options.serviceAccountJson,
@@ -357,6 +386,11 @@ export async function readTutorWorkspaceState(options: {
 			composerStateRaw,
 			(value) => SparkTutorComposerStateSchema.parse(value),
 			buildTutorComposerState()
+		),
+		reviewState: parseJsonWithSchema(
+			reviewStateRaw,
+			(value) => SparkTutorReviewStateSchema.parse(value),
+			buildEmptyTutorReviewState(options.session.updatedAt)
 		),
 		context: {
 			problem: problem ?? '',

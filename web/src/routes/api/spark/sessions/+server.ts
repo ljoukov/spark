@@ -8,14 +8,18 @@ import { parseGraderProblemReport } from '$lib/server/grader/problemReport';
 import {
 	createTutorSession,
 	findTutorSessionForGraderProblem,
-	patchTutorSession
 } from '$lib/server/tutorSessions/repo';
 import {
 	ensureWorkspaceDoc,
-	createTutorTurnAgentRun,
 	requireTutorServiceAccountJson
 } from '$lib/server/tutorSessions/service';
 import { seedTutorWorkspace } from '$lib/server/tutorSessions/workspace';
+import {
+	buildInitialTutorReviewState,
+	buildTutorReviewFocusLabel,
+	buildTutorReviewPreview,
+	summarizeTutorReviewState
+} from '$lib/server/tutorSessions/reviewState';
 import { SparkTutorSessionSchema } from '@spark/schemas';
 
 const requestSchema = z.object({
@@ -83,13 +87,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	const now = new Date();
 	const sessionId = randomUUID();
 	const workspaceId = randomUUID();
-	const agentId = randomUUID();
 	const title = `Problem ${problem.index.toString()} tutor`;
+	const reviewState = buildInitialTutorReviewState({
+		sections,
+		now
+	});
+	const reviewSummary = summarizeTutorReviewState(reviewState);
 
 	const session = SparkTutorSessionSchema.parse({
 		id: sessionId,
 		workspaceId,
-		status: 'responding',
+		status: reviewSummary.allResolved ? 'completed' : 'awaiting_student',
 		source: {
 			kind: 'grader-problem',
 			runId: run.id,
@@ -101,17 +109,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			...(typeof problem.maxMarks === 'number' ? { maxMarks: problem.maxMarks } : {})
 		},
 		title,
-		preview: 'Preparing your tutor session.',
-		activeTurnAgentId: agentId,
+		preview: buildTutorReviewPreview(reviewState),
 		latestDraftRevision: 0,
+		...(buildTutorReviewFocusLabel(reviewState)
+			? { focusLabel: buildTutorReviewFocusLabel(reviewState) }
+			: {}),
 		createdAt: now,
-		updatedAt: now
+		updatedAt: now,
+		...(reviewSummary.allResolved ? { completedAt: now } : {})
 	});
 
 	await ensureWorkspaceDoc({
 		userId,
 		workspaceId,
-		agentId,
 		sessionId,
 		now
 	});
@@ -122,22 +132,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		workspaceId,
 		session,
 		sections,
-		now
-	});
-	await patchTutorSession(userId, sessionId, {
-		activeTurnAgentId: agentId,
-		status: 'responding',
-		updatedAt: now
-	});
-
-	await createTutorTurnAgentRun({
-		userId,
-		agentId,
-		workspaceId,
-		sessionId,
-		prompt: `Open the tutor session for ${title} and deliver the first coaching turn.`,
-		title,
-		action: 'initial',
 		now
 	});
 

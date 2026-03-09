@@ -21,6 +21,7 @@
 	const lessonsHref = $derived(baseHref);
 	const chatsHref = $derived(`${baseHref}/chats`);
 	const gradersHref = $derived(`${baseHref}/graders`);
+	const tutorsHref = $derived(`${baseHref}/tutors`);
 	const agentsHref = $derived(`${baseHref}/agents`);
 
 	const isLessonsActive = $derived(
@@ -28,6 +29,7 @@
 	);
 	const isChatsActive = $derived(pathname.startsWith(`${baseHref}/chats`));
 	const isGradersActive = $derived(pathname.startsWith(`${baseHref}/graders`));
+	const isTutorsActive = $derived(pathname.startsWith(`${baseHref}/tutors`));
 	const isAgentsActive = $derived(pathname.startsWith(`${baseHref}/agents`));
 
 	function formatInstant(value: string | null): string {
@@ -132,6 +134,12 @@
 			class={cn(buttonVariants({ variant: isGradersActive ? 'default' : 'secondary', size: 'sm' }))}
 		>
 			Graders
+		</a>
+		<a
+			href={tutorsHref}
+			class={cn(buttonVariants({ variant: isTutorsActive ? 'default' : 'secondary', size: 'sm' }))}
+		>
+			Tutors
 		</a>
 		<a
 			href={agentsHref}

@@ -77,7 +77,7 @@
 	</Card.Header>
 	<Card.Content class="space-y-3">
 		{#each runs as run (run.id)}
-			<div class="rounded-xl border border-border/70 p-4">
+			<div id={`grader-run-${run.id}`} class="rounded-xl border border-border/70 p-4">
 				<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 					<div class="min-w-0 space-y-2">
 						<div class="flex flex-wrap items-center gap-2">
@@ -149,12 +149,12 @@
 							</p>
 						{/if}
 
-						<details class="rounded-md border border-border/70 bg-muted/10">
+						<details class="min-w-0 overflow-hidden rounded-md border border-border/70 bg-muted/10">
 							<summary class="cursor-pointer px-3 py-2 text-xs font-medium text-foreground">
 								Raw run data
 							</summary>
 							<pre
-								class="max-h-96 overflow-auto border-t border-border/70 px-3 py-2 text-[11px] text-muted-foreground"
+								class="max-h-96 min-w-0 max-w-full overflow-x-auto overflow-y-auto border-t border-border/70 px-3 py-2 text-[11px] text-muted-foreground"
 							>{run.rawJson}</pre>
 						</details>
 					</div>

@@ -96,7 +96,16 @@
 				<span>Percentage</span>
 				<p>{data.run.totals ? formatPercent(data.run.totals.percentage) : '—'}</p>
 			</div>
+			<div>
+				<span>Tutor review</span>
+				<p>
+					{data.run.tutorReview.resolvedProblems}/{data.run.tutorReview.totalProblems}
+				</p>
+			</div>
 		</div>
+		{#if data.run.tutorReview.allResolved}
+			<p class="tutor-review-banner">All problem reviews are resolved.</p>
+		{/if}
 	</section>
 
 	<section class="problems-card">
@@ -118,6 +127,11 @@
 										problem.maxMarks
 									)}
 								</p>
+								{#if problem.tutorSession}
+									<p class="problem-tutor" data-status={problem.tutorSession.status}>
+										Tutor review: {problem.tutorSession.status}
+									</p>
+								{/if}
 							</div>
 							<span class="chevron">›</span>
 						</a>
@@ -262,6 +276,15 @@
 		font-size: 0.86rem;
 	}
 
+	.tutor-review-banner {
+		margin: 0.9rem 0 0;
+		padding: 0.65rem 0.8rem;
+		border-radius: 0.8rem;
+		background: color-mix(in srgb, #16a34a 12%, transparent);
+		color: color-mix(in srgb, #166534 90%, black 8%);
+		font-weight: 700;
+	}
+
 	.summary-text,
 	.error-text {
 		margin: 0.8rem 0 0;
@@ -328,6 +351,23 @@
 		margin: 0.2rem 0 0;
 		font-size: 0.82rem;
 		color: color-mix(in srgb, var(--foreground) 62%, transparent);
+	}
+
+	.problem-tutor {
+		margin: 0.35rem 0 0;
+		font-size: 0.78rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.problem-tutor[data-status='completed'] {
+		color: color-mix(in srgb, #166534 90%, black 6%);
+	}
+
+	.problem-tutor[data-status='awaiting_student'],
+	.problem-tutor[data-status='responding'] {
+		color: color-mix(in srgb, #92400e 90%, black 6%);
 	}
 
 	.chevron {

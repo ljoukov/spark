@@ -177,6 +177,12 @@
 								Graders
 							</a>
 							<a
+								href={`/admin/users/${user.uid}/tutors`}
+								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+							>
+								Tutors
+							</a>
+							<a
 								href={`/admin/users/${user.uid}/agents`}
 								class={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
 							>

@@ -107,3 +107,74 @@ export const SparkTutorHistoryEntrySchema = z.object({
 export type SparkTutorHistoryEntry = z.infer<
   typeof SparkTutorHistoryEntrySchema
 >;
+
+export const SparkTutorReviewThreadStatusSchema = z.enum([
+  "open",
+  "responding",
+  "resolved",
+]);
+
+export type SparkTutorReviewThreadStatus = z.infer<
+  typeof SparkTutorReviewThreadStatusSchema
+>;
+
+export const SparkTutorReviewThreadAnchorSchema = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("transcript_line"),
+      lineNumber: z.number().int().min(1),
+    }),
+    z.object({
+      kind: z.literal("problem"),
+    }),
+  ],
+);
+
+export type SparkTutorReviewThreadAnchor = z.infer<
+  typeof SparkTutorReviewThreadAnchorSchema
+>;
+
+export const SparkTutorReviewMessageSchema = z.object({
+  id: trimmedString,
+  author: z.enum(["assistant", "student"]),
+  markdown: z.string().trim().min(1),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export type SparkTutorReviewMessage = z.infer<
+  typeof SparkTutorReviewMessageSchema
+>;
+
+export const SparkTutorTranscriptLineSchema = z.object({
+  lineNumber: z.number().int().min(1),
+  markdown: z.string().trim().min(1),
+});
+
+export type SparkTutorTranscriptLine = z.infer<
+  typeof SparkTutorTranscriptLineSchema
+>;
+
+export const SparkTutorReviewThreadSchema = z.object({
+  id: trimmedString,
+  label: trimmedString,
+  status: SparkTutorReviewThreadStatusSchema,
+  anchor: SparkTutorReviewThreadAnchorSchema,
+  excerpt: trimmedString.optional(),
+  messages: z.array(SparkTutorReviewMessageSchema).min(1),
+  resolvedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export type SparkTutorReviewThread = z.infer<
+  typeof SparkTutorReviewThreadSchema
+>;
+
+export const SparkTutorReviewStateSchema = z.object({
+  transcriptLines: z.array(SparkTutorTranscriptLineSchema),
+  threads: z.array(SparkTutorReviewThreadSchema),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export type SparkTutorReviewState = z.infer<
+  typeof SparkTutorReviewStateSchema
+>;
