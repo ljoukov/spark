@@ -3,6 +3,8 @@
 - Source of truth: `docs/SPEC.md`. Follow it for requirements, interfaces, APIs, and conventions.
 - Scope: This AGENTS.md applies to the entire repository subtree.
 - Precedence: Direct system/developer/user instructions take precedence over this file.
+- Use this file as the durable Spark-specific memory across checkouts/worktrees: keep portable repo conventions, runbooks, and debugging notes here when they should survive branch switches.
+- Do not add machine-specific or developer-specific state here (absolute paths, usernames, local-only env values, hostnames, ad-hoc checkout state, current dependency pins from one worktree).
 - UI/UX flows should be reflected in `docs/SPEC.md` and kept up to date alongside code-level docs.
 - SvelteKit has had many recent updates (eg ropes), docs are in `web/docs/sveltekit-docs.md`
 - /app and /admin UIs are built shadcn-svelte, docs are in `web/docs/shadcn-svelte.md`
