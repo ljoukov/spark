@@ -1,7 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z, ZodError } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 // The document holds arbitrary diagnostic data; validate as an object with any keys.
 const DocSchema = z.object({}).loose();
@@ -13,10 +14,12 @@ export const GET: RequestHandler = async () => {
 		if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 			return json({ error: 'misconfigured', message: 'GOOGLE_SERVICE_ACCOUNT_JSON missing' }, { status: 500 });
 		}
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
 
 		const documentPath = 'spark/test-user/docs/adminSdkDiagnostics';
-		const snap = await getFirestoreDocument({ serviceAccountJson, documentPath });
-		if (!snap.exists || !snap.data) {
+		const snap = await getDoc(doc(firestore, documentPath));
+		if (!snap.exists) {
 			return json(
 				{
 					error: 'not_found',
@@ -26,7 +29,7 @@ export const GET: RequestHandler = async () => {
 			);
 		}
 
-		const parsed = DocSchema.parse(snap.data);
+		const parsed = DocSchema.parse(snap.data());
 		return json(parsed);
 	} catch (err) {
 		console.log('GET: failed:', err);

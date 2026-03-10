@@ -7,7 +7,7 @@
 <div class="mx-auto w-full max-w-5xl">
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>Firestore Admin SDK</Card.Title>
+			<Card.Title>Firestore Diagnostics</Card.Title>
 			<Card.Description
 				>Document diagnostics from spark/test-user/docs/adminSdkDiagnostics</Card.Description
 			>

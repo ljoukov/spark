@@ -1,7 +1,8 @@
 import { QuizDefinitionSchema, type QuizDefinition } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const quizIdSchema = z.string().trim().min(1, 'quizId is required');
@@ -28,14 +29,14 @@ export async function getUserQuiz(
 	quizId: string
 ): Promise<QuizDefinition | null> {
 	const documentPath = resolveQuizDocPath(userId, sessionId, quizId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, documentPath));
+	if (!snapshot.exists) {
 		return null;
 	}
-	return QuizDefinitionSchema.parse({ id: quizIdSchema.parse(quizId), ...snapshot.data });
+	return QuizDefinitionSchema.parse({ id: quizIdSchema.parse(quizId), ...snapshot.data() });
 }
 
 export async function saveUserQuiz(
@@ -45,9 +46,8 @@ export async function saveUserQuiz(
 ): Promise<void> {
 	const parsed = QuizDefinitionSchema.parse(quiz);
 	const documentPath = resolveQuizDocPath(userId, sessionId, parsed.id);
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath,
-		data: parsed as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(doc(firestore, documentPath), parsed as unknown as Record<string, unknown>);
 }

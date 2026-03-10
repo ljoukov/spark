@@ -12,11 +12,9 @@ import {
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import {
-	commitFirestoreWrites,
-	getFirestoreDocument,
-	patchFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc, writeBatch } from '@ljoukov/firebase-admin-cloudflare/firestore';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 
 const paramsSchema = z.object({
 	sessionId: z.string().trim().min(1, 'sessionId is required')
@@ -200,17 +198,21 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const serviceAccountJson = requireServiceAccountJson();
 	const userDocPath = `spark/${userId}`;
 	const sessionStateDocPath = `${userDocPath}/state/${sessionId}`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	try {
-		await patchFirestoreDocument({
-			serviceAccountJson,
-			documentPath: sessionStateDocPath,
-			updates: {
-				sessionId,
-				lastUpdatedAt: new Date(),
-				[`items.${parsedBody.planItemId}`]: incomingState
-			}
-		});
+		await setDoc(
+			doc(firestore, sessionStateDocPath),
+			buildFirestoreMergeData({
+				updates: {
+					sessionId,
+					lastUpdatedAt: new Date(),
+					[`items.${parsedBody.planItemId}`]: incomingState
+				}
+			}),
+			{ merge: true }
+		);
 	} catch (error) {
 		console.error('Failed to persist session state update', { error, userId, sessionId });
 		return json(
@@ -229,14 +231,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		let currentStats: UserStats = DEFAULT_USER_STATS;
 		try {
-			const userSnapshot = await getFirestoreDocument({
-				serviceAccountJson,
-				documentPath: userDocPath
-			});
-			const rawStats =
-				userSnapshot.exists && userSnapshot.data && typeof userSnapshot.data === 'object'
-					? (userSnapshot.data.stats as unknown)
-					: {};
+			const userSnapshot = await getDoc(doc(firestore, userDocPath));
+			const userData = userSnapshot.exists ? userSnapshot.data() : undefined;
+			const rawStats = userData && typeof userData === 'object' ? (userData.stats as unknown) : {};
 			currentStats = UserStatsSchema.parse(rawStats ?? {});
 		} catch (error) {
 			console.warn('Failed to read user stats before awarding XP (continuing with defaults)', {
@@ -267,34 +264,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				...baseProgressPayload,
 				quizId: awardingContext.quizId
 			};
-			} else {
-				const problemDifficulty =
-					planItem.kind === 'coding_problem' ? (planItem.difficulty ?? null) : null;
-				progressPayload = {
-					...baseProgressPayload,
-					problemId: planItem.id,
-					difficulty: problemDifficulty,
+		} else {
+			const problemDifficulty =
+				planItem.kind === 'coding_problem' ? (planItem.difficulty ?? null) : null;
+			progressPayload = {
+				...baseProgressPayload,
+				problemId: planItem.id,
+				difficulty: problemDifficulty,
 				language: incomingState.code?.language ?? null
 			};
 		}
 
 		try {
-			await commitFirestoreWrites({
-				serviceAccountJson,
-				writes: [
-					{
-						type: 'set',
-						documentPath: progressDocPath,
-						data: progressPayload,
-						precondition: { exists: false }
-					},
-					{
-						type: 'patch',
-						documentPath: userDocPath,
-						updates: { stats: nextStats }
-					}
-				]
-			});
+			const batch = writeBatch(firestore);
+			batch.create(doc(firestore, progressDocPath), progressPayload);
+			batch.set(doc(firestore, userDocPath), { stats: nextStats }, { merge: true });
+			await batch.commit();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (message.includes('ALREADY_EXISTS') || message.includes('FAILED_PRECONDITION')) {

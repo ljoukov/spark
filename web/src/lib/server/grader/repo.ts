@@ -1,15 +1,22 @@
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import {
 	buildWorkspaceFileDocPath,
 	SPARK_GRADER_SHEET_PATH,
 	SPARK_GRADER_SUMMARY_PATH
 } from '@spark/llm';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 import { z } from 'zod';
 
 export const DEFAULT_GRADER_RUN_KEY = 'uploaded_work' as const;
@@ -141,11 +148,13 @@ export function resolveGraderRunDocPath(userId: string, runId: string): string {
 
 export async function createGraderRun(userId: string, run: SparkGraderRun): Promise<void> {
 	const validated = sparkGraderRunSchema.parse(run);
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveGraderRunDocPath(userId, validated.id),
-		data: validated as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, resolveGraderRunDocPath(userId, validated.id)),
+		validated as unknown as Record<string, unknown>
+	);
 }
 
 export async function patchGraderRun(
@@ -153,29 +162,36 @@ export async function patchGraderRun(
 	runId: string,
 	updates: Record<string, unknown>
 ): Promise<void> {
-	await patchFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveGraderRunDocPath(userId, runId),
-		updates
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, resolveGraderRunDocPath(userId, runId)),
+		buildFirestoreMergeData({ updates }),
+		{ merge: true }
+	);
 }
 
 export async function listGraderRuns(userId: string, limit = 50): Promise<SparkGraderRun[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `${resolveSparkUserDocPath(userId)}/graderRuns`,
-		limit,
-		orderBy: 'createdAt desc'
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(
+			collection(firestore, `${resolveSparkUserDocPath(userId)}/graderRuns`),
+			orderBy('createdAt', 'desc'),
+			limitQuery(limit)
+		)
+	);
 	const runs: SparkGraderRun[] = [];
-	for (const doc of docs) {
+	for (const graderRunDoc of docs.docs) {
 		const parsed = sparkGraderRunSchema.safeParse({
-			id: docIdFromPath(doc.documentPath),
-			...doc.data
+			id: docIdFromPath(graderRunDoc.ref.path),
+			...graderRunDoc.data()
 		});
 		if (!parsed.success) {
 			console.warn('Skipping invalid grader run document', {
-				documentPath: doc.documentPath,
+				documentPath: graderRunDoc.ref.path,
 				issues: parsed.error.issues
 			});
 			continue;
@@ -187,16 +203,16 @@ export async function listGraderRuns(userId: string, limit = 50): Promise<SparkG
 
 export async function getGraderRun(userId: string, runId: string): Promise<SparkGraderRun | null> {
 	const docPath = resolveGraderRunDocPath(userId, runId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: docPath
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, docPath));
+	if (!snapshot.exists) {
 		return null;
 	}
 	const parsed = sparkGraderRunSchema.safeParse({
 		id: runIdSchema.parse(runId),
-		...snapshot.data
+		...snapshot.data()
 	});
 	if (!parsed.success) {
 		console.warn('Invalid grader run payload', {
@@ -218,18 +234,26 @@ export async function getWorkspaceTextFile(
 	if (path.length === 0) {
 		return null;
 	}
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: buildWorkspaceFileDocPath({
-			userId,
-			workspaceId,
-			filePath: path
-		})
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(
+		doc(
+			firestore,
+			buildWorkspaceFileDocPath({
+				userId,
+				workspaceId,
+				filePath: path
+			})
+		)
+	);
+	if (!snapshot.exists) {
 		return null;
 	}
-	const content = snapshot.data.content;
+	const data = snapshot.data();
+	if (!data) {
+		return null;
+	}
+	const content = data.content;
 	if (typeof content !== 'string') {
 		return null;
 	}

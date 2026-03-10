@@ -18,7 +18,8 @@ import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
 import { isGeminiModelId } from "../utils/gemini";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
-import { getFirestoreDocument } from "../utils/gcp/firestoreRest";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import { doc, getDoc, getFirestore } from "@ljoukov/firebase-admin-cloudflare/firestore";
 import { uploadStorageObject } from "../utils/gcp/storageRest";
 import type { MediaSegment } from "./schemas";
 import { getSharp } from "../utils/sharp";
@@ -4780,10 +4781,11 @@ export class StoryGenerationPipeline {
           /^\/+/u,
           "",
         );
-        const docSnapshot = await getFirestoreDocument({
-          serviceAccountJson,
-          documentPath,
-        });
+        const firestore = getFirestore(
+          initializeApp({ serviceAccountJson }, serviceAccountJson),
+        );
+        firestore.settings({ ignoreUndefinedProperties: true });
+        const docSnapshot = await getDoc(doc(firestore, documentPath));
         if (docSnapshot.exists) {
           this.logger.log(
             `[story/narration] reusing existing narration audio at ${cachedPublishResult.storagePath}; skipping synthesis`,

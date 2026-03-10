@@ -3,14 +3,6 @@
 	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
 	import {
-		collection,
-		getFirestore,
-		limit as queryLimit,
-		onSnapshot,
-		orderBy,
-		query
-	} from 'firebase/firestore';
-	import {
 		SparkAgentConversationSchema,
 		type SparkAgentConversation,
 		type SparkAgentMessage
@@ -491,28 +483,46 @@
 		loading = true;
 		error = null;
 
-		const db = getFirestore(getFirebaseApp());
-		const conversationsQuery = query(
-			collection(db, userId, 'client', 'conversations'),
-			orderBy('lastMessageAt', 'desc'),
-			queryLimit(CHAT_LIST_LIMIT)
-		);
-
-		const stop = onSnapshot(
-			conversationsQuery,
-			(snapshot) => {
-				chats = snapshot.docs.map((document) => parseChatListItem(document.id, document.data()));
-				loading = false;
-			},
-			(snapshotError) => {
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ collection, getFirestore, limit: queryLimit, onSnapshot, orderBy, query }) => {
+				if (cancelled) {
+					return;
+				}
+				const db = getFirestore(getFirebaseApp());
+				const conversationsQuery = query(
+					collection(db, userId, 'client', 'conversations'),
+					orderBy('lastMessageAt', 'desc'),
+					queryLimit(CHAT_LIST_LIMIT)
+				);
+				stop = onSnapshot(
+					conversationsQuery,
+					(snapshot) => {
+						chats = snapshot.docs.map((document) =>
+							parseChatListItem(document.id, document.data())
+						);
+						loading = false;
+					},
+					(snapshotError) => {
+						console.warn('Failed to load Spark chats', snapshotError);
+						error = 'Spark could not load your chats right now.';
+						loading = false;
+					}
+				);
+			})
+			.catch((snapshotError) => {
+				if (cancelled) {
+					return;
+				}
 				console.warn('Failed to load Spark chats', snapshotError);
 				error = 'Spark could not load your chats right now.';
 				loading = false;
-			}
-		);
+			});
 
 		return () => {
-			stop();
+			cancelled = true;
+			stop?.();
 		};
 	});
 </script>

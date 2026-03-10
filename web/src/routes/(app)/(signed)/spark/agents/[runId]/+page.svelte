@@ -682,38 +682,58 @@
 		agentLoadState = 'loading';
 		loadError = null;
 
-		const db = getFirestore(getFirebaseApp());
-		const agentRef = doc(db, 'users', userId, 'agents', runId);
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			agentRef,
-			(snapshot) => {
-				if (!snapshot.exists()) {
-					agent = null;
-					agentLoadState = 'missing';
-					loadError = null;
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ doc, getFirestore, onSnapshot }) => {
+				if (cancelled) {
 					return;
 				}
-				const parsed = SparkAgentStateSchema.safeParse({ id: snapshot.id, ...snapshot.data() });
-				if (!parsed.success) {
-					console.warn('Invalid Spark Agent payload', parsed.error.flatten());
-					agent = null;
-					agentLoadState = 'invalid';
-					loadError = 'Spark returned an invalid agent payload.';
+				const db = getFirestore(getFirebaseApp());
+				const agentRef = doc(db, 'users', userId, 'agents', runId);
+				stop = onSnapshot(
+					agentRef,
+					(snapshot) => {
+						if (!snapshot.exists()) {
+							agent = null;
+							agentLoadState = 'missing';
+							loadError = null;
+							return;
+						}
+						const parsed = SparkAgentStateSchema.safeParse({
+							id: snapshot.id,
+							...snapshot.data()
+						});
+						if (!parsed.success) {
+							console.warn('Invalid Spark Agent payload', parsed.error.flatten());
+							agent = null;
+							agentLoadState = 'invalid';
+							loadError = 'Spark returned an invalid agent payload.';
+							return;
+						}
+						agent = parsed.data;
+						agentLoadState = 'loaded';
+						loadError = null;
+					},
+					(snapshotError) => {
+						console.warn('Firestore subscription failed', snapshotError);
+						agent = null;
+						agentLoadState = 'invalid';
+						loadError = 'Unable to load Spark Agent details right now.';
+					}
+				);
+			})
+			.catch((snapshotError) => {
+				if (cancelled) {
 					return;
 				}
-				agent = parsed.data;
-				agentLoadState = 'loaded';
-				loadError = null;
-			},
-			(snapshotError) => {
 				console.warn('Firestore subscription failed', snapshotError);
 				agent = null;
 				agentLoadState = 'invalid';
 				loadError = 'Unable to load Spark Agent details right now.';
-			}
-		);
+			});
 		return () => {
+			cancelled = true;
 			stop?.();
 		};
 	});
@@ -761,37 +781,52 @@
 			files = [];
 			return;
 		}
-		const db = getFirestore(getFirebaseApp());
-		const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
-		const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			filesQuery,
-			(snapshot) => {
-				const nextFiles: SparkAgentWorkspaceFile[] = [];
-				for (const document of snapshot.docs) {
-					const data = document.data();
-					const payload = {
-						...data,
-						path:
-							typeof data.path === 'string' && data.path.trim().length > 0
-								? data.path.trim()
-								: decodeFileId(document.id)
-					};
-					const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
-					if (!parsed.success) {
-						continue;
-					}
-					nextFiles.push(parsed.data);
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ collection, getFirestore, limit, onSnapshot, orderBy, query }) => {
+				if (cancelled) {
+					return;
 				}
-				files = nextFiles;
-			},
-			(snapshotError) => {
+				const db = getFirestore(getFirebaseApp());
+				const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
+				const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
+				stop = onSnapshot(
+					filesQuery,
+					(snapshot) => {
+						const nextFiles: SparkAgentWorkspaceFile[] = [];
+						for (const document of snapshot.docs) {
+							const data = document.data();
+							const payload = {
+								...data,
+								path:
+									typeof data.path === 'string' && data.path.trim().length > 0
+										? data.path.trim()
+										: decodeFileId(document.id)
+							};
+							const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
+							if (!parsed.success) {
+								continue;
+							}
+							nextFiles.push(parsed.data);
+						}
+						files = nextFiles;
+					},
+					(snapshotError) => {
+						console.warn('Firestore subscription failed', snapshotError);
+						loadError = 'Unable to load Spark Agent workspace right now.';
+					}
+				);
+			})
+			.catch((snapshotError) => {
+				if (cancelled) {
+					return;
+				}
 				console.warn('Firestore subscription failed', snapshotError);
 				loadError = 'Unable to load Spark Agent workspace right now.';
-			}
-		);
+			});
 		return () => {
+			cancelled = true;
 			stop?.();
 		};
 	});
@@ -806,28 +841,43 @@
 			runLogFollow = true;
 			return;
 		}
-		const db = getFirestore(getFirebaseApp());
-		const ref = doc(db, 'users', userId, 'agents', runId, 'logs', 'log');
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			ref,
-			(snapshot) => {
-				if (!snapshot.exists()) {
-					runLog = null;
-					runLogLines = [];
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ doc, getFirestore, onSnapshot }) => {
+				if (cancelled) {
 					return;
 				}
-				const data = (snapshot.data() ?? {}) as Record<string, unknown>;
-				const parsed = parseRunLogDoc(data);
-				runLog = parsed;
-				runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? [], parsed?.stream);
-			},
-			(snapshotError) => {
+				const db = getFirestore(getFirebaseApp());
+				const ref = doc(db, 'users', userId, 'agents', runId, 'logs', 'log');
+				stop = onSnapshot(
+					ref,
+					(snapshot) => {
+						if (!snapshot.exists()) {
+							runLog = null;
+							runLogLines = [];
+							return;
+						}
+						const data = (snapshot.data() ?? {}) as Record<string, unknown>;
+						const parsed = parseRunLogDoc(data);
+						runLog = parsed;
+						runLogLines = toRunLogLineView(runLogLines, parsed?.lines ?? [], parsed?.stream);
+					},
+					(snapshotError) => {
+						console.warn('Firestore subscription failed', snapshotError);
+						loadError = 'Unable to load Spark Agent logs right now.';
+					}
+				);
+			})
+			.catch((snapshotError) => {
+				if (cancelled) {
+					return;
+				}
 				console.warn('Firestore subscription failed', snapshotError);
 				loadError = 'Unable to load Spark Agent logs right now.';
-			}
-		);
+			});
 		return () => {
+			cancelled = true;
 			stop?.();
 		};
 	});

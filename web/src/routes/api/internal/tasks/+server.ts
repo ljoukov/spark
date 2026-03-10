@@ -19,10 +19,14 @@ import { saveUserProblem } from '$lib/server/code/problemRepo';
 import { saveUserQuiz } from '$lib/server/quiz/repo';
 import { saveSession, updateSessionStatus } from '$lib/server/session/repo';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
-	commitFirestoreWrites,
-	getFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+	FieldValue,
+	doc,
+	getDoc,
+	getFirestore,
+	writeBatch
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 
@@ -196,6 +200,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const serviceAccountJson = requireServiceAccountJson();
 		const uploadDocPath = `spark/${userId}/uploads/${uploadId}`;
 		const quizDocPath = `${uploadDocPath}/quiz/${quizId}`;
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
 
 		const fail = async ({ reason, error }: FailureContext) => {
 			console.error('[internal task] quiz generation failed', {
@@ -207,30 +213,27 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 			try {
 				const timestamp = new Date();
-				await commitFirestoreWrites({
-					serviceAccountJson,
-					writes: [
-						{
-							type: 'patch',
-							documentPath: quizDocPath,
-							updates: {
-								status: 'failed',
-								failureReason: reason,
-								updatedAt: timestamp
-							}
-						},
-						{
-							type: 'patch',
-							documentPath: uploadDocPath,
-							updates: {
-								status: 'failed',
-								quizStatus: 'failed',
-								latestError: reason,
-								lastUpdatedAt: timestamp
-							}
-						}
-					]
-				});
+				const batch = writeBatch(firestore);
+				batch.set(
+					doc(firestore, quizDocPath),
+					{
+						status: 'failed',
+						failureReason: reason,
+						updatedAt: timestamp
+					},
+					{ merge: true }
+				);
+				batch.set(
+					doc(firestore, uploadDocPath),
+					{
+						status: 'failed',
+						quizStatus: 'failed',
+						latestError: reason,
+						lastUpdatedAt: timestamp
+					},
+					{ merge: true }
+				);
+				await batch.commit();
 			} catch (updateError) {
 				console.error('[internal task] failed to persist failure state', {
 					updateError,
@@ -244,17 +247,17 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		let uploadSnap;
 		try {
-			uploadSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: uploadDocPath });
+			uploadSnap = await getDoc(doc(firestore, uploadDocPath));
 		} catch (error) {
 			return await fail({ reason: 'upload_fetch_failed', error, userId, uploadId, quizId });
 		}
-		if (!uploadSnap.exists || !uploadSnap.data) {
+		if (!uploadSnap.exists) {
 			return await fail({ reason: 'upload_not_found', userId, uploadId, quizId });
 		}
 
 		let uploadDoc;
 		try {
-			uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data);
+			uploadDoc = SparkUploadDocumentSchema.parse(uploadSnap.data());
 		} catch (error) {
 			return await fail({
 				reason: 'invalid_upload_document',
@@ -267,17 +270,17 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		let quizSnap;
 		try {
-			quizSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: quizDocPath });
+			quizSnap = await getDoc(doc(firestore, quizDocPath));
 		} catch (error) {
 			return await fail({ reason: 'quiz_fetch_failed', error, userId, uploadId, quizId });
 		}
-		if (!quizSnap.exists || !quizSnap.data) {
+		if (!quizSnap.exists) {
 			return await fail({ reason: 'quiz_doc_not_found', userId, uploadId, quizId });
 		}
 
 		let quizDoc;
 		try {
-			quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data);
+			quizDoc = SparkUploadQuizDocumentSchema.parse(quizSnap.data());
 		} catch (error) {
 			return await fail({
 				reason: 'invalid_quiz_document',
@@ -290,32 +293,29 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		try {
 			const timestamp = new Date();
-			await commitFirestoreWrites({
-				serviceAccountJson,
-				writes: [
-					{
-						type: 'patch',
-						documentPath: quizDocPath,
-						updates: {
-							status: 'generating',
-							updatedAt: timestamp
-						},
-						deletes: ['failureReason']
-					},
-					{
-						type: 'patch',
-						documentPath: uploadDocPath,
-						updates: {
-							status: 'processing',
-							quizStatus: 'generating',
-							lastUpdatedAt: timestamp,
-							activeQuizId: quizId,
-							quizQuestionCount: quizDoc.requestedQuestionCount
-						},
-						deletes: ['latestError']
-					}
-				]
-			});
+			const batch = writeBatch(firestore);
+			batch.set(
+				doc(firestore, quizDocPath),
+				{
+					status: 'generating',
+					updatedAt: timestamp,
+					failureReason: FieldValue.delete()
+				},
+				{ merge: true }
+			);
+			batch.set(
+				doc(firestore, uploadDocPath),
+				{
+					status: 'processing',
+					quizStatus: 'generating',
+					lastUpdatedAt: timestamp,
+					activeQuizId: quizId,
+					quizQuestionCount: quizDoc.requestedQuestionCount,
+					latestError: FieldValue.delete()
+				},
+				{ merge: true }
+			);
+			await batch.commit();
 		} catch (error) {
 			return await fail({
 				reason: 'status_update_failed',
@@ -367,33 +367,30 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 
 			const timestamp = new Date();
-			await commitFirestoreWrites({
-				serviceAccountJson,
-				writes: [
-					{
-						type: 'patch',
-						documentPath: quizDocPath,
-						updates: {
-							status: 'ready',
-							definition,
-							updatedAt: timestamp
-						},
-						deletes: ['failureReason']
-					},
-					{
-						type: 'patch',
-						documentPath: uploadDocPath,
-						updates: {
-							status: 'ready',
-							quizStatus: 'ready',
-							lastUpdatedAt: timestamp,
-							activeQuizId: quizId,
-							quizQuestionCount: definition.questions.length
-						},
-						deletes: ['latestError']
-					}
-				]
-			});
+			const batch = writeBatch(firestore);
+			batch.set(
+				doc(firestore, quizDocPath),
+				{
+					status: 'ready',
+					definition,
+					updatedAt: timestamp,
+					failureReason: FieldValue.delete()
+				},
+				{ merge: true }
+			);
+			batch.set(
+				doc(firestore, uploadDocPath),
+				{
+					status: 'ready',
+					quizStatus: 'ready',
+					lastUpdatedAt: timestamp,
+					activeQuizId: quizId,
+					quizQuestionCount: definition.questions.length,
+					latestError: FieldValue.delete()
+				},
+				{ merge: true }
+			);
+			await batch.commit();
 		} catch (error) {
 			return await fail({
 				reason: 'quiz_generation_failed',

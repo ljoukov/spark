@@ -1,7 +1,8 @@
 import { CodeProblemSchema, type CodeProblem } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const problemIdSchema = z.string().trim().min(1, 'problemId is required');
@@ -28,14 +29,14 @@ export async function getUserProblem(
 	problemId: string
 ): Promise<CodeProblem | null> {
 	const documentPath = resolveProblemDocPath(userId, sessionId, problemId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, documentPath));
+	if (!snapshot.exists) {
 		return null;
 	}
-	const raw = snapshot.data;
+	const raw = snapshot.data();
 	const slug = problemIdSchema.parse(problemId);
 	return CodeProblemSchema.parse({ slug, ...raw });
 }
@@ -47,9 +48,8 @@ export async function saveUserProblem(
 ): Promise<void> {
 	const parsed = CodeProblemSchema.parse(problem);
 	const documentPath = resolveProblemDocPath(userId, sessionId, parsed.slug);
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath,
-		data: parsed as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(doc(firestore, documentPath), parsed as unknown as Record<string, unknown>);
 }

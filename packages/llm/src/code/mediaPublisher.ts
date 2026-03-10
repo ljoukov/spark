@@ -1,11 +1,14 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
 import {
-  getFirestoreDocument,
-  setFirestoreDocument,
-} from "../utils/gcp/firestoreRest";
+  doc,
+  getDoc,
+  getFirestore,
+  setDoc,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
+
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import { uploadStorageObject } from "../utils/gcp/storageRest";
 import {
@@ -152,13 +155,14 @@ export async function publishSessionMediaClip(
   const now = new Date();
 
   const documentPath = `spark/${userId}/sessions/${sessionId}/media/${planItemId}`;
-  const existing = await getFirestoreDocument({
-    serviceAccountJson,
-    documentPath,
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  const existing = await getDoc(doc(firestore, documentPath));
   let createdAt = now;
   if (existing.exists) {
-    const rawCreatedAt = existing.data?.createdAt;
+    const rawCreatedAt = existing.data()?.createdAt;
     if (rawCreatedAt instanceof Date) {
       createdAt = rawCreatedAt;
     } else if (
@@ -193,11 +197,10 @@ export async function publishSessionMediaClip(
   // Validate shape before writing.
   SessionMediaDocSchema.parse(docData satisfies SessionMediaDoc);
 
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath,
-    data: docData as unknown as Record<string, unknown>,
-  });
+  await setDoc(
+    doc(firestore, documentPath),
+    docData as unknown as Record<string, unknown>,
+  );
 
   return {
     storagePath: `/${storagePath}`,

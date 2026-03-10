@@ -1,4 +1,14 @@
-import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import {
@@ -298,16 +308,21 @@ async function loadAgentToolTrace(args: {
 	serviceAccountJson: string;
 	logDocPath: string;
 }): Promise<AgentToolTraceStep[]> {
-	const stepDocs = await listFirestoreDocuments({
-		serviceAccountJson: args.serviceAccountJson,
-		collectionPath: `${args.logDocPath}/toolTraceSteps`,
-		limit: 1000,
-		orderBy: 'step asc'
-	});
+	const firestore = getFirestore(
+		initializeApp({ serviceAccountJson: args.serviceAccountJson }, args.serviceAccountJson)
+	);
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const stepDocs = await getDocs(
+		query(
+			collection(firestore, `${args.logDocPath}/toolTraceSteps`),
+			orderBy('step', 'asc'),
+			limitQuery(1000)
+		)
+	);
 
 	const steps: AgentToolTraceStep[] = [];
-	for (const stepDoc of stepDocs) {
-		const data = stepDoc.data ?? {};
+	for (const stepDoc of stepDocs.docs) {
+		const data = stepDoc.data() ?? {};
 		const step = typeof data.step === 'number' ? data.step : Number.NaN;
 		if (!Number.isFinite(step)) {
 			continue;
@@ -319,15 +334,16 @@ async function loadAgentToolTrace(args: {
 				? data.toolCallCount
 				: 0;
 
-		const callDocs = await listFirestoreDocuments({
-			serviceAccountJson: args.serviceAccountJson,
-			collectionPath: `${stepDoc.documentPath}/toolCalls`,
-			limit: 2000,
-			orderBy: 'toolIndex asc'
-		});
+		const callDocs = await getDocs(
+			query(
+				collection(firestore, `${stepDoc.ref.path}/toolCalls`),
+				orderBy('toolIndex', 'asc'),
+				limitQuery(2000)
+			)
+		);
 		const toolCalls: AgentToolTraceCall[] = [];
-		for (const callDoc of callDocs) {
-			const callData = callDoc.data ?? {};
+		for (const callDoc of callDocs.docs) {
+			const callData = callDoc.data() ?? {};
 			const toolIndex =
 				typeof callData.toolIndex === 'number' && Number.isFinite(callData.toolIndex)
 					? callData.toolIndex
@@ -462,35 +478,41 @@ export async function buildSparkAgentDownloadZip(args: {
 	const { serviceAccountJson, userId, agentId } = args;
 	const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
 	const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	const agentDocPath = `users/${userId}/agents/${agentId}`;
-	const agentSnap = await getFirestoreDocument({ serviceAccountJson, documentPath: agentDocPath });
-	if (!agentSnap.exists || !agentSnap.data) {
+	const agentSnap = await getDoc(doc(firestore, agentDocPath));
+	if (!agentSnap.exists) {
 		return { ok: false, status: 404, error: 'not_found' };
 	}
-	const agentParsed = SparkAgentStateSchema.safeParse({ id: agentId, ...agentSnap.data });
+	const agentParsed = SparkAgentStateSchema.safeParse({ id: agentId, ...agentSnap.data() });
 	if (!agentParsed.success) {
 		return { ok: false, status: 500, error: 'invalid_agent' };
 	}
 	const agent = agentParsed.data;
 
-	const filesDocs = await listFirestoreDocuments({
-		serviceAccountJson,
-		collectionPath: buildWorkspaceFilesCollectionPath({
-			userId,
-			workspaceId: agent.workspaceId
-		}),
-		limit: 1000,
-		orderBy: 'path asc'
-	});
+	const filesDocs = await getDocs(
+		query(
+			collection(
+				firestore,
+				buildWorkspaceFilesCollectionPath({
+					userId,
+					workspaceId: agent.workspaceId
+				})
+			),
+			orderBy('path', 'asc'),
+			limitQuery(1000)
+		)
+	);
 
 	const workspaceFiles: SparkAgentWorkspaceFile[] = [];
-	for (const docSnap of filesDocs) {
-		const data = docSnap.data ?? {};
+	for (const docSnap of filesDocs.docs) {
+		const data = docSnap.data() ?? {};
 		const payload = {
 			...data,
 			path: resolveWorkspaceFilePathFromFirestoreDocument({
-				documentPath: docSnap.documentPath,
+				documentPath: docSnap.ref.path,
 				storedPath: data.path
 			})
 		};
@@ -501,17 +523,14 @@ export async function buildSparkAgentDownloadZip(args: {
 		workspaceFiles.push(parsed.data);
 	}
 
-	const logSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `${agentDocPath}/logs/log`
-	});
+	const logSnap = await getDoc(doc(firestore, `${agentDocPath}/logs/log`));
 	const logDocPath = `${agentDocPath}/logs/log`;
 	const traceSteps = await loadAgentToolTrace({
 		serviceAccountJson,
 		logDocPath
 	}).catch(() => []);
 	const traceText = formatAgentToolTraceText(traceSteps);
-	const agentLogText = `${formatAgentLogText(logSnap.exists ? logSnap.data : null)}${traceText}`;
+	const agentLogText = `${formatAgentLogText(logSnap.exists ? (logSnap.data() ?? null) : null)}${traceText}`;
 
 	const archiveLabel = `spark-agent-${agentId}`;
 	const archiveEntries: ZipEntry[] = [{ name: 'agent.log', data: encodeUtf8(agentLogText) }];

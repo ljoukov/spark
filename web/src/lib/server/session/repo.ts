@@ -6,14 +6,21 @@ import {
 	type SessionStatus,
 	UserDocSchema
 } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 
@@ -41,60 +48,78 @@ function resolveUserDocPath(userId: string): string {
 
 export async function saveSession(userId: string, session: Session): Promise<void> {
 	const validated = SessionSchema.parse(session);
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `${resolveUserDocPath(userId)}/sessions/${validated.id}`,
-		data: validated as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, `${resolveUserDocPath(userId)}/sessions/${validated.id}`),
+		validated as unknown as Record<string, unknown>
+	);
 }
 
 export async function getSession(userId: string, sessionId: string): Promise<Session | null> {
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(
+		doc(firestore, `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`)
+	);
+	if (!snapshot.exists) {
 		return null;
 	}
-	return SessionSchema.parse({ id: sessionIdSchema.parse(sessionId), ...snapshot.data });
+	return SessionSchema.parse({ id: sessionIdSchema.parse(sessionId), ...snapshot.data() });
 }
 
 export async function listSessions(userId: string, limit = 10): Promise<Session[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `${resolveUserDocPath(userId)}/sessions`,
-		limit,
-		orderBy: 'createdAt desc'
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(
+			collection(firestore, `${resolveUserDocPath(userId)}/sessions`),
+			orderBy('createdAt', 'desc'),
+			limitQuery(limit)
+		)
+	);
 
 	const sessions: Session[] = [];
-	for (const doc of docs) {
+	for (const sessionDoc of docs.docs) {
 		try {
-			sessions.push(SessionSchema.parse({ id: docIdFromPath(doc.documentPath), ...doc.data }));
+			sessions.push(
+				SessionSchema.parse({
+					id: docIdFromPath(sessionDoc.ref.path),
+					...sessionDoc.data()
+				})
+			);
 		} catch (error) {
-			console.error('Unable to parse session document', doc.documentPath, error);
+			console.error('Unable to parse session document', sessionDoc.ref.path, error);
 		}
 	}
 	return sessions;
 }
 
 export async function setCurrentSessionId(userId: string, sessionId: string): Promise<void> {
-	await patchFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveUserDocPath(userId),
-		updates: { currentSessionId: sessionIdSchema.parse(sessionId) }
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, resolveUserDocPath(userId)),
+		buildFirestoreMergeData({
+			updates: { currentSessionId: sessionIdSchema.parse(sessionId) }
+		}),
+		{ merge: true }
+	);
 }
 
 export async function getCurrentSessionId(userId: string): Promise<string | null> {
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveUserDocPath(userId)
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, resolveUserDocPath(userId)));
+	if (!snapshot.exists) {
 		return null;
 	}
-	const parsed = UserDocSchema.parse(snapshot.data ?? {});
+	const parsed = UserDocSchema.parse(snapshot.data() ?? {});
 	return parsed.currentSessionId;
 }
 
@@ -125,14 +150,19 @@ export async function saveNextLessonProposals(
 	proposals: LessonProposal[]
 ): Promise<void> {
 	const validatedProposals = proposalsArraySchema.parse(proposals);
-	await patchFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`,
-		updates: {
-			nextLessonProposals: validatedProposals,
-			nextLessonProposalsGeneratedAt: new Date()
-		}
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`),
+		buildFirestoreMergeData({
+			updates: {
+				nextLessonProposals: validatedProposals,
+				nextLessonProposalsGeneratedAt: new Date()
+			}
+		}),
+		{ merge: true }
+	);
 }
 
 export async function updateSessionStatus(
@@ -140,9 +170,12 @@ export async function updateSessionStatus(
 	sessionId: string,
 	status: SessionStatus
 ): Promise<void> {
-	await patchFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`,
-		updates: { status }
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, `${resolveUserDocPath(userId)}/sessions/${sessionIdSchema.parse(sessionId)}`),
+		buildFirestoreMergeData({ updates: { status } }),
+		{ merge: true }
+	);
 }

@@ -15,6 +15,19 @@ import {
 
 import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  limit as limitQuery,
+  orderBy,
+  query,
+  setDoc,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 import {
   type AgentFilesystem,
   type AgentFilesystemToolAccessContext,
@@ -64,13 +77,7 @@ import {
 import { errorAsString } from "../utils/error";
 import { loadEnvFromFile, loadLocalEnv } from "../utils/env";
 import { formatByteSize, formatMillis } from "../utils/format";
-import {
-  deleteFirestoreDocument,
-  getFirestoreDocument,
-  listFirestoreDocuments,
-  patchFirestoreDocument,
-  setFirestoreDocument,
-} from "../utils/gcp/firestoreRest";
+import { buildFirestoreMergeData } from "../utils/gcp/firestoreData";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import {
   configureSparkLlmTelemetryFromEnv,
@@ -320,6 +327,13 @@ async function persistToolLoopTrace(options: {
   const logDocPath = `users/${options.userId}/agents/${options.agentId}/logs/log`;
   const now = new Date();
   let toolCallCount = 0;
+  const firestore = getFirestore(
+    initializeApp(
+      { serviceAccountJson: options.serviceAccountJson },
+      options.serviceAccountJson,
+    ),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
 
   for (const step of options.toolLoopResult.steps) {
     const stepDocPath = `${logDocPath}/toolTraceSteps/s${String(step.step).padStart(6, "0")}`;
@@ -327,10 +341,9 @@ async function persistToolLoopTrace(options: {
     const toolCalls = step.toolCalls;
     toolCallCount += toolCalls.length;
 
-    await setFirestoreDocument({
-      serviceAccountJson: options.serviceAccountJson,
-      documentPath: stepDocPath,
-      data: {
+    await setDoc(
+      doc(firestore, stepDocPath),
+      {
         step: step.step,
         modelId: step.modelVersion,
         text: stepText,
@@ -338,7 +351,7 @@ async function persistToolLoopTrace(options: {
         createdAt: now,
         updatedAt: now,
       },
-    });
+    );
 
     for (const [toolIndex, toolCall] of toolCalls.entries()) {
       const callIndex = toolIndex + 1;
@@ -372,10 +385,12 @@ async function persistToolLoopTrace(options: {
           ? toolCall.error
           : undefined;
 
-      await setFirestoreDocument({
-        serviceAccountJson: options.serviceAccountJson,
-        documentPath: `${stepDocPath}/toolCalls/c${String(callIndex).padStart(6, "0")}`,
-        data: {
+      await setDoc(
+        doc(
+          firestore,
+          `${stepDocPath}/toolCalls/c${String(callIndex).padStart(6, "0")}`,
+        ),
+        {
           step: step.step,
           toolIndex: callIndex,
           toolName: toolCall.toolName,
@@ -386,19 +401,21 @@ async function persistToolLoopTrace(options: {
           createdAt: now,
           updatedAt: now,
         },
-      });
+      );
     }
   }
 
-  await patchFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: logDocPath,
-    updates: {
-      "trace.updatedAt": now,
-      "trace.stepCount": options.toolLoopResult.steps.length,
-      "trace.toolCallCount": toolCallCount,
-    },
-  });
+  await setDoc(
+    doc(firestore, logDocPath),
+    buildFirestoreMergeData({
+      updates: {
+        "trace.updatedAt": now,
+        "trace.stepCount": options.toolLoopResult.steps.length,
+        "trace.toolCallCount": toolCallCount,
+      },
+    }),
+    { merge: true },
+  );
 
   return {
     stepCount: options.toolLoopResult.steps.length,
@@ -1571,11 +1588,18 @@ async function patchGraderRunStatus(options: {
   runId: string;
   updates: Record<string, unknown>;
 }): Promise<void> {
-  await patchFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: `spark/${options.userId}/graderRuns/${options.runId}`,
-    updates: options.updates,
-  });
+  const firestore = getFirestore(
+    initializeApp(
+      { serviceAccountJson: options.serviceAccountJson },
+      options.serviceAccountJson,
+    ),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(firestore, `spark/${options.userId}/graderRuns/${options.runId}`),
+    buildFirestoreMergeData({ updates: options.updates }),
+    { merge: true },
+  );
 }
 
 function resolveTutorSessionDocPath(userId: string, sessionId: string): string {
@@ -2725,19 +2749,27 @@ class WorkspaceSync {
   }
 
   async load(): Promise<void> {
-    const docs = await listFirestoreDocuments({
-      serviceAccountJson: this.serviceAccountJson,
-      collectionPath: this.filesCollectionPath(),
-      limit: 1000,
-      orderBy: "path asc",
-    });
-    if (docs.length === 0) {
+    const firestore = getFirestore(
+      initializeApp(
+        { serviceAccountJson: this.serviceAccountJson },
+        this.serviceAccountJson,
+      ),
+    );
+    firestore.settings({ ignoreUndefinedProperties: true });
+    const docs = await getDocs(
+      query(
+        collection(firestore, this.filesCollectionPath()),
+        orderBy("path", "asc"),
+        limitQuery(1000),
+      ),
+    );
+    if (docs.empty) {
       return;
     }
-    for (const doc of docs) {
-      const data = doc.data ?? {};
+    for (const workspaceDoc of docs.docs) {
+      const data = workspaceDoc.data() ?? {};
       const rawPath = resolveWorkspaceFilePathFromFirestoreDocument({
-        documentPath: doc.documentPath,
+        documentPath: workspaceDoc.ref.path,
         storedPath: data.path,
       });
       if (!rawPath) {
@@ -2820,10 +2852,16 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(filePath);
-    await deleteFirestoreDocument({
-      serviceAccountJson: this.serviceAccountJson,
-      documentPath: this.fileDocPath(filePath),
-    }).catch(() => undefined);
+    const firestore = getFirestore(
+      initializeApp(
+        { serviceAccountJson: this.serviceAccountJson },
+        this.serviceAccountJson,
+      ),
+    );
+    firestore.settings({ ignoreUndefinedProperties: true });
+    await deleteDoc(doc(firestore, this.fileDocPath(filePath))).catch(
+      () => undefined,
+    );
   }
 
   async moveFile(fromPath: string, toPath: string): Promise<void> {
@@ -2839,10 +2877,16 @@ class WorkspaceSync {
       await meta.inFlight?.catch(() => undefined);
     }
     this.fileMeta.delete(fromPath);
-    await deleteFirestoreDocument({
-      serviceAccountJson: this.serviceAccountJson,
-      documentPath: this.fileDocPath(fromPath),
-    }).catch(() => undefined);
+    const firestore = getFirestore(
+      initializeApp(
+        { serviceAccountJson: this.serviceAccountJson },
+        this.serviceAccountJson,
+      ),
+    );
+    firestore.settings({ ignoreUndefinedProperties: true });
+    await deleteDoc(doc(firestore, this.fileDocPath(fromPath))).catch(
+      () => undefined,
+    );
     const toMeta = this.ensureMeta(toPath);
     if (fromCreatedAt && !toMeta.createdAt) {
       toMeta.createdAt = fromCreatedAt;
@@ -3547,11 +3591,18 @@ class AgentLogSync {
     }
 
     try {
-      await patchFirestoreDocument({
-        serviceAccountJson: this.serviceAccountJson,
-        documentPath: this.documentPath(),
-        updates: payload,
-      });
+      const firestore = getFirestore(
+        initializeApp(
+          { serviceAccountJson: this.serviceAccountJson },
+          this.serviceAccountJson,
+        ),
+      );
+      firestore.settings({ ignoreUndefinedProperties: true });
+      await setDoc(
+        doc(firestore, this.documentPath()),
+        buildFirestoreMergeData({ updates: payload }),
+        { merge: true },
+      );
       this.createdAtWritten = true;
     } catch (error) {
       for (const [key, value] of linesEntries) {
@@ -5567,12 +5618,18 @@ function buildAgentTools(options: {
       }) => {
         const resolvedSessionPath = sessionPath ?? "lesson/output/session.json";
         const resolvedBriefPath = briefPath ?? "brief.md";
+        const firestore = getFirestore(
+          initializeApp({ serviceAccountJson }, serviceAccountJson),
+        );
+        firestore.settings({ ignoreUndefinedProperties: true });
 
         const docPath = `spark/${userId}/sessions/${sessionId}`;
-        const existing = await getFirestoreDocument({
-          serviceAccountJson,
-          documentPath: docPath,
-        }).catch(() => ({ exists: false, data: null }));
+        const existing = await getDoc(doc(firestore, docPath))
+          .then((snapshot) => ({
+            exists: snapshot.exists,
+            data: snapshot.exists ? snapshot.data() ?? null : null,
+          }))
+          .catch(() => ({ exists: false, data: null }));
         const existingSession =
           existing.exists && existing.data
             ? SessionSchema.safeParse({
@@ -5606,42 +5663,38 @@ function buildAgentTools(options: {
             includeCoding,
             enforceLessonPipeline: shouldEnforceLessonPipeline,
           });
-          await setFirestoreDocument({
-            serviceAccountJson,
-            documentPath: docPath,
-            data: bundle.session as unknown as Record<string, unknown>,
-          });
+          await setDoc(
+            doc(firestore, docPath),
+            bundle.session as unknown as Record<string, unknown>,
+          );
 
           await Promise.all(
             bundle.quizzes.map(async (quiz) => {
               const validated = QuizDefinitionSchema.parse(quiz);
-              await setFirestoreDocument({
-                serviceAccountJson,
-                documentPath: `${docPath}/quiz/${validated.id}`,
-                data: validated as unknown as Record<string, unknown>,
-              });
+              await setDoc(
+                doc(firestore, `${docPath}/quiz/${validated.id}`),
+                validated as unknown as Record<string, unknown>,
+              );
             }),
           );
 
           await Promise.all(
             bundle.problems.map(async (problem) => {
               const validated = CodeProblemSchema.parse(problem);
-              await setFirestoreDocument({
-                serviceAccountJson,
-                documentPath: `${docPath}/code/${validated.slug}`,
-                data: validated as unknown as Record<string, unknown>,
-              });
+              await setDoc(
+                doc(firestore, `${docPath}/code/${validated.slug}`),
+                validated as unknown as Record<string, unknown>,
+              );
             }),
           );
 
           await Promise.all(
             bundle.media.map(async (item) => {
               const validated = SessionMediaDocSchema.parse(item);
-              await setFirestoreDocument({
-                serviceAccountJson,
-                documentPath: `${docPath}/media/${validated.id}`,
-                data: validated as unknown as Record<string, unknown>,
-              });
+              await setDoc(
+                doc(firestore, `${docPath}/media/${validated.id}`),
+                validated as unknown as Record<string, unknown>,
+              );
             }),
           );
 
@@ -5656,11 +5709,11 @@ function buildAgentTools(options: {
             href: `/spark/lesson/${sessionId}`,
           };
         } catch (error) {
-          await patchFirestoreDocument({
-            serviceAccountJson,
-            documentPath: docPath,
-            updates: { status: "error" },
-          }).catch(() => undefined);
+          await setDoc(
+            doc(firestore, docPath),
+            { status: "error" },
+            { merge: true },
+          ).catch(() => undefined);
           throw error;
         }
       },
@@ -7367,14 +7420,18 @@ async function updateAgentStatus(options: {
   error?: string;
 }): Promise<void> {
   const now = new Date();
-  const snapshot = await getFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: options.agentDocPath,
-  });
+  const firestore = getFirestore(
+    initializeApp(
+      { serviceAccountJson: options.serviceAccountJson },
+      options.serviceAccountJson,
+    ),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  const snapshot = await getDoc(doc(firestore, options.agentDocPath));
   const existingTimeline = z
     .array(SparkAgentStateTimelineSchema)
     .catch([])
-    .parse(snapshot.data?.statesTimeline ?? []);
+    .parse((snapshot.data() ?? {}).statesTimeline ?? []);
   const nextTimeline: SparkAgentStateTimeline[] = [
     ...existingTimeline,
     { state: options.status, timestamp: now },
@@ -7390,11 +7447,7 @@ async function updateAgentStatus(options: {
   if (typeof options.error === "string") {
     payload.error = options.error;
   }
-  await patchFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: options.agentDocPath,
-    updates: payload,
-  });
+  await setDoc(doc(firestore, options.agentDocPath), payload, { merge: true });
 }
 
 export async function runSparkAgentTask(
@@ -7409,6 +7462,10 @@ export async function runSparkAgentTask(
   const serviceAccount = parseGoogleServiceAccountJson(serviceAccountJson);
   const bucketName = `${serviceAccount.projectId}.firebasestorage.app`;
   const agentDocPath = `users/${options.userId}/agents/${options.agentId}`;
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
 
   const toolLoopModelId = options.modelId ?? DEFAULT_AGENT_MODEL_ID;
   const statsTracker = new AgentRunStatsTracker({
@@ -7461,16 +7518,13 @@ export async function runSparkAgentTask(
   };
 
   try {
-    const agentSnap = await getFirestoreDocument({
-      serviceAccountJson,
-      documentPath: agentDocPath,
-    });
-    if (!agentSnap.exists || !agentSnap.data) {
+    const agentSnap = await getDoc(doc(firestore, agentDocPath));
+    if (!agentSnap.exists) {
       console.warn(`[spark-agent:${options.agentId}] Agent not found`);
       return;
     }
 
-    const agentData = agentSnap.data ?? {};
+    const agentData = agentSnap.data() ?? {};
     agentMetricType = resolveSparkAgentMetricType(agentData);
     const rawGraderRunId =
       typeof agentData.graderRunId === "string"
@@ -7617,18 +7671,18 @@ export async function runSparkAgentTask(
       }).catch(() => undefined);
     }
     if (tutorSessionId) {
-      await patchFirestoreDocument({
-        serviceAccountJson,
-        documentPath: resolveTutorSessionDocPath(
-          options.userId,
-          tutorSessionId,
+      await setDoc(
+        doc(
+          firestore,
+          resolveTutorSessionDocPath(options.userId, tutorSessionId),
         ),
-        updates: {
+        {
           status: "responding",
           activeTurnAgentId: options.agentId,
           updatedAt: new Date(),
         },
-      }).catch(() => undefined);
+        { merge: true },
+      ).catch(() => undefined);
     }
 
     logSync = new AgentLogSync({
@@ -7666,14 +7720,13 @@ export async function runSparkAgentTask(
     });
     await workspaceSync.load();
     if (tutorSessionId) {
-      const tutorSessionSnap = await getFirestoreDocument({
-        serviceAccountJson,
-        documentPath: resolveTutorSessionDocPath(
-          options.userId,
-          tutorSessionId,
+      const tutorSessionSnap = await getDoc(
+        doc(
+          firestore,
+          resolveTutorSessionDocPath(options.userId, tutorSessionId),
         ),
-      });
-      const tutorSessionData = tutorSessionSnap.data ?? {};
+      );
+      const tutorSessionData = tutorSessionSnap.data() ?? {};
       if (
         typeof tutorSessionData.title === "string" &&
         tutorSessionData.title.trim().length > 0
@@ -7720,11 +7773,8 @@ export async function runSparkAgentTask(
         return;
       }
       stopPollInFlight = (async () => {
-        const snap = await getFirestoreDocument({
-          serviceAccountJson,
-          documentPath: agentDocPath,
-        });
-        const data = snap.data ?? {};
+        const snap = await getDoc(doc(firestore, agentDocPath));
+        const data = snap.data() ?? {};
         if (data.stop_requested === true) {
           stopRequested = true;
           logSync?.append("warn: stop_requested detected");
@@ -8557,18 +8607,18 @@ export async function runSparkAgentTask(
               }),
             ),
           }).catch(() => undefined),
-          patchFirestoreDocument({
-            serviceAccountJson,
-            documentPath: resolveTutorSessionDocPath(
-              options.userId,
-              tutorSessionId,
+          setDoc(
+            doc(
+              firestore,
+              resolveTutorSessionDocPath(options.userId, tutorSessionId),
             ),
-            updates: {
+            {
               status: "failed",
               error: "Stopped by user.",
               updatedAt: now,
             },
-          }).catch(() => undefined),
+            { merge: true },
+          ).catch(() => undefined),
         ]);
       }
       return;
@@ -8636,18 +8686,18 @@ export async function runSparkAgentTask(
             }),
           ),
         }).catch(() => undefined),
-        patchFirestoreDocument({
-          serviceAccountJson,
-          documentPath: resolveTutorSessionDocPath(
-            options.userId,
-            tutorSessionId,
+        setDoc(
+          doc(
+            firestore,
+            resolveTutorSessionDocPath(options.userId, tutorSessionId),
           ),
-          updates: {
+          {
             status: "failed",
             error: message,
             updatedAt: now,
           },
-        }).catch(() => undefined),
+          { merge: true },
+        ).catch(() => undefined),
       ]);
     }
     return;

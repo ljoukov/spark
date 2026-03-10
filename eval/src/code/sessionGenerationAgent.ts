@@ -2,6 +2,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Command } from "commander";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  doc,
+  getFirestore,
+  setDoc,
+  writeBatch,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 
 import {
   runSessionAgentSmokeTest,
@@ -13,10 +20,7 @@ import type {
   LlmUsageChunk,
   ModelCallHandle,
 } from "@spark/llm/utils/concurrency";
-import {
-  commitFirestoreWrites,
-  patchFirestoreDocument,
-} from "@spark/llm/utils/gcp/firestoreRest";
+import { buildFirestoreMergeData } from "@spark/llm/utils/gcp/firestoreData";
 import type { CodeProblem, QuizDefinition, Session } from "@spark/schemas";
 import { ensureEvalEnvLoaded } from "../utils/paths";
 import { requireServiceAccountJson } from "../utils/gcp";
@@ -544,6 +548,10 @@ async function publishToWelcomeTemplate(options: {
 }): Promise<void> {
   const serviceAccountJson = requireServiceAccountJson();
   const templateDoc = getTemplateDocRef(options.sessionId);
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
 
   if (options.quizzes.length > 0) {
     const quizWrites = options.quizzes.map((quiz) => {
@@ -557,10 +565,11 @@ async function publishToWelcomeTemplate(options: {
     });
     const MAX_WRITES_PER_BATCH = 450;
     for (let i = 0; i < quizWrites.length; i += MAX_WRITES_PER_BATCH) {
-      await commitFirestoreWrites({
-        serviceAccountJson,
-        writes: quizWrites.slice(i, i + MAX_WRITES_PER_BATCH),
-      });
+      const batch = writeBatch(firestore);
+      for (const write of quizWrites.slice(i, i + MAX_WRITES_PER_BATCH)) {
+        batch.set(doc(firestore, write.documentPath), write.data);
+      }
+      await batch.commit();
     }
     console.log(
       `[welcome/${options.sessionId}] published ${String(options.quizzes.length)} quizzes to template`,
@@ -581,10 +590,11 @@ async function publishToWelcomeTemplate(options: {
     });
     const MAX_WRITES_PER_BATCH = 450;
     for (let i = 0; i < problemWrites.length; i += MAX_WRITES_PER_BATCH) {
-      await commitFirestoreWrites({
-        serviceAccountJson,
-        writes: problemWrites.slice(i, i + MAX_WRITES_PER_BATCH),
-      });
+      const batch = writeBatch(firestore);
+      for (const write of problemWrites.slice(i, i + MAX_WRITES_PER_BATCH)) {
+        batch.set(doc(firestore, write.documentPath), write.data);
+      }
+      await batch.commit();
     }
     console.log(
       `[welcome/${options.sessionId}] published ${String(options.problems.length)} problems to template`,
@@ -627,12 +637,14 @@ async function publishToWelcomeTemplate(options: {
     "problemsGrade",
     "storyTitle",
   ];
-  await patchFirestoreDocument({
-    serviceAccountJson,
-    documentPath: templateDoc,
-    updates: stripUndefined(payload),
-    deletes: draftFieldsToDelete,
-  });
+  await setDoc(
+    doc(firestore, templateDoc),
+    buildFirestoreMergeData({
+      updates: stripUndefined(payload) as Record<string, unknown>,
+      deletes: draftFieldsToDelete,
+    }),
+    { merge: true },
+  );
   console.log(`[welcome/${options.sessionId}] published session doc`);
 }
 
