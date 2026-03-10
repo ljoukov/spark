@@ -11,7 +11,7 @@
 		"build": "node ./scripts/write-build-info.mjs && vite build",
 		"build:bun": "bun run build",
 		"build:cloudflare": "CF_PAGES=dummy bun run build && node ./scripts/write-cloudflare-assetsignore.mjs",
-		"build:vercel": "mkdir -p ../data/tmp-vercel && TMPDIR=${TMPDIR:-$PWD/../data/tmp-vercel} VERCEL=dummy bun run build",
+		"build:vercel": "mkdir -p ../data/tmp-vercel && TMPDIR=$PWD/../data/tmp-vercel VERCEL=dummy bun run build",
 		"build:gcp": "BUILD_TARGET=gcp bun run build:bun",
 		"preview": "vite preview",
 		"start:bun": "bun ./build/index.js",
