@@ -91,6 +91,8 @@ If you need `/admin`, include the userId in `ADMIN_USER_IDS`.
 bun --cwd=web run dev:https
 ```
 
+If this is a new machine, first install trusted localhost certs with `mkcert -install`, then create `~/.localhost-certs/localhost.pem` and `~/.localhost-certs/localhost-key.pem` for `localhost 127.0.0.1 ::1`. The repo expects those files for HTTPS dev.
+
 3. Open the email login page and sign in using the credentials from `.env.local`:
 
 ```

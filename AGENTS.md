@@ -15,6 +15,7 @@
 - Eval assets and generated artifacts belong under the gitignored `data/` workspace.
 - All secrets belong in environment variables. During local dev load them from `.env.local` via `loadLocalEnv()`; in deployed or hosted environments rely on OS-provided env vars (no `.env.local`).
 - Use `scripts/create-worktree.sh` to create Spark worktrees. Pass `--bootstrap-only` when the worktree already exists but still needs env-file copies and the root Bun install. The bootstrap copies `.env.local`, `eval/.env.local`, and `web/.env.local` from `SPARK_ENV_SOURCE` (default `$HOME/projects/spark`) when present.
+- HTTPS local dev expects trusted localhost certs in `~/.localhost-certs/localhost.pem` and `~/.localhost-certs/localhost-key.pem`. On a new machine, install the local CA once with `mkcert -install`, then generate the cert pair for `localhost`, `127.0.0.1`, and `::1`. This is required for `bun --cwd=web run dev:https`, Firebase Auth flows, and any local callbacks that hit the HTTPS dev server.
 - For non-interactive Git workflows (rebase, squash, etc.), export `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` so Git does not spawn an interactive editor.
 - Push semantics: if a user asks to "push" without naming a remote/branch, treat it as push to `origin/main`. Only push to another branch when the user explicitly names that branch.
 - Long-lived processes should run in the background (e.g. `nohup … &`) with logs redirected to a file. tmux is optional and not required.
