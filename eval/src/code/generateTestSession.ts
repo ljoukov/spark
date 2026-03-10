@@ -2,12 +2,14 @@ import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { z } from "zod";
-import { getTestUserId } from "@spark/llm";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
 import {
-  commitFirestoreWrites,
-  patchFirestoreDocument,
-  setFirestoreDocument,
-} from "@spark/llm/utils/gcp/firestoreRest";
+  doc,
+  getFirestore,
+  setDoc,
+  writeBatch,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
+import { getTestUserId } from "@spark/llm";
 import {
   SessionSchema,
   SessionStateSchema,
@@ -987,11 +989,14 @@ async function seedContent(
     lastUpdatedAt: new Date(),
   });
 
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath: `${userDocPath}/state/${session.id}`,
-    data: initialState as unknown as Record<string, unknown>,
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(firestore, `${userDocPath}/state/${session.id}`),
+    initialState as unknown as Record<string, unknown>,
+  );
 
   const writes = [
     ...QUIZZES.map((quiz) => {
@@ -1014,10 +1019,11 @@ async function seedContent(
 
   const MAX_WRITES_PER_BATCH = 450;
   for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
-    await commitFirestoreWrites({
-      serviceAccountJson,
-      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
-    });
+    const batch = writeBatch(firestore);
+    for (const write of writes.slice(i, i + MAX_WRITES_PER_BATCH)) {
+      batch.set(doc(firestore, write.documentPath), write.data);
+    }
+    await batch.commit();
   }
 }
 
@@ -1140,16 +1146,19 @@ async function runSeedStage(
 
   await seedContent(runtime.userId, session, problems);
 
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath: `spark/${runtime.userId}/sessions/${session.id}`,
-    data: sessionData as unknown as Record<string, unknown>,
-  });
-  await patchFirestoreDocument({
-    serviceAccountJson,
-    documentPath: `spark/${runtime.userId}`,
-    updates: { currentSessionId: session.id },
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(firestore, `spark/${runtime.userId}/sessions/${session.id}`),
+    sessionData as unknown as Record<string, unknown>,
+  );
+  await setDoc(
+    doc(firestore, `spark/${runtime.userId}`),
+    { currentSessionId: session.id },
+    { merge: true },
+  );
 
   context.session = session;
   context.sessionData = sessionData;

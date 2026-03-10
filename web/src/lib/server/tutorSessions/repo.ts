@@ -1,11 +1,18 @@
 import { env } from '$env/dynamic/private';
 import { SparkTutorSessionSchema, type SparkTutorSession } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 import { z } from 'zod';
 
 const trimmedString = z.string().trim().min(1);
@@ -35,11 +42,13 @@ export async function createTutorSession(
 	userId: string,
 	session: SparkTutorSession
 ): Promise<void> {
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveTutorSessionDocPath(userId, session.id),
-		data: SparkTutorSessionSchema.parse(session) as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, resolveTutorSessionDocPath(userId, session.id)),
+		SparkTutorSessionSchema.parse(session) as unknown as Record<string, unknown>
+	);
 }
 
 export async function patchTutorSession(
@@ -47,43 +56,50 @@ export async function patchTutorSession(
 	sessionId: string,
 	updates: Record<string, unknown>
 ): Promise<void> {
-	await patchFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveTutorSessionDocPath(userId, sessionId),
-		updates
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, resolveTutorSessionDocPath(userId, sessionId)),
+		buildFirestoreMergeData({ updates }),
+		{ merge: true }
+	);
 }
 
 export async function getTutorSession(
 	userId: string,
 	sessionId: string
 ): Promise<SparkTutorSession | null> {
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: resolveTutorSessionDocPath(userId, sessionId)
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, resolveTutorSessionDocPath(userId, sessionId)));
+	if (!snapshot.exists) {
 		return null;
 	}
 	const parsed = SparkTutorSessionSchema.safeParse({
 		id: trimmedString.parse(sessionId),
-		...snapshot.data
+		...snapshot.data()
 	});
 	return parsed.success ? parsed.data : null;
 }
 
 export async function listTutorSessions(userId: string, limit = 100): Promise<SparkTutorSession[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: resolveTutorSessionsCollectionPath(userId),
-		limit,
-		orderBy: 'updatedAt desc'
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(
+			collection(firestore, resolveTutorSessionsCollectionPath(userId)),
+			orderBy('updatedAt', 'desc'),
+			limitQuery(limit)
+		)
+	);
 	const sessions: SparkTutorSession[] = [];
-	for (const doc of docs) {
+	for (const sessionDoc of docs.docs) {
 		const parsed = SparkTutorSessionSchema.safeParse({
-			id: docIdFromPath(doc.documentPath),
-			...doc.data
+			id: docIdFromPath(sessionDoc.ref.path),
+			...sessionDoc.data()
 		});
 		if (parsed.success) {
 			sessions.push(parsed.data);

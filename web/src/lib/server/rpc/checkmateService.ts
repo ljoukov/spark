@@ -26,11 +26,18 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 
 const STREAM_MODEL_ID: LlmTextModelId = 'gemini-flash-latest';
 const CONVERSATION_UPDATE_INTERVAL_MS = 10_000;
@@ -402,12 +409,16 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			const limit = parsed.data.limit;
 			let docs;
 			try {
-				docs = await listFirestoreDocuments({
-					serviceAccountJson: requireServiceAccountJson(),
-					collectionPath: resolveConversationCollectionPath(userId),
-					limit,
-					orderBy: 'lastMessageAt desc'
-				});
+				const serviceAccountJson = requireServiceAccountJson();
+				const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+				firestore.settings({ ignoreUndefinedProperties: true });
+				docs = await getDocs(
+					query(
+						collection(firestore, resolveConversationCollectionPath(userId)),
+						orderBy('lastMessageAt', 'desc'),
+						limitQuery(limit)
+					)
+				);
 			} catch (error) {
 				logServerEvent({
 					level: 'error',
@@ -420,15 +431,16 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			}
 
 			const chats: CheckMateChatSummaryProto[] = [];
-			for (const doc of docs) {
-				const data = doc.data;
+			for (const chatDoc of docs.docs) {
+				const data = chatDoc.data();
 				const messages = parseConversationMessages(data?.messages);
 				const status = parseConversationStatus(data?.status);
 				const lastMessageAt = resolveTimestamp(
 					data?.lastMessageAt ?? data?.updatedAt ?? data?.createdAt,
 					new Date()
 				);
-				const conversationId = doc.documentPath.split('/').filter(Boolean).pop() ?? doc.documentPath;
+				const conversationId =
+					chatDoc.ref.path.split('/').filter(Boolean).pop() ?? chatDoc.ref.path;
 				chats.push(toConversationSummaryProto(conversationId, messages, lastMessageAt, status));
 			}
 			logServerEvent({
@@ -463,15 +475,15 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 			const conversationId = resolveConversationId(parsed.data.conversationId);
 			const now = new Date();
 			const conversationDocPath = resolveConversationDocPath(userId, conversationId);
+			const serviceAccountJson = requireServiceAccountJson();
+			const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+			firestore.settings({ ignoreUndefinedProperties: true });
 			let createdAt = now;
 			let participantIds: string[] = [userId];
 			try {
-				const snapshot = await getFirestoreDocument({
-					serviceAccountJson: requireServiceAccountJson(),
-					documentPath: conversationDocPath
-				});
+				const snapshot = await getDoc(doc(firestore, conversationDocPath));
 				if (snapshot.exists) {
-					const data = snapshot.data;
+					const data = snapshot.data() ?? {};
 					createdAt = resolveTimestamp(data?.createdAt, now);
 					const rawParticipants = Array.isArray(data?.participantIds) ? data?.participantIds : null;
 					if (rawParticipants && rawParticipants.length > 0) {
@@ -510,11 +522,11 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 				status: initialStatus
 			};
 
-			await patchFirestoreDocument({
-				serviceAccountJson: requireServiceAccountJson(),
-				documentPath: conversationDocPath,
-				updates: conversation as unknown as Record<string, unknown>
-			});
+			await setDoc(
+				doc(firestore, conversationDocPath),
+				conversation as unknown as Record<string, unknown>,
+				{ merge: true }
+			);
 
 			try {
 				const queue: StreamChatResponseProto[] = [];
@@ -553,18 +565,18 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 					conversation.status = status;
 					conversation.updatedAt = status.updatedAt;
 					try {
-						await patchFirestoreDocument({
-							serviceAccountJson: requireServiceAccountJson(),
-							documentPath: conversationDocPath,
-							updates: {
+						await setDoc(
+							doc(firestore, conversationDocPath),
+							{
 								status: {
 									state: status.state,
 									updatedAt: status.updatedAt,
 									errorMessage: status.errorMessage ?? ''
 								},
 								updatedAt: status.updatedAt
-							}
-						});
+							},
+							{ merge: true }
+						);
 					} catch (error) {
 						logServerEvent({
 							level: 'warn',
@@ -645,15 +657,15 @@ export function registerCheckMateRoutes(router: ConnectRouter): void {
 							updateAssistantMessage(conversationMessages, assistantIndex, assistantText);
 							conversation.updatedAt = nowTimestampValue;
 							conversation.lastMessageAt = nowTimestampValue;
-							await patchFirestoreDocument({
-								serviceAccountJson: requireServiceAccountJson(),
-								documentPath: conversationDocPath,
-								updates: {
+							await setDoc(
+								doc(firestore, conversationDocPath),
+								{
 									updatedAt: nowTimestampValue,
 									lastMessageAt: nowTimestampValue,
 									messages: conversationMessages
-								}
-							});
+								},
+								{ merge: true }
+							);
 							lastPersistedText = assistantText;
 							hasPendingUpdate = false;
 							lastUpdate = Date.now();

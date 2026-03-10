@@ -3,7 +3,17 @@ import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import {
 	buildWorkspaceFilesCollectionPath,
 	resolveWorkspaceFilePathFromFirestoreDocument
@@ -60,40 +70,43 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	}
 
 	const agentDocPath = `users/${userId}/agents/${parsedParams.agentId}`;
-	const agentSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: agentDocPath
-	});
-	if (!agentSnap.exists || !agentSnap.data) {
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const agentSnap = await getDoc(doc(firestore, agentDocPath));
+	if (!agentSnap.exists) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
 	const agentParsed = SparkAgentStateSchema.safeParse({
 		id: parsedParams.agentId,
-		...agentSnap.data
+		...agentSnap.data()
 	});
 	if (!agentParsed.success) {
 		return json({ error: 'invalid_agent' }, { status: 500 });
 	}
 
 	const agent: SparkAgentState = agentParsed.data;
-	const filesDocs = await listFirestoreDocuments({
-		serviceAccountJson,
-		collectionPath: buildWorkspaceFilesCollectionPath({
-			userId,
-			workspaceId: agent.workspaceId
-		}),
-		limit: 200,
-		orderBy: 'path asc'
-	});
+	const filesDocs = await getDocs(
+		query(
+			collection(
+				firestore,
+				buildWorkspaceFilesCollectionPath({
+					userId,
+					workspaceId: agent.workspaceId
+				})
+			),
+			orderBy('path', 'asc'),
+			limitQuery(200)
+		)
+	);
 
 	const files: SparkAgentWorkspaceFile[] = [];
-	for (const fileDoc of filesDocs) {
-		const data = fileDoc.data;
+	for (const fileDoc of filesDocs.docs) {
+		const data = fileDoc.data();
 		const payload = {
 			...data,
 			path: resolveWorkspaceFilePathFromFirestoreDocument({
-				documentPath: fileDoc.documentPath,
+				documentPath: fileDoc.ref.path,
 				storedPath: data.path
 			})
 		};
@@ -105,12 +118,9 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	}
 
 	let log: SparkAgentRunLog | null = null;
-	const logSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `${agentDocPath}/logs/log`
-	});
-	if (logSnap.exists && logSnap.data) {
-		const data = logSnap.data ?? {};
+	const logSnap = await getDoc(doc(firestore, `${agentDocPath}/logs/log`));
+	if (logSnap.exists) {
+		const data = logSnap.data() ?? {};
 		const rawLines = data.lines && typeof data.lines === 'object' ? data.lines : null;
 		const entries: Array<{ key: string; timestamp: Date; line: string }> = [];
 		if (rawLines && !Array.isArray(rawLines)) {

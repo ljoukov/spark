@@ -1,9 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import {
@@ -51,18 +52,17 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		workspaceId,
 		filePath: path
 	});
-	const fileSnap = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: fileDocPath
-	});
-	if (!fileSnap.exists || !fileSnap.data) {
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const fileSnap = await getDoc(doc(firestore, fileDocPath));
+	if (!fileSnap.exists) {
 		return json({ error: 'not_found', message: 'Workspace file not found.' }, { status: 404 });
 	}
 	const parsedFile = SparkAgentWorkspaceFileSchema.safeParse({
-		...(fileSnap.data ?? {}),
+		...(fileSnap.data() ?? {}),
 		path: resolveWorkspaceFilePathFromFirestoreDocument({
 			documentPath: fileDocPath,
-			storedPath: fileSnap.data.path
+			storedPath: fileSnap.data()?.path
 		})
 	});
 	if (!parsedFile.success) {

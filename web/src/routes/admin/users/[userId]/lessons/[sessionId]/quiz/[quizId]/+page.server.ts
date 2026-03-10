@@ -1,4 +1,3 @@
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 import { renderMarkdownOptional } from '$lib/server/markdown';
 import { resolveGradingPrompt, resolveMarkScheme } from '$lib/server/quiz/grading';
 import {
@@ -8,6 +7,8 @@ import {
 	QuizTypeAnswerSchema
 } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 import type {
@@ -142,12 +143,12 @@ function withHtmlQuiz(quiz: QuizDefinition): QuizView {
 export const load: PageServerLoad = async ({ params }) => {
 	const { userId, sessionId, quizId } = paramsSchema.parse(params);
 
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `spark/${userId}/sessions/${sessionId}/quiz/${quizId}`
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, `spark/${userId}/sessions/${sessionId}/quiz/${quizId}`));
 
-	if (!snapshot.exists || !snapshot.data) {
+	if (!snapshot.exists) {
 		return {
 			quizDocFound: false,
 			quizParseOk: false,
@@ -158,7 +159,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
-	const payload = { id: quizId, ...(snapshot.data ?? {}) };
+	const payload = { id: quizId, ...(snapshot.data() ?? {}) };
 	const strictParsed = QuizDefinitionSchema.safeParse(payload);
 	const quizParseOk = strictParsed.success;
 

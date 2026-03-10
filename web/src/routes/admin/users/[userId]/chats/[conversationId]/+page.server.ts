@@ -1,4 +1,5 @@
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { SparkAgentConversationSchema, type SparkAgentConversation } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
@@ -84,12 +85,12 @@ function serializeConversation(conversation: SparkAgentConversation): {
 export const load: PageServerLoad = async ({ params }) => {
 	const { userId, conversationId } = paramsSchema.parse(params);
 
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `${userId}/client/conversations/${conversationId}`
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, `${userId}/client/conversations/${conversationId}`));
 
-	if (!snapshot.exists || !snapshot.data) {
+	if (!snapshot.exists) {
 		return {
 			conversationDocFound: false,
 			conversationParseOk: false,
@@ -98,7 +99,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		};
 	}
 
-	const parsed = SparkAgentConversationSchema.safeParse({ id: conversationId, ...(snapshot.data ?? {}) });
+	const parsed = SparkAgentConversationSchema.safeParse({ id: conversationId, ...(snapshot.data() ?? {}) });
 	if (!parsed.success) {
 		return {
 			conversationDocFound: true,
@@ -118,4 +119,3 @@ export const load: PageServerLoad = async ({ params }) => {
 		parseIssues: []
 	};
 };
-

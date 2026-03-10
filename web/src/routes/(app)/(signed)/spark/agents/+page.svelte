@@ -2,14 +2,6 @@
 	import { browser } from '$app/environment';
 	import { getContext, onMount } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
-	import {
-		collection,
-		getFirestore,
-		limit as queryLimit,
-		onSnapshot,
-		orderBy,
-		query
-	} from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { SparkAgentStateSchema, type SparkAgentState } from '@spark/schemas';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
@@ -260,35 +252,52 @@
 		loading = true;
 		error = null;
 
-		const db = getFirestore(getFirebaseApp());
-		const runsQuery = query(
-			collection(db, 'users', userId, 'agents'),
-			orderBy('updatedAt', 'desc'),
-			queryLimit(RUN_LIST_LIMIT)
-		);
-		const stop = onSnapshot(
-			runsQuery,
-			(snapshot) => {
-				const nextRuns: RunListItem[] = [];
-				for (const document of snapshot.docs) {
-					const nextRun = parseRunListItem(document.id, document.data());
-					if (!nextRun) {
-						continue;
-					}
-					nextRuns.push(nextRun);
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ collection, getFirestore, limit: queryLimit, onSnapshot, orderBy, query }) => {
+				if (cancelled) {
+					return;
 				}
-				agentRuns = nextRuns;
-				loading = false;
-			},
-			(snapshotError) => {
+				const db = getFirestore(getFirebaseApp());
+				const runsQuery = query(
+					collection(db, 'users', userId, 'agents'),
+					orderBy('updatedAt', 'desc'),
+					queryLimit(RUN_LIST_LIMIT)
+				);
+				stop = onSnapshot(
+					runsQuery,
+					(snapshot) => {
+						const nextRuns: RunListItem[] = [];
+						for (const document of snapshot.docs) {
+							const nextRun = parseRunListItem(document.id, document.data());
+							if (!nextRun) {
+								continue;
+							}
+							nextRuns.push(nextRun);
+						}
+						agentRuns = nextRuns;
+						loading = false;
+					},
+					(snapshotError) => {
+						console.warn('Failed to load Spark agent runs', snapshotError);
+						error = 'Spark could not load your agent runs right now.';
+						loading = false;
+					}
+				);
+			})
+			.catch((snapshotError) => {
+				if (cancelled) {
+					return;
+				}
 				console.warn('Failed to load Spark agent runs', snapshotError);
 				error = 'Spark could not load your agent runs right now.';
 				loading = false;
-			}
-		);
+			});
 
 		return () => {
-			stop();
+			cancelled = true;
+			stop?.();
 		};
 	});
 </script>

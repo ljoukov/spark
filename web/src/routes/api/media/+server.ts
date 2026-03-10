@@ -2,7 +2,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { SessionMediaDocSchema, type SessionMediaDoc } from '@spark/schemas';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
@@ -109,15 +110,17 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 	const serviceAccountJson = requireServiceAccountJson();
 	const documentPath = `spark/${userId}/sessions/${parsed.sessionId}/media/${parsed.planItemId}`;
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
-	const snapshot = await getFirestoreDocument({ serviceAccountJson, documentPath });
-	if (!snapshot.exists || !snapshot.data) {
+	const snapshot = await getDoc(doc(firestore, documentPath));
+	if (!snapshot.exists) {
 		return json({ error: 'not_found', message: 'Media not found' }, { status: 404 });
 	}
 
 	let media: SessionMediaDoc;
 	try {
-		media = SessionMediaDocSchema.parse({ id: parsed.planItemId, ...snapshot.data });
+		media = SessionMediaDocSchema.parse({ id: parsed.planItemId, ...snapshot.data() });
 	} catch (error) {
 		console.error('Failed to parse session media document', { error, userId, documentPath });
 		return json(

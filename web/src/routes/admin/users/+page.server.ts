@@ -3,8 +3,15 @@ import {
 	findAdminUsersByEmail,
 	getAdminUserProfile
 } from '$lib/server/admin/usersRepo';
-import { listFirestoreDocuments } from '$lib/server/gcp/firestoreRest';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	query
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import type { PageServerLoad } from './$types';
 
@@ -77,12 +84,10 @@ function requireServiceAccountJson(): string {
 
 async function userHasLessons(userId: string, serviceAccountJson: string): Promise<boolean> {
 	try {
-		const docs = await listFirestoreDocuments({
-			serviceAccountJson,
-			collectionPath: `spark/${userId}/sessions`,
-			limit: 1
-		});
-		return docs.length > 0;
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
+		const docs = await getDocs(query(collection(firestore, `spark/${userId}/sessions`), limitQuery(1)));
+		return !docs.empty;
 	} catch (error) {
 		console.error('Failed to check user lessons', { userId, error });
 		return false;
@@ -91,12 +96,12 @@ async function userHasLessons(userId: string, serviceAccountJson: string): Promi
 
 async function userHasChats(userId: string, serviceAccountJson: string): Promise<boolean> {
 	try {
-		const docs = await listFirestoreDocuments({
-			serviceAccountJson,
-			collectionPath: `${userId}/client/conversations`,
-			limit: 1
-		});
-		return docs.length > 0;
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
+		const docs = await getDocs(
+			query(collection(firestore, `${userId}/client/conversations`), limitQuery(1))
+		);
+		return !docs.empty;
 	} catch (error) {
 		console.error('Failed to check user chats', { userId, error });
 		return false;
@@ -105,12 +110,10 @@ async function userHasChats(userId: string, serviceAccountJson: string): Promise
 
 async function userHasAgentRuns(userId: string, serviceAccountJson: string): Promise<boolean> {
 	try {
-		const docs = await listFirestoreDocuments({
-			serviceAccountJson,
-			collectionPath: `users/${userId}/agents`,
-			limit: 1
-		});
-		return docs.length > 0;
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
+		const docs = await getDocs(query(collection(firestore, `users/${userId}/agents`), limitQuery(1)));
+		return !docs.empty;
 	} catch (error) {
 		console.error('Failed to check user agent runs', { userId, error });
 		return false;

@@ -8,15 +8,6 @@
 		SparkTutorScreenState
 	} from '@spark/schemas';
 	import { SparkAgentWorkspaceFileSchema, SparkTutorReviewStateSchema } from '@spark/schemas';
-	import {
-		collection,
-		getFirestore,
-		limit,
-		onSnapshot,
-		orderBy,
-		query,
-		type Unsubscribe
-	} from 'firebase/firestore';
 	import { getAuth, onIdTokenChanged } from 'firebase/auth';
 	import { getContext, onMount } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
@@ -211,36 +202,50 @@
 		if (!browser || !authReady || !userId) {
 			return;
 		}
-		const db = getFirestore(getFirebaseApp());
-		const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
-		const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
-		let stop: Unsubscribe | null = null;
-		stop = onSnapshot(
-			filesQuery,
-			(snapshot) => {
-				const files: SparkAgentWorkspaceFile[] = [];
-				for (const document of snapshot.docs) {
-					const raw = document.data();
-					const payload = {
-						...raw,
-						path:
-							typeof raw.path === 'string' && raw.path.trim().length > 0
-								? raw.path.trim()
-								: decodeFileId(document.id)
-					};
-					const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
-					if (!parsed.success) {
-						continue;
-					}
-					files.push(parsed.data);
+		let stop: (() => void) | null = null;
+		let cancelled = false;
+		void import('firebase/firestore')
+			.then(({ collection, getFirestore, limit, onSnapshot, orderBy, query }) => {
+				if (cancelled) {
+					return;
 				}
-				applyWorkspaceFiles(files);
-			},
-			(error) => {
+				const db = getFirestore(getFirebaseApp());
+				const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
+				const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
+				stop = onSnapshot(
+					filesQuery,
+					(snapshot) => {
+						const files: SparkAgentWorkspaceFile[] = [];
+						for (const document of snapshot.docs) {
+							const raw = document.data();
+							const payload = {
+								...raw,
+								path:
+									typeof raw.path === 'string' && raw.path.trim().length > 0
+										? raw.path.trim()
+										: decodeFileId(document.id)
+							};
+							const parsed = SparkAgentWorkspaceFileSchema.safeParse(payload);
+							if (!parsed.success) {
+								continue;
+							}
+							files.push(parsed.data);
+						}
+						applyWorkspaceFiles(files);
+					},
+					(error) => {
+						console.warn('Tutor workspace subscription failed', error);
+					}
+				);
+			})
+			.catch((error) => {
+				if (cancelled) {
+					return;
+				}
 				console.warn('Tutor workspace subscription failed', error);
-			}
-		);
+			});
 		return () => {
+			cancelled = true;
 			stop?.();
 		};
 	});

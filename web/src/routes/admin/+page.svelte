@@ -2,7 +2,6 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { formatRelativeAge } from '$lib/utils/relativeAge';
 	import type { PageData } from './$types';
-
 	type BuildField = {
 		label: string;
 		value: string;
