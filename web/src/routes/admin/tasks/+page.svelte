@@ -24,11 +24,18 @@
 		}
 		return form.taskRunnerInfo ?? null;
 	});
-	const buildsMatch = $derived.by(() => {
+	const buildComparison = $derived.by(() => {
 		if (!taskRunnerInfo) {
 			return null;
 		}
-		return taskRunnerInfo.build.buildId === uiBuildInfo.buildId;
+		const taskRunnerCommit = taskRunnerInfo.build.gitCommitSha?.trim() ?? '';
+		const uiCommit = uiBuildInfo.gitCommitSha?.trim() ?? '';
+
+		if (taskRunnerCommit && uiCommit) {
+			return taskRunnerCommit === uiCommit ? 'commit-match' : 'commit-mismatch';
+		}
+
+		return taskRunnerInfo.build.buildId === uiBuildInfo.buildId ? 'build-match' : null;
 	});
 	const uiBuildFields = $derived(buildRows(uiBuildInfo));
 	const taskRunnerBuildFields = $derived.by(() =>
@@ -141,17 +148,23 @@
 					</form>
 
 					{#if taskRunnerInfo}
-						{#if buildsMatch === true}
+						{#if buildComparison === 'commit-match'}
+							<p
+								class="mt-4 rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+							>
+								Task runner matches this admin UI commit.
+							</p>
+						{:else if buildComparison === 'build-match'}
 							<p
 								class="mt-4 rounded-md border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
 							>
 								Task runner matches this admin UI build.
 							</p>
-						{:else if buildsMatch === false}
+						{:else if buildComparison === 'commit-mismatch'}
 							<p
 								class="mt-4 rounded-md border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-800"
 							>
-								Task runner is serving a different build than this admin UI.
+								Task runner is serving a different commit than this admin UI.
 							</p>
 						{/if}
 
