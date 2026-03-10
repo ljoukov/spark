@@ -11,7 +11,7 @@
   - Run `bun run generate` to emit TypeScript protos into `packages/proto/src/gen` and Swift protos into `CheckMate/proto`.
   - TypeScript: alias `$proto` points at `packages/proto/src`.
   - Swift types are generated via `swift-protobuf` and used by the iOS apps.
-- `web/` — SvelteKit (latest) project deployed to Cloudflare Workers (Workers Builds Git integration). Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
+- `web/` — SvelteKit (latest) project deployed to Cloudflare Workers for Cloudflare-hosted builds and as a standalone Bun server for local/GCP container builds. Hosts the public marketing pages _and_ API endpoints consumed by the iOS app.
   - UI theming + color tokens are documented in `web/docs/color-system.md`.
 - API logic lives under `web/src/routes/api/*`.
 - Web app routes live under `web/src/routes`.
@@ -225,7 +225,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Location: `us-central1`.
 - The Cloud Task `httpRequest` targets `TASKS_SERVICE_URL` with the Bearer token header and JSON body.
 - For debugging, `runAgent` tasks also include `userId`, `agentId`, and `workspaceId` as query params on the target URL (in addition to `type=runAgent`).
-- The same Bearer token also protects `GET /api/internal/tasks/info`, which returns the task runner's embedded build metadata (`buildId`, `builtAt`, platform, commit/branch, and provider-specific build identifiers when available).
+- The same Bearer token also protects `GET /api/internal/tasks/info`, which returns the task runner's embedded build metadata (`buildId`, `builtAt`, platform, runtime/runtimeVersion, commit/branch, and provider-specific build identifiers when available).
 - Build metadata is generated during `web` builds and embedded into the server bundle. Every build gets a fresh `buildId` plus a `builtAt` timestamp; provider commit/build identifiers are sourced from Vercel/Cloudflare env vars directly and from Cloud Build via Docker build args so Cloud Run images retain provenance after the Docker boundary.
 
 ### Admin UI
@@ -494,4 +494,5 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 ## 12) Developer Operations Notes
 
 - Cloud Run troubleshooting: when native bindings (e.g., `sharp`) misbehave in production, validate the image locally before redeploying. Docker path: `docker build -f web/Dockerfile -t spark-web-local .`, then `docker run --rm -e PORT=8080 -p 8080:8080 spark-web-local`, then `curl http://127.0.0.1:8080`.
+- Local standalone Bun path: `bun --cwd=web run build:bun`, then `PORT=8080 bun --cwd=web run start:bun`, then `curl http://127.0.0.1:8080`.
 - Apple `container` path (Apple silicon, macOS 26+): run `container system start` once, optionally `container builder start --cpus 8 --memory 16g` for faster Bun builds, then `container build -f web/Dockerfile -t spark-web-local .`, `container run --name spark-web-local-test --detach --rm -e PORT=8080 -p 8080:8080 spark-web-local`, and `curl http://127.0.0.1:8080`. Local builds read `web/.env.local`; Cloud Build populates that same file via `web/write_dotenv.py` from Secret Manager. The first Apple `container` build/run is materially slower because it bootstraps the kernel, BuildKit VM, init image, and local snapshot import, so reserve it for deployment-specific debugging rather than routine development.

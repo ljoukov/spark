@@ -52,10 +52,32 @@ function resolveBuildPlatform() {
 	return 'local';
 }
 
+function resolveRuntimeTarget(platform) {
+	switch (platform) {
+		case 'cloudflare': {
+			return 'cloudflare-worker';
+		}
+		case 'vercel': {
+			return 'node';
+		}
+		case 'gcp':
+		case 'local': {
+			return 'bun';
+		}
+		default: {
+			return 'unknown';
+		}
+	}
+}
+
+const platform = resolveBuildPlatform();
+
 const buildInfo = {
 	buildId: randomUUID(),
 	builtAt: new Date().toISOString(),
-	platform: resolveBuildPlatform(),
+	platform,
+	runtime: resolveRuntimeTarget(platform),
+	runtimeVersion: null,
 	gitCommitSha: readEnv(
 		'BUILD_GIT_COMMIT_SHA',
 		'VERCEL_GIT_COMMIT_SHA',

@@ -7,6 +7,8 @@ describe('BuildInfoSchema', () => {
 			buildId: 'build-123',
 			builtAt: '2026-03-08T12:00:00.000Z',
 			platform: 'gcp',
+			runtime: 'bun',
+			runtimeVersion: '1.3.8',
 			gitCommitSha: 'abcdef1234567890',
 			gitBranch: 'main',
 			providerBuildId: 'provider-build-1',
@@ -15,6 +17,7 @@ describe('BuildInfoSchema', () => {
 		});
 
 		expect(parsed.platform).toBe('gcp');
+		expect(parsed.runtime).toBe('bun');
 		expect(parsed.gitCommitSha).toBe('abcdef1234567890');
 	});
 });
@@ -25,6 +28,8 @@ describe('doBuildsMatch', () => {
 			buildId: 'same-build',
 			builtAt: '2026-03-08T12:00:00.000Z',
 			platform: 'vercel',
+			runtime: 'node',
+			runtimeVersion: '24.0.0',
 			gitCommitSha: 'abc123',
 			gitBranch: 'main',
 			providerBuildId: null,
@@ -35,6 +40,8 @@ describe('doBuildsMatch', () => {
 			buildId: 'same-build',
 			builtAt: '2026-03-08T12:05:00.000Z',
 			platform: 'vercel',
+			runtime: 'node',
+			runtimeVersion: '24.0.0',
 			gitCommitSha: 'abc123',
 			gitBranch: 'main',
 			providerBuildId: null,
@@ -45,6 +52,8 @@ describe('doBuildsMatch', () => {
 			buildId: 'different-build',
 			builtAt: '2026-03-08T12:05:00.000Z',
 			platform: 'vercel',
+			runtime: 'node',
+			runtimeVersion: '24.0.0',
 			gitCommitSha: 'abc123',
 			gitBranch: 'main',
 			providerBuildId: null,

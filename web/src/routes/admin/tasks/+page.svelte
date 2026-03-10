@@ -59,6 +59,8 @@
 			{ label: 'Built', value: formatInstant(build.builtAt) },
 			{ label: 'Age', value: formatRelativeAge(build.builtAt, { now: new Date(data.loadedAt) }) },
 			{ label: 'Platform', value: build.platform },
+			{ label: 'Runtime', value: build.runtime },
+			{ label: 'Runtime version', value: build.runtimeVersion ?? '—', mono: Boolean(build.runtimeVersion) },
 			{ label: 'Commit', value: formatCommit(build.gitCommitSha), mono: Boolean(build.gitCommitSha) },
 			{ label: 'Branch', value: build.gitBranch ?? '—' },
 			{ label: 'Provider build', value: build.providerBuildId ?? '—', mono: Boolean(build.providerBuildId) },

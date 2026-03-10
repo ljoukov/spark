@@ -1,5 +1,5 @@
 <script lang="ts">
-	import HomeIcon from '@lucide/svelte/icons/home';
+	import PackageIcon from '@lucide/svelte/icons/package';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
@@ -21,15 +21,15 @@
 	type NavItem = {
 		title: string;
 		href: Pathname;
-		icon: typeof HomeIcon;
+		icon: typeof PackageIcon;
 		highlight: (path: string) => boolean;
 	};
 
 	const primaryNav = [
 		{
-			title: 'Home',
+			title: 'Build',
 			href: '/admin',
-			icon: HomeIcon,
+			icon: PackageIcon,
 			highlight: (path) => path === '/admin' || path === '/admin/'
 		},
 		{

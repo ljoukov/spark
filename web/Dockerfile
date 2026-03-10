@@ -32,8 +32,7 @@ ARG BUILD_GIT_BRANCH=""
 ARG BUILD_PROVIDER_BUILD_ID=""
 ARG BUILD_PROVIDER_REVISION=""
 
-# Ensure adapter-auto picks Node in CI images (matches existing behavior).
-ENV GCP_BUILDPACKS="make-sveltekit-adapter-auto-use-node"
+# Cloud Run images always build the standalone Bun server.
 ENV BUILD_TARGET="${BUILD_TARGET}"
 ENV BUILD_GIT_COMMIT_SHA="${BUILD_GIT_COMMIT_SHA}"
 ENV BUILD_GIT_BRANCH="${BUILD_GIT_BRANCH}"
