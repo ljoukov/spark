@@ -47,14 +47,16 @@ FROM oven/bun:1.3.8 AS production
 WORKDIR /usr/src/app
 
 COPY --from=build /workspace/node_modules ./node_modules
-COPY --from=build /workspace/web/node_modules ./web/node_modules
+COPY --from=build /workspace/web/node_modules ./build/node_modules
 COPY --from=build /workspace/packages/schemas/node_modules ./packages/schemas/node_modules
 COPY --from=build /workspace/packages/proto/node_modules ./packages/proto/node_modules
 COPY --from=build /workspace/packages/llm/node_modules ./packages/llm/node_modules
 COPY --from=build /workspace/package.json ./package.json
 
 COPY --from=build /workspace/web/build ./build
-COPY --from=build /workspace/web/.env.local ./.env.local
+COPY --from=build /workspace/web/.env.local ./build/.env.local
 COPY --from=build /workspace/packages ./packages
 
-CMD ["bun", "./build/index.js"]
+WORKDIR /usr/src/app/build
+
+CMD ["bun", "./index.js"]
