@@ -13,7 +13,6 @@ import {
 	getDoc,
 	getDocs,
 	getFirestore,
-	limit as limitQuery,
 	orderBy,
 	query,
 	setDoc
@@ -157,8 +156,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 					workspaceId: sourceAgent.workspaceId
 				})
 			),
-			orderBy(documentId(), 'asc'),
-			limitQuery(1000)
+			orderBy(documentId(), 'asc')
 		)
 	);
 	const sourceWorkspaceFiles = sourceFiles.docs.flatMap((sourceFile) => {

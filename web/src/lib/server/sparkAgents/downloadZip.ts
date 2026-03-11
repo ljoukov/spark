@@ -502,8 +502,7 @@ export async function buildSparkAgentDownloadZip(args: {
 					workspaceId: agent.workspaceId
 				})
 			),
-			orderBy(documentId(), 'asc'),
-			limitQuery(1000)
+			orderBy(documentId(), 'asc')
 		)
 	);
 
