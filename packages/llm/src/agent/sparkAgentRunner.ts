@@ -2526,6 +2526,24 @@ class AgentRunStatsTracker {
     };
   }
 
+  reconcileModelCostFromToolLoopResult(details: {
+    modelId: string;
+    toolLoopResult: Pick<LlmToolLoopResult, "steps" | "totalCostUsd">;
+  }): number {
+    this.modelsUsed.add(details.modelId);
+    for (const step of details.toolLoopResult.steps) {
+      this.modelsUsed.add(step.modelVersion);
+    }
+    const expectedModelCostUsd = Number.isFinite(details.toolLoopResult.totalCostUsd)
+      ? Math.max(0, details.toolLoopResult.totalCostUsd)
+      : 0;
+    const costDeltaUsd = Math.max(0, expectedModelCostUsd - this.modelCostUsd);
+    if (costDeltaUsd > 0) {
+      this.modelCostUsd += costDeltaUsd;
+    }
+    return costDeltaUsd;
+  }
+
   private applyTokenUpdate(
     state: {
       modelId: string;
@@ -8022,8 +8040,19 @@ export async function runSparkAgentTask(
         toolLoopEventBridge.finish();
       }
     })();
+    const reconciledAgentCostUsd = statsTracker.reconcileModelCostFromToolLoopResult(
+      {
+        modelId: toolLoopModelId,
+        toolLoopResult,
+      },
+    );
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
+    if (reconciledAgentCostUsd > 0) {
+      logSync?.append(
+        `reconciled_agent_llm_cost: +${reconciledAgentCostUsd.toFixed(6)} from toolLoopResult.totalCostUsd`,
+      );
+    }
 
     try {
       const traceSummary = await persistToolLoopTrace({
