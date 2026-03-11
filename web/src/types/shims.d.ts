@@ -28,69 +28,11 @@ declare module '@spark/llm/utils/gcp/googleAccessToken' {
 	}): Promise<{ accessToken: string; projectId: string }>;
 }
 
-declare module '@spark/llm/utils/gcp/firestoreRest' {
-	export function getFirestoreDocument(options: {
-		serviceAccountJson: string;
-		documentPath: string;
-	}): Promise<{
-		exists: boolean;
-		data: Record<string, unknown> | null;
-		updateTime?: string;
-		createTime?: string;
-	}>;
-
-	export function setFirestoreDocument(options: {
-		serviceAccountJson: string;
-		documentPath: string;
-		data: Record<string, unknown>;
-	}): Promise<void>;
-
-	export function patchFirestoreDocument(options: {
-		serviceAccountJson: string;
-		documentPath: string;
+declare module '@spark/llm/utils/gcp/firestoreData' {
+	export function buildFirestoreMergeData(options: {
 		updates: Record<string, unknown>;
 		deletes?: string[];
-	}): Promise<void>;
-
-	export function listFirestoreDocuments(options: {
-		serviceAccountJson: string;
-		collectionPath: string;
-		limit?: number;
-		orderBy?: string;
-	}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>>;
-
-	export function queryFirestoreDocuments(options: {
-		serviceAccountJson: string;
-		collectionPath: string;
-		where?: { fieldPath: string; op: 'EQUAL'; value: unknown };
-		limit?: number;
-		orderBy?: string;
-	}): Promise<Array<{ documentPath: string; data: Record<string, unknown> }>>;
-
-	type CommitWrite =
-		| {
-				type: 'patch';
-				documentPath: string;
-				updates: Record<string, unknown>;
-				deletes?: string[];
-				precondition?: { exists?: boolean };
-		  }
-		| {
-				type: 'set';
-				documentPath: string;
-				data: Record<string, unknown>;
-				precondition?: { exists?: boolean };
-		  };
-
-	export function commitFirestoreWrites(options: {
-		serviceAccountJson: string;
-		writes: CommitWrite[];
-	}): Promise<void>;
-
-	export function deleteFirestoreDocument(options: {
-		serviceAccountJson: string;
-		documentPath: string;
-	}): Promise<void>;
+	}): Record<string, unknown>;
 }
 
 declare module '@spark/llm/utils/gcp/storageRest' {

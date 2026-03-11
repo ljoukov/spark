@@ -18,7 +18,15 @@ import { saveSession, setCurrentSessionId, getSession } from './repo';
 import { saveUserQuiz } from '../quiz/repo';
 import { saveUserProblem } from '../code/problemRepo';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, listFirestoreDocuments, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 
 export type WelcomeSessionKey = string;
 
@@ -81,23 +89,26 @@ function docIdFromPath(documentPath: string): string {
 }
 
 async function fetchTemplateSnapshot(keyOrSessionId: string): Promise<{ templateId: string; parsed: TemplateDoc }> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: templateCollectionPath()
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(collection(firestore, templateCollectionPath()));
 
-	const direct = docs.find((doc) => docIdFromPath(doc.documentPath) === keyOrSessionId) ?? null;
+	const direct = docs.docs.find((templateDoc) => docIdFromPath(templateDoc.ref.path) === keyOrSessionId) ?? null;
 	const matchByKey =
 		direct ??
-		docs.find((doc) => typeof doc.data.key === 'string' && doc.data.key === keyOrSessionId) ??
+		docs.docs.find((templateDoc) => {
+			const data = templateDoc.data();
+			return typeof data.key === 'string' && data.key === keyOrSessionId;
+		}) ??
 		null;
 
 	if (!matchByKey) {
 		throw new Error(`Welcome session template not found for key '${keyOrSessionId}'`);
 	}
 
-	const raw = matchByKey.data;
-	const templateId = docIdFromPath(matchByKey.documentPath);
+	const raw = matchByKey.data();
+	const templateId = docIdFromPath(matchByKey.ref.path);
 	const parsed = TemplateDocSchema.parse({
 		id: (raw.id ?? templateId) as TemplateDoc['id'],
 		title: raw.title,
@@ -114,32 +125,42 @@ async function fetchTemplateSnapshot(keyOrSessionId: string): Promise<{ template
 }
 
 async function fetchTemplateQuizzes(templateId: string): Promise<QuizDefinition[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `${templateDocPath(templateId)}/quiz`
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(collection(firestore, `${templateDocPath(templateId)}/quiz`));
 	const quizzes: QuizDefinition[] = [];
-	for (const doc of docs) {
+	for (const quizDoc of docs.docs) {
 		try {
-			quizzes.push(QuizDefinitionSchema.parse({ id: docIdFromPath(doc.documentPath), ...doc.data }));
+			quizzes.push(
+				QuizDefinitionSchema.parse({
+					id: docIdFromPath(quizDoc.ref.path),
+					...quizDoc.data()
+				})
+			);
 		} catch (error) {
-			console.error('Unable to parse welcome quiz template', doc.documentPath, error);
+			console.error('Unable to parse welcome quiz template', quizDoc.ref.path, error);
 		}
 	}
 	return quizzes;
 }
 
 async function fetchTemplateProblems(templateId: string): Promise<CodeProblem[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: `${templateDocPath(templateId)}/code`
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(collection(firestore, `${templateDocPath(templateId)}/code`));
 	const problems: CodeProblem[] = [];
-	for (const doc of docs) {
+	for (const problemDoc of docs.docs) {
 		try {
-			problems.push(CodeProblemSchema.parse({ slug: docIdFromPath(doc.documentPath), ...doc.data }));
+			problems.push(
+				CodeProblemSchema.parse({
+					slug: docIdFromPath(problemDoc.ref.path),
+					...problemDoc.data()
+				})
+			);
 		} catch (error) {
-			console.error('Unable to parse welcome problem template', doc.documentPath, error);
+			console.error('Unable to parse welcome problem template', problemDoc.ref.path, error);
 		}
 	}
 	return problems;
@@ -161,14 +182,17 @@ async function fetchTemplateMedia(templateId: string, plan: readonly PlanItem[])
 		return null;
 	}
 	const docPath = `${templateDocPath(templateId)}/media/${storyPlanItem.id}`;
-	const snapshot = await getFirestoreDocument({ serviceAccountJson: requireServiceAccountJson(), documentPath: docPath });
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, docPath));
+	if (!snapshot.exists) {
 		console.warn('[welcome] Template media document not found for plan item', storyPlanItem.id);
 		return null;
 	}
 
 	try {
-		return SessionMediaDocSchema.parse({ id: storyPlanItem.id, ...snapshot.data });
+		return SessionMediaDocSchema.parse({ id: storyPlanItem.id, ...snapshot.data() });
 	} catch (error) {
 		console.error('Unable to parse template media document', storyPlanItem.id, error);
 		return null;
@@ -211,15 +235,17 @@ async function copyMediaToUser(
 	media: SessionMediaDoc
 ): Promise<void> {
 	const now = new Date();
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `spark/${userId}/sessions/${sessionId}/media/${media.planItemId}`,
-		data: {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, `spark/${userId}/sessions/${sessionId}/media/${media.planItemId}`),
+		{
 			...media,
 			createdAt: now,
 			updatedAt: now
 		} as unknown as Record<string, unknown>
-	});
+	);
 }
 
 async function seedSessionState(userId: string, session: Session): Promise<void> {
@@ -232,23 +258,25 @@ async function seedSessionState(userId: string, session: Session): Promise<void>
 		lastUpdatedAt: new Date()
 	});
 
-	await setFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `spark/${userId}/state/${session.id}`,
-		data: baseState as unknown as Record<string, unknown>
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, `spark/${userId}/state/${session.id}`),
+		baseState as unknown as Record<string, unknown>
+	);
 }
 
 export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[]> {
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: templateCollectionPath()
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(collection(firestore, templateCollectionPath()));
 	const options: WelcomeSessionOption[] = [];
 
-	for (const doc of docs) {
-		const docId = docIdFromPath(doc.documentPath);
-		const raw = doc.data;
+	for (const templateDoc of docs.docs) {
+		const docId = docIdFromPath(templateDoc.ref.path);
+		const raw = templateDoc.data();
 		try {
 			const parsed = TemplateDocSchema.safeParse({
 				id: (raw.id ?? docId) as TemplateDoc['id'],
@@ -289,7 +317,7 @@ export async function listWelcomeSessionOptions(): Promise<WelcomeSessionOption[
 				posterImageUrl: null
 			});
 		} catch (error) {
-			console.error('Unable to parse welcome session option', doc.documentPath, error);
+			console.error('Unable to parse welcome session option', templateDoc.ref.path, error);
 		}
 	}
 

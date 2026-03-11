@@ -47,7 +47,7 @@ Note: We are deliberately keeping schemas separate from any LLM deps to remain b
 
 All Firestore reads/writes validated with `@spark/schemas` using Zod; normalize shapes via `transform()` where appropriate.
 
-## Server Repos (web, Admin SDK)
+## Server Repos (web, Firestore access)
 
 - `web/src/lib/server/session/repo.ts`
   - `saveSession(userId, session)`
@@ -57,8 +57,7 @@ All Firestore reads/writes validated with `@spark/schemas` using Zod; normalize 
   - `getOrSelectCurrentSession(userId)`: return `currentSessionId` if valid; else latest session; if none, throw.
 - `web/src/lib/server/user/repo.ts`
   - `getUserDoc(userId)` and `getUserStats(userId)`; parse with `UserStatsSchema`.
-- `web/src/lib/server/firebase/admin.ts`
-  - Admin SDK bootstrap (reuse if present).
+- Firestore server access uses `@ljoukov/firebase-admin-cloudflare` directly from the relevant repo/service files.
 
 ## Session ID
 
@@ -118,7 +117,7 @@ All Firestore reads/writes validated with `@spark/schemas` using Zod; normalize 
 - Trivial generator runs only for the test user returned by `getTestUserId()`.
 - Server updates `stats` in the future; client reads only. Do not implement server-side stats updates yet.
 - Zod is used for all external inputs (Firestore payloads, env, request params); validation errors produce clear 4xx responses.
-- SvelteKit server uses Admin SDK for Firestore; client uses Web SDK for realtime state.
+- SvelteKit server uses `@ljoukov/firebase-admin-cloudflare` for Firestore; client uses Web SDK for realtime state.
 
 ## Open Questions
 

@@ -1,15 +1,22 @@
 import { deriveLessonStatus, countCompletedSteps } from '$lib/server/lessons/status';
 import { listSessions } from '$lib/server/session/repo';
 import { getSessionState } from '$lib/server/sessionState/repo';
-import {
-	deleteFirestoreDocument,
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
 import { fail } from '@sveltejs/kit';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	deleteField,
+	deleteDoc,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import type { Actions, PageServerLoad } from './$types';
 
 const paramsSchema = z.object({
@@ -82,11 +89,13 @@ export const actions: Actions = {
 		const serviceAccountJson = requireServiceAccountJson();
 
 		try {
-			await patchFirestoreDocument({
-				serviceAccountJson,
-				documentPath: `spark/${userId}/state/${sessionId}`,
-				updates: { sessionId, items: {}, lastUpdatedAt: new Date() }
-			});
+			const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+			firestore.settings({ ignoreUndefinedProperties: true });
+			await setDoc(
+				doc(firestore, `spark/${userId}/state/${sessionId}`),
+				{ sessionId, items: deleteField(), lastUpdatedAt: new Date() },
+				{ merge: true }
+			);
 
 			return { success: { message: `Reset progress for ${sessionId}.` } as const };
 		} catch (error) {
@@ -109,37 +118,24 @@ export const actions: Actions = {
 		const serviceAccountJson = requireServiceAccountJson();
 
 		try {
+			const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+			firestore.settings({ ignoreUndefinedProperties: true });
 			const subcollections = ['quiz', 'code', 'media'] as const;
 			for (const sub of subcollections) {
-				const docs = await listFirestoreDocuments({
-					serviceAccountJson,
-					collectionPath: `spark/${userId}/sessions/${sessionId}/${sub}`,
-					limit: 500
-				});
-				for (const doc of docs) {
-					await deleteFirestoreDocument({ serviceAccountJson, documentPath: doc.documentPath });
+				const docs = await getDocs(
+					query(collection(firestore, `spark/${userId}/sessions/${sessionId}/${sub}`), limitQuery(500))
+				);
+				for (const lessonDoc of docs.docs) {
+					await deleteDoc(lessonDoc.ref);
 				}
 			}
 
-			await deleteFirestoreDocument({
-				serviceAccountJson,
-				documentPath: `spark/${userId}/state/${sessionId}`
-			});
-			await deleteFirestoreDocument({
-				serviceAccountJson,
-				documentPath: `spark/${userId}/sessions/${sessionId}`
-			});
+			await deleteDoc(doc(firestore, `spark/${userId}/state/${sessionId}`));
+			await deleteDoc(doc(firestore, `spark/${userId}/sessions/${sessionId}`));
 
-			const userDoc = await getFirestoreDocument({
-				serviceAccountJson,
-				documentPath: `spark/${userId}`
-			});
-			if (userDoc.exists && userDoc.data?.currentSessionId === sessionId) {
-				await patchFirestoreDocument({
-					serviceAccountJson,
-					documentPath: `spark/${userId}`,
-					updates: { currentSessionId: null }
-				});
+			const userDoc = await getDoc(doc(firestore, `spark/${userId}`));
+			if (userDoc.exists && userDoc.data()?.currentSessionId === sessionId) {
+				await setDoc(doc(firestore, `spark/${userId}`), { currentSessionId: null }, { merge: true });
 			}
 
 			return { success: { message: `Deleted lesson ${sessionId}.` } as const };

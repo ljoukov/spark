@@ -3,11 +3,16 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  doc,
+  getFirestore,
+  writeBatch,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 
 import { generateJson, generateText, type LlmDebugOptions } from "../utils/llm";
 import type { JobProgressReporter, LlmUsageChunk } from "../utils/concurrency";
 import { errorAsString } from "../utils/error";
-import { commitFirestoreWrites } from "../utils/gcp/firestoreRest";
 import {
   MAX_PROBLEM_ATTEMPTS,
   MAX_PROBLEM_GRADE_RETRIES,
@@ -2654,10 +2659,18 @@ async function persistProblemSolutionsToFirestore(options: {
     });
 
     // Firestore commit supports up to 500 writes; chunk defensively.
+    const firestore = getFirestore(
+      initializeApp({ serviceAccountJson }, serviceAccountJson),
+    );
+    firestore.settings({ ignoreUndefinedProperties: true });
     const chunkSize = 450;
     for (let i = 0; i < writes.length; i += chunkSize) {
       const chunk = writes.slice(i, i + chunkSize);
-      await commitFirestoreWrites({ serviceAccountJson, writes: chunk });
+      const batch = writeBatch(firestore);
+      for (const write of chunk) {
+        batch.set(doc(firestore, write.documentPath), write.data);
+      }
+      await batch.commit();
     }
     logger.log(
       `[session/problem-solution] stored ${problems.length} solutions for session '${sessionId}'`,

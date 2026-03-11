@@ -10,7 +10,8 @@ import {
 	type SparkTutorSession
 } from '@spark/schemas';
 import { buildWorkspaceFileDocPath, upsertWorkspaceTextFileDoc } from '@spark/llm';
-import { getFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import type { GraderProblemReportSections } from '$lib/server/grader/problemReport';
 import {
 	buildEmptyTutorReviewState,
@@ -236,18 +237,28 @@ export async function readTutorWorkspaceTextFile(options: {
 	workspaceId: string;
 	filePath: string;
 }): Promise<string | null> {
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: options.serviceAccountJson,
-		documentPath: buildWorkspaceFileDocPath({
-			userId: options.userId,
-			workspaceId: options.workspaceId,
-			filePath: options.filePath
-		})
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const firestore = getFirestore(
+		initializeApp({ serviceAccountJson: options.serviceAccountJson }, options.serviceAccountJson)
+	);
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(
+		doc(
+			firestore,
+			buildWorkspaceFileDocPath({
+				userId: options.userId,
+				workspaceId: options.workspaceId,
+				filePath: options.filePath
+			})
+		)
+	);
+	if (!snapshot.exists) {
 		return null;
 	}
-	const content = snapshot.data.content;
+	const data = snapshot.data();
+	if (!data) {
+		return null;
+	}
+	const content = data.content;
 	return typeof content === 'string' ? content : null;
 }
 

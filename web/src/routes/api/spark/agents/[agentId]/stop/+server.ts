@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 
 const paramsSchema = z.object({
 	agentId: z.string().trim().min(1)
@@ -32,15 +33,17 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	const agentId = parsedParams.data.agentId;
 
 	const documentPath = `users/${userId}/agents/${agentId}`;
-	const agentSnap = await getFirestoreDocument({ serviceAccountJson, documentPath });
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const agentSnap = await getDoc(doc(firestore, documentPath));
 	if (!agentSnap.exists) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
-	await patchFirestoreDocument({
-		serviceAccountJson,
-		documentPath,
-		updates: { stop_requested: true, updatedAt: new Date() }
-	});
+	await setDoc(
+		doc(firestore, documentPath),
+		{ stop_requested: true, updatedAt: new Date() },
+		{ merge: true }
+	);
 	return json({ status: 'stop_requested' }, { status: 200 });
 };

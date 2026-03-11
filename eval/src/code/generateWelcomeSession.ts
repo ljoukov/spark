@@ -4,6 +4,14 @@ import path from "node:path";
 
 import { Command } from "commander";
 import { z } from "zod";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  setDoc,
+  writeBatch,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 
 import type {
   generateCodeProblems,
@@ -11,13 +19,8 @@ import type {
   generateQuizDefinitions,
 } from "@spark/llm/code/sessionArtifacts";
 import type { GenerateStoryResult } from "@spark/llm/code/generateStory";
-import {
-  commitFirestoreWrites,
-  getFirestoreDocument,
-  patchFirestoreDocument,
-  setFirestoreDocument,
-} from "@spark/llm/utils/gcp/firestoreRest";
 import { runJobsWithConcurrency } from "@spark/llm/utils/concurrency";
+import { buildFirestoreMergeData } from "@spark/llm/utils/gcp/firestoreData";
 import { ensureEvalEnvLoaded, WORKSPACE_PATHS } from "../utils/paths";
 import { CodeProblemSchema, QuizDefinitionSchema } from "@spark/schemas";
 import { requireServiceAccountJson } from "../utils/gcp";
@@ -230,11 +233,14 @@ async function copyStoryToTemplate(
   storyResult: GenerateStoryResult,
 ): Promise<void> {
   const serviceAccountJson = requireServiceAccountJson();
-  const snapshot = await getFirestoreDocument({
-    serviceAccountJson,
-    documentPath: storyResult.narration.documentPath,
-  });
-  if (!snapshot.exists || !snapshot.data) {
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  const snapshot = await getDoc(
+    doc(firestore, storyResult.narration.documentPath),
+  );
+  if (!snapshot.exists) {
     console.warn(
       `[welcome/${sessionId}] narration document ${storyResult.narration.documentPath} missing; skipping copy`,
     );
@@ -242,11 +248,7 @@ async function copyStoryToTemplate(
   }
 
   const targetDocPath = `${getTemplateDocRef(sessionId)}/media/${planItemId}`;
-  await setFirestoreDocument({
-    serviceAccountJson,
-    documentPath: targetDocPath,
-    data: snapshot.data,
-  });
+  await setDoc(doc(firestore, targetDocPath), snapshot.data() ?? {});
   console.log(
     `[welcome/${sessionId}] published story media to ${targetDocPath}`,
   );
@@ -269,11 +271,16 @@ async function writeQuizzesToTemplate(
   });
 
   const MAX_WRITES_PER_BATCH = 450;
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
   for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
-    await commitFirestoreWrites({
-      serviceAccountJson,
-      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
-    });
+    const batch = writeBatch(firestore);
+    for (const write of writes.slice(i, i + MAX_WRITES_PER_BATCH)) {
+      batch.set(doc(firestore, write.documentPath), write.data);
+    }
+    await batch.commit();
   }
   console.log(
     `[welcome/${sessionId}] published ${String(quizzes.length)} quizzes to template`,
@@ -297,11 +304,16 @@ async function writeProblemsToTemplate(
   });
 
   const MAX_WRITES_PER_BATCH = 450;
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
   for (let i = 0; i < writes.length; i += MAX_WRITES_PER_BATCH) {
-    await commitFirestoreWrites({
-      serviceAccountJson,
-      writes: writes.slice(i, i + MAX_WRITES_PER_BATCH),
-    });
+    const batch = writeBatch(firestore);
+    for (const write of writes.slice(i, i + MAX_WRITES_PER_BATCH)) {
+      batch.set(doc(firestore, write.documentPath), write.data);
+    }
+    await batch.commit();
   }
   console.log(
     `[welcome/${sessionId}] published ${String(problems.length)} problems to template`,
@@ -346,12 +358,18 @@ async function writeTemplateDoc(
     "problemsGrade",
     "storyTitle",
   ];
-  await patchFirestoreDocument({
-    serviceAccountJson,
-    documentPath: templateDoc,
-    updates: stripUndefined(payload),
-    deletes: draftFieldsToDelete,
-  });
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson }, serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(firestore, templateDoc),
+    buildFirestoreMergeData({
+      updates: stripUndefined(payload),
+      deletes: draftFieldsToDelete,
+    }),
+    { merge: true },
+  );
 }
 
 async function main(): Promise<void> {

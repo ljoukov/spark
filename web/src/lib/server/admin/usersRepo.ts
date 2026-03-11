@@ -1,10 +1,17 @@
 import { FirestoreTimestampSchema } from '@spark/schemas';
-import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	queryFirestoreDocuments
-} from '$lib/server/gcp/firestoreRest';
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	where
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
+import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
@@ -81,15 +88,15 @@ function mergeUserId(userId: string, profile: z.infer<typeof userDocSchema>): Ad
 
 export async function getAdminUserProfile(userId: string): Promise<AdminUserProfile | null> {
 	const uid = userIdSchema.parse(userId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath: `spark/${uid}`
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, `spark/${uid}`));
+	if (!snapshot.exists) {
 		return null;
 	}
 
-	const parsed = userDocSchema.safeParse(snapshot.data);
+	const parsed = userDocSchema.safeParse(snapshot.data());
 	if (!parsed.success) {
 		console.warn('Unable to parse admin user profile', uid, parsed.error);
 		return mergeUserId(uid, userDocSchema.parse({}));
@@ -101,20 +108,21 @@ export async function listAdminUserProfiles(options?: {
 	limit?: number;
 	orderBy?: string;
 }): Promise<AdminUserProfile[]> {
-	const limit = options?.limit ?? 50;
-	const orderBy = options?.orderBy ?? 'lastLoginAt desc';
-
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: 'spark',
-		limit,
-		orderBy
-	});
+	const pageSize = options?.limit ?? 50;
+	const ordering = options?.orderBy ?? 'lastLoginAt desc';
+	const [fieldPath, rawDirection] = ordering.split(/\s+/u);
+	const direction = rawDirection?.toLowerCase() === 'asc' ? 'asc' : 'desc';
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(collection(firestore, 'spark'), orderBy(fieldPath ?? 'lastLoginAt', direction), limitQuery(pageSize))
+	);
 
 	const users: AdminUserProfile[] = [];
-	for (const doc of docs) {
-		const uid = docIdFromPath(doc.documentPath);
-		const parsed = userDocSchema.safeParse(doc.data);
+	for (const userDoc of docs.docs) {
+		const uid = docIdFromPath(userDoc.ref.path);
+		const parsed = userDocSchema.safeParse(userDoc.data());
 		if (!parsed.success) {
 			console.warn('Unable to parse admin user profile', uid, parsed.error);
 			users.push(mergeUserId(uid, userDocSchema.parse({})));
@@ -128,17 +136,17 @@ export async function listAdminUserProfiles(options?: {
 
 export async function findAdminUsersByEmail(email: string): Promise<AdminUserProfile[]> {
 	const parsedEmail = emailSchema.parse(email);
-	const docs = await queryFirestoreDocuments({
-		serviceAccountJson: requireServiceAccountJson(),
-		collectionPath: 'spark',
-		where: { fieldPath: 'email', op: 'EQUAL', value: parsedEmail },
-		limit: 20
-	});
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(collection(firestore, 'spark'), where('email', '==', parsedEmail), limitQuery(20))
+	);
 
 	const users: AdminUserProfile[] = [];
-	for (const doc of docs) {
-		const uid = docIdFromPath(doc.documentPath);
-		const parsed = userDocSchema.safeParse(doc.data);
+	for (const userDoc of docs.docs) {
+		const uid = docIdFromPath(userDoc.ref.path);
+		const parsed = userDocSchema.safeParse(userDoc.data());
 		if (!parsed.success) {
 			console.warn('Unable to parse admin user profile', uid, parsed.error);
 			users.push(mergeUserId(uid, userDocSchema.parse({})));

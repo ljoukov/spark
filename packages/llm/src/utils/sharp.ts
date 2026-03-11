@@ -1,11 +1,14 @@
 import { createRequire } from "node:module";
 
+import { assertNodeRuntime } from "./runtime";
+
 type SharpModule = typeof import("sharp");
 
 let cachedSharp: SharpModule | undefined;
 
 export function getSharp(): SharpModule {
-  if (cachedSharp) {
+  assertNodeRuntime("sharp image processing");
+  if (cachedSharp !== undefined) {
     return cachedSharp;
   }
   const requireSharp = createRequire(import.meta.url);

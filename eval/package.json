@@ -35,6 +35,7 @@
     "session:story": "tsx src/code/generateTestStory.ts"
   },
   "dependencies": {
+    "@ljoukov/firebase-admin-cloudflare": "^0.0.2",
     "@ljoukov/llm": "4.0.11",
     "@spark/llm": "workspace:*",
     "@spark/schemas": "workspace:*",

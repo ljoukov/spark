@@ -5,6 +5,18 @@ import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { env } from '$env/dynamic/private';
 import { createTask } from '@spark/llm';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	documentId,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import {
 	SparkAgentStateSchema,
 	SparkAgentWorkspaceFileSchema
@@ -15,11 +27,6 @@ import {
 	upsertWorkspaceStorageLinkFileDoc,
 	upsertWorkspaceTextFileDoc
 } from '@spark/llm';
-import {
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
 
 const paramsSchema = z.object({
 	agentId: z.string().trim().min(1)
@@ -86,17 +93,16 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	const sourceAgentId = parsedParams.data.agentId;
 
 	const sourceDocPath = `users/${userId}/agents/${sourceAgentId}`;
-	const sourceSnapshot = await getFirestoreDocument({
-		serviceAccountJson,
-		documentPath: sourceDocPath
-	});
-	if (!sourceSnapshot.exists || !sourceSnapshot.data) {
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const sourceSnapshot = await getDoc(doc(firestore, sourceDocPath));
+	if (!sourceSnapshot.exists) {
 		return json({ error: 'not_found' }, { status: 404 });
 	}
 
 	const sourceParsed = SparkAgentStateSchema.safeParse({
 		id: sourceAgentId,
-		...sourceSnapshot.data
+		...sourceSnapshot.data()
 	});
 	if (!sourceParsed.success) {
 		return json({ error: 'invalid_source_agent' }, { status: 500 });
@@ -115,12 +121,11 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	const newAgentId = randomUUID();
 	const newWorkspaceId = randomUUID();
 	const now = new Date();
-	const retryMetadata = buildRetryAgentMetadata(sourceSnapshot.data);
+	const retryMetadata = buildRetryAgentMetadata(sourceSnapshot.data() ?? {});
 
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `users/${userId}/agents/${newAgentId}`,
-		data: {
+	await setDoc(
+		doc(firestore, `users/${userId}/agents/${newAgentId}`),
+		{
 			id: newAgentId,
 			prompt: sourceAgent.prompt,
 			status: 'created',
@@ -130,46 +135,51 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			statesTimeline: [{ state: 'created', timestamp: now }],
 			...retryMetadata
 		}
-	});
+	);
 
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `users/${userId}/workspace/${newWorkspaceId}`,
-		data: {
+	await setDoc(
+		doc(firestore, `users/${userId}/workspace/${newWorkspaceId}`),
+		{
 			id: newWorkspaceId,
 			agentId: newAgentId,
 			createdAt: now,
 			updatedAt: now
 		}
-	});
+	);
 
-	const sourceFiles = await listFirestoreDocuments({
-		serviceAccountJson,
-		collectionPath: buildWorkspaceFilesCollectionPath({
-			userId,
-			workspaceId: sourceAgent.workspaceId
-		}),
-		limit: 1000,
-		orderBy: 'path asc'
-	});
-	let copiedFileCount = 0;
-	for (const sourceFile of sourceFiles) {
-		const data = sourceFile.data ?? {};
+	const sourceFiles = await getDocs(
+		query(
+			collection(
+				firestore,
+				buildWorkspaceFilesCollectionPath({
+					userId,
+					workspaceId: sourceAgent.workspaceId
+				})
+			),
+			orderBy(documentId(), 'asc')
+		)
+	);
+	const sourceWorkspaceFiles = sourceFiles.docs.flatMap((sourceFile) => {
+		const data = sourceFile.data() ?? {};
 		const path = resolveWorkspaceFilePathFromFirestoreDocument({
-			documentPath: sourceFile.documentPath,
+			documentPath: sourceFile.ref.path,
 			storedPath: data.path
 		});
 		if (path.length === 0) {
-			continue;
+			return [];
 		}
 		const parsedSourceFile = SparkAgentWorkspaceFileSchema.safeParse({
 			...data,
 			path
 		});
 		if (!parsedSourceFile.success) {
-			continue;
+			return [];
 		}
-		const sourceWorkspaceFile = parsedSourceFile.data;
+		return [parsedSourceFile.data];
+	});
+	sourceWorkspaceFiles.sort((a, b) => a.path.localeCompare(b.path));
+	let copiedFileCount = 0;
+	for (const sourceWorkspaceFile of sourceWorkspaceFiles) {
 		if (sourceWorkspaceFile.type === 'storage_link') {
 			await upsertWorkspaceStorageLinkFileDoc({
 				serviceAccountJson,

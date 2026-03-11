@@ -4,9 +4,11 @@ import {
 	type PlanItemState,
 	type SessionState
 } from '@spark/schemas';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
-import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 
 const userIdSchema = z.string().trim().min(1, 'userId is required');
 const sessionIdSchema = z.string().trim().min(1, 'sessionId is required');
@@ -36,15 +38,15 @@ export function createEmptySessionState(sessionId: string): SessionState {
 
 export async function getSessionState(userId: string, sessionId: string): Promise<SessionState> {
 	const documentPath = resolveSessionStateDocPath(userId, sessionId);
-	const snapshot = await getFirestoreDocument({
-		serviceAccountJson: requireServiceAccountJson(),
-		documentPath
-	});
-	if (!snapshot.exists || !snapshot.data) {
+	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const snapshot = await getDoc(doc(firestore, documentPath));
+	if (!snapshot.exists) {
 		return createEmptySessionState(sessionId);
 	}
 
-	const raw = snapshot.data ?? {};
+	const raw = snapshot.data() ?? {};
 	return SessionStateSchema.parse({
 		sessionId: sessionIdSchema.parse(sessionId),
 		items: raw.items ?? {},
@@ -63,20 +65,17 @@ export async function savePlanItemState(
 	const sanitized = PlanItemStateSchema.parse(state);
 
 	const serviceAccountJson = requireServiceAccountJson();
-
-	// Ensure the document exists, then patch nested field paths without clobbering the whole items map.
-	await patchFirestoreDocument({
-		serviceAccountJson,
-		documentPath,
-		updates: { sessionId: sessionIdSchema.parse(sessionId) }
-	});
-
-	await patchFirestoreDocument({
-		serviceAccountJson,
-		documentPath,
-		updates: {
-			lastUpdatedAt: new Date(),
-			[`items.${pid}`]: sanitized
-		}
-	});
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	await setDoc(
+		doc(firestore, documentPath),
+		buildFirestoreMergeData({
+			updates: {
+				sessionId: sessionIdSchema.parse(sessionId),
+				lastUpdatedAt: new Date(),
+				[`items.${pid}`]: sanitized
+			}
+		}),
+		{ merge: true }
+	);
 }

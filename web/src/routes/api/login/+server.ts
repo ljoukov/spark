@@ -1,8 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { z } from 'zod';
 import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { setAppSessionCookie } from '$lib/server/auth/sessionCookie';
-import { getFirestoreDocument, patchFirestoreDocument } from '$lib/server/gcp/firestoreRest';
+import { buildFirestoreMergeData } from '@spark/llm/utils/gcp/firestoreData';
 import { env } from '$env/dynamic/private';
 
 const bodySchema = z
@@ -58,8 +60,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	}
 
 	// Best-effort user doc upsert.
-	// This must be Workers-compatible; Firebase Admin Firestore uses gRPC/protobuf codegen
-	// and can throw EvalError on Cloudflare Workers.
 	try {
 		const nowIso = new Date().toISOString();
 		type FirebaseSignInClaim = { sign_in_provider?: string };
@@ -82,21 +82,23 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
 			throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is missing');
 		}
+		const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+		firestore.settings({ ignoreUndefinedProperties: true });
 
-		const existing = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: `spark/${user.uid}`
-		});
+		const existing = await getDoc(doc(firestore, `spark/${user.uid}`));
+		const existingData = existing.exists ? existing.data() : null;
 		const existingCreatedAt =
-			typeof existing.data?.createdAt === 'string' && existing.data.createdAt.trim().length > 0
-				? existing.data.createdAt
+			typeof existingData?.createdAt === 'string' && existingData.createdAt.trim().length > 0
+				? existingData.createdAt
 				: null;
 
-		await patchFirestoreDocument({
-			serviceAccountJson,
-			documentPath: `spark/${user.uid}`,
-			updates: { ...data, createdAt: existingCreatedAt ?? nowIso }
-		});
+		await setDoc(
+			doc(firestore, `spark/${user.uid}`),
+			buildFirestoreMergeData({
+				updates: { ...data, createdAt: existingCreatedAt ?? nowIso }
+			}),
+			{ merge: true }
+		);
 	} catch (error) {
 		console.warn('Login user doc upsert failed (continuing)', {
 			error: error instanceof Error ? error.message : String(error),

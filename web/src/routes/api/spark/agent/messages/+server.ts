@@ -33,11 +33,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { z } from 'zod';
-import {
-	getFirestoreDocument,
-	patchFirestoreDocument,
-	setFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import { doc, getDoc, getFirestore, setDoc } from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { parseGoogleServiceAccountJson } from '$lib/server/gcp/googleAccessToken';
 import { downloadStorageObject } from '$lib/server/gcp/storageRest';
 import { encodeBytesToBase64 } from '$lib/server/gcp/base64';
@@ -1126,6 +1123,8 @@ function buildSparkChatTools(options: {
 			sizeBytes: attachment.sizeBytes,
 			pageCount: attachment.pageCount
 		}));
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 	return {
 		list_lessons: tool({
 			description: 'List the user’s lessons (sessions), newest first, with status and progress.',
@@ -1233,16 +1232,15 @@ function buildSparkChatTools(options: {
 
 					const brief = buildLessonBrief(input, sourceText);
 
-					await setFirestoreDocument({
-						serviceAccountJson,
-						documentPath: `users/${userId}/workspace/${workspaceId}`,
-						data: {
+					await setDoc(
+						doc(firestore, `users/${userId}/workspace/${workspaceId}`),
+						{
 							id: workspaceId,
 							agentId,
 							createdAt: now,
 							updatedAt: now
 						}
-					});
+					);
 
 					await writeWorkspaceTextFile({
 						serviceAccountJson,
@@ -1479,10 +1477,9 @@ function buildSparkChatTools(options: {
 						'Do not publish into welcome templates.'
 					].join('\n');
 
-					await setFirestoreDocument({
-						serviceAccountJson,
-						documentPath: `users/${userId}/agents/${agentId}`,
-						data: {
+					await setDoc(
+						doc(firestore, `users/${userId}/agents/${agentId}`),
+						{
 							id: agentId,
 							prompt,
 							status: 'created',
@@ -1492,7 +1489,7 @@ function buildSparkChatTools(options: {
 							updatedAt: now,
 							statesTimeline: [{ state: 'created', timestamp: now }]
 						}
-					});
+					);
 
 					await createTask(
 						{
@@ -1535,14 +1532,14 @@ function buildSparkChatTools(options: {
 						error: serializeErrorForLog(error)
 					});
 					if (sessionSaved && sessionId) {
-						await patchFirestoreDocument({
-							serviceAccountJson,
-							documentPath: `spark/${userId}/sessions/${sessionId}`,
-							updates: {
+						await setDoc(
+							doc(firestore, `spark/${userId}/sessions/${sessionId}`),
+							{
 								status: 'error',
 								tagline: 'Lesson creation failed. Please try again.'
-							}
-						}).catch(() => undefined);
+							},
+							{ merge: true }
+						).catch(() => undefined);
 					}
 					throw error;
 				}
@@ -1574,16 +1571,15 @@ function buildSparkChatTools(options: {
 						updatedAt: plan.createdAt
 					});
 					runCreated = true;
-					await setFirestoreDocument({
-						serviceAccountJson,
-						documentPath: `users/${userId}/workspace/${plan.workspaceId}`,
-						data: {
+					await setDoc(
+						doc(firestore, `users/${userId}/workspace/${plan.workspaceId}`),
+						{
 							id: plan.workspaceId,
 							agentId: plan.agentId,
 							createdAt: plan.createdAt,
 							updatedAt: plan.createdAt
 						}
-					});
+					);
 					await Promise.all([
 						writeWorkspaceTextFile({
 							serviceAccountJson,
@@ -1636,10 +1632,9 @@ function buildSparkChatTools(options: {
 							})
 						)
 					]);
-					await setFirestoreDocument({
-						serviceAccountJson,
-						documentPath: `users/${userId}/agents/${plan.agentId}`,
-						data: {
+					await setDoc(
+						doc(firestore, `users/${userId}/agents/${plan.agentId}`),
+						{
 							id: plan.agentId,
 							prompt: plan.prompt,
 							status: 'created',
@@ -1653,7 +1648,7 @@ function buildSparkChatTools(options: {
 							updatedAt: plan.createdAt,
 							statesTimeline: [{ state: 'created', timestamp: plan.createdAt }]
 						}
-					});
+					);
 					await createTask(
 						{
 							type: 'runAgent',
@@ -1972,14 +1967,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		now
 	).conversation;
 	let conversationAttachments: SparkAgentAttachment[] = [];
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 
 	try {
-		const snapshot = await getFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath
-		});
+		const snapshot = await getDoc(doc(firestore, conversationDocPath));
 		const resolvedConversation = resolveConversationDoc(
-			snapshot.exists ? (snapshot.data ?? undefined) : undefined,
+			snapshot.exists ? snapshot.data() : undefined,
 			userId,
 			conversationId,
 			now
@@ -2064,17 +2058,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	conversation.attachments = conversationAttachments;
 
 	try {
-		await setFirestoreDocument({
-			serviceAccountJson,
-			documentPath: conversationDocPath,
-			data: toConversationPayload({
+		await setDoc(
+			doc(firestore, conversationDocPath),
+			toConversationPayload({
 				...conversation,
 				updatedAt: now,
 				lastMessageAt: now,
 				messages: conversation.messages,
 				attachments: conversationAttachments
 			})
-		});
+		);
 	} catch (error) {
 		console.error('Spark AI Agent conversation write failed', {
 			userId,
@@ -2127,15 +2120,15 @@ export const POST: RequestHandler = async ({ request }) => {
 				updateAssistantMessageText(conversation, assistantMessageId, assistantText);
 				conversation.updatedAt = nowTimestampValue;
 				conversation.lastMessageAt = nowTimestampValue;
-				await patchFirestoreDocument({
-					serviceAccountJson,
-					documentPath: conversationDocPath,
-					updates: {
+				await setDoc(
+					doc(firestore, conversationDocPath),
+					{
 						updatedAt: nowTimestampValue,
 						lastMessageAt: nowTimestampValue,
 						messages: conversation.messages
-					}
-				});
+					},
+					{ merge: true }
+				);
 				lastUpdate = Date.now();
 			} finally {
 				flushInFlight = false;

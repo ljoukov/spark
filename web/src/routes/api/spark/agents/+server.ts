@@ -1,4 +1,15 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	doc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	orderBy,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
@@ -6,7 +17,6 @@ import { authenticateApiRequest } from '$lib/server/auth/apiAuth';
 import { createTask } from '@spark/llm';
 import { SparkAgentStateSchema, type SparkAgentState } from '@spark/schemas';
 import { env } from '$env/dynamic/private';
-import { listFirestoreDocuments, setFirestoreDocument } from '$lib/server/gcp/firestoreRest';
 
 const requestSchema = z.object({
 	prompt: z.string().trim().min(1),
@@ -46,18 +56,17 @@ export const GET: RequestHandler = async ({ request }) => {
 	const userId = authResult.user.uid;
 
 	const serviceAccountJson = requireServiceAccountJson();
-	const docs = await listFirestoreDocuments({
-		serviceAccountJson,
-		collectionPath: `users/${userId}/agents`,
-		limit: 50,
-		orderBy: 'createdAt desc'
-	});
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const docs = await getDocs(
+		query(collection(firestore, `users/${userId}/agents`), orderBy('createdAt', 'desc'), limitQuery(50))
+	);
 
 	const agents: SparkAgentState[] = [];
-	for (const doc of docs) {
+	for (const agentDoc of docs.docs) {
 		const parsed = SparkAgentStateSchema.safeParse({
-			id: docIdFromPath(doc.documentPath),
-			...doc.data
+			id: docIdFromPath(agentDoc.ref.path),
+			...agentDoc.data()
 		});
 		if (!parsed.success) {
 			continue;
@@ -75,6 +84,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	const userId = authResult.user.uid;
 	const serviceAccountJson = requireServiceAccountJson();
+	const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+	firestore.settings({ ignoreUndefinedProperties: true });
 	const tasksEnv = requireTasksEnv();
 
 	let parsed: z.infer<typeof requestSchema>;
@@ -91,10 +102,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const workspaceId = parsed.workspaceId ?? randomUUID();
 	const now = new Date();
 
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `users/${userId}/agents/${agentId}`,
-		data: {
+	await setDoc(doc(firestore, `users/${userId}/agents/${agentId}`), {
 		id: agentId,
 		prompt: parsed.prompt,
 		status: 'created',
@@ -102,18 +110,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		createdAt: now,
 		updatedAt: now,
 		statesTimeline: [{ state: 'created', timestamp: now }]
-		}
 	});
 
-	await setFirestoreDocument({
-		serviceAccountJson,
-		documentPath: `users/${userId}/workspace/${workspaceId}`,
-		data: {
-			id: workspaceId,
-			agentId,
-			createdAt: now,
-			updatedAt: now
-		}
+	await setDoc(doc(firestore, `users/${userId}/workspace/${workspaceId}`), {
+		id: workspaceId,
+		agentId,
+		createdAt: now,
+		updatedAt: now
 	});
 
 	await createTask({

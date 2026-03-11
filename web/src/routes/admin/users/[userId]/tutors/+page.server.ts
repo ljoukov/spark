@@ -1,15 +1,21 @@
-import {
-	deleteFirestoreDocument,
-	getFirestoreDocument,
-	listFirestoreDocuments,
-	patchFirestoreDocument
-} from '$lib/server/gcp/firestoreRest';
 import { getGraderRun } from '$lib/server/grader/repo';
 import {
 	listTutorSessions,
 	resolveTutorSessionDocPath
 } from '$lib/server/tutorSessions/repo';
 import { env } from '$env/dynamic/private';
+import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
+import {
+	collection,
+	deleteDoc,
+	doc,
+	getDoc,
+	getDocs,
+	getFirestore,
+	limit as limitQuery,
+	query,
+	setDoc
+} from '@ljoukov/firebase-admin-cloudflare/firestore';
 import { fail } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
@@ -41,23 +47,22 @@ async function deleteWorkspaceTree(options: {
 	userId: string;
 	workspaceId: string;
 }): Promise<void> {
-	const fileDocs = await listFirestoreDocuments({
-		serviceAccountJson: options.serviceAccountJson,
-		collectionPath: `users/${options.userId}/workspace/${options.workspaceId}/files`,
-		limit: 500
-	});
+	const firestore = getFirestore(
+		initializeApp({ serviceAccountJson: options.serviceAccountJson }, options.serviceAccountJson)
+	);
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const fileDocs = await getDocs(
+		query(
+			collection(firestore, `users/${options.userId}/workspace/${options.workspaceId}/files`),
+			limitQuery(500)
+		)
+	);
 
-	for (const doc of fileDocs) {
-		await deleteFirestoreDocument({
-			serviceAccountJson: options.serviceAccountJson,
-			documentPath: doc.documentPath
-		});
+	for (const fileDoc of fileDocs.docs) {
+		await deleteDoc(fileDoc.ref);
 	}
 
-	await deleteFirestoreDocument({
-		serviceAccountJson: options.serviceAccountJson,
-		documentPath: `users/${options.userId}/workspace/${options.workspaceId}`
-	});
+	await deleteDoc(doc(firestore, `users/${options.userId}/workspace/${options.workspaceId}`));
 }
 
 async function clearCurrentSessionIfDeleted(options: {
@@ -66,19 +71,16 @@ async function clearCurrentSessionIfDeleted(options: {
 	sessionId: string;
 }): Promise<void> {
 	const userDocPath = `spark/${options.userId}`;
-	const userDoc = await getFirestoreDocument({
-		serviceAccountJson: options.serviceAccountJson,
-		documentPath: userDocPath
-	});
-	if (!userDoc.exists || userDoc.data?.currentSessionId !== options.sessionId) {
+	const firestore = getFirestore(
+		initializeApp({ serviceAccountJson: options.serviceAccountJson }, options.serviceAccountJson)
+	);
+	firestore.settings({ ignoreUndefinedProperties: true });
+	const userDoc = await getDoc(doc(firestore, userDocPath));
+	if (!userDoc.exists || userDoc.data()?.currentSessionId !== options.sessionId) {
 		return;
 	}
 
-	await patchFirestoreDocument({
-		serviceAccountJson: options.serviceAccountJson,
-		documentPath: userDocPath,
-		updates: { currentSessionId: null }
-	});
+	await setDoc(doc(firestore, userDocPath), { currentSessionId: null }, { merge: true });
 }
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -155,21 +157,17 @@ export const actions: Actions = {
 		}
 
 		try {
+			const firestore = getFirestore(initializeApp({ serviceAccountJson }, serviceAccountJson));
+			firestore.settings({ ignoreUndefinedProperties: true });
 			if (session.activeTurnAgentId) {
-				await deleteFirestoreDocument({
-					serviceAccountJson,
-					documentPath: `users/${userId}/agents/${session.activeTurnAgentId}`
-				});
+				await deleteDoc(doc(firestore, `users/${userId}/agents/${session.activeTurnAgentId}`));
 			}
 			await deleteWorkspaceTree({
 				serviceAccountJson,
 				userId,
 				workspaceId: session.workspaceId
 			});
-			await deleteFirestoreDocument({
-				serviceAccountJson,
-				documentPath: resolveTutorSessionDocPath(userId, sessionId)
-			});
+			await deleteDoc(doc(firestore, resolveTutorSessionDocPath(userId, sessionId)));
 			await clearCurrentSessionIfDeleted({
 				serviceAccountJson,
 				userId,

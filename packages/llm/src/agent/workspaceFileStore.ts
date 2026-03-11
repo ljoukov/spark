@@ -5,8 +5,14 @@ import path from "node:path";
 import {
   type SparkAgentWorkspaceFile,
 } from "@spark/schemas";
+import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
+import {
+  doc,
+  getFirestore,
+  setDoc,
+} from "@ljoukov/firebase-admin-cloudflare/firestore";
 
-import { patchFirestoreDocument } from "../utils/gcp/firestoreRest";
+import { buildFirestoreMergeData } from "../utils/gcp/firestoreData";
 import { uploadStorageObject } from "../utils/gcp/storageRest";
 
 export function encodeWorkspaceFileId(filePath: string): string {
@@ -149,23 +155,32 @@ export async function upsertWorkspaceTextFileDoc(options: {
   createdAt: Date;
   updatedAt: Date;
 }): Promise<void> {
-  await patchFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: buildWorkspaceFileDocPath({
-      userId: options.userId,
-      workspaceId: options.workspaceId,
-      filePath: options.filePath,
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson: options.serviceAccountJson }, options.serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(
+      firestore,
+      buildWorkspaceFileDocPath({
+        userId: options.userId,
+        workspaceId: options.workspaceId,
+        filePath: options.filePath,
+      }),
+    ),
+    buildFirestoreMergeData({
+      updates: {
+        path: options.filePath,
+        content: options.content,
+        ...(options.contentType ? { contentType: options.contentType } : {}),
+        sizeBytes: Buffer.byteLength(options.content, "utf8"),
+        createdAt: options.createdAt,
+        updatedAt: options.updatedAt,
+      },
+      deletes: ["type", "storagePath", "id", "filename", "pageCount"],
     }),
-    updates: {
-      path: options.filePath,
-      content: options.content,
-      ...(options.contentType ? { contentType: options.contentType } : {}),
-      sizeBytes: Buffer.byteLength(options.content, "utf8"),
-      createdAt: options.createdAt,
-      updatedAt: options.updatedAt,
-    },
-    deletes: ["type", "storagePath", "id", "filename", "pageCount"],
-  });
+    { merge: true },
+  );
 }
 
 export async function upsertWorkspaceStorageLinkFileDoc(options: {
@@ -179,24 +194,33 @@ export async function upsertWorkspaceStorageLinkFileDoc(options: {
   createdAt: Date;
   updatedAt: Date;
 }): Promise<void> {
-  await patchFirestoreDocument({
-    serviceAccountJson: options.serviceAccountJson,
-    documentPath: buildWorkspaceFileDocPath({
-      userId: options.userId,
-      workspaceId: options.workspaceId,
-      filePath: options.filePath,
+  const firestore = getFirestore(
+    initializeApp({ serviceAccountJson: options.serviceAccountJson }, options.serviceAccountJson),
+  );
+  firestore.settings({ ignoreUndefinedProperties: true });
+  await setDoc(
+    doc(
+      firestore,
+      buildWorkspaceFileDocPath({
+        userId: options.userId,
+        workspaceId: options.workspaceId,
+        filePath: options.filePath,
+      }),
+    ),
+    buildFirestoreMergeData({
+      updates: {
+        path: options.filePath,
+        type: "storage_link",
+        storagePath: options.storagePath,
+        contentType: normalizeContentType(options.contentType),
+        sizeBytes: options.sizeBytes,
+        createdAt: options.createdAt,
+        updatedAt: options.updatedAt,
+      },
+      deletes: ["content", "id", "filename", "pageCount"],
     }),
-    updates: {
-      path: options.filePath,
-      type: "storage_link",
-      storagePath: options.storagePath,
-      contentType: normalizeContentType(options.contentType),
-      sizeBytes: options.sizeBytes,
-      createdAt: options.createdAt,
-      updatedAt: options.updatedAt,
-    },
-    deletes: ["content", "id", "filename", "pageCount"],
-  });
+    { merge: true },
+  );
 }
 
 export async function persistWorkspaceFileFromLocalFs(options: {
