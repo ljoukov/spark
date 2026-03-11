@@ -613,13 +613,13 @@
 		let stop: (() => void) | null = null;
 		let cancelled = false;
 		void import('firebase/firestore')
-			.then(({ collection, getFirestore, limit, onSnapshot, orderBy, query }) => {
+			.then(({ collection, documentId, getFirestore, limit, onSnapshot, orderBy, query }) => {
 				if (cancelled) {
 					return;
 				}
 				const db = getFirestore(getFirebaseApp());
 				const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
-				const filesQuery = query(filesRef, orderBy('path', 'asc'), limit(200));
+				const filesQuery = query(filesRef, orderBy(documentId(), 'asc'), limit(200));
 				stop = onSnapshot(
 					filesQuery,
 					(snapshot) => {
@@ -639,6 +639,7 @@
 							}
 							nextFiles.push(parsed.data);
 						}
+						nextFiles.sort((a, b) => a.path.localeCompare(b.path));
 						files = nextFiles;
 					},
 					(snapshotError) => {

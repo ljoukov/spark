@@ -8,6 +8,7 @@ import { createTask } from '@spark/llm';
 import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
 	collection,
+	documentId,
 	doc,
 	getDoc,
 	getDocs,
@@ -156,28 +157,31 @@ export const POST: RequestHandler = async ({ request, params }) => {
 					workspaceId: sourceAgent.workspaceId
 				})
 			),
-			orderBy('path', 'asc'),
+			orderBy(documentId(), 'asc'),
 			limitQuery(1000)
 		)
 	);
-	let copiedFileCount = 0;
-	for (const sourceFile of sourceFiles.docs) {
+	const sourceWorkspaceFiles = sourceFiles.docs.flatMap((sourceFile) => {
 		const data = sourceFile.data() ?? {};
 		const path = resolveWorkspaceFilePathFromFirestoreDocument({
 			documentPath: sourceFile.ref.path,
 			storedPath: data.path
 		});
 		if (path.length === 0) {
-			continue;
+			return [];
 		}
 		const parsedSourceFile = SparkAgentWorkspaceFileSchema.safeParse({
 			...data,
 			path
 		});
 		if (!parsedSourceFile.success) {
-			continue;
+			return [];
 		}
-		const sourceWorkspaceFile = parsedSourceFile.data;
+		return [parsedSourceFile.data];
+	});
+	sourceWorkspaceFiles.sort((a, b) => a.path.localeCompare(b.path));
+	let copiedFileCount = 0;
+	for (const sourceWorkspaceFile of sourceWorkspaceFiles) {
 		if (sourceWorkspaceFile.type === 'storage_link') {
 			await upsertWorkspaceStorageLinkFileDoc({
 				serviceAccountJson,

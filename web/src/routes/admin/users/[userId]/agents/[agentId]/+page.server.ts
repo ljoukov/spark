@@ -1,6 +1,7 @@
 import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
 	collection,
+	documentId,
 	doc,
 	getDoc,
 	getDocs,
@@ -175,7 +176,7 @@ export const load: PageServerLoad = async ({ params }) => {
 					workspaceId: agent.workspaceId
 				})
 			),
-			orderBy('path', 'asc'),
+			orderBy(documentId(), 'asc'),
 			limitQuery(200)
 		)
 	);
@@ -196,6 +197,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		}
 		files.push(parsed.data);
 	}
+	files.sort((a, b) => a.path.localeCompare(b.path));
 
 	let log: SparkAgentRunLog | null = null;
 	const logSnap = await getDoc(doc(firestore, `${agentDocPath}/logs/log`));

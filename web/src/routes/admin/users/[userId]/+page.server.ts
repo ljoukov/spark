@@ -7,6 +7,7 @@ import { env } from '$env/dynamic/private';
 import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
 	collection,
+	deleteField,
 	deleteDoc,
 	doc,
 	getDoc,
@@ -92,7 +93,7 @@ export const actions: Actions = {
 			firestore.settings({ ignoreUndefinedProperties: true });
 			await setDoc(
 				doc(firestore, `spark/${userId}/state/${sessionId}`),
-				{ sessionId, items: {}, lastUpdatedAt: new Date() },
+				{ sessionId, items: deleteField(), lastUpdatedAt: new Date() },
 				{ merge: true }
 			);
 
