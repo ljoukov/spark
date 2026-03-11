@@ -848,12 +848,11 @@
 					</div>
 					<div>
 						<span>Updated</span>
-						<p>
-							{formatTimestamp(agent.updatedAt)}
-							{#if runDurationLabel}
-								<span class="agents-detail__duration"> · Duration {runDurationLabel}</span>
-							{/if}
-						</p>
+						<p>{formatTimestamp(agent.updatedAt)}</p>
+					</div>
+					<div>
+						<span>Duration</span>
+						<p>{runDurationLabel ?? '—'}</p>
 					</div>
 				</div>
 
@@ -1231,10 +1230,6 @@
 		font-size: 1rem;
 		line-height: 1.55;
 		word-break: break-word;
-	}
-
-	.agents-detail__duration {
-		color: rgba(100, 116, 139, 0.8);
 	}
 
 	.agents-detail__meta {
