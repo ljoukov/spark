@@ -19,6 +19,7 @@ import { initializeApp } from "@ljoukov/firebase-admin-cloudflare/app";
 import {
   collection,
   deleteDoc,
+  documentId,
   doc,
   getDoc,
   getDocs,
@@ -2759,22 +2760,27 @@ class WorkspaceSync {
     const docs = await getDocs(
       query(
         collection(firestore, this.filesCollectionPath()),
-        orderBy("path", "asc"),
+        orderBy(documentId(), "asc"),
         limitQuery(1000),
       ),
     );
     if (docs.empty) {
       return;
     }
-    for (const workspaceDoc of docs.docs) {
+    const workspaceDocs = docs.docs.flatMap((workspaceDoc) => {
       const data = workspaceDoc.data() ?? {};
       const rawPath = resolveWorkspaceFilePathFromFirestoreDocument({
         documentPath: workspaceDoc.ref.path,
         storedPath: data.path,
       });
       if (!rawPath) {
-        continue;
+        return [];
       }
+      return [{ data, rawPath }];
+    });
+    workspaceDocs.sort((a, b) => a.rawPath.localeCompare(b.rawPath));
+    for (const workspaceDoc of workspaceDocs) {
+      const { data, rawPath } = workspaceDoc;
       const content = typeof data.content === "string" ? data.content : "";
       const createdAt = resolveFirestoreDate(data.createdAt);
       const updatedAt = resolveFirestoreDate(data.updatedAt);

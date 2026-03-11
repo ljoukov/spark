@@ -1,6 +1,7 @@
 import { initializeApp } from '@ljoukov/firebase-admin-cloudflare/app';
 import {
 	collection,
+	documentId,
 	doc,
 	getDoc,
 	getDocs,
@@ -501,7 +502,7 @@ export async function buildSparkAgentDownloadZip(args: {
 					workspaceId: agent.workspaceId
 				})
 			),
-			orderBy('path', 'asc'),
+			orderBy(documentId(), 'asc'),
 			limitQuery(1000)
 		)
 	);
@@ -522,6 +523,7 @@ export async function buildSparkAgentDownloadZip(args: {
 		}
 		workspaceFiles.push(parsed.data);
 	}
+	workspaceFiles.sort((a, b) => a.path.localeCompare(b.path));
 
 	const logSnap = await getDoc(doc(firestore, `${agentDocPath}/logs/log`));
 	const logDocPath = `${agentDocPath}/logs/log`;
