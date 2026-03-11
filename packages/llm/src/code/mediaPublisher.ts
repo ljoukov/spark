@@ -46,6 +46,30 @@ function roundTime(value: number): number {
   return Math.round(safe * 1000) / 1000;
 }
 
+function resolveFirestoreDate(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const toDate = (value as { toDate?: unknown }).toDate;
+  if (typeof toDate !== "function") {
+    return undefined;
+  }
+  const resolved = (toDate as (this: unknown) => unknown).call(value);
+  if (resolved instanceof Date) {
+    return resolved;
+  }
+  return undefined;
+}
+
 function normaliseImageStoragePath(imagePath: string): string {
   const path = imagePath.trim();
   if (!path) {
@@ -163,16 +187,9 @@ export async function publishSessionMediaClip(
   let createdAt = now;
   if (existing.exists) {
     const rawCreatedAt = existing.data()?.createdAt;
-    if (rawCreatedAt instanceof Date) {
-      createdAt = rawCreatedAt;
-    } else if (
-      typeof rawCreatedAt === "string" ||
-      typeof rawCreatedAt === "number"
-    ) {
-      const parsed = new Date(rawCreatedAt);
-      if (!Number.isNaN(parsed.getTime())) {
-        createdAt = parsed;
-      }
+    const resolvedCreatedAt = resolveFirestoreDate(rawCreatedAt);
+    if (resolvedCreatedAt) {
+      createdAt = resolvedCreatedAt;
     }
   }
 

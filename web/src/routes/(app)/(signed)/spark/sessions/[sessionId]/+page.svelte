@@ -205,13 +205,13 @@
 		let stop: (() => void) | null = null;
 		let cancelled = false;
 		void import('firebase/firestore')
-			.then(({ collection, documentId, getFirestore, limit, onSnapshot, orderBy, query }) => {
+			.then(({ collection, documentId, getFirestore, onSnapshot, orderBy, query }) => {
 				if (cancelled) {
 					return;
 				}
 				const db = getFirestore(getFirebaseApp());
 				const filesRef = collection(db, 'users', userId, 'workspace', workspaceId, 'files');
-				const filesQuery = query(filesRef, orderBy(documentId(), 'asc'), limit(200));
+				const filesQuery = query(filesRef, orderBy(documentId(), 'asc'));
 				stop = onSnapshot(
 					filesQuery,
 					(snapshot) => {

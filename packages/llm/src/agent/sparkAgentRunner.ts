@@ -2148,7 +2148,6 @@ class WorkspaceSync {
       query(
         collection(firestore, this.filesCollectionPath()),
         orderBy(documentId(), "asc"),
-        limitQuery(1000),
       ),
     );
     if (docs.empty) {

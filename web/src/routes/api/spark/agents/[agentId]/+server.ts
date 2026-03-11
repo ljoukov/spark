@@ -11,7 +11,6 @@ import {
 	getDoc,
 	getDocs,
 	getFirestore,
-	limit as limitQuery,
 	orderBy,
 	query
 } from '@ljoukov/firebase-admin-cloudflare/firestore';
@@ -96,8 +95,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 					workspaceId: agent.workspaceId
 				})
 			),
-			orderBy(documentId(), 'asc'),
-			limitQuery(200)
+			orderBy(documentId(), 'asc')
 		)
 	);
 
