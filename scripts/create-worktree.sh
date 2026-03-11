@@ -91,8 +91,34 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
+verify_bootstrap_path() {
+  local relative_path="$1"
+  if [ -e "$relative_path" ]; then
+    return 0
+  fi
+
+  echo "Missing bootstrap artifact: $relative_path" >&2
+  return 1
+}
+
+verify_bun_bootstrap() {
+  local ok=0
+
+  verify_bootstrap_path "web/node_modules/svelte-adapter-bun" || ok=1
+  verify_bootstrap_path "web/node_modules/@spark/llm" || ok=1
+  verify_bootstrap_path "web/node_modules/@spark/schemas" || ok=1
+
+  return "$ok"
+}
+
 # Ensure dev dependencies are present even if the caller exported NODE_ENV=production.
 export NODE_ENV=development
 bun install --frozen-lockfile
+
+if ! verify_bun_bootstrap; then
+  echo "Frozen Bun install left the workspace incomplete; rerunning bun install to repair it." >&2
+  bun install
+  verify_bun_bootstrap
+fi
 
 echo "Spark worktree ready at $target_path"
