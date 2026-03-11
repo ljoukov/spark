@@ -31,6 +31,8 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - write to `grader/output/transcription.md`.
    - in `instructions`, require separate sections for student submissions, problem statements, and official solutions, each with source filenames.
    - for student submissions, produce complete transcription, not a summary or retelling.
+   - when a page mixes printed prompt text and student-written answers (for example fill-in-the-blank work on the same sheet), explicitly distinguish the original prompt from the student's supplied response.
+   - if a student answer only makes sense with nearby prompt text, include the needed prompt fragment but label it clearly (for example `Prompt fragment:` and `Student response:`) so later grading never confuses the two.
    - for uploaded problem statements and official solutions, keep the source wording as verbatim as possible: preserve numbering, labels, examples, punctuation, variable names, and displayed math.
    - only fix obvious OCR/layout issues when meaning is unchanged; do NOT paraphrase, summarize, or rewrite problem statements into "cleaned" canonical wording.
    - if any problem-statement wording remains uncertain after extraction, mark the uncertainty explicitly instead of silently rewriting it.
@@ -70,6 +72,10 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - award marks fairly even when the student's method differs, if mathematically correct.
    - anchor grading and annotation to the numbered student statements so feedback can be read line-by-line against the transcript.
    - reference paper / mark-scheme / official solution URLs when available.
+   - keep the tone empathetic and teacherly: if an attempt is understandable, plausible, or nearly right, first say what makes sense before naming the gap.
+   - prefer a next-step cue, rule of thumb, contrast, or methodological direction before giving the answer away outright.
+   - do not treat a response as sufficient just because it points in the right direction; check whether it actually meets the task being asked.
+   - when the student has the right structure but misses one small word or piece, say that explicitly and identify the precise omission.
 7. Write one markdown file per problem under `grader/output/problems/`:
    - file path pattern: `grader/output/problems/<problem-id>.md`
    - use Markdown with LaTeX math notation (`$...$` and `$$...$$`) when writing mathematics.
@@ -89,9 +95,12 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - `## Official solution` should match the student's level, terminology, and method style where reasonable when it is a derived solution rather than an official one.
    - `## Student solution transcript` must contain the complete student solution transcription for that problem as an enumerated list of statements/sentences in source order (cleanly structured, but not retold).
    - in `## Student solution transcript`, preserve student variable names, formulas, terminology, and method choices as verbatim as possible; do not rename variables, alter formula text, or rewrite the method into a stronger one.
+   - when the student answered on the same page as the prompt, each relevant numbered transcript item must clearly separate original prompt text from the student's contributed answer.
    - `## Annotation and feedback` must be line-by-line against the numbered transcript: reference every numbered student line in order and explain whether it is correct, incomplete, unjustified, or irrelevant.
    - in `## Annotation and feedback`, keep numbering aligned with `## Student solution transcript` and quote the student text where useful.
    - every numbered student line should receive corresponding feedback, even if the note is brief.
+   - `## Annotation and feedback` should sound like a thoughtful reviewer, not a blunt judge: acknowledge sensible partial thinking before correction, especially on near-misses and omissions.
+   - if the task asks for a definition/explanation, do not accept loose synonyms alone; say what definitional meaning is still missing.
 8. Write run summary JSON to `grader/output/run-summary.json` with this shape:
 
 ```json

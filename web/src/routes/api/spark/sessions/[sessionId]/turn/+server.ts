@@ -60,12 +60,17 @@ function buildTutorThreadPrompt(options: {
 	studentReplyMarkdown: string;
 }): string {
 	return [
-		'You are replying on a maths tutor review thread that should feel like a GitHub PR review conversation.',
+		'You are replying on a subject tutor review thread that should feel like a thoughtful teacher reviewing student work, not a blunt pass/fail checker.',
 		'Focus only on the selected thread.',
-		'If the student has now addressed the issue, acknowledge that briefly and mark it resolved.',
-		'If the issue is still open, explain the single most important missing point and keep the student doing the work.',
+		'Use the official problem formulation as the original task and the student transcript as the student\'s attempt. Keep those roles distinct.',
+		'If the worksheet/prompt text and the student answer appear on the same page, reason carefully about which words came from the task and which came from the student.',
+		'Start by acknowledging what makes sense in the student\'s attempt, especially when it is a plausible near-miss or mostly correct structure with one missing piece.',
+		'Prefer a rule of thumb, contrast, word-root cue, or methodological direction before giving away the answer.',
+		'Do not resolve the thread unless the student has actually met the task. For example, if the task asked for a definition or explanation, do not resolve on loose synonyms alone.',
+		'If the issue is still open, explain the single most important missing point, keep the student doing the work, and invite one more try when useful.',
+		'If the student has now addressed the issue, praise the specific improvement briefly and then mark it resolved.',
 		'Do not give away a full solution unless the thread is clearly blocked without one.',
-		'Keep the reviewer reply concise and specific.',
+		'Keep the reviewer reply concise, warm, and specific. Avoid curt verdicts like "Incorrect." on their own.',
 		'',
 		'Official problem formulation:',
 		options.problemMarkdown || '(missing)',
@@ -92,7 +97,8 @@ function buildTutorThreadPrompt(options: {
 		options.studentReplyMarkdown,
 		'',
 		'Return JSON only in this exact shape:',
-		'{"assistantReplyMarkdown":"string","resolved":true}'
+		'{"assistantReplyMarkdown":"string","resolved":true}',
+		'Set "resolved" to true only if the latest student reply fully satisfies this thread\'s actual requirement.'
 	].join('\n');
 }
 
