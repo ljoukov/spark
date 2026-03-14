@@ -1,10 +1,13 @@
 <script lang="ts">
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount, tick } from 'svelte';
 	import { getContext } from 'svelte';
 	import { fromStore, type Readable } from 'svelte/store';
+	import { z } from 'zod';
 	import {
 		collection,
 		doc,
@@ -41,6 +44,25 @@
 		storagePath: string;
 		contentType: string;
 	};
+	const cloudLogEntrySchema = z.object({
+		insertId: z.string().nullable(),
+		timestamp: z.string(),
+		severity: z.string(),
+		source: z.string(),
+		logName: z.string(),
+		message: z.string(),
+		requestUrl: z.string().nullable(),
+		httpStatus: z.number().nullable(),
+		userId: z.string().nullable(),
+		agentId: z.string().nullable(),
+		workspaceId: z.string().nullable()
+	});
+	const cloudLogsResponseSchema = z.object({
+		agentId: z.string(),
+		workspaceId: z.string(),
+		logs: z.array(cloudLogEntrySchema)
+	});
+	type CloudLogEntry = z.infer<typeof cloudLogEntrySchema>;
 
 	const userStore = getContext<Readable<ClientUser> | undefined>('spark:user');
 	const userSnapshot = userStore ? fromStore(userStore) : null;
@@ -67,6 +89,12 @@
 	let authReady = $state(false);
 	let runLogFollow = $state(true);
 	let runLogLines = $state<RunLogLineView[]>([]);
+	let cloudLogs = $state<CloudLogEntry[]>([]);
+	let cloudLogsLoading = $state(false);
+	let cloudLogsError = $state<string | null>(null);
+	let cloudLogsLoadedAt = $state<Date | null>(null);
+	let cloudLogsRequestSeq = 0;
+	let expandedCloudLogRows = $state<Record<string, boolean>>({});
 
 	let runLogScrollEl = $state<HTMLDivElement | null>(null);
 	let runLogScrollFrame: number | null = null;
@@ -157,6 +185,9 @@
 		return agent.status === 'failed';
 	});
 	const canRetry = $derived.by(() => showRetryButton && !retrySubmitting);
+	const cloudLogsNewestFirst = $derived.by(() =>
+		[...cloudLogs].sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+	);
 
 	function formatUsd(value: number | undefined): string {
 		if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -219,6 +250,55 @@
 		}
 		const mb = kb / 1024;
 		return `${mb.toFixed(1)} MB`;
+	}
+
+	function formatIsoTimestamp(value: string | null): string {
+		if (!value) {
+			return '—';
+		}
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return value;
+		}
+		return formatTimestamp(date);
+	}
+
+	function compactLogText(message: string, requestUrl: string | null): string {
+		const messageText = message.replace(/\s+/g, ' ').trim();
+		if (requestUrl && !messageText.includes(requestUrl)) {
+			return `${messageText} ${requestUrl}`.trim();
+		}
+		return messageText;
+	}
+
+	function expandedLogText(message: string, requestUrl: string | null): string {
+		const messageText = message.replace(/\r\n/g, '\n').trimEnd();
+		if (requestUrl && !messageText.includes(requestUrl)) {
+			return messageText.length > 0 ? `${messageText}\n${requestUrl}` : requestUrl;
+		}
+		return messageText;
+	}
+
+	function getCloudLogRowKey(entry: CloudLogEntry, index: number): string {
+		return `${entry.insertId ?? entry.timestamp}-${index}`;
+	}
+
+	function isMessageExpandable(text: string): boolean {
+		return text.length > 100;
+	}
+
+	function truncateMessage(text: string): string {
+		if (!isMessageExpandable(text)) {
+			return text;
+		}
+		return `${text.slice(0, 100)}…`;
+	}
+
+	function toggleCloudLogRow(key: string): void {
+		expandedCloudLogRows = {
+			...expandedCloudLogRows,
+			[key]: !expandedCloudLogRows[key]
+		};
 	}
 
 	function decodeFileId(value: string): string {
@@ -518,6 +598,53 @@
 		}
 	}
 
+	async function refreshCloudLogs(options: { silent?: boolean } = {}): Promise<void> {
+		if (!browser || !runId || !userId || !authReady) {
+			return;
+		}
+
+		const requestSeq = ++cloudLogsRequestSeq;
+		if (!options.silent) {
+			cloudLogsLoading = true;
+		}
+		cloudLogsError = null;
+
+		try {
+			const params = new URLSearchParams({
+				limit: '120',
+				lookbackHours: '48'
+			});
+			const response = await fetch(
+				`/api/spark/agents/${encodeURIComponent(runId)}/cloud-logs?${params.toString()}`,
+				{
+					method: 'GET'
+				}
+			);
+			if (!response.ok) {
+				const payload = await response.json().catch(() => null);
+				throw new Error(payload?.error ?? payload?.message ?? 'cloud_logs_failed');
+			}
+			const parsed = cloudLogsResponseSchema.parse(await response.json());
+			if (requestSeq !== cloudLogsRequestSeq) {
+				return;
+			}
+			cloudLogs = parsed.logs;
+			cloudLogsLoadedAt = new Date();
+		} catch (cloudLogsFailure) {
+			if (requestSeq !== cloudLogsRequestSeq) {
+				return;
+			}
+			cloudLogsError =
+				cloudLogsFailure instanceof Error
+					? cloudLogsFailure.message
+					: 'Unable to load Cloud logs right now.';
+		} finally {
+			if (requestSeq === cloudLogsRequestSeq) {
+				cloudLogsLoading = false;
+			}
+		}
+	}
+
 	onMount(() => {
 		if (!browser) {
 			return;
@@ -588,6 +715,40 @@
 		);
 		return () => {
 			stop?.();
+		};
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		if (!userId || !runId || !authReady) {
+			cloudLogs = [];
+			cloudLogsLoading = false;
+			cloudLogsError = null;
+			cloudLogsLoadedAt = null;
+			return;
+		}
+
+		void refreshCloudLogs();
+	});
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+		if (!userId || !runId || !authReady) {
+			return;
+		}
+		if (agent?.status !== 'created' && agent?.status !== 'executing') {
+			return;
+		}
+
+		const intervalId = window.setInterval(() => {
+			void refreshCloudLogs({ silent: true });
+		}, 10_000);
+		return () => {
+			window.clearInterval(intervalId);
 		};
 	});
 
@@ -683,6 +844,11 @@
 		runLog = null;
 		runLogLines = [];
 		runLogFollow = true;
+		cloudLogs = [];
+		cloudLogsLoading = false;
+		cloudLogsError = null;
+		cloudLogsLoadedAt = null;
+		expandedCloudLogRows = {};
 		files = [];
 	});
 
@@ -1015,6 +1181,94 @@
 						</div>
 					{:else}
 						<p class="agents-empty">No logs yet.</p>
+					{/if}
+
+					<div class="agents-run__section-header">
+						<h3>Cloud logs</h3>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={cloudLogsLoading}
+							onclick={() => {
+								void refreshCloudLogs();
+							}}
+						>
+							{cloudLogsLoading ? 'Refreshing…' : 'Refresh'}
+						</Button>
+					</div>
+					{#if cloudLogsError}
+						<div class="agents-detail__error">
+							<p class="agents-detail__eyebrow">Cloud logs</p>
+							<p>{cloudLogsError}</p>
+						</div>
+					{:else if cloudLogsNewestFirst.length > 0}
+						<div class="agents-run__log" aria-label="Cloud logs">
+							<table class="min-w-full w-max border-collapse text-[11px]">
+								<thead class="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+									<tr>
+										<th class="px-2 py-2 font-medium whitespace-nowrap"></th>
+										<th class="px-3 py-2 font-medium whitespace-nowrap">Time</th>
+										<th class="px-3 py-2 font-medium whitespace-nowrap">Source</th>
+										<th class="px-3 py-2 font-medium whitespace-nowrap">Level</th>
+										<th class="px-3 py-2 font-medium">Message</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each cloudLogsNewestFirst as entry, index (getCloudLogRowKey(entry, index))}
+										{@const rowKey = getCloudLogRowKey(entry, index)}
+										{@const compactMessage = compactLogText(entry.message, entry.requestUrl)}
+										{@const fullMessage = expandedLogText(entry.message, entry.requestUrl)}
+										{@const expanded = expandedCloudLogRows[rowKey] === true}
+										<tr class="border-t border-border/50 align-top">
+											<td class="px-2 py-2 whitespace-nowrap text-center">
+												<button
+													type="button"
+													class="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+													aria-label={expanded ? 'Collapse log row' : 'Expand log row'}
+													aria-expanded={expanded}
+													onclick={() => {
+														toggleCloudLogRow(rowKey);
+													}}
+												>
+													{#if expanded}
+														<ChevronDownIcon class="size-4" />
+													{:else}
+														<ChevronRightIcon class="size-4" />
+													{/if}
+												</button>
+											</td>
+											<td class="px-3 py-2 whitespace-nowrap text-muted-foreground">
+												{formatIsoTimestamp(entry.timestamp)}
+											</td>
+											<td class="px-3 py-2 whitespace-nowrap text-muted-foreground">
+												{entry.source}
+											</td>
+											<td class="px-3 py-2 whitespace-nowrap text-muted-foreground">
+												{entry.httpStatus !== null ? `${entry.severity} ${entry.httpStatus}` : entry.severity}
+											</td>
+											<td class="px-3 py-2 font-mono">
+												{#if !expanded}
+													<span class="whitespace-nowrap">{truncateMessage(compactMessage)}</span>
+												{/if}
+											</td>
+										</tr>
+										{#if expanded}
+											<tr class="border-t border-border/30 bg-muted/10 align-top">
+												<td class="px-2 py-2"></td>
+												<td colspan="4" class="px-3 py-2">
+													<pre class="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5">{fullMessage}</pre>
+												</td>
+											</tr>
+										{/if}
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{:else}
+						<p class="agents-empty">No Cloud logs yet.</p>
+					{/if}
+					{#if cloudLogsLoadedAt}
+						<p class="agents-run__caption">Last refreshed {formatTimestamp(cloudLogsLoadedAt)}</p>
 					{/if}
 				</section>
 			</div>
@@ -1410,6 +1664,17 @@
 		font-size: 1rem;
 	}
 
+	.agents-run__section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.agents-run__section-header h3 {
+		margin-bottom: 0;
+	}
+
 	.agents-workspace__files ul {
 		list-style: none;
 		padding: 0;
@@ -1583,6 +1848,59 @@
 		word-break: break-word;
 	}
 
+	.agents-run__caption {
+		margin: 0;
+		font-size: 0.75rem;
+		color: rgba(100, 116, 139, 0.85);
+		word-break: break-word;
+	}
+
+	.agents-run__cloud-table {
+		display: grid;
+		grid-template-columns: minmax(10rem, 10rem) minmax(8rem, 8rem) minmax(9rem, 9rem) minmax(0, 1fr);
+		font-size: 0.74rem;
+		line-height: 1.25;
+	}
+
+	.agents-run__cloud-header,
+	.agents-run__cloud-row {
+		display: contents;
+	}
+
+	.agents-run__cloud-header > span {
+		padding: 0 0 0.45rem;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: rgba(100, 116, 139, 0.8);
+	}
+
+	.agents-run__cloud-row > span {
+		padding: 0.35rem 0;
+		border-top: 1px solid rgba(148, 163, 184, 0.12);
+	}
+
+	.agents-run__cloud-time,
+	.agents-run__cloud-level,
+	.agents-run__cloud-source {
+		padding-right: 0.75rem;
+		color: rgba(100, 116, 139, 0.86);
+	}
+
+	.agents-run__cloud-source,
+	.agents-run__cloud-level {
+		text-transform: uppercase;
+	}
+
+	.agents-run__cloud-message {
+		font-family:
+			'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	.file-dialog__backdrop {
 		position: fixed;
 		inset: 0;
@@ -1657,6 +1975,11 @@
 		.agents-run__log-line {
 			grid-template-columns: 1fr;
 			gap: 0.15rem;
+		}
+
+		.agents-run__cloud-table {
+			grid-template-columns: minmax(8.5rem, 8.5rem) minmax(6.5rem, 6.5rem) minmax(7rem, 7rem) minmax(0, 1fr);
+			font-size: 0.7rem;
 		}
 	}
 </style>

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import PackageIcon from '@lucide/svelte/icons/package';
-import UsersIcon from '@lucide/svelte/icons/users';
-import BotIcon from '@lucide/svelte/icons/bot';
-import MonitorIcon from '@lucide/svelte/icons/monitor';
-import DatabaseIcon from '@lucide/svelte/icons/database';
-import PlayIcon from '@lucide/svelte/icons/play';
-import ActivityIcon from '@lucide/svelte/icons/activity';
-import Volume2Icon from '@lucide/svelte/icons/volume-2';
+	import UsersIcon from '@lucide/svelte/icons/users';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import PlayIcon from '@lucide/svelte/icons/play';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import Volume2Icon from '@lucide/svelte/icons/volume-2';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -62,6 +63,12 @@ import Volume2Icon from '@lucide/svelte/icons/volume-2';
 			href: '/admin/tasks',
 			icon: PlayIcon,
 			highlight: (path) => path.startsWith('/admin/tasks')
+		},
+		{
+			title: 'Logs',
+			href: '/admin/logs',
+			icon: FileTextIcon,
+			highlight: (path) => path.startsWith('/admin/logs')
 		},
 		{
 			title: 'TTS',

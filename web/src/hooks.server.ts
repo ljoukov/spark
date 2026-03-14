@@ -2,9 +2,16 @@ import { isUserAdmin } from '$lib/server/utils/admin';
 import { AUTH_SESSION_COOKIE_NAME, AUTH_TOKEN_COOKIE_NAME } from '$lib/auth/constants';
 import { verifyFirebaseIdToken } from '$lib/server/utils/firebaseServer';
 import { readAppSessionCookieValue, setAppSessionCookie } from '$lib/server/auth/sessionCookie';
+import {
+	flushPendingCloudLogWrites,
+	installServerConsoleCloudLogging,
+	writeSparkCloudLog
+} from '$lib/server/gcp/logging';
 import { z } from 'zod';
 import { json, type Handle, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+
+installServerConsoleCloudLogging();
 
 if (typeof process !== 'undefined' && typeof process.on === 'function') {
 	process.on('unhandledRejection', (reason, promise) => {
@@ -16,7 +23,97 @@ if (process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE === undefined) {
 	process.env.CHATGPT_RESPONSES_WEBSOCKET_MODE = 'off';
 }
 
+type WaitUntilEvent = {
+	waitUntil?: (promise: Promise<void>) => void;
+	platform?: {
+		context?: {
+			waitUntil?: (promise: Promise<void>) => void;
+		};
+	};
+};
+
+function shouldLogRequest(pathname: string): boolean {
+	if (pathname.startsWith('/_app/') || pathname.startsWith('/favicon')) {
+		return false;
+	}
+
+	return (
+		pathname === '/' ||
+		pathname.startsWith('/admin') ||
+		pathname.startsWith('/api') ||
+		pathname.startsWith('/code') ||
+		pathname.startsWith('/login') ||
+		pathname.startsWith('/logout') ||
+		pathname.startsWith('/spark')
+	);
+}
+
+function readQueryParam(url: URL, name: string): string | undefined {
+	const value = url.searchParams.get(name)?.trim() ?? '';
+	return value.length > 0 ? value : undefined;
+}
+
+function readParam(
+	params: Partial<Record<string, string>>,
+	name: string
+): string | undefined {
+	const value = params[name]?.trim() ?? '';
+	return value.length > 0 ? value : undefined;
+}
+
+function extractRequestLogLabels(event: Parameters<Handle>[0]['event']): {
+	userId?: string;
+	agentId?: string;
+	workspaceId?: string;
+} {
+	const params = event.params as Partial<Record<string, string>>;
+	const pathname = event.url.pathname;
+
+	let agentId = readParam(params, 'agentId') ?? readQueryParam(event.url, 'agentId');
+	if (!agentId && pathname.startsWith('/spark/agents/')) {
+		agentId = readParam(params, 'runId');
+	}
+
+	return {
+		userId:
+			event.locals.appUser?.uid ??
+			readParam(params, 'userId') ??
+			readQueryParam(event.url, 'userId'),
+		agentId,
+		workspaceId: readParam(params, 'workspaceId') ?? readQueryParam(event.url, 'workspaceId')
+	};
+}
+
+function inferResponseStatus(response: Response | null, error: unknown): number | null {
+	if (response) {
+		return response.status;
+	}
+	if (typeof error === 'object' && error !== null && 'status' in error) {
+		const status = (error as { status?: unknown }).status;
+		return typeof status === 'number' && Number.isFinite(status) ? status : null;
+	}
+	return null;
+}
+
+function getWaitUntil(target: WaitUntilEvent): ((promise: Promise<void>) => void) | null {
+	return target.platform?.context?.waitUntil ?? target.waitUntil ?? null;
+}
+
+function severityForStatus(status: number | null): 'INFO' | 'WARNING' | 'ERROR' {
+	if (status !== null && status >= 500) {
+		return 'ERROR';
+	}
+	if (status !== null && status >= 400) {
+		return 'WARNING';
+	}
+	return 'INFO';
+}
+
 export const handle = (async ({ event, resolve }) => {
+	const requestStartedAt = Date.now();
+	let response: Response | null = null;
+	let requestError: unknown = null;
+
 	// Initialize app user locals to a known state
 	event.locals.appUser = null;
 	const pathname = event.url.pathname;
@@ -158,5 +255,39 @@ export const handle = (async ({ event, resolve }) => {
 		}
 	}
 
-	return await resolve(event);
+	try {
+		response = await resolve(event);
+		return response;
+	} catch (error) {
+		requestError = error;
+		throw error;
+	} finally {
+		if (shouldLogRequest(pathname)) {
+			const status = inferResponseStatus(response, requestError);
+			writeSparkCloudLog({
+				severity: severityForStatus(status),
+				source: 'spark-request',
+				message: `${event.request.method} ${status ?? 'ERR'} ${pathname}`,
+				labels: extractRequestLogLabels(event),
+				jsonPayload: {
+					logger: 'request',
+					method: event.request.method,
+					pathname,
+					requestUrl: event.url.toString(),
+					status,
+					durationMs: Date.now() - requestStartedAt,
+					userAgent: event.request.headers.get('user-agent'),
+					referer: event.request.headers.get('referer')
+				}
+			});
+		}
+
+		const flushPromise = flushPendingCloudLogWrites().catch(() => undefined);
+		const waitUntil = getWaitUntil(event as WaitUntilEvent);
+		if (waitUntil) {
+			waitUntil(flushPromise);
+		} else {
+			void flushPromise;
+		}
+	}
 }) satisfies Handle;

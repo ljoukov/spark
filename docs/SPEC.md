@@ -370,7 +370,10 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 - Web app uses JSON endpoints under `/api/*`; non-proto marketing endpoints remain separate (`/api/health`, `/api/newsletter`).
 - `POST /api/spark/agents` creates a new Spark Agent run, persists the agent doc, assigns a workspace, and schedules the `runAgent` task.
 - `POST /api/spark/agents/{agentId}/retry` retries a failed run by cloning the source prompt + retry-safe metadata (including attachment metadata such as `inputAttachments`/`graderInputAttachments`) into a new agent doc, copying workspace files into a fresh workspace, and scheduling a new `runAgent` task.
-- Logging & tracing: console logs captured via Cloudflare Workers logs/observability; include `jobId`, `uid`, `latency_ms`, and `stage` fields.
+- Logging & tracing:
+  - Server-side web runtimes mirror console logs plus one structured request log per request into Google Cloud Logging when `GOOGLE_SERVICE_ACCOUNT_JSON` is configured, even outside GCP-hosted deployments.
+  - Custom web log entries include platform/runtime metadata (`local`, `cloudflare`, `vercel`, `gcp`, etc.); local dev writes are enabled by default and can be disabled with `SPARK_DISABLE_CLOUD_LOGGING=1` (aliases `DISABLE_CLOUD_LOGGING=1` and `CLOUD_LOGGING_DISABLED=1` also work).
+  - Admin/operators can query Cloud Logging by `userId`, `agentId`, and `workspaceId`, alongside Cloud Run request/stdout/stderr logs and Cloud Tasks queue operation logs.
 
 ## 5) iOS App (SwiftUI)
 
@@ -415,6 +418,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   - The user-facing summary also renders Markdown. Metadata shows separate fields for the agent ID, workspace ID, created timestamp, updated timestamp, and elapsed duration, alongside the status timeline and a Stop button (only while `status` is `created`/`executing` and `stop_requested` is not set; after requesting stop, the UI shows a “stop requested” badge).
   - Failed runs show a Retry button in the run header; retrying creates a new agent run with the same prompt and retry-safe metadata, copies the prior workspace files into a new workspace, and starts a fresh task before navigating to the new run.
   - Run log view defaults to tailing the latest lines (auto-scrolls while pinned to bottom, stops auto-follow when the user scrolls up), preserves newline formatting inside each log entry, and shows the raw chronological log stream instead of appending a merged thought snapshot at the end.
+  - A separate `Cloud logs` section fetches Google Cloud Logging for the same run (filtered by the authenticated user plus agent/workspace identifiers) and supports manual refresh so crashed or partially-written runs still expose request/task/runtime logs even when Firestore log flushing stops early.
   - Workspace files (Markdown renders inline). Image files and image storage-link files are previewable in the modal, and `Raw` opens the underlying file/link target in a new tab.
   - A `Download zip` action that returns the full workspace contents (including LLM logs) plus a plain-text `agent.log` file for the run.
 - `/spark/lesson` hosts the Spark Lessons experience (quizzes, coding problems, media steps).
