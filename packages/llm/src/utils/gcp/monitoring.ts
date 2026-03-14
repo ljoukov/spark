@@ -1,3 +1,10 @@
+import {
+  configureTelemetry,
+  resetTelemetry,
+  type TelemetryConfig,
+  type TelemetryEvent,
+  type LlmTelemetryOperation,
+} from "@ljoukov/llm";
 import { z } from "zod";
 
 import {
@@ -13,6 +20,13 @@ const DEFAULT_NAMESPACE = "spark";
 const DEFAULT_LOCATION = "global";
 const DEFAULT_LABEL_VALUE = "n/a";
 const DEFAULT_METRIC_JOB = "spark-llm";
+const SPARK_LLM_TELEMETRY_OPERATION_LABELS = {
+  generateText: "generate_text",
+  streamText: "stream_text",
+  generateJson: "generate_json",
+  streamJson: "stream_json",
+  generateImages: "generate_images",
+} as const satisfies Record<LlmTelemetryOperation, string>;
 
 function createTimeoutSignal(timeoutMs: number): {
   signal: AbortSignal;
@@ -277,6 +291,26 @@ const ensuredSparkMetricDescriptorTypesByProject = new Map<
   string,
   Set<SparkMetricType>
 >();
+let configuredSparkTelemetryServiceAccountJson: string | null = null;
+
+function resolveSparkTelemetryOperationLabel(
+  operation: LlmTelemetryOperation,
+): string {
+  return SPARK_LLM_TELEMETRY_OPERATION_LABELS[operation];
+}
+
+function resolveSparkTelemetryStatus(
+  event: Extract<TelemetryEvent, { type: "llm.call.completed" }>,
+): "ok" | "blocked" | "error" {
+  if (!event.success) {
+    return "error";
+  }
+  return event.blocked ? "blocked" : "ok";
+}
+
+function resolveSparkAgentRunScope(depth: number): "primary" | "subagent" {
+  return depth > 0 ? "subagent" : "primary";
+}
 
 async function readMonitoringApiError(
   response: Response,
@@ -577,6 +611,72 @@ function getSparkMonitoringServiceAccountJsonFromEnv(): string | null {
     return null;
   }
   return raw;
+}
+
+export function configureSparkLlmTelemetryFromEnv(): void {
+  const serviceAccountJson = getSparkMonitoringServiceAccountJsonFromEnv();
+  if (!serviceAccountJson) {
+    if (configuredSparkTelemetryServiceAccountJson !== null) {
+      resetTelemetry();
+      configuredSparkTelemetryServiceAccountJson = null;
+    }
+    return;
+  }
+  if (configuredSparkTelemetryServiceAccountJson === serviceAccountJson) {
+    return;
+  }
+  configuredSparkTelemetryServiceAccountJson = serviceAccountJson;
+  configureTelemetry({
+    includeStreamEvents: false,
+    sink: {
+      emit: async (event): Promise<void> => {
+        if (event.type !== "llm.call.completed") {
+          return;
+        }
+        await publishSparkLlmCallMetricsFromEnv({
+          operation: resolveSparkTelemetryOperationLabel(event.operation),
+          model: event.model,
+          provider: event.provider,
+          status: resolveSparkTelemetryStatus(event),
+          latencyMs: event.durationMs,
+          totalTokens: event.usage?.totalTokens,
+          costUsd: event.costUsd,
+          taskId: event.callId,
+          timestamp: event.timestamp,
+        });
+      },
+      flush: async (): Promise<void> => {},
+    },
+  });
+}
+
+export function createSparkAgentRunTelemetryConfig(options: {
+  readonly agentType: string;
+  readonly job?: string;
+  readonly taskIdPrefix?: string;
+}): TelemetryConfig {
+  return {
+    includeStreamEvents: false,
+    sink: {
+      emit: async (event): Promise<void> => {
+        if (event.type !== "agent.run.completed") {
+          return;
+        }
+        await publishSparkAgentRunMetricFromEnv({
+          agentType: options.agentType,
+          status: event.success ? "ok" : "error",
+          scope: resolveSparkAgentRunScope(event.depth),
+          durationMs: event.durationMs,
+          job: options.job,
+          taskId: options.taskIdPrefix
+            ? `${options.taskIdPrefix}-${event.runId}`
+            : event.runId,
+          timestamp: event.timestamp,
+        });
+      },
+      flush: async (): Promise<void> => {},
+    },
+  };
 }
 
 export async function writeSparkMetricPointsFromEnv(

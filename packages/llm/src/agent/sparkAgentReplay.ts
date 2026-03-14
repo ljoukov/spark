@@ -46,6 +46,10 @@ import {
   type SparkAgentWorkspace,
 } from "./sparkAgentRunner";
 import { applyPdfTranscriptionSkillTools } from "./skills/pdfTranscription";
+import {
+  configureSparkLlmTelemetryFromEnv,
+  createSparkAgentRunTelemetryConfig,
+} from "../utils/gcp/monitoring";
 
 const DEFAULT_GRADER_MAX_STEPS = 200;
 const LOCAL_REPLAY_ATTACHMENT_MAX_COUNT = 24;
@@ -445,6 +449,7 @@ export async function runSparkGraderLocal(options: {
   const requestPayload = await loadLocalGraderRequestPayload({
     workspaceDir: options.workspaceDir,
   });
+  configureSparkLlmTelemetryFromEnv();
   const modelTools = resolveSparkGraderModelTools({
     input: requestPayload?.input,
   });
@@ -477,6 +482,11 @@ export async function runSparkGraderLocal(options: {
     ...(useSubagents ? { subagents: { promptPattern: "codex" as const } } : {}),
     maxSteps,
     ...(thinkingLevel ? { thinkingLevel } : {}),
+    telemetry: createSparkAgentRunTelemetryConfig({
+      agentType: "grader",
+      job: "spark-agent-replay",
+      taskIdPrefix: "spark-agent-replay",
+    }),
     logging: {
       workspaceDir: resolveSparkAgentLogsDir(options.workspaceDir),
       callLogsDir: "llm_calls",

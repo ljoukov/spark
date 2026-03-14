@@ -43,6 +43,7 @@ import type { OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
 import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
 import {
+  configureSparkLlmTelemetryFromEnv,
   publishSparkLlmCallMetricsFromEnv,
   publishSparkToolLoopStepMetricsFromEnv,
   resolveSparkMetricProviderLabel,
@@ -385,6 +386,7 @@ function resolveMetricsStatus(blocked: boolean): "ok" | "blocked" {
 
 export async function generateText(options: LlmTextCallOptions): Promise<string> {
   loadLocalEnv();
+  configureSparkLlmTelemetryFromEnv();
 
   const progress = options.progress ?? createFallbackProgress(options.modelId);
   const handle = progress.startModelCall({
@@ -405,6 +407,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
     imageSize: options.imageSize,
     thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
     openAiTextFormat: options.openAiTextFormat,
+    telemetry: false,
   });
 
   try {
@@ -464,6 +467,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
 
 export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T> {
   loadLocalEnv();
+  configureSparkLlmTelemetryFromEnv();
 
   const progress = options.progress ?? createFallbackProgress(options.modelId);
   const handle = progress.startModelCall({
@@ -499,6 +503,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
       ...(options.openAiSchemaName ? { openAiSchemaName: options.openAiSchemaName } : {}),
       ...(options.normalizeJson ? { normalizeJson: options.normalizeJson } : {}),
       thinkingLevel: resolveThinkingLevel(options.openAiReasoningEffort),
+      telemetry: false,
       onEvent: (event) => {
         if (event.type === "delta") {
           if (event.channel === "response") {
@@ -548,6 +553,7 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
 
 export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolLoopResult> {
   loadLocalEnv();
+  configureSparkLlmTelemetryFromEnv();
 
   const progress = options.progress ?? createFallbackProgress(options.modelId);
 
@@ -595,6 +601,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
   try {
     const result = await runAgentLoopV2({
       ...request,
+      telemetry: false,
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
     });
 
@@ -679,6 +686,7 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
 
 export async function generateImages(options: LlmGenerateImagesOptions): Promise<LlmImageData[]> {
   loadLocalEnv();
+  configureSparkLlmTelemetryFromEnv();
 
   void options.progress;
   void options.debug;
@@ -693,6 +701,7 @@ export async function generateImages(options: LlmGenerateImagesOptions): Promise
       maxAttempts: options.maxAttempts,
       imageAspectRatio: options.imageAspectRatio,
       imageSize: options.imageSize,
+      telemetry: false,
     });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_images",
@@ -718,6 +727,7 @@ export async function generateImageInBatches(
   options: LlmGenerateImagesOptions & { batchSize: number; overlapSize: number },
 ): Promise<LlmImageData[]> {
   loadLocalEnv();
+  configureSparkLlmTelemetryFromEnv();
 
   void options.progress;
   void options.debug;
@@ -734,6 +744,7 @@ export async function generateImageInBatches(
       imageSize: options.imageSize,
       batchSize: options.batchSize,
       overlapSize: options.overlapSize,
+      telemetry: false,
     });
     await publishSparkLlmCallMetricsFromEnv({
       operation: "generate_image_batches",

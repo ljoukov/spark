@@ -10,6 +10,10 @@ import {
 import { z } from "zod";
 
 import {
+  configureSparkLlmTelemetryFromEnv,
+  createSparkAgentRunTelemetryConfig,
+} from "../utils/gcp/monitoring";
+import {
   SPARK_GRADER_PROBLEMS_DIR,
   SPARK_GRADER_SUMMARY_PATH,
   SPARK_GRADER_UPLOADS_MANIFEST_PATH,
@@ -358,6 +362,7 @@ export async function runSparkChatAgentLoop(options: {
   logging?: RunAgentLoopOptions["logging"];
   onEvent?: RunAgentLoopOptions["onEvent"];
 }) {
+  configureSparkLlmTelemetryFromEnv();
   return await runAgentLoop({
     model: SPARK_CHAT_MODEL_ID,
     input: options.input,
@@ -365,6 +370,11 @@ export async function runSparkChatAgentLoop(options: {
     tools: options.tools,
     maxSteps: SPARK_CHAT_MAX_TOOL_STEPS,
     thinkingLevel: SPARK_CHAT_THINKING_LEVEL,
+    telemetry: createSparkAgentRunTelemetryConfig({
+      agentType: "chat",
+      job: "spark-chat",
+      taskIdPrefix: "spark-chat",
+    }),
     ...(options.logging ? { logging: options.logging } : {}),
     ...(options.onEvent ? { onEvent: options.onEvent } : {}),
   });

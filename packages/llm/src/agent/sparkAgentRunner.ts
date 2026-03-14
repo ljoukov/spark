@@ -27,7 +27,6 @@ import {
   type LlmContentPart,
   type LlmInputMessage,
   type LlmStreamEvent,
-  type AgentTelemetryEvent,
   type LlmTextModelId,
   type LlmTextResult,
   type LlmThinkingLevel,
@@ -66,8 +65,9 @@ import {
 } from "../utils/gcp/firestoreRest";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
 import {
+  configureSparkLlmTelemetryFromEnv,
+  createSparkAgentRunTelemetryConfig,
   publishSparkAgentProcessMetricsFromEnv,
-  publishSparkAgentRunMetricFromEnv,
   publishSparkToolLoopStepMetricsFromEnv,
   resolveSparkMetricProviderLabel,
 } from "../utils/gcp/monitoring";
@@ -864,33 +864,6 @@ class AgentProcessUsageMonitor {
       rssPeakBytes: this.rssPeakBytes,
     };
   }
-}
-
-function resolveSparkAgentRunScope(depth: number): "primary" | "subagent" {
-  return depth > 0 ? "subagent" : "primary";
-}
-
-function createSparkAgentTelemetrySink(options: {
-  agentType: SparkAgentMetricType;
-  job: string;
-  taskIdPrefix: string;
-}) {
-  return {
-    emit: async (event: AgentTelemetryEvent): Promise<void> => {
-      if (event.type !== "agent.run.completed") {
-        return;
-      }
-      await publishSparkAgentRunMetricFromEnv({
-        agentType: options.agentType,
-        status: event.success ? "ok" : "error",
-        scope: resolveSparkAgentRunScope(event.depth),
-        durationMs: event.durationMs,
-        job: options.job,
-        taskId: `${options.taskIdPrefix}-${event.runId}`,
-        timestamp: event.timestamp,
-      });
-    },
-  };
 }
 
 function resolveTextModelId(
@@ -7261,6 +7234,7 @@ export async function runSparkAgentTask(
   options: AgentRunOptions,
 ): Promise<void> {
   loadAgentEnv();
+  configureSparkLlmTelemetryFromEnv();
   const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
   if (!serviceAccountJson || serviceAccountJson.trim().length === 0) {
     throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is missing");
@@ -8155,13 +8129,11 @@ export async function runSparkAgentTask(
           onEvent: (event) => {
             toolLoopEventBridge.onEvent(event);
           },
-          telemetry: {
-            sink: createSparkAgentTelemetrySink({
-              agentType: agentMetricType,
-              job: monitoringJob,
-              taskIdPrefix: agentMetricTaskIdPrefix,
-            }),
-          },
+          telemetry: createSparkAgentRunTelemetryConfig({
+            agentType: agentMetricType,
+            job: monitoringJob,
+            taskIdPrefix: agentMetricTaskIdPrefix,
+          }),
           logging: {
             workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
             callLogsDir: "llm_calls",
