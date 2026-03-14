@@ -27,6 +27,7 @@ import {
   type LlmContentPart,
   type LlmInputMessage,
   type LlmStreamEvent,
+  type AgentTelemetryEvent,
   type LlmTextModelId,
   type LlmTextResult,
   type LlmThinkingLevel,
@@ -64,6 +65,12 @@ import {
   setFirestoreDocument,
 } from "../utils/gcp/firestoreRest";
 import { parseGoogleServiceAccountJson } from "../utils/gcp/googleAccessToken";
+import {
+  publishSparkAgentProcessMetricsFromEnv,
+  publishSparkAgentRunMetricFromEnv,
+  publishSparkToolLoopStepMetricsFromEnv,
+  resolveSparkMetricProviderLabel,
+} from "../utils/gcp/monitoring";
 import {
   downloadStorageObject,
   uploadStorageObject,
@@ -782,6 +789,108 @@ export function resolveSparkAgentThinkingLevel(
     return "medium";
   }
   return undefined;
+}
+
+type SparkAgentMetricType = "chat" | "lesson" | "grader" | "tutor";
+
+function resolveSparkAgentMetricType(agentData: Record<string, unknown>): SparkAgentMetricType {
+  if (
+    typeof agentData.graderRunId === "string" &&
+    agentData.graderRunId.trim().length > 0
+  ) {
+    return "grader";
+  }
+  if (
+    typeof agentData.tutorSessionId === "string" &&
+    agentData.tutorSessionId.trim().length > 0
+  ) {
+    return "tutor";
+  }
+  if (
+    typeof agentData.lessonSessionId === "string" &&
+    agentData.lessonSessionId.trim().length > 0
+  ) {
+    return "lesson";
+  }
+  return "chat";
+}
+
+type AgentProcessUsageSnapshot = {
+  readonly cpuTimeMs: number;
+  readonly cpuUtilization: number;
+  readonly rssPeakBytes: number;
+};
+
+class AgentProcessUsageMonitor {
+  private readonly startedAtMs = Date.now();
+  private readonly startCpuUsage = process.cpuUsage();
+  private rssPeakBytes = process.memoryUsage().rss;
+  private timer: NodeJS.Timeout | undefined;
+  private stopped = false;
+
+  start(): void {
+    this.sample();
+    this.timer = setInterval(() => {
+      this.sample();
+    }, 5_000);
+    this.timer.unref?.();
+  }
+
+  stop(): AgentProcessUsageSnapshot {
+    if (this.stopped) {
+      return this.snapshot();
+    }
+    this.stopped = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
+    this.sample();
+    return this.snapshot();
+  }
+
+  private sample(): void {
+    const memory = process.memoryUsage();
+    this.rssPeakBytes = Math.max(this.rssPeakBytes, memory.rss);
+  }
+
+  private snapshot(): AgentProcessUsageSnapshot {
+    const cpuUsage = process.cpuUsage(this.startCpuUsage);
+    const cpuTimeMs = (cpuUsage.user + cpuUsage.system) / 1_000;
+    const wallclockMs = Math.max(1, Date.now() - this.startedAtMs);
+    return {
+      cpuTimeMs,
+      cpuUtilization: cpuTimeMs / wallclockMs,
+      rssPeakBytes: this.rssPeakBytes,
+    };
+  }
+}
+
+function resolveSparkAgentRunScope(depth: number): "primary" | "subagent" {
+  return depth > 0 ? "subagent" : "primary";
+}
+
+function createSparkAgentTelemetrySink(options: {
+  agentType: SparkAgentMetricType;
+  job: string;
+  taskIdPrefix: string;
+}) {
+  return {
+    emit: async (event: AgentTelemetryEvent): Promise<void> => {
+      if (event.type !== "agent.run.completed") {
+        return;
+      }
+      await publishSparkAgentRunMetricFromEnv({
+        agentType: options.agentType,
+        status: event.success ? "ok" : "error",
+        scope: resolveSparkAgentRunScope(event.depth),
+        durationMs: event.durationMs,
+        job: options.job,
+        taskId: `${options.taskIdPrefix}-${event.runId}`,
+        timestamp: event.timestamp,
+      });
+    },
+  };
 }
 
 function resolveTextModelId(
@@ -7171,6 +7280,11 @@ export async function runSparkAgentTask(
   let tutorDraftRevision = 0;
   let tutorFocusLabel: string | null = null;
   let tutorSnapshot: TutorWorkspaceSnapshot | null = null;
+  let agentMetricType: SparkAgentMetricType = "chat";
+  let agentMetricStatus: "ok" | "error" | "stopped" = "error";
+  const monitoringJob = "spark-task-runner";
+  const agentMetricTaskIdPrefix = `agent-${options.agentId}`;
+  let processUsageMonitor: AgentProcessUsageMonitor | undefined;
 
   let stopRequested = false;
   let stopPollTimer: NodeJS.Timeout | undefined;
@@ -7197,6 +7311,7 @@ export async function runSparkAgentTask(
     }
 
     const agentData = agentSnap.data ?? {};
+    agentMetricType = resolveSparkAgentMetricType(agentData);
     const rawGraderRunId =
       typeof agentData.graderRunId === "string"
         ? agentData.graderRunId.trim()
@@ -7984,6 +8099,8 @@ export async function runSparkAgentTask(
       }
     }
 
+    processUsageMonitor = new AgentProcessUsageMonitor();
+    processUsageMonitor.start();
     const toolLoopStartedAt = Date.now();
     const toolLoopEventBridge = createToolLoopStatsEventBridge({
       tracker: statsTracker,
@@ -8022,6 +8139,13 @@ export async function runSparkAgentTask(
           onEvent: (event) => {
             toolLoopEventBridge.onEvent(event);
           },
+          telemetry: {
+            sink: createSparkAgentTelemetrySink({
+              agentType: agentMetricType,
+              job: monitoringJob,
+              taskIdPrefix: agentMetricTaskIdPrefix,
+            }),
+          },
           logging: {
             workspaceDir: resolveSparkAgentLogsDir(workspaceRoot),
             callLogsDir: "llm_calls",
@@ -8048,6 +8172,35 @@ export async function runSparkAgentTask(
     );
     statsTracker.recordToolCallsFromResult(toolLoopResult);
     logSync?.setStats(statsTracker.snapshot());
+    await Promise.all(
+      toolLoopResult.steps.map(async (step) => {
+        if (!step.timing) {
+          return;
+        }
+        await publishSparkToolLoopStepMetricsFromEnv({
+          operation: "agent_run_tool_loop",
+          model: toolLoopModelId,
+          provider: resolveSparkMetricProviderLabel(toolLoopModelId),
+          status: "ok",
+          agentType: agentMetricType,
+          timings: {
+            totalMs: step.timing.totalMs,
+            queueWaitMs: step.timing.queueWaitMs,
+            connectionSetupMs: step.timing.connectionSetupMs,
+            activeGenerationMs: step.timing.activeGenerationMs,
+            toolExecutionMs: step.timing.toolExecutionMs,
+            waitToolMs: step.timing.waitToolMs,
+            schedulerDelayMs: step.timing.schedulerDelayMs,
+            providerRetryDelayMs: step.timing.providerRetryDelayMs,
+          },
+          job: monitoringJob,
+          taskId: `${agentMetricTaskIdPrefix}-step-${step.step.toString()}`,
+          ...(step.timing.completedAt
+            ? { timestamp: step.timing.completedAt }
+            : {}),
+        });
+      }),
+    );
     if (reconciledAgentCostUsd > 0) {
       logSync?.append(
         `reconciled_agent_llm_cost: +${reconciledAgentCostUsd.toFixed(6)} from toolLoopResult.totalCostUsd`,
@@ -8122,8 +8275,10 @@ export async function runSparkAgentTask(
 
     await workspaceSync?.flushAll().catch(() => undefined);
     await logSync?.flushAll().catch(() => undefined);
+    agentMetricStatus = "ok";
   } catch (error) {
     if (error instanceof StopRequestedError) {
+      agentMetricStatus = "stopped";
       logSync?.append("warn: agent stopped by user request");
       await workspaceSync?.flushAll().catch(() => undefined);
       await logSync?.flushAll().catch(() => undefined);
@@ -8270,6 +8425,18 @@ export async function runSparkAgentTask(
     return;
   } finally {
     await stopStopPolling();
+    const processUsage = processUsageMonitor?.stop();
+    if (processUsage) {
+      await publishSparkAgentProcessMetricsFromEnv({
+        agentType: agentMetricType,
+        status: agentMetricStatus,
+        cpuUtilization: processUsage.cpuUtilization,
+        cpuTimeMs: processUsage.cpuTimeMs,
+        rssPeakBytes: processUsage.rssPeakBytes,
+        job: monitoringJob,
+        taskId: `${agentMetricTaskIdPrefix}-process`,
+      });
+    }
     logSync?.dispose();
     if (workspaceRoot && cleanupWorkspaceRoot) {
       await rm(workspaceRoot, { recursive: true, force: true }).catch(

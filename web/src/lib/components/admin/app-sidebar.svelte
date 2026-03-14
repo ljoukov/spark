@@ -1,11 +1,12 @@
 <script lang="ts">
 	import PackageIcon from '@lucide/svelte/icons/package';
-	import UsersIcon from '@lucide/svelte/icons/users';
-	import BotIcon from '@lucide/svelte/icons/bot';
-	import MonitorIcon from '@lucide/svelte/icons/monitor';
-	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import PlayIcon from '@lucide/svelte/icons/play';
-	import Volume2Icon from '@lucide/svelte/icons/volume-2';
+import UsersIcon from '@lucide/svelte/icons/users';
+import BotIcon from '@lucide/svelte/icons/bot';
+import MonitorIcon from '@lucide/svelte/icons/monitor';
+import DatabaseIcon from '@lucide/svelte/icons/database';
+import PlayIcon from '@lucide/svelte/icons/play';
+import ActivityIcon from '@lucide/svelte/icons/activity';
+import Volume2Icon from '@lucide/svelte/icons/volume-2';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoreVerticalIcon from '@lucide/svelte/icons/more-vertical';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -49,6 +50,12 @@
 			href: '/admin/gemini',
 			icon: BotIcon,
 			highlight: (path) => path.startsWith('/admin/gemini')
+		},
+		{
+			title: 'Metrics',
+			href: '/admin/metrics',
+			icon: ActivityIcon,
+			highlight: (path) => path.startsWith('/admin/metrics')
 		},
 		{
 			title: 'Tasks',

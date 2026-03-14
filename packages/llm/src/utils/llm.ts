@@ -42,6 +42,11 @@ import { z } from "zod";
 import type { OpenAiReasoningEffort } from "./openai-llm";
 import { loadLocalEnv } from "./env";
 import type { JobProgressReporter, LlmUsageChunk, ModelCallHandle } from "./concurrency";
+import {
+  publishSparkLlmCallMetricsFromEnv,
+  publishSparkToolLoopStepMetricsFromEnv,
+  resolveSparkMetricProviderLabel,
+} from "./gcp/monitoring";
 
 // NOTE:
 // This module intentionally preserves the existing @spark/llm "v1" call shapes
@@ -203,13 +208,42 @@ export type LlmToolCallResult = {
   readonly output: unknown;
   readonly error?: string;
   readonly callId?: string;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly durationMs?: number;
+  readonly metrics?: Record<string, unknown>;
 };
 
 export type LlmToolLoopStep = {
   readonly step: number;
   readonly modelId: LlmTextModelId;
+  readonly modelVersion?: string;
   readonly text?: string;
+  readonly thoughts?: string;
   readonly toolCalls: readonly LlmToolCallResult[];
+  readonly usage?: {
+    readonly promptTokens?: number;
+    readonly cachedTokens?: number;
+    readonly responseTokens?: number;
+    readonly responseImageTokens?: number;
+    readonly thinkingTokens?: number;
+  readonly totalTokens?: number;
+  readonly toolUsePromptTokens?: number;
+  };
+  readonly costUsd?: number;
+  readonly timing?: {
+    readonly startedAt: string;
+    readonly completedAt: string;
+    readonly totalMs: number;
+    readonly queueWaitMs: number;
+    readonly connectionSetupMs: number;
+    readonly activeGenerationMs: number;
+    readonly toolExecutionMs: number;
+    readonly waitToolMs: number;
+    readonly schedulerDelayMs: number;
+    readonly providerRetryDelayMs: number;
+    readonly providerAttempts: number;
+  };
 };
 
 export type LlmToolLoopResult = {
@@ -345,6 +379,10 @@ function reportPromptUsage(progress: JobProgressReporter, handle: ModelCallHandl
   progress.recordModelUsage(handle, chunk);
 }
 
+function resolveMetricsStatus(blocked: boolean): "ok" | "blocked" {
+  return blocked ? "blocked" : "ok";
+}
+
 export async function generateText(options: LlmTextCallOptions): Promise<string> {
   loadLocalEnv();
 
@@ -356,6 +394,7 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
   });
 
   reportPromptUsage(progress, handle, options.contents);
+  const startedAtMs = Date.now();
 
   const call = streamText({
     model: resolveLlmModelId(options.modelId),
@@ -399,7 +438,25 @@ export async function generateText(options: LlmTextCallOptions): Promise<string>
       }
     }
     const result = await call.result;
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_text",
+      model: options.modelId,
+      provider: result.provider,
+      status: resolveMetricsStatus(result.blocked),
+      latencyMs: Date.now() - startedAtMs,
+      totalTokens: result.usage?.totalTokens,
+      costUsd: result.costUsd,
+    });
     return result.text;
+  } catch (error) {
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_text",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "error",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    throw error;
   } finally {
     progress.finishModelCall(handle);
   }
@@ -431,9 +488,10 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
     return floored;
   };
   const maxAttempts = normaliseAttempts(options.maxAttempts) ?? normaliseAttempts(options.maxRetries) ?? 2;
+  const startedAtMs = Date.now();
 
   try {
-    const { value } = await generateJsonV2({
+    const { value, result } = await generateJsonV2({
       model: resolveLlmTextModelId(options.modelId),
       input: toInputMessages(options.contents),
       schema: options.schema,
@@ -464,7 +522,25 @@ export async function generateJson<T>(options: LlmJsonCallOptions<T>): Promise<T
         }
       },
     });
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_json",
+      model: options.modelId,
+      provider: result.provider,
+      status: resolveMetricsStatus(result.blocked),
+      latencyMs: Date.now() - startedAtMs,
+      totalTokens: result.usage?.totalTokens,
+      costUsd: result.costUsd,
+    });
     return value;
+  } catch (error) {
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_json",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "error",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    throw error;
   } finally {
     progress.finishModelCall(handle);
   }
@@ -514,21 +590,91 @@ export async function runToolLoop(options: LlmToolLoopOptions): Promise<LlmToolL
     ...(onEvent ? { onEvent } : {}),
   };
 
-  const result = await runAgentLoopV2({
-    ...request,
-    ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
-  });
+  const startedAtMs = Date.now();
+  const toolLoopMetricTaskIdPrefix = `tool-loop-${startedAtMs.toString()}`;
+  try {
+    const result = await runAgentLoopV2({
+      ...request,
+      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
+    });
 
-  return {
-    text: result.text,
-    steps: result.steps.map((step) => ({
+    const publishedSteps: LlmToolLoopStep[] = result.steps.map((step) => ({
       step: step.step,
       modelId: options.modelId,
+      modelVersion: step.modelVersion,
       text: step.text,
-      toolCalls: step.toolCalls,
-    })),
-    totalCostUsd: result.totalCostUsd,
-  };
+      thoughts: step.thoughts,
+      toolCalls: step.toolCalls.map((toolCall) => ({
+        toolName: toolCall.toolName,
+        input: toolCall.input,
+        output: toolCall.output,
+        ...(toolCall.error ? { error: toolCall.error } : {}),
+        ...(toolCall.callId ? { callId: toolCall.callId } : {}),
+        ...(toolCall.startedAt ? { startedAt: toolCall.startedAt } : {}),
+        ...(toolCall.completedAt ? { completedAt: toolCall.completedAt } : {}),
+        ...(typeof toolCall.durationMs === "number"
+          ? { durationMs: toolCall.durationMs }
+          : {}),
+        ...(toolCall.metrics ? { metrics: toolCall.metrics } : {}),
+      })),
+      ...(step.usage ? { usage: step.usage } : {}),
+      ...(typeof step.costUsd === "number" ? { costUsd: step.costUsd } : {}),
+      ...(step.timing ? { timing: step.timing } : {}),
+    }));
+
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "run_tool_loop",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "ok",
+      latencyMs: Date.now() - startedAtMs,
+      totalTokens: publishedSteps.reduce((total, step) => {
+        const nextTotal = step.usage?.totalTokens;
+        return total + (typeof nextTotal === "number" ? nextTotal : 0);
+      }, 0),
+      costUsd: result.totalCostUsd,
+    });
+
+    await Promise.all(
+      publishedSteps.map(async (step) => {
+        if (!step.timing) {
+          return;
+        }
+        await publishSparkToolLoopStepMetricsFromEnv({
+          operation: "run_tool_loop",
+          model: options.modelId,
+          provider: resolveSparkMetricProviderLabel(options.modelId),
+          status: "ok",
+          timings: {
+            totalMs: step.timing.totalMs,
+            queueWaitMs: step.timing.queueWaitMs,
+            connectionSetupMs: step.timing.connectionSetupMs,
+            activeGenerationMs: step.timing.activeGenerationMs,
+            toolExecutionMs: step.timing.toolExecutionMs,
+            waitToolMs: step.timing.waitToolMs,
+            schedulerDelayMs: step.timing.schedulerDelayMs,
+            providerRetryDelayMs: step.timing.providerRetryDelayMs,
+          },
+          taskId: `${toolLoopMetricTaskIdPrefix}-step-${step.step.toString()}`,
+        });
+      }),
+    );
+
+    return {
+      text: result.text,
+      steps: publishedSteps,
+      totalCostUsd: result.totalCostUsd,
+    };
+  } catch (error) {
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "run_tool_loop",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "error",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    throw error;
+  }
 }
 
 export async function generateImages(options: LlmGenerateImagesOptions): Promise<LlmImageData[]> {
@@ -536,17 +682,36 @@ export async function generateImages(options: LlmGenerateImagesOptions): Promise
 
   void options.progress;
   void options.debug;
-
-  return await generateImagesV2({
-    model: resolveLlmImageModelId(options.modelId),
-    stylePrompt: options.stylePrompt,
-    styleImages: options.styleImages,
-    imagePrompts: options.imagePrompts,
-    imageGradingPrompt: options.imageGradingPrompt,
-    maxAttempts: options.maxAttempts,
-    imageAspectRatio: options.imageAspectRatio,
-    imageSize: options.imageSize,
-  });
+  const startedAtMs = Date.now();
+  try {
+    const result = await generateImagesV2({
+      model: resolveLlmImageModelId(options.modelId),
+      stylePrompt: options.stylePrompt,
+      styleImages: options.styleImages,
+      imagePrompts: options.imagePrompts,
+      imageGradingPrompt: options.imageGradingPrompt,
+      maxAttempts: options.maxAttempts,
+      imageAspectRatio: options.imageAspectRatio,
+      imageSize: options.imageSize,
+    });
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_images",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "ok",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    return result;
+  } catch (error) {
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_images",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "error",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    throw error;
+  }
 }
 
 export async function generateImageInBatches(
@@ -556,17 +721,36 @@ export async function generateImageInBatches(
 
   void options.progress;
   void options.debug;
-
-  return await generateImageInBatchesV2({
-    model: resolveLlmImageModelId(options.modelId),
-    stylePrompt: options.stylePrompt,
-    styleImages: options.styleImages,
-    imagePrompts: options.imagePrompts,
-    imageGradingPrompt: options.imageGradingPrompt,
-    maxAttempts: options.maxAttempts,
-    imageAspectRatio: options.imageAspectRatio,
-    imageSize: options.imageSize,
-    batchSize: options.batchSize,
-    overlapSize: options.overlapSize,
-  });
+  const startedAtMs = Date.now();
+  try {
+    const result = await generateImageInBatchesV2({
+      model: resolveLlmImageModelId(options.modelId),
+      stylePrompt: options.stylePrompt,
+      styleImages: options.styleImages,
+      imagePrompts: options.imagePrompts,
+      imageGradingPrompt: options.imageGradingPrompt,
+      maxAttempts: options.maxAttempts,
+      imageAspectRatio: options.imageAspectRatio,
+      imageSize: options.imageSize,
+      batchSize: options.batchSize,
+      overlapSize: options.overlapSize,
+    });
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_image_batches",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "ok",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    return result;
+  } catch (error) {
+    await publishSparkLlmCallMetricsFromEnv({
+      operation: "generate_image_batches",
+      model: options.modelId,
+      provider: resolveSparkMetricProviderLabel(options.modelId),
+      status: "error",
+      latencyMs: Date.now() - startedAtMs,
+    });
+    throw error;
+  }
 }

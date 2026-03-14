@@ -234,6 +234,8 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
 
 - `/admin/tasks` exposes manual task triggers for operators. Controls include a "Run task" button that enqueues the `helloWorld` task (expects to see `Hello World` in the server logs) and a "Generate welcome session" form that accepts a topic string and queues `generateWelcomeSession` to publish a new template under `spark-admin/templates/sessions`.
 - `/admin/tasks` also shows the current admin UI build metadata and a "Retrieve build info" button that synchronously fetches `/api/internal/tasks/info` from the configured task service, then renders the task runner build details and whether they match the UI build.
+- `/admin/metrics` shows a Cloud Monitoring-backed overview for Spark observability.
+- `/admin/metrics/llm` shows detailed LLM telemetry (wrapper call latency, cost, tokens, and tool-loop phase timings) plus agent workload metrics (run duration, task-runner CPU usage, and task-runner RSS peak grouped by agent type such as `grader`, `lesson`, `tutor`, and chat).
 
 ### 3.1 Data Flow
 
@@ -257,6 +259,7 @@ During development, the server schedules work by POSTing directly to `TASKS_SERV
   Test user login: for local/preview testing, set `TEST_USER_EMAIL_ID_PASSWORD=email/userId/password`. This does **not** bypass Firebase Auth; it is only a reference for signing in via `/login-with-email`. Admin access is still controlled by `ADMIN_USER_IDS`, and Firestore rules have no test-user exceptions.
 
   Web SSR session: the web app issues a long-lived, encrypted, HTTP-only session cookie (`appSession`, max age 1 year) after successful Firebase sign-in (minted via `POST /api/login`). This cookie is used by `web/src/hooks.server.ts` to keep `/spark/*` SSR routes logged in even when the 1-hour Firebase ID token expires (for example after laptop sleep). The cookie is cleared via `POST /api/logout` (also called by `/logout`). Requires `COOKIE_SECRET_KEY` (32 bytes, base64) in the server environment.
+- **Cloud Monitoring**: Spark writes custom metrics under `custom.googleapis.com/spark/**` for LLM wrapper latency, tool-loop timing phases, agent run duration, and task-runner process CPU/RSS summaries. The task runner emits these metrics with monitored-resource metadata for Spark jobs, and `/admin/metrics` reads them back through the same Google service-account JSON. The service account used in `GOOGLE_SERVICE_ACCOUNT_JSON` must have both `roles/monitoring.metricWriter` and `roles/monitoring.viewer`.
 
 - **Firestore**: Single source of truth for job metadata, quiz content, attempts, summaries, and client events. Server access uses the Firestore REST API with a service-account JWT flow (WebCrypto) using `GOOGLE_SERVICE_ACCOUNT_JSON`. Structured to minimize document sizes (<1 MB) and keep hot paths under 10 writes/sec per doc.
 - **Firebase Storage**: Raw uploads stored short-term (7-day TTL) under `/spark/uploads/<uid>/<md5>` with security rules enforcing ownership. Server access uses the Storage JSON API (REST) with the same service-account JWT flow; objects are read/written by `storagePath` (no `downloadUrl` requirement). The server derives the storage bucket automatically as `<projectId>.firebasestorage.app` from the Google service account; do not override via environment variables.
