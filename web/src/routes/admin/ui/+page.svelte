@@ -24,7 +24,7 @@
 		},
 		{
 			title: 'Sheet UI',
-			description: 'Paper-like worksheet preview with mock review states.',
+			description: 'Paper-like worksheet and annotated-text previews.',
 			href: '/admin/ui/sheet',
 			cta: 'Open'
 		},

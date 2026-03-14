@@ -1,9 +1,15 @@
 <script lang="ts">
+	import {
+		AnnotatedTextPanel,
+		sampleAnnotatedTextDocument,
+		type AnnotatedTextTheme
+	} from '$lib/components/annotated-text/index.js';
 	import { PaperSheet, samplePaperSheets } from '$lib/components/paper-sheet/index.js';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
 	let activeSheetId = $state(samplePaperSheets[0]?.id ?? '');
+	let annotatedTextTheme = $state<AnnotatedTextTheme>('light');
 
 	const activeSheet = $derived.by(() => {
 		for (const sheet of samplePaperSheets) {
@@ -20,8 +26,8 @@
 		<div class="space-y-2">
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sheet UI preview</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
-				Showcase for the paper-style worksheet component ported to Svelte and stored in
-				<code>$lib/components/paper-sheet</code>.
+				Showcase for the paper-style worksheet and annotated-text components ported to Svelte and
+				stored in <code>$lib/components</code>.
 			</p>
 		</div>
 
@@ -33,6 +39,13 @@
 	</div>
 
 	<div class="sheet-preview-stage">
+		<div class="sheet-preview-section-copy">
+			<h2 class="sheet-preview-section-title">Worksheet</h2>
+			<p class="sheet-preview-section-description">
+				Reusable paper-sheet component from <code>$lib/components/paper-sheet</code>.
+			</p>
+		</div>
+
 		<div class="sheet-preview-tabs">
 			{#each samplePaperSheets as sample (sample.id)}
 				<button
@@ -59,6 +72,48 @@
 			</div>
 		{/if}
 	</div>
+
+	<div
+		class={`sheet-preview-stage annotated-stage ${annotatedTextTheme === 'dark' ? 'is-dark' : 'is-light'}`}
+	>
+		<div class="sheet-preview-section-copy">
+			<h2 class="sheet-preview-section-title">Annotated Text</h2>
+			<p class="sheet-preview-section-description">
+				Reusable inline-annotation component from <code>$lib/components/annotated-text</code>.
+			</p>
+		</div>
+
+		<div class="sheet-preview-tabs">
+			<button
+				type="button"
+				class={`sheet-preview-tab ${annotatedTextTheme === 'light' ? 'is-active' : ''}`}
+				style={`--sample-color:${annotatedTextTheme === 'light' ? '#7c3aed' : '#8b5cf6'};`}
+				aria-pressed={annotatedTextTheme === 'light'}
+				onclick={() => {
+					annotatedTextTheme = 'light';
+				}}
+			>
+				Light theme
+			</button>
+			<button
+				type="button"
+				class={`sheet-preview-tab ${annotatedTextTheme === 'dark' ? 'is-active' : ''}`}
+				style={`--sample-color:${annotatedTextTheme === 'dark' ? '#fbbf24' : '#8b5cf6'};`}
+				aria-pressed={annotatedTextTheme === 'dark'}
+				onclick={() => {
+					annotatedTextTheme = 'dark';
+				}}
+			>
+				Dark theme
+			</button>
+		</div>
+
+		<div class="sheet-preview-canvas">
+			<div class="annotated-preview-paper">
+				<AnnotatedTextPanel document={sampleAnnotatedTextDocument} theme={annotatedTextTheme} />
+			</div>
+		</div>
+	</div>
 </div>
 
 <style>
@@ -68,6 +123,25 @@
 			radial-gradient(circle at top left, rgba(255, 255, 255, 0.5), transparent 36%),
 			linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%);
 		padding: 24px 16px 32px;
+	}
+
+	.sheet-preview-section-copy {
+		margin-bottom: 18px;
+	}
+
+	.sheet-preview-section-title {
+		margin: 0 0 6px;
+		font-size: 18px;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+		color: #1f1f1f;
+	}
+
+	.sheet-preview-section-description {
+		margin: 0;
+		font-size: 13px;
+		line-height: 1.7;
+		color: #555;
 	}
 
 	.sheet-preview-tabs {
@@ -116,10 +190,56 @@
 		max-width: 750px;
 	}
 
+	.annotated-stage.is-dark {
+		background:
+			radial-gradient(circle at top left, rgba(196, 189, 224, 0.16), transparent 34%),
+			linear-gradient(180deg, #221c3d 0%, #16122a 100%);
+	}
+
+	.annotated-stage.is-dark .sheet-preview-tab {
+		border-color: #302850;
+		background: #1f1b35;
+		color: #a89ec4;
+	}
+
+	.annotated-stage.is-dark .sheet-preview-tab.is-active {
+		color: #ffffff;
+	}
+
+	.annotated-stage.is-dark .sheet-preview-section-title {
+		color: #e4dff5;
+	}
+
+	.annotated-stage.is-dark .sheet-preview-section-description {
+		color: #a89ec4;
+	}
+
+	.annotated-preview-paper {
+		width: 100%;
+		max-width: 820px;
+		border-radius: 12px;
+		padding: 24px;
+		box-shadow:
+			0 4px 30px rgba(0, 0, 0, 0.18),
+			0 1px 4px rgba(0, 0, 0, 0.1);
+		background: #ffffff;
+	}
+
+	.annotated-stage.is-dark .annotated-preview-paper {
+		background: #1f1b35;
+		box-shadow:
+			0 4px 40px rgba(0, 0, 0, 0.6),
+			0 1px 6px rgba(0, 0, 0, 0.4);
+	}
+
 	@media (max-width: 640px) {
 		.sheet-preview-stage {
 			padding-right: 10px;
 			padding-left: 10px;
+		}
+
+		.annotated-preview-paper {
+			padding: 18px;
 		}
 	}
 </style>
