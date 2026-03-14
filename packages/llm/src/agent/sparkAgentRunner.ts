@@ -1915,6 +1915,22 @@ function renderExtractTextPromptWithInlineData(options: {
       }
       continue;
     }
+    if (part.type !== "inlineData") {
+      const nextIndex = inlineAttachments.length + 1;
+      const labelText =
+        lastTextLabel ??
+        `Attachment ${nextIndex.toString()} uses ${part.type} transport.`;
+      sections.push(
+        [
+          "----------",
+          labelText,
+          `attachment_type=${part.type} debug_payload=omitted`,
+          "----------",
+        ].join("\n"),
+      );
+      lastTextLabel = null;
+      continue;
+    }
     const mimeType =
       typeof part.mimeType === "string" && part.mimeType.trim().length > 0
         ? part.mimeType.trim().toLowerCase()

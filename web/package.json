@@ -29,7 +29,7 @@
 		"@connectrpc/connect-node": "^2.1.1",
 		"@connectrpc/connect-web": "^2.1.1",
 		"@bufbuild/protobuf": "^2.11.0",
-		"@ljoukov/llm": "4.0.12",
+		"@ljoukov/llm": "4.1.1",
 		"@spark/llm": "workspace:*",
 		"@spark/proto": "workspace:*",
 		"@spark/schemas": "workspace:*",
