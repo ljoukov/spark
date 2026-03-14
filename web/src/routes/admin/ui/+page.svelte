@@ -23,6 +23,12 @@
 			cta: 'Open'
 		},
 		{
+			title: 'Sheet UI',
+			description: 'Paper-like worksheet preview with mock review states.',
+			href: '/admin/ui/sheet',
+			cta: 'Open'
+		},
+		{
 			title: 'Dialogs',
 			description: 'Confirmation, error, and progress dialog states.',
 			href: null,
