@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import PaperSheetQuestionFeedback from './paper-sheet-question-feedback.svelte';
 	import type {
 		PaperSheetAnswers,
 		PaperSheetBlank,
@@ -10,13 +11,18 @@
 		PaperSheetMockReview,
 		PaperSheetQuestion,
 		PaperSheetQuestionReview,
-		PaperSheetQuestionReviewStatus,
-		PaperSheetScore
+		PaperSheetQuestionReviewStatus
 	} from './types';
 
 	type PaperSheetQuestionEntry = {
 		sectionId: string;
 		question: PaperSheetQuestion;
+	};
+
+	type PaperSheetQuestionFeedbackTurn = {
+		id: string;
+		speaker: 'student' | 'tutor';
+		text: string;
 	};
 
 	function isHookSection(
@@ -108,7 +114,11 @@
 			`--sheet-color-25:${rgbaFromHex(sheet.color, 0.25)}`,
 			`--sheet-color-30:${rgbaFromHex(sheet.color, 0.3)}`,
 			`--sheet-color-40:${rgbaFromHex(sheet.color, 0.4)}`,
-			`--sheet-color-60:${rgbaFromHex(sheet.color, 0.6)}`
+			`--sheet-color-60:${rgbaFromHex(sheet.color, 0.6)}`,
+			`--sheet-accent-12:${rgbaFromHex(sheet.accent, 0.12)}`,
+			`--sheet-accent-18:${rgbaFromHex(sheet.accent, 0.18)}`,
+			`--sheet-accent-24:${rgbaFromHex(sheet.accent, 0.24)}`,
+			`--sheet-accent-30:${rgbaFromHex(sheet.accent, 0.3)}`
 		].join('; ');
 	}
 
@@ -129,37 +139,6 @@
 			.replace(/\n/gu, '<br />');
 	}
 
-	function createScoreTone(score: PaperSheetScore): {
-		background: string;
-		border: string;
-		text: string;
-		message: string;
-	} {
-		const ratio = score.total > 0 ? score.got / score.total : 0;
-		if (ratio >= 0.7) {
-			return {
-				background: '#edfdf6',
-				border: '#22a66e',
-				text: '#1a8c5b',
-				message: 'Mock success state for the preview.'
-			};
-		}
-		if (ratio >= 0.5) {
-			return {
-				background: '#fffbea',
-				border: '#f0b429',
-				text: '#b07a00',
-				message: 'Mock mixed-result state for the preview.'
-			};
-		}
-		return {
-			background: '#fdf0f0',
-			border: '#e04040',
-			text: '#c03030',
-			message: 'Mock revision-needed state for the preview.'
-		};
-	}
-
 	function createQuestionReview(
 		question: PaperSheetQuestion,
 		status: PaperSheetQuestionReviewStatus
@@ -167,43 +146,141 @@
 		if (status === 'teacher-review') {
 			return {
 				status,
-				note: 'Mock review: this written response stays with teacher marking.'
+				label: 'Response space',
+				statusLabel: 'reflection prompt',
+				note: 'This is a longer written answer, so the demo tutor leaves it open for **teacher review**. Reply with what you would improve, and the tutor will nudge you toward a stronger final version.',
+				replyPlaceholder: 'Write your response to the tutor...',
+				followUp:
+					'Good. When you redraft, keep one clear point per sentence and pull in one exact detail from the theory box so the explanation feels anchored.'
 			};
 		}
 
 		if (status === 'correct') {
 			switch (question.type) {
 				case 'fill':
-					return { status, note: 'Mock review: the fill-in layout shows an accepted state.' };
+					return {
+						status,
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'Nice. You landed the key fact cleanly here. If you want to stretch yourself, reply with **how** you found the answer so the tutor can suggest a faster checking strategy.',
+						replyPlaceholder: 'Optional reply to the tutor...',
+						followUp:
+							'That method works. On similar retrieval questions, scan for the bold detail in the theory box first, then copy it exactly.'
+					};
 				case 'mcq':
-					return { status, note: 'Mock review: the selected option shows a positive outcome.' };
+					return {
+						status,
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'You chose the strongest option here. If you reply, the tutor will turn that choice into a one-sentence explanation you could use in a written answer.',
+						replyPlaceholder: 'Optional reply to the tutor...',
+						followUp:
+							'Good instinct. The next step is saying **why** that answer fits, not just spotting it in the list.'
+					};
 				case 'calc':
-					return { status, note: 'Mock review: the calculation row shows a successful state.' };
+					return {
+						status,
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'The method looks secure on this calculation. If you reply, the tutor will show you how to present the same method even more clearly.',
+						replyPlaceholder: 'Optional reply to the tutor...',
+						followUp:
+							'To make it even stronger, write the formula first, then substitute the values, then finish with the unit.'
+					};
 				case 'match':
 					return {
 						status,
-						note: 'Mock review: the matching layout shows a completed success state.'
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'Your matching looks settled. If you reply, the tutor can turn one of those pairs into a quick memory rule.',
+						replyPlaceholder: 'Optional reply to the tutor...',
+						followUp:
+							'A good revision trick is to say each term and meaning out loud as one phrase, so the pair sticks together.'
 					};
 				case 'spelling':
-					return { status, note: 'Mock review: the spelling row shows an accepted state.' };
+					return {
+						status,
+						label: 'Strong move',
+						statusLabel: 'optional reply',
+						note: 'This spelling looks secure. If you reply, the tutor can point out the letter pattern that made it work.',
+						replyPlaceholder: 'Optional reply to the tutor...',
+						followUp:
+							'Keep noticing the sound pattern in the middle of the word. That is often what prevents the slip on a second attempt.'
+					};
 				case 'lines':
-					return { status, note: 'Mock review: teacher review state.' };
+					return {
+						status,
+						label: 'Response space',
+						statusLabel: 'reflection prompt',
+						note: 'This written response still needs teacher judgement in the demo.',
+						replyPlaceholder: 'Write your response to the tutor...',
+						followUp:
+							'When you refine it, keep your explanation tight and include one concrete piece of evidence from the sheet.'
+					};
 			}
 		}
 
 		switch (question.type) {
 			case 'fill':
-				return { status, note: 'Mock review: the fill-in layout shows a revision prompt.' };
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'Have another look at the **theory section**. The exact fact for this blank is stated directly in the reading above, so slow down and copy the date or term exactly as it appears.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'That is a better direction. Before you move on, rewrite the full sentence in your head so the blank fits the question smoothly.'
+				};
 			case 'mcq':
-				return { status, note: 'Mock review: the selected option shows a revision state.' };
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'You are in the right topic area, but not on the **exact detail** yet. Re-read the theory box and eliminate the options that were never mentioned at all before choosing again.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'Good. Now turn that option into a short explanation: “I chose this because...” That makes the knowledge easier to keep.'
+				};
 			case 'calc':
-				return { status, note: 'Mock review: the calculation row shows a retry state.' };
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'Set the **method** out first. Use the formula from the hint, substitute the values carefully, and only then write the final answer with the unit.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'That plan is better. On the next attempt, keep each step on its own line so the arithmetic is easier to check.'
+				};
 			case 'match':
-				return { status, note: 'Mock review: the matching layout shows a retry state.' };
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'At least one pair has crossed over. Rebuild the matches **one term at a time** and say what each word means before you click.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'That makes sense. Try matching the easiest term first, then use process of elimination on the final pair.'
+				};
 			case 'spelling':
-				return { status, note: 'Mock review: the spelling row shows a correction state.' };
+				return {
+					status,
+					label: 'Quick note',
+					statusLabel: 'response needed',
+					note: 'Say the word aloud and listen for the **missing sound**. The mistake is usually not random, so focus on the letter pattern that should sit in the middle of the word.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'That is the right habit. After you fix it once, write the corrected spelling again from memory so it sticks.'
+				};
 			case 'lines':
-				return { status, note: 'Mock review: teacher review state.' };
+				return {
+					status,
+					label: 'Response space',
+					statusLabel: 'reflection prompt',
+					note: 'This answer needs teacher judgement, but the tutor can still help you improve it. Reply with what you think your strongest point was, or where you felt unsure.',
+					replyPlaceholder: 'Write your response to the tutor...',
+					followUp:
+						'Useful reflection. On the redraft, keep one clear idea per sentence and tie it back to the theory text.'
+				};
 		}
 	}
 
@@ -212,6 +289,8 @@
 		let got = 0;
 		let total = 0;
 		let teacherReviewMarks = 0;
+		let objectiveQuestionCount = 0;
+		let teacherReviewQuestionCount = 0;
 		let objectiveIndex = 0;
 
 		for (const entry of getQuestionEntries(sheet)) {
@@ -219,11 +298,13 @@
 			const question = entry.question;
 			if (question.type === 'lines') {
 				teacherReviewMarks += question.marks;
+				teacherReviewQuestionCount += 1;
 				questions[questionKey] = createQuestionReview(question, 'teacher-review');
 				continue;
 			}
 
 			total += question.marks;
+			objectiveQuestionCount += 1;
 			const status: PaperSheetQuestionReviewStatus =
 				objectiveIndex % 3 === 1 ? 'incorrect' : 'correct';
 			if (status === 'correct') {
@@ -235,11 +316,21 @@
 
 		return {
 			score: { got, total },
+			objectiveQuestionCount,
+			teacherReviewMarks,
+			teacherReviewQuestionCount,
 			label: 'Mock review score (objective questions only)',
 			message: `Demo-only review state. ${teacherReviewMarks} teacher-reviewed marks are excluded from this mock score.`,
 			note: 'Preview only. This component shows mocked review feedback for UI validation; it is not checking answer keys.',
 			questions
 		};
+	}
+
+	function shouldShowQuestionFeedback(review: PaperSheetQuestionReview | null): boolean {
+		if (!review) {
+			return false;
+		}
+		return review.status !== 'correct';
 	}
 
 	function resolveReviewColors(status: PaperSheetQuestionReviewStatus | null): {
@@ -256,15 +347,15 @@
 		}
 		if (status === 'incorrect') {
 			return {
-				border: '#e04040',
-				background: '#fdf0f0',
-				text: '#e04040'
+				border: '#c66317',
+				background: '#fbefe3',
+				text: '#c66317'
 			};
 		}
 		if (status === 'teacher-review') {
 			return {
-				border: '#f0b429',
-				background: '#fffbea',
+				border: '#d6a11e',
+				background: '#fff6d8',
 				text: '#b07a00'
 			};
 		}
@@ -334,28 +425,6 @@
 		);
 	}
 
-	function getFeedbackLabel(status: PaperSheetQuestionReviewStatus): string {
-		switch (status) {
-			case 'correct':
-				return 'Mock OK';
-			case 'incorrect':
-				return 'Mock Revise';
-			case 'teacher-review':
-				return 'Teacher Review';
-		}
-	}
-
-	function getFeedbackClass(status: PaperSheetQuestionReviewStatus): string {
-		switch (status) {
-			case 'correct':
-				return 'is-correct';
-			case 'incorrect':
-				return 'is-wrong';
-			case 'teacher-review':
-				return 'is-review';
-		}
-	}
-
 	function readInputValue(event: Event): string {
 		const target = event.currentTarget;
 		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
@@ -369,6 +438,11 @@
 	let answers = $state<PaperSheetAnswers>({});
 	let checked = $state(false);
 	let review = $state<PaperSheetMockReview | null>(null);
+	let feedbackDrafts = $state<Record<string, string>>({});
+	let feedbackThreads = $state<Record<string, PaperSheetQuestionFeedbackTurn[]>>({});
+	let feedbackSending = $state<Record<string, boolean>>({});
+	let feedbackRequestTokens = $state<Record<string, number>>({});
+	let openFeedbackCards = $state<Record<string, boolean>>({});
 	let openSections = $state<Record<string, boolean>>({});
 	let activeMatchTerms = $state<Record<string, string | null>>({});
 	let previousSheetSignature = $state<string | null>(null);
@@ -381,6 +455,11 @@
 		answers = {};
 		checked = false;
 		review = null;
+		feedbackDrafts = {};
+		feedbackThreads = {};
+		feedbackSending = {};
+		feedbackRequestTokens = {};
+		openFeedbackCards = {};
 		openSections = createOpenSections(sheet);
 		activeMatchTerms = {};
 		previousSheetSignature = nextSheetSignature;
@@ -407,11 +486,15 @@
 
 	const questionNumbers = $derived(buildQuestionNumbers(sheet));
 	const totalSheetMarks = $derived(totalMarks(sheet));
-	const scoreTone = $derived(review ? createScoreTone(review.score) : null);
 	const paperStyle = $derived(buildPaperThemeStyle(sheet));
 
 	function handleCheck(): void {
 		review = buildMockReview(sheet);
+		feedbackDrafts = {};
+		feedbackThreads = {};
+		feedbackSending = {};
+		feedbackRequestTokens = {};
+		openFeedbackCards = {};
 		checked = true;
 	}
 
@@ -420,7 +503,102 @@
 		activeMatchTerms = {};
 		checked = false;
 		review = null;
+		feedbackDrafts = {};
+		feedbackThreads = {};
+		feedbackSending = {};
+		feedbackRequestTokens = {};
+		openFeedbackCards = {};
 		openSections = createOpenSections(sheet);
+	}
+
+	function isFeedbackCardOpen(questionKey: string): boolean {
+		return openFeedbackCards[questionKey] ?? true;
+	}
+
+	function toggleFeedbackCard(questionKey: string): void {
+		openFeedbackCards = {
+			...openFeedbackCards,
+			[questionKey]: !isFeedbackCardOpen(questionKey)
+		};
+	}
+
+	function updateFeedbackDraft(questionKey: string, value: string): void {
+		feedbackDrafts = {
+			...feedbackDrafts,
+			[questionKey]: value
+		};
+	}
+
+	function getFeedbackDraft(questionKey: string): string {
+		return feedbackDrafts[questionKey] ?? '';
+	}
+
+	function getFeedbackThread(questionKey: string): PaperSheetQuestionFeedbackTurn[] {
+		return feedbackThreads[questionKey] ?? [];
+	}
+
+	function isFeedbackSending(questionKey: string): boolean {
+		return feedbackSending[questionKey] ?? false;
+	}
+
+	function replyToTutor(
+		questionKey: string,
+		questionReview: PaperSheetQuestionReview,
+		draftOverride?: string
+	): void {
+		const draft = (draftOverride ?? getFeedbackDraft(questionKey)).trim();
+		if (!draft || isFeedbackSending(questionKey)) {
+			return;
+		}
+		const sentAt = Date.now();
+
+		feedbackDrafts = {
+			...feedbackDrafts,
+			[questionKey]: ''
+		};
+		feedbackSending = {
+			...feedbackSending,
+			[questionKey]: true
+		};
+		feedbackRequestTokens = {
+			...feedbackRequestTokens,
+			[questionKey]: sentAt
+		};
+
+		window.setTimeout(() => {
+			if (feedbackRequestTokens[questionKey] !== sentAt) {
+				return;
+			}
+
+			const nextThread: PaperSheetQuestionFeedbackTurn[] = [
+				...getFeedbackThread(questionKey),
+				{
+					id: `${questionKey}-student-${sentAt}`,
+					speaker: 'student',
+					text: draft
+				},
+				{
+					id: `${questionKey}-tutor-${sentAt + 1}`,
+					speaker: 'tutor',
+					text:
+						questionReview.followUp ??
+						'That is a sensible next step. Use the theory box to sharpen one exact detail before you move on.'
+				}
+			];
+
+			feedbackThreads = {
+				...feedbackThreads,
+				[questionKey]: nextThread
+			};
+			feedbackSending = {
+				...feedbackSending,
+				[questionKey]: false
+			};
+			feedbackRequestTokens = {
+				...feedbackRequestTokens,
+				[questionKey]: 0
+			};
+		}, 900);
 	}
 
 	function toggleSection(sectionId: string): void {
@@ -605,7 +783,10 @@
 						{@const questionReview = getQuestionReview(questionKey)}
 						{@const reviewStatus = checked ? (questionReview?.status ?? null) : null}
 
-						<div class="paper-sheet__question">
+						{@const showQuestionFeedback =
+							checked && questionReview && shouldShowQuestionFeedback(questionReview)}
+
+						<div class={`paper-sheet__question ${showQuestionFeedback ? 'has-feedback' : ''}`}>
 							<div class="paper-sheet__question-number">{questionNumbers[questionKey]}</div>
 
 							<div class="paper-sheet__question-body">
@@ -643,14 +824,6 @@
 										{/if}
 
 										<span>{question.after}</span>
-
-										{#if checked && questionReview}
-											<span
-												class={`paper-sheet__feedback ${getFeedbackClass(questionReview.status)}`}
-											>
-												{getFeedbackLabel(questionReview.status)}
-											</span>
-										{/if}
 									</div>
 								{:else if question.type === 'mcq'}
 									{@const selected = getTextAnswer(questionKey)}
@@ -678,13 +851,6 @@
 													{/if}
 												</span>
 												<span class="paper-sheet__mcq-label">{option}</span>
-												{#if checked && selectedOption && questionReview}
-													<span
-														class={`paper-sheet__feedback paper-sheet__feedback--inline ${getFeedbackClass(questionReview.status)}`}
-													>
-														{getFeedbackLabel(questionReview.status)}
-													</span>
-												{/if}
 											</button>
 										{/each}
 									</div>
@@ -724,13 +890,6 @@
 											readonly={checked}
 										/>
 										<span>{question.unit}</span>
-										{#if checked && questionReview}
-											<span
-												class={`paper-sheet__feedback ${getFeedbackClass(questionReview.status)}`}
-											>
-												{getFeedbackLabel(questionReview.status)}
-											</span>
-										{/if}
 									</div>
 								{:else if question.type === 'match'}
 									{@const selections = getObjectAnswer(questionKey)}
@@ -760,13 +919,6 @@
 													}}
 												>
 													<span>{pair.term}</span>
-													{#if checked && hasMatch && questionReview}
-														<span
-															class={`paper-sheet__feedback paper-sheet__feedback--inline ${getFeedbackClass(questionReview.status)}`}
-														>
-															{getFeedbackLabel(questionReview.status)}
-														</span>
-													{/if}
 												</button>
 											{/each}
 										</div>
@@ -810,46 +962,39 @@
 													placeholder="correct spelling..."
 													readonly={checked}
 												/>
-												{#if checked && questionReview}
-													<span
-														class={`paper-sheet__feedback ${getFeedbackClass(questionReview.status)}`}
-													>
-														{getFeedbackLabel(questionReview.status)}
-													</span>
-												{/if}
 											</div>
 										{/each}
 									</div>
 								{/if}
-
-								{#if checked && questionReview}
-									<p class={`paper-sheet__review-note ${getFeedbackClass(questionReview.status)}`}>
-										{questionReview.note}
-									</p>
-								{/if}
 							</div>
 
 							<div class="paper-sheet__question-marks">[{question.marks}m]</div>
+
+							{#if showQuestionFeedback}
+								<div class="paper-sheet__question-feedback">
+									<PaperSheetQuestionFeedback
+										review={questionReview}
+										open={isFeedbackCardOpen(questionKey)}
+										draft={getFeedbackDraft(questionKey)}
+										thread={getFeedbackThread(questionKey)}
+										processing={isFeedbackSending(questionKey)}
+										onToggle={() => {
+											toggleFeedbackCard(questionKey);
+										}}
+										onDraftChange={(value) => {
+											updateFeedbackDraft(questionKey, value);
+										}}
+										onReply={(value) => {
+											replyToTutor(questionKey, questionReview, value);
+										}}
+									/>
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>
 			</section>
 		{/each}
-
-		{#if checked && review && scoreTone}
-			<div
-				class="paper-sheet__score-card"
-				style={`background:${scoreTone.background}; border-color:${scoreTone.border};`}
-			>
-				<p class="paper-sheet__score-label">{review.label}</p>
-				<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
-					{review.score.got} / {review.score.total}
-				</p>
-				<p class="paper-sheet__score-message">{scoreTone.message}</p>
-				<p class="paper-sheet__score-note">{review.message}</p>
-				<p class="paper-sheet__score-note">{review.note}</p>
-			</div>
-		{/if}
 
 		<div class="paper-sheet__actions">
 			{#if checked}
@@ -1091,8 +1236,11 @@
 	}
 
 	.paper-sheet__question {
-		display: flex;
-		gap: 12px;
+		display: grid;
+		grid-template-columns: 26px minmax(0, 1fr) auto;
+		column-gap: 12px;
+		row-gap: 14px;
+		align-items: start;
 		padding: 14px 0;
 		border-bottom: 1px dashed #e0e0e0;
 	}
@@ -1105,6 +1253,8 @@
 		display: flex;
 		height: 26px;
 		width: 26px;
+		grid-column: 1;
+		grid-row: 1;
 		flex-shrink: 0;
 		align-items: center;
 		justify-content: center;
@@ -1117,11 +1267,15 @@
 	}
 
 	.paper-sheet__question-body {
+		grid-column: 2;
+		grid-row: 1;
 		flex: 1;
 		min-width: 0;
 	}
 
 	.paper-sheet__question-marks {
+		grid-column: 3;
+		grid-row: 1;
 		flex-shrink: 0;
 		align-self: flex-start;
 		padding-left: 8px;
@@ -1131,6 +1285,12 @@
 		font-weight: 700;
 		white-space: nowrap;
 		color: var(--sheet-color);
+	}
+
+	.paper-sheet__question-feedback {
+		grid-column: 2 / 4;
+		grid-row: 2;
+		min-width: 0;
 	}
 
 	.paper-sheet__prompt {
@@ -1184,35 +1344,6 @@
 	.paper-sheet__inline-input::placeholder,
 	.paper-sheet__lines-input::placeholder {
 		color: #999999;
-	}
-
-	.paper-sheet__feedback,
-	.paper-sheet__review-note {
-		font-size: 12px;
-		font-weight: 600;
-	}
-
-	.paper-sheet__feedback--inline {
-		margin-left: auto;
-	}
-
-	.paper-sheet__review-note {
-		margin: 8px 0 0;
-	}
-
-	.paper-sheet__feedback.is-correct,
-	.paper-sheet__review-note.is-correct {
-		color: #22a66e;
-	}
-
-	.paper-sheet__feedback.is-wrong,
-	.paper-sheet__review-note.is-wrong {
-		color: #e04040;
-	}
-
-	.paper-sheet__feedback.is-review,
-	.paper-sheet__review-note.is-review {
-		color: #b07a00;
 	}
 
 	.paper-sheet__mcq-grid,
@@ -1348,39 +1479,6 @@
 		font-size: 13px;
 	}
 
-	.paper-sheet__score-card {
-		margin: 8px 0 16px;
-		border: 2px solid #22a66e;
-		border-radius: 10px;
-		padding: 20px 24px;
-		text-align: center;
-	}
-
-	.paper-sheet__score-label {
-		margin: 0 0 4px;
-		font-size: 13px;
-		color: #666666;
-	}
-
-	.paper-sheet__score-value {
-		margin: 0;
-		font-size: 36px;
-		line-height: 1;
-		font-weight: 900;
-	}
-
-	.paper-sheet__score-message {
-		margin: 6px 0 0;
-		font-size: 13.5px;
-		color: #555555;
-	}
-
-	.paper-sheet__score-note {
-		margin: 4px 0 0;
-		font-size: 12px;
-		color: #888888;
-	}
-
 	.paper-sheet__actions {
 		display: flex;
 		justify-content: flex-end;
@@ -1457,12 +1555,19 @@
 		}
 
 		.paper-sheet__question {
-			flex-wrap: wrap;
+			grid-template-columns: 26px minmax(0, 1fr);
 		}
 
 		.paper-sheet__question-marks {
-			width: 100%;
-			padding-left: 38px;
+			grid-column: 2;
+			grid-row: 2;
+			padding-left: 0;
+			margin-top: -4px;
+		}
+
+		.paper-sheet__question-feedback {
+			grid-column: 1 / -1;
+			grid-row: 3;
 		}
 
 		.paper-sheet__mcq-grid,

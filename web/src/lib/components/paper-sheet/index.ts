@@ -1,4 +1,5 @@
 export { default as PaperSheet } from './paper-sheet.svelte';
+export { default as PaperSheetQuestionFeedback } from './paper-sheet-question-feedback.svelte';
 export { samplePaperSheets } from './sample-paper-sheets';
 export type {
 	PaperSheetAnswers,

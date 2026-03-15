@@ -90,12 +90,9 @@
 		const hasValue = value.length > 0;
 		const wantsExtraLine = variant === 'chat' && value.includes('\n');
 		const singleHeight = lineHeight + paddingTop + paddingBottom;
-		if (!hasValue) {
-			hasExpanded = false;
-		}
-		if (hasValue && (wantsExtraLine || textareaEl.scrollHeight > singleHeight + 1)) {
-			hasExpanded = true;
-		}
+		const hasVisualOverflow = textareaEl.scrollHeight > singleHeight + 1;
+		hasExpanded = hasValue && (wantsExtraLine || hasVisualOverflow);
+		const isExpanded = hasValue && (hasExpanded || wantsExtraLine);
 		const baseMinLines = wantsExtraLine ? 3 : hasExpanded ? 2 : 1;
 		const minLines = Math.min(maxLines, baseMinLines);
 		const minHeight = lineHeight * minLines + paddingTop + paddingBottom;
@@ -103,7 +100,6 @@
 		const nextHeight = Math.min(Math.max(textareaEl.scrollHeight, minHeight), maxHeight);
 		textareaEl.style.height = `${nextHeight}px`;
 		textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
-		const isExpanded = hasValue && (hasExpanded || wantsExtraLine);
 		textareaEl.dataset.expanded = isExpanded ? 'true' : 'false';
 	}
 
@@ -148,6 +144,38 @@
 	$effect(() => {
 		void value;
 		resizeTextarea();
+	});
+
+	$effect(() => {
+		if (!textareaEl || typeof ResizeObserver === 'undefined') {
+			return;
+		}
+
+		const observedTarget = textareaEl.parentElement ?? textareaEl;
+		let frameId = 0;
+
+		const scheduleResize = () => {
+			if (frameId) {
+				cancelAnimationFrame(frameId);
+			}
+			frameId = requestAnimationFrame(() => {
+				frameId = 0;
+				resizeTextarea();
+			});
+		};
+
+		const observer = new ResizeObserver(() => {
+			scheduleResize();
+		});
+
+		observer.observe(observedTarget);
+
+		return () => {
+			if (frameId) {
+				cancelAnimationFrame(frameId);
+			}
+			observer.disconnect();
+		};
 	});
 </script>
 

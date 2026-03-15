@@ -27,7 +27,8 @@
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sheet UI preview</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
 				Showcase for the paper-style worksheet and annotated-text components ported to Svelte and
-				stored in <code>$lib/components</code>.
+				stored in <code>$lib/components</code>. Use the mock review inside each worksheet to preview
+				the per-question tutor note and reply interaction.
 			</p>
 		</div>
 
@@ -42,7 +43,8 @@
 		<div class="sheet-preview-section-copy">
 			<h2 class="sheet-preview-section-title">Worksheet</h2>
 			<p class="sheet-preview-section-description">
-				Reusable paper-sheet component from <code>$lib/components/paper-sheet</code>.
+				Reusable paper-sheet component from <code>$lib/components/paper-sheet</code>, now with
+				question-level tutor feedback cards and mock reply interactions.
 			</p>
 		</div>
 
@@ -187,7 +189,7 @@
 
 	.sheet-preview-paper {
 		width: 100%;
-		max-width: 750px;
+		max-width: 1024px;
 	}
 
 	.annotated-stage.is-dark {
@@ -216,7 +218,7 @@
 
 	.annotated-preview-paper {
 		width: 100%;
-		max-width: 820px;
+		max-width: 1024px;
 		border-radius: 12px;
 		padding: 24px;
 		box-shadow:
