@@ -78,7 +78,7 @@
 		},
 		{
 			title: 'UI',
-			href: '/admin/ui/quiz',
+			href: '/admin/ui',
 			icon: MonitorIcon,
 			highlight: (path) => path.startsWith('/admin/ui')
 		}
