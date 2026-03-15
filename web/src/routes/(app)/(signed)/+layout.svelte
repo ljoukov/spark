@@ -67,6 +67,7 @@
 	const experience = $derived(resolveExperience($page.route.id));
 	const sessionHomeHref = $derived(resolveSessionHomeHref(experience, sessionId));
 	const brandCopy = $derived(resolveBrandCopy(experience));
+	const canAccessAdmin = $derived(Boolean(data.isAdmin));
 	const logoutLabel = $derived(user?.isAnonymous ? 'Delete guest account' : 'Log out');
 	let theme = $state<ThemePreference>('auto');
 	let copiedIdentity = $state(false);
@@ -411,6 +412,17 @@
 							</div>
 						</div>
 						<DropdownMenu.Separator />
+						{#if canAccessAdmin}
+							<DropdownMenu.Item
+								class="app-user-menu__link"
+								onSelect={() => {
+									void goto('/admin');
+								}}
+							>
+								Admin
+							</DropdownMenu.Item>
+							<DropdownMenu.Separator />
+						{/if}
 						<DropdownMenu.Item
 							class="app-user-menu__link"
 							onSelect={() => {

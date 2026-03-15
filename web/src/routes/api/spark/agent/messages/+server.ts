@@ -23,8 +23,6 @@ import {
 	type SparkAgentMessage
 } from '@spark/schemas';
 import {
-	GRADER_PROBLEMS_DIR,
-	GRADER_SUMMARY_PATH,
 	createGraderRun,
 	patchGraderRun
 } from '$lib/server/grader/repo';
