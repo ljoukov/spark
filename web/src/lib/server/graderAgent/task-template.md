@@ -59,14 +59,17 @@ Linked uploads are available in the workspace under `grader/uploads/<filename>`.
    - when self-solving, match the student's level where reasonable: prefer their terminology, notation style, and method family so the derived solution is easier for that student to follow.
    - do not introduce substantially more advanced machinery unless it is necessary for correctness; if you must, say so explicitly.
    - when self-solving, clearly mark this in `## Official solution` as "Derived solution (official solution unavailable)".
-5. Use subagents for per-problem solving and assessment:
+5. Use subagents selectively for solving and assessment:
    - perform transcription and reference gathering (steps 1-4) with the main agent only.
-   - once references are ready, spawn exactly one subagent per problem.
-   - each subagent must handle one problem only and do both tasks for that problem:
+   - once references are ready, decide whether any problem actually needs a subagent.
+   - keep short routine problems in the main agent; do NOT spawn subagents just because there are many small questions.
+   - spawn a subagent only when a problem needs substantial independent reasoning, for example olympiad-style work or a solution/explanation that would normally take about a page or more.
+   - at most 6 subagents can be live at once; close finished subagents before spawning more.
+   - if you use a subagent, give it one problem only and have it do both tasks for that problem:
      - establish/verify the solution baseline (official or derived),
      - assess the student's solution and draft grading rationale.
-   - do not assign multiple problems to one subagent.
-   - the main agent must consolidate subagent outputs into final files.
+   - do not split one problem across multiple subagents.
+   - the main agent must consolidate final outputs and may grade all problems itself when subagents are unnecessary.
 6. Grade each problem deeply:
    - compare against official guidance when available; otherwise compare against your carefully derived solution.
    - award marks fairly even when the student's method differs, if mathematically correct.

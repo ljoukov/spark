@@ -16,6 +16,7 @@ import {
 import type { PyodideInterface } from "pyodide";
 import { z } from "zod";
 import {
+  type AgentSubagentToolSelection,
   createFilesystemToolSetForModel,
   estimateCallCostUsd,
   generateText,
@@ -783,12 +784,19 @@ export function resolveSparkAgentThinkingLevel(
   modelId: LlmTextModelId,
 ): LlmThinkingLevel | undefined {
   if (modelId.includes("gpt-5.4") || modelId.includes("gpt-5.3-codex")) {
-    return "high";
+    return "medium";
   }
   if (modelId.includes("gpt-5.2")) {
     return "medium";
   }
   return undefined;
+}
+
+export function resolveSparkAgentSubagentSelection(): AgentSubagentToolSelection {
+  return {
+    promptPattern: "codex",
+    model: DEFAULT_AGENT_MODEL_ID,
+  };
 }
 
 type SparkAgentMetricType = "chat" | "lesson" | "grader" | "tutor";
@@ -8123,7 +8131,7 @@ export async function runSparkAgentTask(
           subagents:
             tutorSessionId || graderRunId === null
               ? undefined
-              : { promptPattern: "codex" as const },
+              : resolveSparkAgentSubagentSelection(),
           maxSteps,
           ...(thinkingLevel ? { thinkingLevel } : {}),
           onEvent: (event) => {

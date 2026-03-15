@@ -39,6 +39,7 @@ import {
 } from "./sparkAgentReplayArtifacts";
 import {
   buildSparkAgentSystemPrompt,
+  resolveSparkAgentSubagentSelection,
   buildSparkAgentTools,
   resolveSparkAgentLogsDir,
   resolveSparkAgentThinkingLevel,
@@ -479,7 +480,7 @@ export async function runSparkGraderLocal(options: {
     ...(initialInput ? {} : { instructions: systemPrompt }),
     tools,
     ...(modelTools ? { modelTools } : {}),
-    ...(useSubagents ? { subagents: { promptPattern: "codex" as const } } : {}),
+    ...(useSubagents ? { subagents: resolveSparkAgentSubagentSelection() } : {}),
     maxSteps,
     ...(thinkingLevel ? { thinkingLevel } : {}),
     telemetry: createSparkAgentRunTelemetryConfig({
