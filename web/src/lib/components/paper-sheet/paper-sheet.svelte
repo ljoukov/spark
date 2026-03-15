@@ -11,13 +11,16 @@
 		PaperSheetMockReview,
 		PaperSheetQuestion,
 		PaperSheetQuestionReview,
-		PaperSheetQuestionReviewStatus
+		PaperSheetQuestionReviewStatus,
+		PaperSheetScore
 	} from './types';
 
 	type PaperSheetQuestionEntry = {
 		sectionId: string;
 		question: PaperSheetQuestion;
 	};
+
+	type PaperSheetReviewMode = 'none' | 'mock';
 
 	type PaperSheetQuestionFeedbackTurn = {
 		id: string;
@@ -137,6 +140,37 @@
 			.replace(/\*\*(.*?)\*\*/gu, '<strong>$1</strong>')
 			.replace(/\*(.*?)\*/gu, '<em>$1</em>')
 			.replace(/\n/gu, '<br />');
+	}
+
+	function createScoreTone(score: PaperSheetScore): {
+		background: string;
+		border: string;
+		text: string;
+		message: string;
+	} {
+		const ratio = score.total > 0 ? score.got / score.total : 0;
+		if (ratio >= 0.7) {
+			return {
+				background: '#edfdf6',
+				border: '#22a66e',
+				text: '#1a8c5b',
+				message: 'Mock success state for the preview.'
+			};
+		}
+		if (ratio >= 0.5) {
+			return {
+				background: '#fffbea',
+				border: '#f0b429',
+				text: '#b07a00',
+				message: 'Mock mixed-result state for the preview.'
+			};
+		}
+		return {
+			background: '#fdf0f0',
+			border: '#e04040',
+			text: '#c03030',
+			message: 'Mock revision-needed state for the preview.'
+		};
 	}
 
 	function createQuestionReview(
@@ -327,10 +361,7 @@
 	}
 
 	function shouldShowQuestionFeedback(review: PaperSheetQuestionReview | null): boolean {
-		if (!review) {
-			return false;
-		}
-		return review.status !== 'correct';
+		return review !== null;
 	}
 
 	function resolveReviewColors(status: PaperSheetQuestionReviewStatus | null): {
@@ -433,7 +464,13 @@
 		return '';
 	}
 
-	let { sheet }: { sheet: PaperSheetData } = $props();
+	let {
+		sheet,
+		reviewMode = 'none'
+	}: {
+		sheet: PaperSheetData;
+		reviewMode?: PaperSheetReviewMode;
+	} = $props();
 
 	let answers = $state<PaperSheetAnswers>({});
 	let checked = $state(false);
@@ -487,8 +524,12 @@
 	const questionNumbers = $derived(buildQuestionNumbers(sheet));
 	const totalSheetMarks = $derived(totalMarks(sheet));
 	const paperStyle = $derived(buildPaperThemeStyle(sheet));
+	const scoreTone = $derived(review ? createScoreTone(review.score) : null);
 
 	function handleCheck(): void {
+		if (reviewMode !== 'mock') {
+			return;
+		}
 		review = buildMockReview(sheet);
 		feedbackDrafts = {};
 		feedbackThreads = {};
@@ -546,6 +587,9 @@
 		questionReview: PaperSheetQuestionReview,
 		draftOverride?: string
 	): void {
+		if (reviewMode !== 'mock') {
+			return;
+		}
 		const draft = (draftOverride ?? getFeedbackDraft(questionKey)).trim();
 		if (!draft || isFeedbackSending(questionKey)) {
 			return;
@@ -974,6 +1018,7 @@
 								<div class="paper-sheet__question-feedback">
 									<PaperSheetQuestionFeedback
 										review={questionReview}
+										questionLabel={`question ${questionNumbers[questionKey]}`}
 										open={isFeedbackCardOpen(questionKey)}
 										draft={getFeedbackDraft(questionKey)}
 										thread={getFeedbackThread(questionKey)}
@@ -996,25 +1041,48 @@
 			</section>
 		{/each}
 
-		<div class="paper-sheet__actions">
-			{#if checked}
-				<button
-					type="button"
-					class="paper-sheet__action paper-sheet__action--secondary"
-					onclick={handleReset}
-				>
-					Reset Demo
-				</button>
-			{:else}
-				<button
-					type="button"
-					class="paper-sheet__action paper-sheet__action--primary"
-					onclick={handleCheck}
-				>
-					Show Mock Review
-				</button>
-			{/if}
-		</div>
+		{#if reviewMode === 'mock' && checked && review && scoreTone}
+			<div
+				class="paper-sheet__score-card"
+				style={`background:${scoreTone.background}; border-color:${scoreTone.border};`}
+			>
+				<p class="paper-sheet__score-label">{review.label}</p>
+				<p class="paper-sheet__score-value" style={`color:${scoreTone.text};`}>
+					{review.score.got} / {review.score.total}
+				</p>
+				<p class="paper-sheet__score-message">{scoreTone.message}</p>
+				<p class="paper-sheet__score-note">{review.message}</p>
+				<p class="paper-sheet__score-note">{review.note}</p>
+				{#if review.objectiveQuestionCount !== undefined || review.teacherReviewQuestionCount !== undefined}
+					<p class="paper-sheet__score-note">
+						{review.objectiveQuestionCount ?? 0} objective questions ·
+						{review.teacherReviewQuestionCount ?? 0} teacher-reviewed responses
+					</p>
+				{/if}
+			</div>
+		{/if}
+
+		{#if reviewMode === 'mock'}
+			<div class="paper-sheet__actions">
+				{#if checked}
+					<button
+						type="button"
+						class="paper-sheet__action paper-sheet__action--secondary"
+						onclick={handleReset}
+					>
+						Reset Demo
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="paper-sheet__action paper-sheet__action--primary"
+						onclick={handleCheck}
+					>
+						Show Mock Review
+					</button>
+				{/if}
+			</div>
+		{/if}
 
 		<footer class="paper-sheet__footer">
 			<span>{sheet.level} · {sheet.subject} · {sheet.title}</span>
@@ -1477,6 +1545,39 @@
 
 	.paper-sheet__spelling-arrow {
 		font-size: 13px;
+	}
+
+	.paper-sheet__score-card {
+		margin: 8px 0 16px;
+		border: 2px solid #22a66e;
+		border-radius: 10px;
+		padding: 20px 24px;
+		text-align: center;
+	}
+
+	.paper-sheet__score-label {
+		margin: 0 0 4px;
+		font-size: 13px;
+		color: #666666;
+	}
+
+	.paper-sheet__score-value {
+		margin: 0;
+		font-size: 36px;
+		line-height: 1;
+		font-weight: 900;
+	}
+
+	.paper-sheet__score-message {
+		margin: 6px 0 0;
+		font-size: 13.5px;
+		color: #555555;
+	}
+
+	.paper-sheet__score-note {
+		margin: 4px 0 0;
+		font-size: 12px;
+		color: #888888;
 	}
 
 	.paper-sheet__actions {

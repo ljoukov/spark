@@ -37,11 +37,12 @@
 	}
 
 	function getStatusState(
+		review: PaperSheetQuestionReview,
 		processing: boolean,
 		thread: ThreadTurn[],
 		fallbackLabel: string
 	): {
-		kind: 'pending' | 'processing' | 'done';
+		kind: 'pending' | 'processing' | 'open' | 'optional' | 'done';
 		label: string;
 	} {
 		if (processing) {
@@ -51,10 +52,24 @@
 			};
 		}
 
+		if (review.status === 'correct') {
+			if (thread.length > 0) {
+				return {
+					kind: 'done',
+					label: 'shared'
+				};
+			}
+
+			return {
+				kind: 'optional',
+				label: fallbackLabel
+			};
+		}
+
 		if (thread.length > 0) {
 			return {
-				kind: 'done',
-				label: 'done'
+				kind: 'open',
+				label: 'conversation open'
 			};
 		}
 
@@ -75,6 +90,7 @@
 		draft,
 		thread,
 		processing = false,
+		questionLabel,
 		onToggle,
 		onDraftChange,
 		onReply
@@ -84,15 +100,29 @@
 		draft: string;
 		thread: ThreadTurn[];
 		processing?: boolean;
+		questionLabel: string;
 		onToggle: () => void;
 		onDraftChange: (value: string) => void;
 		onReply: (value?: string) => void;
 	} = $props();
 
-	const statusState = $derived.by(() => getStatusState(processing, thread, review.statusLabel));
+	const noteLabel = $derived(review.label ?? 'Tutor note');
+	const statusLabel = $derived.by(() => {
+		if (review.statusLabel) {
+			return review.statusLabel;
+		}
+		if (review.status === 'correct') {
+			return 'optional reply';
+		}
+		if (review.status === 'teacher-review') {
+			return 'reflection prompt';
+		}
+		return 'response needed';
+	});
+	const statusState = $derived.by(() => getStatusState(review, processing, thread, statusLabel));
 	const displayThread = $derived.by((): ThreadTurn[] => [
 		{
-			id: `${review.label}-initial`,
+			id: `${noteLabel}-initial`,
 			speaker: 'tutor',
 			text: review.note
 		},
@@ -103,14 +133,16 @@
 <section class={`paper-sheet-note ${getToneClass(review)}`}>
 	<div class="paper-sheet-note__frame">
 		<button type="button" class="paper-sheet-note__header" aria-expanded={open} onclick={onToggle}>
-			<span class="paper-sheet-note__pill">{review.label}</span>
+			<span class="paper-sheet-note__pill">{noteLabel}</span>
 
 			<span class={`paper-sheet-note__status is-${statusState.kind}`}>
 				{#if statusState.kind === 'pending'}
 					<span class="paper-sheet-note__status-dot" aria-hidden="true"></span>
+				{:else if statusState.kind === 'open'}
+					<span class="paper-sheet-note__status-dot is-static" aria-hidden="true"></span>
 				{:else}
 					<span class="paper-sheet-note__status-icon" aria-hidden="true">
-						{statusState.kind === 'done' ? '✓' : '…'}
+						{statusState.kind === 'processing' ? '…' : '✓'}
 					</span>
 				{/if}
 				{statusState.label}
@@ -121,7 +153,7 @@
 
 		{#if open}
 			<div class="paper-sheet-note__body">
-				<div class="paper-sheet-note__thread">
+				<div class="paper-sheet-note__thread" aria-live="polite" aria-relevant="additions text">
 					{#each displayThread as turn (turn.id)}
 						<div class={`paper-sheet-note__turn is-${turn.speaker}`}>
 							<div class={`paper-sheet-note__bubble is-${turn.speaker} sheet-markup`}>
@@ -132,42 +164,40 @@
 				</div>
 
 				{#if processing}
-					<div class="paper-sheet-note__processing">sending…</div>
-				{:else}
-					<div class="paper-sheet-note__composer">
-						<ChatComposer
-							value={draft}
-							placeholder={review.replyPlaceholder ?? 'Write your response to the tutor...'}
-							ariaLabel="Reply to tutor"
-							sendAriaLabel="Send reply to tutor"
-							micAriaLabel="Add spoken-style reply prompt"
-							attachAriaLabel="Open attachment options"
-							submitMode="enter"
-							maxLines={5}
-							showAttach={true}
-							showMic={true}
-							showTakePhoto={true}
-							inputClass="paper-sheet-note__input"
-							onInput={({ value }) => {
-								onDraftChange(value);
-							}}
-							onAttachSelect={() => {
-								appendDraft(
-									'[Mock attachment] I want to show the tutor my working for this answer.'
-								);
-							}}
-							onTakePhotoSelect={() => {
-								appendDraft('[Mock photo] Here is a photo of the part I want feedback on.');
-							}}
-							onMicClick={() => {
-								appendDraft('I think I should make one point more clearly here.');
-							}}
-							onSubmit={({ value }) => {
-								onReply(value);
-							}}
-						/>
-					</div>
+					<div class="paper-sheet-note__processing" role="status" aria-live="polite">sending…</div>
 				{/if}
+
+				<div class="paper-sheet-note__composer">
+					<ChatComposer
+						value={draft}
+						placeholder={review.replyPlaceholder ?? 'Write your response to the tutor...'}
+						ariaLabel={`Reply to tutor for ${questionLabel}`}
+						sendAriaLabel={`Send reply to tutor for ${questionLabel}`}
+						micAriaLabel={`Add spoken-style reply prompt for ${questionLabel}`}
+						attachAriaLabel={`Open attachment options for ${questionLabel}`}
+						submitMode="enter"
+						maxLines={5}
+						showAttach={true}
+						showMic={true}
+						showTakePhoto={true}
+						inputClass="paper-sheet-note__input"
+						onInput={({ value }) => {
+							onDraftChange(value);
+						}}
+						onAttachSelect={() => {
+							appendDraft('[Mock attachment] I want to show the tutor my working for this answer.');
+						}}
+						onTakePhotoSelect={() => {
+							appendDraft('[Mock photo] Here is a photo of the part I want feedback on.');
+						}}
+						onMicClick={() => {
+							appendDraft('I think I should make one point more clearly here.');
+						}}
+						onSubmit={({ value }) => {
+							onReply(value);
+						}}
+					/>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -273,14 +303,16 @@
 		text-transform: lowercase;
 	}
 
-	.paper-sheet-note__status.is-pending {
-		color: var(--note-status-pending);
-	}
-
 	.paper-sheet-note__status.is-processing {
 		color: var(--note-status-processing);
 	}
 
+	.paper-sheet-note__status.is-open,
+	.paper-sheet-note__status.is-pending {
+		color: var(--note-status-pending);
+	}
+
+	.paper-sheet-note__status.is-optional,
 	.paper-sheet-note__status.is-done {
 		color: var(--note-status-done);
 	}
@@ -291,6 +323,10 @@
 		border-radius: 999px;
 		background: var(--note-dot);
 		animation: paper-sheet-note-pulse 1.8s ease-in-out infinite;
+	}
+
+	.paper-sheet-note__status-dot.is-static {
+		animation: none;
 	}
 
 	.paper-sheet-note__status-icon {

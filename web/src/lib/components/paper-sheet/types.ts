@@ -113,8 +113,8 @@ export type PaperSheetQuestionReviewStatus = 'correct' | 'incorrect' | 'teacher-
 
 export type PaperSheetQuestionReview = {
 	status: PaperSheetQuestionReviewStatus;
-	label: string;
-	statusLabel: string;
+	label?: string;
+	statusLabel?: string;
 	note: string;
 	replyPlaceholder?: string;
 	followUp?: string;
@@ -122,9 +122,9 @@ export type PaperSheetQuestionReview = {
 
 export type PaperSheetMockReview = {
 	score: PaperSheetScore;
-	objectiveQuestionCount: number;
-	teacherReviewMarks: number;
-	teacherReviewQuestionCount: number;
+	objectiveQuestionCount?: number;
+	teacherReviewMarks?: number;
+	teacherReviewQuestionCount?: number;
 	label: string;
 	message: string;
 	note: string;

@@ -18,6 +18,7 @@
 		variant?: ChatInputVariant;
 		submitMode?: SubmitMode;
 		onInput?: (detail: { value: string; isExpanded?: boolean }) => void;
+		onLayoutChange?: (detail: { value: string; isExpanded: boolean }) => void;
 		onSubmit?: (detail: { value: string }) => void;
 		onPaste?: (event: ClipboardEvent) => void;
 	};
@@ -35,6 +36,7 @@
 		variant = 'default',
 		submitMode = 'modEnter',
 		onInput = undefined,
+		onLayoutChange = undefined,
 		onSubmit = undefined,
 		onPaste = undefined
 	}: Props = $props();
@@ -101,6 +103,7 @@
 		textareaEl.style.height = `${nextHeight}px`;
 		textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
 		textareaEl.dataset.expanded = isExpanded ? 'true' : 'false';
+		onLayoutChange?.({ value, isExpanded });
 	}
 
 	function handleInput(event: Event) {

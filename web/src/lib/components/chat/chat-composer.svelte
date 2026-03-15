@@ -64,6 +64,12 @@
 	let isExpanded = $state(false);
 
 	const canSubmit = $derived(!disabled && value.trim().length > 0);
+	const hasAttachAction = $derived(Boolean(onAttachSelect));
+	const hasTakePhotoAction = $derived(Boolean(onTakePhotoSelect));
+	const hasMicAction = $derived(Boolean(onMicClick));
+	const showAttachmentMenu = $derived(
+		(showAttach && hasAttachAction) || (showTakePhoto && hasTakePhotoAction)
+	);
 
 	function handleInput(detail: { value: string; isExpanded?: boolean }) {
 		isExpanded = detail.isExpanded ?? detail.value.includes('\n');
@@ -103,7 +109,7 @@
 <div class="composer-stack">
 	<div class="composer-card">
 		<div class={`composer-field ${isExpanded ? 'is-expanded' : ''}`}>
-			{#if showAttach}
+			{#if showAttachmentMenu}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger
 						class="composer-btn composer-attach composer-leading"
@@ -114,37 +120,45 @@
 						<Plus class="composer-icon" />
 					</DropdownMenu.Trigger>
 
-					<DropdownMenu.Content class="composer-menu" sideOffset={12} align="start">
-						<DropdownMenu.Item class="composer-menu__item" onSelect={handleAttachSelect} {disabled}>
-							<span class="composer-menu__icon" aria-hidden="true">
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									xmlns="http://www.w3.org/2000/svg"
-									class="composer-menu__paperclip"
-								>
-									<path
-										d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8"
-										stroke="currentColor"
-									></path>
-								</svg>
-							</span>
-							<span>Add photos &amp; files</span>
-							{#if attachmentShortcutLabel}
-								<DropdownMenu.Shortcut>{attachmentShortcutLabel}</DropdownMenu.Shortcut>
-							{/if}
-						</DropdownMenu.Item>
-
-						{#if showTakePhoto}
-							<DropdownMenu.Separator />
+					<DropdownMenu.Content class="chat-composer__menu" sideOffset={12} align="start">
+						{#if showAttach && hasAttachAction}
 							<DropdownMenu.Item
-								class="composer-menu__item"
+								class="chat-composer__menu-item"
+								onSelect={handleAttachSelect}
+								{disabled}
+							>
+								<span class="chat-composer__menu-icon" aria-hidden="true">
+									<svg
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										xmlns="http://www.w3.org/2000/svg"
+										class="chat-composer__menu-paperclip"
+									>
+										<path
+											d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8"
+											stroke="currentColor"
+										></path>
+									</svg>
+								</span>
+								<span>Add photos &amp; files</span>
+								{#if attachmentShortcutLabel}
+									<DropdownMenu.Shortcut>{attachmentShortcutLabel}</DropdownMenu.Shortcut>
+								{/if}
+							</DropdownMenu.Item>
+						{/if}
+
+						{#if showTakePhoto && hasTakePhotoAction}
+							{#if showAttach && hasAttachAction}
+								<DropdownMenu.Separator />
+							{/if}
+							<DropdownMenu.Item
+								class="chat-composer__menu-item"
 								onSelect={handleTakePhotoSelect}
 								{disabled}
 							>
-								<span class="composer-menu__icon" aria-hidden="true">
+								<span class="chat-composer__menu-icon" aria-hidden="true">
 									<Camera class="composer-icon" />
 								</span>
 								<span>Take photo</span>
@@ -166,15 +180,18 @@
 					{spellcheck}
 					variant="chat"
 					{submitMode}
-					inputClass={`composer-textarea ${inputClass}`.trim()}
+					inputClass={`chat-composer__textarea ${inputClass}`.trim()}
 					{onPaste}
 					onInput={handleInput}
+					onLayoutChange={({ isExpanded: nextIsExpanded }) => {
+						isExpanded = nextIsExpanded;
+					}}
 					onSubmit={handleSubmit}
 				/>
 			</div>
 
 			<div class="composer-trailing">
-				{#if showMic}
+				{#if showMic && hasMicAction}
 					<button
 						class="composer-btn composer-mic"
 						type="button"
@@ -261,7 +278,7 @@
 		align-items: stretch;
 	}
 
-	:global(.composer-textarea) {
+	:global(.chat-composer__textarea) {
 		width: 100%;
 		padding: var(--chat-composer-textarea-padding, 0.15rem 0.2rem 0.25rem);
 		font-family: inherit;
@@ -270,7 +287,7 @@
 		color: var(--chat-composer-text, var(--text-primary, var(--foreground, #111827)));
 	}
 
-	:global(.composer-textarea::placeholder) {
+	:global(.chat-composer__textarea::placeholder) {
 		color: var(--chat-composer-placeholder, var(--text-secondary, rgba(100, 116, 139, 0.72)));
 	}
 
@@ -381,20 +398,20 @@
 		width: 1.05rem;
 	}
 
-	:global(.composer-menu) {
+	:global(.chat-composer__menu) {
 		min-width: 15.5rem;
 		padding: 0.35rem;
 		border-radius: 1rem;
 	}
 
-	:global(.composer-menu__item) {
+	:global(.chat-composer__menu-item) {
 		gap: 0.65rem;
 		padding: 0.6rem 0.65rem;
 		border-radius: 0.75rem;
 		font-size: 0.92rem;
 	}
 
-	:global(.composer-menu__icon) {
+	:global(.chat-composer__menu-icon) {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -402,7 +419,7 @@
 		height: 1rem;
 	}
 
-	:global(.composer-menu__paperclip) {
+	:global(.chat-composer__menu-paperclip) {
 		width: 1rem;
 		height: 1rem;
 	}

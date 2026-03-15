@@ -68,7 +68,7 @@
 			<div class="sheet-preview-canvas">
 				<div class="sheet-preview-paper">
 					{#key activeSheet.id}
-						<PaperSheet sheet={activeSheet} />
+						<PaperSheet sheet={activeSheet} reviewMode="mock" />
 					{/key}
 				</div>
 			</div>
