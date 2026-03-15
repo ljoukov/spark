@@ -27,18 +27,6 @@
 			description: 'Paper-like worksheet and annotated-text previews.',
 			href: '/admin/ui/sheet',
 			cta: 'Open'
-		},
-		{
-			title: 'Dialogs',
-			description: 'Confirmation, error, and progress dialog states.',
-			href: null,
-			cta: 'Soon'
-		},
-		{
-			title: 'Cards & banners',
-			description: 'Content cards, alerts, and inline status banners.',
-			href: null,
-			cta: 'Soon'
 		}
 	] as const;
 </script>
