@@ -10,6 +10,7 @@ import {
   formatUsd,
   listFilesRecursive,
   prepareSparkGraderReplayWorkspace,
+  SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
   readSparkAgentReplayManifest,
   resolveSparkAgentThinkingLevel,
   runSparkGraderReplayLocal,
@@ -29,7 +30,6 @@ const BENCHMARK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT_DIR = path.resolve(BENCHMARK_DIR, "../../../..");
 const OUTPUT_ROOT_DIR = path.join(BENCHMARK_DIR, "output");
 const DEFAULT_MODEL_ID: LlmTextModelId = "chatgpt-gpt-5.4";
-const DEFAULT_MAX_STEPS = 200;
 const { toRepoRelativePath } = createRepoPathHelpers({
   benchmarkDir: BENCHMARK_DIR,
   repoRootDir: REPO_ROOT_DIR,
@@ -48,8 +48,8 @@ type CliArgs = {
 type BenchmarkResult = {
   generatedAt: string;
   sourceRunPath: string;
-  sourceManifestPath: string | null;
-  sourceMode: "captured-snapshot" | "grader-fallback";
+  sourceManifestPath: string;
+  sourceMode: "captured-snapshot";
   runDir: string;
   workspaceDir: string;
   promptPath: string;
@@ -68,10 +68,10 @@ type BenchmarkResult = {
     disableExtractTextTool: boolean;
   };
   sourceDefaults: {
-    modelId: string | null;
+    modelId: string;
     thinkingLevel: "low" | "medium" | "high" | null;
-    useSubagents: boolean | null;
-    maxSteps: number | null;
+    useSubagents: boolean;
+    maxSteps: number;
   };
   agent: {
     modelCalls: number;
@@ -89,7 +89,7 @@ type BenchmarkResult = {
 function parseCliArgs(args: readonly string[]): CliArgs {
   const command = new Command("bench:spark-agent-replay")
     .description(
-      "Replay a Spark grader workspace from data/spark-agent/... with model or thinking overrides.",
+      "Replay a captured Spark grader workspace from data/spark-agent/... with model or thinking overrides.",
     )
     .requiredOption(
       "--run-path <path>",
@@ -237,17 +237,26 @@ async function main(): Promise<void> {
   const cli = parseCliArgs(process.argv.slice(2));
   const sourceRunDir = resolveSourceRunDir(cli.runPath);
   const sourceManifest = await readSparkAgentReplayManifest(sourceRunDir);
+  if (sourceManifest === null) {
+    throw new Error(
+      [
+        `Replay source must contain ${SPARK_AGENT_REPLAY_MANIFEST_PATH}: ${sourceRunDir}`,
+        `Replay source must also contain ${SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR}/.`,
+        "Legacy grader fallback replays are no longer supported.",
+      ].join("\n"),
+    );
+  }
 
   const modelId = resolveReplayModelId({
     cliModelId: cli.modelId,
-    sourceModelId: sourceManifest?.modelId ?? null,
+    sourceModelId: sourceManifest.modelId,
   });
   const thinkingLevel = resolveReplayThinkingLevel({
     cliThinking: cli.thinking,
     cliModelId: cli.modelId,
     chosenModelId: modelId,
-    sourceModelId: sourceManifest?.modelId ?? null,
-    sourceThinkingLevel: sourceManifest?.thinkingLevel ?? null,
+    sourceModelId: sourceManifest.modelId,
+    sourceThinkingLevel: sourceManifest.thinkingLevel,
   });
   const runDir = path.join(
     path.resolve(process.cwd(), cli.outputRootDir),
@@ -276,8 +285,8 @@ async function main(): Promise<void> {
     systemPrompt: prepared.systemPrompt,
     modelId,
     ...(thinkingLevel ? { thinkingLevel } : {}),
-    maxSteps: cli.maxSteps ?? prepared.sourceMaxSteps ?? DEFAULT_MAX_STEPS,
-    useSubagents: cli.useSubagents ?? prepared.sourceUseSubagents ?? true,
+    maxSteps: cli.maxSteps ?? prepared.sourceMaxSteps,
+    useSubagents: cli.useSubagents ?? prepared.sourceUseSubagents,
     disableExtractTextTool: cli.disableExtractTextTool,
   });
 
@@ -298,12 +307,9 @@ async function main(): Promise<void> {
   const benchmarkResult: BenchmarkResult = {
     generatedAt: new Date().toISOString(),
     sourceRunPath: toRepoRelativePath(sourceRunDir),
-    sourceManifestPath:
-      prepared.manifest !== null
-        ? toRepoRelativePath(
-            path.join(sourceRunDir, SPARK_AGENT_REPLAY_MANIFEST_PATH),
-          )
-        : null,
+    sourceManifestPath: toRepoRelativePath(
+      path.join(sourceRunDir, SPARK_AGENT_REPLAY_MANIFEST_PATH),
+    ),
     sourceMode: prepared.sourceMode,
     runDir: toRepoRelativePath(runDir),
     workspaceDir: toRepoRelativePath(workspaceDir),
@@ -373,7 +379,7 @@ async function main(): Promise<void> {
   console.log(lines.join("\n"));
 }
 
-await main().catch((error) => {
+await main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
   process.exitCode = 1;

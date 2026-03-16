@@ -6,17 +6,12 @@ It is intended for grading-agent benchmarking first. The replay uses the same Sp
 
 ## What It Replays
 
-For newer runs, the benchmark reads replay artifacts captured inside the persisted workspace:
+The benchmark requires replay artifacts captured inside the persisted workspace:
 
 - `.spark-agent-replay/manifest.json`
 - `.spark-agent-replay/initial-workspace/**`
 
-For older grader runs that predate those artifacts, it falls back to a grader-specific seed copy:
-
-- `brief.md`
-- `request.json`
-- `grader/task.md`
-- `grader/uploads/**`
+Older grader runs that predate those artifacts are intentionally unsupported and should fail fast.
 
 ## Run
 
@@ -45,7 +40,7 @@ bun --cwd=eval run bench:spark-agent-replay -- \
 
 ## How It Works
 
-1. It copies the replay snapshot or fallback grader seed into a fresh local workspace under `output/`.
+1. It copies the captured replay snapshot into a fresh local workspace under `output/`.
 2. It writes the resolved prompt and system prompt into the run directory for inspection.
 3. It runs the local Spark grader agent with the requested model, `thinkingLevel`, subagent setting, and max-step limit.
 4. It writes a machine-readable summary plus full tool-loop traces.

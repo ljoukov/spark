@@ -22,10 +22,7 @@ import {
 } from "@ljoukov/llm";
 
 import {
-  SPARK_GRADER_PROBLEMS_DIR,
-  SPARK_GRADER_SUMMARY_PATH,
   SPARK_GRADER_UPLOADS_MANIFEST_PATH,
-  buildSparkGraderAgentPrompt,
 } from "./graderAgentPrompt";
 import {
   SparkGraderRequestPayloadSchema,
@@ -55,12 +52,6 @@ import {
 const DEFAULT_GRADER_MAX_STEPS = 200;
 const LOCAL_REPLAY_ATTACHMENT_MAX_COUNT = 24;
 const LOCAL_REPLAY_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
-const GRADER_REPLAY_SEED_PATHS = [
-  "brief.md",
-  "request.json",
-  "grader/task.md",
-  "grader/uploads",
-] as const;
 
 const LocalReplayAttachmentSchema = z
   .object({
@@ -68,7 +59,7 @@ const LocalReplayAttachmentSchema = z
     contentType: z.string().trim().min(1),
     filename: z.string().trim().min(1).optional(),
   })
-  .passthrough();
+  .loose();
 
 const LocalReplayUploadsManifestSchema = z
   .object({
@@ -105,20 +96,6 @@ async function copyPath(sourcePath: string, targetPath: string): Promise<void> {
   await cp(sourcePath, targetPath, { force: true });
 }
 
-async function copyRelativePath(options: {
-  sourceDir: string;
-  targetDir: string;
-  relativePath: string;
-}): Promise<void> {
-  const sourcePath = path.join(options.sourceDir, options.relativePath);
-  if (!(await pathExists(sourcePath))) {
-    return;
-  }
-  const targetPath = path.join(options.targetDir, options.relativePath);
-  await mkdir(path.dirname(targetPath), { recursive: true });
-  await copyPath(sourcePath, targetPath);
-}
-
 async function copyDirectoryContents(options: {
   sourceDir: string;
   targetDir: string;
@@ -133,19 +110,6 @@ async function copyDirectoryContents(options: {
       path.join(options.targetDir, entry.name),
     );
   }
-}
-
-async function isGraderReplayWorkspace(rootDir: string): Promise<boolean> {
-  for (const relativePath of [
-    "brief.md",
-    "request.json",
-    "grader/task.md",
-  ] as const) {
-    if (!(await pathExists(path.join(rootDir, relativePath)))) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function buildReplayInitialInput(options: {
@@ -247,43 +211,16 @@ async function loadLocalGraderRequestPayload(options: {
   return SparkGraderRequestPayloadSchema.parse(JSON.parse(raw));
 }
 
-function resolveReplayPrompt(options: {
-  manifest: SparkAgentReplayManifest | null;
-}): string {
-  const prompt = options.manifest?.prompt?.trim();
-  if (prompt && prompt.length > 0) {
-    return prompt;
-  }
-  return buildSparkGraderAgentPrompt({
-    summaryPath:
-      options.manifest?.grader?.summaryPath ?? SPARK_GRADER_SUMMARY_PATH,
-    problemsDir:
-      options.manifest?.grader?.problemsDir ?? SPARK_GRADER_PROBLEMS_DIR,
-  });
-}
-
-function resolveReplaySystemPrompt(options: {
-  manifest: SparkAgentReplayManifest | null;
-}): string {
-  const systemPrompt = options.manifest?.systemPrompt?.trim();
-  if (systemPrompt && systemPrompt.length > 0) {
-    return systemPrompt;
-  }
-  return buildSparkAgentSystemPrompt({
-    includePdfTranscriptionSkill: true,
-  });
-}
-
 export type PreparedSparkGraderReplayWorkspace = {
-  sourceMode: "captured-snapshot" | "grader-fallback";
+  sourceMode: "captured-snapshot";
   workspaceDir: string;
-  manifest: SparkAgentReplayManifest | null;
+  manifest: SparkAgentReplayManifest;
   prompt: string;
   systemPrompt: string;
-  sourceModelId: string | null;
+  sourceModelId: string;
   sourceThinkingLevel: LlmThinkingLevel | null;
-  sourceMaxSteps: number | null;
-  sourceUseSubagents: boolean | null;
+  sourceMaxSteps: number;
+  sourceUseSubagents: boolean;
 };
 
 export async function prepareSparkGraderReplayWorkspace(options: {
@@ -291,52 +228,36 @@ export async function prepareSparkGraderReplayWorkspace(options: {
   targetWorkspaceDir: string;
 }): Promise<PreparedSparkGraderReplayWorkspace> {
   const manifest = await readSparkAgentReplayManifest(options.sourceRunDir);
-  await rm(options.targetWorkspaceDir, { recursive: true, force: true });
-  await mkdir(options.targetWorkspaceDir, { recursive: true });
-
   const capturedSnapshotDir = path.join(
     options.sourceRunDir,
     SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR,
   );
-  let sourceMode: PreparedSparkGraderReplayWorkspace["sourceMode"];
-  if (
-    manifest?.agentKind === "grader" &&
-    (await pathExists(capturedSnapshotDir))
-  ) {
-    await copyDirectoryContents({
-      sourceDir: capturedSnapshotDir,
-      targetDir: options.targetWorkspaceDir,
-    });
-    sourceMode = "captured-snapshot";
-  } else {
-    if (!(await isGraderReplayWorkspace(options.sourceRunDir))) {
-      throw new Error(
-        [
-          `Run directory does not contain a replay snapshot or a recognizable grader workspace: ${options.sourceRunDir}`,
-          `Expected ${SPARK_AGENT_REPLAY_DIR}/ or grader seed files such as brief.md, request.json, and grader/task.md.`,
-        ].join("\n"),
-      );
-    }
-    for (const relativePath of GRADER_REPLAY_SEED_PATHS) {
-      await copyRelativePath({
-        sourceDir: options.sourceRunDir,
-        targetDir: options.targetWorkspaceDir,
-        relativePath,
-      });
-    }
-    sourceMode = "grader-fallback";
+  if (manifest === null || !(await pathExists(capturedSnapshotDir))) {
+    throw new Error(
+      [
+        `Run directory does not contain captured replay artifacts: ${options.sourceRunDir}`,
+        `Expected ${SPARK_AGENT_REPLAY_DIR}/manifest.json and ${SPARK_AGENT_REPLAY_INITIAL_WORKSPACE_DIR}/.`,
+        "Legacy grader fallback replays are no longer supported.",
+      ].join("\n"),
+    );
   }
+  await rm(options.targetWorkspaceDir, { recursive: true, force: true });
+  await mkdir(options.targetWorkspaceDir, { recursive: true });
+  await copyDirectoryContents({
+    sourceDir: capturedSnapshotDir,
+    targetDir: options.targetWorkspaceDir,
+  });
 
   return {
-    sourceMode,
+    sourceMode: "captured-snapshot",
     workspaceDir: options.targetWorkspaceDir,
     manifest,
-    prompt: resolveReplayPrompt({ manifest }),
-    systemPrompt: resolveReplaySystemPrompt({ manifest }),
-    sourceModelId: manifest?.modelId ?? null,
-    sourceThinkingLevel: manifest?.thinkingLevel ?? null,
-    sourceMaxSteps: manifest?.maxSteps ?? null,
-    sourceUseSubagents: manifest?.useSubagents ?? null,
+    prompt: manifest.prompt,
+    systemPrompt: manifest.systemPrompt,
+    sourceModelId: manifest.modelId,
+    sourceThinkingLevel: manifest.thinkingLevel,
+    sourceMaxSteps: manifest.maxSteps,
+    sourceUseSubagents: manifest.useSubagents,
   };
 }
 
@@ -411,8 +332,8 @@ export async function runSparkGraderLocal(options: {
       options.workspaceDir,
     ),
   });
-  const { extract_text: _extractTextTool, ...baseToolsWithoutExtractText } =
-    fullBaseTools;
+  const { extract_text, ...baseToolsWithoutExtractText } = fullBaseTools;
+  void extract_text;
   const baseTools = disableExtractTextTool
     ? baseToolsWithoutExtractText
     : fullBaseTools;
