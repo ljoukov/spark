@@ -390,6 +390,19 @@ export function renderMarkdown(markdown: string): string {
 	return typeof parsed === 'string' ? parsed : '';
 }
 
+export function renderMarkdownInline(markdown: string): string {
+	const rendered = renderMarkdown(markdown).trim();
+	if (
+		rendered.startsWith('<p>') &&
+		rendered.endsWith('</p>') &&
+		!rendered.includes('</p><p>') &&
+		!rendered.includes('</p>\n<p>')
+	) {
+		return rendered.slice(3, -4);
+	}
+	return rendered;
+}
+
 export function renderMarkdownOptional(value?: string | null): string | undefined {
 	if (!value) {
 		return undefined;

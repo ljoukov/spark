@@ -1,6 +1,481 @@
-import type { PaperSheetData } from './types';
+import type { PaperSheetAnswers, PaperSheetData, PaperSheetMockReview } from './types';
+
+const hamiltonSampleAnswers: PaperSheetAnswers = {
+	'H1:response': `Since the remainder is $43$, $n > 44$ and
+
+$$
+2023 - 43 = 1980
+$$
+
+is a multiple of $n$.
+
+$$
+1980 = 2^2 \\times 3^2 \\times 5 \\times 11.
+$$
+
+This means its factors greater than $43$ are [partly unclear]
+
+$$
+55, 60, 66, 90, 99, 110, 132, 165, 180, 198, 220, 330, 495, 990.
+$$
+
+So there are $14$ possible $n$'s.`,
+	'H2:response': `$\\%$ is equivalent to multiplying by $\\frac{1}{100}$.
+
+$$
+a\\%\\text{ of }b\\%\\text{ of }a
+=
+\\frac{a}{100}\\times\\frac{b}{100}\\times a
+=
+\\frac{a^2b}{10^4}
+$$
+
+and
+
+$$
+b\\%\\text{ of }a\\%\\text{ of }b
+=
+\\frac{b}{100}\\times\\frac{a}{100}\\times b
+=
+\\frac{ab^2}{10^4}.
+$$
+
+Since they differ by
+
+$$
+0.003 = \\frac{3}{10^3} = \\frac{30}{10^4},
+$$
+
+and since $a > b$,
+
+$$
+\\frac{a^2b}{10^4} > \\frac{ab^2}{10^4}
+$$
+
+so
+
+$$
+a^2b - ab^2 = 30
+$$
+
+and hence
+
+$$
+ab(a - b) = 30.
+$$
+
+Since $a$ and $b$ are integers, $ab > a - b$, and so
+
+$$
+(ab, a - b) = (30, 1), (15, 2), (10, 3), (6, 5).
+$$
+
+Case 1:
+
+$$
+ab = 30,\\ a - b = 1 \\Rightarrow a = 6,\\ b = 5.
+$$
+
+Case 2:
+
+$$
+ab = 15,\\ a - b = 2 \\Rightarrow a = 5,\\ b = 3.
+$$
+
+Case 3:
+
+$$
+ab = 10,\\ a - b = 3 \\Rightarrow a = 5,\\ b = 2.
+$$
+
+Case 4:
+
+$$
+ab = 6,\\ a - b = 5 \\Rightarrow a = 6,\\ b = 1.
+$$
+
+So
+
+$$
+(a, b) = (6, 5), (5, 3), (5, 2), (6, 1).
+$$`,
+	'H3:response': `Thus for this to be true:
+
+$$
+1 \\le \\frac{1}{\\sqrt{n}} < 2
+$$
+
+or
+
+$$
+0.1 \\le \\frac{1}{\\sqrt{n}} < 0.2
+$$
+
+or
+
+$$
+0.01 \\le \\frac{1}{\\sqrt{n}} < 0.02
+$$
+
+or [continuation to the next place value].
+
+Then [faint / partial interval work]
+
+$$
+0.01 \\le \\frac{1}{\\sqrt{n}} < 0.02
+$$
+
+and [unclear continuation].
+
+[No final count is visible on the photographed page.]`,
+	'H4:response': `Now since $ABCD$ is a parallelogram,
+
+$$
+AD \\parallel CB,\\qquad CD \\parallel AB.
+$$
+
+This means that
+
+$$
+\\angle QDP = \\angle ABP
+$$
+
+and
+
+$$
+\\angle QPD = \\angle BAP,
+$$
+
+so
+
+$$
+\\triangle DPQ \\sim \\triangle BAP
+$$
+
+and
+
+$$
+\\frac{PD}{PB} = \\frac{PQ}{AP}.
+$$
+
+Since $BR \\parallel AQ$ [equivalently, using the same transversal / parallel structure],
+
+$$
+\\triangle DBR \\sim \\triangle ADP
+$$
+
+and
+
+$$
+\\frac{PD}{PB} = \\frac{AP}{PR}.
+$$
+
+Therefore
+
+$$
+\\left(\\frac{PD}{PB}\\right)\\left(\\frac{PD}{PB}\\right)
+=
+\\left(\\frac{PQ}{AP}\\right)\\left(\\frac{AP}{PR}\\right)
+$$
+
+so
+
+$$
+\\left(\\frac{PD}{PB}\\right)^2 = \\frac{PQ}{PR}.
+$$`,
+	'H5:response': `Now subtracting $2$ integers from each other and replacing by the difference doesn't change parity.
+
+For final sum to be $0$, sum must be even.
+
+Now the largest $2$ numbers are consecutive and will be replaced by $1$.
+
+If $n$ is a multiple of $4$, all larger numbers will have been replaced by [pairs of] $1$'s and then $0$'s [unclear wording], so final sum is $0$.
+
+If $n$ is $1$ more than a multiple of $4$, [unclear continuation].
+
+If $n$ is $3$ more than a multiple of $4$, [unclear continuation; the photographed argument appears to continue but is not fully legible].`,
+	'H6:response': `Rearrange this equation, we get
+
+$$
+p^n = (m + 60)(m - 60).
+$$
+
+Now since $p$ is prime, $p^n$ is prime [power], and
+
+$$
+p^a - p^b = 120.
+$$
+
+This must be divisible by $p$.
+
+Now
+
+$$
+120 = p^a - p^b
+$$
+
+must be divisible by $p$.
+
+So
+
+$$
+p = 2, 3, 5.
+$$
+
+Now if $p = 2$, for
+
+$$
+p^a - p^b = 120
+$$
+
+$$
+p^b(p^{a - b} - 1) = 120
+$$
+
+so $p^b < 120$ and $p^a > 120$.
+
+For $p = 2$,
+
+$$
+p^b = 2, 4, 8, 16, 32, 64, 128
+$$
+
+[continuation].
+
+We have
+
+$$
+p^a = 128,\\ p^b = 8.
+$$
+
+$$
+m + 60 = 128 \\text{ and } m - 60 = 8
+$$
+
+so
+
+$$
+m = 68.
+$$
+
+This gives
+
+$$
+(m, n, p) = (68, 10, 2).
+$$
+
+If $p = 3$, again $p^a > 120$ as then if $p^a - p^b \\ge 2 \\times 120$, no solution.
+
+$$
+p = 3, 9, 27, 81,
+$$
+
+as $243 - 81 = 162 > 120$.
+
+Thus there is no solution.
+
+If $p = 5$, obviously only $5$, $25$ and $125$.
+
+$$
+m + 60 = 125,\\quad m - 60 = 5
+$$
+
+$$
+m = 65
+$$
+
+This gives
+
+$$
+(m, n, p) = (65, 4, 5).
+$$
+
+So
+
+$$
+(m, n, p) = (68, 10, 2) \\text{ or } (65, 4, 5).
+$$`
+};
+
+const hamiltonSampleReview: PaperSheetMockReview = {
+	score: {
+		got: 42,
+		total: 60
+	},
+	objectiveQuestionCount: 0,
+	teacherReviewMarks: 60,
+	teacherReviewQuestionCount: 6,
+	label: 'Sample grading summary',
+	message: 'Hamilton 2023 combined grading file transcribed into the sheet preview.',
+	note: 'Use Show Mock Review to reveal problem-level notes seeded from the original grader comments.',
+	questions: {
+		'H1:response': {
+			status: 'incorrect',
+			label: '5 / 10',
+			statusLabel: 'graded',
+			note: `The key observation is correct: **$2023 - 43 = 1980$** must be divisible by **$n$**. The issue is the count. The condition should be **$n > 43$**, so **$44$** is valid, and several larger factors are still missing from the list.`,
+			followUp:
+				'Recount the factors of $1980$ that are greater than $43$. Check $44$, $45$, $396$, $660$, and $1980$ before you settle on the total.'
+		},
+		'H2:response': {
+			status: 'correct',
+			label: '9 / 10',
+			statusLabel: 'graded',
+			note: 'This is essentially complete. You convert both percentage expressions correctly, reach **$ab(a - b) = 30$**, and recover the right four solution pairs. The only missing piece is making the discarded negative roots explicit in each case.',
+			followUp:
+				'If you polish this for full marks, state briefly why the second quadratic root is rejected in each case.'
+		},
+		'H3:response': {
+			status: 'incorrect',
+			label: '4 / 10',
+			statusLabel: 'graded',
+			note: 'The starting idea is right: the first non-zero digit is **$1$** exactly when **$\\frac{1}{\\sqrt{n}}$** falls into intervals like **$[1, 2)$**, **$[0.1, 0.2)$**, and so on. The photographed work stops before those intervals are converted into full ranges for **$n$** and counted.',
+			followUp:
+				'Push the inequalities through to ranges of $n$, then count the integers in each range before you add the totals.'
+		},
+		'H4:response': {
+			status: 'correct',
+			label: '10 / 10',
+			statusLabel: 'graded',
+			note: 'Complete proof. You identify one similar-triangle pair to get **$\\frac{PD}{PB} = \\frac{PQ}{AP}$**, a second pair to get **$\\frac{PD}{PB} = \\frac{AP}{PR}$**, and then multiply the results to reach the required identity.',
+			followUp:
+				'This is already full-credit level. If you wanted to tighten it further, you could name the matching angles a little more explicitly.'
+		},
+		'H5:response': {
+			status: 'incorrect',
+			label: '6 / 10',
+			statusLabel: 'graded',
+			note: 'Two strong ideas are present: parity is preserved, and the largest consecutive numbers repeatedly collapse to **$1$**. The missing part is the hard odd-case analysis, so the final set of valid **$n$** values is not fully established from the visible work.',
+			followUp:
+				'Keep the parity argument, then separate the cases by $n \\bmod 4$ and finish the odd-case threshold carefully.'
+		},
+		'H6:response': {
+			status: 'incorrect',
+			label: '8 / 10',
+			statusLabel: 'graded',
+			note: 'The factorisation **$p^n = (m + 60)(m - 60)$** is correct, and the casework for **$p = 2, 3, 5$** is mostly good. The gap is the special case **$m - 60 = 1$**, which produces the extra solution **$(61, 2, 11)$**.',
+			followUp:
+				'Before dividing into the $p = 2, 3, 5$ cases, isolate the edge case where $m - 60$ equals $1$ and see what it forces.'
+		}
+	}
+};
 
 export const samplePaperSheets = [
+	{
+		id: 'hamilton-2023',
+		subject: 'Mathematics',
+		level: 'Olympiad',
+		title: 'Hamilton 2023',
+		subtitle: 'Andrew Hamilton · sample student submission',
+		color: '#214A3A',
+		accent: '#2E7D61',
+		light: '#F2F8F5',
+		border: '#BCD8CB',
+		initialAnswers: hamiltonSampleAnswers,
+		mockReview: hamiltonSampleReview,
+		sections: [
+			{
+				type: 'hook',
+				text: "Sample worksheet seeded from the Hamilton 2023 combined grading file. Each section shows the original problem statement with Andrew Hamilton's transcribed notebook submission prefilled, including `[unclear]` markers where the source image was faint."
+			},
+			{
+				id: 'H1',
+				label: 'Remainders and divisors',
+				theory:
+					'Susie thinks of a positive integer $n$. She notices that, when she divides $2023$ by $n$, she is left with a remainder of $43$. Find how many possible values of $n$ there are.',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 11,
+						renderMode: 'markdown'
+					}
+				]
+			},
+			{
+				id: 'H2',
+				label: 'Percent expressions',
+				theory:
+					'The two positive integers $a, b$ with $a > b$ are such that $a\\%$ of $b\\%$ of $a$ and $b\\%$ of $a\\%$ of $b$ differ by $0.003$. Find all possible pairs $(a, b)$.',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 26,
+						renderMode: 'markdown'
+					}
+				]
+			},
+			{
+				id: 'H3',
+				label: 'First non-zero digit',
+				theory:
+					'The $n$th term of a sequence is the first non-zero digit of the decimal expansion of $\\frac{1}{\\sqrt{n}}$. How many of the first one million terms of the sequence are equal to $1$?',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 12,
+						renderMode: 'markdown'
+					}
+				]
+			},
+			{
+				id: 'H4',
+				label: 'Parallelogram proof',
+				theory:
+					'In the parallelogram $ABCD$, a line through $A$ meets $BD$ at $P$, $CD$ at $Q$ and $BC$ extended at $R$. Prove that $\\frac{PQ}{PR} = \\left(\\frac{PD}{PB}\\right)^2$.',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 20,
+						renderMode: 'markdown'
+					}
+				]
+			},
+			{
+				id: 'H5',
+				label: 'Repeated differences',
+				theory:
+					'Mickey writes down on a board $n$ consecutive whole numbers, the smallest of which is $2023$. He repeatedly replaces the largest two numbers with their difference until only one number remains. For which values of $n$ is the last remaining number $0$?',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 14,
+						renderMode: 'markdown'
+					}
+				]
+			},
+			{
+				id: 'H6',
+				label: 'Prime powers and squares',
+				theory:
+					'Find all triples $(m, n, p)$ which satisfy $p^n + 3600 = m^2$, where $p$ is prime and $m, n$ are positive integers.',
+				questions: [
+					{
+						id: 'response',
+						type: 'lines',
+						marks: 10,
+						prompt: '**Student solution transcript**',
+						lines: 32,
+						renderMode: 'markdown'
+					}
+				]
+			}
+		]
+	},
 	{
 		id: 'roman',
 		subject: 'History',

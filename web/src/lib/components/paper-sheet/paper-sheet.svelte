@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import { MarkdownContent } from '$lib/components/markdown/index.js';
 	import PaperSheetQuestionFeedback from './paper-sheet-question-feedback.svelte';
 	import type {
 		PaperSheetAnswers,
@@ -125,21 +126,16 @@
 		].join('; ');
 	}
 
-	function escapeHtml(value: string): string {
-		return value
-			.replace(/&/gu, '&amp;')
-			.replace(/</gu, '&lt;')
-			.replace(/>/gu, '&gt;')
-			.replace(/"/gu, '&quot;')
-			.replace(/'/gu, '&#39;');
-	}
+	function cloneAnswers(source: PaperSheetAnswers | undefined): PaperSheetAnswers {
+		if (!source) {
+			return {};
+		}
 
-	function renderInlineMarkup(value: string): string {
-		const escaped = escapeHtml(value);
-		return escaped
-			.replace(/\*\*(.*?)\*\*/gu, '<strong>$1</strong>')
-			.replace(/\*(.*?)\*/gu, '<em>$1</em>')
-			.replace(/\n/gu, '<br />');
+		const next: PaperSheetAnswers = {};
+		for (const [key, value] of Object.entries(source)) {
+			next[key] = typeof value === 'string' ? value : { ...value };
+		}
+		return next;
 	}
 
 	function createScoreTone(score: PaperSheetScore): {
@@ -319,6 +315,10 @@
 	}
 
 	function buildMockReview(sheet: PaperSheetData): PaperSheetMockReview {
+		if (sheet.mockReview) {
+			return sheet.mockReview;
+		}
+
 		const questions: Record<string, PaperSheetQuestionReview> = {};
 		let got = 0;
 		let total = 0;
@@ -489,7 +489,7 @@
 		if (nextSheetSignature === previousSheetSignature) {
 			return;
 		}
-		answers = {};
+		answers = cloneAnswers(sheet.initialAnswers);
 		checked = false;
 		review = null;
 		feedbackDrafts = {};
@@ -540,7 +540,7 @@
 	}
 
 	function handleReset(): void {
-		answers = {};
+		answers = cloneAnswers(sheet.initialAnswers);
 		activeMatchTerms = {};
 		checked = false;
 		review = null;
@@ -671,12 +671,12 @@
 	}
 
 	function getTextAnswer(key: string): string {
-		const value = answers[key];
+		const value = answers[key] ?? sheet.initialAnswers?.[key];
 		return typeof value === 'string' ? value : '';
 	}
 
 	function getObjectAnswer(key: string): Record<string, string> {
-		const value = answers[key];
+		const value = answers[key] ?? sheet.initialAnswers?.[key];
 		if (!value || typeof value === 'string') {
 			return {};
 		}
@@ -731,14 +731,6 @@
 		};
 	}
 
-	function getQuestionPromptHtml(prompt: string): string {
-		return renderInlineMarkup(prompt);
-	}
-
-	function getTheoryHtml(theory: string): string {
-		return renderInlineMarkup(theory);
-	}
-
 	function getBlankConfig(
 		question: { blanks: [PaperSheetBlank] | [PaperSheetBlank, PaperSheetBlank] },
 		index: 0 | 1
@@ -776,7 +768,7 @@
 
 	<div class="paper-sheet__body">
 		{#if hookSection}
-			<div class="paper-sheet__hook">{hookSection.text}</div>
+			<MarkdownContent markdown={hookSection.text} class="paper-sheet__hook" />
 		{/if}
 
 		{#each contentSections as section (section.id)}
@@ -807,9 +799,7 @@
 					aria-hidden={!isSectionOpen(section.id)}
 				>
 					{#if section.theory}
-						<div class="paper-sheet__theory sheet-markup">
-							{@html getTheoryHtml(section.theory)}
-						</div>
+						<MarkdownContent markdown={section.theory} class="paper-sheet__theory" />
 					{/if}
 
 					{#if section.infoBox}
@@ -817,7 +807,7 @@
 							<div class="paper-sheet__info-icon" aria-hidden="true">{section.infoBox.icon}</div>
 							<div class="paper-sheet__info-copy">
 								<p class="paper-sheet__info-title">{section.infoBox.title}</p>
-								<p class="paper-sheet__info-text">{section.infoBox.text}</p>
+								<MarkdownContent markdown={section.infoBox.text} class="paper-sheet__info-text" />
 							</div>
 						</div>
 					{/if}
@@ -841,7 +831,11 @@
 									{@const blank1 = getBlankConfig(question, 1)}
 
 									<div class="paper-sheet__fill-row">
-										<span>{question.prompt}</span>
+										<MarkdownContent
+											inline
+											markdown={question.prompt}
+											class="paper-sheet__inline-markdown"
+										/>
 										<input
 											class="paper-sheet__inline-input"
 											style={buildTextInputStyle(reviewStatus, blank0?.minWidth ?? 100)}
@@ -854,7 +848,11 @@
 										/>
 
 										{#if blank1}
-											<span>{question.conjunction ?? ''}</span>
+											<MarkdownContent
+												inline
+												markdown={question.conjunction ?? ''}
+												class="paper-sheet__inline-markdown"
+											/>
 											<input
 												class="paper-sheet__inline-input"
 												style={buildTextInputStyle(reviewStatus, blank1.minWidth ?? 100)}
@@ -867,12 +865,16 @@
 											/>
 										{/if}
 
-										<span>{question.after}</span>
+										<MarkdownContent
+											inline
+											markdown={question.after}
+											class="paper-sheet__inline-markdown"
+										/>
 									</div>
 								{:else if question.type === 'mcq'}
 									{@const selected = getTextAnswer(questionKey)}
 
-									<div class="paper-sheet__prompt">{question.prompt}</div>
+									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
 									<div class="paper-sheet__mcq-grid">
 										{#each question.options as option, optionIndex (`${question.id}-option-${optionIndex}`)}
 											{@const selectedOption = selected === option}
@@ -894,35 +896,45 @@
 														<span class="paper-sheet__mcq-radio-dot"></span>
 													{/if}
 												</span>
-												<span class="paper-sheet__mcq-label">{option}</span>
+												<MarkdownContent inline markdown={option} class="paper-sheet__mcq-label" />
 											</button>
 										{/each}
 									</div>
 								{:else if question.type === 'lines'}
 									{@const textValue = getTextAnswer(questionKey)}
 
-									<div class="paper-sheet__prompt sheet-markup">
-										{@html getQuestionPromptHtml(question.prompt)}
-									</div>
-									<textarea
-										class="paper-sheet__lines-input"
-										value={textValue}
-										rows={question.lines}
-										oninput={(event) => {
-											updateTextAnswer(questionKey, readInputValue(event));
-										}}
-										placeholder="Write your answer here..."
-										readonly={checked}
-									></textarea>
+									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
+									{#if question.renderMode === 'markdown'}
+										<div class="paper-sheet__lines-markdown">
+											<MarkdownContent markdown={textValue} class="paper-sheet__answer-markdown" />
+										</div>
+									{:else}
+										<textarea
+											class="paper-sheet__lines-input"
+											value={textValue}
+											rows={question.lines}
+											oninput={(event) => {
+												updateTextAnswer(questionKey, readInputValue(event));
+											}}
+											placeholder="Write your answer here..."
+											readonly={checked}
+										></textarea>
+									{/if}
 								{:else if question.type === 'calc'}
 									{@const calcValue = getTextAnswer(questionKey)}
 
-									<div class="paper-sheet__prompt">{question.prompt}</div>
+									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
 									{#if question.hint}
-										<div class="paper-sheet__hint">Hint: {question.hint}</div>
+										<div class="paper-sheet__hint">
+											<MarkdownContent inline markdown={`Hint: ${question.hint}`} />
+										</div>
 									{/if}
 									<div class="paper-sheet__calc-row">
-										<span>{question.inputLabel}</span>
+										<MarkdownContent
+											inline
+											markdown={question.inputLabel}
+											class="paper-sheet__inline-markdown"
+										/>
 										<input
 											class="paper-sheet__inline-input paper-sheet__inline-input--compact"
 											style={buildTextInputStyle(reviewStatus)}
@@ -933,15 +945,19 @@
 											placeholder="..."
 											readonly={checked}
 										/>
-										<span>{question.unit}</span>
+										<MarkdownContent
+											inline
+											markdown={question.unit}
+											class="paper-sheet__inline-markdown"
+										/>
 									</div>
 								{:else if question.type === 'match'}
 									{@const selections = getObjectAnswer(questionKey)}
 									{@const activeTerm = activeMatchTerms[questionKey] ?? null}
 									{@const takenMatches = Object.values(selections)}
 
-									<div class="paper-sheet__prompt">
-										{question.prompt}
+									<div class="paper-sheet__prompt paper-sheet__prompt--with-note">
+										<MarkdownContent inline markdown={question.prompt} />
 										<span class="paper-sheet__prompt-note"
 											>(Click a term, then click its meaning)</span
 										>
@@ -962,7 +978,11 @@
 														selectMatchTerm(questionKey, pair.term);
 													}}
 												>
-													<span>{pair.term}</span>
+													<MarkdownContent
+														inline
+														markdown={pair.term}
+														class="paper-sheet__match-label"
+													/>
 												</button>
 											{/each}
 										</div>
@@ -980,7 +1000,11 @@
 														assignMatch(questionKey, pair.match);
 													}}
 												>
-													{pair.match}
+													<MarkdownContent
+														inline
+														markdown={pair.match}
+														class="paper-sheet__match-label"
+													/>
 												</button>
 											{/each}
 										</div>
@@ -988,13 +1012,17 @@
 								{:else if question.type === 'spelling'}
 									{@const spellingAnswers = getObjectAnswer(questionKey)}
 
-									<div class="paper-sheet__prompt">{question.prompt}</div>
+									<MarkdownContent markdown={question.prompt} class="paper-sheet__prompt" />
 									<div class="paper-sheet__spelling-list">
 										{#each question.words as word, index (`${question.id}-${index}`)}
 											{@const spellingValue = spellingAnswers[String(index)] ?? ''}
 
 											<div class="paper-sheet__spelling-row">
-												<span class="paper-sheet__spelling-wrong">{word.wrong}</span>
+												<MarkdownContent
+													inline
+													markdown={word.wrong}
+													class="paper-sheet__spelling-wrong"
+												/>
 												<span class="paper-sheet__spelling-arrow">→</span>
 												<input
 													class="paper-sheet__inline-input paper-sheet__inline-input--wide"
@@ -1102,6 +1130,26 @@
 			0 1px 4px rgba(0, 0, 0, 0.1);
 		font-family: Georgia, 'Times New Roman', serif;
 		color: #1a1a1a;
+		--markdown-text: #1a1a1a;
+		--markdown-heading: #1a1a1a;
+		--markdown-strong: var(--sheet-color);
+		--markdown-link: var(--sheet-color);
+		--markdown-quote-border: var(--sheet-color-30);
+		--markdown-quote-text: #555555;
+		--markdown-inline-code-bg: var(--sheet-color-10);
+		--markdown-inline-code-text: #1a1a1a;
+		--markdown-table-border: var(--sheet-color-25);
+		--markdown-table-head-bg: var(--sheet-color-10);
+		--markdown-code-bg: #162033;
+		--markdown-code-header-bg: #1f2c44;
+		--markdown-code-border: rgba(180, 198, 223, 0.24);
+		--markdown-code-text: #f8fafc;
+		--markdown-code-muted: #94a3b8;
+		--markdown-code-keyword: #c084fc;
+		--markdown-code-string: #34d399;
+		--markdown-code-number: #fbbf24;
+		--markdown-code-function: #60a5fa;
+		--markdown-code-type: #f472b6;
 	}
 
 	.paper-sheet__header {
@@ -1297,7 +1345,6 @@
 	}
 
 	.paper-sheet__info-text {
-		margin: 0;
 		font-size: 13px;
 		line-height: 1.6;
 		color: #333333;
@@ -1367,11 +1414,25 @@
 		line-height: 1.6;
 	}
 
+	.paper-sheet__prompt--with-note {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px;
+	}
+
 	.paper-sheet__prompt-note {
-		margin-left: 4px;
 		font-size: 12px;
 		font-style: italic;
 		color: #888888;
+	}
+
+	.paper-sheet__inline-markdown,
+	.paper-sheet__mcq-label,
+	.paper-sheet__match-label,
+	.paper-sheet__spelling-wrong {
+		font-size: inherit;
+		line-height: inherit;
 	}
 
 	.paper-sheet__fill-row,
@@ -1470,6 +1531,12 @@
 	}
 
 	.paper-sheet__mcq-label {
+		display: block;
+		min-width: 0;
+	}
+
+	.paper-sheet__match-label {
+		display: block;
 		min-width: 0;
 	}
 
@@ -1509,6 +1576,27 @@
 		background-color: #f9f9f9;
 	}
 
+	.paper-sheet__lines-markdown {
+		border: 1.5px solid var(--sheet-color-30);
+		border-radius: 6px;
+		background:
+			repeating-linear-gradient(
+				transparent,
+				transparent calc(1.8em - 1px),
+				#ececec calc(1.8em - 1px),
+				#ececec 1.8em
+			),
+			#fdfdfd;
+		padding: 10px 12px;
+	}
+
+	.paper-sheet__answer-markdown {
+		min-height: calc(1.8em * 3);
+		font-size: 13.5px;
+		line-height: 1.8;
+		--markdown-strong: var(--sheet-color);
+	}
+
 	.paper-sheet__match-column {
 		display: flex;
 		flex-direction: column;
@@ -1537,6 +1625,7 @@
 	}
 
 	.paper-sheet__spelling-wrong {
+		display: inline-block;
 		width: 120px;
 		font-size: 13px;
 		color: #888888;
@@ -1618,23 +1707,6 @@
 		font-size: 11px;
 		letter-spacing: 0.04em;
 		color: #bbbbbb;
-	}
-
-	.sheet-markup :global(p) {
-		margin: 0;
-	}
-
-	.sheet-markup :global(p + p) {
-		margin-top: 0.75em;
-	}
-
-	.sheet-markup :global(strong) {
-		color: var(--sheet-color);
-		font-weight: 700;
-	}
-
-	.sheet-markup :global(em) {
-		font-style: italic;
 	}
 
 	@media (max-width: 900px) {

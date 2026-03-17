@@ -8,7 +8,16 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
-	let activeSheetId = $state(samplePaperSheets[0]?.id ?? '');
+	function getDefaultSheetId(): string {
+		for (const sheet of samplePaperSheets) {
+			if (sheet.id === 'hamilton-2023') {
+				return sheet.id;
+			}
+		}
+		return samplePaperSheets[0]?.id ?? '';
+	}
+
+	let activeSheetId = $state(getDefaultSheetId());
 	let annotatedTextTheme = $state<AnnotatedTextTheme>('light');
 
 	const activeSheet = $derived.by(() => {
@@ -27,8 +36,9 @@
 			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sheet UI preview</h1>
 			<p class="max-w-3xl text-sm text-muted-foreground">
 				Showcase for the paper-style worksheet and annotated-text components ported to Svelte and
-				stored in <code>$lib/components</code>. Use the mock review inside each worksheet to preview
-				the per-question tutor note and reply interaction.
+				stored in <code>$lib/components</code>. The Hamilton 2023 tab is seeded with a sample
+				student submission, and each worksheet still supports the mock review flow for previewing
+				per-question tutor notes and reply interactions.
 			</p>
 		</div>
 

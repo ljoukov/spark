@@ -18,11 +18,11 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import type { PageData } from './$types';
 	import { getFirebaseApp } from '$lib/utils/firebaseClient';
+	import { MarkdownContent } from '$lib/components/markdown/index.js';
 	import TaskCard from '$lib/components/spark/chat/TaskCard.svelte';
 	import { ChatInput } from '$lib/components/chat/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { renderMarkdown } from '$lib/markdown';
 	import { streamSse } from '$lib/client/sse';
 	import {
 		SparkAgentAttachmentSchema,
@@ -97,7 +97,6 @@
 	let lastScrollMessageId = $state<string | null>(null);
 	let attachmentInputRef = $state<HTMLInputElement | null>(null);
 	let photoInputRef = $state<HTMLInputElement | null>(null);
-	let agentStreamRef = $state<HTMLDivElement | null>(null);
 	let attachments = $state<LocalAttachment[]>([]);
 	let attachmentError = $state<string | null>(null);
 	let clipboardAttachmentCounter = $state(0);
@@ -108,7 +107,6 @@
 	const ignoredAttachmentIdsByConversation = new Map<string, Set<string>>();
 	const ignoredFingerprintsByConversation = new Map<string, Set<string>>();
 	const uploadQueueByConversation = new Map<string, Promise<void>>();
-	const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
 	let tooltipState = $state({
 		text: '',
 		x: 0,
@@ -676,74 +674,6 @@
 		};
 	}
 
-	async function copyText(value: string): Promise<boolean> {
-		if (!browser) {
-			return false;
-		}
-		if (navigator.clipboard?.writeText) {
-			try {
-				await navigator.clipboard.writeText(value);
-				return true;
-			} catch {
-				// fall through
-			}
-		}
-		try {
-			const textarea = document.createElement('textarea');
-			textarea.value = value;
-			textarea.setAttribute('readonly', 'true');
-			textarea.style.position = 'fixed';
-			textarea.style.opacity = '0';
-			textarea.style.pointerEvents = 'none';
-			document.body.appendChild(textarea);
-			textarea.select();
-			const ok = document.execCommand('copy');
-			textarea.remove();
-			return ok;
-		} catch {
-			return false;
-		}
-	}
-
-	function setCopyButtonState(
-		button: HTMLButtonElement,
-		state: 'idle' | 'copied' | 'error' | 'empty',
-		label: string
-	): void {
-		button.setAttribute('aria-label', label);
-		if (state === 'idle') {
-			delete button.dataset.copyState;
-		} else {
-			button.dataset.copyState = state;
-		}
-		const existingTimer = copyResetTimers.get(button);
-		if (existingTimer !== undefined) {
-			window.clearTimeout(existingTimer);
-		}
-		const timeoutId = window.setTimeout(() => {
-			button.setAttribute('aria-label', 'Copy code');
-			delete button.dataset.copyState;
-		}, 1400);
-		copyResetTimers.set(button, timeoutId);
-	}
-
-	async function handleCodeCopyClick(event: MouseEvent): Promise<void> {
-		const target = event.target as HTMLElement | null;
-		const button = target?.closest<HTMLButtonElement>('[data-code-copy]');
-		if (!button) {
-			return;
-		}
-		event.preventDefault();
-		const codeEl = button.closest('.code-block')?.querySelector('code');
-		const code = codeEl?.textContent ?? '';
-		if (!code) {
-			setCopyButtonState(button, 'empty', 'No code');
-			return;
-		}
-		const ok = await copyText(code);
-		setCopyButtonState(button, ok ? 'copied' : 'error', ok ? 'Copied' : 'Copy failed');
-	}
-
 	function appendStreamingThoughts(current: string, delta: string): string {
 		return `${current}${delta}`;
 	}
@@ -867,21 +797,21 @@
 		return extractSupportedTransferFiles(event.clipboardData);
 	}
 
-		function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {
-			if (!dataTransfer) {
-				return false;
-			}
-			if (Array.from(dataTransfer.types).includes('Files')) {
-				return true;
-			}
-			for (const item of Array.from(dataTransfer.items)) {
-				if (item.kind !== 'file') {
-					continue;
-				}
-				return true;
-			}
-			return dataTransfer.files.length > 0;
+	function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {
+		if (!dataTransfer) {
+			return false;
 		}
+		if (Array.from(dataTransfer.types).includes('Files')) {
+			return true;
+		}
+		for (const item of Array.from(dataTransfer.items)) {
+			if (item.kind !== 'file') {
+				continue;
+			}
+			return true;
+		}
+		return dataTransfer.files.length > 0;
+	}
 
 	function extractSupportedTransferFiles(dataTransfer: DataTransfer | null): File[] {
 		if (!dataTransfer) {
@@ -949,10 +879,10 @@
 		await addAttachments(normalizeClipboardFiles(pastedFiles));
 	}
 
-		function handleComposerDragEnter(event: DragEvent): void {
-			if (!hasFileTransfer(event.dataTransfer)) {
-				return;
-			}
+	function handleComposerDragEnter(event: DragEvent): void {
+		if (!hasFileTransfer(event.dataTransfer)) {
+			return;
+		}
 		event.preventDefault();
 		if (event.dataTransfer) {
 			event.dataTransfer.dropEffect = 'copy';
@@ -960,10 +890,10 @@
 		fileDragDepth += 1;
 	}
 
-		function handleComposerDragOver(event: DragEvent): void {
-			if (!hasFileTransfer(event.dataTransfer)) {
-				return;
-			}
+	function handleComposerDragOver(event: DragEvent): void {
+		if (!hasFileTransfer(event.dataTransfer)) {
+			return;
+		}
 		event.preventDefault();
 		if (event.dataTransfer) {
 			event.dataTransfer.dropEffect = 'copy';
@@ -973,23 +903,23 @@
 		}
 	}
 
-		function handleComposerDragLeave(event: DragEvent): void {
-			if (!hasFileTransfer(event.dataTransfer)) {
-				return;
-			}
+	function handleComposerDragLeave(event: DragEvent): void {
+		if (!hasFileTransfer(event.dataTransfer)) {
+			return;
+		}
 		event.preventDefault();
 		if (fileDragDepth > 0) {
 			fileDragDepth -= 1;
 		}
 	}
 
-		async function handleComposerDrop(event: DragEvent): Promise<void> {
-			const dataTransfer = event.dataTransfer;
-			const droppedFiles = extractSupportedTransferFiles(dataTransfer);
-			const hasDroppedFiles = hasFileTransfer(dataTransfer);
-			if (!hasDroppedFiles && droppedFiles.length === 0) {
-				return;
-			}
+	async function handleComposerDrop(event: DragEvent): Promise<void> {
+		const dataTransfer = event.dataTransfer;
+		const droppedFiles = extractSupportedTransferFiles(dataTransfer);
+		const hasDroppedFiles = hasFileTransfer(dataTransfer);
+		if (!hasDroppedFiles && droppedFiles.length === 0) {
+			return;
+		}
 		event.preventDefault();
 		fileDragDepth = 0;
 		if (droppedFiles.length === 0) {
@@ -1927,17 +1857,6 @@
 	});
 
 	$effect(() => {
-		if (!browser || !agentStreamRef) {
-			return;
-		}
-		const stream = agentStreamRef;
-		stream.addEventListener('click', handleCodeCopyClick);
-		return () => {
-			stream.removeEventListener('click', handleCodeCopyClick);
-		};
-	});
-
-	$effect(() => {
 		if (!browser || !composerRef) {
 			return;
 		}
@@ -2034,7 +1953,7 @@
 			<Button variant="ghost" size="sm" href="/spark/agents">Agents</Button>
 		</div>
 
-		<div class="agent-stream" bind:this={agentStreamRef}>
+		<div class="agent-stream">
 			{#if error}
 				<div class="agent-error" role="alert">
 					{error}
@@ -2058,10 +1977,7 @@
 					<div class={`agent-messages ${shouldUseThreadPadding ? 'has-thread-padding' : ''}`}>
 						{#each messages as message (message.id)}
 							{@const messageText = resolveMessageText(message)}
-							{@const messageHtml =
-								message.role === 'assistant' && messageText ? renderMarkdown(messageText) : ''}
 							{@const thinkingText = streamingThoughtsByMessageId[message.id] ?? ''}
-							{@const thinkingHtml = thinkingText ? renderMarkdown(thinkingText) : ''}
 							{@const isActiveStreamMessage =
 								sending &&
 								message.role === 'assistant' &&
@@ -2130,13 +2046,14 @@
 										{#if thinkingText}
 											<div class="message-thinking">
 												<p class="message-thinking__label">Thinking...</p>
-												<div class="message-thinking__body message-markdown markdown">
-													{@html thinkingHtml}
-												</div>
+												<MarkdownContent
+													markdown={thinkingText}
+													class="message-thinking__body message-markdown markdown"
+												/>
 											</div>
 										{/if}
-										{#if messageHtml}
-											<div class="message-markdown markdown">{@html messageHtml}</div>
+										{#if messageText.trim().length > 0}
+											<MarkdownContent markdown={messageText} class="message-markdown markdown" />
 										{:else if !thinkingText && messageRunCards.length === 0}
 											{#if isActiveStreamMessage && chatStreamPhase === 'connecting'}
 												<p class="message-placeholder message-status">

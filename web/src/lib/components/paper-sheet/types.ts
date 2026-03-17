@@ -38,6 +38,7 @@ export type PaperSheetLinesQuestion = {
 	marks: number;
 	prompt: string;
 	lines: number;
+	renderMode?: 'plain' | 'markdown';
 };
 
 export type PaperSheetCalcQuestion = {
@@ -100,6 +101,8 @@ export type PaperSheetData = {
 	light: string;
 	border: string;
 	sections: PaperSheetSection[];
+	initialAnswers?: PaperSheetAnswers;
+	mockReview?: PaperSheetMockReview;
 };
 
 export type PaperSheetAnswers = Record<string, string | Record<string, string>>;

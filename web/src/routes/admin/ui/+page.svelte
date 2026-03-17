@@ -3,7 +3,14 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
-	const widgets = [
+	type UiPreviewWidget = {
+		title: string;
+		description: string;
+		href?: string;
+		cta: string;
+	};
+
+	const widgets: UiPreviewWidget[] = [
 		{
 			title: 'Quiz UI',
 			description: 'Full-screen quiz previews and grading layouts.',
@@ -28,7 +35,7 @@
 			href: '/admin/ui/sheet',
 			cta: 'Open'
 		}
-	] as const;
+	];
 </script>
 
 <div class="space-y-6">

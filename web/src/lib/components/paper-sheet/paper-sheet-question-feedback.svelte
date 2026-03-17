@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ChatComposer } from '$lib/components/chat/index.js';
+	import { MarkdownContent } from '$lib/components/markdown/index.js';
 	import type { PaperSheetQuestionReview } from './types';
 
 	type ThreadTurn = {
@@ -7,23 +8,6 @@
 		speaker: 'student' | 'tutor';
 		text: string;
 	};
-
-	function escapeHtml(value: string): string {
-		return value
-			.replace(/&/gu, '&amp;')
-			.replace(/</gu, '&lt;')
-			.replace(/>/gu, '&gt;')
-			.replace(/"/gu, '&quot;')
-			.replace(/'/gu, '&#39;');
-	}
-
-	function renderInlineMarkup(value: string): string {
-		const escaped = escapeHtml(value);
-		return escaped
-			.replace(/\*\*(.*?)\*\*/gu, '<strong>$1</strong>')
-			.replace(/\*(.*?)\*/gu, '<em>$1</em>')
-			.replace(/\n/gu, '<br />');
-	}
 
 	function getToneClass(review: PaperSheetQuestionReview): string {
 		switch (review.status) {
@@ -156,8 +140,8 @@
 				<div class="paper-sheet-note__thread" aria-live="polite" aria-relevant="additions text">
 					{#each displayThread as turn (turn.id)}
 						<div class={`paper-sheet-note__turn is-${turn.speaker}`}>
-							<div class={`paper-sheet-note__bubble is-${turn.speaker} sheet-markup`}>
-								{@html renderInlineMarkup(turn.text)}
+							<div class={`paper-sheet-note__bubble is-${turn.speaker}`}>
+								<MarkdownContent markdown={turn.text} class="paper-sheet-note__bubble-markdown" />
 							</div>
 						</div>
 					{/each}
@@ -223,6 +207,24 @@
 		--note-input-border: #f2cd2f;
 		--note-text: #241d19;
 		--note-text-muted: rgba(87, 71, 58, 0.72);
+		--markdown-text: var(--note-text);
+		--markdown-heading: var(--note-text);
+		--markdown-strong: var(--note-text);
+		--markdown-link: var(--note-left);
+		--markdown-quote-border: var(--note-dashed);
+		--markdown-quote-text: var(--note-text-muted);
+		--markdown-inline-code-bg: color-mix(in srgb, var(--note-left) 12%, #ffffff);
+		--markdown-inline-code-text: var(--note-text);
+		--markdown-code-bg: #162033;
+		--markdown-code-header-bg: #1f2c44;
+		--markdown-code-border: rgba(196, 167, 112, 0.22);
+		--markdown-code-text: #f8fafc;
+		--markdown-code-muted: #94a3b8;
+		--markdown-code-keyword: #c084fc;
+		--markdown-code-string: #34d399;
+		--markdown-code-number: #fbbf24;
+		--markdown-code-function: #60a5fa;
+		--markdown-code-type: #f472b6;
 		animation: paper-sheet-note-slide-open 0.22s ease both;
 	}
 
@@ -352,6 +354,11 @@
 		color: var(--note-text);
 	}
 
+	.paper-sheet-note__bubble-markdown {
+		font-size: inherit;
+		line-height: inherit;
+	}
+
 	.paper-sheet-note__thread {
 		display: flex;
 		flex-direction: column;
@@ -431,23 +438,6 @@
 
 	:global(.paper-sheet-note__input::placeholder) {
 		color: rgba(148, 163, 184, 0.96);
-	}
-
-	.sheet-markup :global(p) {
-		margin: 0;
-	}
-
-	.sheet-markup :global(p + p) {
-		margin-top: 0.8em;
-	}
-
-	.sheet-markup :global(strong) {
-		font-weight: 700;
-		color: var(--note-text);
-	}
-
-	.sheet-markup :global(em) {
-		font-style: italic;
 	}
 
 	@media (max-width: 720px) {
